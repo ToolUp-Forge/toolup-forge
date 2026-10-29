@@ -3,7 +3,7 @@
 
 module ToolUp.AI.GroundedNarrativeRun
 
-// ─── The grounded narrative run (Phase 985) ──────────────────────────
+// ─── The grounded narrative run ──────────────────────────
 //
 // One entry point: a registered run (a prompt, the metrics it is written
 // from, a section shape, the deployment's deterministic projections) and a
@@ -24,7 +24,7 @@ module ToolUp.AI.GroundedNarrativeRun
 // passed IN, not resolved by name, so this package takes no dependency on
 // the fact companion; the gate and the publisher are resolved from DI.
 //
-// **Who pays (Phase 995).** A run is a background job: no one is signed in,
+// **Who pays.** A run is a background job: no one is signed in,
 // so the model provider is resolved under the scope the run CARRIES — a team
 // scope as a member of that team — and the key configured at that scope funds
 // the run, under a strict bring-your-own-key policy as under any other. The
@@ -32,7 +32,7 @@ module ToolUp.AI.GroundedNarrativeRun
 // that holds no usable key is `GroundedNarrativeUnfunded`: a permanent,
 // typed outcome, because waiting does not configure a key.
 //
-// **Its call budget (Phase 1109).** No client waits on a run, so it is not
+// **Its call budget.** No client waits on a run, so it is not
 // held to the interactive assistant's 50-second call cap: the agent loop
 // runs under `GroundedNarrativeRunOptions.CallBudget` —
 // `defaultCallBudget` (300 s a call, a 16,384-token reply) unless the
@@ -72,7 +72,7 @@ type GroundedNarrativeRunOptions = {
     Tools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list
     /// The clock the provenance stamp reads.
     Clock: unit -> DateTimeOffset
-    /// Phase 1109 — the budget every model call the run makes runs under.
+    /// The budget every model call the run makes runs under.
     CallBudget: AIAgentEngine.AgentCallBudget
 }
 
@@ -226,7 +226,7 @@ let assemble
         }
 
 /// The grounding rules every run's instruction ends with, after the wording
-/// (Phase 1111: the part of the instruction no administrator edits). A
+/// . A
 /// report that breaks one is refused by the gate whatever the wording says.
 let rules: string list = [
     "The report is REFUSED, and never published, if any of these is broken:"
@@ -294,11 +294,11 @@ type internal GroundedNarrativeAuditRow = {
     Offences: string list
     CertificateDigest: string option
     Detail: string option
-    /// Phase 1111 — the wording version the run's instruction was built
+    /// The wording version the run's instruction was built
     /// from; 0 is the declaration. A row written before 1111 reads as 0,
     /// which is what those runs used.
     PromptVersion: int
-    /// Phase 1111 — set when a saved wording existed and could not be used
+    /// Set when a saved wording existed and could not be used
     /// (unreadable, or it no longer fits the declaration), so the run fell
     /// back to the declared wording.
     PromptFallback: string option
@@ -318,7 +318,7 @@ module internal GroundedNarrativeAuditRow =
         with _ ->
             None
 
-// ── Phase 1111 — the administrator's wording ─────────────────────
+// ── The administrator's wording ───────────────────────────────
 //
 // A scope's saved wording for one narrative is one blob in the scope's own
 // container, `narrative-prompts/<run key>`, holding every saved version
@@ -516,7 +516,7 @@ module internal NarrativeWording =
                                 )
         }
 
-/// Why a run has no provider (Phase 995). `ProviderUnfunded`: the factory
+/// Why a run has no provider. `ProviderUnfunded`: the factory
 /// ANSWERED that the scope holds no usable provider, which another attempt
 /// would answer the same way. `ProviderUnavailable`: everything that may pass
 /// — nothing composed yet, or the resolution itself threw (a secret store
@@ -526,7 +526,7 @@ type private ProviderShortfall =
     | ProviderUnavailable of string
 
 /// Why the model produced no narrative: a failure that may pass, or a reply
-/// cut at the run's call budget (Phase 1109), which will not.
+/// cut at the run's call budget, which will not.
 type private GenerationShortfall =
     | GenerationFailed of string
     | GenerationOverBudget of string
@@ -552,7 +552,7 @@ type GroundedNarrativeRunner
                 ()
     }
 
-    /// Phase 1111 — which wording a row's run used: the version and any
+    /// Which wording a row's run used: the version and any
     /// fallback reason. A run that fails before its wording is resolved
     /// used none, and records the declaration's 0.
     let promptOf (wording: ResolvedWording option) =
@@ -589,12 +589,12 @@ type GroundedNarrativeRunner
 
     let failed = failedAs "failed" GroundedNarrativeFailed
 
-    /// Phase 995 — the scope holds no provider the funding policy allows.
+    /// The scope holds no provider the funding policy allows.
     /// The same audit row as any failure, with its own outcome, so a reader
     /// of the trail can tell "configure a key" from "try again".
     let unfunded = failedAs "unfunded" GroundedNarrativeUnfunded
 
-    /// Phase 1109 — the reply was cut at the run's call budget.
+    /// The reply was cut at the run's call budget.
     let overBudget = failedAs "over-budget" GroundedNarrativeOverBudget
 
     let resolveProvider (access: AccessContext) : Async<Result<IAIProvider, ProviderShortfall>> = async {
@@ -617,7 +617,7 @@ type GroundedNarrativeRunner
                     return Error(ProviderUnavailable ex.Message)
     }
 
-    /// Phase 995 — the access context the provider is resolved under: the
+    /// The access context the provider is resolved under: the
     /// request's when it names one; else the scope the run carries, so the
     /// key configured at the team (or user) scope that triggered the run
     /// funds it; else — a scope that names no team or user, and so holds no
@@ -669,37 +669,40 @@ type GroundedNarrativeRunner
             let ctx, diScope = contextFor resolved scope definition.Principal
 
             try
-                try
-                    let! final =
-                        AIAgentEngine.runAgentLoopWithBudget
-                            provider
-                            tools
-                            (ClientToolDispatch.ClientToolDispatchRegistry())
-                            ctx
-                            (Guid.NewGuid())
-                            (Guid.NewGuid())
-                            AISurface.FullPage
-                            None
-                            None
-                            CancellationToken.None
-                            messages
-                            (ModelInput.ofSystemPrompt
-                                "GroundedNarrativeRun"
-                                (Some(systemPrompt definition toolNames))
-                                messages)
-                            options.CallBudget
-                            ignore
+                let turn =
+                    AIAgentEngine.TurnContext.create
+                        provider
+                        tools
+                        (ClientToolDispatch.ClientToolDispatchRegistry())
+                        ctx
+                        (Guid.NewGuid())
+                        (Guid.NewGuid())
+                        AISurface.FullPage
+                        None
+                        None
+                        (ModelInput.ofSystemPrompt
+                            "GroundedNarrativeRun"
+                            (Some(systemPrompt definition toolNames))
+                            messages)
+                        options.CallBudget
+                        SystemPromptBuilder.AgentLoopLimits.defaults
+                        ignore
+                        CancellationToken.None
 
+                match! AIAgentEngine.run turn AIAgentEngine.TurnPlan.RunLoop messages with
+                | Error(AIAgentEngine.LoopStop.CallBudgetExceeded _ as stop) ->
+                    return Error(GenerationOverBudget(AIAgentEngine.LoopStop.message stop))
+                | Error stop -> return Error(GenerationFailed(AIAgentEngine.LoopStop.message stop))
+                | Ok { Stopped = Some stop } -> return Error(GenerationFailed(AIAgentEngine.LoopStop.message stop))
+                | Ok state ->
                     let answer =
-                        final
+                        state.Messages
                         |> List.rev
                         |> List.tryFind (fun m -> m.Role = "assistant" && not (String.IsNullOrWhiteSpace m.Content))
 
                     match answer with
                     | Some message -> return parseOutput message.Content |> Result.mapError GenerationFailed
                     | None -> return Error(GenerationFailed "the model returned no narrative")
-                with AIAgentEngine.AgentCallBudgetExceeded _ as exceeded ->
-                    return Error(GenerationOverBudget exceeded.Message)
             finally
                 diScope.Dispose()
         }
@@ -791,7 +794,7 @@ type GroundedNarrativeRunner
                             request
                             "the run was given the anonymous scope; a grounded run reads facts through the request-path fact tools, which need a scope the platform resolved"
                 | Some scope ->
-                    // Phase 1111 — the wording in force in THIS scope: an
+                    // The wording in force in THIS scope: an
                     // administrator's saved version, or the declaration.
                     // Only `Prompt` and section guidance can differ from
                     // `declared`; the rules come after it in `systemPrompt`.

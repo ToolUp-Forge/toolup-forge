@@ -1425,7 +1425,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     ShowSidePanel = true
                 }
                 SystemPrompt = Some(SystemPromptBuilder.compose ragLayers)
-                MaxHistoryMessages = None
+                Limits = AgentLoopLimits.defaults
                 AISurfaceDerivation = TrustClient
             }
         | Some cfg ->

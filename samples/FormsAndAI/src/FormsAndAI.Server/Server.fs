@@ -87,7 +87,7 @@ let private aiAssistantConfig: AIAssistantServerConfig = {
         ShowSidePanel = false
     }
     SystemPrompt = None
-    MaxHistoryMessages = None
+    Limits = AgentLoopLimits.defaults
     // Phase 6g.F — take the client-supplied surface at face value; a
     // production app that gates FullPageOnly tools uses DeriveFromCookie.
     AISurfaceDerivation = TrustClient

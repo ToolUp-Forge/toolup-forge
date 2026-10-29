@@ -10,7 +10,7 @@ open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 
-// ─── Supervised agent-loop worker (Phase 6k) ─────────────────────
+// ─── Supervised agent-loop worker ─────────────────────────────────
 //
 // The assistant API's SubmitMessage (the record `AIAssistantHandler.makeAssistantApi`
 // builds) used to fire the agent loop with a bare `Async.Start`. Three things follow from that, and all three
@@ -67,9 +67,9 @@ open ToolUp.Platform
 // throwing: in a composition where the worker was never started (a
 // serverless host that gates hosted services off, a test standing up
 // the handler without `compose`), the caller falls back to the
-// pre-6k `Async.Start` path. That is not a silent degradation — the
+// unsupervised `Async.Start` path. That is not a silent degradation — the
 // fallback is at the call site, logged, and the behaviour it falls
-// back TO is exactly what shipped before this phase.
+// back TO is the unsupervised run, with the same disposal guarantee.
 
 /// One agent turn, queued.
 ///
@@ -114,7 +114,7 @@ type EnqueueOutcome =
 /// refuses at shutdown. Public so a test can assert on it without
 /// restating the string.
 [<Literal>]
-let ShuttingDownReason = "Server is shutting down"
+let ShuttingDownReason = AIAgentEngine.TurnFailure.ShuttingDownReason
 
 /// Message for a turn refused because the queue is full.
 [<Literal>]
@@ -125,9 +125,9 @@ let QueueFullReason =
 ///
 /// `maxConcurrency` bounds how many turns run at once;
 /// `queueCapacity` bounds how many may wait. Both are constructor
-/// parameters rather than `ServerConfig` fields on purpose: this
-/// phase adds no opt-in surface (GP 13), and the defaults are chosen
-/// to be indistinguishable from the pre-6k `Async.Start` behaviour for
+/// parameters rather than `ServerConfig` fields on purpose: the worker
+/// adds no opt-in surface (GP 13), and the defaults are chosen
+/// to be indistinguishable from an unsupervised `Async.Start` for
 /// any deployment not already in trouble. A deployment that wants
 /// different numbers constructs the worker itself.
 type AIChatWorker(logger: ILogger, ?maxConcurrency: int, ?queueCapacity: int) =
@@ -285,9 +285,10 @@ type AIChatWorker(logger: ILogger, ?maxConcurrency: int, ?queueCapacity: int) =
                     )
 
                 if not drained.IsCompleted then
-                    // Budget exhausted. Cancel what is still running so
-                    // the turns bail at their next cancellation check
-                    // rather than being abandoned mid-provider-call.
+                    // Budget exhausted. Cancel what is still running: the
+                    // token is each turn's shutdown token, which reaches its
+                    // in-flight provider call and tool body, so the turn ends
+                    // with its terminal event rather than being abandoned.
                     trace "worker shutdown budget exhausted; cancelling in-flight turns"
 
                     try
@@ -313,7 +314,7 @@ type AIChatWorker(logger: ILogger, ?maxConcurrency: int, ?queueCapacity: int) =
 
             inFlightCts.Dispose()
 
-/// Run a work item WITHOUT a worker — the pre-6k `Async.Start` path,
+/// Run a work item WITHOUT a worker — the unsupervised `Async.Start` path,
 /// kept as the fallback for a composition that never started one.
 ///
 /// It is a named function rather than an inline `Async.Start` at the

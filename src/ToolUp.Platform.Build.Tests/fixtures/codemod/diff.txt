@@ -120,6 +120,17 @@
 @@ L43 [879-slot-case-nullary]
 -let usageOn = config.UsageDashboard <> NoUsageDashboard
 +let usageOn = config.UsageDashboard <> SlotFill.Empty
+--- a/src/Server/Assistant.fs
++++ b/src/Server/Assistant.fs
+@@ L14 [1077-history-window-default]
+-    MaxHistoryMessages = None
++    Limits = AgentLoopLimits.defaults
+@@ L18 [1077-history-window-literal]
+-let longer = { assistant with MaxHistoryMessages = Some 120 }
++let longer = { assistant with Limits = { AgentLoopLimits.defaults with HistoryWindow = 120 } }
+@@ L20 [1077-history-window-constant]
+-let window = AIAssistantServerConfig.DefaultMaxHistoryMessages
++let window = AgentLoopLimits.DefaultHistoryWindow
 --- a/src/Server/Program.fs
 +++ b/src/Server/Program.fs
 @@ L5 [73-remoting-namespace]
@@ -171,4 +182,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 53 rewrite(s) across 7 file(s) pending.
+Codemod: 56 rewrite(s) across 8 file(s) pending.

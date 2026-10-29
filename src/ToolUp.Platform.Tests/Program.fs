@@ -843,6 +843,7 @@ let private registeredTests =
         ToolOutcomeTests.tests
         ConversationRecordTests.tests
         AgentLoopRailsTests.tests
+        TurnOutcomeStatusTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         // Phase 44 — the IProviderProfileApi transport + the reusable

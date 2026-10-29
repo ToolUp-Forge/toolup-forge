@@ -4,6 +4,7 @@ open ToolUp.Platform.Transport
 open System
 open System.Text
 open System.Collections.Generic
+open System.Threading
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -59,29 +60,30 @@ let private toJson obj =
 
 // ─── Bounded waits on the chat path ──────────────────────────────
 //
-// Provider resolution, history loads, and conversation loads each
-// touch I/O (blob storage, secret store, config store). None had
-// timeouts before, so a wedged backend would hang the agent loop
-// indefinitely and present to the user as a silent 60-second
-// watchdog timeout. Bounding each call to 10 s converts the hang
-// into a thrown exception, which the surrounding `bgWork`'s
-// `try/with | ex -> AITaskFailed ex.Message` surfaces inline in
-// chat (now ungated by `DebugMode` on the client side panel).
+// Provider resolution, history loads and conversation loads each touch
+// I/O (blob storage, secret store, config store). Each is bounded to 10 s,
+// so a wedged backend fails the turn inline — its `TimeoutException` is the
+// turn's `TurnFailure.Faulted` — instead of presenting as the client's
+// silent 60-second watchdog.
 
 [<Literal>]
 let private ChatPathIoTimeoutMs = 10_000
 
-/// Run `work` with a wall-clock cap. On timeout, raise
-/// `TimeoutException` carrying `label` so the surrounding handler's
-/// catch can surface it to the user via `AITaskFailed`.
+/// Run `work` with a wall-clock cap. The work runs under a token linked to
+/// the caller's, which the cap cancels; the wait ends at the cap whether or
+/// not the work observes it, raising `TimeoutException` carrying `label`.
 let private withTimeout (label: string) (timeoutMs: int) (work: Async<'T>) : Async<'T> = async {
-    let workTask = work |> Async.StartAsTask
-    let timeoutTask = Task.Delay(timeoutMs)
-    let! winner = Task.WhenAny(workTask :> Task, timeoutTask) |> Async.AwaitTask
+    let! outer = Async.CancellationToken
+    let cap = CancellationTokenSource.CreateLinkedTokenSource outer
+    let running = Async.StartAsTask(work, cancellationToken = cap.Token)
+    // Released once the work settles, which may be after the cap.
+    running.ContinueWith(fun (_: Task<'T>) -> cap.Dispose()) |> ignore
+    let! winner = Task.WhenAny(running :> Task, Task.Delay timeoutMs) |> Async.AwaitTask
 
-    if winner = (workTask :> Task) then
-        return! workTask |> Async.AwaitTask
+    if winner = (running :> Task) then
+        return! running |> Async.AwaitTask
     else
+        cap.Cancel()
         return raise (TimeoutException $"{label} timed out after {timeoutMs / 1000}s")
 }
 
@@ -113,102 +115,26 @@ let private withTimeout (label: string) (timeoutMs: int) (work: Async<'T>) : Asy
 //     unchanged; clients see the same shape they always have.
 //   - The agent loop gets the complete history every turn; no more orphaned
 //     tool_result blocks.
-//   - Pre-existing conversations migrate gracefully: if the history blob
-//     is missing we start from an empty provider history, which is the
-//     same behaviour as today (just without broken round-tripping).
+//   - A conversation with no history blob starts from its UI blob.
 //
 // A sibling that is present but cannot be read is a typed error in the
 // record, never an empty value: this handler refuses the turn (or the
 // write) rather than write over what it could not read.
 
-/// The user-facing refusal when a conversation blob cannot be read. The
-/// operator detail (blob, reason) goes to the log; the chat shows this,
-/// and the stored history is left exactly as it was.
-let private unreadableConversation
-    (logger: ILogger)
-    (conversationId: Guid)
-    (err: ConversationBlobs.ConversationBlobError)
-    =
-    logger.Warn $"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}."
+/// The turn's failure for an unreadable conversation blob. The operator
+/// detail (blob, reason) goes to the log; the client is shown
+/// `TurnFailure.message`, and the stored history is left as it was.
+let private unreadable (logger: ILogger) (conversationId: Guid) (err: ConversationBlobs.ConversationBlobError) =
+    let detail = ConversationBlobs.ConversationBlobError.describe err
+    logger.Warn $"AI conversation {conversationId}: {detail}."
+    TurnFailure.RecordUnreadable(conversationId, detail)
 
-    $"The stored history of conversation {conversationId} could not be read, so it was left untouched rather than overwritten."
-
-/// The user-facing failure when a conversation blob could not be written;
-/// a failed save is never reported as a completed turn.
-let private unwrittenConversation
-    (logger: ILogger)
-    (conversationId: Guid)
-    (err: ConversationBlobs.ConversationBlobError)
-    =
-    logger.Error($"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}.", None)
-
-    $"The reply for conversation {conversationId} could not be saved."
-
-// ─── The chat path's adapters over the record ────────────────────
-//
-// Every caller below goes on to WRITE, or gates a write, so an unreadable
-// blob and a failed save both RAISE: inside `bgWork` the exception is the
-// turn's `AITaskFailed`, and the stored history is never replaced by what
-// could not be read. The message raised is the user-facing one; the
-// operator detail is logged.
-
-let private loadConversationOrFail
-    (logger: ILogger)
-    (storage: IBlobStorage)
-    (container: string)
-    (conversationId: Guid)
-    : Async<ConversationMessage list> =
-    async {
-        match! ConversationBlobs.loadConversation storage container conversationId with
-        | Ok messages -> return messages
-        | Error err -> return failwith (unreadableConversation logger conversationId err)
-    }
-
-let private loadProviderHistoryOrFail
-    (logger: ILogger)
-    (storage: IBlobStorage)
-    (container: string)
-    (conversationId: Guid)
-    : Async<AIProviderMessage list> =
-    async {
-        match! ConversationBlobs.loadProviderHistory storage container conversationId with
-        | Ok messages -> return messages
-        | Error err -> return failwith (unreadableConversation logger conversationId err)
-    }
-
-/// The metadata a turn resolves its provider from. Unreadable metadata
-/// fails the turn: its stored provider override may be the provider the
-/// user chose for this conversation, and the turn must not quietly run on
-/// another.
-let private loadMetaOrFail
-    (logger: ILogger)
-    (storage: IBlobStorage)
-    (container: string)
-    (conversationId: Guid)
-    : Async<ConversationBlobs.ConversationMeta> =
-    async {
-        match! ConversationBlobs.loadMeta storage container conversationId with
-        | Ok meta -> return meta
-        | Error err -> return failwith (unreadableConversation logger conversationId err)
-    }
-
-/// Write the turn's exchange — the history, then the UI — and return the
-/// UI messages it was appended to.
-let private appendExchangeOrFail
-    (logger: ILogger)
-    (storage: IBlobStorage)
-    (container: string)
-    (conversationId: Guid)
-    (history: AIProviderMessage list)
-    (exchange: ConversationMessage list)
-    : Async<ConversationMessage list> =
-    async {
-        match!
-            ConversationBlobs.ConversationRecord.appendExchange storage container conversationId history exchange
-        with
-        | Ok prior -> return prior
-        | Error err -> return failwith (unwrittenConversation logger conversationId err)
-    }
+/// The turn's failure for an exchange that could not be written; a failed
+/// save is never reported as a completed turn.
+let private unwritten (logger: ILogger) (conversationId: Guid) (err: ConversationBlobs.ConversationBlobError) =
+    let detail = ConversationBlobs.ConversationBlobError.describe err
+    logger.Error($"AI conversation {conversationId}: {detail}.", None)
+    TurnFailure.RecordUnwritten(conversationId, detail)
 
 // ─── Task status for the polling fallback ────────────────────────
 //
@@ -1261,6 +1187,47 @@ let private isTerminalStreamEvent =
 /// SSE-broadcast sink, the streaming method takes the stream's channel
 /// sink, and nothing else differs.
 /// Mirrors the pattern from fileManagementApi in FileManagement.fs.
+/// The service `services` registers as `'T`, if any.
+let private tryService<'T> (services: IServiceProvider) : 'T option =
+    match services.GetService(typeof<'T>) with
+    | :? 'T as s -> Some s
+    | _ -> None
+
+/// What `SubmitMessage` resolves in the foreground and hands the turn.
+type private TurnRequest = {
+    TaskId: Guid
+    Request: AIMessageRequest
+    /// The authoritative surface (`AISurfaceCapability`).
+    Surface: AISurface
+    /// What the prompt builder contributed.
+    Contribution: SystemPromptBuilder.PromptContribution
+    /// The turn's model input, built from the contribution.
+    Input: ModelInput
+    /// The background context the turn runs on, with its own DI scope.
+    Background: HttpContext
+    /// The request's access, for the ownership gate.
+    GateAccess: AccessContext option
+    /// The turn's stream.
+    Emit: AIStreamEvent -> unit
+}
+
+/// The turn's model input: the composed prompt verbatim as one block, so
+/// rendering reproduces it byte for byte, and each retrieved source as a
+/// chunk carrying `NotGated` until a gate result is supplied.
+let private modelInputOf (contribution: SystemPromptBuilder.PromptContribution) : ModelInput =
+    contribution.RetrievedSources
+    |> List.fold
+        (fun input (s: RetrievedSource) ->
+            ModelInput.addChunk
+                {
+                    ChunkId = s.DocumentId
+                    Text = s.Snippet
+                    GateResult = NotGated
+                    Source = Some s.DocumentName
+                }
+                input)
+        (ModelInput.ofSystemPrompt "SystemPromptBuilder" contribution.SystemPrompt [])
+
 let aiAssistantApi
     (config: SystemPromptBuilder.AIAssistantServerConfig option)
     (moduleContexts: Map<string, ModuleAIContext>)
@@ -1618,7 +1585,7 @@ let aiAssistantApi
                 // owner, so nobody's authority over it can be established;
                 // refuse rather than read it as the empty (ownerless,
                 // writable-by-anyone) conversation.
-                return Error(unreadableConversation logger conversationId err)
+                return Error(TurnFailure.message (unreadable logger conversationId err))
             | Ok messages ->
                 let owner = ConversationListing.ownerOf messages
 
@@ -1644,10 +1611,10 @@ let aiAssistantApi
                                 $"Only the conversation's author or {elevated} can delete or change another member's conversation."
     }
 
-    // ONE turn implementation, the event sink injected at
-    // construction. `makeAssistantApi emit` builds the api record whose turn
-    // machinery (SubmitMessage's bgWork) emits every `AIStreamEvent` through
-    // `emit`; the two mounted surfaces differ ONLY in the sink they pass:
+    // ONE turn implementation, the event sink injected at construction.
+    // `makeAssistantApi emit` builds the api record whose turn emits every
+    // `AIStreamEvent` through `emit`; the two mounted surfaces differ ONLY in
+    // the sink they pass:
     //
     //   * the legacy `SubmitMessage` + `/api/ai/events` pair is
     //     `makeAssistantApi (sendEvent sseManager userId)` — the SSE-manager
@@ -1657,12 +1624,9 @@ let aiAssistantApi
     //     `AsyncStream.fromCallback` channel sink and drives the turn through
     //     it, so its `event: chunk` payloads are the same serialised events.
     //
-    // The sink is a parameter, not a per-request ref cell the typed endpoint
-    // arms before firing the turn: no state to arm, nothing a future third
-    // surface could forget to reset, and the legacy path consults no cell.
-    // Every status a turn reaches passes through the sink its
-    // api record is built over, so wrapping BOTH sinks below keeps
-    // `GetTaskStatus` in step with the stream without touching an emit site.
+    // Every status a turn reaches passes through the sink its api record is
+    // built over, so wrapping BOTH sinks below keeps `GetTaskStatus` in step
+    // with the stream without touching an emit site.
     let trackTaskStatus (sink: AIStreamEvent -> unit) (event: AIStreamEvent) =
         match event with
         | TaskStatusChanged(taskId, status) -> taskRegistry.Transition(taskId, status, DateTime.UtcNow)
@@ -1670,824 +1634,562 @@ let aiAssistantApi
 
         sink event
 
+    // ─── One turn: one request in, one outcome out ───────────────────
+
+    let limits = SystemPromptBuilder.AIAssistantServerConfig.limits config
+
+    /// The prompt builder's contribution for `request`. The builder sees the
+    /// resolved access context plus the active module the client reported,
+    /// so platform, team and module layers all contribute per request.
+    let contributePrompt (request: AIMessageRequest) : Async<SystemPromptBuilder.PromptContribution> = async {
+        // Prior turns for the query-rewrite stage, read only when a builder
+        // will run; no I/O on the request path otherwise.
+        let! history =
+            match promptBuilder with
+            | Some _ -> loadPromptHistory canSeeStoredConversation scope.ScopeId request.ConversationId
+            | None -> async.Return []
+
+        return!
+            SystemPromptBuilder.PromptContribution.collect promptBuilder {
+                Access = accessContext
+                ActiveModule = request.ActiveModule
+                ActivePage = request.ActivePage
+                ActivePageNarrative = request.ActivePageNarrative
+                ModuleContexts = moduleContexts
+                CurrentMessage = Some request.Content
+                ConversationHistory = history
+                // The client's per-turn retrieval scope, forwarded verbatim:
+                // a filter only narrows, AND-combined on top of the scopes the
+                // builder derives from `accessContext`.
+                RetrievalFilters = request.RetrievalFilters
+                RetrievedSources = ref []
+                ShortCircuit = ref None
+                PlannedAnswerId = ref None
+                Scope = ScopeResolution.forRequest ctx
+            }
+    }
+
+    /// Record a refused append on the audit trail: one `BeaconRejected` row,
+    /// `Surface = "submit"`, whichever surface fired the gate.
+    let auditRefusal (conversationId: Guid) (ownerOfRecord: string) = async {
+        logger.Warn
+            $"AI SubmitMessage rejected: caller '{userId}' is not the owner of conversation {conversationId} (owner '{ownerOfRecord}', scope '{scope.ScopeId}')."
+
+        match auditLogOpt with
+        | Some auditLog ->
+            let payload: BeaconRejectedPayload = {
+                ConversationId = conversationId
+                Caller = userId
+                Owner = ownerOfRecord
+                Surface = "submit"
+            }
+
+            try
+                do! auditLog.Record(scope.ScopeId, BeaconRejected payload)
+            with ex ->
+                logger.Warn $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
+        | None -> ()
+    }
+
+    /// The symmetric ownership gate, shared with the beacon handler. In a
+    /// shared container a member could address another member's
+    /// conversation; the gate refuses an append to one whose first message
+    /// recorded a different owner, and admits an ownerless legacy one under
+    /// a narrowed team level only for a caller `canModify` admits.
+    ///
+    /// This is the turn's ONLY read of the addressed conversation before the
+    /// caller is admitted, and it runs before `InProgress`, so a refused turn
+    /// never flashes as in flight.
+    let admitTurn (turn: TurnRequest) : Async<Result<unit, TurnFailure>> = async {
+        let conversationId = turn.Request.ConversationId
+
+        let! existing =
+            ConversationBlobs.loadConversation storage scope.Container conversationId
+            |> withTimeout "Conversation load (ownership gate)" ChatPathIoTimeoutMs
+
+        match existing with
+        | Error err -> return Error(unreadable logger conversationId err)
+        | Ok messages ->
+            // The team state and the caller's role are read on the background
+            // scope (the request's own is gone), and only for an ownerless
+            // conversation.
+            let! admission =
+                ConversationBlobs.checkAppend
+                    (fun () ->
+                        TeamConversationPolicyStore.ConversationVisibility.resolveState
+                            turn.Background
+                            storage
+                            scope.Container)
+                    (fun state ->
+                        ToolUp.Platform.TeamPolicyStore.TeamPolicyViewer.resolve
+                            turn.Background.RequestServices
+                            turn.GateAccess
+                            userId
+                            state.TeamId)
+                    messages
+                    userId
+
+            match admission with
+            | Ok() -> return Ok()
+            | Error ownerOfRecord ->
+                do! auditRefusal conversationId ownerOfRecord
+                return Error(TurnFailure.Refused ownerOfRecord)
+    }
+
+    /// Resolve the provider once per message, so the user's configuration
+    /// cannot shift mid-loop. Priority: the request's one-off override, then
+    /// the conversation's stored override (the defensive fallback for a tab
+    /// that has not loaded the picker, and the truth on reload), then the
+    /// factory's active-label policy. Unreadable metadata fails the turn: its
+    /// override may be the provider the user chose, and the turn must not
+    /// quietly run on another.
+    let resolveProvider (turn: TurnRequest) : Async<Result<IAIProvider, TurnFailure>> = async {
+        let conversationId = turn.Request.ConversationId
+
+        let! meta =
+            ConversationBlobs.loadMeta storage scope.Container conversationId
+            |> withTimeout "Conversation metadata load" ChatPathIoTimeoutMs
+
+        match meta with
+        | Error err -> return Error(unreadable logger conversationId err)
+        | Ok meta ->
+            let label =
+                turn.Request.OverrideProviderLabel |> Option.orElse meta.OverrideProviderLabel
+
+            let! resolved =
+                match label with
+                | Some label -> providerFactory.TryResolveByLabel(accessContext, label)
+                | None -> providerFactory.Resolve accessContext
+                |> withTimeout "AI provider resolution" ChatPathIoTimeoutMs
+
+            match resolved with
+            | Ok provider ->
+                // No key material is ever included.
+                logger.Debug
+                    $"AI provider resolved for user {accessContext.UserId} (conversation={conversationId}, override={label}): {provider.Capabilities.ProviderName}/{provider.Capabilities.Model}"
+
+                return Ok provider
+            | Error err ->
+                logger.Warn
+                    $"AI provider resolution failed for user {accessContext.UserId} (conversation={conversationId}, override={label}): {ProviderResolutionError.toMessage err}"
+
+                return Error(TurnFailure.ProviderUnresolved err)
+    }
+
+    /// The round-trippable provider history, every tool_use / tool_result
+    /// pair intact. A conversation with no history sibling (written before
+    /// it existed) is rebuilt from its UI blob, without tool context, for
+    /// one turn.
+    let loadHistory (conversationId: Guid) : Async<Result<AIProviderMessage list, TurnFailure>> = async {
+        let! history =
+            ConversationBlobs.loadProviderHistory storage scope.Container conversationId
+            |> withTimeout "Conversation history load" ChatPathIoTimeoutMs
+
+        match history with
+        | Error err -> return Error(unreadable logger conversationId err)
+        | Ok [] ->
+            let! existing =
+                ConversationBlobs.loadConversation storage scope.Container conversationId
+                |> withTimeout "Conversation load" ChatPathIoTimeoutMs
+
+            return
+                existing
+                |> Result.map (List.map toProviderMessage)
+                |> Result.mapError (unreadable logger conversationId)
+        | Ok history -> return Ok history
+    }
+
+    /// Bound the replayed history to the limits' window, keeping the most
+    /// recent messages. Replaying everything grows per-turn cost without
+    /// limit and ends in an opaque context-overflow error.
+    let windowed (conversationId: Guid) (messages: AIProviderMessage list) =
+        let window = SystemPromptBuilder.AgentLoopLimits.historyWindow limits
+        let total = List.length messages
+
+        if total > window then
+            logger.Warn(
+                sprintf
+                    "AI conversation %O: provider history is %d messages; replaying only the most recent %d (dropping %d oldest). Tune via AIAssistantServerConfig.Limits.HistoryWindow."
+                    conversationId
+                    total
+                    window
+                    (total - window)
+            )
+
+            List.skip (total - window) messages
+        else
+            messages
+
+    /// Post-stream citation normalisation, when `ICitationNormaliser` is
+    /// composed (RAG with a non-Off policy) and the turn produced both
+    /// retrieved sources and assistant text. One audit event per citation
+    /// event, best-effort: a wedged event store never fails the turn.
+    let normaliseCitations (turn: TurnRequest) (provider: IAIProvider) (content: string) = async {
+        let services = turn.Background.RequestServices
+        let sources = turn.Contribution.RetrievedSources
+
+        match services.GetService(typeof<ICitationNormaliser>), services.GetService(typeof<IEventStore>) with
+        | :? ICitationNormaliser as normaliser, store when
+            not (List.isEmpty sources) && not (String.IsNullOrEmpty content)
+            ->
+            let providerName = provider.Capabilities.ProviderName
+            let providerModel = provider.Capabilities.Model
+            let result = normaliser.Normalise(sources, content, providerName, providerModel)
+
+            match store with
+            | :? IEventStore as store ->
+                for evt in result.Events do
+                    let sourceModule, eventType, sourceIndex =
+                        match evt.Action with
+                        | NormalisedToCanonical idx -> "_platform.ai.citation.normalised", "Normalised", Some idx
+                        | StrippedPhantom -> "_platform.ai.citation.stripped", "Stripped", None
+                        | UnverifiedTagged -> "_platform.ai.citation.stripped", "UnverifiedTagged", None
+
+                    let payload = {|
+                        TaskId = turn.TaskId
+                        ConversationId = turn.Request.ConversationId
+                        ProviderName = providerName
+                        ProviderModel = providerModel
+                        Variant = evt.Variant
+                        Digit = evt.Digit
+                        Action = eventType
+                        SourceIndex = sourceIndex
+                    |}
+
+                    try
+                        do!
+                            store.Write {
+                                Id = Guid.NewGuid()
+                                OccurredAt = DateTime.UtcNow
+                                ScopeId = scope.ScopeId
+                                SourceModule = sourceModule
+                                EventType = eventType
+                                Payload = toJson payload
+                            }
+                    with ex ->
+                        logger.Warn
+                            $"AI citation-audit write failed (taskId={turn.TaskId}, action={eventType}): {ex.Message}. Record dropped; conversation unaffected."
+            | _ -> ()
+
+            return result.Text
+        | _ -> return content
+    }
+
+    /// The numeric-fidelity answer gate. Absent (the default) it returns the
+    /// content verbatim with no verdict, event, audit or metric (GP 11 /
+    /// GP 13); in `Annotate` / `Strict` it verifies every number against the
+    /// turn's retrieved facts and returns the verdict the message carries.
+    let verifyAnswer (turn: TurnRequest) (provider: IAIProvider) (content: string) =
+        let services = turn.Background.RequestServices
+
+        AnswerVerifier.runVerificationStageWithJoin
+            (tryService<AnswerVerifier.AnswerGate> services)
+            (tryService<Grounding.IMetricRegistry> services)
+            turn.Contribution.RetrievedSources
+            content
+            (tryService<Metrics.IMetricsSink> services)
+            (tryService<IEventStore> services)
+            {
+                AuditLog = tryService<IAuditLog> services
+                Anchors = tryService<IAnswerProvenanceAnchors> services
+            }
+            scope.ScopeId
+            turn.TaskId
+            turn.Request.ConversationId
+            provider.Capabilities.ProviderName
+            provider.Capabilities.Model
+            logger
+
+    /// Finish an answered turn: the reply's final text, the exchange written
+    /// through the record (the full history first, then the user prompt and
+    /// final text appended to the UI blob), the assistant turn on the
+    /// conversation substrate, and the conversation marked completed. `Some`
+    /// provider when this was the conversation's first exchange, to title it.
+    let completeTurn (turn: TurnRequest) (provider: IAIProvider) (finalMessages: AIProviderMessage list) = async {
+        let conversationId = turn.Request.ConversationId
+
+        let lastAssistant =
+            finalMessages |> List.tryFindBack (fun m -> m.Role = "assistant")
+
+        let emitted = lastAssistant |> Option.map _.Content |> Option.defaultValue ""
+        let! normalised = normaliseCitations turn provider emitted
+        let! content, verification = verifyAnswer turn provider normalised
+
+        verification
+        |> Option.iter (fun v -> turn.Emit(AnswerVerified(conversationId, v)))
+
+        let exchange = [
+            toConversationMessage conversationId User turn.Request.Content [] [] [] userId None
+            toConversationMessage
+                conversationId
+                AIAssistant
+                content
+                []
+                turn.Contribution.RetrievedSources
+                []
+                ""
+                verification
+        ]
+
+        match!
+            ConversationBlobs.ConversationRecord.appendExchange
+                storage
+                scope.Container
+                conversationId
+                finalMessages
+                exchange
+        with
+        | Error err -> return Error(unwritten logger conversationId err)
+        | Ok priorUi ->
+            do!
+                convAppendTurn
+                    scope.ScopeId
+                    conversationId
+                    "assistant"
+                    {
+                        Role = "assistant"
+                        Content = content
+                        ToolCalls = lastAssistant |> Option.map _.ToolCalls |> Option.defaultValue []
+                        ToolResults = []
+                        Parts = []
+                    }
+                    None
+                    None
+
+            do! convMarkStatus scope.ScopeId conversationId ConversationStatus.Completed
+            return Ok(if List.isEmpty priorUi then Some provider else None)
+    }
+
+    /// Run an admitted turn on `provider`: the history, the user's turn on
+    /// the conversation substrate, the plan, and the completion.
+    let runAdmitted (turn: TurnRequest) (provider: IAIProvider) (cancel: CancellationToken) = async {
+        let conversationId = turn.Request.ConversationId
+
+        match! loadHistory conversationId with
+        | Error failure -> return Error failure
+        | Ok history ->
+            let userMessage = AIProviderMessage.text "user" turn.Request.Content
+
+            // Both no-ops without a composed `IConversationStore`.
+            do!
+                convBeginIfNeeded
+                    conversationId
+                    userId
+                    scope.ScopeId
+                    provider.Capabilities.ProviderName
+                    provider.Capabilities.Model
+                    turn.Contribution.SystemPrompt
+
+            do!
+                convAppendTurn
+                    scope.ScopeId
+                    conversationId
+                    "user"
+                    {
+                        Role = "user"
+                        Content = turn.Request.Content
+                        ToolCalls = []
+                        ToolResults = []
+                        Parts = []
+                    }
+                    None
+                    None
+
+            let context =
+                TurnContext.create
+                    provider
+                    registry
+                    dispatchRegistry
+                    turn.Background
+                    turn.TaskId
+                    conversationId
+                    turn.Surface
+                    turn.Request.ActiveModule
+                    turn.Request.ActivePage
+                    turn.Input
+                    (AgentCallBudget.ofLimits limits)
+                    limits
+                    turn.Emit
+                    cancel
+
+            let plan = TurnPlan.ofContribution turn.Contribution
+
+            match! AIAgentEngine.run context plan (windowed conversationId history @ [ userMessage ]) with
+            | Error stop -> return Error(TurnFailure.Stopped stop)
+            | Ok state -> return! completeTurn turn provider state.Messages
+    }
+
+    /// The turn's stages, each refusing with a typed failure.
+    let attemptTurn (turn: TurnRequest) (cancel: CancellationToken) = async {
+        match! admitTurn turn with
+        | Error failure -> return Error failure
+        | Ok() ->
+            turn.Emit(TaskStatusChanged(turn.TaskId, InProgress))
+
+            match! resolveProvider turn with
+            | Error failure -> return Error failure
+            | Ok provider -> return! runAdmitted turn provider cancel
+    }
+
+    /// Run one turn to its outcome, and render the outcome once.
+    ///
+    /// The turn's cancellation joins the user's cancel (the per-task token
+    /// `/api/ai/cancel` flips) and the worker's shutdown token, and reaches
+    /// the provider call and the tool body. Which of the two fired decides
+    /// the outcome: a user's cancel completes the task, a shutdown fails it
+    /// with the reason, so the client is never left on an open stream.
+    let runTurn (turn: TurnRequest) (shutdown: CancellationToken) = async {
+        let conversationId = turn.Request.ConversationId
+
+        // The turn runs on the chat worker, where the request's ambient
+        // context does not flow: re-establish its viewer from the items
+        // carried forward, so the disclosure gate decides for this user.
+        use _viewer =
+            let viewer = RequestViewer.ofItems turn.Background.Items
+            RequestViewerContext.establish (fun () -> viewer)
+
+        Logger.trace
+            logger
+            "ai.agent"
+            $"turn start (userId={userId}, taskId={turn.TaskId}, conversation={conversationId})"
+
+        let userCancel = cancellationRegistry.Register turn.TaskId
+        use linked = CancellationTokenSource.CreateLinkedTokenSource(userCancel, shutdown)
+        let! attempted = attemptTurn turn linked.Token |> Async.Catch
+
+        let interrupted (otherwise: TurnFailure) =
+            if userCancel.IsCancellationRequested then
+                TurnOutcome.CancelledByUser
+            elif shutdown.IsCancellationRequested then
+                TurnOutcome.Failed TurnFailure.ShutDown
+            else
+                TurnOutcome.Failed otherwise
+
+        let outcome =
+            match attempted with
+            | Choice1Of2(Ok _) -> TurnOutcome.Completed
+            | Choice1Of2(Error(TurnFailure.Stopped LoopStop.Cancelled as failure)) -> interrupted failure
+            | Choice1Of2(Error failure) -> TurnOutcome.Failed failure
+            | Choice2Of2(:? OperationCanceledException as ex) -> interrupted (TurnFailure.Faulted ex)
+            | Choice2Of2 ex -> TurnOutcome.Failed(TurnFailure.Faulted ex)
+
+        match outcome with
+        | TurnOutcome.Completed
+        // Another member's conversation: nothing of it is touched.
+        | TurnOutcome.Failed(TurnFailure.Refused _) -> ()
+        | TurnOutcome.CancelledByUser
+        | TurnOutcome.Failed TurnFailure.ShutDown ->
+            convMarkStatus scope.ScopeId conversationId ConversationStatus.Cancelled
+            |> Async.Start
+        | TurnOutcome.Failed failure ->
+            convMarkStatus scope.ScopeId conversationId (ConversationStatus.Errored(TurnFailure.message failure))
+            |> Async.Start
+
+        turn.Emit(TaskStatusChanged(turn.TaskId, TurnOutcome.toStatus outcome))
+        cancellationRegistry.Unregister turn.TaskId
+
+        // Title a new conversation after the terminal event, so the reply is
+        // never kept waiting on it. A no-op unless a generating policy is
+        // composed; never throws.
+        match attempted with
+        | Choice1Of2(Ok(Some provider)) ->
+            do!
+                ConversationTitling.titleConversation
+                    logger
+                    storage
+                    scope.Container
+                    conversationId
+                    titlingPolicy
+                    provider
+                    turn.Request.Content
+        | _ -> ()
+    }
+
+    /// Hand a turn to the supervised worker rather than `Async.Start`. The
+    /// background scope is disposed exactly once, on the worker boundary,
+    /// whichever way the turn ended.
+    let enqueue (workItem: AIChatWorker.AIChatWorkItem) =
+        match chatWorker with
+        | Some worker ->
+            match worker.TryEnqueue workItem with
+            | AIChatWorker.Accepted -> ()
+            | AIChatWorker.QueueFull ->
+                // Admission control, surfaced, rather than a provider
+                // timeout several seconds further from the cause.
+                Logger.trace logger "ai.agent" $"chat worker queue full; refusing turn (taskId={workItem.TaskId})"
+                workItem.Reject AIChatWorker.QueueFullReason
+                workItem.Dispose()
+            | AIChatWorker.NotRunning ->
+                Logger.trace
+                    logger
+                    "ai.agent"
+                    $"chat worker registered but not running; detached start (taskId={workItem.TaskId})"
+
+                AIChatWorker.runDetached workItem
+        | None -> AIChatWorker.runDetached workItem
+
     let makeAssistantApi (emit: AIStreamEvent -> unit) : AIAssistantApi = {
         SubmitMessage =
             fun (request: AIMessageRequest) -> async {
-                let conversationId = request.ConversationId
-                let content = request.Content
                 let taskId = Guid.NewGuid()
 
-                // Resolve the authoritative surface for this turn.
-                // Under `TrustClient` (default) this is byte-for-byte
-                // `request.Surface`; under `DeriveFromCookie` the surface
-                // comes from the signed capability cookie on the ORIGINAL
-                // request context (`ctx`, not the synthetic background
-                // context — the bg context carries no cookies), so a client
+                // The authoritative surface. Under `TrustClient` (default)
+                // this is `request.Surface`; under `DeriveFromCookie` it comes
+                // from the signed capability cookie on the ORIGINAL request
+                // (the background context carries no cookies), so a client
                 // lying about `Surface = FullPage` is demoted to SidePanel.
                 let surfaceMode =
                     config |> Option.map _.AISurfaceDerivation |> Option.defaultValue TrustClient
 
-                let effectiveSurface, surfaceWarning =
+                let surface, surfaceWarning =
                     AISurfaceCapability.resolveSurfaceFromRequest surfaceMode DateTimeOffset.UtcNow ctx request.Surface
 
                 surfaceWarning |> Option.iter logger.Warn
 
                 let task: AITask = {
                     TaskId = taskId
-                    ConversationId = conversationId
-                    Prompt = content
+                    ConversationId = request.ConversationId
+                    Prompt = request.Content
                     Status = Queued
                     CreatedAt = DateTime.UtcNow
                     CompletedAt = None
                 }
 
                 taskRegistry.Register(scope.Container, userId, task, task.CreatedAt)
+                let! contribution = contributePrompt request
 
-                // Build the system prompt for this request. The builder
-                // sees the resolved access context plus the active module
-                // reported by the client, so platform, team, and module
-                // layers can all contribute per-request.
-                //
-                // `retrievedSourcesCell` is a fresh-per-request mutable cell
-                // that RAG-style builders (e.g. `withRetrieval`) populate
-                // with structured `RetrievedSource`s alongside the prompt
-                // text they return. We read it after the builder resolves
-                // so the assistant `ConversationMessage` can carry the
-                // sources to the client without leaking RAG types into
-                // `SystemPromptBuilder`'s return type.
-                let retrievedSourcesCell: RetrievedSource list ref = ref []
-
-                // Per-request server-side short-circuit channel. A
-                // prompt builder (RAG under `StrictlyGrounded` on a
-                // retrieval miss) sets this to refuse the turn without
-                // a provider call; checked after the builder resolves.
-                let shortCircuitCell: string option ref = ref None
-
-                // The id of the answer plan compiled for this
-                // turn's fact-first retrieval, when the fact tier is
-                // composed. Fresh cell per request, same lifecycle as the
-                // two above; stays `None` in every composition without a
-                // clause planner and on every turn that planned nothing.
-                let plannedAnswerCell: string option ref = ref None
-
-                // Prior turns for the query-rewrite stage. Read
-                // only when a prompt builder is actually going to run, and
-                // only when the conversation substrate is composed; `[]`
-                // otherwise, with no I/O on the request path.
-                let! promptHistory =
-                    match promptBuilder with
-                    | Some _ -> loadPromptHistory canSeeStoredConversation scope.ScopeId conversationId
-                    | None -> async { return [] }
-
-                let! systemPromptText =
-                    match promptBuilder with
-                    | Some builder ->
-                        builder {
-                            Access = accessContext
-                            ActiveModule = request.ActiveModule
-                            ActivePage = request.ActivePage
-                            ActivePageNarrative = request.ActivePageNarrative
-                            ModuleContexts = moduleContexts
-                            CurrentMessage = Some request.Content
-                            ConversationHistory = promptHistory
-                            // The client's per-turn retrieval scope,
-                            // forwarded verbatim. Taken at face value
-                            // by design: a filter only ever narrows, and it
-                            // AND-combines on top of the scopes the builder
-                            // derives from `accessContext`, so it cannot
-                            // reach a chunk this caller could not already
-                            // retrieve (see `AIMessageRequest.RetrievalFilters`).
-                            RetrievalFilters = request.RetrievalFilters
-                            RetrievedSources = retrievedSourcesCell
-                            ShortCircuit = shortCircuitCell
-                            PlannedAnswerId = plannedAnswerCell
-                            Scope = ScopeResolution.forRequest ctx
-                        }
-                    | None -> async { return "" }
-
-                let systemPrompt =
-                    if systemPromptText = "" then
-                        None
-                    else
-                        Some systemPromptText
-
-                // The turn's closed value. The prompt block is
-                // the composed builder output verbatim, so rendering it
-                // reproduces `systemPrompt` byte for byte; the chunks come
-                // from the same cell the Sources panel reads, each carrying
-                // `NotGated` until a gate result is supplied.
-                let modelInput =
-                    retrievedSourcesCell.Value
-                    |> List.fold
-                        (fun input (s: RetrievedSource) ->
-                            ModelInput.addChunk
-                                {
-                                    ChunkId = s.DocumentId
-                                    Text = s.Snippet
-                                    GateResult = NotGated
-                                    Source = Some s.DocumentName
-                                }
-                                input)
-                        (ModelInput.ofSystemPrompt "SystemPromptBuilder" systemPrompt [])
-
-                // Create a background context with its own DI scope.
-                // The original HttpContext is disposed after this response.
-                let bgCtx, bgScope = createBackgroundContext ctx userId
+                // A background context with its own DI scope: the request's
+                // HttpContext is disposed after this response.
+                let background, backgroundScope = createBackgroundContext ctx userId
 
                 // The "from" half of "cross-module". The active module
-                // arrives on the REQUEST BODY, so it is not among the
-                // middleware-resolved items `createBackgroundContext`
-                // copies forward; a tool executor has no other route to
-                // it. Stamped here, beside the copy, rather than inside
-                // that helper, because it is the only caller that holds
-                // the request.
-                //
-                // Absent when the user was on no module's page, which is
-                // an ordinary state: the audit row then carries `None` and
-                // the rollup labels it, rather than guessing a module.
+                // arrives on the request body, not among the items the
+                // background context copies forward. Absent when the user was
+                // on no module's page; the audit row then carries `None`.
                 request.ActiveModule
                 |> Option.iter (fun activeModule ->
-                    bgCtx.Items[AICrossModuleAudit.ItemsKeys.ActiveModule] <- box activeModule)
+                    background.Items[AICrossModuleAudit.ItemsKeys.ActiveModule] <- box activeModule)
 
-                // Fire the agent loop on a background thread.
-                // Results stream to the client via SSE.
-                // bgScope is disposed after completion or failure.
-                //
-                // `userCancelToken` is hoisted above the try so the
-                // `with` branch can disambiguate user-initiated cancel
-                // (real `cancelToken.IsCancellationRequested`) from
-                // every other `OperationCanceledException` source —
-                // provider per-call timeout, I/O timeout, framework
-                // shutdown. CancellationToken is a struct; `None` is
-                // a safe default until the real token is registered.
-                let mutable userCancelToken = System.Threading.CancellationToken.None
-
-                // The refusal, as its own function so the turn
-                // cannot fall through it: the gate in `bgWork` calls this on
-                // `Error` and does nothing else. The shape is the one
-                // `AIStreamFramingPinTests` pins — the queued task already
-                // returned, then `AITaskFailed` with the fixed text — plus a
-                // `BeaconRejected` row with `Surface = "submit"`. The DI
-                // scope is disposed once, by the worker, as on every other
-                // exit. (Refusing in the foreground, before the task is
-                // registered, would change `SubmitMessage`'s result type;
-                // not taken.)
-                let refuseTurn (ownerOfRecord: string) = async {
-                    logger.Warn
-                        $"AI SubmitMessage rejected: caller '{userId}' is not the owner of conversation {conversationId} (owner '{ownerOfRecord}', scope '{scope.ScopeId}')."
-
-                    // Emit BeaconRejected via IAuditLog when available. The
-                    // audit-trail row exists independent of which surface
-                    // fired the gate — operators query the trail by
-                    // `BeaconRejected` regardless of whether the rejection
-                    // came from the beacon POST or the SubmitMessage path;
-                    // `Surface` disambiguates.
-                    match auditLogOpt with
-                    | Some auditLog ->
-                        let payload: BeaconRejectedPayload = {
-                            ConversationId = conversationId
-                            Caller = userId
-                            Owner = ownerOfRecord
-                            Surface = "submit"
-                        }
-
-                        try
-                            do! auditLog.Record(scope.ScopeId, BeaconRejected payload)
-                        with ex ->
-                            logger.Warn
-                                $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
-                    | None -> ()
-
-                    // Surface the refusal through the existing SSE failure
-                    // channel — same shape as a provider resolution failure
-                    // or an agent-loop exception. The ToolUp.Remoting
-                    // SubmitMessage call already returned the queued task;
-                    // the failure event flips it to AITaskFailed client-side.
-                    emit (
-                        TaskStatusChanged(
-                            taskId,
-                            AITaskFailed "Conversation does not belong to the current user — refusing to append."
-                        )
-                    )
-                }
-
-                // The request's access context, captured now: the gate runs
-                // on the background scope, after the request's own services
-                // are gone.
-                let gateAccess = TeamConversationPolicyStore.ConversationVisibility.accessOf ctx
-
-                let bgWork (shutdownToken: System.Threading.CancellationToken) = async {
-                    try
-                        // The turn runs on the chat worker, where the
-                        // request's ambient context does not flow. Re-establish
-                        // the request's viewer from the items carried forward,
-                        // so the disclosure gate decides this turn's retrieval
-                        // and tool results for this user, not for nobody.
-                        use _viewer =
-                            let viewer = RequestViewer.ofItems bgCtx.Items
-                            RequestViewerContext.establish (fun () -> viewer)
-
-                        // Trace the user/task fingerprint at bgWork entry so a
-                        // `TOOLUP_TRACE_CATEGORIES=ai.agent` operator can
-                        // correlate this run's userId with the SSE-trace
-                        // panel's broadcast destination scopeId — the
-                        // exact data needed to spot a userId/scopeId
-                        // mismatch without hand-rolling diagnostic logs.
-                        Logger.trace
-                            logger
-                            "ai.agent"
-                            $"bgWork start (userId={userId}, taskId={taskId}, conversation={conversationId})"
-
-                        // Symmetric ownership gate. In shared-container
-                        // modes (`Team` / `MultiTeam`,
-                        // `Container = team-{teamId}`) a buggy or hostile
-                        // member could target another member's
-                        // conversation in the same container; the gate
-                        // refuses cross-user appends to a conversation
-                        // whose first persisted message recorded a
-                        // different owner. Mirrors the gate the beacon
-                        // handler applies for fast-path resolutions.
-                        // An ownerless legacy conversation under a
-                        // narrowed team level is admitted only for a
-                        // caller `canModify` admits (`checkAppend`).
-                        //
-                        // Load happens BEFORE the InProgress SSE so a
-                        // refused turn doesn't briefly flash as in-flight
-                        // on the client; the agent loop never starts.
-                        // An unreadable conversation blob
-                        // raises here, failing the turn before the agent
-                        // loop starts and before anything is written.
-                        //
-                        // This is the ONLY read of the addressed
-                        // conversation before the gate admits the caller:
-                        // its metadata, its provider history and its UI
-                        // blob are all read inside the `Ok()` branch below.
-                        let! gateExisting =
-                            loadConversationOrFail logger storage scope.Container conversationId
-                            |> withTimeout "Conversation load (ownership gate)" ChatPathIoTimeoutMs
-
-                        // The one definition of the gate, shared with the
-                        // beacon handler. The team state
-                        // and the caller's role are read on the background
-                        // scope (the request's own is gone by now), and
-                        // only for an ownerless conversation.
-                        let! admission =
-                            ConversationBlobs.checkAppend
-                                (fun () ->
-                                    TeamConversationPolicyStore.ConversationVisibility.resolveState
-                                        bgCtx
-                                        storage
-                                        scope.Container)
-                                (fun state ->
-                                    ToolUp.Platform.TeamPolicyStore.TeamPolicyViewer.resolve
-                                        bgCtx.RequestServices
-                                        gateAccess
-                                        userId
-                                        state.TeamId)
-                                gateExisting
-                                userId
-
-                        // The refusal ENDS the turn by construction:
-                        // everything the turn does sits in the `Ok()`
-                        // branch, and this `match` is the last
-                        // expression of the `try`. (A `return ()` in one
-                        // branch followed by the rest of the turn would
-                        // not end an `async` block, so a refused turn
-                        // would emit `InProgress` and read the teammate's
-                        // metadata and provider history.)
-                        match admission with
-                        | Error ownerOfRecord -> do! refuseTurn ownerOfRecord
-                        | Ok() ->
-                            emit (TaskStatusChanged(taskId, InProgress))
-
-                            // Resolve the provider once per user message. The
-                            // agent loop may make several SendMessage calls
-                            // across tool-use turns; all share this provider
-                            // so the user's active configuration can't shift
-                            // mid-loop. A user switching providers takes effect
-                            // on their next message.
-                            //
-                            // Per-conversation default: stored override
-                            // recorded by the module-page picker. The UI
-                            // also sends it as `request.OverrideProviderLabel`
-                            // on each submit, but reading the persisted
-                            // value here is the defensive fallback for
-                            // tabs that haven't loaded the dropdown yet
-                            // and is the source of truth on reload.
-                            //
-                            // Resolution priority: request override (one-off,
-                            // explicit per-message), then conversation
-                            // override (per-conversation default), then the
-                            // factory's active-label policy.
-                            let! storedMeta =
-                                loadMetaOrFail logger storage scope.Container conversationId
-                                |> withTimeout "Conversation metadata load" ChatPathIoTimeoutMs
-
-                            let resolvedOverrideLabel =
-                                match request.OverrideProviderLabel with
-                                | Some _ -> request.OverrideProviderLabel
-                                | None -> storedMeta.OverrideProviderLabel
-
-                            let! providerResult =
-                                match resolvedOverrideLabel with
-                                | Some label -> providerFactory.TryResolveByLabel(accessContext, label)
-                                | None -> providerFactory.Resolve accessContext
-                                |> withTimeout "AI provider resolution" ChatPathIoTimeoutMs
-
-                            let provider =
-                                match providerResult with
-                                | Ok p ->
-                                    // Log provider/model for ops traceability.
-                                    // No key material is ever included.
-                                    logger.Debug
-                                        $"AI provider resolved for user {accessContext.UserId} (conversation={conversationId}, override={resolvedOverrideLabel}): {p.Capabilities.ProviderName}/{p.Capabilities.Model}"
-
-                                    p
-                                | Error err ->
-                                    logger.Warn
-                                        $"AI provider resolution failed for user {accessContext.UserId} (conversation={conversationId}, override={resolvedOverrideLabel}): {ProviderResolutionError.toMessage err}"
-                                    // Catastrophic configuration failure.
-                                    // Surfaces via the outer try/with below
-                                    // as AITaskFailed; keeps a single error
-                                    // routing path for the handler.
-                                    failwith (ProviderResolutionError.toMessage err)
-
-                            // Round-trippable provider history — includes every
-                            // tool_use / tool_result from prior turns. Falls back
-                            // to rebuilding from the UI-facing conversation
-                            // blob when the history sibling is absent (e.g.
-                            // conversations created before this feature
-                            // landed). The rebuild path carries no tool context
-                            // forward, which is the pre-fix behaviour — safe
-                            // but degraded for one turn until the new history
-                            // blob is written.
-                            let! providerHistory =
-                                loadProviderHistoryOrFail logger storage scope.Container conversationId
-                                |> withTimeout "Conversation history load" ChatPathIoTimeoutMs
-
-                            let! providerMessages =
-                                if List.isEmpty providerHistory then
-                                    async {
-                                        let! existing =
-                                            loadConversationOrFail logger storage scope.Container conversationId
-                                            |> withTimeout "Conversation load" ChatPathIoTimeoutMs
-
-                                        return existing |> List.map toProviderMessage
-                                    }
-                                else
-                                    async.Return providerHistory
-
-                            let userMsg: AIProviderMessage = {
-                                Role = "user"
-                                Content = content
-                                ToolCalls = []
-                                ToolResults = []
-                                Parts = []
-                            }
-
-                            // Substrate hook — begin the conversation
-                            // record on first turn (idempotent) and
-                            // append the user turn.
-                            // Both no-op when ConversationStore =
-                            // NoConversationStore (the default).
-                            do!
-                                convBeginIfNeeded
-                                    conversationId
-                                    userId
-                                    scope.ScopeId
-                                    provider.Capabilities.ProviderName
-                                    provider.Capabilities.Model
-                                    systemPrompt
-
-                            do!
-                                convAppendTurn
-                                    scope.ScopeId
-                                    conversationId
-                                    "user"
-                                    {
-                                        Role = "user"
-                                        Content = content
-                                        ToolCalls = []
-                                        ToolResults = []
-                                        Parts = []
-                                    }
-                                    None
-                                    None
-
-                            // Bound the replayed history. Sending the entire
-                            // prior message list verbatim grows per-turn cost
-                            // without limit and eventually hard-fails with an
-                            // opaque provider context-overflow error. Keep the
-                            // most recent N; log when older turns are dropped.
-                            let maxHistory =
-                                SystemPromptBuilder.AIAssistantServerConfig.effectiveMaxHistory config
-
-                            let trimmedHistory =
-                                let total = List.length providerMessages
-
-                                if total > maxHistory then
-                                    let dropped = total - maxHistory
-
-                                    logger.Warn(
-                                        sprintf
-                                            "AI conversation %O: provider history is %d messages; replaying only the most recent %d (dropping %d oldest). Tune via AIAssistantServerConfig.MaxHistoryMessages."
-                                            conversationId
-                                            total
-                                            maxHistory
-                                            dropped
-                                    )
-
-                                    providerMessages |> List.skip dropped
-                                else
-                                    providerMessages
-
-                            let allProviderMessages = trimmedHistory @ [ userMsg ]
-
-                            // Register a CancellationTokenSource for this
-                            // task. The cancel POST handler flips it; the
-                            // agent loop checks at turn boundaries and bails
-                            // cleanly via OperationCanceledException. We always
-                            // unregister in the surrounding finally to free
-                            // the entry whether cancellation fired or not.
-                            let registeredToken = cancellationRegistry.Register(taskId)
-                            userCancelToken <- registeredToken
-
-                            // The worker's shutdown token joins the
-                            // per-task cancel token, so a host shutdown reaches
-                            // `runAgentLoop`'s turn-boundary checks instead of
-                            // abandoning the computation with the client still
-                            // waiting on an open stream.
-                            //
-                            // `userCancelToken` deliberately stays the REGISTERED
-                            // token. The `with` clauses below discriminate a user
-                            // cancel from every other cancellation source, and a
-                            // shutdown is not a user cancel — conflating them
-                            // would report a killed turn as a completed one.
-                            use linkedCancel =
-                                System.Threading.CancellationTokenSource.CreateLinkedTokenSource(
-                                    registeredToken,
-                                    shutdownToken
-                                )
-
-                            let cancelToken = linkedCancel.Token
-
-                            let! finalMessages =
-                                match shortCircuitCell.Value with
-                                | Some refusal ->
-                                    // Server-side grounding guard: a prompt
-                                    // builder (RAG `StrictlyGrounded` on a
-                                    // retrieval miss) demanded refusal
-                                    // WITHOUT a provider call. Synthesize the
-                                    // assistant turn so the existing
-                                    // persistence / SSE / history path runs
-                                    // verbatim — no model call, no duplicated
-                                    // finalisation.
-                                    async {
-                                        return
-                                            allProviderMessages
-                                            @ [
-                                                {
-                                                    Role = "assistant"
-                                                    Content = refusal
-                                                    ToolCalls = []
-                                                    ToolResults = []
-                                                    Parts = []
-                                                }
-                                            ]
-                                    }
-                                | None ->
-                                    runAgentLoopWithInput
-                                        provider
-                                        registry
-                                        dispatchRegistry
-                                        bgCtx
-                                        taskId
-                                        conversationId
-                                        effectiveSurface
-                                        request.ActiveModule
-                                        request.ActivePage
-                                        cancelToken
-                                        allProviderMessages
-                                        modelInput
-                                        (fun evt -> emit evt)
-
-                            let userConvMsg =
-                                toConversationMessage conversationId User content [] [] [] userId None
-
-                            let modelEmittedContent =
-                                finalMessages
-                                |> List.tryFindBack (fun m -> m.Role = "assistant")
-                                |> Option.map _.Content
-                                |> Option.defaultValue ""
-
-                            // Post-stream citation normalisation. Resolves
-                            // `ICitationNormaliser` from DI; when registered
-                            // (RAG composed with a non-Off policy) and the
-                            // turn produced both retrieved sources AND
-                            // assistant text, run the normaliser, emit one
-                            // audit event per `CitationEvent`, and persist
-                            // the rewritten text. Non-RAG deployments
-                            // resolve `null` → the model's text is kept
-                            // verbatim.
-                            let citationNormaliserOpt =
-                                match bgCtx.RequestServices.GetService(typeof<ICitationNormaliser>) with
-                                | :? ICitationNormaliser as n -> Some n
-                                | _ -> None
-
-                            let providerName = provider.Capabilities.ProviderName
-                            let providerModel = provider.Capabilities.Model
-
-                            let citationEventStore =
-                                match bgCtx.RequestServices.GetService(typeof<IEventStore>) with
-                                | :? IEventStore as store -> Some store
-                                | _ -> None
-
-                            let! finalContent =
-                                match citationNormaliserOpt with
-                                | Some normaliser when
-                                    not (List.isEmpty retrievedSourcesCell.Value)
-                                    && not (System.String.IsNullOrEmpty modelEmittedContent)
-                                      ->
-                                      async {
-                                          let result =
-                                              normaliser.Normalise(
-                                                  retrievedSourcesCell.Value,
-                                                  modelEmittedContent,
-                                                  providerName,
-                                                  providerModel
-                                              )
-
-                                          // Emit one audit event per recognised
-                                          // citation event so operators can correlate
-                                          // model drift with prompt changes. Best-
-                                          // effort: a wedged event store must never
-                                          // crash the conversation. Same shape as the
-                                          // denial-audit emission in AIAgentEngine.fs.
-                                          match citationEventStore with
-                                          | Some store ->
-                                              for evt in result.Events do
-                                                  let sourceModule, eventType, sourceIndexJson =
-                                                      match evt.Action with
-                                                      | NormalisedToCanonical idx ->
-                                                          "_platform.ai.citation.normalised", "Normalised", Some idx
-                                                      | StrippedPhantom ->
-                                                          "_platform.ai.citation.stripped", "Stripped", None
-                                                      | UnverifiedTagged ->
-                                                          "_platform.ai.citation.stripped", "UnverifiedTagged", None
-
-                                                  let payload = {|
-                                                      TaskId = taskId
-                                                      ConversationId = conversationId
-                                                      ProviderName = providerName
-                                                      ProviderModel = providerModel
-                                                      Variant = evt.Variant
-                                                      Digit = evt.Digit
-                                                      Action = eventType
-                                                      SourceIndex = sourceIndexJson
-                                                  |}
-
-                                                  let evtRecord: ModuleEvent = {
-                                                      Id = Guid.NewGuid()
-                                                      OccurredAt = DateTime.UtcNow
-                                                      ScopeId = scope.ScopeId
-                                                      SourceModule = sourceModule
-                                                      EventType = eventType
-                                                      Payload = toJson payload
-                                                  }
-
-                                                  try
-                                                      do! store.Write evtRecord
-                                                  with ex ->
-                                                      logger.Warn
-                                                          $"AI citation-audit write failed (taskId={taskId}, action={eventType}): {ex.Message}. Record dropped; conversation unaffected."
-                                          | None -> ()
-
-                                          return result.Text
-                                      }
-                                | _ -> async.Return modelEmittedContent
-
-                            // Numeric-fidelity answer gate. Resolves the
-                            // opt-in `AnswerGate` + metric registry + metrics
-                            // sink from the background DI scope; when the gate is
-                            // absent (the default) `runVerificationStage`
-                            // short-circuits to `finalContent` verbatim with no
-                            // verdict, no SSE event, no audit, no metric
-                            // (GP 11 / GP 13). In `Annotate` / `Strict` mode it
-                            // verifies every numeric token against the turn's
-                            // retrieved facts, appends a
-                            // footnote (or withholds unverified sentences behind an
-                            // inline flag), and returns the verdict to ride the
-                            // persisted `ConversationMessage` and the SSE stream.
-                            let answerGateOpt =
-                                match bgCtx.RequestServices.GetService(typeof<AnswerVerifier.AnswerGate>) with
-                                | :? AnswerVerifier.AnswerGate as g -> Some g
-                                | _ -> None
-
-                            let metricRegistryOpt =
-                                match bgCtx.RequestServices.GetService(typeof<Grounding.IMetricRegistry>) with
-                                | :? Grounding.IMetricRegistry as r -> Some r
-                                | _ -> None
-
-                            let answerMetricsSinkOpt =
-                                match bgCtx.RequestServices.GetService(typeof<Metrics.IMetricsSink>) with
-                                | :? Metrics.IMetricsSink as s -> Some s
-                                | _ -> None
-
-                            // The provenance join. `IAuditLog` is
-                            // composed by the platform, so a gate-on deployment
-                            // gets the typed row (and, through it, whichever
-                            // sinks it composed) without opting into anything
-                            // further; `IAnswerProvenanceAnchors` is opt-in
-                            // (`withAnswerProvenanceAnchors`) and absent leaves
-                            // the row's join fields honestly `None`.
-                            let answerAuditJoin: AnswerVerifier.AnswerAuditJoin = {
-                                AuditLog =
-                                    match bgCtx.RequestServices.GetService(typeof<IAuditLog>) with
-                                    | :? IAuditLog as a -> Some a
-                                    | _ -> None
-                                Anchors =
-                                    match bgCtx.RequestServices.GetService(typeof<IAnswerProvenanceAnchors>) with
-                                    | :? IAnswerProvenanceAnchors as a -> Some a
-                                    | _ -> None
-                            }
-
-                            let! (verifiedContent, verificationOpt) =
-                                AnswerVerifier.runVerificationStageWithJoin
-                                    answerGateOpt
-                                    metricRegistryOpt
-                                    retrievedSourcesCell.Value
-                                    finalContent
-                                    answerMetricsSinkOpt
-                                    citationEventStore
-                                    answerAuditJoin
-                                    scope.ScopeId
-                                    taskId
-                                    conversationId
-                                    providerName
-                                    providerModel
-                                    logger
-
-                            // Surface the per-message verdict on the SSE stream
-                            // (`Annotate` / `Strict` only; `Off` returns `None`).
-                            match verificationOpt with
-                            | Some verification -> emit (AnswerVerified(conversationId, verification))
-                            | None -> ()
-
-                            let assistantConvMsg =
-                                toConversationMessage
-                                    conversationId
-                                    AIAssistant
-                                    verifiedContent
-                                    []
-                                    retrievedSourcesCell.Value
-                                    []
-                                    ""
-                                    verificationOpt
-
-                            // Persist the exchange through the record: the full
-                            // round-trippable history first — what the next turn
-                            // loads to keep tool_use / tool_result pairing with
-                            // the provider — then the user prompt + final
-                            // assistant text appended to the UI blob (the
-                            // intermediate tool steps are not rendered in the
-                            // chat, though they stay inspectable in the history).
-                            let! existingUiMessages =
-                                appendExchangeOrFail logger storage scope.Container conversationId finalMessages [
-                                    userConvMsg
-                                    assistantConvMsg
-                                ]
-
-                            // Substrate hook — append the assistant
-                            // turn + mark the conversation
-                            // Completed. No-op when ConversationStore =
-                            // NoConversationStore.
-                            do!
-                                convAppendTurn
-                                    scope.ScopeId
-                                    conversationId
-                                    "assistant"
-                                    {
-                                        Role = "assistant"
-                                        Content = verifiedContent
-                                        ToolCalls =
-                                            finalMessages
-                                            |> List.tryFindBack (fun m -> m.Role = "assistant")
-                                            |> Option.map _.ToolCalls
-                                            |> Option.defaultValue []
-                                        ToolResults = []
-                                        Parts = []
-                                    }
-                                    None
-                                    None
-
-                            do! convMarkStatus scope.ScopeId conversationId ConversationStatus.Completed
-
-                            emit (TaskStatusChanged(taskId, AITaskCompleted))
-
-                            // Free the cancellation entry on natural
-                            // completion. The cancel POST handler
-                            // already removes the entry on cancellation,
-                            // so this is the no-cancel path.
-                            cancellationRegistry.Unregister(taskId)
-
-                            // Title a new conversation after its first
-                            // turn, AFTER the terminal event so the reply
-                            // is never kept waiting on it. A no-op unless a
-                            // generating policy is composed; never throws.
-                            if existingUiMessages.IsEmpty then
-                                do!
-                                    ConversationTitling.titleConversation
-                                        logger
-                                        storage
-                                        scope.Container
-                                        conversationId
-                                        titlingPolicy
-                                        provider
-                                        content
-                    with
-                    | :? System.OperationCanceledException when userCancelToken.IsCancellationRequested ->
-                        // User-initiated cancel. The agent
-                        // loop already emitted StreamCancelled; the
-                        // task ends gracefully (not as a failure).
-                        //
-                        // Gate this branch on the user-cancel token
-                        // actually being flipped. Any OTHER
-                        // OperationCanceledException — provider
-                        // per-call timeout (RetryPolicy.Timeout CTS),
-                        // I/O timeout, etc. — must fall through to the
-                        // generic failure branch and surface as
-                        // AITaskFailed. Without this guard, F# async's
-                        // habit of propagating OCE through `with`
-                        // clauses would silently treat timeout-induced
-                        // cancellations as user cancels: no error
-                        // event, no chat-inline ⚠️, just a 60 s
-                        // watchdog timeout.
-                        convMarkStatus scope.ScopeId conversationId ConversationStatus.Cancelled
-                        |> Async.Start
-
-                        emit (TaskStatusChanged(taskId, AITaskCompleted))
-                        cancellationRegistry.Unregister(taskId)
-                    | :? System.OperationCanceledException when shutdownToken.IsCancellationRequested ->
-                        // The host is going away and the worker's
-                        // shutdown budget expired with this turn still in
-                        // flight. Abandoning the computation would leave no
-                        // terminal event, so the client would sit on an open
-                        // stream until its 60 s watchdog called it a hang
-                        // and the user would never be told why.
-                        //
-                        // `Cancelled` rather than `Errored` because nothing
-                        // went wrong with the turn — it was cut short — and
-                        // the terminal event carries the reason so the chat
-                        // says so inline.
-                        convMarkStatus scope.ScopeId conversationId ConversationStatus.Cancelled
-                        |> Async.Start
-
-                        emit (TaskStatusChanged(taskId, AITaskFailed AIChatWorker.ShuttingDownReason))
-                        cancellationRegistry.Unregister(taskId)
-                    | ex ->
-                        convMarkStatus scope.ScopeId conversationId (ConversationStatus.Errored ex.Message)
-                        |> Async.Start
-
-                        emit (TaskStatusChanged(taskId, AITaskFailed ex.Message))
-                        cancellationRegistry.Unregister(taskId)
-                }
-
-                // The turn is handed to the supervised worker
-                // rather than fired with `Async.Start`. Scope disposal moves
-                // with it: `Dispose` runs exactly once on the worker
-                // boundary whichever way the turn ended, so a terminal
-                // branch added later cannot leak a DI scope per turn by
-                // forgetting to dispose one.
-                let workItem: AIChatWorker.AIChatWorkItem = {
+                let turn: TurnRequest = {
                     TaskId = taskId
-                    Fingerprint = $"userId={userId}, conversation={conversationId}"
-                    Run = bgWork
-                    Reject = fun reason -> emit (TaskStatusChanged(taskId, AITaskFailed reason))
-                    Dispose = fun () -> bgScope.Dispose()
+                    Request = request
+                    Surface = surface
+                    Contribution = contribution
+                    Input = modelInputOf contribution
+                    Background = background
+                    // Captured now: the gate runs on the background scope,
+                    // after the request's own services are gone.
+                    GateAccess = TeamConversationPolicyStore.ConversationVisibility.accessOf ctx
+                    Emit = emit
                 }
 
-                match chatWorker with
-                | Some worker ->
-                    match worker.TryEnqueue workItem with
-                    | AIChatWorker.Accepted -> ()
-                    | AIChatWorker.QueueFull ->
-                        // Admission control, surfaced. The alternative is
-                        // to start the turn anyway and let it fail later
-                        // as a provider timeout — the same outcome, minus
-                        // the explanation, several seconds further from
-                        // the cause.
-                        Logger.trace logger "ai.agent" $"chat worker queue full; refusing turn (taskId={taskId})"
-
-                        workItem.Reject AIChatWorker.QueueFullReason
-                        workItem.Dispose()
-                    | AIChatWorker.NotRunning ->
-                        Logger.trace
-                            logger
-                            "ai.agent"
-                            $"chat worker registered but not running; detached start (taskId={taskId})"
-
-                        AIChatWorker.runDetached workItem
-                | None -> AIChatWorker.runDetached workItem
+                enqueue {
+                    TaskId = taskId
+                    Fingerprint = $"userId={userId}, conversation={request.ConversationId}"
+                    Run = runTurn turn
+                    Reject = fun reason -> emit (TaskStatusChanged(taskId, AITaskFailed reason))
+                    Dispose = fun () -> backgroundScope.Dispose()
+                }
 
                 return task
             }
@@ -2499,7 +2201,11 @@ let aiAssistantApi
         // conversation.
         GetConversation =
             fun conversationId -> async {
-                let! messages = loadConversationOrFail logger storage scope.Container conversationId
+                let! messages = async {
+                    match! ConversationBlobs.loadConversation storage scope.Container conversationId with
+                    | Ok messages -> return messages
+                    | Error err -> return failwith (TurnFailure.message (unreadable logger conversationId err))
+                }
 
                 match messages with
                 | [] -> return []

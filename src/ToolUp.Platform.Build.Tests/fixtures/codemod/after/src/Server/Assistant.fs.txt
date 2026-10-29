@@ -1,0 +1,25 @@
+module MyApp.Server.Assistant
+
+open System.Threading
+open ToolUp.AI
+open ToolUp.AI.SystemPromptBuilder
+
+let assistant: AIAssistantServerConfig = {
+    Branding = {
+        Name = "Assistant"
+        Icon = ""
+        ShowSidePanel = true
+    }
+    SystemPrompt = None
+    Limits = AgentLoopLimits.defaults
+    AISurfaceDerivation = TrustClient
+}
+
+let longer = { assistant with Limits = { AgentLoopLimits.defaults with HistoryWindow = 120 } }
+
+let window = AgentLoopLimits.DefaultHistoryWindow
+
+let tuned (n: int) = { assistant with MaxHistoryMessages = Some n }
+
+let reply provider registry dispatch ctx taskId conversationId messages prompt onEvent =
+    AIAgentEngine.runAgentLoop provider registry dispatch ctx taskId conversationId AISurface.SidePanel None None CancellationToken.None messages prompt onEvent

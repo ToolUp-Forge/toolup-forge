@@ -771,7 +771,7 @@ AIServerApp.create aiProviderFactory providerProfile
 |> AIServerApp.withAIConfig {
     Branding = branding
     SystemPrompt = Some composedBuilder
-    MaxHistoryMessages = None
+    Limits = AgentLoopLimits.defaults
     AISurfaceDerivation = TrustClient
 }
 |> AIServerApp.run

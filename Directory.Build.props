@@ -855,6 +855,20 @@
       move. Migration recipe:
       `docs/migrations/1076-tool-outcome-and-conversation-record.md`.
     -->
+    <!--
+      Phase 1077 rides the 0.36.0 draft (untagged, publicly unpinned; its
+      surface movement is breaking-class, the draft's own class, not above
+      it): `ToolUp.AI.Server` removes the `[<Obsolete>]` string-prompt entry
+      `AIAgentEngine.runAgentLoop` (codemod review rule
+      `1077-run-agent-loop`), and `AIAssistantServerConfig` gains `Limits:
+      AgentLoopLimits` in place of `MaxHistoryMessages`, so a full record
+      construction changes a field (codemod rewrite rules
+      `1077-history-window-*`). The rest is additive: `TurnContext`,
+      `TurnServices`, `LoopState`, `LoopStop`, `TurnFailure`, `TurnOutcome`,
+      `TurnPlan`, `AIAgentEngine.run`, `PromptContribution`. The
+      `AITaskStatus` a client is sent does not move. Migration recipe:
+      `docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md`.
+    -->
     <Version>0.36.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

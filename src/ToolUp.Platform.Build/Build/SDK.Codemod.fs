@@ -23,6 +23,9 @@ type CodemodMigration =
     /// `SlotFill`, and `ClientConfig`'s per-built-in fields become the
     /// `Slots` map.
     | ShellSlots
+    /// Phase 1077 — the string-shaped agent-loop entry is removed, and the
+    /// history window moves into the loop's limits.
+    | AgentLoop
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -34,6 +37,7 @@ module CodemodMigration =
         | CodemodMigration.ApiStability -> "docs/migrations/11-C-5-public-api-stability-cluster.md"
         | CodemodMigration.Deprecations -> "docs/migrations/815-remove-open-deprecations.md"
         | CodemodMigration.ShellSlots -> "docs/migrations/879-shell-slots.md"
+        | CodemodMigration.AgentLoop -> "docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -43,6 +47,7 @@ module CodemodMigration =
         | CodemodMigration.ApiStability -> "Phase 11.C.5"
         | CodemodMigration.Deprecations -> "Phase 815"
         | CodemodMigration.ShellSlots -> "Phase 879"
+        | CodemodMigration.AgentLoop -> "Phase 1077"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -517,6 +522,29 @@ module Codemod =
             (@"(?<![\w])(?:" + labelRecords + @")Config\b")
             "ModuleLabel"
             "`TeamManagerConfig` (and the nineteen other `{ Name; Icon }` records) → `ModuleLabel`"
+        // Phase 1077 — the history window moved into the loop's limits. A
+        // literal window maps 1:1; any other expression is reported below.
+        rewrite
+            "1077-history-window-default"
+            CodemodMigration.AgentLoop
+            CodemodFileClass.Source
+            @"\bMaxHistoryMessages\s*=\s*None\b"
+            "Limits = AgentLoopLimits.defaults"
+            "`MaxHistoryMessages = None` → `Limits = AgentLoopLimits.defaults`"
+        rewrite
+            "1077-history-window-literal"
+            CodemodMigration.AgentLoop
+            CodemodFileClass.Source
+            @"\bMaxHistoryMessages\s*=\s*Some\s*(?:\(\s*(\d+)\s*\)|(\d+)\b)"
+            "Limits = { AgentLoopLimits.defaults with HistoryWindow = $1$2 }"
+            "`MaxHistoryMessages = Some n` → `Limits = { AgentLoopLimits.defaults with HistoryWindow = n }`"
+        rewrite
+            "1077-history-window-constant"
+            CodemodMigration.AgentLoop
+            CodemodFileClass.Source
+            @"\bAIAssistantServerConfig\.DefaultMaxHistoryMessages\b"
+            "AgentLoopLimits.DefaultHistoryWindow"
+            "`AIAssistantServerConfig.DefaultMaxHistoryMessages` → `AgentLoopLimits.DefaultHistoryWindow`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -673,6 +701,20 @@ module Codemod =
             CodemodFileClass.Source
             (@"^\s*(?:" + slotFields + @")\s*=\s*$")
             "if this is a `ClientConfig` field, it is `Slots.<field> =` now (a nested copy-and-update) — the codemod moves the field only when its mode case is on the same line; a message-catalog field of the same name stays as it is"
+        // Phase 1077 — the string-shaped loop entry is removed. Its twelfth
+        // argument changes type, so the call is reshaped by hand.
+        review
+            "1077-run-agent-loop"
+            CodemodMigration.AgentLoop
+            CodemodFileClass.Source
+            @"\brunAgentLoop\b"
+            "`AIAgentEngine.runAgentLoop` is removed: call `runAgentLoopWithInput` with the same arguments, passing `ModelInput.ofSystemPrompt \"SystemPromptBuilder\" systemPrompt messages` where the system prompt was (or build an `AIAgentEngine.TurnContext` and call `AIAgentEngine.run`)"
+        review
+            "1077-history-window"
+            CodemodMigration.AgentLoop
+            CodemodFileClass.Source
+            @"\b(?:MaxHistoryMessages|effectiveMaxHistory)\b"
+            "the history window is `AIAssistantServerConfig.Limits.HistoryWindow` now: set `Limits = { AgentLoopLimits.defaults with HistoryWindow = <n> }`, and read it as `AIAssistantServerConfig.limits cfg |> AgentLoopLimits.historyWindow`"
     ]
 
     // ── Per-file decision ─────────────────────────────────────────────

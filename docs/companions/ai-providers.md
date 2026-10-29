@@ -315,8 +315,8 @@ See [`ai/extending.md`](../ai/extending.md) for the full provider authoring guid
 
 ## Cost-control patterns
 
-- **Agent-loop turn cap** — the loop stops after 15 turns rather than running away; a chat that hits it ends with an explicit message rather than more provider calls.
-- **`AIAssistantServerConfig.MaxHistoryMessages`** — caps the prior history replayed to the model each turn (default 60), so a long-lived conversation cannot grow per-turn token spend without bound.
+- **Agent-loop turn cap** — the loop stops after `AIAssistantServerConfig.Limits.MaxTurns` turns (default 15) rather than running away; a chat that hits it ends with an explicit message rather than more provider calls.
+- **`AIAssistantServerConfig.Limits.HistoryWindow`** — caps the prior history replayed to the model each turn (default 60), so a long-lived conversation cannot grow per-turn token spend without bound.
 - **Token-usage caps** — middleware that short-circuits before hitting the provider when the user/team's daily/monthly cap is exceeded. Build atop `AILatencyRecord` events.
 - **Cheaper models for non-critical paths** — use Haiku / GPT-4o-mini for tool dispatch in modules where Opus / GPT-4o would be overkill.
 - **Cached system prompts** — long system prompts that don't change across users (platform-layer prompts) benefit most from caching. Make module-private prompts shorter than platform-shared ones to maximise hit rate.

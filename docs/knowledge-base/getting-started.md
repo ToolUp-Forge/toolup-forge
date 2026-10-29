@@ -91,7 +91,7 @@ RAGServerApp.create aiProviderFactory providerProfile embedder
         standingContextBuilder
         // ... other builders (active module, RAG retrieval, etc.)
     ])
-    MaxHistoryMessages = None
+    Limits = AgentLoopLimits.defaults
     AISurfaceDerivation = TrustClient
 }
 |> RAGServerApp.run

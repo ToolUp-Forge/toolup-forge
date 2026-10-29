@@ -370,10 +370,12 @@ type AIAssistantServerConfig = {
     Branding: AIAssistantBranding
     /// `None` sends no system prompt at all.
     SystemPrompt: SystemPromptBuilder option
-    /// Cap on prior provider-history messages replayed each turn. `None` uses
-    /// `AIAssistantServerConfig.DefaultMaxHistoryMessages` (60); older turns are
-    /// dropped with a Warn log so the truncation is observable.
-    MaxHistoryMessages: int option
+    /// The agent loop's limits: MaxTurns (15), MaxConsecutiveErrored (2),
+    /// OuterRetries (1), ProviderSendTimeout (50 s), ClientToolTimeout (90 s)
+    /// and HistoryWindow (60 prior provider-history messages replayed each turn;
+    /// older ones are dropped with a Warn log). `AgentLoopLimits.defaults` is
+    /// those values.
+    Limits: AgentLoopLimits
     /// How the server decides each turn's authoritative `AISurface`.
     AISurfaceDerivation: AISurfaceDerivationMode   // TrustClient | DeriveFromCookie of byte[]
 }

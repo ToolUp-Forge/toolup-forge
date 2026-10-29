@@ -28,7 +28,7 @@ open ToolUp.AI.SystemPromptBuilder
 // `AIServerApp` wraps a `ServerApp` in its `Base` field, and some
 // `ServerApp.with*` helpers have a delegating counterpart here that lifts
 // the operation onto `Base`. It is NOT a flat superset, and says so
-// because a reader would assume it (Phase 1051, measured then): 41 of the
+// because a reader would assume it: 41 of the
 // 68 `ServerApp.with*` / `add*` builders have no counterpart. Apply those
 // to the `Base` field directly — the wrappers are retired by the
 // composition-as-contributions model rather than completed. AI-specific
@@ -52,7 +52,7 @@ open ToolUp.AI.SystemPromptBuilder
 //     |> AIServerApp.withAIConfig assistant    // AI-specific
 //     |> AIServerApp.run
 //
-// Composition root pattern (Phase 1h — stack AI with Forms / RAG):
+// Composition root pattern:
 //
 //     ServerApp.empty
 //     |> ServerApp.withConfig config
@@ -70,13 +70,13 @@ open ToolUp.AI.SystemPromptBuilder
 type AIServerApp = {
     Base: ServerApp
     AIProviderFactory: IAIProviderFactory
-    /// Canonical platform-wide BYOK store (Phase 43.A). The AI factory
+    /// Canonical platform-wide BYOK store. The AI factory
     /// resolves providers against this; the settings handler + usage-
     /// metering wrapper read it. Mirrored onto `Base.ProviderProfile`
     /// by `create` / `createFrom` so a non-AI handler in the same app
     /// can resolve it from DI too.
     ProviderProfile: IProviderProfile
-    /// Phase 70 — Platform-Admin-managed AI key store. `None` lets the
+    /// Platform-Admin-managed AI key store. `None` lets the
     /// composer auto-promote `BlobPlatformAIKeyStore.create secretStore`
     /// at compose time when `ISecretStore` is registered in DI. Setting
     /// `Some store` overrides with a custom backing implementation
@@ -84,9 +84,9 @@ type AIServerApp = {
     /// registered as `IPlatformAIKeyStore` in DI; the factory's
     /// resolution chain consumes it via the consumer's
     /// `DefaultAIProviderFactory.create` call, and the Platform Admin
-    /// keys handler (Phase 70 Stream D) resolves it from DI.
+    /// keys handler resolves it from DI.
     PlatformKeyStore: IPlatformAIKeyStore option
-    /// Phase 70 A.5 — declarative accumulator for the platform providers
+    /// Declarative accumulator for the platform providers
     /// wired into `AIProviderFactory`. Populated additively via
     /// `withPlatformProvider`. Today the consumer still constructs the
     /// factory directly (passing the same list to
@@ -105,21 +105,21 @@ type AIServerApp = {
     PlatformProviders: DefaultAIProviderFactory.AIPlatformProvider list
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
-    /// Phase 47 — when to raise a sustained-action-denial alert.
+    /// When to raise a sustained-action-denial alert.
     /// `None` (the default) registers no monitor at all: a deployment
     /// that has not opted in pays one failed `GetService` per agent
     /// turn and nothing else (GP 13). Set via
     /// `AIServerApp.withDenialRateAlert`.
     DenialRateAlert: AIDenialRateMonitor.AIDenialRateAlertPolicy option
-    /// Phase 36.D — whether, and how often, the user is asked before a
+    /// Whether, and how often, the user is asked before a
     /// `_platform.ai.*` tool reads from a module they did not name.
     ///
     /// **Defaults to `RememberPerConversation`, which is a behaviour
     /// change rather than the byte-for-byte default GP 11 usually asks
-    /// for** — the second place the SDK inverts that posture, after Phase
-    /// 36.C's opt-in, and for the same reason: shipping this gate off by
-    /// default would ship nothing. A deployment that wants the pre-36.D
-    /// flow declares `TrustEverything` via `withAIConsentMode`, and that
+    /// for** — the second place the SDK inverts that posture, after the
+    /// cross-module read opt-in, and for the same reason: shipping this gate
+    /// off by default would ship nothing. A deployment that wants no consent
+    /// prompt declares `TrustEverything` via `withAIConsentMode`, and that
     /// is then a decision somebody made. See
     /// `docs/migrations/36-D-cross-module-read-consent.md`.
     ///
@@ -127,9 +127,9 @@ type AIServerApp = {
     /// "undeclared" here — every deployment has a consent posture, and
     /// the default IS one.
     ConsentMode: AIConsentMode
-    /// Phase 793 — the tool effect policy and the profile it is mandatory
+    /// The tool effect policy and the profile it is mandatory
     /// under. `None` (the default) runs the registry under
-    /// `ToolPolicy.unrestricted`, byte-for-byte the pre-793 tool surface;
+    /// `ToolPolicy.unrestricted`, byte-for-byte the unrestricted tool surface;
     /// `Some` composes the policy and, under `CompositionProfile.Verified`,
     /// refuses any registered tool that declares no effects.
     ToolEffects: ToolEffectEnvelope.ToolEffectComposition option
@@ -137,7 +137,7 @@ type AIServerApp = {
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
 //
-// Phase 1h seam: `composeAI : AIServerApp -> ServerApp` lifts every
+// The seam: `composeAI : AIServerApp -> ServerApp` lifts every
 // AI-specific contribution (DI registrations, agent-loop handlers,
 // tool registry, dev endpoints, notification-consumer declaration,
 // SDK config validators) onto the inner `ServerApp.Extensions`,
@@ -168,7 +168,7 @@ type AIServerApp = {
 /// calls this and then `ServerApp.run`; the `withAI` additive
 /// extension calls this from inside a `ServerApp`-shaped pipeline so
 /// AI contributions stack with Forms / RAG contributions onto one
-/// composition root (Phase 1h goal).
+/// composition root.
 ///
 /// **Advanced.** Consumers should use `AIServerApp.run` unless they
 /// are stacking multiple companion supersets — in which case use the
@@ -185,7 +185,7 @@ let composeAI (app: AIServerApp) : ServerApp =
     let aiConfig = app.AIConfig
     let moduleAIContexts = app.ModuleAIContexts
 
-    // Phase 9m.C — declare the trace categories this package emits under,
+    // Declare the trace categories this package emits under,
     // so `TraceCategoriesValidator` can tell an operator that
     // `TOOLUP_TRACE_CATEGORIES=ai.agnet` selects nothing. Declared here
     // rather than observed at the emission sites because the preflight
@@ -196,7 +196,7 @@ let composeAI (app: AIServerApp) : ServerApp =
 
     // Validate tool name uniqueness across modules AND against the
     // platform-reserved built-in tool names (`NarrativeTools.builtInTools`
-    // + Phase 36.B's `PlatformAITools.builtIn`). Duplicates fail loudly
+    // + `PlatformAITools.builtIn`). Duplicates fail loudly
     // at compose time with a clear message, before any agent turn runs.
     // Before this check included built-ins, a module tool named e.g.
     // `list_narratives` passed compose validation and silently lost
@@ -220,7 +220,7 @@ let composeAI (app: AIServerApp) : ServerApp =
             (System.String.Join(", ", duplicateNames))
             (System.String.Join(", ", builtInToolNames))
 
-    // Phase 70 A.5 — when the consumer declared platform providers via
+    // When the consumer declared platform providers via
     // `AIServerApp.withPlatformProvider`, verify the accumulated list
     // matches what `factory.PlatformDescriptors` reports. A divergence
     // means the consumer wired providers via the builder but passed a
@@ -249,7 +249,7 @@ let composeAI (app: AIServerApp) : ServerApp =
 
     // Convert per-module `(definition, executor)` tuples into the
     // companion's `RegisteredTool` shape and prepend the SDK's built-in
-    // tools (narrative + Phase 36.B's `_platform.ai.*` cross-module read
+    // tools (narrative + `_platform.ai.*` cross-module read
     // family). Modules contribute their tools via
     // `ServerModule.withAITools`; `composeAI` aggregates them via
     // `ServerApp.AITools` and registers them here. Built-ins reserve
@@ -257,7 +257,7 @@ let composeAI (app: AIServerApp) : ServerApp =
     let registeredModuleTools =
         moduleTools |> List.map (fun (def, exec) -> createTool def exec)
 
-    // Phase 793 — the registry lists and dispatches under the deployment's
+    // The registry lists and dispatches under the deployment's
     // `ToolPolicy`; none declared is `ToolPolicy.unrestricted` (GP 11).
     let toolPolicy =
         app.ToolEffects
@@ -267,7 +267,7 @@ let composeAI (app: AIServerApp) : ServerApp =
     let registry = AIToolRegistry(toolPolicy)
     registry.RegisterAll(NarrativeTools.builtInTools @ PlatformAITools.builtIn @ registeredModuleTools)
 
-    // Phase 793 — under the verified profile every registered tool, built-in
+    // Under the verified profile every registered tool, built-in
     // and module-declared alike, must declare its effects: a mandatory
     // envelope with nothing to check against would admit everything while
     // presenting as enforcement. Refused here, at compose, beside the
@@ -289,43 +289,43 @@ let composeAI (app: AIServerApp) : ServerApp =
     let resolveManager (ctx: HttpContext) =
         ctx.RequestServices.GetService(typeof<SSEConnectionManager>) :?> SSEConnectionManager
 
-    // Phase 6g.A: per-process registry of pending client-resident tool
+    // Per-process registry of pending client-resident tool
     // calls. Singleton — same instance resolved by `aiAssistantApi`
     // (which suspends agent-loop tool calls on it) and by
     // `clientToolResultHandler` (which completes them when the browser
     // POSTs back).
     let dispatchRegistry = ClientToolDispatch.ClientToolDispatchRegistry()
 
-    // Phase 36.D: per-process registry of cross-module reads suspended on
+    // Per-process registry of cross-module reads suspended on
     // a user consent decision. Singleton for the same reason, and with the
     // same multi-instance caveat, as `dispatchRegistry` above — the
     // `/api/ai/consent` POST has to find the suspended read, so a
     // multi-silo deployment needs SSE/POST affinity.
     let consentRegistry = AIConsentDispatch.AIConsentRegistry()
 
-    // Phase 503: per-process registry of tool invocations held awaiting a
+    // Per-process registry of tool invocations held awaiting a
     // user's approval. Singleton for the same reason, and with the same
     // multi-instance caveat, as the two registries above — the
     // `/api/ai/tool-approval` POST has to find the held invocation, so a
     // multi-silo deployment needs SSE/POST affinity.
     let approvalRegistry = ToolApprovalDispatch.ToolApprovalRegistry()
 
-    // Phase 6h: per-task `CancellationTokenSource` registry for the
+    // Per-task `CancellationTokenSource` registry for the
     // cancel-mid-stream feature. `aiAssistantApi` registers a CTS
     // when starting the agent loop; `cancelHandler` cancels it when
     // the user clicks Cancel; the handler unregisters on natural
     // completion via try/finally.
     let cancellationRegistry = AICancellationRegistry.AICancellationRegistry()
 
-    // Phase 6j.A + 6i.A: dev-only telemetry endpoints. Runtime-gated via
+    // Dev-only telemetry endpoints. Runtime-gated via
     // `ServerConfig.EnableDevEndpoints` (default `false`). The previous
     // `#if DEBUG` belt-and-suspenders gate was removed when ToolUp.Platform
     // and OSS-bound companions stopped carrying compile-time gates. Two
     // endpoints share the gate:
-    //   * `/dev/ai-fastpath` — Phase 6j.A Tier-1 hit-rate stats
-    //   * `/dev/ai-latency`  — Phase 6i.A per-turn latency rollup
-    //   * `/dev/ai-allowlist` — Phase 47 action-denial rollup
-    //   * `/dev/ai-cross-module` — Phase 36.E cross-module read rollup
+    //   * `/dev/ai-fastpath` — Tier-1 hit-rate stats
+    //   * `/dev/ai-latency`  — per-turn latency rollup
+    //   * `/dev/ai-allowlist` — action-denial rollup
+    //   * `/dev/ai-cross-module` — cross-module read rollup
     let fastPathDevHandlers =
         if config.EnableDevEndpoints then
             FastPathTelemetryHandler.routes
@@ -338,38 +338,38 @@ let composeAI (app: AIServerApp) : ServerApp =
     let aiHandlers =
         [
             makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> fst)
-            // Phase 69c.tail A — typed streaming companion (StreamChatV2).
+            // The typed streaming companion (StreamChatV2).
             // Same per-request closure; the dispatcher auto-frames its
             // IAsyncEnumerable<AIStreamEvent> method as SSE. Legacy
             // SubmitMessage + /api/ai/events (below) stay mounted unchanged.
             makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> snd)
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
-            // Phase 859 — the active team's conversation visibility level.
+            // The active team's conversation visibility level.
             makeApi TeamConversationPolicyStore.teamConversationVisibilityApi
-            // Phase 896's output-visibility API is mounted by the platform
-            // itself since Phase 936, in every deployment.
-            // Phase 70 — Platform Admin AI keys API. Every method
+            // The output-visibility API is mounted by the platform
+            // itself, in every deployment.
+            // Platform Admin AI keys API. Every method
             // is gated server-side on canModifyPlatformConfig; the
             // client-side module is hidden from non-admin sidebars by
             // ClientModule.Visibility.platformAdminOnly.
             makeApi (PlatformAIKeysHandler.platformAIKeysApi aiProviderFactory)
             route "/api/ai/events"
             >=> fun next ctx -> sseHandler (resolveManager ctx) config.SseAuthMode next ctx
-            // Phase 6g.A: client-resident tool result POST endpoint.
+            // Client-resident tool result POST endpoint.
             POST
             >=> route "/api/ai/tool-result"
             >=> ClientToolDispatch.clientToolResultHandler
-            // Phase 36.D: cross-module read-consent decision POST.
+            // Cross-module read-consent decision POST.
             POST >=> route "/api/ai/consent" >=> AIConsentHandler.consentDecisionHandler
-            // Phase 503: human-in-the-loop tool-approval decision POST.
+            // Human-in-the-loop tool-approval decision POST.
             POST
             >=> route "/api/ai/tool-approval"
             >=> ToolApprovalHandler.toolApprovalDecisionHandler
-            // Phase 6h: cancel-mid-stream endpoint.
+            // Cancel-mid-stream endpoint.
             POST >=> routef "/api/ai/cancel/%O" AICancellationRegistry.cancelHandler
-            // Phase 6j.A: fast-path audit beacon.
+            // Fast-path audit beacon.
             POST >=> route "/api/ai/fastpath/beacon" >=> FastPathBeaconHandler.beaconHandler
-            // Phase 6j.G: sequenced fast-path beacons.
+            // Sequenced fast-path beacons.
             POST
             >=> route "/api/ai/fastpath/sequenced-clause-beacon"
             >=> FastPathBeaconHandler.sequencedClauseBeaconHandler
@@ -379,11 +379,11 @@ let composeAI (app: AIServerApp) : ServerApp =
             POST
             >=> route "/api/ai/fastpath/sequence-beacon"
             >=> FastPathBeaconHandler.sequenceBeaconHandler
-            // Phase 6h.A: conversation-export audit beacon.
+            // Conversation-export audit beacon.
             POST
             >=> route "/api/ai/conversation/export-audit"
             >=> ConversationExportAuditHandler.exportAuditHandler
-            // Phase 6g.E: client UI decoder-error sink.
+            // Client UI decoder-error sink.
             POST
             >=> route "/api/ai/ui-decode-error"
             >=> UIDecodeErrorHandler.uiDecodeErrorHandler
@@ -391,10 +391,10 @@ let composeAI (app: AIServerApp) : ServerApp =
         @ fastPathDevHandlers
 
     let aiServiceConfig (s: IServiceCollection) =
-        // Phase 9s — the per-user token budget. Registered ONLY on a
+        // The per-user token budget. Registered ONLY on a
         // team-scoped deployment: the window it adds is per-USER within
         // a scope, and on an Individual / Anonymous surface the scope IS
-        // the user, so the ceiling would duplicate Phase 9d's per-scope
+        // the user, so the ceiling would duplicate the per-scope
         // one under a second name. Registering the cache is also the
         // composition gate `wrapFactoryForDI` reads, so a deployment
         // outside this branch pays nothing at all — no decorator, no
@@ -403,7 +403,7 @@ let composeAI (app: AIServerApp) : ServerApp =
         // The cache is a singleton because the read-through window sums
         // are worth sharing across requests; nothing in the decision
         // depends on its contents surviving (see `AIBudgetEnforcer`'s
-        // header on the Phase 9c rule-4 split).
+        // header on the rule-4 split).
         let s =
             if DeploymentConfig.hasTeamScope config then
                 let budgetCache = AIBudgetEnforcer.AIBudgetWindowCache()
@@ -416,10 +416,10 @@ let composeAI (app: AIServerApp) : ServerApp =
             else
                 s
 
-        // Phase 499 — the monetary spend budget's shared window cache
+        // The monetary spend budget's shared window cache
         // and its `/dev/inspect` panel.
         //
-        // NOT gated on team scope, unlike Phase 9s above: a monetary
+        // NOT gated on team scope, unlike the token budget above: a monetary
         // ceiling on an Individual deployment ("this install may spend
         // 5.00 a day") is a budget an operator plainly wants, whereas a
         // per-USER TOKEN window inside a per-SCOPE budget is meaningless
@@ -450,7 +450,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                     )
                     :> IDevDiagnosticsContributor)
 
-        // Phase 9d (usage metering) + Phase 9 compute-quota. The
+        // Usage metering and the compute quota. The
         // delegate factory resolves `IUsageLog` and `ITeamQuotaPolicy`
         // from DI per request and stacks the wrappers over the
         // composition-supplied raw factory. Same shape as RAGCompose
@@ -463,7 +463,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                     AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
                 )
                 .AddSingleton<IProviderProfile>(providerProfile)
-                // Phase 43.C — the AI tier's implementation of the
+                // The AI tier's implementation of the
                 // platform `IProviderEntryProbe` seam. Registering it
                 // here is what turns on BOTH verification-on-add
                 // (`AISettingsApi.SaveInstance` refuses to persist
@@ -480,11 +480,11 @@ let composeAI (app: AIServerApp) : ServerApp =
                 .AddSingleton<IProviderEntryProbe>(
                     AIProviderEntryProbe.create aiProviderFactory AIProviderEntryProbe.scopeAccessContext
                 )
-                // Phase 171 — expose the active AI provider/model to the
+                // Expose the active AI provider/model to the
                 // platform-tier Home overview via the Core IActiveAiProbe
                 // seam (GP 1: Platform.Server stays AI-dependency-free).
                 .AddSingleton<IActiveAiProbe>(ActiveAiProbe.create aiProviderFactory)
-                // Phase 47 — expose the AI action-denial rollup to the
+                // Expose the AI action-denial rollup to the
                 // platform-tier health-monitor admin surface via the Core
                 // `IAIDenialRollupProbe` seam, for the same GP 1 reason
                 // as `IActiveAiProbe` above. This is the PRODUCTION route
@@ -506,14 +506,14 @@ let composeAI (app: AIServerApp) : ServerApp =
                             | :? IEventStore as store -> Some store
                             | _ -> None))
                 )
-                // Phase 70 — register the Platform-Admin-managed AI key
+                // Register the Platform-Admin-managed AI key
                 // store. When the consumer passed `withPlatformAIKeyStore`
                 // explicitly, register that instance directly. When
                 // omitted, register a Func-resolver that lazily builds
                 // `BlobPlatformAIKeyStore.create secretStore` from
                 // whichever `ISecretStore` is in DI at request time.
-                // Platform-side handlers (Phase 70 Stream D's
-                // `PlatformAIKeysHandler`) resolve via DI.
+                // Platform-side handlers (`PlatformAIKeysHandler`) resolve
+                // via DI.
                 .AddSingleton<IPlatformAIKeyStore>(
                     System.Func<IServiceProvider, IPlatformAIKeyStore>(fun sp ->
                         match app.PlatformKeyStore with
@@ -526,14 +526,20 @@ let composeAI (app: AIServerApp) : ServerApp =
                 .AddSingleton<ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)
                 .AddSingleton<AIConsentDispatch.AIConsentRegistry>(consentRegistry)
                 .AddSingleton<ToolApprovalDispatch.ToolApprovalRegistry>(approvalRegistry)
-                // Phase 36.D: the deployment's consent posture, resolved by
+                // The deployment's consent posture, resolved by
                 // the tool executors. Registered unconditionally — a tool
                 // reads it per invocation and an absent registration would
                 // read as the default anyway, so registering it always is
                 // what makes `TrustEverything` actually reachable.
                 .AddSingleton<AIConsentMode>(app.ConsentMode)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
-                // Phase 6k — the supervised agent-loop worker, plus its
+                // The services an agent turn reads, resolved once per turn
+                // (transient: one resolution each time a turn asks), so the
+                // loop holds one record instead of probing the container.
+                .AddTransient<AIAgentEngine.TurnServices>(
+                    Func<IServiceProvider, AIAgentEngine.TurnServices>(AIAgentEngine.TurnServices.resolve)
+                )
+                // The supervised agent-loop worker, plus its
                 // `IHostedService` lifecycle. Two registrations of ONE
                 // instance: the handler resolves the concrete type to
                 // enqueue turns, the host drives Start/Stop through the
@@ -559,7 +565,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                         // container owns the singleton's disposal.
                         new AIChatWorker.AIChatWorker(logger))
                 )
-                // Phase 1051 — the reason above, as the exemption the
+                // The reason above, as the exemption the
                 // registration guard reads.
                 .AddSingleton<HostedServiceExemption>(
                     {
@@ -580,7 +586,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                     AICancellationDispatchInstanceValidator.AICancellationDispatchInstanceValidator(config)
                     :> ConfigValidation.IConfigValidator
                 )
-                // Phase 6m — refuse the wide-open shape: an Anonymous
+                // Refuse the wide-open shape: an Anonymous
                 // surface, no rate-limit policy for AnonymousKind, and a
                 // platform-paid provider wired. Registered here (not in
                 // the platform tier) for the same reason as the validator
@@ -589,7 +595,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                     AnonymousAIModeValidator.AnonymousAIModeValidator(config, aiProviderFactory)
                     :> ConfigValidation.IConfigValidator
                 )
-                // Phase 9m.A — catch operator-typo'd TOOLUP_AI_PROVIDER /
+                // Catch operator-typo'd TOOLUP_AI_PROVIDER /
                 // TOOLUP_AI_MODEL env vars at startup. Both validators self-
                 // skip with Ok when the corresponding env var is unset
                 // (GP 13 — zero cost for deployments that do not rely on
@@ -597,7 +603,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIProviderEnvValidator.create aiProviderFactory)
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIModelEnvValidator.create aiProviderFactory)
 
-        // Phase 936 — the conversation axis of team visibility exists
+        // The conversation axis of team visibility exists
         // whenever the assistant is composed. Register its declaration
         // (`unrestricted` unless `withTeamConversationVisibility` declared
         // one), so the platform's output-visibility change check and startup
@@ -610,7 +616,7 @@ let composeAI (app: AIServerApp) : ServerApp =
             TeamConversationVisibilitySettings.unrestricted
         )
 
-        // Phase 47 — the sustained-denial rate monitor. Registered ONLY
+        // The sustained-denial rate monitor. Registered ONLY
         // when the deployment declared a policy via
         // `AIServerApp.withDenialRateAlert`; otherwise nothing exists to
         // resolve and the agent loop's probe returns null (GP 13).
@@ -622,7 +628,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                     AIDenialRateMonitor.AIDenialRateMonitor(policy, fun () -> DateTime.UtcNow)
                 )
 
-        // Phase 9m.A — opt-in startup probe (default OFF). Registered
+        // Opt-in startup probe (default OFF). Registered
         // only when TOOLUP_AI_PROBE_ON_STARTUP=1 — pays nothing for
         // deployments that haven't opted in (GP 13). When enabled,
         // probes the resolved provider's models endpoint with the
@@ -643,7 +649,7 @@ let composeAI (app: AIServerApp) : ServerApp =
             match baseExtensions.ServiceConfig with
             | None -> Some aiServiceConfig
             | Some baseFn -> Some(fun s -> aiServiceConfig (baseFn s))
-        // Phase 1g — AI tool completions and SSE-driven chat publish
+        // AI tool completions and SSE-driven chat publish
         // through `INotificationChannel`; declaring the dependency
         // here flips `compose`'s `NotificationsAuto` resolution to
         // `InMemoryNotifications` so the SSE endpoint mounts and
@@ -653,9 +659,9 @@ let composeAI (app: AIServerApp) : ServerApp =
         PostMiddleware = baseExtensions.PostMiddleware
     }
 
-    // Phase 9s — surface the per-user token-budget cap in the per-team
+    // Surface the per-user token-budget cap in the per-team
     // config panel. Merged here rather than in `BuildRouteHandlers`
-    // (which merges Phase 9d's `_platform.usage` quota tab) because the
+    // (which merges the `_platform.usage` quota tab) because the
     // key is AI-tier: `Platform.Server` compiles before `AI.Core` and
     // cannot name `AIBudgetConfigKey`. Gated on team scope for the same
     // reason the DI registration above is, and gated on nothing else —
@@ -679,8 +685,7 @@ let composeAI (app: AIServerApp) : ServerApp =
 module AIServerApp =
     /// Construct an `AIServerApp` from scratch with the two required AI
     /// dependencies: the provider factory and the canonical platform
-    /// `IProviderProfile` BYOK store (Phase 43.A — replaces the removed
-    /// `IUserAIConfigStore` shim). The store is mirrored onto
+    /// `IProviderProfile` BYOK store. The store is mirrored onto
     /// `Base.ProviderProfile` so it is also the `IProviderProfile` DI
     /// singleton. All other fields default to the empty / `None`
     /// values; chain `with*` helpers (delegating to `ServerApp` or
@@ -701,7 +706,7 @@ module AIServerApp =
         ToolEffects = None
     }
 
-    /// Phase 1h composition seam — lift an existing `ServerApp` into an
+    /// The composition seam — lift an existing `ServerApp` into an
     /// `AIServerApp` so the additive `AICompose.withAI` extension can
     /// stack AI contributions onto whatever the input `ServerApp`
     /// already carries. `Base.ProviderProfile` is mirrored to the
@@ -709,7 +714,7 @@ module AIServerApp =
     /// on the same pipeline — last-write-wins), and
     /// `AILatencyMetrics.registrations` are appended (calling `withAI`
     /// twice on the same pipeline would re-append and fail at sink
-    /// construction — the Phase 1h conflict validator catches this).
+    /// construction — the conflict validator catches this).
     let createFrom
         (factory: IAIProviderFactory)
         (providerProfile: IProviderProfile)
@@ -775,7 +780,7 @@ module AIServerApp =
             Base = ServerApp.withCspContributor contributor app.Base
     }
 
-    /// Phase 6f — register an out-of-band transactional notification
+    /// Register an out-of-band transactional notification
     /// sink. Delegates to `ServerApp.withTransactionalSink`. See that
     /// helper's docstring for the full contract; this mirror exists
     /// so the AI fluent pipeline reads the same as the core one.
@@ -784,21 +789,21 @@ module AIServerApp =
             Base = ServerApp.withTransactionalSink sink app.Base
     }
 
-    /// Phase 9k — register a companion-contributed health probe.
+    /// Register a companion-contributed health probe.
     /// Delegates to `ServerApp.withHealthCheck`.
     let withHealthCheck (check: HealthChecks.IHealthCheck) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withHealthCheck check app.Base
     }
 
-    /// Phase 9m — register a companion-contributed startup config
+    /// Register a companion-contributed startup config
     /// validator. Delegates to `ServerApp.withConfigValidator`.
     let withConfigValidator (validator: ConfigValidation.IConfigValidator) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withConfigValidator validator app.Base
     }
 
-    /// Phase 22 — opt into AES-GCM envelope encryption for the
+    /// Opt into AES-GCM envelope encryption for the
     /// registered IBlobStorage. Delegates to
     /// `ServerApp.withEncryptedBlobStorage`. See that helper's
     /// docstring for the resolver-choice contract.
@@ -807,7 +812,7 @@ module AIServerApp =
             Base = ServerApp.withEncryptedBlobStorage resolver app.Base
     }
 
-    /// Phase 9e — register a companion-contributed metrics sink
+    /// Register a companion-contributed metrics sink
     /// (e.g. OpenTelemetry exporter) alongside the in-process
     /// Prometheus default. Delegates to `ServerApp.withMetricsSink`.
     let withMetricsSink (sink: Metrics.IMetricsSink) (app: AIServerApp) : AIServerApp = {
@@ -815,21 +820,21 @@ module AIServerApp =
             Base = ServerApp.withMetricsSink sink app.Base
     }
 
-    /// Phase 9v — declare an outbound rate-limit window for one
+    /// Declare an outbound rate-limit window for one
     /// upstream provider. Delegates to `ServerApp.withRateLimitDescriptor`.
     let withRateLimitDescriptor (descriptor: RateLimitDescriptor) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withRateLimitDescriptor descriptor app.Base
     }
 
-    /// Phase 19 — register an entity type with the typed entity store.
+    /// Register an entity type with the typed entity store.
     /// Delegates to `ServerApp.withEntity`.
     let withEntity<'T> (registration: EntityTypes.EntityRegistration<'T>) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withEntity registration app.Base
     }
 
-    /// Phase 9b.B — declare a composition-root-owned background job.
+    /// Declare a composition-root-owned background job.
     /// Delegates to `ServerApp.withJobHandler`. See that helper's
     /// docstring for the full contract; this mirror exists so the AI
     /// fluent pipeline reads the same as the core one.
@@ -838,7 +843,7 @@ module AIServerApp =
             Base = ServerApp.withJobHandler (handlerName, handler, trigger) app.Base
     }
 
-    /// Phase 9b.B — declare a composition-root-owned background job
+    /// Declare a composition-root-owned background job
     /// with full control over every `JobRegistration` knob. Delegates
     /// to `ServerApp.withScheduledJob`.
     let withScheduledJob (declaration: ScheduledJobDeclaration) (app: AIServerApp) : AIServerApp = {
@@ -846,35 +851,35 @@ module AIServerApp =
             Base = ServerApp.withScheduledJob declaration app.Base
     }
 
-    /// Phase 9b.A — opt into back-fill of `OnEvent` jobs on detected
+    /// Opt into back-fill of `OnEvent` jobs on detected
     /// scheduler tick drift. Delegates to `ServerApp.withBackfillMissedTicks`.
     let withBackfillMissedTicks (enabled: bool) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withBackfillMissedTicks enabled app.Base
     }
 
-    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Opt into the event-trigger catch-up watermark.
     /// Delegates to `ServerApp.withEventTriggerCatchUp`.
     let withEventTriggerCatchUp (enabled: bool) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withEventTriggerCatchUp enabled app.Base
     }
 
-    /// Phase 9t — audit-write failure policy. Delegates to
+    /// Audit-write failure policy. Delegates to
     /// `ServerApp.withAuditFailurePolicy`.
     let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withAuditFailurePolicy policy app.Base
     }
 
-    /// Phase 599 — opt into the entity-write outbox. Delegates to
+    /// Opt into the entity-write outbox. Delegates to
     /// `ServerApp.withEntityOutbox`.
     let withEntityOutbox (enabled: bool) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withEntityOutbox enabled app.Base
     }
 
-    /// Phase 1027 — opt into durable lineage. Delegates to
+    /// Opt into durable lineage. Delegates to
     /// `ServerApp.withDurableLineage`.
     let withDurableLineage (enabled: bool) (app: AIServerApp) : AIServerApp = {
         app with
@@ -918,7 +923,7 @@ module AIServerApp =
             ModuleAIContexts = contexts
     }
 
-    /// Phase 523 — opt into the numeric-fidelity answer gate with a custom
+    /// Opt into the numeric-fidelity answer gate with a custom
     /// verifier (the seat for the future LLM-judge qualitative tier, which
     /// implements the same `IAnswerVerifier` seam). Registers the composed
     /// `AnswerVerifier.AnswerGate` as a DI singleton (resolved by the chat
@@ -926,7 +931,7 @@ module AIServerApp =
     /// counter registrations so the metrics sink pre-allocates their series.
     ///
     /// `AnswerGateOff` (or not calling this at all) leaves the answer path
-    /// byte-for-byte pre-523 — no DI registration, no metric series, no
+    /// byte-for-byte as it is without the gate — no DI registration, no metric series, no
     /// per-turn verification (GP 11 / GP 13). Threads the singleton through
     /// the shared `ComposeExtensions.ServiceConfig` exactly like
     /// `ServerApp.withCspContributor`, so `RAGServerApp` inherits it.
@@ -960,14 +965,14 @@ module AIServerApp =
                     }
             }
 
-    /// Phase 523 — opt into the numeric-fidelity answer gate with the
+    /// Opt into the numeric-fidelity answer gate with the
     /// default deterministic verifier (`NumericFidelityVerifier`). See
     /// `withAnswerVerifier` for the gate semantics; `AnswerGateOff` is the
     /// byte-identical no-op default (GP 13).
     let withNumericFidelityGate (mode: AnswerVerifier.AnswerGateMode) (app: AIServerApp) : AIServerApp =
         withAnswerVerifier mode (AnswerVerifier.NumericFidelityVerifier() :> AnswerVerifier.IAnswerVerifier) app
 
-    /// Phase 680 — declare the deployment-side anchors the answer-
+    /// Declare the deployment-side anchors the answer-
     /// verification audit row names: the sealed composition this process
     /// affirmed at boot, and the grounding certificate covering an answer's
     /// chain where one exists.
@@ -1000,10 +1005,10 @@ module AIServerApp =
                 }
         }
 
-    /// Phase 6j.B — opt into Tier-3 fast-path triage. Registers the
+    /// Opt into Tier-3 fast-path triage. Registers the
     /// `FastPathTriageConfig` singleton the agent loop's intercept
     /// resolves; NOT calling this (or passing a config with
-    /// `Enabled = false`) leaves the chat path byte-for-byte pre-6j.B —
+    /// `Enabled = false`) leaves the chat path byte-for-byte as it is without triage —
     /// no triage call, no attempt row, no emission (GP 11 / GP 13).
     ///
     /// The metric series ride `AILatencyMetrics.registrations`, which
@@ -1021,7 +1026,7 @@ module AIServerApp =
     ///
     /// Leave `config.TriageProvider` as `None` and triage runs on the
     /// turn's own provider at its declared `Capabilities.TriageModelId`
-    /// through the per-call model override (Phase 661) — the cheap tier
+    /// through the per-call model override — the cheap tier
     /// with nothing extra wired. `FastPathTriageConfig.withTriageProvider`
     /// is the explicit escape hatch for routing triage somewhere the turn
     /// provider's own family cannot reach; it wins outright when set.
@@ -1046,7 +1051,7 @@ module AIServerApp =
                     }
             }
 
-    /// Phase 43.A — swap the canonical BYOK provider-profile store
+    /// Swap the canonical BYOK provider-profile store
     /// after `create`. Mirrors `ServerApp.withProviderProfile` (the
     /// deferred 42.B seam) onto the AI superset: rebinds both the
     /// required AI field (what `composeAI` threads to the factory's
@@ -1058,7 +1063,7 @@ module AIServerApp =
             Base = ServerApp.withProviderProfile store app.Base
     }
 
-    /// Phase 70 — supply a Platform-Admin-managed AI key store. When
+    /// Supply a Platform-Admin-managed AI key store. When
     /// omitted, `composeAI` auto-promotes `BlobPlatformAIKeyStore.create`
     /// over the registered `ISecretStore` so the Platform Admin keys
     /// module works out of the box. Override when you want a custom
@@ -1072,7 +1077,7 @@ module AIServerApp =
             PlatformKeyStore = Some store
     }
 
-    /// Phase 47 — opt into sustained-action-denial alerting. When a
+    /// Opt into sustained-action-denial alerting. When a
     /// scope's refused client-tool calls cross `Threshold` within
     /// `Window`, one Owner/Admin `SystemMessage` is published (then
     /// suppressed for `Cooldown`), because a prompt-injection campaign
@@ -1094,7 +1099,7 @@ module AIServerApp =
             DenialRateAlert = Some policy
     }
 
-    /// Phase 36.D — declare how the cross-module read-consent gate
+    /// Declare how the cross-module read-consent gate
     /// behaves.
     ///
     /// `RememberPerConversation` (the default) prompts once per target
@@ -1102,12 +1107,12 @@ module AIServerApp =
     /// `TrustEverything` never prompts — for single-user / self-hosted /
     /// development deployments where the person driving the agent and the
     /// person who owns the data are the same person, and the ONLY way back
-    /// to the pre-36.D flow.
+    /// to a flow with no consent prompt.
     ///
     ///     AIServerApp.withAIConsentMode TrustEverything
     let withAIConsentMode (mode: AIConsentMode) (app: AIServerApp) : AIServerApp = { app with ConsentMode = mode }
 
-    /// Phase 793 — compose the tool effect policy. `policy` is what the
+    /// Compose the tool effect policy. `policy` is what the
     /// registry lists and dispatches under (`ToolPolicy.readOnly`,
     /// `ToolPolicy.bounded [ … ]`, or `ToolPolicy.unrestricted` narrowed
     /// with `withApprovalFor` / `withExternalPrincipalCeiling`); `profile`
@@ -1118,7 +1123,7 @@ module AIServerApp =
             ToolEffects = Some { Profile = profile; Policy = policy }
     }
 
-    /// Phase 782 — compose the three read-only reflection tools
+    /// Compose the three read-only reflection tools
     /// (`_platform.reflection.describe_composition`, `.verification_report`,
     /// `.module_reach`): the deployment's own self-description, offered to
     /// the model behind the composition inspector's Owner/Admin gate (and
@@ -1140,7 +1145,7 @@ module AIServerApp =
             }
     }
 
-    /// Phase 70 A.5 — additively declare a platform provider on the
+    /// Additively declare a platform provider on the
     /// `AIServerApp` pipeline. Each call appends to
     /// `app.PlatformProviders`; `composeAI` cross-checks the
     /// accumulated list against `factory.PlatformDescriptors` at
@@ -1154,8 +1159,7 @@ module AIServerApp =
     /// declared shape and the factory's actual shape.
     ///
     /// **Future.** When `composeAI` takes over factory construction
-    /// (deferred per Phase 70 A.5 — no consumer migration target has
-    /// surfaced), this list becomes the direct input to
+    /// (deferred: no consumer migration target has surfaced), this list becomes the direct input to
     /// `DefaultAIProviderFactory.create`. The builder's call shape and
     /// semantics stay byte-identical across that transition; consumers
     /// adopting the builder today are forward-compatible.
@@ -1165,19 +1169,19 @@ module AIServerApp =
     }
 
     /// Drive the final composition. Returns the process exit code.
-    /// Phase 1h — implementation is now `composeAI >> ServerApp.run`;
+    /// Implementation is now `composeAI >> ServerApp.run`;
     /// consumers needing to stack AI with Forms / RAG companions on
     /// one composition root use the additive `AICompose.withAI`
     /// extension instead.
     let run (app: AIServerApp) : int = composeAI app |> ServerApp.run
 
-// ─── Additive companion-set extension `withAI` (Phase 1h) ───────────
+// ─── Additive companion-set extension `withAI` ───────────
 //
 // Stack AI contributions onto an existing `ServerApp` pipeline
 // alongside Forms / RAG / future companions, without forcing the
 // deployment to commit to `AIServerApp.run` as the terminal call.
 
-/// Phase 1h — stack the AI assistant onto an existing `ServerApp`
+/// Stack the AI assistant onto an existing `ServerApp`
 /// pipeline. Consumes the required AI dependencies (`factory` +
 /// `providerProfile`) and a `configure` function that builds AI-
 /// specific state (assistant config, module AI contexts) on a fresh
@@ -1193,7 +1197,7 @@ module AIServerApp =
 ///
 /// Calling `withAI` twice on the same pipeline re-appends
 /// `AILatencyMetrics.registrations` and re-registers AI's DI services;
-/// the Phase 1h conflict validator (task 4) surfaces this at compose
+/// the conflict validator surfaces this at compose
 /// time.
 ///
 /// Example — Forms + AI in one composition root:
@@ -1214,7 +1218,7 @@ let withAI
     : ServerApp =
     AIServerApp.createFrom factory providerProfile app |> configure |> composeAI
 
-// ─── Phase 504 — conversation retention / TTL policy ─────────────
+// ─── Conversation retention / TTL policy ─────────────
 
 let private withServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp = {
     app with
@@ -1236,7 +1240,7 @@ let private withServiceConfig (register: IServiceCollection -> IServiceCollectio
 /// **`retainForever` registers nothing.** An inert policy (no `MaxAge`
 /// and no `MaxCount`) short-circuits before any hosted service or
 /// scheduler entry is created, so a deployment that never calls this —
-/// or calls it with the default — is byte-for-byte its pre-504 self
+/// or calls it with the default — is byte-for-byte what it is without a policy
 /// (GP 11 / GP 13). With `JobScheduler = NoJobScheduler` the deferred
 /// declaration logs the mismatch at startup and nothing runs.
 ///
@@ -1254,7 +1258,7 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
         if ConversationRetentionPolicy.isInert policy || List.isEmpty scopes then
             withPolicy
         else
-            // Phase 1051 — exempt from the profile matrix: the sweep runs as
+            // Exempt from the profile matrix: the sweep runs as
             // a scheduler job, placed by the scheduler's own gate.
             withPolicy
             |> ProcessProfileGate.addDeferredJobs "AI conversation retention sweep" [
@@ -1268,10 +1272,10 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
 
     app |> withServiceConfig register
 
-// ─── Phase 516.B — conversation titling ──────────────────────────
+// ─── Conversation titling ──────────────────────────
 
 /// Compose how AI conversations are titled in the conversation list
-/// (Phase 516.B). `ConversationTitlingPolicy.generatedOn "<small model>"`
+/// . `ConversationTitlingPolicy.generatedOn "<small model>"`
 /// asks the provider that served a conversation's first turn for a short
 /// title, once, after that turn's terminal event — metered like every
 /// other call of the turn, bounded by the policy's input/output caps and
@@ -1285,10 +1289,10 @@ let withConversationTitling (policy: ConversationTitlingPolicy) (app: ServerApp)
     app
     |> withServiceConfig (fun s -> s.AddSingleton<ConversationTitlingPolicy>(policy))
 
-// ─── Phase 859 — team conversation visibility ────────────────────
+// ─── Team conversation visibility ────────────────────
 
 /// Declare who, besides its author, can see a conversation in a team's
-/// shared storage (Phase 859.D): `defaultLevel` is the level a team starts
+/// shared storage: `defaultLevel` is the level a team starts
 /// with, `allowed` the levels a team owner may choose from. The level is
 /// stored per team, in the team's own record, and read per request in the
 /// team's scope; `TeamConversationVisibilityApi` is how the owner sets it.

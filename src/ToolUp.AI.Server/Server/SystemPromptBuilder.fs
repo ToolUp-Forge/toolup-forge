@@ -1,5 +1,6 @@
 module ToolUp.AI.SystemPromptBuilder
 
+open System
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -37,15 +38,15 @@ type PromptContext = {
     /// Prior conversation turns for this request, oldest first, rendered as
     /// plain text and already bounded by the handler. Empty on the first
     /// turn, and empty for every deployment that has not composed an
-    /// `IConversationStore` (Phase 53) — the substrate this is read from.
+    /// `IConversationStore` — the substrate this is read from.
     ///
     /// Threaded onto `RetrievalRequest.History` by `RAGPromptBuilder`, where
-    /// the Phase 506 query-rewrite stage consumes it to resolve follow-up
+    /// the query-rewrite stage consumes it to resolve follow-up
     /// queries ("what about it?") against what was said before. Builders
     /// that do not perform retrieval ignore it; an empty list leaves every
-    /// downstream stage byte-identical to its pre-506 behaviour (GP 11).
+    /// downstream stage byte-identical (GP 11).
     ConversationHistory: string list
-    /// Phase 502.D — per-request metadata-equality filter scoping this
+    /// Per-request metadata-equality filter scoping this
     /// turn's retrieval, as reported by `AIMessageRequest.RetrievalFilters`.
     /// `None` on every turn that did not ask to be scoped.
     ///
@@ -54,38 +55,38 @@ type PromptContext = {
     /// `RetrievalDefaults.mergeFilters`) and threaded onto
     /// `RetrievalRequest.Filters`. This is the seam that makes a filter
     /// reachable from the AI panel at all: `withRetrievalToolAware` builds
-    /// its own `RetrievalRequest`, so before 502.D a caller on the prompt
-    /// path had no way to scope one. Builders that do not retrieve ignore
+    /// its own `RetrievalRequest`, so without it a caller on the prompt
+    /// path has no way to scope one. Builders that do not retrieve ignore
     /// it; `None` leaves every downstream stage byte-identical (GP 11).
     RetrievalFilters: Map<string, string> option
     /// Mutable cell collecting `RetrievedSource`s populated by RAG-style
     /// builders (`RAGPromptBuilder.withRetrieval`) so the assistant
-    /// handler can attach them to the outbound `ConversationMessage`
+    /// turn can attach them to the outbound `ConversationMessage`
     /// without coupling the prompt-builder return type to the wire-format
     /// shape. Keeps `SystemPromptBuilder` returning `Async<string>` while
     /// still letting builders surface structured side-data to the handler.
-    /// Builders that don't perform retrieval ignore this; the handler
-    /// reads `Value` after `compose` resolves and clears it between
-    /// turns by allocating a fresh cell per request.
+    /// Builders that don't perform retrieval ignore this;
+    /// `PromptContribution.collect` reads it once the builder resolves,
+    /// and every turn allocates a fresh cell.
     RetrievedSources: RetrievedSource list ref
     /// Per-request server-side short-circuit channel. A builder that
     /// must refuse the turn WITHOUT invoking the provider (e.g.
     /// `RAGPromptBuilder` under `StrictlyGrounded` when retrieval
-    /// found nothing) sets `Value <- Some <reply text>`. The handler
-    /// reads it after `compose` resolves and, if set, emits that text
-    /// as the assistant turn and skips the model call entirely — the
+    /// found nothing) sets `Value <- Some <reply text>`. The turn reads
+    /// it through `PromptContribution.collect` and, if set, replies with
+    /// that text and skips the model call entirely — the
     /// "server-side guard" the grounding contract promises. Builders
     /// that never short-circuit leave it `None`. Fresh cell per
     /// request (same lifecycle as `RetrievedSources`).
     ShortCircuit: string option ref
-    /// Phase 708 — the answer plan compiled for this turn, named by id.
+    /// The answer plan compiled for this turn, named by id.
     /// `RAGPromptBuilder`'s planned-retrieval path sets it when a
     /// composed `IFactClausePlanner` produced clauses; it stays `None`
     /// on every turn that planned nothing and in every composition
     /// without the fact tier (GP 11 / GP 13).
     ///
     /// The channel exists so the plan is **reused, not recomputed**
-    /// (560.D): compiling a question can cost a provider round-trip, so
+    /// compiling a question can cost a provider round-trip, so
     /// the provenance recording that follows the answer names the
     /// already-computed plan by this id rather than re-compiling the
     /// same question. Only the id crosses — the plan itself is a
@@ -93,7 +94,7 @@ type PromptContext = {
     /// Same mutable-cell lifecycle as `RetrievedSources` / `ShortCircuit`
     /// (fresh cell per request).
     PlannedAnswerId: string option ref
-    /// Phase 821 — the storage scope the platform's scope resolution
+    /// The storage scope the platform's scope resolution
     /// minted for this request (`ScopeResolution.forRequest`), or the
     /// explicit anonymous scope when it minted none. Builders that read
     /// the fact tier (the clause planner, the retrieval pipeline) key on
@@ -167,6 +168,98 @@ module SystemPromptBuilder =
             return parts |> Array.filter (fun s -> s <> "") |> String.concat "\n\n"
         }
 
+/// What a prompt builder contributed to one turn: the prompt text and the
+/// side data a RAG-style builder reports beside it. The turn reads this
+/// record and nothing else of the builder's run.
+type PromptContribution = {
+    /// The composed system prompt, `None` when the builders produced none.
+    SystemPrompt: string option
+    /// The sources a retrieving builder grounded the prompt on, carried to
+    /// the assistant message's Sources panel and the citation normaliser.
+    RetrievedSources: RetrievedSource list
+    /// A reply the builder demanded instead of a provider call (a
+    /// strictly grounded retrieval that found nothing).
+    ShortCircuit: string option
+    /// The id of the answer plan compiled for this turn, when one was.
+    PlannedAnswerId: string option
+}
+
+module PromptContribution =
+    /// Run `builder` over `context` and read what it contributed. The
+    /// context's three side-data cells are the builder contract; this is
+    /// the one place they are read, so the turn holds a value, not cells.
+    /// No builder contributes nothing.
+    let collect (builder: SystemPromptBuilder option) (context: PromptContext) : Async<PromptContribution> = async {
+        let! text =
+            match builder with
+            | Some build -> build context
+            | None -> async.Return ""
+
+        return {
+            SystemPrompt = if text = "" then None else Some text
+            RetrievedSources = context.RetrievedSources.Value
+            ShortCircuit = context.ShortCircuit.Value
+            PlannedAnswerId = context.PlannedAnswerId.Value
+        }
+    }
+
+/// The agent loop's limits. Every field defaults to the value the loop has
+/// always used (`AgentLoopLimits.defaults`); a deployment that needs other
+/// numbers sets `AIAssistantServerConfig.Limits`.
+type AgentLoopLimits = {
+    /// Turns one message may take before the loop stops it as a runaway.
+    MaxTurns: int
+    /// Consecutive turns of only failing tool calls before the loop stops
+    /// early. One errored turn is normal recovery.
+    MaxConsecutiveErrored: int
+    /// Extra attempts after the provider reports its own retry budget
+    /// exhausted (`RetriesExhausted`). Other provider errors are final.
+    OuterRetries: int
+    /// The per-call cap on an interactive provider call. Shorter than the
+    /// client's 60 s watchdog, so a hung call surfaces as its own error.
+    ProviderSendTimeout: TimeSpan
+    /// How long the loop waits for the browser to post a client-resident
+    /// tool's result. The consent and approval prompts wait the platform
+    /// default (`AgentLoopLimits.DefaultClientToolTimeoutMs`).
+    ClientToolTimeout: TimeSpan
+    /// Prior provider-history messages replayed to the model each turn;
+    /// older ones are dropped with a warning. A non-positive value means
+    /// the default.
+    HistoryWindow: int
+}
+
+module AgentLoopLimits =
+    /// The platform default for a wait on the browser: the client-resident
+    /// tool result, the consent prompt and the approval hold. 90 s, longer
+    /// than the client's own 30 s watchdog, so the client-side failure wins
+    /// the race and the user sees its specific cause.
+    [<Literal>]
+    let DefaultClientToolTimeoutMs = 90_000
+
+    /// The default history window: generous enough that ordinary
+    /// conversations are never truncated, bounded so a long-running one
+    /// cannot grow per-turn token spend without limit.
+    [<Literal>]
+    let DefaultHistoryWindow = 60
+
+    /// The limits the loop has always run under.
+    let defaults: AgentLoopLimits = {
+        MaxTurns = 15
+        MaxConsecutiveErrored = 2
+        OuterRetries = 1
+        ProviderSendTimeout = TimeSpan.FromSeconds 50.0
+        ClientToolTimeout = TimeSpan.FromMilliseconds(float DefaultClientToolTimeoutMs)
+        HistoryWindow = DefaultHistoryWindow
+    }
+
+    /// The history window to apply: `HistoryWindow`, or the default when it
+    /// is not positive.
+    let historyWindow (limits: AgentLoopLimits) : int =
+        if limits.HistoryWindow > 0 then
+            limits.HistoryWindow
+        else
+            DefaultHistoryWindow
+
 /// Server-side AI assistant configuration. Contains both the client-visible
 /// `Branding` (which will be forwarded to the client via the AI module's
 /// props) and the server-only `SystemPrompt` builder. Passed to the
@@ -174,23 +267,15 @@ module SystemPromptBuilder =
 type AIAssistantServerConfig = {
     Branding: AIAssistantBranding
     /// Optional system-prompt builder. When `None`, no system prompt is
-    /// sent to the provider — equivalent to the previous
-    /// `SystemPromptPrefix = None` case.
+    /// sent to the provider.
     SystemPrompt: SystemPromptBuilder option
-    /// Cap on prior provider-history messages replayed to the LLM each
-    /// turn. `None` ⇒ the SDK's safe default
-    /// (`AIAssistantServerConfig.DefaultMaxHistoryMessages`). The old
-    /// behaviour replayed the ENTIRE history verbatim, so a long-lived
-    /// conversation grew per-turn cost without bound and eventually
-    /// hard-failed with an opaque provider context-overflow error.
-    /// `Some n` (n must be > 0; non-positive falls back to the default)
-    /// keeps only the most recent `n` messages; older turns are dropped
-    /// with a Warn log so the truncation is observable.
-    MaxHistoryMessages: int option
-    /// Phase 6g.F — how the server decides each turn's authoritative
-    /// `AISurface` (which drives `FullPageOnly` tool gating). Default
-    /// `TrustClient` takes the client-supplied `AIMessageRequest.Surface`
-    /// at face value — byte-for-byte the pre-6g.F behaviour.
+    /// The agent loop's limits, including the history window replayed to
+    /// the model each turn. `AgentLoopLimits.defaults` is what the loop has
+    /// always used.
+    Limits: AgentLoopLimits
+    /// How the server decides each turn's authoritative `AISurface` (which
+    /// drives `FullPageOnly` tool gating). Default `TrustClient` takes the
+    /// client-supplied `AIMessageRequest.Surface` at face value.
     /// `DeriveFromCookie key` derives the surface from a signed
     /// server-issued capability cookie and demotes a client that lies
     /// about its surface (defence in depth). See `AISurfaceCapability`
@@ -200,16 +285,7 @@ type AIAssistantServerConfig = {
 
 /// Companion helpers for `AIAssistantServerConfig`.
 module AIAssistantServerConfig =
-    /// Safe default history window when `MaxHistoryMessages = None`.
-    /// Generous enough that normal conversations are never truncated,
-    /// bounded enough that a pathological long-runner can't grow
-    /// per-turn token spend without limit.
-    [<Literal>]
-    let DefaultMaxHistoryMessages = 60
-
-    /// Resolve the effective, validated history cap. Non-positive
-    /// overrides are ignored in favour of the safe default.
-    let effectiveMaxHistory (cfg: AIAssistantServerConfig option) : int =
-        match cfg |> Option.bind _.MaxHistoryMessages with
-        | Some n when n > 0 -> n
-        | _ -> DefaultMaxHistoryMessages
+    /// The loop's limits under `cfg`: its `Limits`, or the defaults when no
+    /// configuration was composed.
+    let limits (cfg: AIAssistantServerConfig option) : AgentLoopLimits =
+        cfg |> Option.map _.Limits |> Option.defaultValue AgentLoopLimits.defaults

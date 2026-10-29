@@ -13,11 +13,11 @@ open System.Threading.Tasks
 // browser can make, and they are three CALLERS of one mechanism rather
 // than three mechanisms:
 //
-//   * Phase 6g.A — a client-resident tool call, suspended on
+//   * a client-resident tool call, suspended on
 //     `ClientToolDispatchRegistry` until `/api/ai/tool-result` arrives.
-//   * Phase 36.D — a cross-module read, suspended until the user answers
+//   * a cross-module read, suspended until the user answers
 //     a consent dialog at `/api/ai/consent`.
-//   * Phase 503 — a consequential tool invocation, held until the user
+//   * a consequential tool invocation, held until the user
 //     approves it at `/api/ai/tool-approval`.
 //
 // The shape they share is exactly this file: a per-process dictionary of
@@ -46,18 +46,16 @@ open System.Threading.Tasks
 /// How long a suspended dispatch waits for the browser before it gives
 /// up.
 ///
-/// **One declaration, three callers.** `AIAgentEngine`'s client-resident
-/// tool dispatch, `AIConsentDispatch`'s consent await and
-/// `ToolApprovalDispatch`'s approval hold all read this. They are the
-/// same wait — a server thread parked on a `TaskCompletionSource` that
-/// only a browser can complete — and a second constant would be a second
-/// budget to keep in step.
-///
-/// 90 s: generously longer than the client's own 30 s watchdog on the
-/// tool path, so the client-side failure wins the race and the user sees
-/// the specific cause rather than a generic server abort.
+/// **One declaration, three waits.** `AIConsentDispatch`'s consent await
+/// and `ToolApprovalDispatch`'s approval hold read this, and the agent
+/// loop's client-resident tool dispatch defaults to it. They are the same
+/// wait — a server thread parked on a `TaskCompletionSource` that only a
+/// browser can complete — so the value is declared once, as
+/// `AgentLoopLimits.DefaultClientToolTimeoutMs` (90 s); a deployment's
+/// `AgentLoopLimits.ClientToolTimeout` moves only the loop's wait.
 [<Literal>]
-let SuspendedDispatchTimeoutMs = 90_000
+let SuspendedDispatchTimeoutMs =
+    SystemPromptBuilder.AgentLoopLimits.DefaultClientToolTimeoutMs
 
 /// A per-process registry of dispatches suspended on a decision the
 /// browser makes.

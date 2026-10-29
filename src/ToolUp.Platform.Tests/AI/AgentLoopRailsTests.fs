@@ -18,6 +18,7 @@ module ToolUp.Platform.Tests.AI.AgentLoopRailsTests
 // rather than waiting for the call to return.
 
 open System
+open System.Diagnostics
 open System.Threading
 open System.Threading.Tasks
 open Expecto
@@ -274,16 +275,14 @@ type private BlockingProvider() =
 
         member _.SendMessage(_messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
             let! token = Async.CancellationToken
+            // Recorded the moment the token fires, not when this call next runs.
+            use _ = token.Register(fun () -> sawCancellation <- true)
             entered.TrySetResult() |> ignore
 
             let cancelled =
                 Task.Delay(Timeout.Infinite, token).ContinueWith(fun (_: Task) -> ())
 
             let! _ = Task.WhenAny(cancelled, release.Task) |> Async.AwaitTask
-
-            if token.IsCancellationRequested then
-                sawCancellation <- true
-
             return Ok(finalReply "too late")
         }
 
@@ -336,5 +335,144 @@ let private cancellationTests =
         }
     ]
 
+let private silentLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+let private shutdownTests =
+    testList "a host shutdown reaches an in-flight turn" [
+
+        testCaseAsync "the worker's shutdown token ends a turn blocked in its provider call, inside the budget"
+        <| async {
+            let provider = BlockingProvider()
+            use worker = new AIChatWorker.AIChatWorker(silentLogger)
+            let hosted = worker :> Microsoft.Extensions.Hosting.IHostedService
+
+            let ended =
+                TaskCompletionSource<exn option>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+            try
+                do! hosted.StartAsync CancellationToken.None |> Async.AwaitTask
+
+                let item: AIChatWorker.AIChatWorkItem = {
+                    TaskId = Guid.NewGuid()
+                    Fingerprint = "rails"
+                    Run =
+                        fun shutdown -> async {
+                            let! run = runLoop provider shutdown
+                            ended.TrySetResult run.Failure |> ignore
+                        }
+                    Reject = fun _ -> ended.TrySetResult None |> ignore
+                    Dispose = ignore
+                }
+
+                Expect.equal (worker.TryEnqueue item) AIChatWorker.Accepted "the turn is queued"
+                let! _ = Task.WhenAny(provider.Entered, Task.Delay 5_000) |> Async.AwaitTask
+                Expect.isTrue provider.Entered.IsCompleted "the provider call started"
+
+                // A 200 ms shutdown budget: the turn cannot finish in it, so the
+                // worker cancels its in-flight turns when it expires.
+                use budget = new CancellationTokenSource(200)
+                let stopped = Stopwatch.StartNew()
+                do! hosted.StopAsync budget.Token |> Async.AwaitTask
+                stopped.Stop()
+
+                Expect.isTrue ended.Task.IsCompleted "the turn ended before the worker finished stopping"
+                Expect.isTrue provider.SawCancellation "the shutdown reached the in-flight provider call"
+
+                Expect.isLessThan
+                    stopped.Elapsed
+                    (TimeSpan.FromSeconds 2.0)
+                    "the worker stopped inside its budget plus the settle, not after the provider call"
+            finally
+                provider.Release()
+        }
+    ]
+
+/// The record entry returns a hard stop as a value, rendered once to the
+/// same status the positional entry's exception carries.
+let private recordEntryTests =
+    testList "the record entry returns the stop as a value" [
+
+        testCaseAsync "the turn ceiling is LoopStop.MaxTurns, rendered to the same AITaskFailed text"
+        <| async {
+            let provider =
+                ScriptedProvider(fun _ -> async { return Ok(toolCall "" "_test.ok") })
+
+            let registry = AIToolRegistry.AIToolRegistry()
+            registry.RegisterAll [ okTool ]
+
+            let turn =
+                AIAgentEngine.TurnContext.create
+                    provider
+                    registry
+                    (ClientToolDispatch.ClientToolDispatchRegistry())
+                    (context ())
+                    (Guid.NewGuid())
+                    (Guid.NewGuid())
+                    AISurface.FullPage
+                    None
+                    None
+                    ModelInput.empty
+                    AIAgentEngine.AgentCallBudget.interactive
+                    SystemPromptBuilder.AgentLoopLimits.defaults
+                    ignore
+                    CancellationToken.None
+
+            let! result = AIAgentEngine.run turn AIAgentEngine.TurnPlan.RunLoop [ userTurn ]
+
+            match result with
+            | Error stop ->
+                Expect.equal stop (AIAgentEngine.LoopStop.MaxTurns 15) "the stop is the turn ceiling"
+
+                Expect.equal
+                    (AIAgentEngine.TurnOutcome.toStatus (
+                        AIAgentEngine.TurnOutcome.Failed(AIAgentEngine.TurnFailure.Stopped stop)
+                    ))
+                    (AITaskFailed
+                        "Agent loop exceeded 15 turns — stopping to avoid a runaway. If this was a legitimate multi-step task, try breaking it into smaller requests, or simplify the tools' return payloads so the model converges faster.")
+                    "rendered once, to the text the client has always been shown"
+            | Ok _ -> failtest "the turn ceiling must stop the loop"
+        }
+
+        testCaseAsync "a lower MaxTurns in the limits stops the loop there"
+        <| async {
+            let provider =
+                ScriptedProvider(fun _ -> async { return Ok(toolCall "" "_test.ok") })
+
+            let registry = AIToolRegistry.AIToolRegistry()
+            registry.RegisterAll [ okTool ]
+
+            let turn =
+                AIAgentEngine.TurnContext.create
+                    provider
+                    registry
+                    (ClientToolDispatch.ClientToolDispatchRegistry())
+                    (context ())
+                    (Guid.NewGuid())
+                    (Guid.NewGuid())
+                    AISurface.FullPage
+                    None
+                    None
+                    ModelInput.empty
+                    AIAgentEngine.AgentCallBudget.interactive
+                    {
+                        SystemPromptBuilder.AgentLoopLimits.defaults with
+                            MaxTurns = 3
+                    }
+                    ignore
+                    CancellationToken.None
+
+            let! result = AIAgentEngine.run turn AIAgentEngine.TurnPlan.RunLoop [ userTurn ]
+
+            Expect.equal result (Error(AIAgentEngine.LoopStop.MaxTurns 3)) "the configured ceiling"
+            Expect.equal provider.Calls 3 "three turns, then the stop"
+        }
+    ]
+
 let tests =
-    testList "Phase 1077 — the agent loop's rails" [ railTests; cancellationTests ]
+    testList "Phase 1077 — the agent loop's rails" [ railTests; cancellationTests; shutdownTests; recordEntryTests ]

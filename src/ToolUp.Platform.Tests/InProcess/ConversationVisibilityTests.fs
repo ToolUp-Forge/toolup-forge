@@ -915,7 +915,7 @@ let private historySeenBy (world: World) (store: IConversationStore) (userId: st
                 seen.Value <- Some context.ConversationHistory
                 return ""
             })
-        MaxHistoryMessages = None
+        Limits = SystemPromptBuilder.AgentLoopLimits.defaults
         AISurfaceDerivation = TrustClient
     }
 

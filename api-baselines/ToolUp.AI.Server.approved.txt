@@ -4,8 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.AI.AIAgentEngine (class)
-ToolUp.AI.AIAgentEngine.runAgentLoop(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]
-ToolUp.AI.AIAgentEngine.runAgentLoop(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]  (obsolete)
+ToolUp.AI.AIAgentEngine.run(ToolUp.AI.AIAgentEngine+TurnContext, ToolUp.AI.AIAgentEngine+TurnPlan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.AIAgentEngine+LoopState, ToolUp.AI.AIAgentEngine+LoopStop]]
 ToolUp.AI.AIAgentEngine.runAgentLoopWithBudget(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], ToolUp.AI.ModelInput, ToolUp.AI.AIAgentEngine+AgentCallBudget, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]
 ToolUp.AI.AIAgentEngine.runAgentLoopWithInput(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], ToolUp.AI.ModelInput, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]
 ToolUp.AI.AIAgentEngine+AgentCallBudget (class)
@@ -23,7 +22,77 @@ ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.elapsed : System.TimeSpan { get 
 ToolUp.AI.AIAgentEngine+AgentCallBudgetModule (class)
 ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.describe(ToolUp.AI.AIAgentEngine+AgentCallBudget) : System.String
 ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.effectiveTimeout(ToolUp.AI.AIAgentEngine+AgentCallBudget) : System.TimeSpan
+ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.exceeded(ToolUp.AI.AIAgentEngine+AgentCallBudget, System.TimeSpan, System.String) : System.String
 ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.interactive : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }
+ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.ofLimits(ToolUp.AI.SystemPromptBuilder+AgentLoopLimits) : ToolUp.AI.AIAgentEngine+AgentCallBudget
+ToolUp.AI.AIAgentEngine+AgentLoopStopped (class)
+ToolUp.AI.AIAgentEngine+AgentLoopStopped..ctor()
+ToolUp.AI.AIAgentEngine+AgentLoopStopped..ctor(ToolUp.AI.AIAgentEngine+LoopStop)
+ToolUp.AI.AIAgentEngine+AgentLoopStopped.Message : System.String { get }
+ToolUp.AI.AIAgentEngine+AgentLoopStopped.stop : ToolUp.AI.AIAgentEngine+LoopStop { get }
+ToolUp.AI.AIAgentEngine+Loop (class)
+ToolUp.AI.AIAgentEngine+Loop.reply(ToolUp.AI.AIAgentEngine+TurnContext, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], System.String) : ToolUp.AI.AIAgentEngine+LoopState
+ToolUp.AI.AIAgentEngine+Loop.run(ToolUp.AI.AIAgentEngine+TurnContext, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.AIAgentEngine+LoopState, ToolUp.AI.AIAgentEngine+LoopStop]]
+ToolUp.AI.AIAgentEngine+Loop.settle(ToolUp.AI.AIAgentEngine+TurnContext, ToolUp.AI.AIAgentEngine+LoopState, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[ToolUp.Platform.AI.AIProviderToolResult, ToolUp.AI.ToolCallTiming, ToolUp.AI.ToolOutcome]]) : ToolUp.AI.AIAgentEngine+LoopState
+ToolUp.AI.AIAgentEngine+Loop.step(ToolUp.AI.AIAgentEngine+LoopState, ToolUp.Platform.AI.AIProviderResponse) : ToolUp.AI.AIAgentEngine+StepVerdict
+ToolUp.AI.AIAgentEngine+LoopState (class)
+ToolUp.AI.AIAgentEngine+LoopState..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop])
+ToolUp.AI.AIAgentEngine+LoopState.ConsecutiveErrored : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+LoopState.Messages : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage] { get }
+ToolUp.AI.AIAgentEngine+LoopState.Stopped : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop] { get }
+ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }
+ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+LoopStateModule (class)
+ToolUp.AI.AIAgentEngine+LoopStateModule.start(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : ToolUp.AI.AIAgentEngine+LoopState
+ToolUp.AI.AIAgentEngine+LoopStop (class)
+ToolUp.AI.AIAgentEngine+LoopStop.Cancelled : ToolUp.AI.AIAgentEngine+LoopStop { get }
+ToolUp.AI.AIAgentEngine+LoopStop.IsCallBudgetExceeded : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+LoopStop.IsCancelled : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+LoopStop.IsConfusion : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+LoopStop.IsConsecutiveErrors : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+LoopStop.IsMaxTurns : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+LoopStop.IsProviderFatal : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+LoopStop.Tag : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+LoopStop+CallBudgetExceeded (class)
+ToolUp.AI.AIAgentEngine+LoopStop+CallBudgetExceeded.budget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }
+ToolUp.AI.AIAgentEngine+LoopStop+CallBudgetExceeded.detail : System.String { get }
+ToolUp.AI.AIAgentEngine+LoopStop+CallBudgetExceeded.elapsed : System.TimeSpan { get }
+ToolUp.AI.AIAgentEngine+LoopStop+Confusion (class)
+ToolUp.AI.AIAgentEngine+LoopStop+Confusion.marker : System.String { get }
+ToolUp.AI.AIAgentEngine+LoopStop+ConsecutiveErrors (class)
+ToolUp.AI.AIAgentEngine+LoopStop+ConsecutiveErrors.tools : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.AIAgentEngine+LoopStop+ConsecutiveErrors.turns : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+LoopStop+MaxTurns (class)
+ToolUp.AI.AIAgentEngine+LoopStop+MaxTurns.limit : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+LoopStop+ProviderFatal (class)
+ToolUp.AI.AIAgentEngine+LoopStop+ProviderFatal.error : ToolUp.Platform.AI.AIProviderError { get }
+ToolUp.AI.AIAgentEngine+LoopStop+Tags (class)
+ToolUp.AI.AIAgentEngine+LoopStop+Tags.CallBudgetExceeded : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+LoopStop+Tags.Cancelled : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+LoopStop+Tags.Confusion : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+LoopStop+Tags.ConsecutiveErrors : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+LoopStop+Tags.MaxTurns : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+LoopStop+Tags.ProviderFatal : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+LoopStopModule (class)
+ToolUp.AI.AIAgentEngine+LoopStopModule.earlyStopMessage(ToolUp.AI.AIAgentEngine+LoopStop) : System.String
+ToolUp.AI.AIAgentEngine+LoopStopModule.isSoft(ToolUp.AI.AIAgentEngine+LoopStop) : System.Boolean
+ToolUp.AI.AIAgentEngine+LoopStopModule.message(ToolUp.AI.AIAgentEngine+LoopStop) : System.String
+ToolUp.AI.AIAgentEngine+StepVerdict (class)
+ToolUp.AI.AIAgentEngine+StepVerdict.IsFinal : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+StepVerdict.IsStop : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+StepVerdict.IsToolRound : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+StepVerdict.Tag : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+StepVerdict+Final (class)
+ToolUp.AI.AIAgentEngine+StepVerdict+Final.Item : ToolUp.AI.AIAgentEngine+LoopState { get }
+ToolUp.AI.AIAgentEngine+StepVerdict+Stop (class)
+ToolUp.AI.AIAgentEngine+StepVerdict+Stop.Item : ToolUp.AI.AIAgentEngine+LoopStop { get }
+ToolUp.AI.AIAgentEngine+StepVerdict+Tags (class)
+ToolUp.AI.AIAgentEngine+StepVerdict+Tags.Final : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+StepVerdict+Tags.Stop : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+StepVerdict+Tags.ToolRound : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+StepVerdict+ToolRound (class)
+ToolUp.AI.AIAgentEngine+StepVerdict+ToolRound.Item1 : ToolUp.AI.AIAgentEngine+LoopState { get }
+ToolUp.AI.AIAgentEngine+StepVerdict+ToolRound.Item2 : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall] { get }
 ToolUp.AI.AIAgentEngine+ToolInvocationError (class)
 ToolUp.AI.AIAgentEngine+ToolInvocationError.IsDenied : System.Boolean { get }
 ToolUp.AI.AIAgentEngine+ToolInvocationError.IsInvalidArguments : System.Boolean { get }
@@ -49,6 +118,102 @@ ToolUp.AI.AIAgentEngine+ToolInvocationError+UnknownTool.toolName : System.String
 ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule (class)
 ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule.toOutcome(ToolUp.AI.AIAgentEngine+ToolInvocationError) : ToolUp.AI.ToolOutcome
 ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule.toToolResultContent(ToolUp.AI.AIAgentEngine+ToolInvocationError) : System.String
+ToolUp.AI.AIAgentEngine+TurnContext (class)
+ToolUp.AI.AIAgentEngine+TurnContext..ctor(Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], ToolUp.AI.ModelInput, ToolUp.AI.AIAgentEngine+AgentCallBudget, ToolUp.AI.SystemPromptBuilder+AgentLoopLimits, ToolUp.AI.AIAgentEngine+TurnServices, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit], System.Threading.CancellationToken)
+ToolUp.AI.AIAgentEngine+TurnContext.Access : ToolUp.Platform.AccessContext { get }
+ToolUp.AI.AIAgentEngine+TurnContext.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAgentEngine+TurnContext.ActivePage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Budget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Cancel : System.Threading.CancellationToken { get }
+ToolUp.AI.AIAgentEngine+TurnContext.ClientDispatch : ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry { get }
+ToolUp.AI.AIAgentEngine+TurnContext.ConversationId : System.Guid { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Emit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.AI.AIAgentEngine+TurnContext.GrantGate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean] { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Input : ToolUp.AI.ModelInput { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Limits : ToolUp.AI.SystemPromptBuilder+AgentLoopLimits { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Provider : ToolUp.Platform.AI.IAIProvider { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Registry : ToolUp.AI.AIToolRegistry+AIToolRegistry { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Request : Microsoft.AspNetCore.Http.HttpContext { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Services : ToolUp.AI.AIAgentEngine+TurnServices { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Surface : ToolUp.AI.AISurface { get }
+ToolUp.AI.AIAgentEngine+TurnContext.TaskId : System.Guid { get }
+ToolUp.AI.AIAgentEngine+TurnContext.Tools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef] { get }
+ToolUp.AI.AIAgentEngine+TurnContextModule (class)
+ToolUp.AI.AIAgentEngine+TurnContextModule.create(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.ModelInput, ToolUp.AI.AIAgentEngine+AgentCallBudget, ToolUp.AI.SystemPromptBuilder+AgentLoopLimits, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit], System.Threading.CancellationToken) : ToolUp.AI.AIAgentEngine+TurnContext
+ToolUp.AI.AIAgentEngine+TurnFailure (class)
+ToolUp.AI.AIAgentEngine+TurnFailure.IsFaulted : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.IsProviderUnresolved : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.IsRecordUnreadable : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.IsRecordUnwritten : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.IsRefused : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.IsShutDown : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.IsStopped : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.ShutDown : ToolUp.AI.AIAgentEngine+TurnFailure { get }
+ToolUp.AI.AIAgentEngine+TurnFailure.Tag : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+Faulted (class)
+ToolUp.AI.AIAgentEngine+TurnFailure+Faulted.Item : System.Exception { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+ProviderUnresolved (class)
+ToolUp.AI.AIAgentEngine+TurnFailure+ProviderUnresolved.Item : ToolUp.AI.ProviderResolutionError { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+RecordUnreadable (class)
+ToolUp.AI.AIAgentEngine+TurnFailure+RecordUnreadable.conversationId : System.Guid { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+RecordUnreadable.detail : System.String { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+RecordUnwritten (class)
+ToolUp.AI.AIAgentEngine+TurnFailure+RecordUnwritten.conversationId : System.Guid { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+RecordUnwritten.detail : System.String { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+Refused (class)
+ToolUp.AI.AIAgentEngine+TurnFailure+Refused.ownerOfRecord : System.String { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+Stopped (class)
+ToolUp.AI.AIAgentEngine+TurnFailure+Stopped.Item : ToolUp.AI.AIAgentEngine+LoopStop { get }
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags (class)
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags.Faulted : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags.ProviderUnresolved : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags.RecordUnreadable : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags.RecordUnwritten : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags.Refused : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags.ShutDown : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnFailure+Tags.Stopped : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnFailureModule (class)
+ToolUp.AI.AIAgentEngine+TurnFailureModule.RefusedReason : System.String (literal)
+ToolUp.AI.AIAgentEngine+TurnFailureModule.ShuttingDownReason : System.String (literal)
+ToolUp.AI.AIAgentEngine+TurnFailureModule.message(ToolUp.AI.AIAgentEngine+TurnFailure) : System.String
+ToolUp.AI.AIAgentEngine+TurnOutcome (class)
+ToolUp.AI.AIAgentEngine+TurnOutcome.CancelledByUser : ToolUp.AI.AIAgentEngine+TurnOutcome { get }
+ToolUp.AI.AIAgentEngine+TurnOutcome.Completed : ToolUp.AI.AIAgentEngine+TurnOutcome { get }
+ToolUp.AI.AIAgentEngine+TurnOutcome.IsCancelledByUser : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnOutcome.IsCompleted : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnOutcome.IsFailed : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnOutcome.Tag : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+TurnOutcome+Failed (class)
+ToolUp.AI.AIAgentEngine+TurnOutcome+Failed.Item : ToolUp.AI.AIAgentEngine+TurnFailure { get }
+ToolUp.AI.AIAgentEngine+TurnOutcome+Tags (class)
+ToolUp.AI.AIAgentEngine+TurnOutcome+Tags.CancelledByUser : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnOutcome+Tags.Completed : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnOutcomeModule (class)
+ToolUp.AI.AIAgentEngine+TurnOutcomeModule.toStatus(ToolUp.AI.AIAgentEngine+TurnOutcome) : ToolUp.AI.AITaskStatus
+ToolUp.AI.AIAgentEngine+TurnPlan (class)
+ToolUp.AI.AIAgentEngine+TurnPlan.IsReply : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnPlan.IsRunLoop : System.Boolean { get }
+ToolUp.AI.AIAgentEngine+TurnPlan.RunLoop : ToolUp.AI.AIAgentEngine+TurnPlan { get }
+ToolUp.AI.AIAgentEngine+TurnPlan.Tag : System.Int32 { get }
+ToolUp.AI.AIAgentEngine+TurnPlan+Reply (class)
+ToolUp.AI.AIAgentEngine+TurnPlan+Reply.text : System.String { get }
+ToolUp.AI.AIAgentEngine+TurnPlan+Tags (class)
+ToolUp.AI.AIAgentEngine+TurnPlan+Tags.Reply : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnPlan+Tags.RunLoop : System.Int32 (literal)
+ToolUp.AI.AIAgentEngine+TurnPlanModule (class)
+ToolUp.AI.AIAgentEngine+TurnPlanModule.ofContribution(ToolUp.AI.SystemPromptBuilder+PromptContribution) : ToolUp.AI.AIAgentEngine+TurnPlan
+ToolUp.AI.AIAgentEngine+TurnServices (class)
+ToolUp.AI.AIAgentEngine+TurnServices..ctor(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel])
+ToolUp.AI.AIAgentEngine+TurnServices.ClientToolAuthorizer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.DenialAlertChannel : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.DenialRateMonitor : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.EventStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.Logger : ToolUp.Platform.ILogger { get }
+ToolUp.AI.AIAgentEngine+TurnServices.MetricsSink : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink] { get }
+ToolUp.AI.AIAgentEngine+TurnServicesModule (class)
+ToolUp.AI.AIAgentEngine+TurnServicesModule.ofContext(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.AIAgentEngine+TurnServices
+ToolUp.AI.AIAgentEngine+TurnServicesModule.resolve(System.IServiceProvider) : ToolUp.AI.AIAgentEngine+TurnServices
 ToolUp.AI.AIAllowlistDiagnosticsHandler (class)
 ToolUp.AI.AIAllowlistDiagnosticsHandler.DenialEventType : System.String (literal)
 ToolUp.AI.AIAllowlistDiagnosticsHandler.NoModuleLabel : System.String (literal)
@@ -986,14 +1151,26 @@ ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2.TryAbandon(System.Guid, Decisi
 ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2.TryComplete(System.Guid, Decision) : System.Boolean
 ToolUp.AI.SystemPromptBuilder (class)
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig (class)
-ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.AI.AISurfaceDerivationMode)
+ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+AgentLoopLimits, ToolUp.AI.AISurfaceDerivationMode)
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.AISurfaceDerivation : ToolUp.AI.AISurfaceDerivationMode { get }
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.Branding : ToolUp.AI.AIAssistantBranding { get }
-ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.MaxHistoryMessages : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.Limits : ToolUp.AI.SystemPromptBuilder+AgentLoopLimits { get }
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.SystemPrompt : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]] { get }
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfigModule (class)
-ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfigModule.DefaultMaxHistoryMessages : System.Int32 (literal)
-ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfigModule.effectiveMaxHistory(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig]) : System.Int32
+ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfigModule.limits(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig]) : ToolUp.AI.SystemPromptBuilder+AgentLoopLimits
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits (class)
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits..ctor(System.Int32, System.Int32, System.Int32, System.TimeSpan, System.TimeSpan, System.Int32)
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits.ClientToolTimeout : System.TimeSpan { get }
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits.HistoryWindow : System.Int32 { get }
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits.MaxConsecutiveErrored : System.Int32 { get }
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits.MaxTurns : System.Int32 { get }
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits.OuterRetries : System.Int32 { get }
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimits.ProviderSendTimeout : System.TimeSpan { get }
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimitsModule (class)
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimitsModule.DefaultClientToolTimeoutMs : System.Int32 (literal)
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimitsModule.DefaultHistoryWindow : System.Int32 (literal)
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimitsModule.defaults : ToolUp.AI.SystemPromptBuilder+AgentLoopLimits { get }
+ToolUp.AI.SystemPromptBuilder+AgentLoopLimitsModule.historyWindow(ToolUp.AI.SystemPromptBuilder+AgentLoopLimits) : System.Int32
 ToolUp.AI.SystemPromptBuilder+PromptContext (class)
 ToolUp.AI.SystemPromptBuilder+PromptContext..ctor(ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.ResolvedScope)
 ToolUp.AI.SystemPromptBuilder+PromptContext.Access : ToolUp.Platform.AccessContext { get }
@@ -1008,6 +1185,14 @@ ToolUp.AI.SystemPromptBuilder+PromptContext.RetrievalFilters : Microsoft.FSharp.
 ToolUp.AI.SystemPromptBuilder+PromptContext.RetrievedSources : Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource]] { get }
 ToolUp.AI.SystemPromptBuilder+PromptContext.Scope : ToolUp.Platform.ResolvedScope { get }
 ToolUp.AI.SystemPromptBuilder+PromptContext.ShortCircuit : Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]] { get }
+ToolUp.AI.SystemPromptBuilder+PromptContribution (class)
+ToolUp.AI.SystemPromptBuilder+PromptContribution..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AI.SystemPromptBuilder+PromptContribution.PlannedAnswerId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.SystemPromptBuilder+PromptContribution.RetrievedSources : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource] { get }
+ToolUp.AI.SystemPromptBuilder+PromptContribution.ShortCircuit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.SystemPromptBuilder+PromptContribution.SystemPrompt : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.SystemPromptBuilder+PromptContributionModule (class)
+ToolUp.AI.SystemPromptBuilder+PromptContributionModule.collect(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.SystemPromptBuilder+PromptContribution]
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule (class)
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.activeModuleContext(ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.compose(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
