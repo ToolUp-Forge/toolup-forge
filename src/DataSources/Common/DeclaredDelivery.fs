@@ -958,92 +958,61 @@ module DeclaredDelivery =
             let failed = Collections.Generic.Dictionary<DataSourceId * string, string>()
 
             let perform (row: DataSourceId * string) (work: Async<Result<unit, string>>) = async {
-                if failed.ContainsKey row then
-                    return false
-                else
-                    let! outcome = async {
-                        try
-                            return! work
-                        with ex ->
-                            return Error ex.Message
-                    }
-
-                    match outcome with
-                    | Ok() -> return true
-                    | Error reason ->
-                        failed[row] <- reason
-                        return false
+                if not (failed.ContainsKey row) then
+                    try
+                        match! work with
+                        | Ok() -> ()
+                        | Error reason -> failed[row] <- reason
+                    with ex ->
+                        failed[row] <- ex.Message
             }
 
-            let ok () = async { return Ok() }
+            let step (work: unit -> Async<unit>) = async {
+                do! work ()
+                return Ok()
+            }
 
-            for s in plan.Seed do
-                let! _ =
-                    perform
-                        (s.Config.Id, s.Scope.ScopeId)
-                        (async {
-                            do! deps.Configs.Save(s.Scope.ScopeId, s.Config)
-                            return! ok ()
-                        })
+            let schedule (r: DeliveryRegistration) = async {
+                match! deps.Scheduler.Schedule(r.Scope, r.Registration) with
+                | Ok _ -> return Ok()
+                | Error e -> return Error(sprintf "scheduling its %s job failed: %A" r.JobKey e)
+            }
 
-                ()
+            let steps = [
+                for s in plan.Seed ->
+                    (s.Config.Id, s.Scope.ScopeId), step (fun () -> deps.Configs.Save(s.Scope.ScopeId, s.Config))
+                for r in plan.Register -> (r.SourceId, r.Scope.ScopeId), schedule r
+                for r in plan.Restamp -> (r.SourceId, r.Scope.ScopeId), restamp deps r
+                for c in plan.Cancel ->
+                    (c.SourceId, c.ScopeId), step (fun () -> deps.Scheduler.Cancel(c.ScopeId, c.JobId))
+            ]
 
-            for r in plan.Register do
-                let! _ =
-                    perform
-                        (r.SourceId, r.Scope.ScopeId)
-                        (async {
-                            match! deps.Scheduler.Schedule(r.Scope, r.Registration) with
-                            | Ok _ -> return Ok()
-                            | Error e -> return Error(sprintf "scheduling its %s job failed: %A" r.JobKey e)
-                        })
+            for row, work in steps do
+                do! perform row work
 
-                ()
-
-            for r in plan.Restamp do
-                let! _ = perform (r.SourceId, r.Scope.ScopeId) (restamp deps r)
-                ()
-
-            for c in plan.Cancel do
-                let! _ =
-                    perform
-                        (c.SourceId, c.ScopeId)
-                        (async {
-                            do! deps.Scheduler.Cancel(c.ScopeId, c.JobId)
-                            return! ok ()
-                        })
-
-                ()
-
+            // A delivered source that failed retires none of its old rows.
             let failedDelivered =
                 failed.Keys |> Seq.filter plan.Delivered.Contains |> Seq.map fst |> Set.ofSeq
 
-            let retired = ResizeArray<DataSourceId * string>()
+            let retiring =
+                plan.Retire |> List.filter (fun r -> not (failedDelivered.Contains r.SourceId))
 
-            for r in plan.Retire do
-                let row = r.SourceId, r.ScopeId
+            for r in retiring do
+                do! perform (r.SourceId, r.ScopeId) (step (fun () -> deps.Configs.Delete(r.ScopeId, r.SourceId)))
 
-                if not (failedDelivered.Contains r.SourceId) then
-                    let! done' =
-                        perform
-                            row
-                            (async {
-                                do! deps.Configs.Delete(r.ScopeId, r.SourceId)
-                                return! ok ()
-                            })
+            let failedRows = failed.Keys |> Set.ofSeq
 
-                    if done' then
-                        retired.Add row
-
-            let retiredRows = Set.ofSeq retired
+            let retired =
+                retiring
+                |> List.map (fun r -> r.SourceId, r.ScopeId)
+                |> Set.ofList
+                |> fun rows -> Set.difference rows failedRows
 
             let unretired =
                 plan.Retire
                 |> List.map (fun r -> r.SourceId, r.ScopeId)
                 |> Set.ofList
-                |> fun rows -> Set.difference rows retiredRows
-
-            let failedRows = failed.Keys |> Set.ofSeq
+                |> fun rows -> Set.difference rows retired
 
             let ledger =
                 Set.union
@@ -1072,7 +1041,7 @@ module DeclaredDelivery =
                 | [] ->
                     Ok {
                         Seeded = Set.difference plan.Delivered failedRows |> Set.toList |> List.map rowId
-                        Retired = retiredRows |> Set.toList |> List.map rowId
+                        Retired = retired |> Set.toList |> List.map rowId
                     }
                 | refusals -> Error refusals
         }
