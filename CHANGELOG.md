@@ -19,7 +19,7 @@ Migration notes:
 
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 
-_Surface since `v0.37.0`: **breaking** — 3 packages moved; 3 members added, 1 member changed, 0 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 4 packages moved; 13 members added, 2 members changed, 0 members removed; 1 package new._
 
 ### Added
 
@@ -29,11 +29,24 @@ _Surface since `v0.37.0`: **breaking** — 3 packages moved; 3 members added, 1 
 - `ToolUp.Facts.Presentation.Server` — new package (21 public members)
 - `ToolUp.Facts.Server` — 1 member:
   - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
+- `ToolUp.Platform.Server` — 10 members:
+  - `ToolUp.Platform.CompositionManifest.LiveInterfaceTools : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.Platform.CompositionManifestModule.LiveInterfaceSchemaVersion : System.Int32 (literal)`
+  - `ToolUp.Platform.CompositionManifestModule.isLiveInterfaceTool(ToolUp.Platform.AIToolDefinition) : System.Boolean`
+  - `ToolUp.Platform.CompositionManifestModule.liveInterfaceTools(ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
+  - `ToolUp.Platform.CompositionManifestModule.liveInterfaceToolsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
+  - `ToolUp.Platform.CompositionManifestModule.recordsLiveInterfaceTools(ToolUp.Platform.CompositionManifest) : System.Boolean`
+  - `ToolUp.Platform.CompositionManifestModule.withLiveInterfaceTools(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest`
+  - `ToolUp.Platform.DeploymentReadinessReport.ManifestPostureNote : System.String (literal)`
+  - `ToolUp.Platform.DeploymentReadinessReport.liveInterfaceFromManifest(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary`
+  - `ToolUp.Platform.DeploymentReadinessReport.registerManifestLiveInterface(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection`
 
 ### Changed
 
 - `ToolUp.AI.Server` — 1 member:
   - `ToolUp.AI.AICompose+AIServerApp..ctor` — `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])` → `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]])`
+- `ToolUp.Platform.Server` — 1 member:
+  - `ToolUp.Platform.CompositionManifest..ctor` — `ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod])` → `ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
 
 ## [0.37.0] — 2026-10-29
 
