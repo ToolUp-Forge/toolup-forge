@@ -378,15 +378,15 @@ module SchedulingServerApp =
         let mergedExt: ComposeExtensions = {
             baseExt with
                 Handlers = baseExt.Handlers @ [ schedulingApiHandler ]
-                ServiceConfig =
-                    match baseExt.ServiceConfig with
-                    | None -> Some schedulingServiceConfig
-                    | Some baseFn -> Some(fun s -> schedulingServiceConfig (baseFn s))
         }
 
-        let final = {
-            withEntities with
-                Extensions = mergedExt
-        }
+        let final =
+            {
+                withEntities with
+                    Extensions = mergedExt
+            }
+            |> ServerApp.addContribution (
+                Contribution.service (ComponentId.forCompanionSlot "ToolUp.Scheduling") schedulingServiceConfig
+            )
 
         ServerApp.run final
