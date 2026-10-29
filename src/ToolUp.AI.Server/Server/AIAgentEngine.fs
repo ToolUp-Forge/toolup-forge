@@ -519,6 +519,11 @@ type LoopState = {
     Timings: ToolCallTiming list
     /// The soft stop that ended the loop, when one did.
     Stopped: LoopStop option
+    /// Phase 1131 — the parts server-resident tools attached across the
+    /// turn's tool rounds, in round order and, within a round, in
+    /// tool-call order. The final assistant message carries them after
+    /// its text (`LoopState.messageParts`).
+    Attached: AIContentPart list
 }
 
 /// The loop's starting state.
@@ -530,7 +535,17 @@ module LoopState =
         ConsecutiveErrored = 0
         Timings = []
         Stopped = None
+        Attached = []
     }
+
+    /// Phase 1131 — the parts of the final assistant message whose text is
+    /// `text`: none when no tool attached a part, so a plain turn stays a
+    /// plain-text message; otherwise the text part first, then the attached
+    /// parts in order.
+    let messageParts (text: string) (state: LoopState) : AIContentPart list =
+        match state.Attached with
+        | [] -> []
+        | attached -> TextPart text :: attached
 
 /// What one provider response means for the loop.
 type StepVerdict =
@@ -910,36 +925,62 @@ module private Dispatch =
             return ToolInvocationError.toOutcome (ToolThrew(tc.Name, detail))
     }
 
-    /// Run an admitted tool where it lives. A server-resident body runs
-    /// inside its declared effect envelope (an undeclared tool has none) and
-    /// under the turn's cancellation; a client-resident one goes to the
-    /// browser.
+    /// Phase 1131 — a client-resident tool carrying the record form of the
+    /// executor is refused by name before any gate runs: its result is the
+    /// browser's, and a part is the server's judgement of a read it made.
+    let private refuseAttach (turn: TurnContext) (tc: AIProviderToolCall) (def: AIToolDefinition) =
+        turn.Services.Logger.Warn
+            $"AI tool '{def.Name}' is client-resident and carries the record form of the executor; refused (conversation={turn.ConversationId}). Register it with createTool, or declare it ServerResident."
+
+        ToolOutcome.Refused(
+            ToolRefusal.Denied(tc.Name, "a client-resident tool cannot attach parts to the assistant message")
+        )
+
+    /// Run an admitted tool where it lives, with the parts it attached. A
+    /// server-resident body runs inside its declared effect envelope (an
+    /// undeclared tool has none) and under the turn's cancellation; a
+    /// client-resident one goes to the browser and attaches nothing.
     let private route (turn: TurnContext) (tc: AIProviderToolCall) (tcId: Guid) (tool: RegisteredTool) = async {
         let def = tool.Definition
 
-        match! admit turn tc def with
-        | Error err -> return ToolInvocationError.toOutcome err
-        | Ok() ->
-            match def.Location with
-            | ServerResident ->
-                let! executed =
-                    ToolEffectEnvelope.runWithin
-                        {
-                            ToolName = def.Name
-                            Effects = AIToolEffects.declaredOf def
-                            OnDenied = fun denial -> Telemetry.denial turn def.Name denial.Reason
-                        }
-                        (tool.Execute turn.Request tc.Arguments)
-                    |> underCancel turn.Cancel
+        match def.Location, tool.Answer with
+        | ClientResident, Some _ -> return refuseAttach turn tc def, []
+        | _ ->
+            match! admit turn tc def with
+            | Error err -> return ToolInvocationError.toOutcome err, []
+            | Ok() ->
+                match def.Location with
+                | ServerResident ->
+                    let body =
+                        match tool.Answer with
+                        | Some answer -> answer turn.Request tc.Arguments
+                        | None -> async {
+                            let! content = tool.Execute turn.Request tc.Arguments
 
-                match executed with
-                | Some content -> return ToolOutcome.Produced content
-                | None -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, "The turn was cancelled."))
-            | ClientResident -> return! awaitClient turn tc tcId def
+                            return ({ Text = content; Parts = [] }: ToolHelpers.ToolAnswer)
+                          }
+
+                    let! executed =
+                        ToolEffectEnvelope.runWithin
+                            {
+                                ToolName = def.Name
+                                Effects = AIToolEffects.declaredOf def
+                                OnDenied = fun denial -> Telemetry.denial turn def.Name denial.Reason
+                            }
+                            body
+                        |> underCancel turn.Cancel
+
+                    match executed with
+                    | Some answered -> return ToolOutcome.Produced answered.Text, answered.Parts
+                    | None -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, "The turn was cancelled.")), []
+                | ClientResident ->
+                    let! outcome = awaitClient turn tc tcId def
+                    return outcome, []
     }
 
-    /// Decide and run one tool call. Every failure becomes a `ToolOutcome`
-    /// the model is shown; nothing here ends the turn.
+    /// Decide and run one tool call, with the parts it attached. Every
+    /// failure becomes a `ToolOutcome` the model is shown and attaches
+    /// nothing; nothing here ends the turn.
     let private decide
         (turn: TurnContext)
         (tc: AIProviderToolCall)
@@ -948,26 +989,32 @@ module private Dispatch =
         (verdict: ToolGateVerdict)
         =
         async {
+            let attachingNothing (outcome: Async<ToolOutcome>) = async {
+                let! outcome = outcome
+                return outcome, []
+            }
+
             try
                 match toolOpt, verdict with
-                | None, _ -> return ToolInvocationError.toOutcome (UnknownTool tc.Name)
+                | None, _ -> return ToolInvocationError.toOutcome (UnknownTool tc.Name), []
                 | Some tool, ToolAdmitted -> return! route turn tc tcId tool
-                | Some tool, ToolRefusedSource _ -> return! refuseSource turn tc tool.Definition
-                | Some tool, ToolRefusedGrant _ -> return refuseGrant turn tc tool.Definition
+                | Some tool, ToolRefusedSource _ -> return! attachingNothing (refuseSource turn tc tool.Definition)
+                | Some tool, ToolRefusedGrant _ -> return refuseGrant turn tc tool.Definition, []
                 | Some tool, (ToolRefusedUndeclared | ToolRefusedEffects _) ->
-                    return! refuseEffects turn tc tool.Definition verdict
+                    return! attachingNothing (refuseEffects turn tc tool.Definition verdict)
             with
-            | :? JsonException as ex -> return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, ex.Message))
+            | :? JsonException as ex -> return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, ex.Message)), []
             // The exception's own text, not `Message`, which F# renders as
             // the exception's structured form.
             | ToolHelpers.ToolArgumentError message ->
-                return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, message))
-            | ToolHelpers.ToolFaulted fault -> return ToolOutcome.Faulted fault
-            | ex -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, ex.Message))
+                return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, message)), []
+            | ToolHelpers.ToolFaulted fault -> return ToolOutcome.Faulted fault, []
+            | ex -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, ex.Message)), []
         }
 
     /// Execute one tool call: the result the model is shown, the call's
-    /// latency timing, and its outcome for the rails.
+    /// latency timing, its outcome for the rails, and the parts it attached
+    /// (Phase 1131), which ride only a produced outcome.
     ///
     /// Produced content passes the tool's result budget, the single choke
     /// point between a tool and model context — a client-resident result
@@ -991,7 +1038,7 @@ module private Dispatch =
             | Some tool -> ToolGate.decide turn.Access turn.GrantGate turn.Registry.Policy tool.Definition
             | None -> ToolAdmitted
 
-        let! outcome = decide turn tc tcId toolOpt verdict
+        let! outcome, attached = decide turn tc tcId toolOpt verdict
         let rendered = ToolOutcome.toModel outcome
 
         let content =
@@ -1023,7 +1070,8 @@ module private Dispatch =
                 Content = content
             },
             timing,
-            outcome
+            outcome,
+            (if ToolOutcome.isError outcome then [] else attached)
     }
 
 // ─── The loop ───────────────────────────────────────────────────
@@ -1067,20 +1115,21 @@ module Loop =
 
     /// Fold a tool round's results into the state, purely: the results
     /// become the next user message, the errored-turn count advances or
-    /// resets, and the consecutive-errors rail fires when it reaches the
-    /// limit.
+    /// resets, the consecutive-errors rail fires when it reaches the
+    /// limit, and the round's attached parts extend `Attached` in
+    /// tool-call order.
     let settle
         (turn: TurnContext)
         (state: LoopState)
         (calls: AIProviderToolCall list)
-        (results: (AIProviderToolResult * ToolCallTiming * ToolOutcome) list)
+        (results: (AIProviderToolResult * ToolCallTiming * ToolOutcome * AIContentPart list) list)
         : LoopState =
-        let toolResults = results |> List.map (fun (result, _, _) -> result)
+        let toolResults = results |> List.map (fun (result, _, _, _) -> result)
 
         let errored =
             if
                 results
-                |> List.exists (fun (_, _, outcome) -> not (ToolOutcome.isError outcome))
+                |> List.exists (fun (_, _, outcome, _) -> not (ToolOutcome.isError outcome))
             then
                 0
             else
@@ -1097,7 +1146,8 @@ module Loop =
                         }
                     ]
                 ConsecutiveErrored = errored
-                Timings = results |> List.map (fun (_, timing, _) -> timing)
+                Timings = results |> List.map (fun (_, timing, _, _) -> timing)
+                Attached = state.Attached @ (results |> List.collect (fun (_, _, _, parts) -> parts))
                 Stopped =
                     if errored >= turn.Limits.MaxConsecutiveErrored then
                         Some(LoopStop.ConsecutiveErrors(errored, calls |> List.map _.Name |> List.distinct))
@@ -1242,6 +1292,13 @@ module Loop =
                 complete ()
 
             let! results = calls |> List.map (Dispatch.execute turn) |> Async.Parallel
+
+            // The round is complete: each attached part goes to the stream
+            // now, in tool-call order, before the model's next response.
+            for _, _, _, parts in results do
+                for part in parts do
+                    turn.Emit(BlockAttached(turn.ConversationId, part))
+
             return Settled(settle turn state calls (List.ofArray results))
     }
 

@@ -696,6 +696,11 @@ let update msg model =
         // `ConversationMessage` and re-read on history load.
         | AnswerVerified(_, _) -> model, Cmd.none
 
+        // Phase 1131 — a part a server-resident tool attached. The reloaded
+        // conversation carries it on the final message; appending it to the
+        // in-flight message is the client reducer's (Phase 1080).
+        | BlockAttached(_, _) -> model, Cmd.none
+
         // Phase 6h: user clicked Cancel and the server has confirmed
         // the agent loop is bailing. Commit whatever was streaming
         // (so the user keeps the partial response) and clear the

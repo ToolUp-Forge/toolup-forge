@@ -892,6 +892,17 @@
       neither form renders and is instructed exactly as before. Migration
       recipe: `docs/migrations/1136-requested-projections.md`.
     -->
+    <!--
+      Phase 1131 rides the 0.37.0 draft (untagged, publicly unpinned; its
+      surface movement is breaking-class, the draft's own class, not above
+      it): `ToolUp.AI.Core`'s `AIStreamEvent` gains `BlockAttached`, so an
+      exhaustive match adds an arm, and `ToolUp.AI.Server`'s
+      `RegisteredTool` gains `Answer`, so a full record construction adds a
+      field. For a tool author it is additive: `ToolHelpers.ToolAnswer`,
+      `AIToolRegistry.createAnsweringTool`, `LoopState.Attached` and
+      `LoopState.messageParts`; a string-returning executor is unchanged.
+      Migration recipe: `docs/migrations/1131-tool-result-block.md`.
+    -->
     <Version>0.37.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

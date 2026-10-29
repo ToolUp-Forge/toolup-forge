@@ -338,6 +338,14 @@ type AIStreamEvent =
         summary: string *
         detail: string *
         redactedArgumentsPreview: string
+    /// Phase 1131 — a part a server-resident tool attached to the
+    /// assistant turn (a block, Phase 1128), emitted when the tool round
+    /// that produced it completes, one event per part in tool-call order.
+    /// The final assistant message carries the same parts after its text,
+    /// in the same order, and the conversation record persists them, so a
+    /// reloaded conversation shows each part where the stream placed it.
+    /// The part is encoded exactly as the conversation record encodes it.
+    | BlockAttached of conversationId: Guid * part: AIContentPart
 
 // ─── Tool outcomes ───────────────────────────────────────────────
 //

@@ -206,6 +206,7 @@ ToolUp.AI.AISpendResourceKind.cost : System.String (literal)
 ToolUp.AI.AIStreamEvent (class)
 ToolUp.AI.AIStreamEvent.IsAIConsentRequired : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsAnswerVerified : System.Boolean { get }
+ToolUp.AI.AIStreamEvent.IsBlockAttached : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsClientToolInvoke : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsMessageComplete : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsMessageDelta : System.Boolean { get }
@@ -227,6 +228,9 @@ ToolUp.AI.AIStreamEvent+AIConsentRequired.toolName : System.String { get }
 ToolUp.AI.AIStreamEvent+AnswerVerified (class)
 ToolUp.AI.AIStreamEvent+AnswerVerified.conversationId : System.Guid { get }
 ToolUp.AI.AIStreamEvent+AnswerVerified.verification : ToolUp.AI.AnswerVerification { get }
+ToolUp.AI.AIStreamEvent+BlockAttached (class)
+ToolUp.AI.AIStreamEvent+BlockAttached.conversationId : System.Guid { get }
+ToolUp.AI.AIStreamEvent+BlockAttached.part : ToolUp.Platform.AI.AIContentPart { get }
 ToolUp.AI.AIStreamEvent+ClientToolInvoke (class)
 ToolUp.AI.AIStreamEvent+ClientToolInvoke.activeModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.AIStreamEvent+ClientToolInvoke.activePage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -247,6 +251,7 @@ ToolUp.AI.AIStreamEvent+StreamError.message : System.String { get }
 ToolUp.AI.AIStreamEvent+Tags (class)
 ToolUp.AI.AIStreamEvent+Tags.AIConsentRequired : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.AnswerVerified : System.Int32 (literal)
+ToolUp.AI.AIStreamEvent+Tags.BlockAttached : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.ClientToolInvoke : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.MessageComplete : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.MessageDelta : System.Int32 (literal)

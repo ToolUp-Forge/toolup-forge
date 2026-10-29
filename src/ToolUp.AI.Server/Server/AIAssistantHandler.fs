@@ -1894,8 +1894,9 @@ let aiAssistantApi
     /// final text appended to the UI blob), the assistant turn on the
     /// conversation substrate, and the conversation marked completed. `Some`
     /// provider when this was the conversation's first exchange, to title it.
-    let completeTurn (turn: TurnRequest) (context: TurnContext) (finalMessages: AIProviderMessage list) = async {
+    let completeTurn (turn: TurnRequest) (context: TurnContext) (state: LoopState) = async {
         let provider = context.Provider
+        let finalMessages = state.Messages
         let conversationId = turn.Request.ConversationId
 
         let lastAssistant =
@@ -1916,7 +1917,9 @@ let aiAssistantApi
                 content
                 []
                 turn.Contribution.RetrievedSources
-                []
+                // Phase 1131: the parts the turn's tools attached, after
+                // the settled text; none on a plain turn.
+                (LoopState.messageParts content state)
                 ""
                 verification
         ]
@@ -2006,7 +2009,7 @@ let aiAssistantApi
 
             match! AIAgentEngine.run context plan (windowed conversationId history @ [ userMessage ]) with
             | Error stop -> return Error(TurnFailure.Stopped stop)
-            | Ok state -> return! completeTurn turn context state.Messages
+            | Ok state -> return! completeTurn turn context state
     }
 
     /// The turn's stages, each refusing with a typed failure.

@@ -11,6 +11,7 @@ open System.Text.Json
 open System.Threading
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Json.SystemTextJson
@@ -150,6 +151,50 @@ let private legacyGolden =
     + "data: {\"MessageComplete\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000001\",\"0a3d3e4c-1a2b-4c5d-8e9f-000000000004\"]}\n\n"
     + "data: {\"TaskStatusChanged\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000002\",\"AITaskCompleted\"]}\n\n"
 
+// ─── Phase 1131 — the block event ───────────────────────────────────────
+//
+// A part a server-resident tool attached reaches the stream as one more
+// default `message` frame, framed exactly as every other event. The part is
+// the conversation record's own encoding of an `AIContentPart` (the same
+// `FableConverters` writer), so a client parses it with the decoder that
+// already reads a persisted block (Phase 1128). Recorded from
+// `SSEHandler.sendEvent` when the event was added; like the goldens above,
+// a change here is a wire break.
+
+let private blockPart =
+    BlockPart(
+        """{"kind":"table","rows":[["north",120]]}""",
+        {
+            Kind = "table"
+            Request = """{"kind":"table","tableId":"daily-trade"}"""
+            FactIds = [ "fact-0001" ]
+            Withheld = [
+                {
+                    PolicyRef = "trade-figures"
+                    Count = 2
+                }
+            ]
+            TableId = "daily-trade"
+            Metric = "revenue"
+            Period = "2026-10-26"
+        }
+    )
+
+/// A tool round that attached a block: the call, its result, the block,
+/// then the final message.
+let private blockTurn: AIStreamEvent list = [
+    ToolCallStarted(conversationId, "render_table", toolCallId)
+    ToolCallCompleted(conversationId, toolCallId, "{\"n\":1}")
+    BlockAttached(conversationId, blockPart)
+    MessageComplete(conversationId, messageId)
+]
+
+let private blockGolden =
+    "data: {\"ToolCallStarted\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000001\",\"render_table\",\"0a3d3e4c-1a2b-4c5d-8e9f-000000000003\"]}\n\n"
+    + "data: {\"ToolCallCompleted\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000001\",\"0a3d3e4c-1a2b-4c5d-8e9f-000000000003\",\"{\\\"n\\\":1}\"]}\n\n"
+    + "data: {\"BlockAttached\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000001\",{\"BlockPart\":[\"{\\\"kind\\\":\\\"table\\\",\\\"rows\\\":[[\\\"north\\\",120]]}\",{\"Kind\":\"table\",\"Request\":\"{\\\"kind\\\":\\\"table\\\",\\\"tableId\\\":\\\"daily-trade\\\"}\",\"FactIds\":[\"fact-0001\"],\"Withheld\":[{\"PolicyRef\":\"trade-figures\",\"Count\":2}],\"TableId\":\"daily-trade\",\"Metric\":\"revenue\",\"Period\":\"2026-10-26\"}]}]}\n\n"
+    + "data: {\"MessageComplete\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000001\",\"0a3d3e4c-1a2b-4c5d-8e9f-000000000004\"]}\n\n"
+
 let private refusedGolden =
     "data: {\"TaskStatusChanged\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000002\",{\"AITaskFailed\":\"Conversation does not belong to the current user — refusing to append.\"}]}\n\n"
 
@@ -167,6 +212,34 @@ let tests =
 
         test "the legacy refusal terminal is the recorded bytes" {
             Expect.equal (legacyWire "user-1" refusedTurn) refusedGolden "ownership-refusal terminal frame"
+        }
+
+        test "Phase 1131: the block event is framed as the recorded bytes, on both channels" {
+            let actual = legacyWire "user-1" blockTurn
+
+            if actual <> blockGolden then
+                failtestf "block event framing changed.\n--- expected ---\n%s\n--- actual ---\n%s" blockGolden actual
+
+            let frames = SseFrame.parse actual
+
+            Expect.all
+                frames
+                (fun f -> f.Event = "message" && f.Id.IsNone)
+                "the block event is a default message frame, like every legacy event"
+
+            let typedPayloads =
+                blockTurn
+                |> List.map (typedPayload >> Streaming.formatChunk >> Encoding.UTF8.GetString)
+                |> String.concat ""
+                |> SseFrame.parse
+                |> List.map _.Data
+
+            Expect.equal typedPayloads (frames |> List.map _.Data) "the typed channel carries the same payload bytes"
+
+            Expect.stringContains
+                frames[2].Data
+                (JsonSerializer.Serialize(blockPart, fableJson))
+                "the part is the conversation record's own encoding of the part"
         }
 
         test "legacy frames are default `message` events — the client reads them with onmessage" {

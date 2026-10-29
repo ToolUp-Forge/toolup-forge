@@ -250,7 +250,8 @@ let private eventKinds (events: AIStreamEvent list) =
         | ClientToolInvoke _ -> "ClientToolInvoke"
         | AnswerVerified _ -> "AnswerVerified"
         | AIConsentRequired _ -> "AIConsentRequired"
-        | ToolApprovalRequired _ -> "ToolApprovalRequired")
+        | ToolApprovalRequired _ -> "ToolApprovalRequired"
+        | BlockAttached _ -> "BlockAttached")
 
 let private auditRows (store: IEventStore) (source: string) = async {
     let! rows = store.ReadBySource("anonymous", source)
