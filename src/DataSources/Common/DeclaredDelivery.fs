@@ -229,16 +229,21 @@ type DeliveryObservation = {
 
 /// A delivered source's config, written at its principal's scope (Phase 1095).
 type DeliverySeed = {
+    /// The principal's resolved scope the config is written in.
     Scope: ResolvedScope
+    /// The config as seeded — for a watch, located in the scope.
     Config: DataSourceConfig
 }
 
 /// A job a delivery schedules under its principal's resolution (Phase 1095).
 type DeliveryRegistration = {
+    /// The declared source the job delivers.
     SourceId: DataSourceId
     /// `pull:<table>` or `watch` — the job's `DeclaredDelivery.JobKeyTag`.
     JobKey: string
+    /// The principal's resolution the job is scheduled (and its scope sealed) under.
     Scope: ResolvedScope
+    /// The registration, idempotency key included.
     Registration: JobRegistration
 }
 
@@ -246,8 +251,11 @@ type DeliveryRegistration = {
 /// principal's resolution, so a token an earlier key ring no longer redeems
 /// runs under the scope it was declared for (Phase 1095).
 type DeliveryRestamp = {
+    /// The declared source the job delivers.
     SourceId: DataSourceId
+    /// The principal's resolution the job's scope is re-issued under.
     Scope: ResolvedScope
+    /// The kept job.
     JobId: JobId
     /// The job already carries a scope token, so a scheduler that cannot
     /// re-issue one leaves it running under that token.
@@ -256,15 +264,20 @@ type DeliveryRestamp = {
 
 /// A live declared job no declaration accounts for any more (Phase 1095).
 type DeliveryCancel = {
+    /// The source the job was declared for.
     SourceId: DataSourceId
+    /// The scope the job lives in.
     ScopeId: string
+    /// The job to cancel.
     JobId: JobId
 }
 
 /// A seeded source no declaration accounts for where it was seeded: its
 /// config is deleted there (its jobs are `Cancel` entries) (Phase 1095).
 type DeliveryRetire = {
+    /// The retired source.
     SourceId: DataSourceId
+    /// The scope it was seeded in, whose config is deleted.
     ScopeId: string
 }
 

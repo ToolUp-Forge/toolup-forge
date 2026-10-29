@@ -1295,6 +1295,12 @@ ToolUp.Platform.CapabilityGateDecision+Denied.Item : ToolUp.Platform.CapabilityD
 ToolUp.Platform.CapabilityGateDecision+Tags (class)
 ToolUp.Platform.CapabilityGateDecision+Tags.Denied : System.Int32 (literal)
 ToolUp.Platform.CapabilityGateDecision+Tags.Granted : System.Int32 (literal)
+ToolUp.Platform.CapabilityNotDeclared (class)
+ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)
+ToolUp.Platform.CapabilityNotDeclared.Capability : ToolUp.Platform.ConnectorCapability { get }
+ToolUp.Platform.CapabilityNotDeclared.Kind : System.String { get }
+ToolUp.Platform.CapabilityNotDeclaredModule (class)
+ToolUp.Platform.CapabilityNotDeclaredModule.describe(ToolUp.Platform.CapabilityNotDeclared) : System.String
 ToolUp.Platform.CapacityDecision (class)
 ToolUp.Platform.CapacityDecision.IsBudgetExceeded : System.Boolean { get }
 ToolUp.Platform.CapacityDecision.IsUnbudgeted : System.Boolean { get }
@@ -2621,6 +2627,29 @@ ToolUp.Platform.ConfigValidators.fromEnv(Microsoft.FSharp.Core.FSharpOption`1[Mi
 ToolUp.Platform.ConfigurePipeline (class)
 ToolUp.Platform.ConfigurePipeline.buildForwardedHeadersOptions(ToolUp.Platform.ServerConfig) : Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
 ToolUp.Platform.ConfigurePipeline.configurePipeline(Microsoft.AspNetCore.Builder.WebApplication, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.ComposeExtensions, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]) : System.Void
+ToolUp.Platform.ConnectorCapabilities (class)
+ToolUp.Platform.ConnectorCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload])
+ToolUp.Platform.ConnectorCapabilities.Native : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload] { get }
+ToolUp.Platform.ConnectorCapabilities.Watchable : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource] { get }
+ToolUp.Platform.ConnectorCapabilitiesModule (class)
+ToolUp.Platform.ConnectorCapabilitiesModule.declared(ToolUp.Platform.ConnectorCapabilities) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConnectorCapability]
+ToolUp.Platform.ConnectorCapabilitiesModule.declares(ToolUp.Platform.ConnectorCapability, ToolUp.Platform.ConnectorCapabilities) : System.Boolean
+ToolUp.Platform.ConnectorCapabilitiesModule.native(ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IEmitsNativePayload, ToolUp.Platform.CapabilityNotDeclared]
+ToolUp.Platform.ConnectorCapabilitiesModule.none : ToolUp.Platform.ConnectorCapabilities { get }
+ToolUp.Platform.ConnectorCapabilitiesModule.require(ToolUp.Platform.ConnectorCapability, ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CapabilityNotDeclared]
+ToolUp.Platform.ConnectorCapabilitiesModule.watchable(ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IWatchableFileSource, ToolUp.Platform.CapabilityNotDeclared]
+ToolUp.Platform.ConnectorCapability (class)
+ToolUp.Platform.ConnectorCapability.IsNative : System.Boolean { get }
+ToolUp.Platform.ConnectorCapability.IsWatchable : System.Boolean { get }
+ToolUp.Platform.ConnectorCapability.Native : ToolUp.Platform.ConnectorCapability { get }
+ToolUp.Platform.ConnectorCapability.Tag : System.Int32 { get }
+ToolUp.Platform.ConnectorCapability.Watchable : ToolUp.Platform.ConnectorCapability { get }
+ToolUp.Platform.ConnectorCapability+Tags (class)
+ToolUp.Platform.ConnectorCapability+Tags.Native : System.Int32 (literal)
+ToolUp.Platform.ConnectorCapability+Tags.Watchable : System.Int32 (literal)
+ToolUp.Platform.ConnectorCapabilityModule (class)
+ToolUp.Platform.ConnectorCapabilityModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConnectorCapability] { get }
+ToolUp.Platform.ConnectorCapabilityModule.name(ToolUp.Platform.ConnectorCapability) : System.String
 ToolUp.Platform.Consent.ConsentStateStore (class)
 ToolUp.Platform.Consent.ConsentStateStore+ConsentRecord (class)
 ToolUp.Platform.Consent.ConsentStateStore+ConsentRecord..ctor(System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ConsentCategory], System.DateTimeOffset, ToolUp.Platform.Consent.ConsentStateStore+ConsentSource)
@@ -5989,6 +6018,7 @@ ToolUp.Platform.IDataObjectStore.Purge(System.String) : Microsoft.FSharp.Control
 ToolUp.Platform.IDataObjectStore.Recover(System.String, System.String, System.Int32, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataObject, ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.IDataObjectStore.Save(System.String, System.String, System.Byte[], System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.VersioningPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataObject, ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.IDataSource (interface)
+ToolUp.Platform.IDataSource.Capabilities : ToolUp.Platform.ConnectorCapabilities { get }
 ToolUp.Platform.IDataSource.Connect(ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IngestionError]]
 ToolUp.Platform.IDataSource.GetSchema(ToolUp.Platform.DataSourceCallContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TableSchema, ToolUp.Platform.IngestionError]]
 ToolUp.Platform.IDataSource.Kind : System.String { get }
@@ -6816,6 +6846,8 @@ ToolUp.Platform.IVectorStore+VectorIndexLocality+Tags.Shared : System.Int32 (lit
 ToolUp.Platform.IVectorStore+VectorIndexLocalityModule (class)
 ToolUp.Platform.IVectorStore+VectorIndexLocalityModule.declared(ToolUp.Platform.IVectorStore+IVectorStore) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+VectorIndexLocality]
 ToolUp.Platform.IVectorStore+VectorIndexLocalityModule.isInProcess(ToolUp.Platform.IVectorStore+IVectorStore) : System.Boolean
+ToolUp.Platform.IWatchableFileSource (interface)
+ToolUp.Platform.IWatchableFileSource.ListObjects(ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WatchedObject], ToolUp.Platform.IngestionError]]
 ToolUp.Platform.IWebhookDeliveryLog (interface)
 ToolUp.Platform.IWebhookDeliveryLog.ListRecent(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookDelivery]]
 ToolUp.Platform.IWebhookDeliveryLog.Prune(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -11682,6 +11714,11 @@ ToolUp.Platform.VirtualDatasetReader.ReadPage(System.String, ToolUp.Platform.Vir
 ToolUp.Platform.VirtualDatasetReader.Schema : ToolUp.Platform.DatasetSchema { get }
 ToolUp.Platform.VirtualDatasetReaderModule (class)
 ToolUp.Platform.VirtualDatasetReaderModule.create(ToolUp.Platform.IDataSource, ToolUp.Platform.IDatasetCodec, ToolUp.Platform.DatasetSchema, ToolUp.Platform.DataSourceConfig) : ToolUp.Platform.VirtualDatasetReader
+ToolUp.Platform.WatchedObject (class)
+ToolUp.Platform.WatchedObject..ctor(System.String, System.String, System.String)
+ToolUp.Platform.WatchedObject.BlobName : System.String { get }
+ToolUp.Platform.WatchedObject.Identity : System.String { get }
+ToolUp.Platform.WatchedObject.Table : System.String { get }
 ToolUp.Platform.WebhookApiHandler (class)
 ToolUp.Platform.WebhookApiHandler.webhookApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IWebhookApi
 ToolUp.Platform.WebhookDispatcher (class)
