@@ -8,12 +8,12 @@ open ToolUp.Platform
 open ToolUp.Platform.IEntityStore
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
+open ToolUp.AI.ToolHelpers
 open DataManagementTypes
 
-/// Phase 36.B — built-in cross-module AI tool family (`_platform.ai.*`).
+/// Built-in cross-module AI tool family (`_platform.ai.*`).
 ///
 /// Six SDK-built-in tools registered by `composeAI` that wrap existing
 /// platform substrate so an LLM can roam across the user's module data
@@ -23,7 +23,7 @@ open DataManagementTypes
 /// substrate already enforces.
 ///
 /// Every tool carries `SourceModule = "_platform.ai"` so the
-/// per-module dispatch RBAC filter (Phase 36.A) does not hide them;
+/// per-module dispatch RBAC filter does not hide them;
 /// per-*target*-module RBAC is enforced internally by each tool
 /// (either the bus's own `hasPermission` gate, or an explicit pre-check
 /// before reaching the result store).
@@ -41,7 +41,7 @@ open DataManagementTypes
 /// RBAC-correct path (GP 4). It also works unchanged on a real request
 /// context (the same middleware populates the same items).
 ///
-/// **Phase 36.C — the per-module opt-in.** The six tools additionally
+/// **The per-module opt-in.** The six tools additionally
 /// honour each TARGET module's declared `ModuleAIExposure`
 /// (`ServerModule.withAIExposure`), which is **off unless declared**.
 /// `list_accessible_modules` annotates (`queryable: false`);
@@ -49,18 +49,14 @@ open DataManagementTypes
 /// `UnqueryableModule`. See `aiQueryable` below for why that refusal is
 /// rendered differently from `PermissionDenied` and reported after it,
 /// and `docs/migrations/per-module-ai-queryability.md` for what a
-/// deployment that had adopted 36.B has to do.
+/// deployment that already used this tool family has to do.
 ///
 /// Wired automatically by `composeAI`; apps do not register these.
 
-// ─── JSON helpers ────────────────────────────────────────────────
-
-let private fableJsonOptions = FableConverters.create ()
-
-let private fableSerialize (value: obj) : string =
-    JsonSerializer.Serialize(value, fableJsonOptions)
-
 // ─── Access-context + scope reconstruction (from Items, see header) ──
+//
+// The access context is `AIToolRegistry.reconstructAccessContext`, the
+// one reconstruction the agent loop's own gates read.
 
 let private permToken =
     function
@@ -69,81 +65,9 @@ let private permToken =
     | ModulePermission.Admin -> "Admin"
     | ModulePermission.SchemaOnly -> "SchemaOnly"
 
-/// Reconstruct the caller's `AccessContext` from the per-request items
-/// copied into the agent loop's background context. `ModulePermissions`
-/// is the load-bearing field — every RBAC gate below reads it. The
-/// remaining fields are best-effort: a stashed `ToolUp.Subject` is
-/// preferred when present, otherwise the Subject is derived from the
-/// resolved scope / user the same way `ComposeScopeResolver` does.
-let private reconstructAccess (ctx: HttpContext) : AccessContext =
-    let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
-    let scopeOpt =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> Some s
-        | _ -> None
-
-    let teamId =
-        match scopeOpt with
-        | Some s when s.Container.StartsWith "team-" -> Some s.ScopeId
-        | _ -> None
-
-    let modulePermissions =
-        match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
-        | true, (:? Map<string, ModulePermission list> as perms) -> perms
-        | _ -> Map.empty
-
-    let moduleExposure =
-        match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
-        | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
-        | _ -> Map.empty
-
-    let platformRole =
-        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-        | true, (:? PlatformRole as role) -> Some role
-        | _ -> None
-
-    let subject =
-        match ctx.Items.TryGetValue "ToolUp.Subject" with
-        | true, (:? Subject as s) -> s
-        | _ ->
-            match teamId with
-            | Some tid -> TeamMember(userId, tid)
-            | None when userId <> "anonymous" -> AuthenticatedUser userId
-            | None -> AnonymousSession userId
-
-    {
-        UserId = userId
-        TeamId = teamId
-        Subject = subject
-        ModulePermissions = modulePermissions
-        // Phase 987 — the same provider-asserted roles the request's
-        // scoped `AccessContext` carries (Phase 993: API roles plus
-        // directory roles — `AuthenticatedUser.pageRoles`).
-        TokenRoles =
-            match ctx.Items.TryGetValue "ToolUp.User" with
-            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                AccessContext.tokenRolesFor subject (ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user)
-            | _ -> []
-        // Phase 996 — the provider's admission, under the same rule.
-        Admission =
-            match ctx.Items.TryGetValue "ToolUp.User" with
-            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                AccessContext.admissionFor subject user.Admission
-            | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
-        ModuleExposure = moduleExposure
-        PlatformRole = platformRole
-        // Phase 1107 — grants are read only by the `Publication` page
-        // audience, which this path never evaluates.
-        PublicationGrants = []
-    }
-
-/// Phase 730 — the grant / consent gate for the `_platform.*` family.
+/// The grant / consent gate for the `_platform.*` family.
 ///
-/// These tools are exempt from the Phase 36.A per-SOURCE-module filter by
+/// These tools are exempt from the per-SOURCE-module filter by
 /// design: their `SourceModule` is an SDK-reserved namespace, and they
 /// apply RBAC internally, per TARGET module, at the four sites below.
 /// That exemption is exactly why the grant gate has to be repeated here.
@@ -153,20 +77,20 @@ let private reconstructAccess (ctx: HttpContext) : AccessContext =
 /// would happily read a module whose grant is pending the subject's
 /// acceptance, having been admitted by a permission entry that confers
 /// nothing. The cross-module family would become the way around the very
-/// control Phases 551 and 552 shipped.
+/// control the grant gate enforces.
 ///
 /// Built per invocation rather than per turn: a tool executor has no turn
 /// to hang it on, and the cost when nothing is declared is one failed
 /// `GetService`.
 let private grantLive (ctx: HttpContext) : string -> bool = moduleGrantGate ctx
 
-/// Phase 36.C — the per-module AI-queryability gate: has the TARGET
+/// The per-module AI-queryability gate: has the TARGET
 /// module's author opted its data into this tool family at all.
 ///
 /// **Third gate, third question, and the order they run in is the
 /// contract.** Every reach site below asks, in this order: (1) may this
 /// caller read the module (`hasPermission` / `canAccessModule`); (2) is
-/// the authority behind that permission live (Phase 730's grant gate);
+/// the authority behind that permission live (the grant gate above);
 /// (3) is the module on the AI surface (this). One and two are about the
 /// CALLER and render identically as `PermissionDenied` — the model is
 /// never told which of them stopped it. Three is about the DEPLOYMENT
@@ -188,16 +112,16 @@ let private unqueryableModule (moduleName: string) (detail: string) : string =
         message = detail
     |}
 
-/// Phase 36.D — the FOURTH gate, and the only one that asks the USER.
+/// The FOURTH gate, and the only one that asks the USER.
 ///
 /// The three gates above are all answered by the deployment: may this
 /// caller read the module, is that authority live, is the module on the AI
 /// surface. This one asks the person in the conversation, once per target
 /// module, whether the agent may go and read their data out of a module
-/// they did not name. It is INNERMOST by the same argument that put 36.C
-/// last: a caller who fails an outer gate is refused before any dialog is
-/// shown, so the dialog can never tell them which modules exist or which
-/// ones a deployment exposed.
+/// they did not name. It is INNERMOST by the same argument that put the
+/// opt-in gate last: a caller who fails an outer gate is refused before
+/// any dialog is shown, so the dialog can never tell them which modules
+/// exist or which ones a deployment exposed.
 ///
 /// The refusal is rendered as `UserDenied` — a fourth discriminator beside
 /// `PermissionDenied` / `UnqueryableModule` / `NotFound`, for a fourth
@@ -233,7 +157,7 @@ let private consentRefusal
 /// The first refusal wins and the rest are not asked: the read cannot
 /// happen, so further dialogs would ask the user to authorise something
 /// that is not going to occur either way. An empty set is granted — there
-/// is no module to name, which is the same documented limit 36.C's gate
+/// is no module to name, which is the same documented limit the opt-in gate
 /// reaches on an entity type the catalogue cannot attribute.
 let rec private consentRefusalForAll
     (ctx: HttpContext)
@@ -320,7 +244,7 @@ let private listAccessibleModulesDef: AIToolDefinition = {
 }
 
 let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
-    let access = reconstructAccess ctx
+    let access = reconstructAccessContext ctx
     let rbacConfigured = not access.ModulePermissions.IsEmpty
 
     let! catalogModules = async {
@@ -344,7 +268,7 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
 
     let entries =
         allModules
-        // Phase 730 — enumeration is a listing, so it filters silently
+        // Enumeration is a listing, so it filters silently
         // (nothing was attempted) exactly as the tool-registry list filter
         // does. A module whose grant is pending or consent-revoked is not
         // named here at all.
@@ -361,7 +285,7 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
             {|
                 moduleName = m
                 permissions = perms
-                // Phase 36.C — this tool ANNOTATES rather than filters,
+                // This tool ANNOTATES rather than filters,
                 // and it is the one of the six that does. A module the
                 // caller may read but which has not opted into the AI
                 // surface still exists and is still worth naming: the
@@ -399,16 +323,13 @@ let private listDataTypesDef: AIToolDefinition = {
 }
 
 let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
-    let access = reconstructAccess ctx
-    // Phase 730 — same silent-listing treatment as `_platform.list_modules`.
+    let access = reconstructAccessContext ctx
+    // Same silent-listing treatment as `_platform.list_modules`.
     let isGrantLive = grantLive ctx
-    // Phase 36.C — and the AI-queryability opt-in on top, which here
+    // And the AI-queryability opt-in on top, which here
     // FILTERS rather than annotates: a data type is only listed when at
     // least one of its producers is both reachable by this caller and on
-    // the AI surface. This is the intersection Phase 36.B's producer
-    // filter was written against and could not yet compute — with no
-    // opt-in declared it had nothing to narrow by, so every accessible
-    // producer counted.
+    // the AI surface.
     let isQueryable = aiQueryable ctx
 
     match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
@@ -489,7 +410,7 @@ let private queryModuleDef: AIToolDefinition = {
 }
 
 let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<string> = async {
-    let access = reconstructAccess ctx
+    let access = reconstructAccessContext ctx
 
     let parsed =
         try
@@ -510,17 +431,17 @@ let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<str
     | None
     | Some(None, _, _) ->
         return
-            fableSerialize {|
-                error = "InvalidArguments"
-                message = "Required argument 'moduleName' is missing."
-            |}
+            refuseArguments [
+                "error", "InvalidArguments"
+                "message", "Required argument 'moduleName' is missing."
+            ]
     | Some(_, None, _) ->
         return
-            fableSerialize {|
-                error = "InvalidArguments"
-                message = "Required argument 'queryKey' is missing."
-            |}
-    // Phase 36.C — the opt-in gate, AFTER the caller-side question and
+            refuseArguments [
+                "error", "InvalidArguments"
+                "message", "Required argument 'queryKey' is missing."
+            ]
+    // The opt-in gate, AFTER the caller-side question and
     // BEFORE the bus. After, because a caller who may not read the module
     // must learn nothing about the deployment's AI configuration — the
     // bus's own `PermissionDenied` still answers them. Before, because
@@ -539,12 +460,12 @@ let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<str
         ->
         return unqueryableModule moduleName (notOptedInMessage moduleName)
     | Some(Some moduleName, Some queryKey, payload) ->
-        // Phase 36.D — the user-consent gate, innermost.
+        // The user-consent gate, innermost.
         //
         // Gated on the caller's own `Read` permission first, deliberately.
         // Unlike the three other reach tools, this one does not pre-check
         // permission itself — the BUS answers `PermissionDenied`, and that
-        // is the pre-36.C behaviour the ordering rationale above preserves.
+        // is the behaviour the ordering rationale above preserves.
         // Prompting before the bus has spoken would show a dialog naming a
         // module the caller may not read, which is exactly the leak the
         // report-last ordering exists to prevent.
@@ -607,7 +528,7 @@ let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<str
                             else
                                 resp.Payload
 
-                        JsonSerializer.Deserialize<JsonElement>(raw, fableJsonOptions)
+                        fableDeserialize<JsonElement> raw
 
                     return
                         fableSerialize {|
@@ -764,18 +685,13 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
             Error(sprintf "arguments were not valid JSON: %s" ex.Message)
 
     match parsed with
-    | Error msg ->
-        return
-            fableSerialize {|
-                error = "InvalidArguments"
-                message = msg
-            |}
+    | Error msg -> return refuseArguments [ "error", "InvalidArguments"; "message", msg ]
     | Ok(None, _, _) ->
         return
-            fableSerialize {|
-                error = "InvalidArguments"
-                message = "Required argument 'entityType' is missing."
-            |}
+            refuseArguments [
+                "error", "InvalidArguments"
+                "message", "Required argument 'entityType' is missing."
+            ]
     | Ok(_, _, Error predErr) ->
         return
             fableSerialize {|
@@ -783,13 +699,13 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
                 message = predErr
             |}
     | Ok(Some entityType, take, Ok wherePred) ->
-        // Phase 36.C — the opt-in gate for the one tool that names a data
+        // The opt-in gate for the one tool that names a data
         // shape rather than a module. Attribution runs through the data
         // catalogue's producers, which is the only module-attribution an
         // entity type has: `EntityRegistration` carries none (entities are
         // registered app-level by `ServerApp.withEntity`, not per module).
         //
-        // So the gate binds exactly where the shard says it does — "an
+        // So the gate binds exactly on "an
         // entity type whose only producer module is non-queryable" — and
         // an entity type with NO catalogued producer is passed through
         // unchanged rather than refused. Refusing it was the other
@@ -803,12 +719,12 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
         // attribution on `EntityRegistration`, which is a substrate change
         // of its own, not a line in this gate.
         //
-        // Phase 36.D reads the same attribution one step further: the
+        // The consent gate reads the same attribution one step further: the
         // producers that ARE on the AI surface are the modules whose data
         // this read would return, so they are exactly the modules the user
         // is asked about. `Ok []` (no catalogued producer) therefore
         // reaches the consent gate with nothing to name, and is granted for
-        // the same reason it passes the 36.C gate.
+        // the same reason it passes the opt-in gate.
         let! entityGate = async {
             match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
             | :? IDataCatalog as catalog ->
@@ -837,7 +753,7 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
                         entityType
                         producerNames)
         | Ok queryableProducers ->
-            // Phase 36.D — the user-consent gate, innermost, asked once per
+            // The user-consent gate, innermost, asked once per
             // producing module because the read returns data from all of
             // them. The first refusal ends the read.
             let! refusal = consentRefusalForAll ctx queryEntityDef.Name entityType argsJson queryableProducers
@@ -929,7 +845,7 @@ let private resultTypeOf (moduleName: string) (objectId: string) : string =
         objectId
 
 let private executeListResults (ctx: HttpContext) (argsJson: string) : Async<string> = async {
-    let access = reconstructAccess ctx
+    let access = reconstructAccessContext ctx
     let scopeId = scopeIdOf ctx
 
     let parsed =
@@ -944,12 +860,12 @@ let private executeListResults (ctx: HttpContext) (argsJson: string) : Async<str
     | None
     | Some(None, _, _) ->
         return
-            fableSerialize {|
-                error = "InvalidArguments"
-                message = "Required argument 'moduleName' is missing."
-            |}
+            refuseArguments [
+                "error", "InvalidArguments"
+                "message", "Required argument 'moduleName' is missing."
+            ]
     | Some(Some moduleName, dateFrom, dateTo) ->
-        // Phase 730 — BOTH halves, and in this order. The permission check
+        // BOTH halves, and in this order. The permission check
         // asks "may this caller read the module at all"; the grant check
         // asks "is the authority behind that permission entry live". A
         // pending or consent-revoked grant leaves the entry in place, so
@@ -972,7 +888,7 @@ let private executeListResults (ctx: HttpContext) (argsJson: string) : Async<str
                     error = "PermissionDenied"
                     targetModule = moduleName
                 |}
-        // Phase 36.C — third gate, reported LAST and rendered
+        // Third gate, reported LAST and rendered
         // DIFFERENTLY. The caller-side pair above is deliberately
         // indistinguishable to the model; this one is deliberately
         // distinct, because no grant fixes it and a model told
@@ -980,7 +896,7 @@ let private executeListResults (ctx: HttpContext) (argsJson: string) : Async<str
         elif not (aiQueryable ctx moduleName) then
             return unqueryableModule moduleName (notOptedInMessage moduleName)
         else
-            // Phase 36.D — the user-consent gate, innermost: the three
+            // The user-consent gate, innermost: the three
             // gates above are the deployment's answers, this one is the
             // user's. Reached only after all three have passed, so a
             // dialog can never name a module the caller may not read.
@@ -1057,7 +973,7 @@ let private getLatestResultDef: AIToolDefinition = {
 }
 
 let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async<string> = async {
-    let access = reconstructAccess ctx
+    let access = reconstructAccessContext ctx
     let scopeId = scopeIdOf ctx
 
     let parsed =
@@ -1072,18 +988,18 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
     | None
     | Some(None, _) ->
         return
-            fableSerialize {|
-                error = "InvalidArguments"
-                message = "Required argument 'moduleName' is missing."
-            |}
+            refuseArguments [
+                "error", "InvalidArguments"
+                "message", "Required argument 'moduleName' is missing."
+            ]
     | Some(_, None) ->
         return
-            fableSerialize {|
-                error = "InvalidArguments"
-                message = "Required argument 'resultType' is missing."
-            |}
+            refuseArguments [
+                "error", "InvalidArguments"
+                "message", "Required argument 'resultType' is missing."
+            ]
     | Some(Some moduleName, Some resultType) ->
-        // Phase 730 — BOTH halves, and in this order. The permission check
+        // BOTH halves, and in this order. The permission check
         // asks "may this caller read the module at all"; the grant check
         // asks "is the authority behind that permission entry live". A
         // pending or consent-revoked grant leaves the entry in place, so
@@ -1106,7 +1022,7 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
                     error = "PermissionDenied"
                     targetModule = moduleName
                 |}
-        // Phase 36.C — third gate, reported LAST and rendered
+        // Third gate, reported LAST and rendered
         // DIFFERENTLY. The caller-side pair above is deliberately
         // indistinguishable to the model; this one is deliberately
         // distinct, because no grant fixes it and a model told
@@ -1114,7 +1030,7 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
         elif not (aiQueryable ctx moduleName) then
             return unqueryableModule moduleName (notOptedInMessage moduleName)
         else
-            // Phase 36.D — the user-consent gate, innermost: the three
+            // The user-consent gate, innermost: the three
             // gates above are the deployment's answers, this one is the
             // user's. Reached only after all three have passed, so a
             // dialog can never name a module the caller may not read.
@@ -1170,7 +1086,7 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
                         |}
 }
 
-// ─── Phase 36.E — what each tool is reaching for ─────────────────
+// ─── What each tool is reaching for ──────────────────────────────
 //
 // One `describe` per tool, feeding the audit decorator. They live here,
 // beside the executors, because each names the SAME argument the executor
@@ -1207,7 +1123,7 @@ let private describeNamedModule
     )
 
 /// `query_entity` names a data SHAPE rather than a module, so its targets
-/// come from the same place the 36.C and 36.D gates take them: the data
+/// come from the same place the opt-in and consent gates take them: the data
 /// catalogue's producers for the entity type.
 ///
 /// Deliberately UNFILTERED by the queryability gate, unlike those two.
@@ -1235,7 +1151,7 @@ let private describeEntityQuery (ctx: HttpContext) (argsJson: string) : Async<AI
 /// The six built-in `_platform.ai.*` cross-module read tools —
 /// auto-registered by `composeAI` alongside `NarrativeTools.builtInTools`.
 ///
-/// Registered through `createAuditedTool` (Phase 36.E) so every
+/// Registered through `createAuditedTool` so every
 /// invocation lands one `CrossModuleRead` audit row whatever its outcome.
 /// A seventh tool added to this list cannot skip the trail: the
 /// registration shape requires it to declare what it reads.

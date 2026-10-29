@@ -30,5 +30,10 @@
          in kind. -->
     <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The offline pack injects the HTTP client and the retry pause
+         through an internal constructor. -->
+    <InternalsVisibleTo Include="ToolUp.AIProviders.Tests" />
+  </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

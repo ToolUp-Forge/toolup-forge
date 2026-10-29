@@ -847,7 +847,7 @@ Server-side, three call paths gained safety timeouts so a stalled backend produc
 |------|------|-----|-----|
 | `IEventStore.Write` for latency telemetry | `AIAgentEngine.fs` `emitLatency` | 5 s | Telemetry must never crash OR block the conversation |
 | Provider resolution (`Resolve` / `TryResolveByLabel`) | `AIAssistantHandler.fs` `withTimeout` | 10 s | Touches `IUserAIConfigStore` (blob) + `ISecretStore` |
-| `loadConversationMeta` / `loadProviderHistory` / `loadConversation` | `AIAssistantHandler.fs` `withTimeout` | 10 s | Blob I/O on the chat hot path |
+| `loadMetaOrFail` / `loadProviderHistoryOrFail` / `loadConversationOrFail` | `AIAssistantHandler.fs` `withTimeout` | 10 s | Blob I/O on the chat hot path |
 | `SSEConnectionManager.writeOne` | `SSEConnectionManager.fs` linked CTS | 5 s | One stalled subscriber must not wedge a whole scope |
 
 Phase 6k will replace the `Async.Start bgWork` fire-and-forget pattern with a supervised hosted-service worker, fix `FileSecretStore` sync-over-async, and replace `SSEConnectionManager`'s `Task.WhenAll` fan-out with per-connection writer queues. The Phase 6h follow-up timeouts are the bounded-by-default safety nets in the meantime.
@@ -993,7 +993,7 @@ Unrelated to AI but load-bearing: the in-tree ToolUp.Remoting dispatcher (shippe
 - `TurnDurationMs` — `Stopwatch` started right after `turn <- turn + 1` (after the cancellation check + max-turn guard); stopped at end-of-turn just before the emit. Covers `sendWithOuterRetry` + parallel tool dispatch + early-stop bookkeeping.
 - `TtftMs` (`float option`) — captured inside `sendWithOuterRetry` via a closure that snapshots `sw.Elapsed` on the first non-empty `streamCb` invocation. `None` on tool-only turns where the model went straight to a tool call without narrating, or on turns served by a non-streaming provider. The percentile aggregator skips `None`s.
 - `ToolCalls: ToolCallTiming list` — populated only by the tool-use branch; left `[]` for confusion-marker / end-turn branches. Per-tool `Stopwatch` starts right after `ToolCallStarted` emits and stops right after `ToolCallCompleted`. Each branch in the `Async.Parallel` returns `(toolResult, ToolCallTiming)`; the outer split keeps the existing `toolResults` shape and feeds the timings into a `mutable turnToolTimings` accumulator.
-- `Errored` — set to `isErrorToolResult content` so "tools that fail are slow" stands out at the top of `/dev/ai-latency`'s per-tool breakdown.
+- `Errored` — set to `ToolOutcome.isError` of the call's outcome (the value the loop's rails read) so "tools that fail are slow" stands out at the top of `/dev/ai-latency`'s per-tool breakdown.
 - `Location` — `ServerSide | ClientSide`. Captured inside the existing `match tool.Definition.Location` so no extra `FindByName` is needed; defaults to `ServerSide` for the (rare) unknown-tool branch where the registry didn't resolve a tool.
 - `StopReason` — copied verbatim from `response.StopReason`. Empty string when the loop bails before reading one.
 - `PromptTokens` / `CachedPromptTokens` / `OutputTokens` / `CacheCreationTokens` — `int option`. Populated from `AIProviderResponse.Usage` (Phase 6i.B). `None` only when the provider can't extract usage (transient parse failure, streaming early-exit, or pre-6i.B records). `CacheCreationTokens` is Anthropic-specific (cache writes are billed at a premium over reads); OpenAI returns `None`. The `LatencyRecord` schema is forward-compatible so the `None → Some` move does not migrate historical events.

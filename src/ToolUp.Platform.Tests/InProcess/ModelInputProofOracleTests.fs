@@ -113,10 +113,11 @@ let private toModelBlock (b: PromptBlock) : Proved.prompt_block = {
     block_text = b.Text
 }
 
-/// A turn, narrowed to the three fields rendering reads. The call-id
-/// field becomes the model's tool NAME because that is the renaming
-/// `withMessages` performs; doing it here keeps the model's
-/// `with_messages` a faithful counterpart of production's.
+/// A turn, narrowed to the three fields rendering reads. The model's
+/// `tool_name` slot carries the call id, which identifies the result;
+/// production's mirrored results are compared by the same id below, so
+/// the model's `with_messages` stays a faithful counterpart of
+/// production's (rendering consults neither the id nor the name).
 let private toModelMessage (m: AIProviderMessage) : Proved.message = {
     Proved.message_role = m.Role
     message_content = m.Content
@@ -493,7 +494,7 @@ let private productionOutcome (case: Case) : Outcome =
     {
         Facts = value.Facts |> List.map (fun f -> f.FactId, f.Value, f.Verdict, f.Scope)
         Refusals = refusals
-        MirroredToolResults = value.ToolResults |> List.map (fun t -> t.ToolName, t.Content)
+        MirroredToolResults = value.ToolResults |> List.map (fun t -> t.ToolCallId, t.Content)
         SystemPrompt = rendered.SystemPrompt
         Turns =
             rendered.Messages

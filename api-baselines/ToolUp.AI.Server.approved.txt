@@ -47,6 +47,7 @@ ToolUp.AI.AIAgentEngine+ToolInvocationError+ToolThrew.toolName : System.String {
 ToolUp.AI.AIAgentEngine+ToolInvocationError+UnknownTool (class)
 ToolUp.AI.AIAgentEngine+ToolInvocationError+UnknownTool.toolName : System.String { get }
 ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule (class)
+ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule.toOutcome(ToolUp.AI.AIAgentEngine+ToolInvocationError) : ToolUp.AI.ToolOutcome
 ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule.toToolResultContent(ToolUp.AI.AIAgentEngine+ToolInvocationError) : System.String
 ToolUp.AI.AIAllowlistDiagnosticsHandler (class)
 ToolUp.AI.AIAllowlistDiagnosticsHandler.DenialEventType : System.String (literal)
@@ -344,7 +345,7 @@ ToolUp.AI.AICrossModuleAudit.ExceptionOutcome : System.String (literal)
 ToolUp.AI.AICrossModuleAudit.OkOutcome : System.String (literal)
 ToolUp.AI.AICrossModuleAudit.audited(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleAudit+ReadTarget]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.AICrossModuleAudit.createAuditedTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleAudit+ReadTarget]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
-ToolUp.AI.AICrossModuleAudit.outcomeOf(System.String) : System.String
+ToolUp.AI.AICrossModuleAudit.outcomeOf(ToolUp.AI.ToolOutcome) : System.String
 ToolUp.AI.AICrossModuleAudit.payloadOf(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.AI.AICrossModuleAudit+ReadTarget, System.Double, System.Int32, System.String) : ToolUp.Platform.CrossModuleReadPayload
 ToolUp.AI.AICrossModuleAudit+ItemsKeys (class)
 ToolUp.AI.AICrossModuleAudit+ItemsKeys.ActiveModule : System.String (literal)
@@ -1117,6 +1118,7 @@ ToolUp.AI.ToolHelpers.optionalBool(System.Text.Json.JsonElement, System.String, 
 ToolUp.AI.ToolHelpers.optionalDecimal(System.Text.Json.JsonElement, System.String, System.Decimal) : System.Decimal
 ToolUp.AI.ToolHelpers.optionalString(System.Text.Json.JsonElement, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.ToolHelpers.optionalTypedArg`1(System.Text.Json.JsonElement, System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[T]
+ToolUp.AI.ToolHelpers.refuseArguments`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : T
 ToolUp.AI.ToolHelpers.requireDecimal(System.Text.Json.JsonElement, System.String, System.String) : System.Decimal
 ToolUp.AI.ToolHelpers.requireDecoded`1(System.Text.Json.JsonElement, System.String, ToolUp.Platform.ToolSchemaNode) : T
 ToolUp.AI.ToolHelpers.requireNumber(System.Text.Json.JsonElement, System.String, System.String) : System.Double
@@ -1137,6 +1139,10 @@ ToolUp.AI.ToolHelpers+ToolArgumentRefusal.Path : System.String { get }
 ToolUp.AI.ToolHelpers+ToolArgumentRefusal.Received : System.String { get }
 ToolUp.AI.ToolHelpers+ToolArgumentRefusalModule (class)
 ToolUp.AI.ToolHelpers+ToolArgumentRefusalModule.toMessage(ToolUp.AI.ToolHelpers+ToolArgumentRefusal) : System.String
+ToolUp.AI.ToolHelpers+ToolFaulted (class)
+ToolUp.AI.ToolHelpers+ToolFaulted..ctor()
+ToolUp.AI.ToolHelpers+ToolFaulted..ctor(ToolUp.AI.ToolFault)
+ToolUp.AI.ToolHelpers+ToolFaulted.fault : ToolUp.AI.ToolFault { get }
 ToolUp.AI.UIDecodeErrorHandler (class)
 ToolUp.AI.UIDecodeErrorHandler.MaxRawPayloadChars : System.Int32 (literal)
 ToolUp.AI.UIDecodeErrorHandler.truncatePayload(System.String) : System.String

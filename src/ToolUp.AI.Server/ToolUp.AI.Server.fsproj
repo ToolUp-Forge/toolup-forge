@@ -49,6 +49,17 @@
              over it) and ToolApprovalDispatch. Depends on nothing but the
              BCL. -->
         <Compile Include="Server\SuspendedPrompt.fs" />
+        <!-- Phase 859 - the per-team conversation visibility policy. MUST
+             precede ConversationBlobs (whose append gate reads it),
+             AIAssistantHandler, which filters every conversation read and
+             write through it, and AICompose, which mounts its API. -->
+        <Compile Include="Server\TeamConversationPolicyStore.fs" />
+        <!-- The conversation record: the four sibling blobs, their read
+             rule, the one exchange writer and the ownership gate, over the
+             canonical wire types. MUST precede every writer of a sibling:
+             AIConsentDispatch (the consent record), AIAssistantHandler and
+             FastPathBeaconHandler. `internal`, so it adds no public surface. -->
+        <Compile Include="Server\ConversationBlobs.fs" />
         <!-- Phase 36.D — per-conversation cross-module read consent: the
              suspended-dispatch registry, the persisted per-conversation
              record, and the gate the four reach tools call. Depends only
@@ -112,15 +123,6 @@
              platform ILogger/Logger only; MUST precede AIAssistantHandler,
              which enqueues onto it, and AICompose, which registers it. -->
         <Compile Include="Server\AIChatWorker.fs" />
-        <!-- Phase 859 - the per-team conversation visibility policy. MUST
-             precede AIAssistantHandler, which filters every conversation
-             read and write through it, and AICompose, which mounts its API. -->
-        <Compile Include="Server\TeamConversationPolicyStore.fs" />
-        <!-- Phase 862 - the conversation + provider-history blobs: names,
-             load, save and the ownership gate, over the canonical wire
-             types. MUST precede both of its writers, AIAssistantHandler and
-             FastPathBeaconHandler. `internal`, so it adds no public surface. -->
-        <Compile Include="Server\ConversationBlobs.fs" />
         <Compile Include="Server\AIAssistantHandler.fs" />
         <Compile Include="Server\ConversationReplay.fs" />
         <Compile Include="Server\AIProviderSurface.fs" />

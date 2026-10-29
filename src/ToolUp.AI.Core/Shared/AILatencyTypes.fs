@@ -36,9 +36,9 @@ type ToolCallTiming = {
     Name: string
     Location: ToolExecutionLocation
     DurationMs: float
-    /// True when the tool returned an error string (matches the
-    /// `isErrorToolResult` predicate in `AIAgentEngine`). Useful
-    /// for "tools that fail are slow" analysis.
+    /// True when the call faulted or was refused (`ToolOutcome.isError`
+    /// — the predicate the agent loop's rails read). Useful for "tools
+    /// that fail are slow" analysis.
     Errored: bool
 }
 

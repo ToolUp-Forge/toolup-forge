@@ -843,9 +843,23 @@
       `docs/migrations/1130-conversation-block-render.md`.
     -->
     <!--
+      Phase 1076 rides the 0.36.0 draft (untagged, publicly unpinned; its
+      surface movement is breaking-class, the draft's own class, not above
+      it): `ToolUp.AI.Core` gains the `ToolOutcome` / `ToolFault` /
+      `ToolRefusal` vocabulary with `ToolOutcome.toModel` and `isError`, and
+      `ModelInput.ToolResult` gains `ToolCallId`, so a full record
+      construction adds a field; `AICrossModuleAudit.outcomeOf` takes the
+      `ToolOutcome` value instead of the rendered string. The rest is
+      additive (`ToolInvocationError.toOutcome`, `ToolHelpers.ToolFaulted`,
+      `ToolHelpers.refuseArguments`). The bytes the model is shown do not
+      move. Migration recipe:
+      `docs/migrations/1076-tool-outcome-and-conversation-record.md`.
+    -->
+    <!--
       Phase 1134 rides the 0.36.0 draft (untagged, publicly unpinned; its
       surface movement is additive - one new function, no record field,
-      union case or interface member - below the draft's class):
+      union case or interface member - below the draft's breaking class,
+      which Phase 1076 set):
       `DisclosureTaintConfig.isTaintInert` names a config whose walk cannot
       change a verdict, and the disclosure gate decides such a config's
       checks without loading the derivation graph; concurrent cold series

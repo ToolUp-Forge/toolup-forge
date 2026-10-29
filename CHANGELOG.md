@@ -17,12 +17,13 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 
 Migration notes:
 
+- [1076-tool-outcome-and-conversation-record](docs/migrations/1076-tool-outcome-and-conversation-record.md)
 - [1128-conversation-block-part](docs/migrations/1128-conversation-block-part.md)
 - [1129-fact-presentation-builders](docs/migrations/1129-fact-presentation-builders.md)
 - [1130-conversation-block-render](docs/migrations/1130-conversation-block-render.md)
 - [1134-inert-taint-walk](docs/migrations/1134-inert-taint-walk.md)
 
-_Surface since `v0.35.0`: **additive** — 5 packages moved; 58 members added, 0 members changed, 0 members removed; 1 package new._
+_Surface since `v0.35.0`: **breaking** — 7 packages moved; 125 members added, 2 members changed, 0 members removed; 1 package new._
 
 ### Added
 
@@ -48,6 +49,35 @@ _Surface since `v0.35.0`: **additive** — 5 packages moved; 58 members added, 0
   - `ToolUp.AI.Client.BlockRender+BlockOutcome.IsRefused : System.Boolean { get }`
   - `ToolUp.AI.Client.BlockRender+BlockOutcome.NoReader : ToolUp.AI.Client.BlockRender+BlockOutcome { get }`
   - … and 13 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
+- `ToolUp.AI.Core` — 61 members:
+  - `ToolUp.AI.ToolFault (class)`
+  - `ToolUp.AI.ToolFault+ArgumentsRefused (class)`
+  - `ToolUp.AI.ToolFault+ArgumentsRefused.fields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }`
+  - `ToolUp.AI.ToolFault+ClientThrew (class)`
+  - `ToolUp.AI.ToolFault+ClientThrew.detail : System.String { get }`
+  - `ToolUp.AI.ToolFault+ClientThrew.toolName : System.String { get }`
+  - `ToolUp.AI.ToolFault+ClientTimedOut (class)`
+  - `ToolUp.AI.ToolFault+ClientTimedOut.detail : System.String { get }`
+  - `ToolUp.AI.ToolFault+ClientTimedOut.toolName : System.String { get }`
+  - `ToolUp.AI.ToolFault+ClientToolUnregistered (class)`
+  - `ToolUp.AI.ToolFault+ClientToolUnregistered.detail : System.String { get }`
+  - `ToolUp.AI.ToolFault+ClientToolUnregistered.toolName : System.String { get }`
+  - `ToolUp.AI.ToolFault+InvalidArguments (class)`
+  - `ToolUp.AI.ToolFault+InvalidArguments.detail : System.String { get }`
+  - `ToolUp.AI.ToolFault+InvalidArguments.toolName : System.String { get }`
+  - `ToolUp.AI.ToolFault+Tags (class)`
+  - `ToolUp.AI.ToolFault+Tags.ArgumentsRefused : System.Int32 (literal)`
+  - `ToolUp.AI.ToolFault+Tags.ClientThrew : System.Int32 (literal)`
+  - `ToolUp.AI.ToolFault+Tags.ClientTimedOut : System.Int32 (literal)`
+  - `ToolUp.AI.ToolFault+Tags.ClientToolUnregistered : System.Int32 (literal)`
+  - … and 41 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
+- `ToolUp.AI.Server` — 6 members:
+  - `ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule.toOutcome(ToolUp.AI.AIAgentEngine+ToolInvocationError) : ToolUp.AI.ToolOutcome`
+  - `ToolUp.AI.ToolHelpers+ToolFaulted (class)`
+  - `ToolUp.AI.ToolHelpers+ToolFaulted..ctor()`
+  - `ToolUp.AI.ToolHelpers+ToolFaulted..ctor(ToolUp.AI.ToolFault)`
+  - `ToolUp.AI.ToolHelpers+ToolFaulted.fault : ToolUp.AI.ToolFault { get }`
+  - `ToolUp.AI.ToolHelpers.refuseArguments`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : T`
 - `ToolUp.AI.Wire` — 22 members:
   - `ToolUp.Platform.AI.AIContentPart+BlockPart (class)`
   - `ToolUp.Platform.AI.AIContentPart+BlockPart.node : System.String { get }`
@@ -76,6 +106,13 @@ _Surface since `v0.35.0`: **additive** — 5 packages moved; 58 members added, 0
 - `ToolUp.Facts.Core` — 1 member:
   - `ToolUp.Facts.DisclosureTaintConfigModule.isTaintInert(ToolUp.Facts.DisclosureTaintConfig) : System.Boolean`
 - `ToolUp.Facts.Presentation` — new package (123 public members)
+
+### Changed
+
+- `ToolUp.AI.Core` — 1 member:
+  - `ToolUp.AI.ToolResult..ctor` — `ToolUp.AI.ToolResult..ctor(System.String, System.String)` → `ToolUp.AI.ToolResult..ctor(System.String, System.String, System.String)`
+- `ToolUp.AI.Server` — 1 member:
+  - `ToolUp.AI.AICrossModuleAudit.outcomeOf` — `ToolUp.AI.AICrossModuleAudit.outcomeOf(System.String) : System.String` → `ToolUp.AI.AICrossModuleAudit.outcomeOf(ToolUp.AI.ToolOutcome) : System.String`
 
 ## [0.35.0] — 2026-10-28
 

@@ -19,12 +19,12 @@ open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.AIAgentEngine
 open ToolUp.AI.SSEHandler
 
-// ─── Phase 961 — every conversation-addressed entry point, and its rule ──
+// ─── Every conversation-addressed entry point, and its rule ──────
 //
 // Checked against the code below; `docs/ai/conversation-visibility.md`
 // carries the same table for readers of the docs.
 //
-//   GetConversation            `canSee` (Phase 859); an elevated open is
+//   GetConversation            `canSee`; an elevated open is
 //                              audited (`ConversationVisibilityAudit.elevatedRead`).
 //   ListConversations,         every row through `canSee` (`visibleRows`).
 //   ListConversationsPage
@@ -39,14 +39,13 @@ open ToolUp.AI.SSEHandler
 //                              nothing of the conversation is read but the
 //                              gate's own read, nothing is written. The
 //                              opt-in substrate's prompt history is read
-//                              only when `canSee` admits (Phase 946).
+//                              only when `canSee` admits.
 //   fast-path beacon           the same gate, `403` on refusal
 //                              (`FastPathBeaconHandler`).
 //
 // There is no rename endpoint on `AIAssistantApi`. The data-subject export
 // is `ConversationExporter.Export`, an operator-initiated read of the
-// subject's own conversations, pinned with that reason in the Phase 946
-// fitness case.
+// subject's own conversations, pinned with that reason in a fitness case.
 
 // ─── JSON helpers ────────────────────────────────────────────────
 // Uses FableConverters (from ToolUp.Remoting.Json.SystemTextJson) so
@@ -58,11 +57,7 @@ let private jsonOptions = FableConverters.create ()
 let private toJson obj =
     JsonSerializer.Serialize(obj, jsonOptions)
 
-let private fromJson<'T> (bytes: byte[]) =
-    let json = Encoding.UTF8.GetString(bytes)
-    JsonSerializer.Deserialize<'T>(json, jsonOptions)
-
-// ─── Phase 6h follow-up — bounded waits on the chat path ─────────
+// ─── Bounded waits on the chat path ──────────────────────────────
 //
 // Provider resolution, history loads, and conversation loads each
 // touch I/O (blob storage, secret store, config store). None had
@@ -92,7 +87,9 @@ let private withTimeout (label: string) (timeoutMs: int) (work: Async<'T>) : Asy
 
 // ─── Conversation persistence ────────────────────────────────────
 //
-// Each conversation has two sibling blobs:
+// A conversation is four sibling blobs, read and written through the
+// conversation record (`ConversationBlobs`), shared with the fast-path
+// beacon handler (the other writer of an exchange):
 //
 //   ai-conversations/{id}.json          UI-facing `ConversationMessage list`
 //                                        (user/assistant text only — what the
@@ -101,8 +98,11 @@ let private withTimeout (label: string) (timeoutMs: int) (work: Async<'T>) : Asy
 //                                        tool_use / tool_result pair intact,
 //                                        round-trippable back to the AI
 //                                        provider on the next turn.
+//   ai-conversations/{id}.meta.json     Server-only fields — the provider
+//                                        override and the generated title.
+//   ai-conversations/{id}.consent.json  The cross-module consent record.
 //
-// Why two blobs instead of one:
+// Why the UI and the history are two blobs:
 // The provider round-trip requires the full history (tool_use in assistant
 // messages paired with tool_result in user messages — Claude rejects
 // requests that break pairing with HTTP 400). The UI does not display
@@ -117,15 +117,13 @@ let private withTimeout (label: string) (timeoutMs: int) (work: Async<'T>) : Asy
 //     is missing we start from an empty provider history, which is the
 //     same behaviour as today (just without broken round-tripping).
 //
-// Phase 862 — the two blobs' names, load, save and the ownership gate live
-// in `ConversationBlobs`, shared with the fast-path beacon handler (the
-// other writer). A blob that is present but cannot be read is a typed
-// error there, never an empty history: this handler refuses the turn
-// rather than write over what it could not read.
+// A sibling that is present but cannot be read is a typed error in the
+// record, never an empty value: this handler refuses the turn (or the
+// write) rather than write over what it could not read.
 
-/// Phase 862 — the user-facing refusal when a conversation blob cannot be
-/// read. The operator detail (blob, reason) goes to the log; the chat
-/// shows this, and the stored history is left exactly as it was.
+/// The user-facing refusal when a conversation blob cannot be read. The
+/// operator detail (blob, reason) goes to the log; the chat shows this,
+/// and the stored history is left exactly as it was.
 let private unreadableConversation
     (logger: ILogger)
     (conversationId: Guid)
@@ -135,8 +133,8 @@ let private unreadableConversation
 
     $"The stored history of conversation {conversationId} could not be read, so it was left untouched rather than overwritten."
 
-/// Phase 862 — the user-facing failure when a conversation blob could not
-/// be written; a failed save is never reported as a completed turn.
+/// The user-facing failure when a conversation blob could not be written;
+/// a failed save is never reported as a completed turn.
 let private unwrittenConversation
     (logger: ILogger)
     (conversationId: Guid)
@@ -146,32 +144,7 @@ let private unwrittenConversation
 
     $"The reply for conversation {conversationId} could not be saved."
 
-// Per-conversation metadata sibling. Carries server-only fields the
-// UI doesn't render directly (currently the BYOK provider override).
-// Kept separate from the UI-facing message blob so list-page and
-// chat-page reads don't pull either side's payload unnecessarily.
-let private conversationMetaBlobName (conversationId: Guid) =
-    $"ai-conversations/{conversationId}.meta.json"
-
-type private ConversationMeta = {
-    OverrideProviderLabel: string option
-    /// Phase 516.B — the model-generated title, when titling is composed
-    /// in `Generate` mode and the call succeeded. `None` otherwise, and
-    /// for every meta blob written before this field existed (a missing
-    /// option field deserialises to `None`); the listing then derives a
-    /// title from the first user message. Lives here, not in its own
-    /// sibling, so the erasure `deleteSiblings` performs removes it with
-    /// no change to the sibling set.
-    Title: string option
-}
-
-module private ConversationMeta =
-    let empty = {
-        OverrideProviderLabel = None
-        Title = None
-    }
-
-// ─── Phase 862 — the chat path's adapters over `ConversationBlobs` ─
+// ─── The chat path's adapters over the record ────────────────────
 //
 // Every caller below goes on to WRITE, or gates a write, so an unreadable
 // blob and a failed save both RAISE: inside `bgWork` the exception is the
@@ -203,66 +176,41 @@ let private loadProviderHistoryOrFail
         | Error err -> return failwith (unreadableConversation logger conversationId err)
     }
 
-let private saveConversationOrFail
+/// The metadata a turn resolves its provider from. Unreadable metadata
+/// fails the turn: its stored provider override may be the provider the
+/// user chose for this conversation, and the turn must not quietly run on
+/// another.
+let private loadMetaOrFail
     (logger: ILogger)
     (storage: IBlobStorage)
     (container: string)
     (conversationId: Guid)
-    (messages: ConversationMessage list)
-    : Async<unit> =
+    : Async<ConversationBlobs.ConversationMeta> =
     async {
-        match! ConversationBlobs.saveConversation storage container conversationId messages with
-        | Ok() -> return ()
-        | Error err -> return failwith (unwrittenConversation logger conversationId err)
+        match! ConversationBlobs.loadMeta storage container conversationId with
+        | Ok meta -> return meta
+        | Error err -> return failwith (unreadableConversation logger conversationId err)
     }
 
-let private saveProviderHistoryOrFail
+/// Write the turn's exchange — the history, then the UI — and return the
+/// UI messages it was appended to.
+let private appendExchangeOrFail
     (logger: ILogger)
     (storage: IBlobStorage)
     (container: string)
     (conversationId: Guid)
-    (messages: AIProviderMessage list)
-    : Async<unit> =
+    (history: AIProviderMessage list)
+    (exchange: ConversationMessage list)
+    : Async<ConversationMessage list> =
     async {
-        match! ConversationBlobs.saveProviderHistory storage container conversationId messages with
-        | Ok() -> return ()
+        match!
+            ConversationBlobs.ConversationRecord.appendExchange storage container conversationId history exchange
+        with
+        | Ok prior -> return prior
         | Error err -> return failwith (unwrittenConversation logger conversationId err)
     }
 
-let private saveConversationMeta
-    (storage: IBlobStorage)
-    (container: string)
-    (conversationId: Guid)
-    (meta: ConversationMeta)
-    =
-    async {
-        let bytes = toJson meta |> Encoding.UTF8.GetBytes
-
-        // Phase 863 — a refused write raises. Both callers catch it: the
-        // override setter returns it as the call's `Error`, and titling (a
-        // best-effort step by design) logs it at Warn.
-        match! storage.Upload(container, conversationMetaBlobName conversationId, bytes) with
-        | Ok _ -> return ()
-        | Error storageError ->
-            return failwithf "conversation %O metadata could not be written: %s" conversationId storageError
-    }
-
-let private loadConversationMeta (logger: ILogger) (storage: IBlobStorage) (container: string) (conversationId: Guid) = async {
-    let! result = storage.Download(container, conversationMetaBlobName conversationId)
-
-    match result with
-    | Ok bytes ->
-        try
-            return fromJson<ConversationMeta> bytes
-        with ex ->
-            logger.Warn
-                $"AI conversation-meta blob for {conversationId} is present but unparseable ({ex.Message}); falling back to defaults (provider-label override lost)."
-
-            return ConversationMeta.empty
-    | Error _ -> return ConversationMeta.empty
-}
-
-// ─── Phase 516.D — task status for the polling fallback ──────────
+// ─── Task status for the polling fallback ────────────────────────
 //
 // `GetTaskStatus` used to return `None` unconditionally, so a client that
 // missed the terminal SSE event had nothing to poll. Every status a turn
@@ -284,9 +232,9 @@ type private TrackedTask = {
     Task: AITask
 }
 
-/// The per-process record of each chat task's latest status (Phase
-/// 516.D). `AITaskStatusRegistry.Shared` is the instance the handler
-/// uses; construct one directly only in a test.
+/// The per-process record of each chat task's latest status.
+/// `AITaskStatusRegistry.Shared` is the instance the handler uses;
+/// construct one directly only in a test.
 type AITaskStatusRegistry(capacity: int, retention: TimeSpan) =
     let tasks = System.Collections.Concurrent.ConcurrentDictionary<Guid, TrackedTask>()
 
@@ -376,16 +324,14 @@ type AITaskStatusRegistry(capacity: int, retention: TimeSpan) =
     /// How many tasks are held (diagnostics and tests).
     member _.Count = tasks.Count
 
-// ─── Phase 504 — conversation retention sweep ────────────────────
+// ─── Conversation retention sweep ────────────────────────────────
 //
-// The scope-level purge behind `ConversationRetentionPolicy`. Lives
-// here rather than in its own file because the sibling-blob layout
-// (`{id}.json` / `.history.json` / `.meta.json` / `.consent.json`) is
-// this file's private convention, and a purge that enumerated it from
-// outside would drift from `DeleteConversation` the first time a
-// sibling was added. `DeleteConversation` and the sweep now share ONE
-// deletion (`ConversationRetention.deleteSiblings`), so an erasure and
-// a retention purge remove exactly the same set (504.D).
+// The scope-level purge behind `ConversationRetentionPolicy`. The sibling
+// set is the conversation record's (`ConversationRecord.siblingNames`), so
+// a purge cannot drift from the record the first time a sibling is added.
+// `DeleteConversation` and the sweep share ONE deletion
+// (`ConversationRetention.deleteSiblings`), so an erasure and a retention
+// purge remove exactly the same set.
 
 /// Outcome of one retention sweep over one scope.
 type ConversationPurgeReport = {
@@ -429,31 +375,31 @@ module ConversationPurgeReport =
                  " — " + String.concat "; " report.Failures)
 
 module ConversationRetention =
-    /// Every blob a conversation owns, in the order they are deleted.
-    /// The consent sidecar (`AIConsentDispatch.consentBlobName`) is a
-    /// sibling too: a per-conversation record of what the user agreed
-    /// to is that user's data and goes with the conversation.
-    let siblingBlobNames (conversationId: Guid) : string list = [
-        ConversationBlobs.conversationBlobName conversationId
-        ConversationBlobs.providerHistoryBlobName conversationId
-        conversationMetaBlobName conversationId
-        AIConsentDispatch.consentBlobName conversationId
-    ]
+    /// Every blob a conversation owns, in the order they are deleted — the
+    /// conversation record's sibling set. The consent record is a sibling
+    /// too: a per-conversation record of what the user agreed to is that
+    /// user's data and goes with the conversation.
+    let siblingBlobNames (conversationId: Guid) : string list =
+        ConversationBlobs.ConversationRecord.siblingNames conversationId
 
-    /// Delete EVERY sibling blob of a conversation. `IBlobStorage.Delete`
-    /// is idempotent (missing blob ⇒ `Ok`), so deleting all of them
-    /// unconditionally is safe; the FIRST failure is surfaced so an
-    /// incomplete erasure is retryable rather than silently partial.
-    /// Shared by `DeleteConversation` (right-to-erasure) and the
-    /// retention sweep — one deletion, one sibling set.
+    /// Delete EVERY sibling blob of a conversation, and any copy of its UI
+    /// blob the record quarantined. `IBlobStorage.Delete` is idempotent
+    /// (missing blob ⇒ `Ok`), so deleting all of them unconditionally is
+    /// safe; the FIRST failure is surfaced so an incomplete erasure is
+    /// retryable rather than silently partial. Shared by
+    /// `DeleteConversation` (right-to-erasure) and the retention sweep —
+    /// one deletion, one sibling set.
     let deleteSiblings
         (storage: IBlobStorage)
         (container: string)
         (conversationId: Guid)
         : Async<Result<unit, string>> =
         async {
+            let! quarantined =
+                storage.List(container, ConversationBlobs.ConversationRecord.quarantinePrefix conversationId)
+
             let! results =
-                siblingBlobNames conversationId
+                siblingBlobNames conversationId @ quarantined
                 |> List.map (fun name -> storage.Delete(container, name))
                 |> Async.Sequential
 
@@ -464,8 +410,8 @@ module ConversationRetention =
                     | Ok() -> None)
                 |> Option.defaultValue (Ok())
 
-            // Phase 516.D — the task-status registry holds each task's
-            // prompt; an erased conversation takes those entries with it.
+            // The task-status registry holds each task's prompt; an erased
+            // conversation takes those entries with it.
             if Result.isOk outcome then
                 AITaskStatusRegistry.Shared.ForgetConversation(container, conversationId)
 
@@ -704,7 +650,7 @@ type ConversationRetentionSweepJobHandler(services: IServiceProvider, policy: Co
                         "No IBlobStorage is registered; the AI conversation retention sweep has nothing to sweep."
         }
 
-// ─── Phase 516.A/C — real listing metadata, paging and search ────
+// ─── Real listing metadata, paging and search ────────────────────
 //
 // `ListConversations` used to return `Title = None`, `MessageCount = 0`
 // and `DateTime.MinValue` for every row. The metadata is read from the
@@ -714,8 +660,8 @@ type ConversationRetentionSweepJobHandler(services: IServiceProvider, policy: Co
 // or purged by `deleteSiblings` — is not listed, even while a sibling it
 // used to own is still being removed.
 //
-// The listing does NOT read the Phase 53 `IConversationStore`: that
-// substrate is opt-in (`NoConversationStore` is the default), while
+// The listing does NOT read the `IConversationStore`: that substrate
+// is opt-in (`NoConversationStore` is the default), while
 // every conversation has its blob. Reading the blob is what makes the
 // listing real in every composition.
 
@@ -745,7 +691,7 @@ module ConversationListing =
                 Some(collapsed.Substring(0, limit - 1).TrimEnd() + "…")
 
     /// The title a conversation has when none was generated: its first
-    /// user message, truncated (Phase 516.B's fallback).
+    /// user message, truncated.
     let fallbackTitle (maxChars: int) (messages: ConversationMessage list) : string option =
         messages
         |> List.tryFind (fun m -> m.Participant = User && not (String.IsNullOrWhiteSpace m.Content))
@@ -827,16 +773,16 @@ module ConversationListing =
             }
 
     /// A conversation's stored author: the `CreatedBy` its first persisted
-    /// message recorded (Phase 6j.D), `""` when none was recorded. Always
-    /// read from the stored conversation, never from a request (Phase 859).
+    /// message recorded, `""` when none was recorded. Always read from the
+    /// stored conversation, never from a request.
     let ownerOf (messages: ConversationMessage list) : string =
         match messages with
         | first :: _ when not (String.IsNullOrEmpty first.CreatedBy) -> first.CreatedBy
         | _ -> ""
 
     /// Read one conversation's listing row together with its stored author
-    /// (Phase 859 — the visibility filter needs both). `None` when its UI
-    /// blob can no longer be read.
+    /// (the visibility filter needs both). `None` when its UI blob can
+    /// no longer be read.
     let readOwnedRow
         (logger: ILogger)
         (storage: IBlobStorage)
@@ -862,7 +808,17 @@ module ConversationListing =
 
                         []
 
-                let! meta = loadConversationMeta logger storage container conversationId
+                // Read-only too: unreadable metadata lists the conversation
+                // under its first-message title.
+                let! meta = async {
+                    match! ConversationBlobs.loadMeta storage container conversationId with
+                    | Ok meta -> return meta
+                    | Error err ->
+                        logger.Warn
+                            $"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}; listing it under its first message."
+
+                        return ConversationBlobs.ConversationMeta.empty
+                }
 
                 let! createdAt, updatedAt =
                     match messages with
@@ -916,8 +872,8 @@ module ConversationListing =
         }
 
     /// Every conversation in `container` with its stored author, in
-    /// listing order (Phase 859). At most 16 reads are in flight, so a
-    /// large scope does not open one blob read per conversation at once.
+    /// listing order. At most 16 reads are in flight, so a large scope
+    /// does not open one blob read per conversation at once.
     let readAllOwned
         (logger: ILogger)
         (storage: IBlobStorage)
@@ -954,9 +910,9 @@ module ConversationListing =
             return rows |> List.map fst
         }
 
-// ─── Phase 516.B — conversation titling ──────────────────────────
+// ─── Conversation titling ────────────────────────────────────────
 
-/// How conversations get their list titles (Phase 516.B). Composed with
+/// How conversations get their list titles. Composed with
 /// `AICompose.withConversationTitling`; a deployment that composes
 /// nothing gets `firstMessage` — titles derived from the first user
 /// message, and no provider call it did not ask for.
@@ -970,8 +926,8 @@ type ConversationTitlingPolicy = {
     /// blocks or empties the list.
     Generate: bool
     /// The model the titling call asks for through the per-call override
-    /// (Phase 661) — name a small, cheap model. `None` titles on the
-    /// conversation's own model. A provider that cannot serve the id
+    /// — name a small, cheap model. `None` titles on the conversation's
+    /// own model. A provider that cannot serve the id
     /// serves the call on its configured model rather than failing it.
     Model: string option
     /// Characters of the first message sent to the titling call — the
@@ -1114,8 +1070,17 @@ module ConversationTitling =
                 try
                     match! generate policy provider firstMessage with
                     | Ok title ->
-                        let! meta = loadConversationMeta logger storage container conversationId
-                        do! saveConversationMeta storage container conversationId { meta with Title = Some title }
+                        match!
+                            ConversationBlobs.ConversationRecord.updateMeta
+                                storage
+                                container
+                                conversationId
+                                (fun meta -> { meta with Title = Some title })
+                        with
+                        | Ok() -> ()
+                        | Error err ->
+                            logger.Warn
+                                $"AI conversation {conversationId} title could not be saved ({ConversationBlobs.ConversationBlobError.describe err}); the list shows its first message instead."
                     | Error reason ->
                         logger.Warn
                             $"AI conversation {conversationId} titling failed ({reason}); the list shows its first message instead."
@@ -1141,11 +1106,11 @@ let private toProviderMessage (msg: ConversationMessage) : AIProviderMessage = {
             Arguments = tc.Arguments
         })
     ToolResults = []
-    // Phase 6o follow-up B: round-trip multipart content through
-    // history replay. A multipart user turn persisted on a prior
-    // request reaches the provider as the same content-block array
-    // on the next turn; plain-text turns continue to carry
-    // `Parts = []` and the provider emits the legacy string shape.
+    // Round-trip multipart content through history replay. A
+    // multipart user turn persisted on a prior request reaches the
+    // provider as the same content-block array on the next turn;
+    // plain-text turns continue to carry `Parts = []` and the
+    // provider emits the legacy string shape.
     Parts = msg.Parts
 }
 
@@ -1168,17 +1133,17 @@ let private toConversationMessage
         ToolCalls = toolCalls
         RetrievedSources = retrievedSources
         Parts = parts
-        // Phase 6j.D — populated for the first persisted user message of
+        // Populated for the first persisted user message of
         // a conversation; subsequent appends are gated against it by the
         // ownership check inside `bgWork`. Empty for assistant turns
         // (only the first message's `CreatedBy` is authoritative).
         CreatedBy = createdBy
-        // Phase 6j.E — beacon idempotency key. Always empty here: this is
+        // Beacon idempotency key. Always empty here: this is
         // the ordinary agent-loop persistence path, which no client
         // retries against a key. Only `FastPathBeaconHandler` stamps a
         // non-empty value, and only it scans for one.
         BeaconId = ""
-        // Phase 523 — numeric-fidelity verdict; `None` for user turns and
+        // Numeric-fidelity verdict; `None` for user turns and
         // for assistant turns produced with the gate `Off` (the default).
         Verification = verification
     }
@@ -1210,25 +1175,21 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     // Carry forward the resolved scope / user / permission state from the
     // middleware-decorated original context. Keys are the exact strings
     // populated by `ScopeResolutionMiddleware` in `SDK.Server.fs`; keeping
-    // the list in lockstep with that middleware is part of the
-    // "Phase 6a extract SSE into a generic notification channel" work —
-    // a typed `RequestContext` would remove this stringly-typed coupling.
+    // the list in lockstep with that middleware is a stringly-typed
+    // coupling a typed `RequestContext` would remove.
     //
-    // **Phase 730 — this list was SHORT, and its shortness was a defect.**
-    // Phase 36.A recorded it as an out-of-scope finding: three of the six
-    // items `reconstructAccessContext` reads were dropped, so the agent
-    // loop rebuilt `Subject` from the scope-container prefix rather than
-    // carrying the one the request resolved, and `ModuleExposure` /
-    // `PlatformRole` arrived empty. Harmless for 36.A's own gate, which
-    // reads only `ModulePermissions` — but it means every authorization
-    // row the loop emits attributes a subject it inferred, and the whole
-    // point of resolving a subject once is that nothing downstream has to
-    // guess.
+    // The list carries all six items `reconstructAccessContext` reads.
+    // Dropping any of them would make the agent loop rebuild `Subject` from
+    // the scope-container prefix rather than carry the one the request
+    // resolved, or leave `ModuleExposure` / `PlatformRole` empty — every
+    // authorization row the loop emits would then attribute a subject it
+    // inferred, and the whole point of resolving a subject once is that
+    // nothing downstream has to guess.
     //
-    // The two grant stamps are the new arrivals and they are load-bearing
-    // for 730.D. Both are resolved PER REQUEST by the middleware — the
-    // consent verdicts especially, because 552.D's whole promise is that a
-    // revocation bites at the next call rather than the next sweep. A
+    // The two grant stamps are load-bearing for the tool gate. Both are
+    // resolved PER REQUEST by the middleware — the consent verdicts
+    // especially, because a revocation must bite at the next call rather
+    // than the next sweep. A
     // background context that did not carry them would leave the tool gate
     // reading `Map.empty`, which reads as "no grant, no consent" and would
     // therefore fail CLOSED rather than open. Safe, but wrong in the other
@@ -1238,13 +1199,11 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
         "ToolUp.StorageScope"
         "ToolUp.UserId"
         "ToolUp.ModulePermissions"
-        // Phase 730 — the three Phase 36.A dropped.
         "ToolUp.Subject"
         "ToolUp.ModuleExposure"
         "ToolUp.PlatformRole"
-        // Phase 730 — the Phase 551 / 552 grant + consent stamps. Named
-        // through the constants that DEFINE them, not re-spelled, so a
-        // rename moves both ends together.
+        // The grant + consent stamps. Named through the constants that
+        // DEFINE them, not re-spelled, so a rename moves both ends together.
         GrantPolicyGuard.ModuleGrantsItemsKey
         GrantConsentStore.ModuleGrantConsentsItemsKey
     ]
@@ -1254,20 +1213,20 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
         | true, value -> bgCtx.Items[key] <- value
         | _ -> ()
 
-    // Phase 990 — the scope the platform resolved for the request. The fact
-    // tools read only that (`ScopeResolution.forRequest`, Phase 797), and the
-    // list above never carried it, so every fact tool in a chat turn read the
+    // The scope the platform resolved for the request. The fact tools read
+    // only that (`ScopeResolution.forRequest`), and the list above does not
+    // carry it, so without this every fact tool in a chat turn would read the
     // anonymous shard. `carry` records the request's own resolution and mints
     // nothing: a request the platform resolved no scope for stays anonymous.
     ScopeResolution.carry bgCtx (ScopeResolution.forRequest ctx)
 
     bgCtx, scope
 
-// ─── Phase 69c.tail A — typed streaming surface ──────────────────
+// ─── Typed streaming surface ─────────────────────────────────────
 //
 // Server-only companion to `AIAssistantApi`. A streaming method returns
 // `IAsyncEnumerable<'T>`, which the ToolUp.Remoting dispatcher auto-frames
-// as Server-Sent Events (Phase 69c substrate). This record is deliberately
+// as Server-Sent Events. This record is deliberately
 // NOT in `ToolUp.AI.Core` (Fable-shared): `IAsyncEnumerable` has no Fable
 // client representation, so the typed-streaming wire is consumed as a plain
 // SSE source (fetch / NotificationClient), not via the ToolUp.Remoting proxy.
@@ -1276,16 +1235,16 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
 // unenforceable pre-flight attribute); the turn is gated inside the handler
 // exactly as the legacy SSE path is.
 
-/// Phase 69c.tail A — typed streaming chat surface. `StreamChatV2` is the
-/// versioned typed analogue of the legacy `SubmitMessage` + `/api/ai/events`
+/// Typed streaming chat surface. `StreamChatV2` is the versioned
+/// typed analogue of the legacy `SubmitMessage` + `/api/ai/events`
 /// SSE pair; the legacy path stays mounted unchanged.
 type AIStreamingApi = {
     [<AllowAnonymous>]
     StreamChatV2: AIMessageRequest -> IAsyncEnumerable<AIStreamEvent>
 }
 
-/// Phase 69c.tail A — terminal-event predicate for the typed chat stream:
-/// the turn ends when its task reaches a terminal status. Used by the
+/// Terminal-event predicate for the typed chat stream: the turn
+/// ends when its task reaches a terminal status. Used by the
 /// `AsyncStream.fromCallback` bridge to close the stream after the terminal
 /// `TaskStatusChanged` is yielded.
 let private isTerminalStreamEvent =
@@ -1298,8 +1257,8 @@ let private isTerminalStreamEvent =
 
 /// Build the AIAssistantApi ToolUp.Remoting handler + its typed streaming
 /// companion. Both records are built in one closure over ONE turn
-/// implementation (`makeAssistantApi`, Phase 69c.F): the legacy record takes
-/// the SSE-broadcast sink, the streaming method takes the stream's channel
+/// implementation (`makeAssistantApi`): the legacy record takes the
+/// SSE-broadcast sink, the streaming method takes the stream's channel
 /// sink, and nothing else differs.
 /// Mirrors the pattern from fileManagementApi in FileManagement.fs.
 let aiAssistantApi
@@ -1314,29 +1273,28 @@ let aiAssistantApi
     let registry =
         ctx.RequestServices.GetService(typeof<AIToolRegistry>) :?> AIToolRegistry
 
-    // Phase 6g.A: per-process registry of pending client-resident tool
-    // calls. The agent loop suspends on a TCS keyed by toolCallId; the
+    // Per-process registry of pending client-resident tool calls. The
+    // agent loop suspends on a TCS keyed by toolCallId; the
     // /api/ai/tool-result POST handler completes it. Singleton — same
     // instance everywhere it's resolved.
     let dispatchRegistry =
         ctx.RequestServices.GetService(typeof<ClientToolDispatch.ClientToolDispatchRegistry>)
         :?> ClientToolDispatch.ClientToolDispatchRegistry
 
-    // Phase 6h: per-task `CancellationTokenSource` registry for
-    // cancel-mid-stream. The handler registers a CTS before
-    // kicking off the agent loop; /api/ai/cancel/{taskId} cancels
-    // it; the handler's try/finally unregisters on natural
-    // completion.
+    // Per-task `CancellationTokenSource` registry for cancel-mid-stream.
+    // The handler registers a CTS before kicking off the agent loop;
+    // /api/ai/cancel/{taskId} cancels it; the handler's try/finally
+    // unregisters on natural completion.
     let cancellationRegistry =
         ctx.RequestServices.GetService(typeof<AICancellationRegistry.AICancellationRegistry>)
         :?> AICancellationRegistry.AICancellationRegistry
 
-    // Phase 6k — the supervised agent-loop worker. `GetService`, not
+    // The supervised agent-loop worker. `GetService`, not
     // `GetRequiredService`: a composition that never registered one is
     // a supported shape (a host that gates every `IHostedService` off,
     // a test standing this handler up without `compose`), and the
-    // enqueue site falls back to the pre-6k detached start rather than
-    // refusing to serve chat at all.
+    // enqueue site falls back to a detached start rather than refusing
+    // to serve chat at all.
     let chatWorker =
         match ctx.RequestServices.GetService(typeof<AIChatWorker.AIChatWorker>) with
         | :? AIChatWorker.AIChatWorker as w -> Some w
@@ -1357,23 +1315,22 @@ let aiAssistantApi
                 member _.Error(_, _) = ()
             }
 
-    // Phase 6j.D — `IAuditLog` for the BeaconRejected emission on the
-    // symmetric ownership-gate path. `None` in test compositions that
-    // bypass `compose` (no DI registration); the gate stays effective
-    // — only the audit-trail row is skipped.
+    // `IAuditLog` for the BeaconRejected emission on the symmetric
+    // ownership-gate path. `None` in test compositions that bypass
+    // `compose` (no DI registration); the gate stays effective — only
+    // the audit-trail row is skipped.
     let auditLogOpt =
         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
         | :? IAuditLog as a -> Some a
         | _ -> None
 
-    // Phase 53 — opt-in conversation persistence. Resolves
-    // `IConversationStore` once per handler invocation; `null`
-    // (the default, `ServerConfig.ConversationStore =
-    // NoConversationStore`) gates every substrate-hook closure
-    // below to a no-op so the pre-Phase-53 path runs byte-for-byte.
-    // The `ConvBridge` closures stringify the existing `Guid`-typed
-    // `conversationId` at the seam — see `ConversationTypes.fs`
-    // for the identity-by-value rationale.
+    // Opt-in conversation persistence. Resolves `IConversationStore`
+    // once per handler invocation; `null` (the default,
+    // `ServerConfig.ConversationStore = NoConversationStore`) gates
+    // every substrate-hook closure below to a no-op. The `ConvBridge`
+    // closures stringify the existing `Guid`-typed `conversationId` at
+    // the seam — see `ConversationTypes.fs` for the identity-by-value
+    // rationale.
     let conversationStore =
         match ctx.RequestServices.GetService(typeof<IConversationStore>) with
         | :? IConversationStore as s -> Some s
@@ -1381,14 +1338,14 @@ let aiAssistantApi
 
     let convId (id: Guid) : ConversationId = id.ToString("N")
 
-    // Phase 516.B — the titling policy `withConversationTitling` composed,
+    // The titling policy `withConversationTitling` composed,
     // else titles derived from the first message and no titling call.
     let titlingPolicy =
         match ctx.RequestServices.GetService(typeof<ConversationTitlingPolicy>) with
         | :? ConversationTitlingPolicy as p -> p
         | _ -> ConversationTitlingPolicy.firstMessage
 
-    // Phase 516.D — where every task's latest status is recorded.
+    // Where every task's latest status is recorded.
     let taskRegistry = AITaskStatusRegistry.Shared
 
     let sha256OfText (text: string) : string =
@@ -1506,7 +1463,7 @@ let aiAssistantApi
                 return ()
     }
 
-    /// Phase 506 — prior turns handed to `PromptContext.ConversationHistory`
+    /// Prior turns handed to `PromptContext.ConversationHistory`
     /// so the RAG query-rewrite stage can resolve a follow-up against what
     /// was said before. Bounded to the trailing window: an anaphor's referent
     /// is within a turn or two, and the rewriter's own prompt budget is
@@ -1517,10 +1474,10 @@ let aiAssistantApi
     /// Read the trailing conversation turns for this request as plain text,
     /// oldest first.
     ///
-    /// Gated on the Phase 53 `IConversationStore` being composed: with no
-    /// store this returns `[]` without any I/O, so a deployment that never
+    /// Gated on the `IConversationStore` being composed: with no store
+    /// this returns `[]` without any I/O, so a deployment that never
     /// opted into conversation persistence pays nothing and its prompt
-    /// context is byte-identical to the pre-506 shape (GP 11 / GP 13).
+    /// context carries no history (GP 11 / GP 13).
     ///
     /// Best-effort by construction — a store error, a not-yet-existing
     /// conversation (the first turn of every conversation) and an empty
@@ -1528,7 +1485,7 @@ let aiAssistantApi
     /// retrieval; failing the user's turn because we could not read it
     /// would be a far worse outcome than retrieving on the raw query.
     ///
-    /// Phase 946 — the conversation id is the REQUEST's, so the history is
+    /// The conversation id is the REQUEST's, so the history is
     /// read only when `canSeeStored` (the team's visibility rule,
     /// `ConversationVisibility.canSee`, over the stored conversation's
     /// owner and creation time) admits the caller; otherwise it is `[]`,
@@ -1569,7 +1526,7 @@ let aiAssistantApi
     // Scope and user are pre-resolved asynchronously by
     // `ScopeResolutionMiddleware`. If the middleware did not run or scope
     // resolution failed (Error case), fall back to an anonymous user-scoped
-    // container. Full error propagation lives in a later phase.
+    // container.
     let scope =
         match ctx.Items.TryGetValue "ToolUp.StorageScope" with
         | true, (:? StorageScope as s) -> s
@@ -1596,17 +1553,12 @@ let aiAssistantApi
         | _ ->
             // Fallback: construct from Items. Only used when the AccessContext
             // DI factory didn't run (tests bypassing compose).
-            let teamId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
-                | _ -> None
-
             AccessContext.unrestricted (AnonymousSession userId)
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 
-    // Phase 859 — the team's conversation visibility policy, read per
-    // request in the team's scope (`None` outside one: a personal container
+    // The team's conversation visibility policy, read per request
+    // in the team's scope (`None` outside one: a personal container
     // is owner-only by construction). Every read path below filters through
     // `ConversationVisibility.canSee`, every write through `canModify`, and
     // the owner is always the stored conversation's, never the request's.
@@ -1621,9 +1573,9 @@ let aiAssistantApi
         | [] -> DateTime.MinValue
         | _ -> messages |> List.map _.Timestamp |> List.min
 
-    /// Phase 946 — whether the caller may see a conversation the opt-in
-    /// substrate holds, by its stored owner and creation time: the rule
-    /// every other read path applies (`ConversationVisibility.canSee`).
+    /// Whether the caller may see a conversation the opt-in substrate
+    /// holds, by its stored owner and creation time: the rule every other
+    /// read path applies (`ConversationVisibility.canSee`).
     let canSeeStoredConversation (owner: string) (createdAt: DateTime) : Async<bool> = async {
         match! visibilityState () with
         | Some state when not (TeamConversationPolicyStore.ConversationVisibility.isOpen state) ->
@@ -1662,10 +1614,10 @@ let aiAssistantApi
         | Some state ->
             match! ConversationBlobs.loadConversation storage scope.Container conversationId with
             | Error err ->
-                // Phase 862 — a conversation whose blob cannot be read has
-                // no readable owner, so nobody's authority over it can be
-                // established; refuse rather than read it as the empty
-                // (ownerless, writable-by-anyone) conversation.
+                // A conversation whose blob cannot be read has no readable
+                // owner, so nobody's authority over it can be established;
+                // refuse rather than read it as the empty (ownerless,
+                // writable-by-anyone) conversation.
                 return Error(unreadableConversation logger conversationId err)
             | Ok messages ->
                 let owner = ConversationListing.ownerOf messages
@@ -1692,7 +1644,7 @@ let aiAssistantApi
                                 $"Only the conversation's author or {elevated} can delete or change another member's conversation."
     }
 
-    // Phase 69c.F — ONE turn implementation, the event sink injected at
+    // ONE turn implementation, the event sink injected at
     // construction. `makeAssistantApi emit` builds the api record whose turn
     // machinery (SubmitMessage's bgWork) emits every `AIStreamEvent` through
     // `emit`; the two mounted surfaces differ ONLY in the sink they pass:
@@ -1705,11 +1657,10 @@ let aiAssistantApi
     //     `AsyncStream.fromCallback` channel sink and drives the turn through
     //     it, so its `event: chunk` payloads are the same serialised events.
     //
-    // This replaces the Phase 69c.tail A per-request `typedSink` ref cell —
-    // a mutable the typed endpoint armed before firing the turn — with a
-    // parameter: no state to arm, nothing a future third surface could
-    // forget to reset, and the legacy path no longer consults a cell at all.
-    // Phase 516.D — every status a turn reaches passes through the sink its
+    // The sink is a parameter, not a per-request ref cell the typed endpoint
+    // arms before firing the turn: no state to arm, nothing a future third
+    // surface could forget to reset, and the legacy path consults no cell.
+    // Every status a turn reaches passes through the sink its
     // api record is built over, so wrapping BOTH sinks below keeps
     // `GetTaskStatus` in step with the stream without touching an emit site.
     let trackTaskStatus (sink: AIStreamEvent -> unit) (event: AIStreamEvent) =
@@ -1726,8 +1677,8 @@ let aiAssistantApi
                 let content = request.Content
                 let taskId = Guid.NewGuid()
 
-                // Phase 6g.F — resolve the authoritative surface for this
-                // turn. Under `TrustClient` (default) this is byte-for-byte
+                // Resolve the authoritative surface for this turn.
+                // Under `TrustClient` (default) this is byte-for-byte
                 // `request.Surface`; under `DeriveFromCookie` the surface
                 // comes from the signed capability cookie on the ORIGINAL
                 // request context (`ctx`, not the synthetic background
@@ -1772,14 +1723,14 @@ let aiAssistantApi
                 // a provider call; checked after the builder resolves.
                 let shortCircuitCell: string option ref = ref None
 
-                // Phase 708 — the id of the answer plan compiled for this
+                // The id of the answer plan compiled for this
                 // turn's fact-first retrieval, when the fact tier is
                 // composed. Fresh cell per request, same lifecycle as the
                 // two above; stays `None` in every composition without a
                 // clause planner and on every turn that planned nothing.
                 let plannedAnswerCell: string option ref = ref None
 
-                // Phase 506 — prior turns for the query-rewrite stage. Read
+                // Prior turns for the query-rewrite stage. Read
                 // only when a prompt builder is actually going to run, and
                 // only when the conversation substrate is composed; `[]`
                 // otherwise, with no I/O on the request path.
@@ -1799,8 +1750,8 @@ let aiAssistantApi
                             ModuleContexts = moduleContexts
                             CurrentMessage = Some request.Content
                             ConversationHistory = promptHistory
-                            // Phase 502.D — the client's per-turn retrieval
-                            // scope, forwarded verbatim. Taken at face value
+                            // The client's per-turn retrieval scope,
+                            // forwarded verbatim. Taken at face value
                             // by design: a filter only ever narrows, and it
                             // AND-combines on top of the scopes the builder
                             // derives from `accessContext`, so it cannot
@@ -1820,11 +1771,11 @@ let aiAssistantApi
                     else
                         Some systemPromptText
 
-                // Phase 791 — the turn's closed value. The prompt block is
+                // The turn's closed value. The prompt block is
                 // the composed builder output verbatim, so rendering it
                 // reproduces `systemPrompt` byte for byte; the chunks come
                 // from the same cell the Sources panel reads, each carrying
-                // `NotGated` until Phase 775 supplies a gate result.
+                // `NotGated` until a gate result is supplied.
                 let modelInput =
                     retrievedSourcesCell.Value
                     |> List.fold
@@ -1843,13 +1794,13 @@ let aiAssistantApi
                 // The original HttpContext is disposed after this response.
                 let bgCtx, bgScope = createBackgroundContext ctx userId
 
-                // Phase 36.E — the "from" half of "cross-module". The
-                // active module arrives on the REQUEST BODY, so it is not
-                // among the middleware-resolved items
-                // `createBackgroundContext` copies forward; a tool
-                // executor has no other route to it. Stamped here, beside
-                // the copy, rather than inside that helper, because it is
-                // the only caller that holds the request.
+                // The "from" half of "cross-module". The active module
+                // arrives on the REQUEST BODY, so it is not among the
+                // middleware-resolved items `createBackgroundContext`
+                // copies forward; a tool executor has no other route to
+                // it. Stamped here, beside the copy, rather than inside
+                // that helper, because it is the only caller that holds
+                // the request.
                 //
                 // Absent when the user was on no module's page, which is
                 // an ordinary state: the audit row then carries `None` and
@@ -1871,7 +1822,7 @@ let aiAssistantApi
                 // a safe default until the real token is registered.
                 let mutable userCancelToken = System.Threading.CancellationToken.None
 
-                // Phase 961 — the refusal, as its own function so the turn
+                // The refusal, as its own function so the turn
                 // cannot fall through it: the gate in `bgWork` calls this on
                 // `Error` and does nothing else. The shape is the one
                 // `AIStreamFramingPinTests` pins — the queued task already
@@ -1920,14 +1871,14 @@ let aiAssistantApi
                     )
                 }
 
-                // Phase 961 — the request's access context, captured now: the
-                // gate runs on the background scope, after the request's own
-                // services are gone.
+                // The request's access context, captured now: the gate runs
+                // on the background scope, after the request's own services
+                // are gone.
                 let gateAccess = TeamConversationPolicyStore.ConversationVisibility.accessOf ctx
 
                 let bgWork (shutdownToken: System.Threading.CancellationToken) = async {
                     try
-                        // Phase 896 — the turn runs on the chat worker, where the
+                        // The turn runs on the chat worker, where the
                         // request's ambient context does not flow. Re-establish
                         // the request's viewer from the items carried forward,
                         // so the disclosure gate decides this turn's retrieval
@@ -1936,8 +1887,7 @@ let aiAssistantApi
                             let viewer = RequestViewer.ofItems bgCtx.Items
                             RequestViewerContext.establish (fun () -> viewer)
 
-                        // Phase 6h follow-up — Workstream B. Trace the
-                        // user/task fingerprint at bgWork entry so a
+                        // Trace the user/task fingerprint at bgWork entry so a
                         // `TOOLUP_TRACE_CATEGORIES=ai.agent` operator can
                         // correlate this run's userId with the SSE-trace
                         // panel's broadcast destination scopeId — the
@@ -1948,8 +1898,8 @@ let aiAssistantApi
                             "ai.agent"
                             $"bgWork start (userId={userId}, taskId={taskId}, conversation={conversationId})"
 
-                        // Phase 6j.D — symmetric ownership gate. In
-                        // shared-container modes (`Team` / `MultiTeam`,
+                        // Symmetric ownership gate. In shared-container
+                        // modes (`Team` / `MultiTeam`,
                         // `Container = team-{teamId}`) a buggy or hostile
                         // member could target another member's
                         // conversation in the same container; the gate
@@ -1957,14 +1907,14 @@ let aiAssistantApi
                         // whose first persisted message recorded a
                         // different owner. Mirrors the gate the beacon
                         // handler applies for fast-path resolutions.
-                        // Phase 961 — an ownerless legacy conversation
-                        // under a narrowed team level is admitted only for
-                        // a caller `canModify` admits (`checkAppend`).
+                        // An ownerless legacy conversation under a
+                        // narrowed team level is admitted only for a
+                        // caller `canModify` admits (`checkAppend`).
                         //
                         // Load happens BEFORE the InProgress SSE so a
                         // refused turn doesn't briefly flash as in-flight
                         // on the client; the agent loop never starts.
-                        // Phase 862 — an unreadable conversation blob
+                        // An unreadable conversation blob
                         // raises here, failing the turn before the agent
                         // loop starts and before anything is written.
                         //
@@ -1977,7 +1927,7 @@ let aiAssistantApi
                             |> withTimeout "Conversation load (ownership gate)" ChatPathIoTimeoutMs
 
                         // The one definition of the gate, shared with the
-                        // beacon handler (Phase 862 / 961). The team state
+                        // beacon handler. The team state
                         // and the caller's role are read on the background
                         // scope (the request's own is gone by now), and
                         // only for an ownerless conversation.
@@ -1997,16 +1947,14 @@ let aiAssistantApi
                                 gateExisting
                                 userId
 
-                        // Phase 961 — the refusal ENDS the turn by
-                        // construction: everything the turn does sits in
-                        // the `Ok()` branch, and this `match` is the last
-                        // expression of the `try`. (Before 961 the refusal
-                        // was a `return ()` in one branch followed by the
-                        // rest of the turn; in an `async` block that does
-                        // not end the block, so a refused turn emitted
-                        // `InProgress` and read the teammate's metadata and
-                        // provider history before the disposed background
-                        // scope happened to stop it.)
+                        // The refusal ENDS the turn by construction:
+                        // everything the turn does sits in the `Ok()`
+                        // branch, and this `match` is the last
+                        // expression of the `try`. (A `return ()` in one
+                        // branch followed by the rest of the turn would
+                        // not end an `async` block, so a refused turn
+                        // would emit `InProgress` and read the teammate's
+                        // metadata and provider history.)
                         match admission with
                         | Error ownerOfRecord -> do! refuseTurn ownerOfRecord
                         | Ok() ->
@@ -2032,7 +1980,7 @@ let aiAssistantApi
                             // override (per-conversation default), then the
                             // factory's active-label policy.
                             let! storedMeta =
-                                loadConversationMeta logger storage scope.Container conversationId
+                                loadMetaOrFail logger storage scope.Container conversationId
                                 |> withTimeout "Conversation metadata load" ChatPathIoTimeoutMs
 
                             let resolvedOverrideLabel =
@@ -2097,9 +2045,9 @@ let aiAssistantApi
                                 Parts = []
                             }
 
-                            // Phase 53 substrate hook — begin the
-                            // conversation record on first turn
-                            // (idempotent) and append the user turn.
+                            // Substrate hook — begin the conversation
+                            // record on first turn (idempotent) and
+                            // append the user turn.
                             // Both no-op when ConversationStore =
                             // NoConversationStore (the default).
                             do!
@@ -2155,8 +2103,8 @@ let aiAssistantApi
 
                             let allProviderMessages = trimmedHistory @ [ userMsg ]
 
-                            // Phase 6h: register a CancellationTokenSource for
-                            // this task. The cancel POST handler flips it; the
+                            // Register a CancellationTokenSource for this
+                            // task. The cancel POST handler flips it; the
                             // agent loop checks at turn boundaries and bails
                             // cleanly via OperationCanceledException. We always
                             // unregister in the surrounding finally to free
@@ -2164,7 +2112,7 @@ let aiAssistantApi
                             let registeredToken = cancellationRegistry.Register(taskId)
                             userCancelToken <- registeredToken
 
-                            // Phase 6k — the worker's shutdown token joins the
+                            // The worker's shutdown token joins the
                             // per-task cancel token, so a host shutdown reaches
                             // `runAgentLoop`'s turn-boundary checks instead of
                             // abandoning the computation with the client still
@@ -2223,19 +2171,6 @@ let aiAssistantApi
                                         modelInput
                                         (fun evt -> emit evt)
 
-                            // Persist the full round-trippable history first —
-                            // this is what the next turn will load to maintain
-                            // tool_use / tool_result pairing with the provider.
-                            do! saveProviderHistoryOrFail logger storage scope.Container conversationId finalMessages
-
-                            // Persist the UI-facing conversation blob: user
-                            // prompt + final assistant text (intermediate
-                            // tool_use / tool_result steps are not rendered in
-                            // the chat history, though they remain inspectable
-                            // via the history blob for audit or future UI).
-                            let! existingUiMessages =
-                                loadConversationOrFail logger storage scope.Container conversationId
-
                             let userConvMsg =
                                 toConversationMessage conversationId User content [] [] [] userId None
 
@@ -2245,15 +2180,15 @@ let aiAssistantApi
                                 |> Option.map _.Content
                                 |> Option.defaultValue ""
 
-                            // Phase 6q follow-up A — post-stream citation
-                            // normalisation. Resolves `ICitationNormaliser`
-                            // from DI; when registered (RAG composed with
-                            // a non-Off policy) and the turn produced both
-                            // retrieved sources AND assistant text, run the
-                            // normaliser, emit one audit event per
-                            // `CitationEvent`, and persist the rewritten
-                            // text. Non-RAG deployments resolve `null` →
-                            // byte-for-byte pre-Phase-6q behaviour.
+                            // Post-stream citation normalisation. Resolves
+                            // `ICitationNormaliser` from DI; when registered
+                            // (RAG composed with a non-Off policy) and the
+                            // turn produced both retrieved sources AND
+                            // assistant text, run the normaliser, emit one
+                            // audit event per `CitationEvent`, and persist
+                            // the rewritten text. Non-RAG deployments
+                            // resolve `null` → the model's text is kept
+                            // verbatim.
                             let citationNormaliserOpt =
                                 match bgCtx.RequestServices.GetService(typeof<ICitationNormaliser>) with
                                 | :? ICitationNormaliser as n -> Some n
@@ -2331,15 +2266,15 @@ let aiAssistantApi
                                       }
                                 | _ -> async.Return modelEmittedContent
 
-                            // Phase 523 — numeric-fidelity answer gate. Resolves
-                            // the opt-in `AnswerGate` + metric registry + metrics
+                            // Numeric-fidelity answer gate. Resolves the
+                            // opt-in `AnswerGate` + metric registry + metrics
                             // sink from the background DI scope; when the gate is
                             // absent (the default) `runVerificationStage`
                             // short-circuits to `finalContent` verbatim with no
-                            // verdict, no SSE event, no audit, no metric — the
-                            // pre-523 path byte-for-byte (GP 11 / GP 13). In
-                            // `Annotate` / `Strict` mode it verifies every numeric
-                            // token against the turn's retrieved facts, appends a
+                            // verdict, no SSE event, no audit, no metric
+                            // (GP 11 / GP 13). In `Annotate` / `Strict` mode it
+                            // verifies every numeric token against the turn's
+                            // retrieved facts, appends a
                             // footnote (or withholds unverified sentences behind an
                             // inline flag), and returns the verdict to ride the
                             // persisted `ConversationMessage` and the SSE stream.
@@ -2358,7 +2293,7 @@ let aiAssistantApi
                                 | :? Metrics.IMetricsSink as s -> Some s
                                 | _ -> None
 
-                            // Phase 680 — the provenance join. `IAuditLog` is
+                            // The provenance join. `IAuditLog` is
                             // composed by the platform, so a gate-on deployment
                             // gets the typed row (and, through it, whichever
                             // sinks it composed) without opting into anything
@@ -2409,12 +2344,21 @@ let aiAssistantApi
                                     ""
                                     verificationOpt
 
-                            let updatedConversation = existingUiMessages @ [ userConvMsg; assistantConvMsg ]
+                            // Persist the exchange through the record: the full
+                            // round-trippable history first — what the next turn
+                            // loads to keep tool_use / tool_result pairing with
+                            // the provider — then the user prompt + final
+                            // assistant text appended to the UI blob (the
+                            // intermediate tool steps are not rendered in the
+                            // chat, though they stay inspectable in the history).
+                            let! existingUiMessages =
+                                appendExchangeOrFail logger storage scope.Container conversationId finalMessages [
+                                    userConvMsg
+                                    assistantConvMsg
+                                ]
 
-                            do! saveConversationOrFail logger storage scope.Container conversationId updatedConversation
-
-                            // Phase 53 substrate hook — append the
-                            // assistant turn + mark the conversation
+                            // Substrate hook — append the assistant
+                            // turn + mark the conversation
                             // Completed. No-op when ConversationStore =
                             // NoConversationStore.
                             do!
@@ -2440,14 +2384,14 @@ let aiAssistantApi
 
                             emit (TaskStatusChanged(taskId, AITaskCompleted))
 
-                            // Phase 6h: free the cancellation entry on
-                            // natural completion. The cancel POST handler
+                            // Free the cancellation entry on natural
+                            // completion. The cancel POST handler
                             // already removes the entry on cancellation,
                             // so this is the no-cancel path.
                             cancellationRegistry.Unregister(taskId)
 
-                            // Phase 516.B — title a new conversation after its
-                            // first turn, AFTER the terminal event so the reply
+                            // Title a new conversation after its first
+                            // turn, AFTER the terminal event so the reply
                             // is never kept waiting on it. A no-op unless a
                             // generating policy is composed; never throws.
                             if existingUiMessages.IsEmpty then
@@ -2462,34 +2406,34 @@ let aiAssistantApi
                                         content
                     with
                     | :? System.OperationCanceledException when userCancelToken.IsCancellationRequested ->
-                        // Phase 6h: user-initiated cancel. The agent
+                        // User-initiated cancel. The agent
                         // loop already emitted StreamCancelled; the
                         // task ends gracefully (not as a failure).
                         //
-                        // Phase 6h follow-up: gate this branch on the
-                        // user-cancel token actually being flipped. Any
-                        // OTHER OperationCanceledException — provider
+                        // Gate this branch on the user-cancel token
+                        // actually being flipped. Any OTHER
+                        // OperationCanceledException — provider
                         // per-call timeout (RetryPolicy.Timeout CTS),
                         // I/O timeout, etc. — must fall through to the
                         // generic failure branch and surface as
                         // AITaskFailed. Without this guard, F# async's
                         // habit of propagating OCE through `with`
-                        // clauses meant timeout-induced cancellations
-                        // were being silently treated as user cancels:
-                        // no error event, no chat-inline ⚠️, just a
-                        // 60 s watchdog timeout.
+                        // clauses would silently treat timeout-induced
+                        // cancellations as user cancels: no error
+                        // event, no chat-inline ⚠️, just a 60 s
+                        // watchdog timeout.
                         convMarkStatus scope.ScopeId conversationId ConversationStatus.Cancelled
                         |> Async.Start
 
                         emit (TaskStatusChanged(taskId, AITaskCompleted))
                         cancellationRegistry.Unregister(taskId)
                     | :? System.OperationCanceledException when shutdownToken.IsCancellationRequested ->
-                        // Phase 6k — the host is going away and the worker's
+                        // The host is going away and the worker's
                         // shutdown budget expired with this turn still in
-                        // flight. Before, the computation was simply
-                        // abandoned: no terminal event, so the client sat on
-                        // an open stream until its 60 s watchdog called it a
-                        // hang and the user was never told why.
+                        // flight. Abandoning the computation would leave no
+                        // terminal event, so the client would sit on an open
+                        // stream until its 60 s watchdog called it a hang
+                        // and the user would never be told why.
                         //
                         // `Cancelled` rather than `Errored` because nothing
                         // went wrong with the turn — it was cut short — and
@@ -2508,7 +2452,7 @@ let aiAssistantApi
                         cancellationRegistry.Unregister(taskId)
                 }
 
-                // Phase 6k — the turn is handed to the supervised worker
+                // The turn is handed to the supervised worker
                 // rather than fired with `Async.Start`. Scope disposal moves
                 // with it: `Dispose` runs exactly once on the worker
                 // boundary whichever way the turn ended, so a terminal
@@ -2548,11 +2492,11 @@ let aiAssistantApi
                 return task
             }
 
-        // Phase 859.B/E — a conversation the caller may not see reads as
-        // empty, exactly as a missing id does; opening another member's
-        // conversation under a narrower level than `TeamVisible` is audited.
-        // Phase 862 — a blob that is present but cannot be read raises
-        // rather than reading as an empty conversation.
+        // A conversation the caller may not see reads as empty, exactly as
+        // a missing id does; opening another member's conversation under a
+        // narrower level than `TeamVisible` is audited. A blob that is
+        // present but cannot be read raises rather than reading as an empty
+        // conversation.
         GetConversation =
             fun conversationId -> async {
                 let! messages = loadConversationOrFail logger storage scope.Container conversationId
@@ -2593,9 +2537,8 @@ let aiAssistantApi
                     | _ -> return messages
             }
 
-        // Phase 516.A — real titles, counts and timestamps, newest
-        // activity first, read by the same `ConversationListing` the paged
-        // endpoint uses.
+        // Real titles, counts and timestamps, newest activity first, read
+        // by the same `ConversationListing` the paged endpoint uses.
         ListConversations =
             fun () -> async {
                 let! owned = ConversationListing.readAllOwned logger storage scope.Container titlingPolicy.MaxTitleChars
@@ -2603,7 +2546,7 @@ let aiAssistantApi
                 return rows |> List.map _.Conversation
             }
 
-        // Phase 36.A: the client-visible tool listing is filtered by the
+        // The client-visible tool listing is filtered by the
         // caller's per-module `Read` permission, the same predicate the
         // agent loop's per-turn list and its dispatch re-check use — a
         // user must not be able to enumerate the tool surface of a module
@@ -2623,7 +2566,7 @@ let aiAssistantApi
                     | :? AccessContext as ac -> ac
                     | _ -> AIToolRegistry.reconstructAccessContext ctx
 
-                // Phase 730 — grant-gated for the same reason the listing
+                // Grant-gated for the same reason the listing
                 // is permission-gated: enumerating the tool surface of a
                 // module whose grant is pending or consent-revoked tells
                 // the caller what they would have had, which is the fact
@@ -2633,32 +2576,30 @@ let aiAssistantApi
                     |> List.map _.Definition
             }
 
-        // Phase 516.D — the polling fallback: the last status the task's
-        // turn emitted, for the caller that submitted it. Phase 859 leaves
-        // it as it is: a task is readable by its submitter only, at every
-        // level, which is never wider than `canSee` allows (the author
-        // always sees their own), so another member's task is `None` under
-        // every level without consulting the policy.
+        // The polling fallback: the last status the task's turn emitted,
+        // for the caller that submitted it. A task is readable by its
+        // submitter only, at every level, which is never wider than `canSee`
+        // allows (the author always sees their own), so another member's
+        // task is `None` under every level without consulting the policy.
         GetTaskStatus =
             fun taskId -> async { return taskRegistry.TryGet(scope.Container, userId, taskId, DateTime.UtcNow) }
 
         DeleteConversation =
             fun conversationId -> async {
-                // Delete EVERY sibling blob. Deleting only `.json` left
-                // `.history.json` (the full provider round-trip incl.
+                // Delete EVERY sibling blob. Deleting only `.json` would
+                // leave `.history.json` (the full provider round-trip incl.
                 // tool inputs/outputs) and `.meta.json` behind — a
-                // right-to-erasure / privacy gap. Phase 504.D — the
-                // sibling set now lives in ONE place
-                // (`ConversationRetention.siblingBlobNames`, which also
+                // right-to-erasure / privacy gap. The sibling set lives in
+                // ONE place (`ConversationRetention.siblingBlobNames`, which also
                 // names the consent sidecar) and is shared with the
                 // retention sweep, so an erasure and a purge remove
                 // exactly the same blobs. The first failure is surfaced
                 // so an incomplete erasure is retryable rather than
                 // silently partial.
                 //
-                // Phase 859.C — another member's conversation only by the
-                // level's elevated role; one the caller cannot see is a
-                // no-op, as a missing id is.
+                // Another member's conversation only by the level's
+                // elevated role; one the caller cannot see is a no-op, as
+                // a missing id is.
                 match! authoriseWrite conversationId with
                 | Ok true -> return! ConversationRetention.deleteSiblings storage scope.Container conversationId
                 | Ok false -> return Ok()
@@ -2667,32 +2608,37 @@ let aiAssistantApi
 
         SetConversationOverride =
             fun (conversationId, label) -> async {
-                // Phase 859.C — the one other write a caller can aim at a
-                // conversation: the same rule as `DeleteConversation`.
+                // The one other write a caller can aim at a conversation:
+                // the same rule as `DeleteConversation`.
                 match! authoriseWrite conversationId with
                 | Error refusal -> return Error refusal
                 | Ok false -> return Ok()
                 | Ok true ->
-                    try
-                        // Read-modify-write: the meta sibling also carries the
-                        // generated title (Phase 516.B), which an override
-                        // change must not erase.
-                        let! meta = loadConversationMeta logger storage scope.Container conversationId
-
-                        do!
-                            saveConversationMeta storage scope.Container conversationId {
+                    // Read-modify-write: the meta sibling also carries the
+                    // generated title, which an override change must not
+                    // erase — and metadata that cannot be read is refused
+                    // rather than written over.
+                    match!
+                        ConversationBlobs.ConversationRecord.updateMeta
+                            storage
+                            scope.Container
+                            conversationId
+                            (fun meta -> {
                                 meta with
                                     OverrideProviderLabel = label
-                            }
+                            })
+                    with
+                    | Ok() -> return Ok()
+                    | Error err ->
+                        logger.Warn
+                            $"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}; the provider override was not changed."
 
-                        return Ok()
-                    with ex ->
-                        return Error ex.Message
+                        return Error $"The provider override of conversation {conversationId} could not be changed."
             }
 
-        // Phase 516.C — one page, filtered by title/content search.
+        // One page, filtered by title/content search.
         //
-        // Phase 859.B — filtered BEFORE the search and the page, so a hit
+        // Filtered BEFORE the search and the page, so a hit
         // never surfaces a conversation the caller could not open, and the
         // count and cursor are over what the caller can see.
         ListConversationsPage =
@@ -2707,7 +2653,7 @@ let aiAssistantApi
     let assistantApi: AIAssistantApi =
         makeAssistantApi (trackTaskStatus (sendEvent sseManager userId))
 
-    // Phase 69c.F — the typed streaming surface: the SAME turn over the
+    // The typed streaming surface: the SAME turn over the
     // stream's channel sink. `SubmitMessage`'s foreground returns once the
     // agent loop is kicked off (the detached-tail shape `fromCallback` is
     // built for); the loop emits the terminal `TaskStatusChanged` that ends
