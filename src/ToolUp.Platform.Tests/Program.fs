@@ -181,7 +181,9 @@ let private registeredTests =
         // address idempotency, AsOf reconstruction, supersession, competing
         // facts, scope isolation, disclosure/Absent round-trips) + BlobFactStore
         // audit emission + freshness derivation.
+        CanonicalFrameTests.tests
         FactStoreTests.tests
+        FactStoreTests.factIdTests
         FactStoreTests.auditAndFreshnessTests
         // Phase 704 — batch fact assertion: the semantics ride the contract
         // pack above (both read models); this is the summarised-audit half —

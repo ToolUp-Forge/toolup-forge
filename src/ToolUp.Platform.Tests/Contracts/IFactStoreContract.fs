@@ -166,9 +166,189 @@ let private scalars (facts: Fact list) =
         | Scalar d -> d
         | other -> failtestf "expected a Scalar in the ranking, got %A" other)
 
+// ─── Phase 1089 — the id law and the id migration law ────────────────
+
+/// The pre-1089 fact id recipe: SHA-256 over the five fields joined by
+/// newlines, the input hashes sorted and comma-joined. Every fact written
+/// before Phase 1089 is stored under it. It lives here, in the test pack,
+/// and nowhere in the shipped code: it exists to seed a store exactly as
+/// an upgrading deployment finds it, and `FactStoreTests` pins it against
+/// an id computed outside this code base.
+let legacyFactId (f: Fact) : string =
+    let subject = sprintf "%s/%s" f.Subject.Hierarchy (String.concat ">" f.Subject.Path)
+
+    let period =
+        sprintf "%s..%s" (f.Period.From.ToUniversalTime().ToString("o")) (f.Period.To.ToUniversalTime().ToString("o"))
+
+    let inputs =
+        Fact.effectiveInputHashes f.Method f.Evidence f.Value
+        |> List.sort
+        |> String.concat ","
+
+    [ subject; f.Metric.Value; period; Fact.methodIdentity f.Method; inputs ]
+    |> String.concat "\n"
+    |> Text.Encoding.UTF8.GetBytes
+    |> Security.Cryptography.SHA256.HashData
+    |> Convert.ToHexStringLower
+
+/// What the id migration law needs from a store: the store, a scope, a way
+/// to write facts exactly as given (ids, transaction times, supersession
+/// links — bypassing `Assert`, which would re-address them), and the
+/// store's migration.
+type FactIdMigrationHarness = {
+    Store: IFactStore
+    Scope: string
+    SeedRaw: Fact list -> Async<unit>
+    Migrate: bool -> Async<Result<FactIdMigrationReport, string>>
+}
+
+let private t1 = DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc)
+let private t2 = DateTime(2026, 8, 2, 9, 0, 0, DateTimeKind.Utc)
+
+/// A fact as a pre-1089 store holds it: under its legacy id.
+let private legacyFact (d: FactDraft) (asOf: DateTime) (supersedes: Fact option) : Fact =
+    let f: Fact = {
+        FactId = ""
+        Subject = d.Subject
+        Metric = d.Metric
+        Value = d.Value
+        Period = d.Period
+        AsOf = asOf
+        Method = d.Method
+        Evidence = d.Evidence
+        Confidence = d.Confidence
+        Supersedes = supersedes |> Option.map _.FactId
+        Disclosure = d.Disclosure
+    }
+
+    { f with FactId = legacyFactId f }
+
+/// A scope as an upgrading deployment finds it: one lineage of two (the
+/// second superseding the first) and a second lineage of one, every id
+/// and link legacy.
+let private legacyScope () =
+    let v1 = legacyFact (draft "uk" "revenue" "sha256:aa" 100m) t1 None
+    let v2 = legacyFact (draft "uk" "revenue" "sha256:bb" 110m) t2 (Some v1)
+    let fr = legacyFact (draft "fr" "revenue" "sha256:cc" 90m) t1 None
+    v1, v2, fr
+
+let private migrated (report: Result<FactIdMigrationReport, string>) =
+    match report with
+    | Ok r -> r
+    | Error e -> failtestf "expected the migration to run, got %s" e
+
+/// Phase 1089 — the migration law: a store migrated by its tool answers
+/// every pre-migration query by content, under the recomputed ids, and a
+/// second run changes nothing.
+let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
+    testList $"{name} — fact id migration (Phase 1089)" [
+
+        testCaseAsync "a dry run names what would move and writes nothing"
+        <| async {
+            let h = harness ()
+            let v1, v2, fr = legacyScope ()
+            do! h.SeedRaw [ v1; v2; fr ]
+            let! report = h.Migrate true
+            let r = migrated report
+
+            Expect.isTrue r.DryRun "a dry run says so"
+            Expect.equal r.FactsRead 3 "every fact read"
+            Expect.equal r.Rekeyed 3 "every legacy id would move"
+            Expect.isSome r.FirstDivergent "the first divergent id is named"
+
+            let! stillLegacy = h.Store.Get(h.Scope, v2.FactId)
+            Expect.isSome stillLegacy "nothing was written: the legacy id still resolves"
+            let! notYet = h.Store.Get(h.Scope, Fact.computeFor v2)
+            Expect.isNone notYet "and the new id does not yet"
+        }
+
+        testCaseAsync "a migrated store answers every pre-migration query by content"
+        <| async {
+            let h = harness ()
+            let v1, v2, fr = legacyScope ()
+            do! h.SeedRaw [ v1; v2; fr ]
+
+            let byContent (f: Fact) = f.Subject, f.Metric, f.Value, f.AsOf
+            let! headBefore = h.Store.Query(h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
+
+            let! asOfBefore =
+                h.Store.Query(h.Scope, FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1)
+
+            let! frBefore = h.Store.Query(h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
+
+            let! report = h.Migrate false
+            let r = migrated report
+            Expect.equal r.Rekeyed 3 "every legacy id moved"
+
+            let! headAfter = h.Store.Query(h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
+
+            let! asOfAfter =
+                h.Store.Query(h.Scope, FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1)
+
+            let! frAfter = h.Store.Query(h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
+
+            Expect.equal (headAfter |> List.map byContent) (headBefore |> List.map byContent) "the current head"
+            Expect.equal (asOfAfter |> List.map byContent) (asOfBefore |> List.map byContent) "the AsOf read"
+            Expect.equal (frAfter |> List.map byContent) (frBefore |> List.map byContent) "the other lineage"
+
+            for f in headAfter @ asOfAfter @ frAfter do
+                Expect.equal f.FactId (Fact.computeFor f) "every fact is under its recomputed id"
+
+            let newV1 = Fact.computeFor v1
+            let newV2 = Fact.computeFor v2
+            let! chain = h.Store.QuerySupersessionChain(h.Scope, newV2)
+            Expect.equal (chain |> List.map _.FactId |> Set.ofList) (Set.ofList [ newV1; newV2 ]) "the chain, re-keyed"
+
+            Expect.equal
+                (chain |> List.tryFind (fun f -> f.FactId = newV2) |> Option.bind _.Supersedes)
+                (Some newV1)
+                "the supersession link names the predecessor's new id"
+
+            let! legacy = h.Store.Get(h.Scope, v2.FactId)
+            Expect.isNone legacy "the legacy id is gone — moved, not dual-read"
+        }
+
+        testCaseAsync "a second run changes nothing"
+        <| async {
+            let h = harness ()
+            let v1, v2, fr = legacyScope ()
+            do! h.SeedRaw [ v1; v2; fr ]
+            let! _ = h.Migrate false
+            let! again = h.Migrate false
+            let r = migrated again
+
+            Expect.equal (r.Rekeyed, r.Relinked) (0, 0) "idempotent"
+            Expect.isNone r.FirstDivergent "nothing diverges"
+            Expect.equal r.FactsRead 3 "and nothing was lost or duplicated"
+        }
+    ]
+
 let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
     testList $"{name} — IFactStore contract" [
+
+        // ─── Phase 1089 — the id law ──────────────────────────────────
+
+        testCaseAsync "the stored id is the canonical frame's digest of the documented fields, unaltered"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let d = draft "uk" "revenue" "sha256:1089" 100m
+            let! f = assertOk "assert" store scopeA d
+
+            let expected =
+                ToolUp.Platform.CanonicalFrame.digest [
+                    "fact"
+                    "geography/uk"
+                    "revenue"
+                    "2026-04-01T00:00:00.0000000Z..2026-07-01T00:00:00.0000000Z"
+                    "computed:rollup:1:p0"
+                    "sha256:1089"
+                ]
+
+            Expect.equal f.FactId expected "Fact.compute is a pure function of the frame fields"
+            let! back = store.Get(scopeA, expected)
+            Expect.equal (back |> Option.map _.FactId) (Some expected) "and the store returns it under that id"
+        }
 
         // ─── Content-address idempotency (L2) ─────────────────────────
 

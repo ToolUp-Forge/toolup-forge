@@ -1378,6 +1378,37 @@ let private liveTests (conn: string) =
         // Migrating a blob store into the table (Phase 941).
         migrationLiveTests dataSource
 
+        // Phase 1089 — the id migration law, the same one BlobFactStore
+        // binds. Legacy rows are seeded raw through the Phase 941 copy,
+        // which keeps each fact's content address as it is.
+        IFactStoreContract.idMigrationTests "PostgresFactStore"
+        <| fun () ->
+            let target = store None (fun () -> DateTime.UtcNow)
+            let scope = newScope ()
+
+            {
+                IFactStoreContract.Store = target :> IFactStore
+                Scope = scope
+                SeedRaw =
+                    fun facts -> async {
+                        let source, storage = blobSource ()
+                        let json = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+
+                        for f in facts do
+                            let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(f, json))
+                            let! r = storage.Upload(scope, sprintf "_facts/%s.json" f.FactId, bytes)
+                            Expect.isOk r "seeded"
+
+                        let! copied =
+                            FactStoreMigration.migrate source target (events ()) FactStoreMigrationOptions.defaults [
+                                scope
+                            ]
+
+                        Expect.isTrue copied.Passed "the legacy rows were copied as they are"
+                    }
+                Migrate = fun dryRun -> FactStoreMigration.migrateIds target scope dryRun
+            }
+
         // The default fact-table writer over the companion (Phase 994): the
         // writer contract, one open run per table, run provenance, and run
         // inputs and period slices, unmodified.
