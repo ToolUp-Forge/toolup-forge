@@ -901,7 +901,7 @@ let private compositionTests =
 
             services.AddSingleton<IFactTableWriter>(w.Writer) |> ignore
 
-            match composed.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig composed with
             | Some configure -> configure services |> ignore
             | None -> failtest "the decoration must be registered"
 
@@ -996,7 +996,7 @@ let private composeDemo () : DemoApp =
     services.AddSingleton<IMetricRegistry>(registry) |> ignore
     services.AddSingleton<IFactTableRegistry>(demoTables) |> ignore
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some configure -> configure services |> ignore
     | None -> failtest "the composed fact tier must register its services"
 

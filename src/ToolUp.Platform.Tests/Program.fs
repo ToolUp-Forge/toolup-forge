@@ -2655,6 +2655,8 @@ let private registeredTests =
         OidcSignInSpaPrecedenceTests.tests
         // Phase 1001 - an app supplies ServerApp its secret store.
         ServerAppSecretStoreTests.tests
+        // Phase 1052 - contributions survive the builder order.
+        ServerAppOrderTests.tests
         // Phase 1000 - a forge server binds the address it is configured to.
         ServerBindAddressTests.tests
         // Phase 1024 - a fire-and-forget audit write never faults unobserved.

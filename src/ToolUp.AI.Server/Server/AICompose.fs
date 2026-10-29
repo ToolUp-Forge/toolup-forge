@@ -61,6 +61,13 @@ open ToolUp.AI.SystemPromptBuilder
 //     |> AICompose.withAI factory providerProfile (fun ai -> ai |> AIServerApp.withAIConfig assistant)
 //     |> ServerApp.run
 
+/// Phase 1052 — the AI companion's identity: every DI registration it makes
+/// is a `Contribution.service` under it.
+let private owner: ComponentId = ComponentId.forCompanionSlot "ToolUp.AI"
+
+let private contribute (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp =
+    ServerApp.addContribution (Contribution.service owner register) app
+
 /// Record form of AI compose arguments. Wraps a base `ServerApp` and
 /// adds AI-specific extension points. The required AI fields
 /// (`AIProviderFactory`, `ProviderProfile`) are constructor parameters
@@ -661,10 +668,7 @@ let composeAI (app: AIServerApp) : ServerApp =
     // notification consumers append.
     let extensions: ComposeExtensions = {
         Handlers = baseExtensions.Handlers @ aiHandlers
-        ServiceConfig =
-            match baseExtensions.ServiceConfig with
-            | None -> Some aiServiceConfig
-            | Some baseFn -> Some(fun s -> aiServiceConfig (baseFn s))
+        ServiceConfig = baseExtensions.ServiceConfig
         // AI tool completions and SSE-driven chat publish
         // through `INotificationChannel`; declaring the dependency
         // here flips `compose`'s `NotificationsAuto` resolution to
@@ -697,6 +701,7 @@ let composeAI (app: AIServerApp) : ServerApp =
             Extensions = extensions
             Config = configWithBudgetSchema
     }
+    |> contribute aiServiceConfig
 
 module AIServerApp =
     /// Construct an `AIServerApp` from scratch with the two required AI
@@ -971,16 +976,7 @@ module AIServerApp =
 
             {
                 app with
-                    Base = {
-                        baseWithMetrics with
-                            Extensions = {
-                                baseWithMetrics.Extensions with
-                                    ServiceConfig =
-                                        match baseWithMetrics.Extensions.ServiceConfig with
-                                        | None -> Some register
-                                        | Some baseFn -> Some(fun s -> register (baseFn s))
-                            }
-                    }
+                    Base = baseWithMetrics |> contribute register
             }
 
     /// Opt into the numeric-fidelity answer gate with the
@@ -1011,16 +1007,7 @@ module AIServerApp =
 
         {
             app with
-                Base = {
-                    app.Base with
-                        Extensions = {
-                            app.Base.Extensions with
-                                ServiceConfig =
-                                    match app.Base.Extensions.ServiceConfig with
-                                    | None -> Some register
-                                    | Some baseFn -> Some(fun s -> register (baseFn s))
-                        }
-                }
+                Base = app.Base |> contribute register
         }
 
     /// Opt into Tier-3 fast-path triage. Registers the
@@ -1057,16 +1044,7 @@ module AIServerApp =
 
             {
                 app with
-                    Base = {
-                        app.Base with
-                            Extensions = {
-                                app.Base.Extensions with
-                                    ServiceConfig =
-                                        match app.Base.Extensions.ServiceConfig with
-                                        | None -> Some register
-                                        | Some baseFn -> Some(fun s -> register (baseFn s))
-                            }
-                    }
+                    Base = app.Base |> contribute register
             }
 
     /// Swap the canonical BYOK provider-profile store
@@ -1245,6 +1223,7 @@ module AIServerApp =
 ///     |> AICompose.withAI factory providerProfile (fun ai ->
 ///         ai |> AIServerApp.withAIConfig assistant)
 ///     |> ServerApp.run
+/// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
 let withAI
     (factory: IAIProviderFactory)
     (providerProfile: IProviderProfile)
@@ -1254,17 +1233,6 @@ let withAI
     AIServerApp.createFrom factory providerProfile app |> configure |> composeAI
 
 // ─── Conversation retention / TTL policy ─────────────
-
-let private withServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp = {
-    app with
-        Extensions = {
-            app.Extensions with
-                ServiceConfig =
-                    match app.Extensions.ServiceConfig with
-                    | None -> Some register
-                    | Some baseFn -> Some(fun s -> register (baseFn s))
-        }
-}
 
 /// Compose a scheduled retention sweep over AI conversations (Phase
 /// 504.B). `scopes` are the scope ids the sweep visits, one job per
@@ -1286,6 +1254,7 @@ let private withServiceConfig (register: IServiceCollection -> IServiceCollectio
 /// that purges anything writes one `ConversationsPurged` audit row and
 /// removes every sibling blob a `DeleteConversation` would — the two
 /// share `ConversationRetention.deleteSiblings`.
+/// **Adds** its registrations as a contribution under the AI companion's id; a later `withExtensions` keeps them.
 let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: string list) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         let withPolicy = s.AddSingleton<ConversationRetentionPolicy>(policy)
@@ -1305,7 +1274,7 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
                     |> ScheduledJobDeclaration.withScopes scopes)
             ]
 
-    app |> withServiceConfig register
+    app |> contribute register
 
 // ─── Conversation titling ──────────────────────────
 
@@ -1320,9 +1289,9 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
 /// every title is the conversation's first user message, truncated
 /// (`ConversationTitlingPolicy.firstMessage`), so a deployment that never
 /// calls this pays nothing new.
+/// **Adds** its registrations as a contribution under the AI companion's id; a later `withExtensions` keeps them.
 let withConversationTitling (policy: ConversationTitlingPolicy) (app: ServerApp) : ServerApp =
-    app
-    |> withServiceConfig (fun s -> s.AddSingleton<ConversationTitlingPolicy>(policy))
+    app |> contribute (fun s -> s.AddSingleton<ConversationTitlingPolicy>(policy))
 
 // ─── Team conversation visibility ────────────────────
 
@@ -1344,5 +1313,5 @@ let withTeamConversationVisibility
     match TeamConversationVisibilitySettings.create defaultLevel allowed with
     | Ok settings ->
         app
-        |> withServiceConfig (fun s -> s.AddSingleton<TeamConversationVisibilitySettings>(settings))
+        |> contribute (fun s -> s.AddSingleton<TeamConversationVisibilitySettings>(settings))
     | Error message -> failwith message

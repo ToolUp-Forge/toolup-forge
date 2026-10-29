@@ -552,6 +552,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
 /// regenerate job handler with the scheduler at startup. A deployment that
 /// does not call this mounts nothing (GP 13); its runs still read a wording
 /// saved for their scope, of which there is none.
+/// **Adds** one handler, and its registration through `ServerApp.addServiceConfig`.
 let withPromptAdmin (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         // Phase 1051 — exempt from the profile matrix: a handler
@@ -565,16 +566,8 @@ let withPromptAdmin (app: ServerApp) : ServerApp =
 
         s
 
-    let serviceConfig =
-        match app.Extensions.ServiceConfig with
-        | None -> Some register
-        | Some existing -> Some(fun s -> register (existing s))
-
     {
         app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig = serviceConfig
-                    Handlers = app.Extensions.Handlers @ [ makeApi narrativePromptApi ]
-            }
+            Extensions.Handlers = app.Extensions.Handlers @ [ makeApi narrativePromptApi ]
     }
+    |> ServerApp.addServiceConfig register

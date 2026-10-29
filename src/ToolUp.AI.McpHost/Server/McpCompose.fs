@@ -239,13 +239,12 @@ module McpServerApp =
             let mergedExt: ComposeExtensions = {
                 baseExt with
                     Handlers = baseExt.Handlers @ [ McpHost.routes app.Options ]
-                    ServiceConfig =
-                        match baseExt.ServiceConfig with
-                        | None -> Some mcpServices
-                        | Some baseFn -> Some(fun s -> mcpServices (baseFn s))
             }
 
             { composed with Extensions = mergedExt }
+            |> ServerApp.addContribution (
+                Contribution.service (ComponentId.forCompanionSlot "ToolUp.AI.McpHost") mcpServices
+            )
 
     /// Compose and run.
     ///

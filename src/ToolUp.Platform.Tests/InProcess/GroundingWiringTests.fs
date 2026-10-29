@@ -83,7 +83,7 @@ let tests =
             services.AddSingleton<IEventStore>(InMemoryEventStore.InMemoryEventStore())
             |> ignore
 
-            match app.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig app with
             | Some cfg -> cfg services |> ignore
             | None -> failtest "EnabledFactStore should append a service registration"
 
@@ -95,7 +95,7 @@ let tests =
         test "withFactStore is a no-op under NoFactStore (byte-identical)" {
             let before = ServerApp.empty
             let after = before |> FactsCompose.withFactStore
-            Expect.isTrue after.Extensions.ServiceConfig.IsNone "no service registration under NoFactStore"
+            Expect.isTrue (ServerApp.serviceConfig after).IsNone "no service registration under NoFactStore"
             Expect.isTrue (Object.ReferenceEquals(after, before)) "the app is returned unchanged"
         }
 

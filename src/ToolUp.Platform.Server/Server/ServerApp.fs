@@ -1241,6 +1241,14 @@ type ServerApp = {
     /// team output visibility is not composed, and the manifest carries no
     /// knob for it (byte-identical to before this field).
     TeamOutputVisibility: TeamOutputVisibilitySettings option
+    /// Phase 1052 — what companions and builders add to the deployment, as
+    /// data, in the order they were added. `run` folds the list through
+    /// `ServiceConfig.append` after the consumer's `Extensions.ServiceConfig`,
+    /// so a later `withExtensions` (which sets that record) no longer
+    /// discards a companion's registrations. Add to it with
+    /// `ServerApp.addContribution` or `ServerApp.addServiceConfig`; read
+    /// what `run` will apply with `ServerApp.serviceConfig`.
+    Contributions: Contribution list
 }
 
 module ServerApp =
@@ -1304,7 +1312,51 @@ module ServerApp =
         GrantNotifications = None
         ModelExecutionCompose = None
         TeamOutputVisibility = None
+        Contributions = []
     }
+
+    /// Phase 1052 — **adds** a contribution. Contributions are applied by
+    /// `run` in the order they were added, after the consumer's
+    /// `Extensions.ServiceConfig`; a later `withExtensions` keeps them. A
+    /// companion root contributes under its own `ComponentId`
+    /// (`Contribution.service owner register`).
+    let addContribution (contribution: Contribution) (app: ServerApp) : ServerApp = {
+        app with
+            Contributions = app.Contributions @ [ contribution ]
+    }
+
+    /// The reserved owner of a registration added through `addServiceConfig`:
+    /// the deployment's own composition (the reserved `_deployment` scope).
+    let private deploymentOwner: ComponentId = ComponentId.ofModule "_deployment"
+
+    /// Phase 1052 — **adds** DI registrations: `register` runs after every
+    /// registration added before it, in the order added, and survives a
+    /// later `withExtensions` (the builder that **sets** the whole
+    /// `ComposeExtensions` record). The registrations are owned by the
+    /// deployment itself; a companion that has an identity of its own uses
+    /// `addContribution (Contribution.service owner register)`.
+    let addServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp =
+        addContribution (Contribution.service deploymentOwner register) app
+
+    /// The platform's own builders contribute under the platform's
+    /// reserved identity (`_platform`, the id `EventTopology` and
+    /// `EgressPolicy` already attribute platform-owned work to).
+    let private addPlatformServices (register: IServiceCollection -> IServiceCollection) (app: ServerApp) =
+        addContribution (Contribution.service EgressPolicy.platformComponent register) app
+
+    /// Phase 1052 — the DI registrations `run` applies at the fixed point
+    /// after the SDK's own: the consumer's `Extensions.ServiceConfig`, then
+    /// every contribution's, in the order added. `None` when there are
+    /// none. This is what a test that builds a provider from a composed
+    /// app applies (reading `Extensions.ServiceConfig` alone misses every
+    /// contribution).
+    let serviceConfig (app: ServerApp) : (IServiceCollection -> IServiceCollection) option =
+        app.Contributions
+        |> List.fold
+            (fun acc contribution ->
+                match contribution.Kind with
+                | Service register -> ServiceConfig.append register acc)
+            app.Extensions.ServiceConfig
 
     /// Phase 728 — compose the model-execution leg: register
     /// `IModelRegistry` (and optionally the `IModelScorer`, the Phase 640
@@ -1326,6 +1378,7 @@ module ServerApp =
     /// the artifact → dataset-version lineage edge when an `ILineageStore`
     /// is present. `ModelExecutionComposeOptions.withRegistry` /
     /// `withScorer` / `withPolicy` / `withObserver` override each leg.
+    /// **Sets** the value; a later call replaces it.
     let withModelExecution (options: ComposeModelExecution.ModelExecutionComposeOptions) (app: ServerApp) : ServerApp = {
         app with
             ModelExecutionCompose = Some options
@@ -1344,6 +1397,7 @@ module ServerApp =
     ///            | "dpo" -> [ "compliance@example.test" ]
     ///            | _ -> []))
     /// ```
+    /// **Sets** the value; a later call replaces it.
     let withGrantNotifications (settings: GrantNotification.GrantNotificationSettings) (app: ServerApp) = {
         app with
             GrantNotifications = Some settings
@@ -1375,6 +1429,7 @@ module ServerApp =
     /// after a successful compose emit. Paired with
     /// `ensureCompanionNotAlreadyComposed` at the top of the same
     /// compose seam.
+    /// **Adds** the marker to `ComposedCompanions`.
     let withCompanionMarker (companionName: string) (app: ServerApp) : ServerApp = {
         app with
             ComposedCompanions = app.ComposedCompanions @ [ companionName ]
@@ -1388,6 +1443,7 @@ module ServerApp =
     /// the app holds at that point, so a `withConfig` AFTER them discards
     /// their work. Call it first.
     let withConfig (c: ServerConfig) (app: ServerApp) : ServerApp = { app with Config = c }
+    /// **Sets** the value; a later call replaces it.
     let withAuth (a: IAuthProvider) (app: ServerApp) : ServerApp = { app with Auth = Some a }
 
     /// Phase 159 — select the durable per-subject consent-state store
@@ -1397,6 +1453,7 @@ module ServerApp =
     /// automatically). Default `NoConsentStateStore` registers nothing
     /// (GP 13). Sugar over a `Config` update so the consent store reads
     /// the same as every other fluent opt-in.
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withConsentStateStore (mode: ConsentStateStoreMode) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -1422,6 +1479,7 @@ module ServerApp =
     /// `{ Config with SeedData = mode }`. `EnabledSeedData` refuses
     /// startup on a Team / multi-team shape; `ForcedSeedData` overrides
     /// that refusal deliberately.
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withSeedData (mode: SeedDataMode) (app: ServerApp) : ServerApp = {
         app with
             Config = { app.Config with SeedData = mode }
@@ -1432,12 +1490,15 @@ module ServerApp =
     /// not verify under one of the verifier's trust anchors. Compose with
     /// `DefaultModuleBindingVerifier.create anchors` from
     /// `ToolUp.ArtefactSigning`, or any custom `IModuleBindingVerifier`.
+    /// **Sets** the value; a later call replaces it.
     let withModuleBindingVerifier (verifier: IModuleBindingVerifier) (app: ServerApp) : ServerApp = {
         app with
             ModuleBindingVerifier = Some verifier
     }
 
+    /// **Sets** the value; a later call replaces it.
     let withLogger (l: ILogger) (app: ServerApp) : ServerApp = { app with Logger = Some l }
+    /// **Sets** the value; a later call replaces it.
     let withStorage (s: IBlobStorage) (app: ServerApp) : ServerApp = { app with Storage = Some s }
 
     /// Phase 37 — register a path prefix as a peer-bearer-auth route.
@@ -1468,6 +1529,7 @@ module ServerApp =
             }
     }
 
+    /// **Sets** the value; a later call replaces it.
     let withNotifications (n: INotificationChannel) (app: ServerApp) : ServerApp = { app with Notifications = Some n }
 
     /// 0.5.7 — register a directory-lookup companion. The impl is
@@ -1483,6 +1545,7 @@ module ServerApp =
     /// companion: `ToolUp.AuthProviders.EntraDirectory` —
     /// `EntraDirectory.fromManagedIdentity` reads the App Service
     /// managed identity to call Microsoft Graph's `/users` endpoint.
+    /// **Sets** the value; a later call replaces it.
     let withUserDirectory (directory: IUserDirectory) (app: ServerApp) : ServerApp = {
         app with
             UserDirectory = Some directory
@@ -1597,6 +1660,7 @@ module ServerApp =
     /// retry budgets supply their own `AuditReplicatorOptions` here.
     /// `None` (the default) uses the SDK defaults — see
     /// `AuditReplicatorOptions.defaults` for the trade-offs.
+    /// **Sets** the value; a later call replaces it.
     let withAuditReplicatorOptions (options: AuditReplicatorOptions) (app: ServerApp) : ServerApp = {
         app with
             AuditReplicator = Some options
@@ -1676,6 +1740,7 @@ module ServerApp =
     /// default `NoOpActivitySink` elides every emission at zero cost.
     /// Calling `withActivitySink` twice overrides the prior sink —
     /// only one tracing sink supported per deployment.
+    /// **Sets** the value; a later call replaces it.
     let withActivitySink (sink: IActivitySink) (app: ServerApp) : ServerApp = { app with ActivitySink = Some sink }
 
     /// Phase 9v — declare an outbound rate-limit window for one
@@ -1737,6 +1802,7 @@ module ServerApp =
     /// deployed. Also registers the path with the SPA fallback so a
     /// deployment serving a client bundle answers it from the server
     /// rather than with the shell. Idempotent.
+    /// **Adds** the route and its registration (idempotent); the registration is a platform contribution, so a later `withExtensions` keeps it.
     let withBuildIdentity (app: ServerApp) : ServerApp =
         if
             app.Handlers
@@ -1750,14 +1816,8 @@ module ServerApp =
             {
                 app with
                     Handlers = app.Handlers @ [ DevDiagnosticsHandler.buildIdentityRoute ]
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig =
-                                match app.Extensions.ServiceConfig with
-                                | None -> Some register
-                                | Some baseFn -> Some(fun s -> register (baseFn s))
-                    }
             }
+            |> addPlatformServices register
 
     /// Phase 9o — register a companion-contributed post-deploy smoke
     /// test. Each companion exposes its `ISmokeTest` instance via a
@@ -1881,16 +1941,7 @@ module ServerApp =
         let register (s: IServiceCollection) =
             s.AddSingleton<ICspContributor>(contributor)
 
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some baseFn -> Some(fun s -> register (baseFn s))
-                }
-        }
+        app |> addPlatformServices register
 
     /// Phase 156 — opt into a CSP source mode so the aggregated
     /// `Content-Security-Policy` can cover the deployment's own SSR-emitted
@@ -1912,20 +1963,12 @@ module ServerApp =
     /// Only meaningful alongside `withSecurityHardening` (the source mode
     /// shapes the hardening CSP that `CspMiddleware` stamps). Omitting this
     /// call leaves the resolved header byte-for-byte pre-156 (GP 11).
+    /// **Adds** a registration (a platform contribution, kept by a later `withExtensions`); the last mode added wins on resolve.
     let withCspSourceMode (mode: SecurityHardening.CspSourceMode) (app: ServerApp) : ServerApp =
         let register (s: IServiceCollection) =
             s.AddSingleton<SecurityHardening.CspSourceMode>(mode)
 
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some baseFn -> Some(fun s -> register (baseFn s))
-                }
-        }
+        app |> addPlatformServices register
 
     /// Phase 22 — opt into AES-GCM envelope encryption for the
     /// registered `IBlobStorage`. The resolver determines the
@@ -1947,6 +1990,7 @@ module ServerApp =
     ///
     /// Calling this multiple times keeps the last resolver. Stacking
     /// encryption layers is not supported in v1.
+    /// **Sets** the value; a later call replaces it.
     let withEncryptedBlobStorage (resolver: IBlobEncryptionKeyResolver) (app: ServerApp) : ServerApp = {
         app with
             EncryptionKeyResolver = Some resolver
@@ -1961,6 +2005,7 @@ module ServerApp =
     /// exceptions, so they are never retried. Omitting this call leaves
     /// the storage layer un-decorated and byte-for-byte unchanged (GP 13).
     /// Calling it multiple times keeps the last policy.
+    /// **Sets** the value; a later call replaces it.
     let withStorageResilience (policy: TransientFaultPolicy) (app: ServerApp) : ServerApp = {
         app with
             StorageResilience = WithResiliencePolicy policy
@@ -1970,6 +2015,7 @@ module ServerApp =
     /// resilience. Same shape as `withStorageResilience`; the secret store
     /// is wrapped with `ResilientSecretStore policy`. Omitting this call
     /// leaves the secret store un-decorated (GP 13).
+    /// **Sets** the value; a later call replaces it.
     let withSecretResilience (policy: TransientFaultPolicy) (app: ServerApp) : ServerApp = {
         app with
             SecretResilience = WithResiliencePolicy policy
@@ -1996,6 +2042,7 @@ module ServerApp =
     /// declare it only when it is true. Calling this multiple times keeps
     /// the last store. Omitting it leaves the default byte-for-byte
     /// unchanged.
+    /// **Sets** the value; a later call replaces it.
     let withSecretStore (store: Secrets.ISecretStore) (app: ServerApp) : ServerApp = {
         app with
             SecretStore = Some store
@@ -2011,6 +2058,7 @@ module ServerApp =
     /// its overall ten-second budget. Calling this multiple times keeps the
     /// last value; a zero or negative timeout is refused, because it would
     /// refuse every boot.
+    /// **Sets** the value; a later call replaces it.
     let withSecretStorePreflightTimeout (timeout: TimeSpan) (app: ServerApp) : ServerApp =
         if timeout <= TimeSpan.Zero then
             invalidArg (nameof timeout) (sprintf "the secret-store preflight timeout must be positive (got %O)" timeout)
@@ -2027,6 +2075,7 @@ module ServerApp =
     /// reads simple ceilings from the `_platform.usage` config schema
     /// and is sufficient for most deployments. Calling this multiple
     /// times keeps the last policy.
+    /// **Sets** the value; a later call replaces it.
     let withQuotaPolicy (policy: ITeamQuotaPolicy) (app: ServerApp) : ServerApp = { app with QuotaPolicy = Some policy }
 
     /// Phase 42.B / 43.A — register the canonical platform-wide BYOK
@@ -2045,6 +2094,7 @@ module ServerApp =
     /// opt in here. Calling this multiple times keeps the last store.
     /// Omit it entirely and `compose` registers nothing — GP 13 zero
     /// footprint for deployments with no BYOK surface.
+    /// **Sets** the value; a later call replaces it.
     let withProviderProfile (store: IProviderProfile) (app: ServerApp) : ServerApp = {
         app with
             ProviderProfile = Some store
@@ -2081,6 +2131,7 @@ module ServerApp =
     /// this seam is the `ServerConfig` opt-in that gates that wiring. When
     /// not called, no projection runs and the entity store is byte-identical
     /// (GP 13).
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withEntityGraphProjection (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -2119,6 +2170,7 @@ module ServerApp =
     /// ahead of the seam, so it is re-applied per element here — an
     /// element is never admitted on the envelope's CSRF exemption). Not
     /// calling it serves nothing (GP 13). See `RemotingBatch`.
+    /// **Adds** one pre-middleware thunk (through `withPreMiddleware`).
     let withRemotingBatching (app: ServerApp) : ServerApp =
         app
         |> withPreMiddleware (fun builder ->
@@ -2159,6 +2211,7 @@ module ServerApp =
     /// store here to override the selection either way — e.g. a
     /// `BlobPendingInviteStore` with a custom retry budget, or a
     /// decorated one. Calling this multiple times keeps the last store.
+    /// **Sets** the value; a later call replaces it.
     let withPendingInviteStore (store: IPendingInviteStore) (app: ServerApp) : ServerApp = {
         app with
             PendingInviteStore = Some store
@@ -2175,6 +2228,7 @@ module ServerApp =
     /// `AnonymousSessionMigrator.compose` before calling this. Calling
     /// `withSubjectMigrator` multiple times keeps the last migrator —
     /// merge upstream of the call site instead.
+    /// **Sets** the value; a later call replaces it.
     let withSubjectMigrator (migrator: IAnonymousSessionMigrator) (app: ServerApp) : ServerApp = {
         app with
             SubjectMigrator = Some migrator
@@ -2294,15 +2348,9 @@ module ServerApp =
 
         {
             app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some baseFn -> Some(fun s -> register (baseFn s))
-                        PreMiddleware = app.Extensions.PreMiddleware @ [ mount ]
-                }
+                Extensions.PreMiddleware = app.Extensions.PreMiddleware @ [ mount ]
         }
+        |> addPlatformServices register
 
     /// Phase 9b.A — opt into back-fill of `OnEvent`-triggered jobs on
     /// detected scheduler tick drift. Default: off. When enabled, a
@@ -2318,6 +2366,7 @@ module ServerApp =
     /// Non-idempotent work should stay opt-out and either rely on
     /// upstream event redelivery or accept the missed dispatches as a
     /// trade-off for at-most-once semantics.
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withBackfillMissedTicks (enabled: bool) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -2358,6 +2407,7 @@ module ServerApp =
     /// the working directory — and the replay service re-ingests it
     /// once the store recovers). Only consulted when
     /// `AuditLog = EnabledAuditLog`.
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -2368,6 +2418,7 @@ module ServerApp =
 
     /// Phase 9t — override the `DegradeToFile` spill root (default:
     /// `audit-fallback/` under the process working directory).
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withAuditFallbackDirectory (directory: string) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -2386,6 +2437,7 @@ module ServerApp =
     /// as committed (at-least-once; never-committed saves are
     /// discarded unpublished). Resolve `OutboxEntityStore` from DI
     /// for mutations whose events must not be lost.
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withEntityOutbox (enabled: bool) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -2405,6 +2457,7 @@ module ServerApp =
     /// `ResultStore.LineageOutbox`. Independent of `withEntityOutbox`; the
     /// two relays share the `EntityOutboxRelaySubsystem` gate, so a
     /// process profile that skips that subsystem skips both.
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withDurableLineage (enabled: bool) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -2421,6 +2474,7 @@ module ServerApp =
     /// Pure projection over signals that already exist — no new gate, no
     /// new control-plane behaviour. A deployment that never calls this
     /// stays `NoReadinessReport` and is byte-for-byte unchanged (GP 13).
+    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
     let withDeploymentReadiness (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -2444,16 +2498,7 @@ module ServerApp =
 
             services
 
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some existing -> Some(fun s -> register (existing s))
-                }
-        }
+        app |> addPlatformServices register
 
     /// Phase 686 — mount the Platform-Admin-gated deployment
     /// verification report. Flips `ServerConfig.DeploymentVerification`
@@ -2481,6 +2526,7 @@ module ServerApp =
     /// probe requests through the pipeline, at boot only), so the report's
     /// hardening-baseline section has something to say. Informational: with
     /// no `withHostingBaselinePolicy` it refuses nothing.
+    /// **Sets** `ServerConfig.DeploymentVerification` and **adds** the baseline-record registration (a platform contribution).
     let withDeploymentVerification (app: ServerApp) : ServerApp =
         registerHostingBaselineRecord {
             app with
@@ -2542,6 +2588,7 @@ module ServerApp =
     /// own (`DeploymentVerificationEvidence.withRemotingDecoders`), as it
     /// must: that profile's refusal is the root's act, and the report
     /// should carry the facet the refusal was judged on.
+    /// **Adds** a registration (a platform contribution, kept by a later `withExtensions`).
     let withDeploymentVerificationEvidence (evidence: IDeploymentVerificationEvidence) (app: ServerApp) : ServerApp =
         let register (services: IServiceCollection) =
             services.AddSingleton<IDeploymentVerificationEvidence>(
@@ -2579,18 +2626,7 @@ module ServerApp =
                         DeploymentVerificationEvidence.withGroundingContinuity derived evidence)
             )
 
-        let serviceConfig =
-            match app.Extensions.ServiceConfig with
-            | None -> Some register
-            | Some existing -> Some(fun s -> register (existing s))
-
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig = serviceConfig
-                }
-        }
+        app |> addPlatformServices register
 
     /// Phase 771 — declare the hardening-baseline floor this deployment is
     /// judged against.
@@ -2612,21 +2648,13 @@ module ServerApp =
     /// )
     /// |> ServerApp.run
     /// ```
+    /// **Adds** a registration (a platform contribution, kept by a later `withExtensions`); the last policy added wins on resolve.
     let withHostingBaselinePolicy (policy: HostingBaselinePolicy) (app: ServerApp) : ServerApp =
         let register (services: IServiceCollection) =
             services.AddSingleton<HostingBaselinePolicy>(policy) |> ignore
             services
 
-        registerHostingBaselineRecord {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some existing -> Some(fun s -> register (existing s))
-                }
-        }
+        app |> addPlatformServices register |> registerHostingBaselineRecord
 
     /// Phase 686 — map a boot verification outcome onto the report's
     /// tier-neutral `BootSealIntegrity`.
@@ -2719,6 +2747,7 @@ module ServerApp =
     /// `IBlobStorage` / `IAuditLog` / `ILogger` from the built provider on
     /// every run, so nothing is captured at compose time and the handler
     /// stays stateless between invocations (GP 12 rule 4).
+    /// **Adds** a registration (a platform contribution, kept by a later `withExtensions`).
     let withDataObjectOrphanSweep
         (policy: DataObjectOrphanSweep.DataObjectOrphanSweepPolicy)
         (app: ServerApp)
@@ -2742,16 +2771,7 @@ module ServerApp =
                         |> ScheduledJobDeclaration.withScopes policy.Scopes)
                 ]
 
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some baseFn -> Some(fun s -> register (baseFn s))
-                }
-        }
+        app |> addPlatformServices register
 
     /// Fan a `ServerModule`'s contributions into the app's accumulating lists.
     /// Honours `app.Config.ModuleFilter` — modules whose name doesn't match
@@ -2791,16 +2811,7 @@ module ServerApp =
 
                 services
 
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig =
-                                match app.Extensions.ServiceConfig with
-                                | None -> Some register
-                                | Some existing -> Some(fun services -> register (existing services))
-                    }
-            }
+            app |> addPlatformServices register
         else
             app
 
@@ -2836,17 +2847,9 @@ module ServerApp =
 
                 services
 
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig =
-                                match app.Extensions.ServiceConfig with
-                                | None -> Some register
-                                | Some existing -> Some(fun services -> register (existing services))
-                    }
-            }
+            app |> addPlatformServices register
 
+    /// **Adds** the module's contributions to every accumulating list.
     let addModule (m: ServerModule) (app: ServerApp) : ServerApp =
         if not (ModuleFilter.matches app.Config.ModuleFilter m.Name) then
             // Phase 169 — a name-filtered module is dropped, but the drop is
@@ -3104,6 +3107,7 @@ module ServerApp =
                     m.DeliveryCompletedHooks
                     |> List.fold (fun a hook -> withDeliveryCompleted (hook.Name, hook.Callback) a) composed
 
+    /// **Adds** each module in order, as `addModule` does.
     let addModules (modules: ServerModule list) (app: ServerApp) : ServerApp =
         modules |> List.fold (fun a m -> addModule m a) app
 
@@ -3434,31 +3438,36 @@ module ServerApp =
         // `IProviderProfile` DI singleton into the extension's
         // `ServiceConfig` so in-process consumers resolve it. `None`
         // leaves `Extensions` untouched — zero footprint (GP 13).
+        // Phase 1052 — the starting point is the consumer's `Extensions` with
+        // every contribution folded after its `ServiceConfig`, in the order
+        // added (`serviceConfig`); the platform's run-time families below
+        // append after them, so the descriptor order is the pre-1052 one.
+        let contributed = {
+            app.Extensions with
+                ServiceConfig = serviceConfig app
+        }
+
         let withProviderProfileService =
             match app.ProviderProfile with
-            | None -> app.Extensions
-            | Some store ->
-                let register (s: IServiceCollection) = s.AddSingleton<IProviderProfile>(store)
-
-                {
-                    app.Extensions with
-                        // Phase 44 — mount the `IProviderProfileApi`
-                        // transport on the SAME gate that registers the
-                        // store, which is the shape every other optional
-                        // route in `BuildRouteHandlers` uses: the flag
-                        // that mounts the route is the flag that
-                        // registers what it resolves, so the handler can
-                        // never meet a null store and a deployment with
-                        // no BYOK surface mounts nothing at all (GP 13).
-                        // A consumer embedding `ProviderProfileUI` needs
-                        // no second composition call — supplying the
-                        // store IS the composition act.
-                        Handlers = app.Extensions.Handlers @ ProviderProfileApiHandler.routeHandlers (Some store)
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some baseFn -> Some(fun s -> register (baseFn s))
-                }
+            | None -> contributed
+            | Some store -> {
+                contributed with
+                    // Phase 44 — mount the `IProviderProfileApi`
+                    // transport on the SAME gate that registers the
+                    // store, which is the shape every other optional
+                    // route in `BuildRouteHandlers` uses: the flag
+                    // that mounts the route is the flag that
+                    // registers what it resolves, so the handler can
+                    // never meet a null store and a deployment with
+                    // no BYOK surface mounts nothing at all (GP 13).
+                    // A consumer embedding `ProviderProfileUI` needs
+                    // no second composition call — supplying the
+                    // store IS the composition act.
+                    Handlers = contributed.Handlers @ ProviderProfileApiHandler.routeHandlers (Some store)
+                    ServiceConfig =
+                        contributed.ServiceConfig
+                        |> ServiceConfig.append (fun s -> s.AddSingleton<IProviderProfile>(store))
+              }
 
         // Phase 9h — DSR exporters / erasure handlers. Folded as
         // `services.AddSingleton<IDataExporter>(exp)` per registered
@@ -3472,29 +3481,17 @@ module ServerApp =
         // deployment that registers exporters without enabling the
         // substrate pays only the DI-registration cost (~tens of
         // bytes per impl) and the route never reaches them.
-        let extensions =
-            let appendRegistration
-                (current: ComposeExtensions)
-                (register: IServiceCollection -> IServiceCollection)
-                : ComposeExtensions =
-                {
-                    current with
-                        ServiceConfig =
-                            match current.ServiceConfig with
-                            | None -> Some register
-                            | Some baseFn -> Some(fun s -> register (baseFn s))
-                }
-
+        let registrations =
             let withExporters =
                 app.DataExporters
                 |> List.fold
-                    (fun acc exp -> appendRegistration acc (fun s -> s.AddSingleton<IDataExporter>(exp)))
-                    withProviderProfileService
+                    (fun acc exp -> acc |> ServiceConfig.append (fun s -> s.AddSingleton<IDataExporter>(exp)))
+                    withProviderProfileService.ServiceConfig
 
             let withErasureHandlers =
                 app.ErasureHandlers
                 |> List.fold
-                    (fun acc h -> appendRegistration acc (fun s -> s.AddSingleton<IErasureHandler>(h)))
+                    (fun acc h -> acc |> ServiceConfig.append (fun s -> s.AddSingleton<IErasureHandler>(h)))
                     withExporters
 
             // Fold each registered OAuth credential flow into DI so the
@@ -3503,7 +3500,9 @@ module ServerApp =
             let withOAuthFlows =
                 app.OAuthCredentialFlows
                 |> List.fold
-                    (fun acc flow -> appendRegistration acc (fun s -> s.AddSingleton<IOAuthCredentialFlow>(flow)))
+                    (fun acc flow ->
+                        acc
+                        |> ServiceConfig.append (fun s -> s.AddSingleton<IOAuthCredentialFlow>(flow)))
                     withErasureHandlers
 
             // Phase 10g — fold each registered OAuth 1.0a flow into DI so the
@@ -3513,7 +3512,7 @@ module ServerApp =
             let withOAuth1aFlows =
                 app.OAuth1aFlows
                 |> List.fold
-                    (fun acc flow -> appendRegistration acc (fun s -> s.AddSingleton<IOAuth1aFlow>(flow)))
+                    (fun acc flow -> acc |> ServiceConfig.append (fun s -> s.AddSingleton<IOAuth1aFlow>(flow)))
                     withOAuthFlows
 
             // 0.5.7 — fold the optional `IUserDirectory` companion into
@@ -3526,7 +3525,8 @@ module ServerApp =
                 match app.UserDirectory with
                 | None -> withOAuth1aFlows
                 | Some directory ->
-                    appendRegistration withOAuth1aFlows (fun s -> s.AddSingleton<IUserDirectory>(directory))
+                    withOAuth1aFlows
+                    |> ServiceConfig.append (fun s -> s.AddSingleton<IUserDirectory>(directory))
 
             // Phase 519 — build the grounding metric & subject registry
             // from the accumulated module declarations and fold
@@ -3543,7 +3543,8 @@ module ServerApp =
                     let registry =
                         Grounding.MetricRegistry.build app.RegisteredMetrics app.RegisteredSubjects
 
-                    appendRegistration withUserDirectory (fun s -> s.AddSingleton<Grounding.IMetricRegistry>(registry))
+                    withUserDirectory
+                    |> ServiceConfig.append (fun s -> s.AddSingleton<Grounding.IMetricRegistry>(registry))
 
             // Phase 887 — fold the declared fact tables into an
             // `IFactTableRegistry` singleton and register the compose-time
@@ -3560,10 +3561,11 @@ module ServerApp =
                         Grounding.FactTableRegistry.build app.RegisteredFactTables app.FactTableBindings
 
                     let withRegistry =
-                        appendRegistration withMetricRegistry (fun s ->
-                            s.AddSingleton<Grounding.IFactTableRegistry>(tables))
+                        withMetricRegistry
+                        |> ServiceConfig.append (fun s -> s.AddSingleton<Grounding.IFactTableRegistry>(tables))
 
-                    appendRegistration withRegistry (FactTablePreflight.serviceRegistration (factTableComposition app))
+                    withRegistry
+                    |> ServiceConfig.append (FactTablePreflight.serviceRegistration (factTableComposition app))
 
             // Phase 447 — fold each registered seed pack into DI as an
             // `ISeedPack` singleton so `SeedDataLoader` (invoked from
@@ -3573,7 +3575,7 @@ module ServerApp =
             let withSeedPacks =
                 app.SeedPacks
                 |> List.fold
-                    (fun acc pack -> appendRegistration acc (fun s -> s.AddSingleton<ISeedPack>(pack)))
+                    (fun acc pack -> acc |> ServiceConfig.append (fun s -> s.AddSingleton<ISeedPack>(pack)))
                     withFactTableRegistry
 
             // Phase 551 — project the accumulated module grant-policy
@@ -3605,7 +3607,8 @@ module ServerApp =
                 else
                     match GrantPolicyGuard.ModuleGrantPolicyRegistry.orphans registry app.ModuleNames with
                     | [] ->
-                        appendRegistration withSeedPacks (fun s ->
+                        withSeedPacks
+                        |> ServiceConfig.append (fun s ->
                             s.AddSingleton<GrantPolicyGuard.ModuleGrantPolicyRegistry>(registry))
                     | orphans ->
                         failwith
@@ -3637,8 +3640,8 @@ module ServerApp =
                 else
                     match ModuleAIExposureRegistry.orphans registry app.ModuleNames with
                     | [] ->
-                        appendRegistration withGrantPolicies (fun s ->
-                            s.AddSingleton<ModuleAIExposureRegistry>(registry))
+                        withGrantPolicies
+                        |> ServiceConfig.append (fun s -> s.AddSingleton<ModuleAIExposureRegistry>(registry))
                     | orphans ->
                         failwith
                             $"""AI-exposure registry names module(s) that are not registered: {String.Join(", ", orphans)}. A declared ModuleAIExposure must be keyed by a composed module's Name, or the module stays invisible to the _platform.ai.* tools with no diagnostic anywhere."""
@@ -3652,7 +3655,8 @@ module ServerApp =
             let withGrantNotificationSettings =
                 match app.GrantNotifications with
                 | Some settings when not (List.isEmpty app.ModuleGrantPolicies) ->
-                    appendRegistration withAIExposures (fun s ->
+                    withAIExposures
+                    |> ServiceConfig.append (fun s ->
                         s.AddSingleton<GrantNotification.GrantNotificationSettings>(settings))
                 | _ -> withAIExposures
 
@@ -3670,7 +3674,8 @@ module ServerApp =
                 match app.ModelExecutionCompose with
                 | None -> withGrantNotificationSettings
                 | Some options ->
-                    appendRegistration withGrantNotificationSettings (fun s ->
+                    withGrantNotificationSettings
+                    |> ServiceConfig.append (fun s ->
                         ComposeModelExecution.register options s
                         s)
 
@@ -3702,9 +3707,8 @@ module ServerApp =
             let inspectedReferences = compositionReferences app
 
             let withCompositionValidator =
-                appendRegistration
-                    withModelExecutionLeg
-                    (CompositionValidator.serviceRegistration inspectedManifest inspectedReferences)
+                withModelExecutionLeg
+                |> ServiceConfig.append (CompositionValidator.serviceRegistration inspectedManifest inspectedReferences)
 
             // Phase 593 — register the composition-inspector snapshot for
             // `CompositionInspectorHandler` to serve. Registered HERE, beside
@@ -3723,7 +3727,8 @@ module ServerApp =
             // describes, not the page load that materialised it.
             let inspectorCapturedAtUtc = DateTime.UtcNow
 
-            appendRegistration withCompositionValidator (fun services ->
+            withCompositionValidator
+            |> ServiceConfig.append (fun services ->
                 services.AddSingleton<CompositionInspectorHandler.CompositionInspectorSnapshot>(
                     Func<IServiceProvider, CompositionInspectorHandler.CompositionInspectorSnapshot>(fun _ ->
                         CompositionInspectorHandler.CompositionInspectorSnapshot.ofComposition
@@ -3745,6 +3750,11 @@ module ServerApp =
                 DeploymentReadinessReport.registerManifestLiveInterface
                     (CompositionManifest.liveInterfaceTools inspectedManifest)
                     services)
+
+        let extensions = {
+            withProviderProfileService with
+                ServiceConfig = registrations
+        }
 
         // Phase 593 — mount the composition-inspector route.
         //

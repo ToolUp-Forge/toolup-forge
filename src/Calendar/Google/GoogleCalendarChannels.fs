@@ -169,16 +169,7 @@ let withChannelRenewal
 
     {
         app with
-            Base = {
-                baseApp with
-                    Extensions = {
-                        baseApp.Extensions with
-                            ServiceConfig =
-                                match baseApp.Extensions.ServiceConfig with
-                                | None -> Some register
-                                | Some baseFn -> Some(fun s -> register (baseFn s))
-                    }
-            }
+            Base = baseApp |> ServerApp.addServiceConfig register
     }
 
 // ─── The notification route ─────────────────────────────────────────

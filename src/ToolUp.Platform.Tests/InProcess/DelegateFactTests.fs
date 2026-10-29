@@ -849,7 +849,7 @@ let private compositionTests =
             services.AddSingleton<IFactTableRegistry>(tables) |> ignore
             services.AddSingleton<IFactStore>(inner) |> ignore
 
-            match app.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig app with
             | Some configure -> configure services |> ignore
             | None -> failtest "the decoration must be registered"
 

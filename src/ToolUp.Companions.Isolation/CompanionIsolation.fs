@@ -161,13 +161,4 @@ module CompanionIsolation =
 
         let app = ServerApp.withConfigValidator (configValidator isolation) app
 
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig =
-                            match app.Extensions.ServiceConfig with
-                            | None -> Some register
-                            | Some baseFn -> Some(fun services -> register (baseFn services))
-                }
-        }
+        app |> ServerApp.addServiceConfig register

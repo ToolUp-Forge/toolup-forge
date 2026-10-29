@@ -105,7 +105,7 @@ let private composed (config: ServerConfig) : IServiceCollection =
         |> ToolUp.RAG.RAGCompose.composeRAG
 
     let services =
-        match app.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig app with
         | Some configure -> configure services
         | None -> services
 
