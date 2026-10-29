@@ -590,8 +590,7 @@ let exactly (#raw #flt: Type0) (arity: nat) : decoder raw flt (list (value raw f
 /// model of its cost.
 let rec item_at (#raw #flt: Type0) (xs: list (value raw flt)) (position: nat{position < count xs})
   : Tot (value raw flt) (decreases xs) =
-  match xs with
-  | head :: tail -> if position = 0 then head else item_at tail (position - 1)
+  if position = 0 then List.Tot.hd xs else item_at (List.Tot.tl xs) (position - 1)
 
 /// F#: `Decode.elementAt` — present exactly when the position is inside
 /// the array's length. (The F# also answers a NEGATIVE position absent;

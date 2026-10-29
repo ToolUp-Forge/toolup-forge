@@ -3,7 +3,33 @@ module ElmishRingArray
 #nowarn "26" "40" "49" "64" "1182" "3220"
 open FStarCustard
 
-type elmishRingArray_ring<'t> = {
+let pop_state (m : ElmishRing.ring<'t>) : ElmishRing.ring<'t> =
+  (let scrut = (ElmishRing.pop m) in
+   (scrut).first)
+
+let pop_out (m : ElmishRing.ring<'t>) : ElmishRing.opt<ElmishRing.slot<'t>> =
+  (let scrut = (ElmishRing.pop m) in
+   (scrut).second)
+
+let out_of (o : option<'t>) : ElmishRing.opt<ElmishRing.slot<'t>> =
+  (match o with
+   | None -> ElmishRing.ONone
+   | (Some (v)) -> (ElmishRing.OSome ((ElmishRing.Written (v)))))
+
+let max_capacity : bigint =
+  (2147483647I)
+
+let max_growable : bigint =
+  (1073741823I)
+
+let rot (cap : bigint) (rix : bigint) (j : bigint) : bigint =
+  (if (Prims.op_Greater_Equals (Prims.op_Plus rix j) cap) then (Prims.op_Minus (Prims.op_Plus rix j) cap) else (Prims.op_Plus rix j))
+
+let succ_sz (c : uint64) (i : uint64) : uint64 =
+  (let i1 = (i + (1UL)) in
+   (if (i1 >= c) then (0UL) else i1))
+
+type ring<'t> = {
   items : (('t)[] ref);
   cap : (uint64 ref);
   wix : (uint64 ref);
@@ -12,23 +38,34 @@ type elmishRingArray_ring<'t> = {
   dflt : 't;
 }
 
-let elmishRingArray_succ_sz (c : uint64) (i : uint64) : uint64 =
-  (let i1 = (i + (1UL)) in
-   (if (i1 >= c) then (0UL) else i1))
+let create (size : uint64) (dflt : 't) : ring<'t> =
+  (let n = (if (size > (2UL)) then size else (2UL)) in
+   let v = (Array.create (int n) dflt) in
+   let items = (ref v) in
+   let cap = (ref n) in
+   let wix = (ref (0UL)) in
+   let rix = (ref (0UL)) in
+   let readable = (ref false) in
+   { ring.items = items;
+     cap = cap;
+     wix = wix;
+     rix = rix;
+     readable = readable;
+     dflt = dflt })
 
-let elmishRingArray_pop (rb : elmishRingArray_ring<'t>) : option<'t> =
+let pop (rb : ring<'t>) : option<'t> =
   (let rdv = (((rb).readable).Value) in
    (if rdv then (let vv = (((rb).items).Value) in
                  let cv = (((rb).cap).Value) in
                  let wv = (((rb).wix).Value) in
                  let rv = (((rb).rix).Value) in
                  let x = ((vv).[(int rv)]) in
-                 let r1 = (elmishRingArray_succ_sz cv rv) in
+                 let r1 = (succ_sz cv rv) in
                  (if (r1 = wv) then ((((rb).readable).Value <- false);
                                      (Some (x))) else ((((rb).rix).Value <- r1);
                                                        (Some (x))))) else None))
 
-let elmishRingArray_grow (src : ('t)[]) (cv : uint64) (rv : uint64) (fill : 't) : ('t)[] =
+let grow (src : ('t)[]) (cv : uint64) (rv : uint64) (fill : 't) : ('t)[] =
   (let nc = ((cv + cv) + (1UL)) in
    let dst = (Array.create (int nc) fill) in
    let j = (ref (0UL)) in
@@ -42,15 +79,15 @@ let elmishRingArray_grow (src : ('t)[]) (cv : uint64) (rv : uint64) (fill : 't) 
        ((j).Value <- (vj + (1UL)))));
    dst)
 
-let elmishRingArray_push (rb : elmishRingArray_ring<'t>) (x : 't) : bool =
+let push (rb : ring<'t>) (x : 't) : bool =
   (let rdv = (((rb).readable).Value) in
    let vv = (((rb).items).Value) in
    let cv = (((rb).cap).Value) in
    let wv = (((rb).wix).Value) in
    (if rdv then (let rv = (((rb).rix).Value) in
-                 let w1 = (elmishRingArray_succ_sz cv wv) in
+                 let w1 = (succ_sz cv wv) in
                  (if (w1 = rv) then (if (cv > (1073741823UL)) then false else (((vv).[(int wv)] <- x);
-                                                                               let nv = (elmishRingArray_grow vv cv rv (rb).dflt) in
+                                                                               let nv = (grow vv cv rv (rb).dflt) in
                                                                                ();
                                                                                (((rb).items).Value <- nv);
                                                                                (((rb).cap).Value <- ((cv + cv) + (1UL)));
@@ -60,22 +97,28 @@ let elmishRingArray_push (rb : elmishRingArray_ring<'t>) (x : 't) : bool =
                                                                                             (((rb).wix).Value <- w1);
                                                                                             true))) else (((vv).[(int wv)] <- x);
                                                                                                           (((rb).rix).Value <- wv);
-                                                                                                          (((rb).wix).Value <- (elmishRingArray_succ_sz cv wv));
+                                                                                                          (((rb).wix).Value <- (succ_sz cv wv));
                                                                                                           (((rb).readable).Value <- true);
                                                                                                           true)))
 
-let elmishRingArray_create (size : uint64) (dflt : 't) : elmishRingArray_ring<'t> =
-  (let n = (if (size > (2UL)) then size else (2UL)) in
-   let v = (Array.create (int n) dflt) in
-   let items = (ref v) in
-   let cap = (ref n) in
-   let wix = (ref (0UL)) in
-   let rix = (ref (0UL)) in
-   let readable = (ref false) in
-   { elmishRingArray_ring.items = items;
-     cap = cap;
-     wix = wix;
-     rix = rix;
-     readable = readable;
-     dflt = dflt })
+let rec outs_of (os : list<option<'t>>) : list<ElmishRing.opt<ElmishRing.slot<'t>>> =
+  (match os with
+   | [] -> []
+   | (o :: rest) -> ((out_of o) :: (outs_of rest)))
+
+let rec run (rb : ring<'t>) (ops : list<ElmishRing.op<'t>>) : (list<option<'t>> * list<ElmishRing.op<'t>>) =
+  (match ops with
+   | [] -> ([], [])
+   | (op :: rest) -> (match op with
+                      | (ElmishRing.Push (x)) -> 
+                          (let ok1 = (push rb x) in
+                           (if ok1 then (run rb rest) else ([], ((ElmishRing.Push (x)) :: rest))))
+                      | ElmishRing.Pop -> 
+                          (let o = (pop rb) in
+                           let res = (run rb rest) in
+                           ((o :: (match res with
+                                   | (u__1, u__2) -> 
+                                       u__1)), (match res with
+                                                | (u__1, u__2) -> 
+                                                    u__2)))))
 

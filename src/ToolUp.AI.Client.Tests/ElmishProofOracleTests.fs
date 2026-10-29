@@ -15,17 +15,19 @@
 ///
 /// ─── The corpus, and — since Phase 850 — the extraction itself ───────
 ///
-/// Until Phase 850 the extraction compiled on .NET only: the F* extractor
-/// emits pre-F#-8 layout that needed `--strict-indentation-`, which Fable
-/// reads from no fsproj, so the corpus carried the model's ANSWER instead
-/// of the model. Phase 850's layout normaliser (`proofs/normalise-extraction.fsx`)
-/// made the committed extraction indentation-clean F#, and this pack now
-/// ALSO compiles `proofs/oracle/ElmishRing.fs` — the same bytes the .NET
-/// oracle compiles — over the machine-integer `Prims` in
-/// `proofs/oracle/fable/`, and runs the ring model live (the Phase 850
-/// cases below). The corpus stays: it is now also the check that the two
-/// hosts' shims — `BigInteger` on .NET, `int` here — compute the same
-/// model, which no single host can assert alone.
+/// Until Phase 850 the extraction compiled on .NET only: the legacy F*
+/// printer emitted pre-F#-8 layout that needed `--strict-indentation-`,
+/// which Fable reads from no fsproj, so the corpus carried the model's
+/// ANSWER instead of the model. Phase 850's layout normaliser made the
+/// committed extraction indentation-clean F#, and this pack began to ALSO
+/// compile the ring extraction over a machine-integer `Prims` shim of its
+/// own and run the model live (the Phase 850 cases below). Since Phase 957
+/// the extraction is Custard's (`proofs/oracle/custard/ElmishRing.fs`, the
+/// same bytes the .NET oracle compiles), over `bigint` on both hosts and a
+/// stand-in for Custard's support library DERIVED from the generated one
+/// (`proofs/oracle/fable/FStarCustard.fs`): there is no shim, and nothing
+/// to normalise. The corpus stays: it is the .NET host's record of the
+/// model's verdicts, and the live model here is held to it on every run.
 ///
 /// ─── Why this pack and not a browser-smoke scenario ──────────────────
 ///
@@ -75,9 +77,11 @@ let private diffCases () =
 
 // ─── Phase 850 — the extracted ring, run DIRECTLY on this host ───────
 //
-// The bridge is the .NET host's (`InProcess/ElmishProofOracleTests.fs`)
-// minus the BigInteger: under the Fable-host shim `Prims.int` IS `int`.
-// Short and case for case, for the reason Rung 3 gives.
+// The bridge is the .NET host's (`InProcess/ElmishProofOracleTests.fs`),
+// over the same `bigint` (Fable carries it as a BigInt): since Phase 957
+// both hosts compile the one Custard extraction over its own support
+// library's `Prims`, and there is no per-host shim to differ in. Short and
+// case for case, for the reason Rung 3 gives.
 
 let private toModelOps (ops: RingOp list) : ElmishRing.op<int> list =
     ops
@@ -96,13 +100,11 @@ let private ofModelOutput (out: ElmishRing.opt<ElmishRing.slot<int>>) : Result<i
 
 /// The extracted model over an op sequence, computed on THIS host.
 let private modelRing (capacity: int) (ops: RingOp list) : int option list =
-    match ElmishRing.run (ElmishRing.create capacity) (toModelOps ops) with
-    | ElmishRing.Pair(_, outs) ->
-        outs
-        |> List.map (fun o ->
-            match ofModelOutput o with
-            | Ok v -> v
-            | Error e -> failwith e)
+    (ElmishRing.run (ElmishRing.create (bigint capacity)) (toModelOps ops)).second
+    |> List.map (fun o ->
+        match ofModelOutput o with
+        | Ok v -> v
+        | Error e -> failwith e)
 
 /// A second campaign, drawn from a seed the corpus never used: the live
 /// model can judge sequences no .NET run recorded, which a replay cannot.
@@ -129,10 +131,10 @@ let private perOpNs (rounds: int) (ops: int) (body: unit -> unit) : float =
 // floors; the faithful skeleton and its six go-reds; the loop properties
 // run on production — is one case here, over the SAME campaign (the
 // first row asserts the pinned fingerprint the .NET pack asserts too),
-// with the extraction `proofs/oracle/ElmishLoop.fs` compiled by Fable
-// over the machine-integer shim (the second row holds its verdicts to
-// the ones the `BigInteger` shim computes). Nothing is replayed from a
-// file: the model runs live, as the ring's does since 850.
+// with the extraction `proofs/oracle/custard/ElmishLoop.fs` compiled by
+// Fable over `bigint` (the second row holds its verdicts, by fingerprint,
+// to the ones the .NET host computes). Nothing is replayed from a file:
+// the model runs live, as the ring's does since 850.
 //
 // What does NOT run here is what is not the campaign: the .NET pack's
 // hand-written production scenarios, which read the process-wide
@@ -177,14 +179,13 @@ let private MaxGrowable = 1073741823UL
 /// are `uint64`, which Fable carries as a JavaScript BigInt — which is
 /// what Phase 956 measured costing the ring its lead on this host's
 /// steady state (the dispatch-shape arm below).
-type private ArrayRing<'item>(ring: ElmishRingArray.elmishRingArray_ring<'item>) =
-    new(size: int) = ArrayRing(ElmishRingArray.elmishRingArray_create (uint64 (max size 0)) Unchecked.defaultof<'item>)
+type private ArrayRing<'item>(ring: ElmishRingArray.ring<'item>) =
+    new(size: int) = ArrayRing(ElmishRingArray.create (uint64 (max size 0)) Unchecked.defaultof<'item>)
 
-    member _.Pop() : 'item option =
-        ElmishRingArray.elmishRingArray_pop ring
+    member _.Pop() : 'item option = ElmishRingArray.pop ring
 
     member _.Push(item: 'item) : unit =
-        if not (ElmishRingArray.elmishRingArray_push ring item) then
+        if not (ElmishRingArray.push ring item) then
             invalidOp ArrayRingCeilingMessage
 
     /// The backing array's length — read by the campaign, never by a client.
@@ -331,7 +332,7 @@ let private arrayRingTests =
             // The .NET host's case: the extraction's own record built in the
             // state `at_ceiling` names over a small array, because Phase 956
             // lifted the ceiling past anything a test can push its way to.
-            let atCeiling () : ElmishRingArray.elmishRingArray_ring<int> = {
+            let atCeiling () : ElmishRingArray.ring<int> = {
                 items = ref [| 10; 11; 12; 13; 14; 15; 16; 17 |]
                 cap = ref (MaxGrowable + 1UL)
                 wix = ref 2UL
@@ -344,7 +345,7 @@ let private arrayRingTests =
             let before = raw.items.Value
 
             Expect.isFalse
-                (ElmishRingArray.elmishRingArray_push raw 99)
+                (ElmishRingArray.push raw 99)
                 "the extraction refuses the push that would grow past max_growable"
 
             Expect.isTrue (obj.ReferenceEquals(raw.items.Value, before)) "the refused push kept the array"
@@ -355,7 +356,7 @@ let private arrayRingTests =
                 (raw.wix.Value = 2UL && raw.rix.Value = 3UL && raw.readable.Value)
                 "the refused push moved an index"
 
-            Expect.equal (ElmishRingArray.elmishRingArray_pop raw) (Some 13) "the oldest unread item is still first"
+            Expect.equal (ElmishRingArray.pop raw) (Some 13) "the oldest unread item is still first"
 
             let rb = ArrayRing<int>(atCeiling ())
 
@@ -605,11 +606,11 @@ let tests =
         testCase
             "Phase 850 - the extracted ring runs directly under Fable and reproduces the verdicts the .NET host recorded"
             (fun () ->
-                // The two shims held to each other: the corpus was computed on
-                // .NET with `Prims.int = BigInteger`; this host computes the
-                // same model with `Prims.int = int`. Disagreement here would be
-                // the shim, not the ring — which is exactly what the machine-
-                // integer assumption on the ladder needs a test to say.
+                // The corpus was computed on .NET; this host computes the same
+                // extraction, over the same `bigint`, under Fable. Until Phase
+                // 957 the two hosts ran different `Prims` shims and this case
+                // held them to each other; what it holds now is Fable's
+                // transpilation of the one extraction to the .NET run of it.
                 let disagreements =
                     ringCases ()
                     |> List.choose (fun c ->
@@ -617,7 +618,7 @@ let tests =
 
                 Expect.isEmpty
                     disagreements
-                    ($"{List.length disagreements} sequence(s) on which the model under the machine-integer shim differs from the corpus the BigInteger shim wrote: "
+                    ($"{List.length disagreements} sequence(s) on which the model transpiled by Fable differs from the corpus the .NET host wrote: "
                      + String.concat " | " (List.truncate 5 disagreements)))
 
         testCase

@@ -110,20 +110,13 @@ why Phase 956 measured it and did not is
 | `ElmishRing.fst` | the ring-buffer model — `RingBuffer<'item>`'s two-case state, `Push`, `Pop` and `doubleSize` clause for clause, the backing array as a slot list with the placeholder a constructor, and the `run` driver both hosts execute |
 | `ElmishSub.fst` | the subscription-diff model — `Sub.Internal.diff`, `NewSubs.calculate` and the active-list half of `Fx.change` clause for clause, the key and the start function opaque |
 | `ElmishRingArray.fst` | **Phase 955** — the ring over a mutable ARRAY, in Pulse (`Pulse.Lib.Vec` and `Pulse.Lib.Box`), proved to refine `ElmishRing.fst`: `create`, `pop`, `push` and the doubling `grow`, each doing to the abstract ring what the list model's operation does, and `run`, which says the array ring is a FIFO queue over any operation sequence up to the first push it refuses; since Phase 956 under the stated premise `SizeT.fits_u32`, with the ceiling at 2^31 - 1 slots |
-| `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash, and the flag sets for the two extraction routes |
-| `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract (the legacy F# printer, or Custard's F# backend for a module that says so), normalise the legacy extractions, drop FS0025 from the `#nowarn` line Custard writes, and byte-diff; build the two oracle projects and any Custard-generated project as generated; run each module's differential host |
-| `normalise-extraction.fsx` | **Phase 850** — the layout normaliser the leg runs between extract and byte-diff: a parser for exactly the dialect the F# backend emits and a printer for indentation-clean F#, so every committed extraction compiles on both hosts with no flag (the section [below](#the-verified-implementation-spike-phase-850) says why the alternatives were not available); since **Phase 1035** it also completes every match F\*'s erased refinements left incomplete (the field projectors, `item_at`) with one explicit arm per missing case that fails naming the module, the binding and the case, so the oracle builds with no FS0025 and no wildcard. Since **Phase 1037** that is enforced rather than observed: `oracle/Directory.Build.props` states FS0025 as an error for everything under `oracle/`, the subtree is no longer exempt from the Phase 624 gate, and an extraction shape the normaliser does not complete fails the build by name |
-| `oracle/RemotingDecode.fs` | **generated** — the decoder model extracted to F#, committed so the repository never needs a prover to build |
-| `oracle/DisclosureFold.fs` | **generated** — the disclosure model extracted to F#, committed for the same reason |
-| `oracle/ToolGate.fs` | **generated** — the tool gate model extracted to F#, committed for the same reason |
-| `oracle/ModelInput.fs` | **generated** — the model-input model extracted to F#, committed for the same reason |
-| `oracle/TaintFlow.fs` | **generated** — the taint-flow model extracted to F#, committed for the same reason |
-| `oracle/ElmishRing.fs`, `oracle/ElmishSub.fs` | **generated** — the two Elmish models extracted to F#, committed for the same reason |
-| [`../tests/elmish-proof-corpus/`](../tests/elmish-proof-corpus/) | **generated** — the two Elmish models' verdicts over the seeded campaign, written by the .NET host and replayed by the **Fable** host against the transpiled runtime; since Phase 850 also the check that the two hosts' `Prims` shims compute the same ring |
-| `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; every later model references a subset of the same nine |
-| `oracle/fable/Prims.fs`, `oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj` | **Phase 850** — the same shim over machine integers, and the project that compiles the committed `oracle/ElmishRing.fs` — and since Phase 884 `oracle/ElmishLoop.fs` — against it for the **Fable** host; `ToolUp.AI.Client.Tests` references it and runs the ring model and the dispatch-loop model live beside the transpiled runtime |
-| `oracle/custard/ElmishRingArray.fs`, `oracle/custard/FStarCustard.fs`, `oracle/custard/ElmishRingArray.fsproj` | **generated, Phase 955** — the project Custard's F# backend wrote for `ElmishRingArray.fst`: the array ring as generic F# over a .NET array and `ref` cells, the support library that backend writes beside every module, and the project file. All three are byte-held; the leg builds the project as generated, and both oracle projects compile the ring's source. The one edit the leg makes to Custard's output (**Phase 1037**) is to drop FS0025 from the `#nowarn` line Custard heads the module with, so the file is under the incomplete-match rule like every other extraction; the other ids on that line are Custard's and stay |
-| `oracle/fable/FStarCustard.fs` | **Phase 955** — the Fable host's stand-in for that support library, which Fable cannot compile. Empty on purpose: the array ring uses nothing from the library, and an extraction that did would fail to compile here rather than run against a second implementation |
+| `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash, and three flag sets: the check, the one extraction route (Custard's F# backend, one whole-program run split per module — since **Phase 957** the only route the release has), and `--quake` |
+| `check.ps1` | the whole proof leg, over a module list: resolve the pin; check each module; extract all nine in ONE run of Custard's F# backend (`--codegen FSharp --custard_split`, every module a root); drop FS0025 from the `#nowarn` line Custard heads each module with and cut the Fable host's support stand-in out of the generated library; byte-diff every generated file and the stand-in against the committed copies; build Custard's project as generated, the .NET oracle and the Fable-host oracle; run each module's differential host (**Phase 957** — until it the eight first-order models went through the legacy printer and a layout normaliser, both retired) |
+| `oracle/custard/` | **generated, Phase 957** — the whole program Custard's F# backend writes for the nine models in one run: one F# module per model under the model's own name (`RemotingDecode.fs` … `ElmishRingArray.fs`), the support library `FStarCustard.fs` every module opens, and `Custard.fsproj` listing them in compile order. Every file is byte-held by the leg and the project is built as generated; committed so the repository never needs a prover to build. The one edit the leg makes to Custard's output (**Phase 1037**) is to drop FS0025 from the `#nowarn` line Custard heads each module with, so every extraction is under the incomplete-match rule; the other ids on that line are Custard's and stay. Until Phase 957 the eight first-order models were committed one level up, as the legacy printer's output re-laid by the normaliser, and the array ring alone lived here with a project of its own |
+| `oracle/ToolUp.Remoting.Proofs.Oracle.fsproj` | the .NET oracle the hosts reference: the same committed files Custard's project lists, in Custard's order (the leg asserts the two lists agree), compiled under `oracle/Directory.Build.props`, which states FS0025 as an error |
+| [`../tests/elmish-proof-corpus/`](../tests/elmish-proof-corpus/) | **generated** — the two Elmish models' verdicts over the seeded campaign, written by the .NET host and replayed by the **Fable** host against the transpiled runtime; since Phase 850 also the check that the ring model transpiled by Fable computes what the .NET host recorded |
+| `oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj` | **Phase 850** — the project that compiles the committed `oracle/custard/ElmishRing.fs`, `ElmishLoop.fs` (since Phase 884) and `ElmishRingArray.fs` (since Phase 955) for the **Fable** host, over the stand-in below; `ToolUp.AI.Client.Tests` references it and runs the ring, the dispatch loop and the array ring live beside the transpiled runtime. Until Phase 957 it compiled the legacy extractions over a hand-written `Prims` shim of machine integers; the shim is gone with them |
+| `oracle/fable/FStarCustard.fs` | **derived, Phase 957** — the Fable host's stand-in for Custard's support library, which Fable cannot compile as written (128-bit integer arithmetic, console writers, `exit`, a strict UTF-8 decoder). `check.ps1` CUTS it from the generated `FStarCustard.fs` on every run — the `Prims` block, verbatim, under a fixed header — and byte-holds it, so it is a projection of the generated library rather than a second implementation of any part of it. The three Elmish extractions reach nothing else in the library; one that did would fail to compile here, naming the name. Phase 955's stand-in was hand-written and empty |
 | [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
 ```powershell
@@ -249,9 +242,13 @@ green leg over a false claim.
   and a defect in it would make the differential compare the wrong thing. It is short and
   case-for-case on purpose, and the go-red bridge beside it exercises the one field most likely to
   be got wrong.
-* **`Prims.fs` is a hand-written shim.** Nine names. It is small enough to read in a minute, which
-  is the mitigation; the byte-diff means a model change reaching for a tenth name fails the leg
-  rather than compiling against a widened shim.
+* **The support library is the extractor's.** `Prims.int` is `bigint` and the operators, `strcat`
+  and `string_of_int` the extraction calls come from the `FStarCustard.fs` Custard writes beside it —
+  generated, byte-held and compiled as generated, so there is nothing hand-written between the
+  prover's output and the host. (Until Phase 957 the legacy printer shipped no runtime and a
+  nine-name hand-written `Prims.fs` stood in; its being small enough to read in a minute was the
+  mitigation.) What is trusted is Custard's realisation of `Prims`, which is the extractor's own
+  trust, stated once as `toolchain-trusted`.
 * **Three payload facts come from the host, not the model**: a string's length, a `bin`'s length,
   and a float's rendered text. Recomputing any of them in F\* would introduce a second
   implementation free to disagree with the host's — and for string length it demonstrably would, as
@@ -944,12 +941,13 @@ one every client executes.
   fsproj — so the .NET host also writes the model's verdicts for its campaign to
   `tests/elmish-proof-corpus/` as a self-describing corpus — each case carries its inputs and the
   outputs the proved model produced — holds that file to the live model on every run, and the Fable
-  pack's `ElmishProofOracleTests` replays it against the transpiled `Ring.fs` / `Sub.fs`. Phase 850's
-  normaliser made the committed extraction F# both hosts compile, and the Fable pack now ALSO
-  compiles `oracle/ElmishRing.fs` over a machine-integer `Prims` and runs the ring model live: it
-  reproduces the corpus's verdicts (so the `BigInteger` and `int` shims are held to each other), it
-  agrees with the transpiled ring on a second campaign the corpus never recorded, and it catches the
-  broken ring. Both hosts hold the shipped ring to the proved model's answer, and both compute it;
+  pack's `ElmishProofOracleTests` replays it against the transpiled `Ring.fs` / `Sub.fs`. Since Phase
+  850 the Fable pack ALSO compiles the ring extraction and runs the ring model live (since Phase 957
+  Custard's `oracle/custard/ElmishRing.fs` over `bigint`, the same bytes and the same integers as the
+  .NET host; until then a normalised legacy extraction over a machine-integer `Prims` shim): it
+  reproduces the corpus's verdicts (so Fable's transpilation of the model is held to the .NET run of
+  it), it agrees with the transpiled ring on a second campaign the corpus never recorded, and it
+  catches the broken ring. Both hosts hold the shipped ring to the proved model's answer, and both compute it;
   the diff is still replayed. The generator is a small LCG rather than `System.Random`, so the
   sequences are the same by seed on either host — **true only since Phase 884.** Fable transpiled
   the LCG's `uint32` step as a plain JavaScript `a * b + c` with no reduction modulo 2^32, so the
@@ -1253,11 +1251,11 @@ Not proved. *Measured*, on every run of the gate.
   module (`src/ToolUp.Platform.Tests/Client/ElmishLoopDifferential.fs`) compiled into both packs,
   each comparison a ROW that each host turns into one case — so a new shape of script is a field
   and a draw, a new property is a row, and neither host can run a row the other does not. The Fable
-  pack drives the transpiled loop beside `oracle/ElmishLoop.fs` compiled by Fable over the
-  machine-integer `Prims` and run live; no verdicts are replayed. That it is the **same** corpus is
-  asserted: the campaign's canonical rendering is pinned, and both hosts check the pin; the model's
-  verdicts over it are pinned too, which holds the `int` shim to the `BigInteger` one over the loop
-  model as Phase 850's corpus does for the ring. Shown red on the shipped code: with the paint made
+  pack drives the transpiled loop beside `oracle/custard/ElmishLoop.fs` compiled by Fable (over
+  `bigint`, as on .NET, since Phase 957) and run live; no verdicts are replayed. That it is the
+  **same** corpus is asserted: the campaign's canonical rendering is pinned, and both hosts check the
+  pin; the model's verdicts over it are pinned too, which holds Fable's transpilation of the loop
+  model to the .NET run of it as Phase 850's corpus does for the ring. Shown red on the shipped code: with the paint made
   after every message in `Program.fs` (the pre-851 loop), the Fable agreement row failed on 259 of
   the 400 scripts. What does not run there is what is not the campaign — the hand-written production
   scenarios below, several of which read the process-wide `Console.Error`; they run on .NET.
@@ -1457,7 +1455,10 @@ so no precedence moves, and every atom is carried through verbatim. It is determ
 byte-diffs its output), it refuses a shape it does not know rather than guessing, and it refuses its
 own output (so a double pass cannot happen quietly). All eight committed extractions were re-emitted
 through it; the oracle project dropped the strict-indentation opt-out and FS0058; every differential
-host is green on .NET, unchanged.
+host is green on .NET, unchanged. **Superseded by Phase 957:** the normaliser is history. The release
+pinned since then has no legacy printer to normalise, and Custard's F# backend lays its output out
+as indentation-clean F# that both hosts compile as written; `normalise-extraction.fsx` is deleted,
+and [the migration section](#the-eight-models-move-to-custard-phase-957) is the record.
 
 **Representation — stood.** `Prims.int` is `BigInteger` in `oracle/Prims.fs` because the decoder
 model needs the `uint64` ceiling; the Elmish models need only indices. `oracle/fable/Prims.fs` is the
@@ -1469,7 +1470,11 @@ corpus the .NET host wrote (the two shims held to each other on 200 sequences), 
 transpiled `Ring.fs` on a second campaign of 120 sequences the corpus never recorded, and catches
 `BrokenRing`. The machine-integer shim is a stated assumption, on the ladder as
 `elmish-fable-shim-machine-integers`: the theorems are about mathematical integers, and hold exactly
-as long as no index or length exceeds `Int32.MaxValue`.
+as long as no index or length exceeds `Int32.MaxValue`. **Superseded by Phase 957:** both `Prims`
+shims are gone. The Fable host compiles the same Custard extraction the .NET host does, over the same
+`bigint` (a JavaScript BigInt under Fable), against a stand-in for the support library that the leg
+cuts from the generated one and byte-holds; the ladder row is restated as `tested`, with nothing left
+assumed about integer width.
 
 **The array-backed ring — did not stand.** The ring model's backing array is a slot **list**, and an
 extraction of that shape is correct and slow; a verified implementation needs the F\* source over a
@@ -1565,7 +1570,10 @@ the flags every other model here uses. Upstream's reference describes the route 
 used since Phase 787 (`--codegen FSharp`) as "unmaintained for long enough that its output no longer
 compiles" against a current F# compiler — the defect `normalise-extraction.fsx` exists to repair. It
 is still in the release and its output did not move: all eight legacy extractions are byte-identical
-across the pin.
+across the pin. **Corrected by Phase 957:** "still in the release" was true of `v2026.09.27` only. The
+release of 2026-10-11 has no legacy printer at all — upstream made Custard the only extraction
+backend and `--codegen FSharp` now names Custard's F# backend — so the clock the paragraph below
+describes ran out one release later.
 
 **The pin move.** `fstar-pin.json` names the new release with the Windows archive's hash re-computed
 locally and equal to the digest the release publishes; the Linux entry stays unhashed. The leg is
@@ -1645,7 +1653,9 @@ on `nightly-2026-10-01`), so the trigger is the first weekly release that carrie
 is the phase that repeats the table on it and migrates on green. The clock on it is
 upstream's: in closing [FStarLang/FStar#4523](https://github.com/FStarLang/FStar/issues/4523)
 (2026-09-18) a maintainer wrote that the legacy `--codegen FSharp` will be deprecated soon in favour
-of the new backend.
+of the new backend. **Superseded by Phase 957** ([below](#the-eight-models-move-to-custard-phase-957)):
+the clock ran out at the next release, which removed the legacy printer outright, and the table
+repeated on it is green for all nine models, so the eight moved.
 
 ### How a generic ring leaves the extractor
 
@@ -1806,7 +1816,7 @@ realisation of the Pulse heap types (new code, one defect found here); the Pulse
 three-line wrapper; on the Fable host the empty stand-in and BigInt arithmetic for indices; and a
 capacity ceiling, which is a behaviour change — a push refused once the ring is full at more than
 32,767 slots — rather than a trust question. Leaving: the hand-written ring (`Ring.fs`, 81 lines
-with its comments), and with it the bridge assumption for the ring's half of the differential. **Not** leaving: the layout normaliser, which the eight models still need. For a
+with its comments), and with it the bridge assumption for the ring's half of the differential. **Not** leaving: the layout normaliser, which the eight models still need (it left with Phase 957). For a
 structure this small the trade is close to even in trusted lines and clearly better in kind — what
 is trusted afterwards is a general tool with a test suite and an upstream, not one ring — and it is
 the extractor's age that argues for landing the replacement behind the differential and the
@@ -1985,6 +1995,119 @@ dated answer; `elmish-array-ring-not-shipped` stands, with this measurement as i
 is the premise; and `elmish-array-ring-is-queue` states the stronger `run`.
 
 
+## The eight models move to Custard (Phase 957)
+
+Phase 955 kept the eight first-order models on the legacy printer and named the trigger for moving
+them: a release in which every model's Custard project builds as generated. This section is that
+move, dated 2026-10-29, on the pin it moved to (`v2026.10.11`, commit `fb6ea91e`). Phase 955's table
+and decision above stand as written, marked where this release makes a sentence of theirs false.
+
+**The pin.** `v2026.10.11` is the first weekly release carrying the two fixes Phase 955 reported —
+[FStarLang/FStar#4626](https://github.com/FStarLang/FStar/pull/4626) (a record field's value printed
+past its label) and [#4627](https://github.com/FStarLang/FStar/pull/4627) (a point-free polymorphic
+function definition eta-expanded on the F# backend) — both ancestors of the release tag by commit
+ancestry (`cd33b5dd`, `a72e1036`); there was no release between 2026-09-27 and 2026-10-11. The
+Windows archive's SHA-256 (`de1f0bfc…d7b85`) was computed locally and equals the digest the release
+publishes. The release still bundles Z3 4.13.3, and all nine models check on it over three cold runs
+under `--quake 3` with no flag change.
+
+**What the release took away, and why 957.A could not run as written.** The phase asked for the
+legacy route to be run first on the new pin, three cold runs, expecting every extraction
+byte-identical. On this release that run is impossible: upstream
+[#4653](https://github.com/FStarLang/FStar/pull/4653) (merged 2026-10-10) *made Custard the only
+extraction backend*. `--extract` is an unrecognised option, `--custard_backend` is gone, and
+`--codegen` takes `OCaml | FSharp | KrmlC | KrmlRust | C | Plugin` — Custard's targets — so
+`--codegen FSharp`, the spelling this directory had used since Phase 787, now names Custard's F#
+backend. The deprecation Phase 955 put on the ladder as a risk happened one release later than the
+sentence predicting it. So the migration is not a choice this phase made on green; it is the only
+route the pinned prover has, and the measurement below is what says the route is sound. The last
+green run of the legacy route is Phase 955's, on `v2026.09.27`, recorded above.
+
+### The nine models on Custard, on `v2026.10.11`
+
+Every model through `--codegen FSharp --custard_split`, rooted as a module (`--custard_entry_module`),
+in ONE whole-program run over all nine sources (the table in Phase 955 was per module, and rooted
+every definition by name; since upstream #4617 a module root emits generic definitions too, so
+naming them is no longer needed):
+
+| Model | a module root emits | .NET 10, project as generated | Fable, over the stand-in |
+|---|---|---|---|
+| `RemotingDecode` | 72 of 72 | builds | not compiled under Fable (its host is .NET) |
+| `DisclosureFold` | 14 of 14 | builds | not compiled under Fable |
+| `ToolGate` | 9 of 9 | builds | not compiled under Fable |
+| `ModelInput` | 28 of 28 | **builds** (FS0058 gone: #4626) | not compiled under Fable |
+| `TaintFlow` | 36 of 36 | builds | not compiled under Fable |
+| `ElmishRing` | 15 of 15 | builds | transpiles, runs live in the Fable pack |
+| `ElmishSub` | 12 of 12 | builds | not compiled under Fable (the Fable pack replays its corpus) |
+| `ElmishLoop` | 26 of 26 | builds | transpiles, runs live in the Fable pack |
+| `ElmishRingArray` | 13 of 13 | builds | transpiles, runs live in the Fable pack |
+
+The counts are top-level `let` and `and` bindings in the generated module. Custard emits what the
+program reaches: the legacy printer's `uu___is_*` discriminators and `__proj__*` projectors are not
+definitions of the model and are not emitted; every definition the model declares is. `RemotingDecode`
+emits all 72 where Phase 955 saw 7 refused (#4627); `ModelInput`'s project builds where Phase 955 saw
+FS0058 (#4626). All nine modules also transpile under Fable when compiled, as a measurement, against a
+copy of the support library cut to the parts Fable accepts; the three the Fable pack *runs* are the
+ones its project compiles.
+
+**What the names became, and what the hosts bind.** `--custard_split` writes one F# module per F\*
+module under its own name and refers across modules as `ElmishRing.push`, so a host that bound
+`ElmishRing.push` before binds `ElmishRing.push` still; the mangled globals Phase 955 measured
+(`elmishRing_succ`, `elmishRingArray_push`) are the single-file spelling, which this leg no longer
+uses. What did move, and every host bridge was rewritten for: an inductive with ONE constructor and
+named fields is an F# record (`pair` / `triple` / `quad` are `{ first; second; … }`, `ElmishSub`'s
+`diff_result` and `TaintFlow`'s `derivation` are records, not `Diff (…)` / `DNode (…)`); a record with
+ONE field is collapsed to that field (`TaintFlow.routine` is the `list string` it wrapped); a
+definition the legacy printer thunked for the value restriction (`as_int32 ()`) is eta-expanded over
+its value argument instead (`as_int32 v`); and `Prims.int` is `bigint` on both hosts. Case counts are
+unchanged on every host (10 / 7 / 8 / 10 / 12 / 22 / 41 on .NET), the go-red cases still go red, and
+the corpus under `tests/elmish-proof-corpus/` did not move: the .NET host's verdicts were already
+computed over `BigInteger`, and `bigint` is the same integer.
+
+**The one model edit.** Custard emits no projectors, so the matches Phase 1035's normaliser completed
+are gone with it — but one incomplete match is the model's own: `RemotingDecode.item_at` matched a
+list whose `[]` case its refinement (`position < count xs`) excludes, and F\* erases the refinement,
+so the F# compiler sees a match with no `[]` arm (FS0025, an error under `oracle/Directory.Build.props`).
+It is respelled over `List.Tot.hd` / `List.Tot.tl`, which Custard realises in the support library, with
+the same statement, the same refinement and the same theorems (`lemma_item_at_smaller`,
+`lemma_element_of_characterised` and everything above them check unchanged). The rule this sets: a
+match F\* leaves incomplete because it erased the refinement that made it total is completed in the
+MODEL by a respelling that changes no theorem, never by a `#nowarn` and never by hand in the output.
+
+**The route change in the leg.** One Custard invocation replaces eight legacy extractions, one Custard
+extraction and the normaliser: `--ext fly_deps=0` lets the run take all nine sources (the default
+dependency mode admits one file), every module is a root, and `--custard_split --odir` writes the
+modules, `FStarCustard.fs` and `Custard.fsproj` into one directory, now committed as `oracle/custard/`.
+The byte-diff is over every file Custard wrote AND over the directory listing — a model that came to
+reach a `ulib` definition would make Custard write a tenth module, which a fixed list would not see.
+The one edit stays (the FS0025 token off each module's `#nowarn` line, Phase 1037). The .NET oracle
+compiles the committed files in Custard's order and the leg asserts its list equals Custard's. The
+module list's ORDER is now load-bearing for the bytes as well as for the imports: Custard orders the
+files it writes by the command line, and a reordered list moves declarations between files.
+
+**The Fable host's stand-in is derived, not written.** Custard's support library does not transpile
+(Fable refuses `System.Int128` / `System.UInt128` arithmetic, `TextWriter.Write` / `Flush`, `exit`, the
+`UTF8Encoding` constructor), and it is one module, so the refusal is of the whole file. The three
+Elmish extractions the Fable pack compiles reach only its `Prims` block, so the leg CUTS that block
+out of the generated file — verbatim, under a fixed header — writes it to `oracle/fable/FStarCustard.fs`
+and byte-holds it. Phase 955's stand-in was hand-written and empty; Phase 850's `oracle/fable/Prims.fs`
+was a hand-written shim over machine integers, and the `assumed` row `elmish-fable-shim-machine-integers`
+existed because it was. Both are gone: the Fable host now runs the prover's integers, and the row is
+restated as `tested` — the corpus replay and the two fingerprint pins hold Fable's transpilation of
+each model to the .NET run of it, which is what they always measured once there was no shim to differ.
+
+**What retired.** `normalise-extraction.fsx` (759 lines), `oracle/Prims.fs` and `oracle/fable/Prims.fs`
+(the two shims), the eight legacy extractions under `oracle/`, and the array ring's own generated
+project. What joined the trusted base is nothing new: Custard's F# backend was already trusted for the
+array ring (`elmish-array-ring-extractor-trusted`), and now carries the eight as well, with
+`toolchain-trusted` naming it. What left the trusted base is 759 lines of this repository's own
+layout parser and two hand-written runtimes.
+
+**Shown red.** A tampered generated module fails the byte-diff; a tampered `FStarCustard.fs` fails it;
+a tampered derived stand-in fails it; a module file added under `oracle/custard/` that Custard did not
+write fails the listing check; and each host's committed go-red case still catches the bridge or
+model it was written to catch.
+
 ## Method, and where it comes from
 
 The method is not new. An open-source F# wire decoder whose combinators were proved total in F\*
@@ -1997,7 +2120,8 @@ met again by anyone touching this file:
 * The F# backend ships no runtime, so a `Prims` shim is required.
 * The emitted F# uses pre-F#-8 indentation. Until Phase 850 the oracle project — and only that
   project — relaxed strict indentation and silenced `FS0058`; since 850 the leg re-lays the
-  extraction out instead (`normalise-extraction.fsx`), and no project carries the flag.
+  extraction out instead (`normalise-extraction.fsx`), and no project carries the flag. Since Phase
+  957 there is nothing to re-lay: Custard's output compiles as written, and the normaliser is gone.
 * A ghost definition needs `noextract_to "FSharp"`; refinement types are erased regardless.
 * Extraction refuses outright on an unchecked module, so the leg is check-then-extract against the
   cache, never one pass.
@@ -2074,7 +2198,8 @@ rather than add a module to it:
 * **`#light "off"` is gone.** F# 10 refuses the verbose-syntax directive (FS1205, "no longer
   supported"), so the OCaml-shaped layout the backend emits has no per-file escape; the flag the
   oracle project used to carry was the last one, and Fable reads none. A re-layout is the only route
-  that reaches both hosts, and `normalise-extraction.fsx` is it.
+  that reaches both hosts, and `normalise-extraction.fsx` is it (retired by Phase 957 with the printer
+  it served).
 * **A continuation line at the offside column is a sequence separator.** `(f a` newline `b)` with
   `b` under `f` parses as `f a; b`, silently; the normaliser therefore puts every continuation four
   columns in and lets only the permitted undentations — match arms, `else`, `then`, a let's body —
@@ -2114,17 +2239,47 @@ And six from the second spike (Phase 955), the first to add a second ROUTE to th
   ring checked on its first run. Ten one-line mutants were then run through the prover and each was
   refused, which is the only evidence that the statements constrain anything.
 
+And seven from the migration (Phase 957), the first to take every model through one extractor run:
+
+* **The legacy printer is gone, not deprecated.** `v2026.10.11` has no `--extract`, no
+  `--custard_backend` and no `--codegen Custard`; `--codegen FSharp` IS Custard's F# backend. A pin
+  move across that boundary is a route change whether or not the phase that moves it intended one.
+* **One run takes many files only under `--ext fly_deps=0`.** The default dependency mode refuses a
+  second source on the command line ("only one file can be provided"); with the extension off, nine
+  sources and nine `--custard_entry_module` roots are one whole-program run, and the output is
+  byte-identical to the same run driven from a tenth module that `open`s the nine.
+* **`--custard_split` keeps the names.** Per-module output under the module's own name, cross-module
+  references as `Module.name`, no `open` between generated modules; the mangled globals are the
+  single-file spelling only. What still moves: one-constructor inductives become records, one-field
+  records collapse to the field, unit-thunked definitions are eta-expanded over a real argument.
+* **The command line's order is the files' order.** Custard writes `Custard.fsproj` in the order the
+  roots were given and relocates declarations by that order, so the same module list in a different
+  order moves bytes the diff holds. The list in `check.ps1` is the order, and it is the only one.
+* **Custard emits reachable `let`s; mutual `and`s ride with their group.** Counting `^let` under-counts
+  a module with mutually recursive definitions (`taint_of` and its three siblings are `and`-bound);
+  the hosts bind them unchanged.
+* **An erased refinement is the model's FS0025.** Custard emits no projectors, so Phase 1035's
+  completion of them is moot — but a match whose missing arm a refinement excluded is incomplete in
+  F# whatever the printer, and the fix is a respelling in the `.fst` that changes no theorem
+  (`item_at` over `hd` / `tl`), never a `#nowarn`.
+* **Derive the stand-in, do not write it.** A hand-written stand-in for a generated library is an
+  assumption on the ladder for as long as it exists; a stand-in the leg cuts from the generated file
+  and byte-holds is a projection, and the ladder row it carried becomes a test.
+
 The 790 note above predicted a third model would be one `$modules` entry and no other edit. That
-held for the leg itself. It is not the whole cost of a model: the oracle project gains a `<Compile>`,
-`.fantomasignore` gains the generated extraction, and the differential host is registered in the test
-pack like any other — four lines in four files, none of them the proof leg.
+held for the leg itself. It is not the whole cost of a model: the oracle project gains a `<Compile>`
+(where Custard's project puts it), the differential host is registered in the test pack like any
+other, and `.fantomasignore` already covers `oracle/custard/` — three lines in two files, none of them
+the proof leg.
 
 ## When the byte-diff fails
 
-It means a committed `oracle/*.fs` is not what the prover produces from the current `.fst` beside
-it. That is the expected state after any model edit, and the fix is to copy the
-fresh extraction over the committed one and commit the two together — `check.ps1` prints the exact
-command and the first forty lines of the diff. It is *not* a state to resolve by editing the
+It means a committed file under `oracle/custard/` (or the derived `oracle/fable/FStarCustard.fs`) is
+not what the prover produces from the current `.fst` files. That is the expected state after any
+model edit, and the fix is to copy the fresh file over the committed one and commit the two together
+— `check.ps1` prints the exact command and the first forty lines of the diff. A file Custard wrote
+that has no committed counterpart is reported the same way, and means a model now reaches a
+definition outside the nine; say so here before committing it. It is *not* a state to resolve by editing the
 extraction: the next run would simply report it again.
 
 ## Licence

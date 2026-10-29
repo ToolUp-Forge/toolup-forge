@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- Phase 850 — the proved Elmish ring buffer, extracted, for the FABLE
-         host: the first extraction the browser's own runtime runs directly.
+    <!-- Phase 850 — the proved Elmish models, extracted, for the FABLE host:
+         the browser's own runtime runs them directly.
 
-         Two files, and the point is which two. `Prims.fs` beside this
-         project is the machine-integer shim (read its header); the second
-         is the SAME `../ElmishRing.fs` the .NET oracle compiles — one
-         committed extraction, laid out by `proofs/normalise-extraction.fsx`
-         into F# both hosts accept with no flag, byte-held by
-         `proofs/check.ps1` — so the model the Fable pack runs is, byte for
-         byte, the model the prover produced and the .NET differential
-         runs. Since Phase 884 a third file rides the same shim: the
-         dispatch loop's extraction `../ElmishLoop.fs`, a step machine over
-         that ring, which the Fable pack runs beside the transpiled
-         `Program.runWithDispatch`.
+         Four files, and the point is which four. `FStarCustard.fs` beside
+         this project is the Fable host's stand-in for Custard's support
+         library — since Phase 957 DERIVED by `proofs/check.ps1` from the
+         generated one (its `Prims` block, verbatim) and byte-held, where
+         Phase 955's stand-in was hand-written and empty and Phase 850's
+         `Prims.fs` was a hand-written shim over machine integers. The other
+         three are the SAME committed extractions the .NET oracle compiles —
+         `../custard/ElmishRing.fs`, `../custard/ElmishLoop.fs` and
+         `../custard/ElmishRingArray.fs`, in Custard's order — so the models the
+         Fable pack runs are, byte for byte, the models the prover produced
+         and the .NET differential runs, over the same `bigint` the .NET host
+         computes with. The two hosts no longer differ in representation.
 
          `ToolUp.AI.Client.Tests` references this project and Fable
-         transpiles both files with the rest of the client tier;
+         transpiles all four files with the rest of the client tier;
          `check.ps1` also builds it on .NET, which is the cheap half of
          "compiles on both hosts".
 
@@ -37,24 +38,13 @@
         <Nullable>disable</Nullable>
     </PropertyGroup>
     <ItemGroup>
-        <!-- The machine-integer runtime. Must precede the extraction. -->
-        <Compile Include="Prims.fs" />
-        <!-- GENERATED from ../../ElmishRing.fst — the committed, normalised
-             extraction, shared with the .NET oracle. Do not edit. -->
-        <Compile Include="../ElmishRing.fs" />
-        <!-- Phase 884 - GENERATED from ../../ElmishLoop.fst, the dispatch
-             loop's step machine over the ring above: the same committed
-             bytes the .NET oracle compiles. It needs nothing of Prims the
-             ring does not, so the shim is unchanged. Do not edit. -->
-        <Compile Include="../ElmishLoop.fs" />
-        <!-- Phase 955 - the array ring's extraction, GENERATED from
-             ../../ElmishRingArray.fst through Custard's F# backend: the
-             same committed bytes the .NET oracle compiles. The support
-             library Custard writes beside it does not transpile (128-bit
-             integers, console writers, exit, a strict UTF-8 decoder), and
-             the ring uses nothing from it, so this host compiles the EMPTY
-             stand-in beside this file in its place; read its header. -->
+        <!-- DERIVED from ../custard/FStarCustard.fs by check.ps1 — do not edit.
+             Must precede the extractions, which open it. -->
         <Compile Include="FStarCustard.fs" />
+        <!-- GENERATED — the committed extractions, shared with the .NET
+             oracle. Do not edit. -->
+        <Compile Include="../custard/ElmishRing.fs" />
+        <Compile Include="../custard/ElmishLoop.fs" />
         <Compile Include="../custard/ElmishRingArray.fs" />
     </ItemGroup>
     <ItemGroup>
