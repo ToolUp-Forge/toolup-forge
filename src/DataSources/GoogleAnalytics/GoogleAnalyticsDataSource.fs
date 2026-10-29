@@ -418,6 +418,11 @@ let create
     { new IDataSource with
         member _.Kind = config.Kind
 
+        // Phase 1095 — a report request has no location a delivery can watch,
+        // and it emits only the JSON envelope it declares: nothing beyond the
+        // five members (what the capability probes answered before the record).
+        member _.Capabilities = ConnectorCapabilities.none
+
         member _.Connect ctx = async {
             match! readClientCredentials secretStore flowName ctx with
             | Error e -> return Error e
