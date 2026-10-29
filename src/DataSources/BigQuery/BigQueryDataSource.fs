@@ -196,6 +196,11 @@ type private BigQueryDataSourceImpl(secretStore: ISecretStore option) =
     interface IDataSource with
         member _.Kind = Kind
 
+        // Phase 1095 — a query against BigQuery has no location a delivery can
+        // watch, and it emits only the CSV it declares: nothing beyond the five
+        // members (what the capability probes answered before the record).
+        member _.Capabilities = ConnectorCapabilities.none
+
         member this.Connect(ctx) =
             withClient ctx "BigQuery Connect" (fun settings client -> async {
                 // Cheapest possible authenticated probe: one dataset
