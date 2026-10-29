@@ -59,8 +59,9 @@ type SidePanelModel = {
     DebugMode: bool
     /// Watchdog token — set to `Some guid` when a submission is in
     /// flight, back to `None` when the final `MessageComplete` arrives.
-    /// A `WatchdogFired` message scheduled at submit time carries the
-    /// same token; if the token still matches when it fires, the stream
+    /// A `WatchdogFired` message scheduled for the token carries it, and
+    /// every stream event of the live turn replaces the token with a
+    /// fresh one; if the token still matches when it fires, the stream
     /// has been idle for the full timeout and the client surfaces a
     /// "no response" error rather than leaving the user staring at a
     /// perpetually-streaming spinner (network disconnect, SSE drop,
@@ -143,11 +144,19 @@ let private sidePanelInit () : SidePanelModel = {
 // — and surfaces a clear timeout message instead of leaving the user
 // watching a permanent "working" spinner.
 //
+// It measures IDLENESS, not elapsed time: the timeout runs from the last
+// event of the live turn, so an answer that streams (or works through
+// tool calls) for longer than the timeout is never reported as dropped,
+// and a stream that goes silent for the timeout still is.
+//
 // Token-based invalidation: each `Send` stamps a fresh Guid on the
 // model and schedules a `WatchdogFired` with the same Guid after the
-// timeout. When `MessageComplete` arrives, the token is cleared to
-// `None`. If the watchdog fires but the token has since changed (new
-// stream started) or been cleared (response already committed), it's
+// timeout. Every stream event of the live turn (`rearmWatchdog`)
+// replaces that token with a fresh one and schedules a new firing for
+// it, which discards the firing the previous token had pending. When
+// `MessageComplete` arrives, the token is cleared to `None`. If the
+// watchdog fires but the token has since changed (a later event, or a
+// new stream) or been cleared (response already committed), it's
 // ignored. This avoids the "false timeout after a legitimately slow
 // response" failure mode a bare sleep-then-check would have.
 
@@ -161,6 +170,20 @@ let private scheduleWatchdog (token: Guid) : Cmd<SidePanelMsg> =
         })
         ()
         WatchdogFired
+
+/// A live turn's event restarts the idle clock. With no live token (the
+/// turn already ended, or none is in flight) there is nothing to restart.
+let private rearmWatchdog (model: SidePanelModel) : SidePanelModel * Cmd<SidePanelMsg> =
+    match model.WatchdogToken with
+    | Some _ ->
+        let token = Guid.NewGuid()
+
+        {
+            model with
+                WatchdogToken = Some token
+        },
+        scheduleWatchdog token
+    | None -> model, Cmd.none
 
 let private watchdogNote (conversationId: Guid) : ConversationMessage = {
     Id = Guid.NewGuid()
@@ -263,11 +286,10 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
     | SSEEvent event ->
         match event with
         | MessageDelta(convId, content) when convId = model.ConversationId ->
-            {
+            rearmWatchdog {
                 model with
                     Streaming = model.Streaming + content
-            },
-            Cmd.none
+            }
 
         | MessageComplete(convId, _) when convId = model.ConversationId ->
             let assistantMsg: ConversationMessage = {
@@ -333,23 +355,30 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
             },
             Cmd.none
 
-        | ToolCallStarted(convId, toolName, toolCallId) when model.DebugMode && convId = model.ConversationId ->
-            let note = debugNote convId $"🔧 Calling tool `{toolName}` (id {toolCallId})"
+        // A tool call is part of the live turn whether or not it is
+        // displayed: the debug note is gated on `DebugMode`, the watchdog
+        // re-arm is not.
+        | ToolCallStarted(convId, toolName, toolCallId) when convId = model.ConversationId ->
+            if model.DebugMode then
+                let note = debugNote convId $"🔧 Calling tool `{toolName}` (id {toolCallId})"
 
-            {
-                model with
-                    Messages = model.Messages @ [ note ]
-            },
-            Cmd.none
+                rearmWatchdog {
+                    model with
+                        Messages = model.Messages @ [ note ]
+                }
+            else
+                rearmWatchdog model
 
-        | ToolCallCompleted(convId, _toolCallId, content) when model.DebugMode && convId = model.ConversationId ->
-            let note = debugNote convId $"↳ Tool result: {truncateForDebug 500 content}"
+        | ToolCallCompleted(convId, _toolCallId, content) when convId = model.ConversationId ->
+            if model.DebugMode then
+                let note = debugNote convId $"↳ Tool result: {truncateForDebug 500 content}"
 
-            {
-                model with
-                    Messages = model.Messages @ [ note ]
-            },
-            Cmd.none
+                rearmWatchdog {
+                    model with
+                        Messages = model.Messages @ [ note ]
+                }
+            else
+                rearmWatchdog model
 
         | TaskStatusChanged(_taskId, AITaskFailed reason) ->
             // Ungated: server-emitted agent-loop failures must surface

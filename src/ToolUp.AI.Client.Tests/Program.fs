@@ -161,6 +161,10 @@ let allTests =
         // reader's gate, with its furniture and the page's theme; a
         // conversation with no block renders as it did before.
         ConversationBlockTests.tests
+        // Phase 1140 - the chat watchdog measures idleness, not elapsed time:
+        // a live turn's events re-arm it on both chat surfaces, and a silent
+        // turn still gets the note.
+        ChatWatchdogTests.tests
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime

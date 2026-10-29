@@ -1535,6 +1535,9 @@
         <Compile Include="InProcess\FactFirstRetrievalTests.fs" />
         <!-- Phase 523 — numeric-fidelity answer gate. -->
         <Compile Include="InProcess\AnswerVerifierTests.fs" />
+        <!-- Phase 1132 - the render tools (render_chart / render_table); compiled before the
+             disclosure egress pack, whose tool-result-door instances read its fixtures. -->
+        <Compile Include="InProcess\FactRenderToolTests.fs" />
         <!-- Phase 525 — disclosure egress filtering, first choke points. -->
         <Compile Include="InProcess\DisclosureEgressTests.fs" />
         <!-- Phase 564 — disclosure egress: export door + webhook contract. -->
@@ -2940,6 +2943,8 @@
         <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
         <!-- Phase 1129 - the fact presentation builders (Fuaran-UI nodes from a fact series). -->
         <ProjectReference Include="..\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj" />
+        <!-- Phase 1132 - the render tools over the presentation builders. -->
+        <ProjectReference Include="..\ToolUp.Facts.Presentation.Server\ToolUp.Facts.Presentation.Server.fsproj" />
         <!-- Phase 68 — graph store substrate: contract pack binds to the
              in-memory default; Core carries the IGraphStore contract. -->
         <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
