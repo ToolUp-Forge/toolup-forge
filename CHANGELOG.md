@@ -19,8 +19,9 @@ Migration notes:
 
 - [1077-redesign-f-turnoutcome-loopstate-and-loop-step](docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md)
 - [1131-tool-result-block](docs/migrations/1131-tool-result-block.md)
+- [1137-build-identity](docs/migrations/1137-build-identity.md)
 
-_Surface since `v0.36.0`: **breaking** — 3 packages moved; 211 members added, 2 members changed, 5 members removed._
+_Surface since `v0.36.0`: **breaking** — 4 packages moved; 224 members added, 2 members changed, 5 members removed._
 
 ### Added
 
@@ -56,6 +57,20 @@ _Surface since `v0.36.0`: **breaking** — 3 packages moved; 211 members added, 
   - `ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }`
   - `ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }`
+- `ToolUp.Platform.Server` — 13 members:
+  - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity (class)`
+  - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])`
+  - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity.Commit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
+  - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity.Version : System.String { get }`
+  - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule (class)`
+  - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule.ofAssembly(System.Reflection.Assembly) : ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity`
+  - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule.ofInformationalVersion(System.String) : ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity`
+  - `ToolUp.Platform.DevDiagnosticsHandler.buildIdentityRoute : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }`
+  - `ToolUp.Platform.ServerAppModule.withBuildIdentity(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp`
+  - `ToolUp.Platform.SpaFallbackExcludedPath (class)`
+  - `ToolUp.Platform.SpaFallbackExcludedPath..ctor(System.String)`
+  - `ToolUp.Platform.SpaFallbackExcludedPath.Path : System.String { get }`
+  - `ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.SpaFallbackExcludedPath])`
 
 ### Changed
 

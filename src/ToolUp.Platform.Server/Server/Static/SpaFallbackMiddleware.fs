@@ -74,7 +74,19 @@ module SpaFallbackPrecedence =
         services.RemoveAll<SpaFallbackPrecedence>() |> ignore
         services.AddSingleton<SpaFallbackPrecedence>(RouterFirst)
 
-type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
+/// Phase 1137 — a path the SPA fallback must leave to the server's router
+/// in BOTH precedence orders, registered in DI by a composition that mounts
+/// a server-answered route which is neither under `/api` nor `/dev`
+/// (`ServerApp.withBuildIdentity` registers `/version`). Absent, the
+/// exclusion list is exactly the fixed one above (GP 11).
+type SpaFallbackExcludedPath = { Path: string }
+
+type SpaFallbackMiddleware
+    (
+        next: RequestDelegate,
+        config: ServerConfig,
+        excluded: System.Collections.Generic.IEnumerable<SpaFallbackExcludedPath>
+    ) =
     let publicPath = Path.GetFullPath config.PublicPath
     let indexPath = Path.Combine(publicPath, "index.html")
 
@@ -86,6 +98,15 @@ type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
         || path.StartsWith("/dev/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/dev", StringComparison.OrdinalIgnoreCase)
 
+    let excludedPaths = excluded |> Seq.map _.Path |> Array.ofSeq
+
+    let isRegisteredExclusion (path: string) =
+        excludedPaths
+        |> Array.exists (fun e -> path.Equals(e, StringComparison.OrdinalIgnoreCase))
+
+    /// No registered exclusions: the fixed list above, exactly as before.
+    new(next: RequestDelegate, config: ServerConfig) = SpaFallbackMiddleware(next, config, Seq.empty)
+
     member _.InvokeAsync(ctx: HttpContext) = task {
         let path = ctx.Request.Path.Value
         let isGet = HttpMethods.IsGet ctx.Request.Method
@@ -94,6 +115,7 @@ type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
             isGet
             && not (String.IsNullOrEmpty path)
             && not (isExcluded path)
+            && not (isRegisteredExclusion path)
             && not (Path.HasExtension path)
             && File.Exists indexPath
 

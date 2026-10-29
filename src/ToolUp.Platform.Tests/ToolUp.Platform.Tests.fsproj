@@ -1316,6 +1316,10 @@
              extension, and the EnableDevEndpoints gate driven through the
              real buildRouteHandlers over a TestServer. -->
         <Compile Include="InProcess\DevVersionEndpointTests.fs" />
+        <!-- Phase 1137 - the production-safe /version build identity: the shared reader,
+             off-by-default, the two-field no-store payload, and the SPA shell not
+             swallowing it, over a composed host. -->
+        <Compile Include="InProcess\BuildIdentityEndpointTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <!-- Phase 537 - ToolUp.AI.UiAwareness companion, server half. -->

@@ -1726,6 +1726,39 @@ module ServerApp =
             HealthChecks = app.HealthChecks @ [ check ]
     }
 
+    /// Phase 1137 — mount the production-safe `GET /version` route: the
+    /// entry assembly's version and the commit its informational version
+    /// carries (`{ "version": ..., "commit": ... }`, `commit` omitted when
+    /// the build carried none), `no-store`, and nothing else. **Off by
+    /// default**, so no deployment starts disclosing its commit without
+    /// asking; independent of `ServerConfig.EnableDevEndpoints`, whose
+    /// `/dev/version` lists every loaded assembly and stays dev-only. A
+    /// deploy check polls the route until `commit` equals the one it
+    /// deployed. Also registers the path with the SPA fallback so a
+    /// deployment serving a client bundle answers it from the server
+    /// rather than with the shell. Idempotent.
+    let withBuildIdentity (app: ServerApp) : ServerApp =
+        if
+            app.Handlers
+            |> List.exists (fun h -> obj.ReferenceEquals(h, DevDiagnosticsHandler.buildIdentityRoute))
+        then
+            app
+        else
+            let register (s: IServiceCollection) =
+                s.AddSingleton<SpaFallbackExcludedPath>({ Path = "/version" })
+
+            {
+                app with
+                    Handlers = app.Handlers @ [ DevDiagnosticsHandler.buildIdentityRoute ]
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig =
+                                match app.Extensions.ServiceConfig with
+                                | None -> Some register
+                                | Some baseFn -> Some(fun s -> register (baseFn s))
+                    }
+            }
+
     /// Phase 9o — register a companion-contributed post-deploy smoke
     /// test. Each companion exposes its `ISmokeTest` instance via a
     /// small constructor (`RedisNotificationChannelSmoke.create
