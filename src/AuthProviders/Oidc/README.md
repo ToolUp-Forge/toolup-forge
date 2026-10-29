@@ -40,6 +40,33 @@ validating until the token's `exp`. Keep access-token lifetimes short.
 Full guidance, including the wiring snippet for the cross-instance signal, is in
 the SDK's auth-providers companion documentation.
 
+## Server-rendered sign-in failure page (Phase 1139)
+
+`OidcSsrSignIn` answers every sign-in failure (missing, expired or mismatched
+state, an IdP `error`, a failed exchange, a refused token, a nonce mismatch, an
+already-expired token) with one small HTML page: a plain-language reason from a
+closed set, never IdP text, a token or an exception message, and a "Try again"
+link back to `SignInPath` carrying the validated return URL. Status codes, the
+no-cookie-on-failure rule and the open-redirect guard are unchanged; the page is
+`no-store`.
+
+Out of the box the page carries minimal inline styling. To take the
+deployment's theme, name a stylesheet:
+
+```fsharp
+let page = OidcSsrSignIn.SignInPage.defaults |> OidcSsrSignIn.SignInPage.withStylesheet "/theme.css"
+app |> OidcSsrSignIn.withInteractiveSignInPage page http config
+```
+
+`withStylesheet` refuses anything that is not a local, rooted path (an absolute
+URL, `//host`, whitespace, a quote, an angle bracket, a backtick or a backslash)
+with `ArgumentException` at composition, so a bad value stops the boot. The
+setting lives on `SignInPage`, not on `OidcSsrSignInConfig`: that record is
+unchanged, so every existing construction of it (full literal or `defaults` with
+`{ ... with }`) keeps compiling, and `routes` / `withInteractiveSignIn` keep
+their signatures and use the default page. The inline style is dropped by a
+strict `style-src` CSP; the page then renders unstyled, which is still readable.
+
 Licensed under Apache-2.0.
 
 Part of the ToolUp Platform SDK — see [github.com/ToolUp-Forge/toolup-forge](https://github.com/ToolUp-Forge/toolup-forge) for full documentation.

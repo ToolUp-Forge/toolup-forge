@@ -63,7 +63,9 @@ ToolUp.AuthProviders.OidcSsrSignIn.defaults(System.String, System.String, System
 ToolUp.AuthProviders.OidcSsrSignIn.interactiveSignIn(ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : ToolUp.Platform.InteractiveSignIn
 ToolUp.AuthProviders.OidcSsrSignIn.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.AuthProviders.OidcSsrSignIn.routes(System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.AuthProviders.OidcSsrSignIn.routesWithPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn(System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignInPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig (class)
 ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken, System.String, System.String, System.String, System.TimeSpan)
 ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.AuthorizationEndpoint : System.String { get }
@@ -77,6 +79,11 @@ ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.SessionToken : ToolUp.Aut
 ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.SignInPath : System.String { get }
 ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.StateLifetime : System.TimeSpan { get }
 ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.TokenEndpoint : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SignInPage (class)
+ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule (class)
+ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.defaults : ToolUp.AuthProviders.OidcSsrSignIn+SignInPage { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.stylesheet(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.withStylesheet(System.String, ToolUp.AuthProviders.OidcSsrSignIn+SignInPage) : ToolUp.AuthProviders.OidcSsrSignIn+SignInPage
 ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken (class)
 ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.AccessToken : ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken { get }
 ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.IdToken : ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken { get }

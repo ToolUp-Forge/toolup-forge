@@ -48,7 +48,7 @@ ToolUp.AuthProviders.GitHub 38/74
 ToolUp.AuthProviders.GoogleDirectory 29/56
 ToolUp.AuthProviders.GoogleIdentity.Client 57/125
 ToolUp.AuthProviders.LdapActiveDirectory 73/127
-ToolUp.AuthProviders.Oidc 64/83
+ToolUp.AuthProviders.Oidc 70/90
 ToolUp.AuthProviders.Oidc.Client 130/336
 ToolUp.AuthProviders.Oidc.Shared 33/52
 ToolUp.AuthProviders.Passkey 75/150

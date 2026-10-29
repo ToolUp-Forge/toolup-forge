@@ -44,6 +44,13 @@
 /// provider refuses, or a nonce mismatch all end in an error page and set
 /// no session cookie. A return URL that is not a local path is replaced by
 /// `/` (no open redirect).
+///
+/// **The error page (Phase 1139).** Every failure answers with one small
+/// HTML page: a plain-language reason drawn from a closed set (never IdP
+/// text, a token or an exception message), a "Try again" link back to
+/// `SignInPath` carrying the sealed, already-validated return URL, and either
+/// the deployment's own stylesheet (`SignInPage.withStylesheet`) or minimal
+/// inline styling. Status codes are unchanged.
 module ToolUp.AuthProviders.OidcSsrSignIn
 
 open System
@@ -101,6 +108,40 @@ type OidcSsrSignInConfig = {
     /// How long a started sign-in may take before its state expires.
     StateLifetime: TimeSpan
 }
+
+/// Phase 1139 — how the sign-in failure page looks. Kept apart from
+/// `OidcSsrSignInConfig` so that record's shape (and every full-literal
+/// construction of it) is untouched; opaque, so a later appearance setting
+/// is an addition here and breaks no caller. Build it with
+/// `SignInPage.defaults` and `SignInPage.withStylesheet`.
+type SignInPage = private {
+    StylesheetPath: string option
+}
+
+[<RequireQualifiedAccess>]
+module SignInPage =
+    /// No stylesheet: the failure page carries minimal inline styling.
+    let defaults: SignInPage = { StylesheetPath = None }
+
+    /// The page links `path` — a local, rooted path such as `/theme.css` —
+    /// as its one stylesheet, so a failure takes the deployment's theme.
+    /// Anything that is not a local path (an absolute URL, `//host`, a path
+    /// with whitespace, a quote, an angle bracket, a backtick or a
+    /// backslash) is refused with `ArgumentException`, at composition time,
+    /// so a bad value stops the boot rather than shipping a broken or
+    /// foreign `<link>`.
+    let withStylesheet (path: string) (page: SignInPage) : SignInPage =
+        let clean =
+            InteractiveSignIn.isLocalReturnUrl path
+            && not (path |> Seq.exists (fun c -> Char.IsWhiteSpace c || "\"'<>`\\".Contains c))
+
+        if not clean then
+            invalidArg (nameof path) "the sign-in stylesheet must be a local, rooted path such as /theme.css"
+
+        { page with StylesheetPath = Some path }
+
+    /// The stylesheet path, if one is set.
+    let stylesheet (page: SignInPage) : string option = page.StylesheetPath
 
 /// Name of the short-lived cookie carrying the sealed sign-in state.
 [<Literal>]
@@ -196,14 +237,74 @@ let private sessionCookieOptions (ctx: HttpContext) (lifetime: TimeSpan option) 
     lifetime |> Option.iter (fun l -> opts.MaxAge <- Nullable l)
     opts
 
-let private writePage (ctx: HttpContext) (status: int) (message: string) : Task<HttpContext option> =
+/// Phase 1139 — the closed set of reasons a sign-in can fail. The page says
+/// one of these in fixed words; nothing from the IdP, a token or an exception
+/// ever reaches it.
+type private SignInFailure =
+    | Unavailable
+    | Expired
+    | Declined
+    | Mismatch
+    | ExchangeFailed
+    | NotIssuedHere
+    | TokenExpired
+    | NotAccepted
+
+let private failureDetail (failure: SignInFailure) : int * string * string =
+    match failure with
+    | Unavailable -> 500, "unavailable", "Sign-in is unavailable on this site right now."
+    | Expired -> 400, "expired", "This sign-in has expired or was not started here."
+    | Declined -> 401, "declined", "The identity provider did not complete the sign-in."
+    | Mismatch -> 400, "mismatch", "The sign-in response did not match the sign-in that was started."
+    | ExchangeFailed -> 502, "exchange-failed", "The identity provider could not finish signing you in."
+    | NotIssuedHere -> 401, "not-issued-here", "The sign-in could not be verified for this visit."
+    | TokenExpired -> 401, "token-expired", "The sign-in had already expired when it arrived."
+    | NotAccepted -> 401, "not-accepted", "Your account is not accepted by this site."
+
+let private minimalStyle =
+    "body{font-family:system-ui,sans-serif;margin:0;display:grid;min-height:100vh;place-items:center}"
+    + "main{max-width:32rem;padding:2rem}a{font-weight:600}"
+
+/// The one renderer for every failure path. `returnUrl` is already validated
+/// local (it comes from the sealed state, or is `/`); the try-again link
+/// re-enters `SignInPath` with it, except when sign-in itself is unavailable.
+let private writeFailure
+    (page: SignInPage)
+    (config: OidcSsrSignInConfig)
+    (ctx: HttpContext)
+    (failure: SignInFailure)
+    (returnUrl: string)
+    : Task<HttpContext option> =
+    let status, code, reason = failureDetail failure
+    let enc (s: string) = System.Net.WebUtility.HtmlEncode s
+
+    let head =
+        match page.StylesheetPath with
+        | Some href -> $"<link rel=\"stylesheet\" href=\"{enc href}\">"
+        | None -> $"<style>{minimalStyle}</style>"
+
+    let retry =
+        match failure with
+        | Unavailable -> ""
+        | _ ->
+            let href = InteractiveSignIn.redirectFor (interactiveSignIn config) returnUrl
+            $"<p><a class=\"signin-failure-retry\" href=\"{enc href}\">Try again</a></p>"
+
+    let html =
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        + "<meta name=\"robots\" content=\"noindex\"><title>Sign-in problem</title>"
+        + head
+        + $"</head><body><main class=\"signin-failure\" data-reason=\"{code}\"><h1>Sign-in problem</h1>"
+        + $"<p class=\"signin-failure-reason\">{enc reason}</p>{retry}</main></body></html>"
+
     ctx.Response.StatusCode <- status
-    ctx.Response.ContentType <- "text/plain; charset=utf-8"
+    ctx.Response.ContentType <- "text/html; charset=utf-8"
     ctx.Response.Headers["Cache-Control"] <- "no-store"
     ctx.Response.Headers["X-Robots-Tag"] <- "noindex"
 
     task {
-        do! ctx.Response.WriteAsync message
+        do! ctx.Response.WriteAsync html
         return Some ctx
     }
 
@@ -315,14 +416,10 @@ let private validateWithProvider (ctx: HttpContext) (cookieName: string) (token:
 
 // ─── Routes ──────────────────────────────────────────────────────────
 
-let private signIn (config: OidcSsrSignInConfig) : HttpHandler =
+let private signIn (page: SignInPage) (config: OidcSsrSignInConfig) : HttpHandler =
     fun _next ctx ->
         match protector ctx with
-        | None ->
-            writePage
-                ctx
-                500
-                "Sign-in is unavailable: ASP.NET Core DataProtection is not composed, so the sign-in state cannot be sealed."
+        | None -> writeFailure page config ctx Unavailable "/"
         | Some p ->
             let requested =
                 match ctx.Request.Query.TryGetValue InteractiveSignIn.ReturnUrlParameter with
@@ -390,7 +487,7 @@ let private exchangeCode (http: HttpClient) (config: OidcSsrSignInConfig) (code:
         return Error $"the token exchange failed ({ex.GetType().Name})"
 }
 
-let private callback (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
+let private callback (page: SignInPage) (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
     fun _next ctx -> task {
         let query (name: string) =
             match ctx.Request.Query.TryGetValue name with
@@ -406,13 +503,13 @@ let private callback (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHand
         ctx.Response.Cookies.Delete(StateCookieName, stateCookieOptions config ctx)
 
         match sealedState with
-        | None -> return! writePage ctx 400 "The sign-in has expired or was not started here. Open the page again."
+        | None -> return! writeFailure page config ctx Expired "/"
         | Some state ->
             match query "error", query "state", query "code" with
-            | Some _, _, _ -> return! writePage ctx 401 "The identity provider did not complete the sign-in."
+            | Some _, _, _ -> return! writeFailure page config ctx Declined state.ReturnUrl
             | None, Some returned, Some code when fixedTimeEquals returned state.State ->
                 match! exchangeCode http config code state.Verifier with
-                | Error reason -> return! writePage ctx 502 $"Sign-in failed: {reason}."
+                | Error reason -> return! writeFailure page config ctx ExchangeFailed state.ReturnUrl
                 | Ok token ->
                     match! validateWithProvider ctx config.CookieName token |> Async.StartAsTask with
                     | Ok user when not (AuthenticatedUser.isAnonymous user) ->
@@ -433,12 +530,12 @@ let private callback (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHand
                                 TimeSpan.FromSeconds(floor (exp - DateTimeOffset.UtcNow).TotalSeconds))
 
                         if not nonceOk then
-                            return! writePage ctx 401 "Sign-in failed: the token was not issued for this sign-in."
+                            return! writeFailure page config ctx NotIssuedHere state.ReturnUrl
                         elif lifetime |> Option.exists (fun l -> l <= TimeSpan.Zero) then
                             // Accepted inside the provider's clock skew but
                             // already past `exp`: a cookie the browser drops at
                             // once would only send the reader round again.
-                            return! writePage ctx 401 "Sign-in failed: the token had already expired."
+                            return! writeFailure page config ctx TokenExpired state.ReturnUrl
                         else
                             ctx.Response.Cookies.Append(config.CookieName, token, sessionCookieOptions ctx lifetime)
                             return! redirect ctx state.ReturnUrl
@@ -446,8 +543,8 @@ let private callback (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHand
                         // Signed in at the IdP but not accepted here (admission
                         // gate, audience, claim mapping). An error page, never a
                         // redirect back to the page — that would loop.
-                        return! writePage ctx 401 "Your account is not accepted by this site."
-            | _ -> return! writePage ctx 400 "The sign-in response did not match the sign-in that was started."
+                        return! writeFailure page config ctx NotAccepted state.ReturnUrl
+            | _ -> return! writeFailure page config ctx Mismatch state.ReturnUrl
     }
 
 /// The sign-in and callback routes. `http` performs the code exchange;
@@ -462,31 +559,45 @@ let private callback (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHand
 /// middleware like every mutating `/api` call. Mounting it twice (beside
 /// `AuthCookieIssuance = EnabledAuthCookieIssuance`) is harmless: the
 /// handlers are the same and the first match answers.
-let routes (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
+let routesWithPage (page: SignInPage) (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
     choose [
-        GET >=> route config.SignInPath >=> signIn config
-        GET >=> route config.CallbackPath >=> callback http config
+        GET >=> route config.SignInPath >=> signIn page config
+        GET >=> route config.CallbackPath >=> callback page http config
         if config.CookieName = AuthSession.CookieName then
             yield! AuthSession.routes
     ]
 
-/// Compose the interactive sign-in onto a `ServerApp`: the two routes are
+/// `routesWithPage` with the default failure page (Phase 1139: minimal
+/// inline styling).
+let routes (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
+    routesWithPage SignInPage.defaults http config
+
+/// Compose the interactive sign-in onto a `ServerApp` with `page` as the failure page: the two routes are
 /// appended to the router through `ComposeExtensions.Handlers` and the
 /// `InteractiveSignIn` registration through its `ServiceConfig`, the seam
 /// every companion contributes through. Apply it BEFORE
 /// `PublicRenderingCompose.withPublicRendering`, so the routes precede the
 /// public-page catch-all.
-let withInteractiveSignIn (http: HttpClient) (config: OidcSsrSignInConfig) (app: ServerApp) : ServerApp =
+let withInteractiveSignInPage
+    (page: SignInPage)
+    (http: HttpClient)
+    (config: OidcSsrSignInConfig)
+    (app: ServerApp)
+    : ServerApp =
     let registerSignIn (s: IServiceCollection) = register s config
 
     {
         app with
             Extensions = {
                 app.Extensions with
-                    Handlers = app.Extensions.Handlers @ [ routes http config ]
+                    Handlers = app.Extensions.Handlers @ [ routesWithPage page http config ]
                     ServiceConfig =
                         match app.Extensions.ServiceConfig with
                         | None -> Some registerSignIn
                         | Some baseFn -> Some(fun s -> registerSignIn (baseFn s))
             }
     }
+
+/// `withInteractiveSignInPage` with the default failure page.
+let withInteractiveSignIn (http: HttpClient) (config: OidcSsrSignInConfig) (app: ServerApp) : ServerApp =
+    withInteractiveSignInPage SignInPage.defaults http config app

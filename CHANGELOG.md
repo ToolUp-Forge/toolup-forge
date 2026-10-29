@@ -20,7 +20,7 @@ Migration notes:
 - [1077-redesign-f-turnoutcome-loopstate-and-loop-step](docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md)
 - [1137-build-identity](docs/migrations/1137-build-identity.md)
 
-_Surface since `v0.36.0`: **breaking** — 3 packages moved; 211 members added, 1 member changed, 5 members removed._
+_Surface since `v0.36.0`: **breaking** — 4 packages moved; 218 members added, 1 member changed, 5 members removed._
 
 ### Added
 
@@ -46,6 +46,14 @@ _Surface since `v0.36.0`: **breaking** — 3 packages moved; 211 members added, 
   - `ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }`
   - `ToolUp.AI.AIAgentEngine+LoopStateModule (class)`
   - … and 175 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+- `ToolUp.AuthProviders.Oidc` — 7 members:
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPage (class)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule (class)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.defaults : ToolUp.AuthProviders.OidcSsrSignIn+SignInPage { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.stylesheet(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage) : Microsoft.FSharp.Core.FSharpOption`1[System.String]`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.withStylesheet(System.String, ToolUp.AuthProviders.OidcSsrSignIn+SignInPage) : ToolUp.AuthProviders.OidcSsrSignIn+SignInPage`
+  - `ToolUp.AuthProviders.OidcSsrSignIn.routesWithPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]`
+  - `ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignInPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }`
