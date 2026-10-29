@@ -120,13 +120,13 @@ module AlgorithmsServerApp =
         let mergedExt: ComposeExtensions = {
             baseExt with
                 Handlers = baseExt.Handlers @ handlers
-                ServiceConfig =
-                    match baseExt.ServiceConfig with
-                    | None -> Some algorithmsServiceConfig
-                    | Some baseFn -> Some(fun s -> algorithmsServiceConfig (baseFn s))
         }
 
-        let withExtensions = { app.Base with Extensions = mergedExt }
+        let withExtensions =
+            { app.Base with Extensions = mergedExt }
+            |> ServerApp.addContribution (
+                Contribution.service (ComponentId.forCompanionSlot "ToolUp.Algorithms") algorithmsServiceConfig
+            )
 
         let withTools =
             if app.ExposeAITools then

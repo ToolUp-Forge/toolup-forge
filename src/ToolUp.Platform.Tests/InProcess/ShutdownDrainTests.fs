@@ -113,7 +113,7 @@ let private ragHost (app: RAGServerApp) : IHost =
     let composed = composeRAG app
     let builder = Host.CreateEmptyApplicationBuilder(HostApplicationBuilderSettings())
 
-    match composed.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig composed with
     | Some f -> f builder.Services |> ignore
     | None -> ()
 
@@ -132,7 +132,7 @@ let private hostedServiceTypeNames (app: RAGServerApp) =
     let services = ServiceCollection() :> IServiceCollection
 
     let services =
-        match composed.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig composed with
         | Some f -> f services
         | None -> services
 

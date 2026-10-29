@@ -896,7 +896,7 @@ module private PreviewCompose =
                 let app = ServerApp.empty
 
                 Expect.isNone
-                    app.Extensions.ServiceConfig
+                    (ServerApp.serviceConfig app)
                     "no preview seam composed → no service config → the pre-200 composition, byte-for-byte"
 
                 let services = ServiceCollection()
@@ -914,7 +914,7 @@ module private PreviewCompose =
                 let services = ServiceCollection()
                 let before = services.Count
 
-                match app.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig app with
                 | Some cfg -> cfg services |> ignore
                 | None -> failtest "composing the seam must populate ServiceConfig"
 
@@ -946,7 +946,7 @@ module private PreviewCompose =
 
                 let services = ServiceCollection()
 
-                match app.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig app with
                 | Some cfg -> cfg services |> ignore
                 | None -> failtest "ServiceConfig must survive composition"
 
@@ -1515,7 +1515,7 @@ module private RedactorCompose =
                 let services = ServiceCollection()
                 let before = services.Count
 
-                match app.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig app with
                 | Some cfg -> cfg services |> ignore
                 | None -> failtest "composing the redactor must populate ServiceConfig"
 

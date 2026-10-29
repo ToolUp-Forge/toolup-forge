@@ -1374,20 +1374,13 @@ module FactBrowseHandler =
     /// table reads as never refreshed. Under `NoFactStore` the app is
     /// returned unchanged — a composition without this call is
     /// byte-for-byte unchanged (GP 11 / GP 13).
+    /// **Adds** one handler, and the writer decoration through `ServerApp.addServiceConfig` (a later `withExtensions` keeps it).
     let withFactBrowse (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
         | EnabledFactStore ->
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some decorateWriter
-                | Some existing -> Some(fun s -> decorateWriter (existing s))
-
             {
                 app with
-                    Extensions = {
-                        app.Extensions with
-                            Handlers = app.Extensions.Handlers @ [ handler ]
-                            ServiceConfig = serviceConfig
-                    }
+                    Extensions.Handlers = app.Extensions.Handlers @ [ handler ]
             }
+            |> ServerApp.addServiceConfig decorateWriter

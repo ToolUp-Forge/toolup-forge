@@ -353,20 +353,12 @@ let previewOriginal
 /// registers nothing. There is no default seam in DI, no hosted
 /// service, and no change to `getOriginalDocument` — the pre-200
 /// original-retrieval path is byte-for-byte what it was.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withOriginalPreviewSeam (seam: IOriginalPreviewSeam) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         s.AddSingleton<IOriginalPreviewSeam>(seam)
 
-    {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    app |> ServerApp.addServiceConfig register
 
 /// Phase 108 — opt into time-bound direct-download URLs for originals.
 /// One call, no signer to write: the seam mints through whatever
@@ -387,6 +379,7 @@ let withOriginalPreviewSeam (seam: IOriginalPreviewSeam) (app: ServerApp) : Serv
 /// `withOriginalPreviewSeam (createBlobSignedUrl myResolver options)`
 /// instead, so its own resolution branches (and its own
 /// `ResolveMetadata`) are the ones that run.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withSignedOriginalUrls (options: PreviewSignedUrlOptions) (app: ServerApp) : ServerApp =
     withOriginalPreviewSeam
         (createBlobSignedUrl (KnowledgeBase.ServerOriginalSourceResolver.createDefault ()) options)

@@ -302,7 +302,7 @@ let private builtProviderUnder (knob: FactStoreMode) : ServiceProvider =
     services.AddSingleton<IEventStore>(InMemoryEventStore.InMemoryEventStore())
     |> ignore
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some cfg -> cfg services |> ignore
     | None -> ()
 

@@ -1249,7 +1249,10 @@ let compose
 
     // Companion DI registrations (AI, future distributed task
     // companions, etc.) run before scope resolution so they can
-    // depend on SDK services being present.
+    // depend on SDK services being present. Phase 1052 — through
+    // `ServerApp.run` this is the consumer's own `ServiceConfig` followed by
+    // every contribution on the app, in the order added
+    // (`ServerApp.serviceConfig`), then the platform's run-time families.
     match extensions.ServiceConfig with
     | Some cfg -> cfg services |> ignore
     | None -> ()

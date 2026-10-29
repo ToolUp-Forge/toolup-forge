@@ -202,7 +202,7 @@ let private configure (app: ServerApp) (scheduler: RecordingScheduler) (logger: 
     let source = InMemoryDataSource.create ()
 
     fun (services: IServiceCollection) ->
-        app.Extensions.ServiceConfig |> Option.iter (fun f -> f services |> ignore)
+        ServerApp.serviceConfig app |> Option.iter (fun f -> f services |> ignore)
         services.AddSingleton<IDataSource>(source) |> ignore
         services.AddSingleton<IJobScheduler>(scheduler) |> ignore
         services.AddSingleton<IEventStore>(events) |> ignore
@@ -689,7 +689,7 @@ let private compositionTests =
 
             let app = ServerApp.empty |> ServerApp.addModule m
             let services = ServiceCollection()
-            app.Extensions.ServiceConfig |> Option.iter (fun f -> f services |> ignore)
+            ServerApp.serviceConfig app |> Option.iter (fun f -> f services |> ignore)
             let provider = services.BuildServiceProvider()
 
             Expect.equal

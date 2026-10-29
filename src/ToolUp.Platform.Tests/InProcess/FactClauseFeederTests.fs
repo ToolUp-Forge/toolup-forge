@@ -691,7 +691,7 @@ let private composedUnder (knob: FactStoreMode) : ServiceProvider =
 
     services.AddSingleton<IMetricRegistry>(registry) |> ignore
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some cfg -> cfg services |> ignore
     | None -> ()
 

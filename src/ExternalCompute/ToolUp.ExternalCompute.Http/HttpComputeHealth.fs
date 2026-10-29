@@ -191,6 +191,7 @@ module HttpComputeCompose =
     /// A deployment that never calls this keeps the `NoExternalCompute`
     /// default and pays nothing (GP 11 + GP 13) — no probe, no validator,
     /// no HTTP client, no allocation.
+    /// **Sets** `ServerConfig.ExternalCompute`, and **adds** the dispatcher's registrations through `ServerApp.addServiceConfig`.
     let withHttpCompute
         (config: HttpComputeConfig)
         (secretStore: ISecretStore)
@@ -223,15 +224,4 @@ module HttpComputeCompose =
             |> withProbe
             |> ServerApp.withConfigValidator (HttpComputeHealth.configValidator dispatcher secretStore)
 
-        let extensions = composed.Extensions
-
-        {
-            composed with
-                Extensions = {
-                    extensions with
-                        ServiceConfig =
-                            match extensions.ServiceConfig with
-                            | None -> Some registerDispatcher
-                            | Some existing -> Some(fun services -> registerDispatcher (existing services))
-                }
-        }
+        composed |> ServerApp.addServiceConfig registerDispatcher

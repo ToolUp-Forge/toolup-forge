@@ -914,7 +914,7 @@ let private composeTests =
 
             let services = ServiceCollection()
 
-            match app.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig app with
             | Some register -> register services |> ignore
             | None -> failtest "the compose helper must contribute a ServiceConfig"
 
