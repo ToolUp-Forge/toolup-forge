@@ -20,7 +20,7 @@ Migration notes:
 - [1069-redesign-e-defects-client-shell](docs/migrations/1069-redesign-e-defects-client-shell.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 
-_Surface since `v0.37.0`: **breaking** — 6 packages moved; 14 members added, 3 members changed, 1 member removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 8 packages moved; 67 members added, 3 members changed, 1 member removed; 1 package new._
 
 ### Added
 
@@ -42,6 +42,30 @@ _Surface since `v0.37.0`: **breaking** — 6 packages moved; 14 members added, 3
   - `ToolUp.Platform.TeamManagerMessages.RevokeInvitePrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }`
   - `ToolUp.Platform.TeamManagerMessages.TransferSelectedMemberFallback : System.String { get }`
   - `Toolup.UIToolkit.Layout.registerHeaderIdentityAction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]) : System.Void`
+- `ToolUp.Platform.Core` — 52 members:
+  - `ToolUp.Platform.AuditScope (class)`
+  - `ToolUp.Platform.AuditScope+Scoped (class)`
+  - `ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }`
+  - `ToolUp.Platform.AuditScope+Tags (class)`
+  - `ToolUp.Platform.AuditScope+Tags.PlatformScope : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditScope+Tags.Scoped : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditScope.IsPlatformScope : System.Boolean { get }`
+  - `ToolUp.Platform.AuditScope.IsScoped : System.Boolean { get }`
+  - `ToolUp.Platform.AuditScope.PlatformScope : ToolUp.Platform.AuditScope { get }`
+  - `ToolUp.Platform.AuditScope.Tag : System.Int32 { get }`
+  - `ToolUp.Platform.AuditScopeModule (class)`
+  - `ToolUp.Platform.AuditScopeModule.streamKey(ToolUp.Platform.AuditScope) : System.String`
+  - `ToolUp.Platform.PlatformShard (class)`
+  - `ToolUp.Platform.PlatformShard.Platform : ToolUp.Platform.PlatformShard { get }`
+  - `ToolUp.Platform.PlatformShard.Tag : System.Int32 { get }`
+  - `ToolUp.Platform.ScopeKey (class)`
+  - `ToolUp.Platform.ScopeKey+Claim (class)`
+  - `ToolUp.Platform.ScopeKey+Claim.claimScopeId : System.String { get }`
+  - `ToolUp.Platform.ScopeKey+Platform (class)`
+  - `ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }`
+  - … and 32 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 1 member:
+  - `ToolUp.Platform.Middleware+StorageScopeDerivation.tryKeyFromSubject(ToolUp.Platform.Subject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]`
 - `ToolUp.Platform.UI` — 1 member:
   - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
 
