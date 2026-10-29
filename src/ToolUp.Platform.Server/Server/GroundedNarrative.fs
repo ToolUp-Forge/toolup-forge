@@ -109,13 +109,56 @@ type GroundedSectionShape = {
     Guidance: string
 }
 
+/// Phase 1136 — what a grounded run's projections are built under: the
+/// run's resolved scope, the principal it reads and publishes as, the
+/// surface its narrative is checked at, and the run's request context.
+///
+/// `Request` is the context the model's fact tools read through: the
+/// resolved scope carried (never minted), the principal as the request's
+/// user, over the run's own DI scope. It is the gated fact reader: a
+/// projection reads facts through the fact tier's per-request API over it
+/// (`FactBrowseHandler.factBrowseApi context.Request`), so every point it
+/// reads has passed the disclosure gate for the narrative's principal, and
+/// a withheld point arrives marked as withheld rather than as a number. The
+/// type names no fact-tier type, like every seam in this file. Valid only
+/// while the projection it is handed to runs.
+type GroundedProjectionContext = {
+    /// The scope the run reads and publishes in, as the platform resolved it.
+    Scope: ResolvedScope
+    /// The definition's principal: the actor every read is judged for.
+    Principal: string
+    /// The surface the narrative is checked at.
+    Surface: FactEgressSurface
+    /// The run's request context — the gated fact reader.
+    Request: Microsoft.AspNetCore.Http.HttpContext
+}
+
+/// Phase 1136 — one projection a grounded run's model asked for: the
+/// request's `kind` and the request itself, the JSON object the model wrote.
+/// The run reads nothing else of it; the builder registered for the kind
+/// does. It names what to draw and carries no number.
+type GroundedProjectionRequest = {
+    /// The request's `kind`, lower-cased; empty when it names none.
+    Kind: string
+    /// The request object as the model wrote it.
+    Json: string
+}
+
+/// Phase 1136 — builds the elements one requested projection draws, under
+/// the run's projection context. `Error` names why the request cannot be
+/// drawn; the run refuses that request on its audit row and publishes the
+/// rest. Whatever it builds is checked by the grounding gate before it is
+/// published, so a builder cannot put an ungrounded number on the page.
+type GroundedRequestBuilder =
+    GroundedProjectionContext -> GroundedProjectionRequest -> Async<Result<NarrativeElement list, string>>
+
 /// A registered grounded narrative run — what a deployment declares. The
 /// SDK holds the registry and names no report (GP 9): the deployment says
 /// which runs exist, and both triggers address a run by its `Key`.
 ///
-/// **Stateless between invocations** (GP 12 rule 4): `Project` derives its
-/// result from the scope it is handed plus whatever the deployment closed
-/// over at registration.
+/// **Stateless between invocations** (GP 12 rule 4): `Project` and every
+/// request builder derive their result from the context they are handed
+/// plus whatever the deployment closed over at registration.
 type GroundedNarrativeDefinition = {
     /// Stable key both triggers address the run by.
     Key: string
@@ -135,12 +178,23 @@ type GroundedNarrativeDefinition = {
     /// reacts to no data change.
     DependsOnMetrics: string list
     Sections: GroundedSectionShape list
-    /// The deterministic projections — tables and charts — built from
-    /// Facts by deployment code (for example `NarrativeFromData`'s
-    /// fact-bearing grids), keyed by section id. The model writes prose
-    /// only; projected elements are appended after it and checked by the
-    /// same gate.
-    Project: string -> Async<Result<(string * NarrativeElement list) list, string>>
+    /// The deterministic projections — tables — built from Facts by
+    /// deployment code (for example `NarrativeFromData`'s fact-bearing
+    /// grids), keyed by section id, under the run's projection context
+    /// (Phase 1136; `withProjection` adapts a scope-id form). They are
+    /// appended after the section's prose, before any requested projection,
+    /// and checked by the same gate.
+    Project: GroundedProjectionContext -> Async<Result<(string * NarrativeElement list) list, string>>
+    /// Phase 1136 — the builders for the projections the model may
+    /// request, by request kind. Empty (the default) means the model is
+    /// told nothing of projections and a request it writes anyway is
+    /// refused as an unregistered kind.
+    RequestBuilders: Map<string, GroundedRequestBuilder>
+    /// Phase 1136 — whether the model is told it may write a hypothesis
+    /// marked as conjecture. A conjecture renders as a labelled callout
+    /// and carries no figure; whether or not this is set, a conjecture the
+    /// model writes is rendered so, never as plain prose. Off by default.
+    AllowsConjecture: bool
     /// Tags the published narrative carries.
     Tags: string list
     /// The egress surface the narrative is checked for.
@@ -170,6 +224,8 @@ module GroundedNarrativeDefinition =
             DependsOnMetrics = []
             Sections = sections
             Project = fun _ -> async { return Ok [] }
+            RequestBuilders = Map.empty
+            AllowsConjecture = false
             Tags = []
             Surface = FactNarrativePublication
         }
@@ -179,11 +235,41 @@ module GroundedNarrativeDefinition =
             DependsOnMetrics = metricIds
     }
 
+    /// Deterministic projections from the scope id alone — the form that
+    /// predates the projection context, kept for the projections that need
+    /// nothing else.
     let withProjection
         (project: string -> Async<Result<(string * NarrativeElement list) list, string>>)
         (definition: GroundedNarrativeDefinition)
         =
+        {
+            definition with
+                Project = fun context -> project context.Scope.ScopeId
+        }
+
+    /// Phase 1136 — deterministic projections built under the run's
+    /// projection context, so they can read facts through its gated
+    /// request (see `GroundedProjectionContext`).
+    let withProjectionContext
+        (project: GroundedProjectionContext -> Async<Result<(string * NarrativeElement list) list, string>>)
+        (definition: GroundedNarrativeDefinition)
+        =
         { definition with Project = project }
+
+    /// Phase 1136 — let the model request projections of `kind`, built by
+    /// `builder`. The run then tells the model the request form and the
+    /// registered kinds; registering a kind again replaces its builder.
+    let withRequestBuilder (kind: string) (builder: GroundedRequestBuilder) (definition: GroundedNarrativeDefinition) = {
+        definition with
+            RequestBuilders = definition.RequestBuilders |> Map.add (kind.Trim().ToLowerInvariant()) builder
+    }
+
+    /// Phase 1136 — tell the model it may write a hypothesis, marked as
+    /// conjecture (see `AllowsConjecture`).
+    let withConjecture (definition: GroundedNarrativeDefinition) = {
+        definition with
+            AllowsConjecture = true
+    }
 
     let withTags (tags: string list) (definition: GroundedNarrativeDefinition) = { definition with Tags = tags }
 

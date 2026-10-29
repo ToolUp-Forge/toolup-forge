@@ -5291,15 +5291,17 @@ ToolUp.Platform.GrantWritePathModule (class)
 ToolUp.Platform.GrantWritePathModule.identity(ToolUp.Platform.GrantWritePath) : System.String
 ToolUp.Platform.GrantWritePathModule.isOpenUnder(ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantWritePath) : System.Boolean
 ToolUp.Platform.GroundedNarrativeDefinition (class)
-ToolUp.Platform.GroundedNarrativeDefinition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface)
+ToolUp.Platform.GroundedNarrativeDefinition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface)
+ToolUp.Platform.GroundedNarrativeDefinition.AllowsConjecture : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeDefinition.DependsOnMetrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.DisplayName : System.String { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Key : System.String { get }
 ToolUp.Platform.GroundedNarrativeDefinition.ModuleId : System.String { get }
 ToolUp.Platform.GroundedNarrativeDefinition.PageRoute : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Principal : System.String { get }
-ToolUp.Platform.GroundedNarrativeDefinition.Project : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]] { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Project : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Prompt : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinition.RequestBuilders : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]]] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Sections : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -5308,7 +5310,10 @@ ToolUp.Platform.GroundedNarrativeDefinitionModule (class)
 ToolUp.Platform.GroundedNarrativeDefinitionModule.create(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape]) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.dependingOn(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.reword(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.GroundedNarrativeDefinition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GroundedNarrativeDefinition, System.String]
+ToolUp.Platform.GroundedNarrativeDefinitionModule.withConjecture(ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.withProjection(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
+ToolUp.Platform.GroundedNarrativeDefinitionModule.withProjectionContext(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
+ToolUp.Platform.GroundedNarrativeDefinitionModule.withRequestBuilder(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.withTags(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeEvents (class)
 ToolUp.Platform.GroundedNarrativeEvents.FailedType : System.String (literal)
@@ -5356,6 +5361,16 @@ ToolUp.Platform.GroundedNarrativeRequest.Access : Microsoft.FSharp.Core.FSharpOp
 ToolUp.Platform.GroundedNarrativeRequest.RunKey : System.String { get }
 ToolUp.Platform.GroundedNarrativeRequest.Scope : ToolUp.Platform.ResolvedScope { get }
 ToolUp.Platform.GroundedNarrativeRequest.Trigger : System.String { get }
+ToolUp.Platform.GroundedProjectionContext (class)
+ToolUp.Platform.GroundedProjectionContext..ctor(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.AspNetCore.Http.HttpContext)
+ToolUp.Platform.GroundedProjectionContext.Principal : System.String { get }
+ToolUp.Platform.GroundedProjectionContext.Request : Microsoft.AspNetCore.Http.HttpContext { get }
+ToolUp.Platform.GroundedProjectionContext.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.GroundedProjectionContext.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.GroundedProjectionRequest (class)
+ToolUp.Platform.GroundedProjectionRequest..ctor(System.String, System.String)
+ToolUp.Platform.GroundedProjectionRequest.Json : System.String { get }
+ToolUp.Platform.GroundedProjectionRequest.Kind : System.String { get }
 ToolUp.Platform.GroundedSectionShape (class)
 ToolUp.Platform.GroundedSectionShape..ctor(System.String, System.String, System.String)
 ToolUp.Platform.GroundedSectionShape.Guidance : System.String { get }

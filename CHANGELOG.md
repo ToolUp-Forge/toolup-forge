@@ -18,13 +18,14 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 Migration notes:
 
 - [1077-redesign-f-turnoutcome-loopstate-and-loop-step](docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md)
+- [1136-requested-projections](docs/migrations/1136-requested-projections.md)
 - [1137-build-identity](docs/migrations/1137-build-identity.md)
 
-_Surface since `v0.36.0`: **breaking** — 4 packages moved; 218 members added, 1 member changed, 5 members removed._
+_Surface since `v0.36.0`: **breaking** — 5 packages moved; 256 members added, 5 members changed, 5 members removed._
 
 ### Added
 
-- `ToolUp.AI.Server` — 195 members:
+- `ToolUp.AI.Server` — 215 members:
   - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.exceeded(ToolUp.AI.AIAgentEngine+AgentCallBudget, System.TimeSpan, System.String) : System.String`
   - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.ofLimits(ToolUp.AI.SystemPromptBuilder+AgentLoopLimits) : ToolUp.AI.AIAgentEngine+AgentCallBudget`
   - `ToolUp.AI.AIAgentEngine+AgentLoopStopped (class)`
@@ -45,7 +46,7 @@ _Surface since `v0.36.0`: **breaking** — 4 packages moved; 218 members added, 
   - `ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }`
   - `ToolUp.AI.AIAgentEngine+LoopStateModule (class)`
-  - … and 175 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+  - … and 195 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AuthProviders.Oidc` — 7 members:
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPage (class)`
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule (class)`
@@ -54,11 +55,15 @@ _Surface since `v0.36.0`: **breaking** — 4 packages moved; 218 members added, 
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.withStylesheet(System.String, ToolUp.AuthProviders.OidcSsrSignIn+SignInPage) : ToolUp.AuthProviders.OidcSsrSignIn+SignInPage`
   - `ToolUp.AuthProviders.OidcSsrSignIn.routesWithPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]`
   - `ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignInPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp`
+- `ToolUp.Facts.Presentation` — 3 members:
+  - `ToolUp.Facts.Presentation.PresentationNarrative (class)`
+  - `ToolUp.Facts.Presentation.PresentationNarrative.draw(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSeries]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]`
+  - `ToolUp.Facts.Presentation.PresentationNarrative.project(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }`
   - `ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }`
-- `ToolUp.Platform.Server` — 13 members:
+- `ToolUp.Platform.Server` — 28 members:
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity (class)`
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])`
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity.Commit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
@@ -67,16 +72,29 @@ _Surface since `v0.36.0`: **breaking** — 4 packages moved; 218 members added, 
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule.ofAssembly(System.Reflection.Assembly) : ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity`
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule.ofInformationalVersion(System.String) : ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity`
   - `ToolUp.Platform.DevDiagnosticsHandler.buildIdentityRoute : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }`
-  - `ToolUp.Platform.ServerAppModule.withBuildIdentity(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp`
-  - `ToolUp.Platform.SpaFallbackExcludedPath (class)`
-  - `ToolUp.Platform.SpaFallbackExcludedPath..ctor(System.String)`
-  - `ToolUp.Platform.SpaFallbackExcludedPath.Path : System.String { get }`
-  - `ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.SpaFallbackExcludedPath])`
+  - `ToolUp.Platform.GroundedNarrativeDefinition.AllowsConjecture : System.Boolean { get }`
+  - `ToolUp.Platform.GroundedNarrativeDefinition.RequestBuilders : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]]] { get }`
+  - `ToolUp.Platform.GroundedNarrativeDefinitionModule.withConjecture(ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition`
+  - `ToolUp.Platform.GroundedNarrativeDefinitionModule.withProjectionContext(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition`
+  - `ToolUp.Platform.GroundedNarrativeDefinitionModule.withRequestBuilder(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition`
+  - `ToolUp.Platform.GroundedProjectionContext (class)`
+  - `ToolUp.Platform.GroundedProjectionContext..ctor(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.AspNetCore.Http.HttpContext)`
+  - `ToolUp.Platform.GroundedProjectionContext.Principal : System.String { get }`
+  - `ToolUp.Platform.GroundedProjectionContext.Request : Microsoft.AspNetCore.Http.HttpContext { get }`
+  - `ToolUp.Platform.GroundedProjectionContext.Scope : ToolUp.Platform.ResolvedScope { get }`
+  - `ToolUp.Platform.GroundedProjectionContext.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }`
+  - `ToolUp.Platform.GroundedProjectionRequest (class)`
+  - … and 8 more — `git diff v0.36.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ### Changed
 
-- `ToolUp.AI.Server` — 1 member:
+- `ToolUp.AI.Server` — 3 members:
+  - `ToolUp.AI.GroundedNarrativeRun.assemble` — `ToolUp.AI.GroundedNarrativeRun.assemble(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], ToolUp.Platform.Narrative.NarrativeProvenance) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]` → `ToolUp.AI.GroundedNarrativeRun.assemble(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], ToolUp.Platform.Narrative.NarrativeProvenance) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]`
+  - `ToolUp.AI.GroundedNarrativeRun.parseOutput` — `ToolUp.AI.GroundedNarrativeRun.parseOutput(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], System.String]` → `ToolUp.AI.GroundedNarrativeRun.parseOutput(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft], System.String]`
   - `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor` — `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.AI.AISurfaceDerivationMode)` → `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+AgentLoopLimits, ToolUp.AI.AISurfaceDerivationMode)`
+- `ToolUp.Platform.Server` — 2 members:
+  - `ToolUp.Platform.GroundedNarrativeDefinition..ctor` — `ToolUp.Platform.GroundedNarrativeDefinition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface)` → `ToolUp.Platform.GroundedNarrativeDefinition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface)`
+  - `ToolUp.Platform.GroundedNarrativeDefinition.Project` — `ToolUp.Platform.GroundedNarrativeDefinition.Project : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]] { get }` → `ToolUp.Platform.GroundedNarrativeDefinition.Project : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]] { get }`
 
 ### Removed
 

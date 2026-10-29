@@ -54,6 +54,9 @@ ToolUp.Facts.Presentation.PresentationKind+Tags.Breakdown : System.Int32 (litera
 ToolUp.Facts.Presentation.PresentationKind+Tags.Comparison : System.Int32 (literal)
 ToolUp.Facts.Presentation.PresentationKind+Tags.Table : System.Int32 (literal)
 ToolUp.Facts.Presentation.PresentationKind+Tags.Trend : System.Int32 (literal)
+ToolUp.Facts.Presentation.PresentationNarrative (class)
+ToolUp.Facts.Presentation.PresentationNarrative.draw(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSeries]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]
+ToolUp.Facts.Presentation.PresentationNarrative.project(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]
 ToolUp.Facts.Presentation.PresentationPeriod (class)
 ToolUp.Facts.Presentation.PresentationPeriod.IsBetween : System.Boolean { get }
 ToolUp.Facts.Presentation.PresentationPeriod.IsEnding : System.Boolean { get }

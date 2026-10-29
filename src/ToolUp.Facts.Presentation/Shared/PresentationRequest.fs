@@ -460,3 +460,235 @@ module PresentationRequest =
         with
         | Some v -> ofJsonValue v
         | None -> Error PresentationRequestError.NotAnObject
+
+/// Phase 1136 — a presentation request drawn as the narrative elements a
+/// grounded narrative publishes: a `Table` whose every cell is a `Metric`
+/// span citing the Fact it states, so the narrative grounding gate checks
+/// each number as it checks the model's own citations. A chart is not drawn
+/// here: the gate reads a chart's props as prose, so its points would be
+/// refused, and a grounded narrative projects tables until a chart-shaped
+/// narrative element exists.
+///
+/// The builders' rule holds: a gap is never drawn as a number. A point the
+/// read withheld, or one with no single number, leaves its cell empty and
+/// is named, with its reason, in a note after the table. The note names a
+/// subject and a metric, never a count or a value.
+///
+/// What the gate would refuse is refused here first, by name and before
+/// any read: a trend (its rows are days, and a date is a figure to the
+/// gate) and annotations (they carry dates). A subject or metric whose NAME
+/// carries a digit is drawn, and the gate refuses the table — the grounded
+/// run then refuses that request on its audit row; it is never published
+/// with the figure unchecked.
+[<RequireQualifiedAccess>]
+module PresentationNarrative =
+    open ToolUp.Platform.Narrative
+
+    let private dayOf = PresentationDay.ofDateTime
+
+    let private pointsOn (day: DateTime) (series: FactSeries) : FactSeriesPoint list =
+        series.Points |> List.filter (fun p -> dayOf p.PeriodFrom = day)
+
+    /// A display label per subject: its own member where that is unique,
+    /// its readable path where two subjects share a member.
+    let private labels (points: FactSeriesPoint list) : Map<string, string> =
+        let subjects = points |> List.distinctBy _.Subject
+
+        let short (p: FactSeriesPoint) =
+            p.SubjectPath |> List.tryLast |> Option.defaultValue p.Subject
+
+        let counts = subjects |> List.countBy short |> Map.ofList
+
+        subjects
+        |> List.map (fun p -> p.Subject, (if Map.find (short p) counts = 1 then short p else p.Subject))
+        |> Map.ofList
+
+    /// The cell stating `p`, or why it states nothing.
+    let private cell (metric: string) (p: FactSeriesPoint) : Result<InlineSpan list, string> =
+        match p.Withheld, p.Value with
+        | true, _ -> Error "withheld from you by the disclosure gate"
+        | false, Some v ->
+            Ok [
+                InlineSpan.Metric(metric, p.Rendering |> Option.defaultValue (string v), Some p.FactId)
+            ]
+        | false, None -> Error "a fact with no single number (an absence or an interval)"
+
+    /// The title, the table, then a note per point not drawn. `headers` is
+    /// the subject column's then one per value column; each row is a
+    /// subject's label and one cell per value column.
+    let private tableOf
+        (request: PresentationRequest)
+        (headers: string list)
+        (rows: (string * Result<InlineSpan list, string> list) list)
+        : NarrativeElement list =
+        let level = List.head headers
+        let valueHeaders = List.tail headers
+
+        let heading =
+            match request.Title with
+            | Some t when not (String.IsNullOrWhiteSpace t) -> t
+            | _ -> sprintf "%s by %s" (String.concat ", " request.Metrics) level
+
+        let drawn =
+            rows
+            |> List.filter (fun (_, cells) -> cells |> List.exists Result.isOk)
+            |> List.map (fun (subject, cells) ->
+                [ InlineSpan.Text subject ]
+                :: (cells
+                    |> List.map (function
+                        | Ok spans -> spans
+                        | Error _ -> [])))
+
+        let gaps =
+            rows
+            |> List.collect (fun (subject, cells) ->
+                List.zip valueHeaders cells
+                |> List.choose (fun (header, c) ->
+                    match c with
+                    | Error why ->
+                        Some(
+                            NarrativeElement.Paragraph [
+                                InlineSpan.Text(sprintf "Not shown: %s, %s, %s." subject header why)
+                            ]
+                        )
+                    | Ok _ -> None))
+
+        [
+            NarrativeElement.Heading(3, [ InlineSpan.Text heading ])
+            NarrativeElement.Table(
+                (level, TableAlignment.Left)
+                :: (valueHeaders |> List.map (fun h -> h, TableAlignment.Right)),
+                drawn
+            )
+            yield! gaps
+        ]
+
+    /// Why `request` draws nothing in a grounded narrative whatever its
+    /// facts, when it does not.
+    let private undrawable (request: PresentationRequest) : string option =
+        if request.Kind = PresentationKind.Trend then
+            Some
+                "a trend is not drawn in a grounded narrative: its rows are days, which the grounding gate reads as figures; request a table, a breakdown or a comparison"
+        elif not (List.isEmpty request.Annotations) then
+            Some "annotations carry dates, which the grounding gate reads as figures; a projected table takes none"
+        else
+            None
+
+    /// The elements `request` draws from `series` — one series per metric
+    /// the request names, in its order, each as the gated read returned it.
+    /// Pure. `Error` names why the request draws nothing.
+    let draw (request: PresentationRequest) (series: FactSeries list) : Result<NarrativeElement list, string> =
+        match PresentationRequest.validate request with
+        | Error e -> Error(PresentationRequestError.describe e)
+        | Ok request ->
+            match undrawable request, series with
+            | Some why, _ -> Error why
+            | None, _ when List.map (fun (s: FactSeries) -> s.Metric) series <> request.Metrics ->
+                Error "the series are not one per metric the request names, in its order"
+            | None, _ when series |> List.exists (fun s -> s.TableId <> request.TableId) ->
+                Error(sprintf "a series is not of table '%s'" request.TableId)
+            | None, [] -> Error "the request names no metric"
+            | None, first :: _ ->
+                let level = first.SubjectLevel
+                let day = PresentationRequest.delivery request
+                let onDay = series |> List.map (pointsOn day)
+                let names = labels (List.concat onDay)
+
+                let subjects (points: FactSeriesPoint list) =
+                    points |> List.map _.Subject |> List.distinct
+
+                let labelOf (known: Map<string, string>) (s: string) =
+                    known |> Map.tryFind s |> Option.defaultValue s
+
+                let at (missing: string) (metric: string) (points: FactSeriesPoint list) (s: string) =
+                    match points |> List.tryFind (fun p -> p.Subject = s) with
+                    | Some p -> cell metric p
+                    | None -> Error missing
+
+                match request.Kind with
+                | _ when onDay |> List.forall List.isEmpty -> Error "the period's last day holds no fact to draw"
+                | PresentationKind.Breakdown ->
+                    // Largest first; a point with no published number last.
+                    let metric = request.Metrics.Head
+
+                    let order =
+                        onDay.Head
+                        |> List.sortByDescending (fun p -> if p.Withheld then None else p.Value)
+                        |> subjects
+
+                    Ok(
+                        tableOf
+                            request
+                            [ level; metric ]
+                            (order
+                             |> List.map (fun s -> labelOf names s, [ at "no fact" metric onDay.Head s ]))
+                    )
+                | PresentationKind.Comparison ->
+                    let metric = request.Metrics.Head
+
+                    let before =
+                        first.Points
+                        |> List.map (fun p -> dayOf p.PeriodFrom)
+                        |> List.filter (fun d -> d < day)
+                        |> List.sortDescending
+                        |> List.tryHead
+
+                    match before with
+                    | None -> Error "the period holds no delivery before the one compared"
+                    | Some before ->
+                        let earlier = pointsOn before first
+                        let known = labels (onDay.Head @ earlier)
+
+                        Ok(
+                            tableOf
+                                request
+                                [ level; metric; sprintf "%s, previous delivery" metric ]
+                                (subjects (onDay.Head @ earlier)
+                                 |> List.map (fun s ->
+                                     labelOf known s,
+                                     [
+                                         at "no fact for that delivery" metric onDay.Head s
+                                         at "no fact for that delivery" metric earlier s
+                                     ]))
+                        )
+                | _ ->
+                    // A table: subjects by metrics.
+                    Ok(
+                        tableOf
+                            request
+                            (level :: request.Metrics)
+                            (subjects (List.concat onDay)
+                             |> List.map (fun s ->
+                                 labelOf names s,
+                                 List.zip request.Metrics onDay
+                                 |> List.map (fun (metric, points) -> at "no fact" metric points s)))
+                    )
+
+    /// Decode `requestJson` (the request's one wire shape), read each of its
+    /// series through `read` — the gated read, which judges every point for
+    /// the reader before anything is drawn — and draw it. `Error` names the
+    /// malformed field, the refused read, or why the request draws nothing.
+    let project
+        (read: FactSeriesQuery -> Async<Result<FactSeries, string>>)
+        (requestJson: string)
+        : Async<Result<NarrativeElement list, string>> =
+        let rec readAll (queries: FactSeriesQuery list) (acc: FactSeries list) = async {
+            match queries with
+            | [] -> return Ok(List.rev acc)
+            | q :: rest ->
+                match! read q with
+                | Ok s -> return! readAll rest (s :: acc)
+                | Error why -> return Error(sprintf "the fact series read refused %s: %s" q.Metric why)
+        }
+
+        async {
+            match PresentationRequest.ofJson requestJson with
+            | Error e -> return Error(PresentationRequestError.describe e)
+            | Ok request ->
+                match undrawable request with
+                | Some why -> return Error why
+                | None ->
+                    match! readAll (PresentationRequest.toQueries FactBrowseApi.MaxSeriesPoints request) [] with
+                    | Error why -> return Error why
+                    | Ok series -> return draw request series
+        }

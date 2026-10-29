@@ -92,8 +92,9 @@ let tradingSummary =
         [ { Id = "summary"; Heading = "Summary"; Guidance = "Revenue and units by brand." } ]
     |> GroundedNarrativeDefinition.dependingOn [ "revenue"; "units" ]
     |> GroundedNarrativeDefinition.withProjection (fun scopeId -> async {
-        // Tables and charts are projected deterministically from Facts —
-        // NarrativeFromData's fact-bearing grids — never written by the model.
+        // Tables are projected deterministically from Facts —
+        // NarrativeFromData's fact-bearing grids — never written by the model
+        // (see "Projections" below for the context form and requested tables).
         let! grid = brandRevenueGrid scopeId
         return Ok [ "summary", [ grid ] ] })
 
@@ -152,6 +153,98 @@ meets the same budget and pays for another partial reply.
 **Why the scope must be resolved.** The model reads facts through the request-path fact tools,
 which take only a scope the platform resolved (Phase 797). A run is handed one — a job passes its
 `JobContext.Scope` — and the anonymous scope is refused rather than read.
+
+## Projections: the tables a report draws (Phase 1136)
+
+A narrative's tables are never the model's rows. They come from Facts by one of two routes, and both
+routes are built under the same **projection context** (`GroundedProjectionContext`):
+
+- `Scope`, the run's resolved scope;
+- `Principal`, the definition's principal;
+- `Surface`, the surface the narrative is checked at;
+- `Request`, the run's request context. This is the context the model's fact tools read through
+  (the resolved scope carried, the principal as the request's user, the run's own DI scope). It is the
+  **gated fact reader**. A projection reads through the fact tier's per-request API over it,
+  `(FactBrowseHandler.factBrowseApi context.Request).QuerySeries`. The disclosure gate judges every
+  point for the narrative's principal, and a withheld point arrives marked as withheld, never as a
+  number.
+
+**Deterministic projections** are deployment code that runs on every run. They are appended after
+the section's prose. `withProjectionContext` hands the hook the context. `withProjection` keeps the
+scope-id form unchanged for hooks that read nothing:
+
+```fsharp skip=fragment
+|> GroundedNarrativeDefinition.withProjectionContext (fun context -> async {
+    let read = (FactBrowseHandler.factBrowseApi context.Request).QuerySeries
+    let! table = PresentationNarrative.project read dailyBySiteRequestJson
+    return table |> Result.map (fun elements -> [ "summary", elements ]) })
+```
+
+**Requested projections** let the model ask for the table a finding calls for. It can see that
+yesterday's drop sits in one category at one site, and it can ask for that breakdown. A section in
+the run's answer may carry `"projections"`. Each entry is a presentation request in Phase 1129's
+shape: a kind, a fact table, its metrics, a subject level and a period, and never a row. The
+deployment registers a builder per kind it allows:
+
+```fsharp skip=fragment
+|> GroundedNarrativeDefinition.withRequestBuilder "breakdown" (fun context request ->
+    PresentationNarrative.project (FactBrowseHandler.factBrowseApi context.Request).QuerySeries request.Json)
+```
+
+A definition with a registered builder tells the model the request form and the registered kinds.
+The deployment's own prompt names the tables, metrics and levels the model may ask for, as it names
+the metrics a report is written from. Each request is built through its kind's builder under the
+projection context. Then it is checked by the grounding gate **on its own**. Only a grounded table
+is appended, after the deterministic projections. A request is refused by name on the run's audit
+row (`ProjectionRefusals`), and the rest of the run still publishes, when:
+
+- its kind has no registered builder (the refusal names the registered kinds);
+- the builder could not draw it (malformed, a refused read, a trend, annotations, nothing on the day);
+- the gate refuses what was drawn. This includes a table whose facts the narrative's disclosure
+  policy does not permit at `FactNarrativePublication`, which is refused like an ungrounded figure.
+  The refusal names each offence by location and reason, never by the value drawn;
+- the run asked for more than `MaxRequestedProjections` (eight).
+
+The row also counts what was drawn (`Projections`).
+
+**A projected number must survive the gate, so a projected section is a `Table`.**
+`PresentationNarrative` draws a request as a heading, a `Table` and a note per point it leaves
+out. Each cell is a `Metric` span that cites the Fact it states, so the gate checks each one as it
+checks the model's citations. A withheld point leaves its cell empty, and the note names the subject
+and metric with the reason, never a count or a value. A chart is **not** projected into a narrative.
+The gate reads a chart component's props as prose, so a chart's points would be refused. A trend's
+rows are days, and the gate reads a date as a figure. Narratives therefore project tables, breakdowns
+and comparisons until a chart-shaped narrative element exists. For the same reason, a subject or
+metric whose name contains a digit draws a table that the gate refuses.
+
+**Why one context, and why it carries a request rather than a typed reader.** The deterministic
+hook and the request builders take the same context. Two mechanisms would diverge in what a read
+is judged under. The context names no fact-tier type, like every seam in `GroundedNarrative.fs`.
+The reader is the fact tier's existing per-request API over the run's own request, the one the
+model's tools and a reader's browser use, so nothing new decides disclosure. Two alternatives were
+rejected:
+
+- A typed series reader on the context would put the fact tier's types in `ToolUp.Platform.Server`.
+- A static holder filled from another seam would be a service locator. It also breaks after a
+  restart when a scheduled run precedes any request.
+
+## Conjecture (Phase 1136)
+
+The model writes facts and never conjecture, unless it marks the conjecture as conjecture. A
+conjecture can be a whole paragraph, written `{"conjecture":"..."}` in place of the paragraph
+string, or a span, written `{{...}}` inside a paragraph. Either form renders as a callout labelled
+*Conjecture — not a recorded fact* (`ConjectureLabel`). A span is lifted out of its paragraph and
+placed after it.
+
+**A conjecture carries no number.** Its text stays plain text, so a citation token inside it is not
+read as a figure. Any digit in it reaches the gate as an `UnreferencedNumber`, and so does a number
+in words. The narrative is then refused, because a number is either a fact or it is not written.
+`GroundedNarrativeDefinition.withConjecture` tells the model it may write a conjecture; it is off by
+default. Whatever the setting, the run renders a conjecture the model writes as a labelled callout,
+never as plain prose. The audit row counts the conjectures (`Conjectures`).
+
+A definition with no request builder and no conjecture gets the instruction it always had, byte for
+byte (`rulesFor`), and renders exactly as before.
 
 ## The triggers
 

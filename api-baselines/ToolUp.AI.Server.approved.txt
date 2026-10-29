@@ -1085,10 +1085,14 @@ ToolUp.AI.FastPathTriageResolver+TriageResult+Tags.TriageUnresolved : System.Int
 ToolUp.AI.FastPathTriageResolver+TriageResult+TriageResolved (class)
 ToolUp.AI.FastPathTriageResolver+TriageResult+TriageResolved.reply : System.String { get }
 ToolUp.AI.GroundedNarrativeRun (class)
-ToolUp.AI.GroundedNarrativeRun.assemble(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], ToolUp.Platform.Narrative.NarrativeProvenance) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]
-ToolUp.AI.GroundedNarrativeRun.parseOutput(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], System.String]
+ToolUp.AI.GroundedNarrativeRun.ConjectureLabel : System.String (literal)
+ToolUp.AI.GroundedNarrativeRun.MaxRequestedProjections : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun.assemble(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], ToolUp.Platform.Narrative.NarrativeProvenance) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]
+ToolUp.AI.GroundedNarrativeRun.conjectureCallout(System.String) : ToolUp.Platform.Narrative.NarrativeElement
+ToolUp.AI.GroundedNarrativeRun.parseOutput(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft], System.String]
 ToolUp.AI.GroundedNarrativeRun.parseParagraph(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]
 ToolUp.AI.GroundedNarrativeRun.rules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.GroundedNarrativeRun.rulesFor(ToolUp.Platform.GroundedNarrativeDefinition) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.AI.GroundedNarrativeRun.systemPrompt(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions (class)
 ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.AI.AIAgentEngine+AgentCallBudget)
@@ -1105,6 +1109,22 @@ ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunner.Run(ToolUp.Platform.Groun
 ToolUp.AI.GroundedNarrativeRun+GroundedNarratives (class)
 ToolUp.AI.GroundedNarrativeRun+GroundedNarratives.compose(ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedNarrativeDefinition], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.GroundedNarrativeRun+GroundedNarratives.create(System.IServiceProvider, ToolUp.Platform.GroundedNarrativeRegistry, ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions) : ToolUp.Platform.IGroundedNarrativeRun
+ToolUp.AI.GroundedNarrativeRun+GroundedProse (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedProse.IsProseConjecture : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedProse.IsProseParagraph : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedProse.Tag : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedProse+ProseConjecture (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedProse+ProseConjecture.Item : System.String { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedProse+ProseParagraph (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedProse+ProseParagraph.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan] { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedProse+Tags (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedProse+Tags.ProseConjecture : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedProse+Tags.ProseParagraph : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedProse], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedProjectionRequest])
+ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft.Id : System.String { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft.Projections : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedProjectionRequest] { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft.Prose : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedProse] { get }
 ToolUp.AI.ICitationCounters (interface)
 ToolUp.AI.ICitationCounters.Record(System.String, System.String, ToolUp.AI.CitationNormalisation) : System.Void
 ToolUp.AI.ICitationCounters.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.CitationCounterRow]
