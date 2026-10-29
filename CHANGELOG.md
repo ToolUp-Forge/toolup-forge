@@ -18,9 +18,10 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 Migration notes:
 
 - [1069-redesign-e-defects-client-shell](docs/migrations/1069-redesign-e-defects-client-shell.md)
+- [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 
-_Surface since `v0.37.0`: **breaking** — 8 packages moved; 67 members added, 3 members changed, 1 member removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 10 packages moved; 167 members added, 4 members changed, 8 members removed; 1 package new._
 
 ### Added
 
@@ -29,9 +30,35 @@ _Surface since `v0.37.0`: **breaking** — 8 packages moved; 67 members added, 3
   - `ToolUp.AI.AICompose+AIServerAppModule.withAIAnsweringTools(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp`
 - `ToolUp.AuthProviders.ClerkUI` — 1 member:
   - `ToolUp.AuthProviders.ClerkAuthUI.userButton() : Fable.React.ReactElement`
+- `ToolUp.DataSources.Common` — 60 members:
+  - `ToolUp.DataSources.Common.DeclaredDelivery.execute(ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.DataSources.Common.DeliveryPlan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredSeedReport, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal]]]`
+  - `ToolUp.DataSources.Common.DeclaredDelivery.idempotencyKey(System.String, System.String, System.String) : System.String`
+  - `ToolUp.DataSources.Common.DeclaredDelivery.observe(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DeclaredPrincipalResolver], ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.Platform.DeclaredDataSources) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeliveryObservation, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal]]]`
+  - `ToolUp.DataSources.Common.DeclaredDelivery.plan(ToolUp.Platform.DeclaredDataSources, ToolUp.DataSources.Common.DeliveryObservation) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeliveryPlan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal]]`
+  - `ToolUp.DataSources.Common.DeclaredDelivery.tryParseIdempotencyKey(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[System.String, System.String, System.String]]`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal+ObservationFailed (class)`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal+ObservationFailed.reason : System.String { get }`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.ObservationFailed : System.Int32 (literal)`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.UnscopedJob : System.Int32 (literal)`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnscopedJob (class)`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnscopedJob.jobKey : System.String { get }`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnscopedJob.sourceId : System.String { get }`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsObservationFailed : System.Boolean { get }`
+  - `ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsUnscopedJob : System.Boolean { get }`
+  - `ToolUp.DataSources.Common.DeliveryCancel (class)`
+  - `ToolUp.DataSources.Common.DeliveryCancel..ctor(System.String, System.String, System.Guid)`
+  - `ToolUp.DataSources.Common.DeliveryCancel.JobId : System.Guid { get }`
+  - `ToolUp.DataSources.Common.DeliveryCancel.ScopeId : System.String { get }`
+  - `ToolUp.DataSources.Common.DeliveryCancel.SourceId : System.String { get }`
+  - `ToolUp.DataSources.Common.DeliveryObservation (class)`
+  - … and 40 more — `git diff v0.37.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
 - `ToolUp.Facts.Presentation.Server` — new package (21 public members)
 - `ToolUp.Facts.Server` — 1 member:
   - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
+- `ToolUp.Platform.Build` — 3 members:
+  - `ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)`
+  - `ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }`
+  - `ToolUp.Platform.CodemodMigration.IsCapabilities : System.Boolean { get }`
 - `ToolUp.Platform.Client` — 9 members:
   - `SidebarPreferences.persist`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]`
   - `ToolUp.Platform.BootSourceMessages.DataSnapshot : System.String { get }`
@@ -64,8 +91,28 @@ _Surface since `v0.37.0`: **breaking** — 8 packages moved; 67 members added, 3
   - `ToolUp.Platform.ScopeKey+Platform (class)`
   - `ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }`
   - … and 32 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 1 member:
-  - `ToolUp.Platform.Middleware+StorageScopeDerivation.tryKeyFromSubject(ToolUp.Platform.Subject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]`
+- `ToolUp.Platform.Server` — 38 members:
+  - `ToolUp.Platform.CapabilityNotDeclared (class)`
+  - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
+  - `ToolUp.Platform.CapabilityNotDeclared.Capability : ToolUp.Platform.ConnectorCapability { get }`
+  - `ToolUp.Platform.CapabilityNotDeclared.Kind : System.String { get }`
+  - `ToolUp.Platform.CapabilityNotDeclaredModule (class)`
+  - `ToolUp.Platform.CapabilityNotDeclaredModule.describe(ToolUp.Platform.CapabilityNotDeclared) : System.String`
+  - `ToolUp.Platform.ConnectorCapabilities (class)`
+  - `ToolUp.Platform.ConnectorCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload])`
+  - `ToolUp.Platform.ConnectorCapabilities.Native : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload] { get }`
+  - `ToolUp.Platform.ConnectorCapabilities.Watchable : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource] { get }`
+  - `ToolUp.Platform.ConnectorCapabilitiesModule (class)`
+  - `ToolUp.Platform.ConnectorCapabilitiesModule.declared(ToolUp.Platform.ConnectorCapabilities) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConnectorCapability]`
+  - `ToolUp.Platform.ConnectorCapabilitiesModule.declares(ToolUp.Platform.ConnectorCapability, ToolUp.Platform.ConnectorCapabilities) : System.Boolean`
+  - `ToolUp.Platform.ConnectorCapabilitiesModule.native(ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IEmitsNativePayload, ToolUp.Platform.CapabilityNotDeclared]`
+  - `ToolUp.Platform.ConnectorCapabilitiesModule.none : ToolUp.Platform.ConnectorCapabilities { get }`
+  - `ToolUp.Platform.ConnectorCapabilitiesModule.require(ToolUp.Platform.ConnectorCapability, ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CapabilityNotDeclared]`
+  - `ToolUp.Platform.ConnectorCapabilitiesModule.watchable(ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IWatchableFileSource, ToolUp.Platform.CapabilityNotDeclared]`
+  - `ToolUp.Platform.ConnectorCapability (class)`
+  - `ToolUp.Platform.ConnectorCapability+Tags (class)`
+  - `ToolUp.Platform.ConnectorCapability+Tags.Native : System.Int32 (literal)`
+  - … and 18 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — 1 member:
   - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
 
@@ -73,12 +120,22 @@ _Surface since `v0.37.0`: **breaking** — 8 packages moved; 67 members added, 3
 
 - `ToolUp.AI.Server` — 1 member:
   - `ToolUp.AI.AICompose+AIServerApp..ctor` — `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])` → `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]])`
+- `ToolUp.DataSources.Common` — 1 member:
+  - `ToolUp.DataSources.Common.Files.listObjects` — `ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.WatchedObject], ToolUp.Platform.IngestionError]]` → `ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WatchedObject], ToolUp.Platform.IngestionError]]`
 - `ToolUp.Platform.Client` — 2 members:
   - `ToolUp.Platform.BootSourceMessages..ctor` — `ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)`
   - `ToolUp.Platform.TeamManagerMessages..ctor` — `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)`
 
 ### Removed
 
+- `ToolUp.DataSources.Common` — 7 members:
+  - `ToolUp.DataSources.Common.IWatchableFileSource (interface)`
+  - `ToolUp.DataSources.Common.IWatchableFileSource.ListObjects(ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.WatchedObject], ToolUp.Platform.IngestionError]]`
+  - `ToolUp.DataSources.Common.WatchedObject (class)`
+  - `ToolUp.DataSources.Common.WatchedObject..ctor(System.String, System.String, System.String)`
+  - `ToolUp.DataSources.Common.WatchedObject.BlobName : System.String { get }`
+  - `ToolUp.DataSources.Common.WatchedObject.Identity : System.String { get }`
+  - `ToolUp.DataSources.Common.WatchedObject.Table : System.String { get }`
 - `ToolUp.Platform.Client` — 1 member:
   - `Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement`
 

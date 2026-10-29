@@ -596,6 +596,15 @@ type private ParquetDataSourceImpl(storage: IBlobStorage) =
     interface IDataSource with
         member _.Kind = Kind
 
+        // Phase 1095 — a watched delivery can watch this connector's location
+        // (Phase 1015), and it can hand the ingestor the file's native bytes
+        // (Phase 837) — what the probes answered before the record.
+        member this.Capabilities = {
+            ConnectorCapabilities.none with
+                Watchable = Some(this :> IWatchableFileSource)
+                Native = Some(this :> IEmitsNativePayload)
+        }
+
         member _.Connect(ctx) =
             withSettings ctx "Parquet Connect" (fun settings -> async {
                 match! Files.listTables storage "Parquet Connect" settings.File with

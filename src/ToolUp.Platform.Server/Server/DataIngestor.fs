@@ -126,15 +126,14 @@ let private handlesPayloadFormat (readers: IPayloadReader list) (format: Payload
 /// connector's `Query` (its declared format) is used exactly as before, so
 /// a deployment composing no native reader is byte-for-byte unchanged.
 let private nativeEmission (readers: IPayloadReader list) (connector: IDataSource) : IEmitsNativePayload option =
-    match box connector with
-    | :? IEmitsNativePayload as native when PayloadReader.handles readers native.NativeFormat -> Some native
-    | _ -> None
+    connector.Capabilities.Native
+    |> Option.filter (fun native -> PayloadReader.handles readers native.NativeFormat)
 
 // ─── DataIngestor ─────────────────────────────────────────────────
 //
 // Phase 837 — native payload formats. `payloadReaders` are the
-// deployment's composed `IPayloadReader`s. A connector implementing
-// `IEmitsNativePayload` whose native format has a composed reader is
+// deployment's composed `IPayloadReader`s. A connector declaring
+// `Capabilities.Native` whose native format has a composed reader is
 // queried through `QueryNative`, and its bytes are stored UNCHANGED with
 // that format recorded as `content-format`; every other connector goes
 // through `Query` exactly as before. The ingestor never parses either.

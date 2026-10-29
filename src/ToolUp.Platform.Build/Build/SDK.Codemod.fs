@@ -26,6 +26,9 @@ type CodemodMigration =
     /// Phase 1077 — the string-shaped agent-loop entry is removed, and the
     /// history window moves into the loop's limits.
     | AgentLoop
+    /// Phase 1095 — `IDataSource` declares what a connector can do as a
+    /// `Capabilities` record.
+    | Capabilities
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -38,6 +41,7 @@ module CodemodMigration =
         | CodemodMigration.Deprecations -> "docs/migrations/815-remove-open-deprecations.md"
         | CodemodMigration.ShellSlots -> "docs/migrations/879-shell-slots.md"
         | CodemodMigration.AgentLoop -> "docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md"
+        | CodemodMigration.Capabilities -> "docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -48,6 +52,7 @@ module CodemodMigration =
         | CodemodMigration.Deprecations -> "Phase 815"
         | CodemodMigration.ShellSlots -> "Phase 879"
         | CodemodMigration.AgentLoop -> "Phase 1077"
+        | CodemodMigration.Capabilities -> "Phase 1095"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -545,6 +550,15 @@ module Codemod =
             @"\bAIAssistantServerConfig\.DefaultMaxHistoryMessages\b"
             "AgentLoopLimits.DefaultHistoryWindow"
             "`AIAssistantServerConfig.DefaultMaxHistoryMessages` → `AgentLoopLimits.DefaultHistoryWindow`"
+        // Phase 1095 — the watch seam moved beside `IDataSource`, so a
+        // fully-qualified reference names its new namespace.
+        rewrite
+            "1095-watch-seam-namespace"
+            CodemodMigration.Capabilities
+            CodemodFileClass.Source
+            @"\bToolUp\.DataSources\.Common\.(IWatchableFileSource|WatchedObject)\b"
+            "ToolUp.Platform.$1"
+            "`ToolUp.DataSources.Common.IWatchableFileSource` / `WatchedObject` → `ToolUp.Platform.…`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -715,7 +729,131 @@ module Codemod =
             CodemodFileClass.Source
             @"\b(?:MaxHistoryMessages|effectiveMaxHistory)\b"
             "the history window is `AIAssistantServerConfig.Limits.HistoryWindow` now: set `Limits = { AgentLoopLimits.defaults with HistoryWindow = <n> }`, and read it as `AIAssistantServerConfig.limits cfg |> AgentLoopLimits.historyWindow`"
+        // Phase 1095 — a capability is read from the declared record, never
+        // probed off the connector's type (a decorator's type hides it).
+        review
+            "1095-capability-probe"
+            CodemodMigration.Capabilities
+            CodemodFileClass.Source
+            @":\?\s*(?:[\w.]+\.)?(?:IWatchableFileSource|IEmitsNativePayload)\b"
+            "a connector's capabilities are its declared `Capabilities` record now: read `ConnectorCapabilities.watchable` / `ConnectorCapabilities.native` (or `source.Capabilities`), never the type — a decorator forwards its inner connector's record"
     ]
+
+
+    // ── Phase 1095 — the Capabilities member ──────────────────────────
+    //
+    // `IDataSource` gained an abstract `Capabilities` member, so every
+    // implementer needs one line. Which line depends on the type it sits in
+    // — `ConnectorCapabilities.none`, or the record naming the capability
+    // interfaces the same type (or object expression) already implements —
+    // so this pass reads the implementer's whole block rather than one line.
+
+    let private implementerLine =
+        rx @"^\s*(?<head>interface\s+(?:[\w.]+\.)?IDataSource|\{\s*new\s+(?:[\w.]+\.)?IDataSource)\s+with\s*$"
+
+    let private capabilityInterface =
+        rx @"\binterface\s+(?:[\w.]+\.)?(?<name>IWatchableFileSource|IEmitsNativePayload)\s+with\b"
+
+    let private declaresCapabilities = rx @"\bmember\s+\w+\.Capabilities\b"
+    let private typeHeader = rx @"^\s*(?:type|and)\s"
+    let private indentOf (line: string) = line.Length - line.TrimStart().Length
+    let private isBlank (line: string) = String.IsNullOrWhiteSpace line
+
+    /// The `[first, last)` lines of the block an implementation at `at`
+    /// belongs to: an object expression's own lines, or the whole body of the
+    /// type it is declared in (where its other interfaces live).
+    let private implementerBlock (lines: string[]) (at: int) (isObjectExpression: bool) =
+        let k = indentOf lines[at]
+
+        let endOf (start: int) (indent: int) =
+            let mutable e = start + 1
+
+            while e < lines.Length && (isBlank lines[e] || indentOf lines[e] > indent) do
+                e <- e + 1
+
+            e
+
+        let header =
+            if isObjectExpression then
+                None
+            else
+                seq { at - 1 .. -1 .. 0 }
+                |> Seq.tryFind (fun h -> not (isBlank lines[h]) && indentOf lines[h] < k && typeHeader.IsMatch lines[h])
+
+        match header with
+        | Some h -> h, endOf h (indentOf lines[h])
+        | None -> at, endOf at k
+
+    /// The member a block declaring `capabilities` (interface names, in
+    /// record-field order) gains.
+    let private capabilitiesMember (capabilities: string list) =
+        match capabilities with
+        | [] -> "member _.Capabilities = ConnectorCapabilities.none"
+        | names ->
+            let field name =
+                match name with
+                | "IWatchableFileSource" -> "Watchable = Some(this :> IWatchableFileSource)"
+                | _ -> "Native = Some(this :> IEmitsNativePayload)"
+
+            $"""member this.Capabilities = {{ ConnectorCapabilities.none with {names |> List.map field |> String.concat "; "} }}"""
+
+    /// Adds the `Capabilities` member after every `IDataSource`
+    /// implementation that does not declare one. `segments` alternate
+    /// content and terminator (see `lineSplitter`); the member line takes
+    /// the implementation line's own terminator.
+    let private addCapabilitiesMembers (segments: string[]) : string[] * CodemodRewrite list =
+        let lines = [| for i in 0..2 .. segments.Length - 1 -> segments[i] |]
+        let out = Array.copy segments
+        let rewrites = ResizeArray<CodemodRewrite>()
+
+        for at in 0 .. lines.Length - 1 do
+            let m = implementerLine.Match lines[at]
+
+            if m.Success then
+                let first, last = implementerBlock lines at (m.Groups["head"].Value.StartsWith "{")
+
+                let block = lines[first .. last - 1]
+
+                if not (block |> Array.exists declaresCapabilities.IsMatch) then
+                    let implemented =
+                        block
+                        |> Array.choose (fun l ->
+                            let c = capabilityInterface.Match l
+                            if c.Success then Some c.Groups["name"].Value else None)
+
+                    let capabilities =
+                        [ "IWatchableFileSource"; "IEmitsNativePayload" ]
+                        |> List.filter (fun name -> Array.contains name implemented)
+
+                    let memberIndent =
+                        lines[at + 1 ..]
+                        |> Array.tryFind (isBlank >> not)
+                        |> Option.map indentOf
+                        |> Option.filter (fun i -> i > indentOf lines[at])
+                        |> Option.defaultValue (indentOf lines[at] + 4)
+
+                    let terminator =
+                        if 2 * at + 1 < segments.Length then
+                            segments[2 * at + 1]
+                        else
+                            "\n"
+
+                    let after =
+                        lines[at]
+                        + terminator
+                        + String(' ', memberIndent)
+                        + capabilitiesMember capabilities
+
+                    out[2 * at] <- after
+
+                    rewrites.Add {
+                        RuleId = "1095-capabilities-member"
+                        Line = at + 1
+                        Before = lines[at]
+                        After = after
+                    }
+
+        out, List.ofSeq rewrites
 
     // ── Per-file decision ─────────────────────────────────────────────
 
@@ -774,7 +912,12 @@ module Codemod =
                         segment)
             |> String.concat ""
 
-        rewritten, List.ofSeq rewrites
+        match cls with
+        | CodemodFileClass.Source ->
+            let withMembers, added = addCapabilitiesMembers (lineSplitter.Split rewritten)
+
+            String.concat "" withMembers, List.ofSeq rewrites @ added |> List.sortBy _.Line
+        | CodemodFileClass.Project -> rewritten, List.ofSeq rewrites
 
     /// Every review-rule match over `text` (the REWRITTEN text), in line
     /// order then rule order.
@@ -900,7 +1043,11 @@ module Codemod =
                 for r in file.Rewrites do
                     sb.AppendLine(sprintf "@@ L%d [%s]" r.Line r.RuleId) |> ignore
                     sb.AppendLine("-" + r.Before) |> ignore
-                    sb.AppendLine("+" + r.After) |> ignore
+
+                    // A rewrite that inserts a line (Phase 1095) carries it
+                    // after a terminator: each line gets its own `+`.
+                    for line in lineSplitter.Split r.After |> Array.chunkBySize 2 |> Array.map Array.head do
+                        sb.AppendLine("+" + line) |> ignore
 
             let rewriteCount = changed |> List.sumBy (fun f -> f.Rewrites.Length)
 

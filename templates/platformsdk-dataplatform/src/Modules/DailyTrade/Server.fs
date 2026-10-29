@@ -295,6 +295,7 @@ let SourceKind = "dailytrade-upload"
 type UploadedDeliverySource(storage: IBlobStorage) =
     interface IDataSource with
         member _.Kind = SourceKind
+        member _.Capabilities = ConnectorCapabilities.none
         member _.Connect(_ctx) = async { return Ok() }
 
         member _.ListTables(ctx) = async {
