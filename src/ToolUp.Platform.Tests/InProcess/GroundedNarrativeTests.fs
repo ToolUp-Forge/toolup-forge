@@ -2909,6 +2909,52 @@ let projectionTests =
         }
     ]
 
+// ── I. One classification of an outcome as a job result ─────────
+
+/// How a job should treat each outcome. The match has no wildcard, so a new
+/// `GroundedNarrativeOutcome` case cannot compile here without the author
+/// deciding whether another attempt is worth paying for.
+type private Retry =
+    | Settled
+    | Retried
+    | GivenUp
+
+let private expectedRetry (outcome: GroundedNarrativeOutcome) : Retry =
+    match outcome with
+    | GroundedNarrativePublished _ -> Settled
+    | GroundedNarrativeFailed _ -> Retried
+    | GroundedNarrativeRefused _
+    | GroundedNarrativeUnfunded _
+    | GroundedNarrativeOverBudget _ -> GivenUp
+
+let private everyOutcome: GroundedNarrativeOutcome list = [
+    GroundedNarrativePublished(Guid.NewGuid(), documentFor "x", [], None, Error "no signer")
+    GroundedNarrativeRefused []
+    GroundedNarrativeFailed "provider outage"
+    GroundedNarrativeUnfunded "no key"
+    GroundedNarrativeOverBudget "budget reached"
+]
+
+let jobResultTests =
+    testList "Phase 1116 I — a narrative outcome maps to a job result in one place" [
+
+        for outcome in everyOutcome do
+            let name = (outcome.GetType().Name)
+
+            test (sprintf "%s is classified as its retry rule says" name) {
+                match GroundedNarrativeOutcome.toJobResult outcome, expectedRetry outcome with
+                | Success, Settled -> ()
+                | TransientFailure reason, Retried ->
+                    Expect.equal reason (GroundedNarrativeOutcome.describe outcome) "a retry names the outcome"
+                | PermanentFailure reason, GivenUp ->
+                    Expect.equal
+                        reason
+                        (GroundedNarrativeOutcome.describe outcome)
+                        "a permanent failure names the outcome"
+                | other, expected -> failtestf "%s: expected %A, got %A" name expected other
+            }
+    ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -2920,4 +2966,5 @@ let tests =
         wordingTests
         doubleRunTests
         projectionTests
+        jobResultTests
     ]
