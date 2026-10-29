@@ -2253,7 +2253,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         )
     ]
 
-    // Merge RAG handlers + service config + the "RAG" notification-consumer
+    // Merge RAG handlers + the "RAG" notification-consumer
     // declaration onto whatever `composeAI` already accumulated. `composeAI`
     // declared "AI"; appending "RAG" reproduces the former combined
     // `[ "AI"; "RAG" ]` declaration.
@@ -2262,10 +2262,6 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let mergedExt: ComposeExtensions = {
         baseExt with
             Handlers = baseExt.Handlers @ ragHandlers
-            ServiceConfig =
-                match baseExt.ServiceConfig with
-                | None -> Some ragServiceConfig
-                | Some baseFn -> Some(fun s -> ragServiceConfig (baseFn s))
             NotificationConsumers = baseExt.NotificationConsumers @ [ "RAG" ]
     }
 
@@ -2277,6 +2273,8 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         withValidators with
             Extensions = mergedExt
     }
+    // Phase 1052 — RAG's registrations are a contribution under its own id.
+    |> ServerApp.addContribution (Contribution.service (ComponentId.forCompanionSlot "ToolUp.RAG") ragServiceConfig)
 
 module RAGServerApp =
     /// Construct a `RAGServerApp` with the three required dependencies:
@@ -3339,6 +3337,7 @@ module RAGServerApp =
 ///         |> RAGServerApp.withAIConfig assistant
 ///         |> RAGServerApp.withGroundingMode StrictlyGrounded)
 ///     |> ServerApp.run
+/// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
 let withRAG
     (factory: IAIProviderFactory)
     (providerProfile: IProviderProfile)

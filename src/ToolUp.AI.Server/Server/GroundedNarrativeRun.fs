@@ -105,6 +105,7 @@ module GroundedNarrativeRunOptions =
     /// Run under `budget` instead of `defaultCallBudget`. A budget with no
     /// `RaiseWith` gets the default's, so an exhausted budget still says how
     /// to raise it.
+    /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
     let withCallBudget
         (budget: AIAgentEngine.AgentCallBudget)
         (options: GroundedNarrativeRunOptions)
@@ -1192,15 +1193,4 @@ module GroundedNarratives =
                 Func<IServiceProvider, IGroundedNarrativeRun>(fun sp -> create sp registry options)
             )
 
-        let serviceConfig =
-            match app.Extensions.ServiceConfig with
-            | None -> Some register
-            | Some existing -> Some(fun s -> register (existing s))
-
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig = serviceConfig
-                }
-        }
+        app |> ServerApp.addServiceConfig register
