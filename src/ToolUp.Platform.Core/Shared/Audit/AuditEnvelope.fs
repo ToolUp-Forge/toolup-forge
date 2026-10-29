@@ -163,12 +163,20 @@ type IAuditLog =
 /// request middleware, the platform admin API and file management carries
 /// (GP 11). Rows written under a `team-{id}` key before this phase are
 /// history: readable under their own key, not migrated.
+///
+/// Phase 1060 — the rendering itself is `AuditScope.streamKey`, over the
+/// closed `AuditScope`; these two are its spellings for a call site that
+/// holds a bare team id or a `StorageScope` rather than a key.
+/// `IAuditLog.Record` keeps its string parameter until it takes an
+/// `AuditScope` directly.
 module AuditStreamKey =
     /// The audit stream key for a team: its bare id.
-    let ofTeam (teamId: string) : string = teamId
+    let ofTeam (teamId: string) : string =
+        AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team teamId))
 
     /// The audit stream key for a storage scope: its `ScopeId` (the bare
-    /// user, team or session id), never its `Container`.
+    /// user, team or session id), never its `Container` — what
+    /// `AuditScope.streamKey` renders for the key the scope projects.
     let ofScope (scope: StorageScope) : string = scope.ScopeId
 
 // ─── Phase 120 — IAuthAuditHook (structured authz-denial trail) ──────
@@ -306,7 +314,7 @@ module BlobStorageAuthAudit =
     /// this start". The container the call was made against is carried in
     /// the payload instead, so nothing is lost by centralising.
     [<Literal>]
-    let scopeId = "_platform"
+    let scopeId = ScopeKey.PlatformContainer
 
     /// Longest sanitised SDK message kept on a row. An SDK message is a
     /// diagnostic aid here, not a queryable axis — the four fields above

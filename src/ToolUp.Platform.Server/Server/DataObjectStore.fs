@@ -360,6 +360,13 @@ let listOrphanedContent (blobStorage: IBlobStorage) (container: string) : Async<
 /// than re-deriving it — a sweep pointed at a different container than
 /// the store writes to would either reclaim nothing or reclaim
 /// another scope's blobs, and both failures are silent.
+///
+/// Phase 1060 — what this store calls `scopeId` is a RENDERED container
+/// (`ScopeKey.container`, carried as `StorageScope.Container`), never a
+/// bare id: a caller holding a key renders it once and passes the result.
+/// The identity is kept, rather than retyped to take a `ScopeKey`, because
+/// `IDataObjectStore`'s members take the same string and retyping them is
+/// a break of that interface.
 let containerFor (scopeId: string) = scopeId
 
 type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =

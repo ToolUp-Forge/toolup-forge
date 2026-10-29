@@ -35,8 +35,14 @@ open ToolUp.Platform.PermissionStore
 // consumer-supplied store implementation too — the SDK composition root
 // applies it unconditionally (ComposeTeamRuntime).
 
-/// Reserved scopes a team/user id must never collide with.
-let private reservedScopes = Set.ofList [ "_platform" ]
+/// Whether an id would address a reserved platform shard. Refused BY TYPE
+/// (Phase 1060): the id is read through `ScopeKey.tryParseContainer`, and a
+/// `ScopeKey.Platform` shard — every case, present and future — is never a
+/// team or user id.
+let private isReservedShard (id: string) : bool =
+    match ScopeKey.tryParseContainer id with
+    | Some(ScopeKey.Platform _) -> true
+    | _ -> false
 
 /// Validate a caller-supplied id destined to become a blob-key segment.
 /// `Error` carries a categorised reason (never the raw attacker value —
@@ -45,7 +51,7 @@ let private reservedScopes = Set.ofList [ "_platform" ]
 let private validate (label: string) (id: string) : Result<unit, string> =
     match IdentitySanitiser.sanitiseScopeId id with
     | Error reason -> Error(sprintf "%s failed identity validation: %s" label reason)
-    | Ok value when reservedScopes.Contains value -> Error(sprintf "%s may not be the reserved platform scope" label)
+    | Ok value when isReservedShard value -> Error(sprintf "%s may not be the reserved platform scope" label)
     | Ok _ -> Ok()
 
 let private both (a: Result<unit, string>) (b: Result<unit, string>) : Result<unit, string> =

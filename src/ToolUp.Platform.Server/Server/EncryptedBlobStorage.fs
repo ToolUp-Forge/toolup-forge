@@ -37,34 +37,22 @@ open ToolUp.Platform.BlobEncryption
 // wraps an `IBlobStorage` mid-flight (defence in depth).
 
 /// Reverse the `IBlobStorage` container-naming convention to recover
-/// the underlying `StorageScope`. Container shapes the SDK uses:
-///   - `_platform`        — reserved SDK-level container
-///   - `user-{userId}`    — individual user scope
-///   - `team-{teamId}`    — team scope
-///   - `session-{sessionId}` — anonymous/ephemeral scope
+/// the underlying `StorageScope`: `_platform`, `user-{id}`, `team-{id}`
+/// and `session-{id}` recover their bare id; any other container is its
+/// own scope id — consistent with `IBlobStorage`'s scope-discipline
+/// contract. Phase 1060 — the reading is `ScopeKey`'s, kept byte-identical
+/// to the one every encrypted blob at rest was keyed under, so the derived
+/// key material does not move.
 ///
 /// `Persist` is set to `true` because encryption is only a meaningful
 /// concern for blobs that survive longer than a single request — the
 /// caller is by definition writing or reading something the backing
 /// store will retain.
-let private scopeFromContainer (container: string) : StorageScope =
-    let scopeId =
-        if container = "_platform" then
-            "_platform"
-        elif container.StartsWith "user-" then
-            container.Substring 5
-        elif container.StartsWith "team-" then
-            container.Substring 5
-        elif container.StartsWith "session-" then
-            container.Substring 8
-        else
-            container
-
-    {
-        Container = container
-        ScopeId = scopeId
-        Persist = true
-    }
+let private scopeFromContainer (container: string) : StorageScope = {
+    Container = container
+    ScopeId = ScopeKey.scopeIdAtRest container
+    Persist = true
+}
 
 /// Element-wise byte-array equality. `byte[]` defaults to reference
 /// equality in .NET; we need value equality for the magic-bytes check.

@@ -144,7 +144,7 @@ module AuditSubject =
     /// reserved `_platform` scope id — system-level events with no
     /// per-user attribution at the dispatcher layer.
     [<Literal>]
-    let PlatformSentinelUserId = "_platform"
+    let PlatformSentinelUserId = ScopeKey.PlatformContainer
 
     /// Phase 66 Stream B.7 — derive a best-effort `AuditSubject` from
     /// the `IEventStore` `ScopeId` alone. Used by the audit-replicator
@@ -174,16 +174,16 @@ module AuditSubject =
     let fromScopeId (scopeId: string) : AuditSubject =
         if System.String.IsNullOrWhiteSpace scopeId then
             UserAudit PlatformSentinelUserId
-        elif scopeId = "_platform" then
-            UserAudit PlatformSentinelUserId
-        elif scopeId.StartsWith("session-", System.StringComparison.Ordinal) then
-            AnonymousAudit(scopeId.Substring 8)
-        elif scopeId.StartsWith("user-", System.StringComparison.Ordinal) then
-            UserAudit(scopeId.Substring 5)
-        elif scopeId.StartsWith("team-", System.StringComparison.Ordinal) then
-            TeamAudit(DispatcherSentinelUserId, scopeId.Substring 5)
         else
-            UserAudit scopeId
+            // Phase 1060 — the one legacy parser; a padded or empty id after
+            // a prefix is no scope, and falls to the last-resort arm.
+            match ScopeKey.tryParseContainer scopeId with
+            | Some(ScopeKey.Platform _) -> UserAudit PlatformSentinelUserId
+            | Some(ScopeKey.Session sessionId) -> AnonymousAudit sessionId
+            | Some(ScopeKey.User userId) -> UserAudit userId
+            | Some(ScopeKey.Team teamId) -> TeamAudit(DispatcherSentinelUserId, teamId)
+            | Some(ScopeKey.Claim _)
+            | None -> UserAudit scopeId
 
 // `AuditSamplingPolicy` (Phase 66 Stream C.2) is defined in
 // `Shared/Types/AuditSampling.fs`, compiled before SDK.Shared.fs so
