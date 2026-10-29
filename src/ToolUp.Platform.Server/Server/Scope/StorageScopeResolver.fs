@@ -29,12 +29,7 @@ type AnonymousScopeResolver() =
                 | Some id when id <> "" -> id
                 | _ -> Guid.NewGuid().ToString()
 
-            return
-                Ok {
-                    ScopeId = sessionId
-                    Container = $"session-{sessionId}"
-                    Persist = false
-                }
+            return Ok(StorageScope.ofKey false (ScopeKey.Session sessionId))
         }
 
 /// AuthenticatedEphemeral mode: auth required, in-memory only.
@@ -45,11 +40,7 @@ type AuthenticatedEphemeralScopeResolver() =
             return
                 match request.User with
                 | Some user when not (AuthenticatedUser.isAnonymous user) ->
-                    Ok {
-                        ScopeId = user.UserId
-                        Container = $"user-{user.UserId}"
-                        Persist = false
-                    }
+                    Ok(StorageScope.ofKey false (ScopeKey.User user.UserId))
                 | _ -> Error NotAuthenticated
         }
 
@@ -60,11 +51,7 @@ type AuthenticatedScopeResolver() =
             return
                 match request.User with
                 | Some user when not (AuthenticatedUser.isAnonymous user) ->
-                    Ok {
-                        ScopeId = user.UserId
-                        Container = $"user-{user.UserId}"
-                        Persist = true
-                    }
+                    Ok(StorageScope.ofKey true (ScopeKey.User user.UserId))
                 | _ -> Error NotAuthenticated
         }
 
@@ -183,13 +170,7 @@ type TeamScopeResolver
                         let! role = teamStore.GetMemberRole(teamId, user.UserId)
 
                         match role with
-                        | Some _ ->
-                            return
-                                Ok {
-                                    ScopeId = teamId
-                                    Container = $"team-{teamId}"
-                                    Persist = true
-                                }
+                        | Some _ -> return Ok(StorageScope.ofKey true (ScopeKey.Team teamId))
                         | None -> return Error(NotTeamMember teamId)
                     with ex ->
                         return Error(ScopeResolutionFailed ex.Message)

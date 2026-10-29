@@ -20,7 +20,7 @@ Migration notes:
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 
-_Surface since `v0.37.0`: **breaking** — 6 packages moved; 103 members added, 2 members changed, 7 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 7 packages moved; 156 members added, 2 members changed, 7 members removed; 1 package new._
 
 ### Added
 
@@ -56,7 +56,29 @@ _Surface since `v0.37.0`: **breaking** — 6 packages moved; 103 members added, 
   - `ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }`
   - `ToolUp.Platform.CodemodMigration.IsCapabilities : System.Boolean { get }`
-- `ToolUp.Platform.Server` — 37 members:
+- `ToolUp.Platform.Core` — 52 members:
+  - `ToolUp.Platform.AuditScope (class)`
+  - `ToolUp.Platform.AuditScope+Scoped (class)`
+  - `ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }`
+  - `ToolUp.Platform.AuditScope+Tags (class)`
+  - `ToolUp.Platform.AuditScope+Tags.PlatformScope : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditScope+Tags.Scoped : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditScope.IsPlatformScope : System.Boolean { get }`
+  - `ToolUp.Platform.AuditScope.IsScoped : System.Boolean { get }`
+  - `ToolUp.Platform.AuditScope.PlatformScope : ToolUp.Platform.AuditScope { get }`
+  - `ToolUp.Platform.AuditScope.Tag : System.Int32 { get }`
+  - `ToolUp.Platform.AuditScopeModule (class)`
+  - `ToolUp.Platform.AuditScopeModule.streamKey(ToolUp.Platform.AuditScope) : System.String`
+  - `ToolUp.Platform.PlatformShard (class)`
+  - `ToolUp.Platform.PlatformShard.Platform : ToolUp.Platform.PlatformShard { get }`
+  - `ToolUp.Platform.PlatformShard.Tag : System.Int32 { get }`
+  - `ToolUp.Platform.ScopeKey (class)`
+  - `ToolUp.Platform.ScopeKey+Claim (class)`
+  - `ToolUp.Platform.ScopeKey+Claim.claimScopeId : System.String { get }`
+  - `ToolUp.Platform.ScopeKey+Platform (class)`
+  - `ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }`
+  - … and 32 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 38 members:
   - `ToolUp.Platform.CapabilityNotDeclared (class)`
   - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
   - `ToolUp.Platform.CapabilityNotDeclared.Capability : ToolUp.Platform.ConnectorCapability { get }`
@@ -77,7 +99,7 @@ _Surface since `v0.37.0`: **breaking** — 6 packages moved; 103 members added, 
   - `ToolUp.Platform.ConnectorCapability (class)`
   - `ToolUp.Platform.ConnectorCapability+Tags (class)`
   - `ToolUp.Platform.ConnectorCapability+Tags.Native : System.Int32 (literal)`
-  - … and 17 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 18 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ### Changed
 

@@ -158,7 +158,13 @@
              Migrations. BCL-only, no server coupling. -->
         <Compile Include="Shared\MigrationTypes.fs" />
         <Compile Include="Shared\Interfaces\IFileProcessor.fs" />
-        <!-- Phase 797 — `StorageScope` + the resolver-minted `ResolvedScope`,
+        <!-- Phase 1060 — the closed scope type. SurfaceProfile.fs moved up from
+             beside Subject.fs (it depends on nothing) so ScopeKey.persistence
+             can read the declared Surfaces; ScopeKey.fs precedes ResolvedScope.fs,
+             whose StorageScope.ofKey projects it. -->
+        <Compile Include="Shared\Types\SurfaceProfile.fs" />
+        <Compile Include="Shared\Types\ScopeKey.fs" />
+        <!-- Phase 797 —`StorageScope` + the resolver-minted `ResolvedScope`,
              ahead of VectorKnowledgeTypes.fs so IFactDisclosureGate can take
              the typed scope. StorageScope.fs below keeps the resolver's
              request and error types (they need AuthenticatedUser). -->
@@ -259,7 +265,6 @@
              field). ShareTokenTypes hoisted alongside because Subject.ClaimBearer
              references ShareTokenClaim. -->
         <Compile Include="Shared\ShareTokenTypes.fs" />
-        <Compile Include="Shared\Types\SurfaceProfile.fs" />
         <Compile Include="Shared\Types\Subject.fs" />
         <Compile Include="Shared\Types\SurfaceRequirement.fs" />
         <Compile Include="Shared\Types\AccessContext.fs" />

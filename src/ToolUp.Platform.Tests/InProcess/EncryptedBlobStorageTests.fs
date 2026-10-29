@@ -43,8 +43,81 @@ let private samplePayload =
 
 let private container = "team-test-scope"
 
+/// Phase 1060 — the pre-1060 derivation, verbatim: the oracle the
+/// decorator's scope reading is pinned against. Every blob encrypted
+/// before the phase was keyed under the scope this function produced, so
+/// the decorator must hand its key resolver the same bytes for EVERY
+/// container — the malformed ones included, which the strict
+/// `ScopeKey.tryParseContainer` refuses.
+let private pre1060ScopeId (container: string) : string =
+    if container = "_platform" then
+        "_platform"
+    elif container.StartsWith "user-" then
+        container.Substring 5
+    elif container.StartsWith "team-" then
+        container.Substring 5
+    elif container.StartsWith "session-" then
+        container.Substring 8
+    else
+        container
+
+/// The containers whose key material is pinned: the grammar's shapes, a
+/// claim's opaque scope, and the degenerate names a strict parser refuses.
+let private keyMaterialContainers = [
+    "_platform"
+    "team-acme"
+    "team-team-x"
+    "team-ai-keys-acme"
+    "user-alice"
+    "user-alice@example.com"
+    "user-anonymous"
+    "session-0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0"
+    "survey-2026"
+    "team-"
+    "team- acme"
+    "user-alice "
+    "session-"
+]
+
+/// A key resolver that records the scope it was asked for, delegating the
+/// key itself to the single-key resolver.
+type private RecordingKeyResolver(inner: IBlobEncryptionKeyResolver) =
+    let asked = System.Collections.Concurrent.ConcurrentQueue<StorageScope>()
+    member _.Asked = List.ofSeq asked
+
+    interface IBlobEncryptionKeyResolver with
+        member _.ResolveKey scope =
+            asked.Enqueue scope
+            inner.ResolveKey scope
+
+        member _.ResolveKeyById keyId = inner.ResolveKeyById keyId
+
+let private keyMaterialTests =
+    testList "Phase 1060 — key material is unchanged for every container" [
+        testCaseAsync "the scope handed to the key resolver is the pre-1060 scope, byte for byte"
+        <| async {
+            let resolver = RecordingKeyResolver(SingleKeyResolver.create (newSecretStore ()))
+
+            let storage = EncryptedBlobStorage(newInnerStorage (), resolver) :> IBlobStorage
+
+            for container in keyMaterialContainers do
+                let! _ = storage.Upload(container, "doc.bin", samplePayload)
+                ()
+
+            let asked = resolver.Asked
+            Expect.equal asked.Length keyMaterialContainers.Length "one key resolution per upload"
+
+            for container, scope in List.zip keyMaterialContainers asked do
+                Expect.equal scope.Container container $"%A{container}: the container is passed through"
+                Expect.equal scope.ScopeId (pre1060ScopeId container) $"%A{container}: the scope id is unchanged"
+                Expect.isTrue scope.Persist $"%A{container}: an encrypted blob persists"
+        }
+
+    ]
+
 let tests =
     testList "EncryptedBlobStorage" [
+        keyMaterialTests
 
         testCaseAsync "SingleKeyResolver round-trip preserves bytes"
         <| async {

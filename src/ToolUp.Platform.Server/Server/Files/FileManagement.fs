@@ -1328,11 +1328,7 @@ let getStoreForUser
     (runtime: FileManagementRuntime)
     (userId: string)
     =
-    let scope = {
-        ScopeId = userId
-        Container = $"user-{userId}"
-        Persist = true
-    }
+    let scope = StorageScope.ofKey true (ScopeKey.User userId)
 
     getStore dataTypes dataObjectStore runtime scope
 
