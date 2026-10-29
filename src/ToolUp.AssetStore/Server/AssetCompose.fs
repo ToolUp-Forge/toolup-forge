@@ -482,12 +482,12 @@ module AssetStoreServerApp =
             let mergedExt: ComposeExtensions = {
                 baseExt with
                     Handlers = baseExt.Handlers @ [ uploadHandler; assetApiHandler ]
-                    ServiceConfig =
-                        match baseExt.ServiceConfig with
-                        | None -> Some assetStoreServiceConfig
-                        | Some baseFn -> Some(fun s -> assetStoreServiceConfig (baseFn s))
             }
 
-            let final = { app.Base with Extensions = mergedExt }
+            let final =
+                { app.Base with Extensions = mergedExt }
+                |> ServerApp.addContribution (
+                    Contribution.service (ComponentId.forCompanionSlot "ToolUp.AssetStore") assetStoreServiceConfig
+                )
 
             ServerApp.run final
