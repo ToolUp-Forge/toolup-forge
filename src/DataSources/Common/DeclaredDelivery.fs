@@ -22,8 +22,8 @@ open ToolUp.Platform
 //
 // **Both deliveries commit through the ordinary ingestion path.** A pull
 // job is the platform's own `DataIngestionJobHandler` job, one per table; a
-// watch job lists the location through the connector's `IWatchableFileSource`
-// and calls `IDataIngestor.RunIngestion` for each object it has not
+// watch job lists the location through the connector's declared watch
+// (`ConnectorCapabilities.Watchable`, Phase 1095) and calls `IDataIngestor.RunIngestion` for each object it has not
 // ingested. Either way the run is recorded, `IngestionRunCompleted` is
 // written under the principal's scope, and every downstream trigger sees a
 // scoped commit.
@@ -33,6 +33,14 @@ open ToolUp.Platform
 // resolved, to a persistent scope), its connector, its cadence and tables,
 // and for a watch, that the location reads. Any refusal fails the host's
 // start, naming every failing source and what it lacks, and seeds nothing.
+//
+// **A plan, then one effectful step (Phase 1095).** `observe` reads what
+// the world answers (resolutions, location reads, the ledger, live jobs,
+// current configs); `plan` turns the declaration and that observation into
+// a `DeliveryPlan` value with no effect, refusing before anything exists;
+// `execute` performs the plan. `seed` is the three in order, so a refusal
+// the plan can see — a kept job no scheduler can re-scope included — never
+// leaves another source half-seeded.
 //
 // **Idempotent.** A source's config is keyed on its id at its principal's
 // scope, and each of its jobs on (source, table or watch, cadence), so a
@@ -60,8 +68,8 @@ type DeclaredDeliveryRefusal =
     | InvalidCadence of sourceId: DataSourceId * cadence: string * reason: string
     /// A scheduled pull declares no table to pull.
     | NoTablesToPull of sourceId: DataSourceId
-    /// A watched source's connector is not a file connector a location can
-    /// be watched through (`IWatchableFileSource`).
+    /// A watched source's connector does not declare a watch
+    /// (`ConnectorCapabilities.Watchable`).
     | NotWatchable of sourceId: DataSourceId * kind: string
     /// A watched source's config sets the container or prefix itself; a
     /// watch reads its principal's scope container at its declared location.
@@ -86,6 +94,13 @@ type DeclaredDeliveryRefusal =
     /// Writing the config, scheduling a job, or retiring an old source
     /// failed.
     | SeedFailed of sourceId: DataSourceId * reason: string
+    /// A live job the source's delivery keeps carries no scope, and the
+    /// deployment's scheduler cannot re-issue one (`IJobScopeReissue`)
+    /// (Phase 1095: refused by the plan, before anything is written).
+    | UnscopedJob of sourceId: DataSourceId * jobKey: string
+    /// Reading the live jobs or the seeded configs failed, before anything
+    /// was written (Phase 1095).
+    | ObservationFailed of reason: string
 
 /// Rendering for `DeclaredDeliveryRefusal`.
 [<RequireQualifiedAccess>]
@@ -123,6 +138,9 @@ module DeclaredDeliveryRefusal =
             $"data-source deliveries were declared, but this deployment composes no {missing}"
         | LedgerUnavailable reason -> $"the declared data-source ledger is unavailable: {reason}"
         | SeedFailed(sourceId, reason) -> $"declared data source '{sourceId}' could not be seeded: {reason}"
+        | UnscopedJob(sourceId, jobKey) ->
+            $"declared data source '{sourceId}': its {jobKey} job carries no scope and this deployment's scheduler cannot re-issue one (IJobScopeReissue)"
+        | ObservationFailed reason -> $"the declared data sources' live jobs and configs could not be read: {reason}"
 
 /// The host's start was refused; carries every refusal at once (Phase 1015).
 exception DeclaredDataSourcesRefused of refusals: DeclaredDeliveryRefusal list with
@@ -180,7 +198,101 @@ type DeclaredDeliveryServices = {
     Logger: ILogger
 }
 
-/// A declaration that passed every check, ready to write.
+/// What `DeclaredDelivery.plan` reads (Phase 1095): what the deployment
+/// composes, and every answer the world gave, gathered by
+/// `DeclaredDelivery.observe` before anything is written. Rows are keyed
+/// (source id, scope id), the ledger's own order.
+type DeliveryObservation = {
+    /// The composed connectors' declared capabilities, by `Kind` (the first
+    /// connector composed for a `Kind`, as the ingestor resolves it).
+    Connectors: Map<string, ConnectorCapabilities>
+    /// The 5-field cron a watched location is polled on.
+    WatchPoll: string
+    /// Whether the deployment composes a `DeclaredPrincipalResolver`.
+    ResolverComposed: bool
+    /// Each principal a delivery runs as, by name, with its resolution.
+    Resolutions: Map<string, Result<ResolvedScope, ScopeResolutionError>>
+    /// Each watched source's location read, by source id: `Error` carries
+    /// the read failure. A watched source absent here was not read, because
+    /// its declaration is refused before its location matters.
+    Locations: Map<DataSourceId, Result<unit, string>>
+    /// Where sources were seeded, as the ledger last recorded it, or why the
+    /// ledger could not be read.
+    Ledger: Result<Set<DataSourceId * string>, string>
+    /// The live (not cancelled) declared jobs of every row the plan may touch.
+    Live: Map<DataSourceId * string, JobDefinition list>
+    /// The config each delivered source has at its principal's scope now.
+    Configs: Map<DataSourceId * string, DataSourceConfig>
+    /// Whether the scheduler re-issues a carried scope (`IJobScopeReissue`).
+    Reissues: bool
+}
+
+/// A delivered source's config, written at its principal's scope (Phase 1095).
+type DeliverySeed = {
+    Scope: ResolvedScope
+    Config: DataSourceConfig
+}
+
+/// A job a delivery schedules under its principal's resolution (Phase 1095).
+type DeliveryRegistration = {
+    SourceId: DataSourceId
+    /// `pull:<table>` or `watch` — the job's `DeclaredDelivery.JobKeyTag`.
+    JobKey: string
+    Scope: ResolvedScope
+    Registration: JobRegistration
+}
+
+/// A live job a delivery keeps, whose carried scope is re-issued under its
+/// principal's resolution, so a token an earlier key ring no longer redeems
+/// runs under the scope it was declared for (Phase 1095).
+type DeliveryRestamp = {
+    SourceId: DataSourceId
+    Scope: ResolvedScope
+    JobId: JobId
+    /// The job already carries a scope token, so a scheduler that cannot
+    /// re-issue one leaves it running under that token.
+    CarriesToken: bool
+}
+
+/// A live declared job no declaration accounts for any more (Phase 1095).
+type DeliveryCancel = {
+    SourceId: DataSourceId
+    ScopeId: string
+    JobId: JobId
+}
+
+/// A seeded source no declaration accounts for where it was seeded: its
+/// config is deleted there (its jobs are `Cancel` entries) (Phase 1095).
+type DeliveryRetire = {
+    SourceId: DataSourceId
+    ScopeId: string
+}
+
+/// A declared data source set's delivery contract, as a value (Phase 1095):
+/// everything seeding does, computed by `DeclaredDelivery.plan` with no
+/// effect, and performed by `DeclaredDelivery.execute` in field order.
+type DeliveryPlan = {
+    /// The rows the declaration delivers, as (source id, scope id): every
+    /// pull or watch source, at its principal's scope.
+    Delivered: Set<DataSourceId * string>
+    /// Configs to write — a delivered source whose config differs from what
+    /// its scope holds.
+    Seed: DeliverySeed list
+    /// Jobs to schedule.
+    Register: DeliveryRegistration list
+    /// Kept jobs whose carried scope is re-issued.
+    Restamp: DeliveryRestamp list
+    /// Jobs to cancel.
+    Cancel: DeliveryCancel list
+    /// Seeded configs to delete.
+    Retire: DeliveryRetire list
+    /// The ledger as the plan found it.
+    LedgerBefore: Set<DataSourceId * string>
+    /// The ledger once the plan is performed.
+    LedgerAfter: Set<DataSourceId * string>
+}
+
+/// A declaration that passed every check, ready to plan.
 type private CheckedSource = {
     Declared: DeclaredDataSource
     Principal: DeclaredPrincipal
@@ -259,13 +371,34 @@ module DeclaredDelivery =
     let private connectorOf (deps: DeclaredDeliveryDeps) (kind: string) =
         deps.Connectors |> List.tryFind (fun c -> c.Kind = kind)
 
+    /// The composed connectors' declared capabilities, by `Kind` — the first
+    /// connector for a `Kind`, as `connectorOf` resolves it.
+    let private capabilitiesOf (connectors: IDataSource list) : Map<string, ConnectorCapabilities> =
+        connectors
+        |> List.distinctBy _.Kind
+        |> List.map (fun c -> c.Kind, c.Capabilities)
+        |> Map.ofList
+
+    /// Whether the scheduler re-issues a carried scope. A scheduler's
+    /// abilities are not a connector's: this reads `IJobScopeReissue` the
+    /// one way the scheduler contract offers it, as `JobScopeReissue.reissue`
+    /// does when it is called.
+    let private reissues (scheduler: IJobScheduler) : bool =
+        match box scheduler with
+        | :? IJobScopeReissue -> true
+        | _ -> false
+
     let private cadenceRefusal (sourceId: DataSourceId) (cadence: string) =
         match CronExpression.tryParse cadence with
         | Ok _ -> None
         | Error reason -> Some(InvalidCadence(sourceId, cadence, reason))
 
     /// The refusals a declaration set earns before anything is resolved.
-    let private shapeRefusals (deps: DeclaredDeliveryDeps) (declared: DeclaredDataSources) =
+    let private shapeRefusals
+        (connectors: Map<string, ConnectorCapabilities>)
+        (watchPoll: string)
+        (declared: DeclaredDataSources)
+        =
         let duplicates (keys: string list) =
             keys |> List.countBy id |> List.filter (fun (_, n) -> n > 1) |> List.map fst
 
@@ -286,9 +419,8 @@ module DeclaredDelivery =
                 match d.Delivery with
                 | DataSourceDelivery.Upload -> ()
                 | DataSourceDelivery.ScheduledPull(cadence, _) ->
-                    match connectorOf deps d.Source.Kind with
-                    | None -> UnknownConnector(sourceId, d.Source.Kind)
-                    | Some _ -> ()
+                    if not (connectors.ContainsKey d.Source.Kind) then
+                        UnknownConnector(sourceId, d.Source.Kind)
 
                     yield! cadenceRefusal sourceId cadence |> Option.toList
 
@@ -300,9 +432,10 @@ module DeclaredDelivery =
                         ()
                     | _ -> NoTablesToPull sourceId
                 | DataSourceDelivery.Watched(location, _) ->
-                    match connectorOf deps d.Source.Kind with
+                    match connectors.TryFind d.Source.Kind with
                     | None -> UnknownConnector(sourceId, d.Source.Kind)
-                    | Some(:? IWatchableFileSource) -> ()
+                    | Some capabilities when ConnectorCapabilities.declares ConnectorCapability.Watchable capabilities ->
+                        ()
                     | Some _ -> NotWatchable(sourceId, d.Source.Kind)
 
                     for key in [ "container"; "prefix" ] do
@@ -313,7 +446,7 @@ module DeclaredDelivery =
                     | Ok _ -> ()
                     | Error reason -> InvalidLocation(sourceId, location, reason)
 
-                    yield! cadenceRefusal sourceId deps.WatchPoll |> Option.toList
+                    yield! cadenceRefusal sourceId watchPoll |> Option.toList
             yield!
                 duplicates (declared.Sources |> List.map _.Source.Id)
                 |> List.map DuplicateSourceId
@@ -342,46 +475,37 @@ module DeclaredDelivery =
         | DataSourceDelivery.Upload
         | DataSourceDelivery.ScheduledPull _ -> d.Source
 
-    /// Check one pull or watch declaration under its principal's
-    /// resolution. Writes nothing.
+    /// Check one pull or watch declaration under its principal's resolution.
     let private checkOne
-        (deps: DeclaredDeliveryDeps)
+        (observed: DeliveryObservation)
         (principal: DeclaredPrincipal)
-        (resolved: Result<ResolvedScope, ScopeResolutionError>)
         (d: DeclaredDataSource)
-        : Async<Result<CheckedSource, DeclaredDeliveryRefusal>> =
-        async {
-            let sourceId = d.Source.Id
+        : Result<CheckedSource, DeclaredDeliveryRefusal> =
+        let sourceId = d.Source.Id
 
-            match resolved with
-            | Error e -> return Error(PrincipalUnresolved(sourceId, principal.Name, DeclaredPrincipal.missingGrant e))
-            | Ok scope ->
-                match scope.Storage with
-                | Some storage when storage.Persist ->
-                    let config = seededConfig d storage
+        match observed.Resolutions.TryFind principal.Name with
+        | None -> Error(PrincipalUnresolved(sourceId, principal.Name, "a resolution (none was observed)"))
+        | Some(Error e) -> Error(PrincipalUnresolved(sourceId, principal.Name, DeclaredPrincipal.missingGrant e))
+        | Some(Ok scope) ->
+            match scope.Storage with
+            | Some storage when storage.Persist ->
+                let accepted =
+                    Ok {
+                        Declared = d
+                        Principal = principal
+                        Scope = scope
+                        Config = seededConfig d storage
+                    }
 
-                    let accepted =
-                        Ok {
-                            Declared = d
-                            Principal = principal
-                            Scope = scope
-                            Config = config
-                        }
-
-                    match d.Delivery, connectorOf deps d.Source.Kind with
-                    | DataSourceDelivery.Watched(location, _), Some(:? IWatchableFileSource as watchable) ->
-                        let ctx: DataSourceCallContext = {
-                            ScopeId = scope.ScopeId
-                            Config = config
-                            Credential = None
-                        }
-
-                        match! watchable.ListObjects ctx with
-                        | Ok _ -> return accepted
-                        | Error e -> return Error(LocationUnreadable(sourceId, location, sprintf "%A" e))
-                    | _ -> return accepted
-                | _ -> return Error(PrincipalScopeNotPersistent(sourceId, principal.Name, scope.ScopeId))
-        }
+                match d.Delivery with
+                | DataSourceDelivery.Watched(location, _) ->
+                    match observed.Locations.TryFind sourceId with
+                    | Some(Ok()) -> accepted
+                    | Some(Error reason) -> Error(LocationUnreadable(sourceId, location, reason))
+                    | None -> Error(LocationUnreadable(sourceId, location, "the location was not read"))
+                | DataSourceDelivery.Upload
+                | DataSourceDelivery.ScheduledPull _ -> accepted
+            | _ -> Error(PrincipalScopeNotPersistent(sourceId, principal.Name, scope.ScopeId))
 
     let private oks (results: Result<'a, 'e> seq) : 'a list =
         results
@@ -397,72 +521,49 @@ module DeclaredDelivery =
             | Ok _ -> None)
         |> List.ofSeq
 
-    /// Check every declaration, resolving each principal once. Writes
-    /// nothing. `Upload` declarations pass unchecked: they seed nothing.
-    let private checkAll
-        (resolver: DeclaredPrincipalResolver option)
-        (deps: DeclaredDeliveryDeps)
-        (declared: DeclaredDataSources)
-        : Async<Result<CheckedSource list, DeclaredDeliveryRefusal list>> =
-        async {
-            let delivered =
-                declared.Sources
-                |> List.filter (fun d -> (DataSourceDelivery.principal d.Delivery).IsSome)
-
-            match shapeRefusals deps declared, resolver with
-            | (_ :: _ as refusals), _ -> return Error refusals
-            | [], _ when List.isEmpty delivered -> return Ok []
-            | [], None -> return Error [ NoPrincipalResolver ]
-            | [], Some resolver ->
-                let used =
-                    delivered
-                    |> List.choose (_.Delivery >> DataSourceDelivery.principal)
-                    |> Set.ofList
-
-                let! resolutions =
-                    declared.Principals
-                    |> List.filter (fun p -> used.Contains p.Name)
-                    |> List.map (fun p -> async {
-                        let! resolved = resolver.Resolve(DeclaredPrincipal.user p)
-                        return p.Name, (p, resolved)
-                    })
-                    |> Async.Sequential
-
-                let resolutions = Map.ofArray resolutions
-
-                let! checkedSources =
-                    delivered
-                    |> List.map (fun d ->
-                        let principal, resolved =
-                            resolutions[DataSourceDelivery.principal d.Delivery |> Option.get]
-
-                        checkOne deps principal resolved d)
-                    |> Async.Sequential
-
-                return
-                    match errors checkedSources with
-                    | [] -> Ok(oks checkedSources)
-                    | refusals -> Error refusals
-        }
+    /// The pull and watch declarations, each with the principal it runs as.
+    /// `Upload` declarations deliver nothing: an uploaded source is created
+    /// by the request that uploads to it, under that request's scope.
+    let private delivered (declared: DeclaredDataSources) : (DeclaredDataSource * string) list =
+        declared.Sources
+        |> List.choose (fun d -> DataSourceDelivery.principal d.Delivery |> Option.map (fun name -> d, name))
 
     // ── Jobs ─────────────────────────────────────────────────────────
 
-    /// The live jobs a declared delivery scheduled for `sourceId` in scope.
-    let private declaredJobs (deps: DeclaredDeliveryDeps) (scopeId: string) (sourceId: DataSourceId) = async {
-        let! jobs = deps.Scheduler.ListJobs scopeId
+    /// The idempotency key of a declared delivery's job:
+    /// `declared-data-delivery-{sourceId}-{jobKey}@{cadence}`. The cadence is
+    /// part of the key because a scheduler keeps a job's trigger: a new
+    /// cadence is a new job.
+    let idempotencyKey (sourceId: DataSourceId) (jobKey: string) (cadence: string) : string =
+        $"declared-data-delivery-{sourceId}-{jobKey}@{cadence}"
 
-        return
-            jobs
-            |> List.filter (fun job ->
-                job.Status <> JobStatus.Cancelled
-                && not (isNull (box job.Tags))
-                && job.Tags.TryFind SourceTag = Some sourceId)
-    }
+    /// Inverse of `idempotencyKey`, for reading a scheduler's store: the
+    /// source id, the job key and the cadence. Unambiguous because a source
+    /// id holds no ':' (so the first `-pull:` ends it) and a cron holds no
+    /// '@' (so the last '@' starts it).
+    let tryParseIdempotencyKey (key: string) : (DataSourceId * string * string) option =
+        let prefix = "declared-data-delivery-"
+        let at = key.LastIndexOf '@'
 
-    /// The registrations a checked source's delivery wants, keyed by job
-    /// key. The cadence is part of the idempotency key because a scheduler
-    /// keeps a job's trigger: a new cadence is a new job.
-    let private registrationsFor (deps: DeclaredDeliveryDeps) (c: CheckedSource) : (string * JobRegistration) list =
+        if not (key.StartsWith(prefix, StringComparison.Ordinal)) || at < prefix.Length then
+            None
+        else
+            let head = key.Substring(prefix.Length, at - prefix.Length)
+            let cadence = key.Substring(at + 1)
+            let pull = head.IndexOf("-pull:", StringComparison.Ordinal)
+
+            if pull > 0 then
+                Some(head.Substring(0, pull), head.Substring(pull + 1), cadence)
+            elif
+                head.EndsWith("-watch", StringComparison.Ordinal)
+                && head.Length > "-watch".Length
+            then
+                Some(head.Substring(0, head.Length - "-watch".Length), "watch", cadence)
+            else
+                None
+
+    /// The registrations a checked source's delivery wants, keyed by job key.
+    let private registrationsFor (watchPoll: string) (c: CheckedSource) : (string * JobRegistration) list =
         let sourceId = c.Config.Id
 
         let registration (jobKey: string) (handler: string) (payload: string) (cadence: string) : JobRegistration = {
@@ -472,7 +573,7 @@ module DeclaredDelivery =
             Trigger = CronTrigger cadence
             Idempotency =
                 Some {
-                    Key = $"declared-data-delivery-{sourceId}-{jobKey}@{cadence}"
+                    Key = idempotencyKey sourceId jobKey cadence
                     TtlSeconds = 60 * 60 * 24 * 365
                 }
             RetryPolicy = JobRetryPolicy.defaults
@@ -504,34 +605,26 @@ module DeclaredDelivery =
                     (DataIngestionJobHandler.payloadFor sourceId table)
                     cadence)
         | DataSourceDelivery.Watched _ -> [
-            "watch", registration "watch" WatchJobHandlerName (watchPayload sourceId) deps.WatchPoll
+            "watch", registration "watch" WatchJobHandlerName (watchPayload sourceId) watchPoll
           ]
 
-    /// Re-issue a recovered job's carried scope under the principal's
-    /// resolution, so a job whose token an earlier key ring no longer
-    /// redeems runs under the scope it was declared for. A scheduler that
-    /// cannot re-issue is a refusal only when the job carries no token.
-    let private restamp (deps: DeclaredDeliveryDeps) (scope: ResolvedScope) (job: JobDefinition) = async {
-        match! JobScopeReissue.reissue deps.Scheduler scope job.ScopeId job.JobId with
-        | Ok() -> return Ok()
-        | Error ScopeReissueError.Unsupported when job.Tags.ContainsKey CarriedJobScope.TokenTag -> return Ok()
-        | Error ScopeReissueError.Unsupported ->
-            return
-                Error "its job carries no scope and this deployment's scheduler cannot re-issue one (IJobScopeReissue)"
-        | Error refusal -> return Error(sprintf "%A" refusal)
-    }
-
-    /// Align a checked source's jobs with its delivery: keep a live job on
-    /// the wanted cadence (re-issuing its scope), schedule each missing one
-    /// under the principal's resolution, cancel every other declared job.
-    let private syncJobs (deps: DeclaredDeliveryDeps) (c: CheckedSource) : Async<Result<unit, string>> = async {
+    /// What one checked source's jobs need: a live job on the wanted key,
+    /// handler and trigger is kept (re-issuing its scope where the scheduler
+    /// can), each missing one is registered, every other live one cancelled.
+    /// A kept job carrying no scope token on a scheduler that cannot re-issue
+    /// one is refused here, before anything is written.
+    let private jobsFor
+        (observed: DeliveryObservation)
+        (c: CheckedSource)
+        : Result<DeliveryRegistration list * DeliveryRestamp list * DeliveryCancel list, DeclaredDeliveryRefusal list> =
+        let sourceId = c.Config.Id
         let scopeId = c.Scope.ScopeId
-        let! live = declaredJobs deps scopeId c.Config.Id
-        let wanted = registrationsFor deps c
 
-        let! outcomes =
-            wanted
-            |> List.map (fun (jobKey, registration) -> async {
+        let live = observed.Live.TryFind(sourceId, scopeId) |> Option.defaultValue []
+
+        let decided =
+            registrationsFor observed.WatchPoll c
+            |> List.map (fun (jobKey, registration) ->
                 let current =
                     live
                     |> List.tryFind (fun job ->
@@ -540,53 +633,457 @@ module DeclaredDelivery =
                         && job.Trigger = registration.Trigger)
 
                 match current with
-                | Some job ->
-                    let! restamped = restamp deps c.Scope job
-                    return restamped |> Result.map (fun () -> job.JobId)
                 | None ->
-                    match! deps.Scheduler.Schedule(c.Scope, registration) with
-                    | Ok jobId -> return Ok jobId
-                    | Error e -> return Error(sprintf "scheduling its %s job failed: %A" jobKey e)
-            })
-            |> Async.Sequential
+                    Ok(
+                        Choice1Of2 {
+                            SourceId = sourceId
+                            JobKey = jobKey
+                            Scope = c.Scope
+                            Registration = registration
+                        }
+                    )
+                | Some job ->
+                    let carriesToken = job.Tags.ContainsKey CarriedJobScope.TokenTag
 
-        match errors outcomes with
-        | _ :: _ as failures -> return Error(String.concat "; " failures)
+                    if observed.Reissues || carriesToken then
+                        Ok(
+                            Choice2Of2(
+                                job.JobId,
+                                {
+                                    SourceId = sourceId
+                                    Scope = c.Scope
+                                    JobId = job.JobId
+                                    CarriesToken = carriesToken
+                                }
+                            )
+                        )
+                    else
+                        Error(UnscopedJob(sourceId, jobKey)))
+
+        match errors decided with
+        | _ :: _ as refusals -> Error refusals
         | [] ->
-            let kept = oks outcomes |> Set.ofList
+            let decided = oks decided
 
-            for job in live do
-                if not (kept.Contains job.JobId) then
-                    do! deps.Scheduler.Cancel(scopeId, job.JobId)
+            let register =
+                decided
+                |> List.choose (function
+                    | Choice1Of2 r -> Some r
+                    | Choice2Of2 _ -> None)
 
-            return Ok()
+            let kept =
+                decided
+                |> List.choose (function
+                    | Choice2Of2(jobId, restamp) -> Some(jobId, restamp)
+                    | Choice1Of2 _ -> None)
+
+            let keptIds = kept |> List.map fst |> Set.ofList
+
+            let cancel =
+                live
+                |> List.filter (fun job -> not (keptIds.Contains job.JobId))
+                |> List.map (fun job -> {
+                    SourceId = sourceId
+                    ScopeId = scopeId
+                    JobId = job.JobId
+                })
+
+            // A scheduler that cannot re-issue leaves a tokened job on the
+            // token it has: there is nothing to perform.
+            let restamp = if observed.Reissues then kept |> List.map snd else []
+
+            Ok(register, restamp, cancel)
+
+    /// Every live job of `row`, cancelled.
+    let private cancelAll (observed: DeliveryObservation) ((sourceId, scopeId) as row) : DeliveryCancel list =
+        observed.Live.TryFind row
+        |> Option.defaultValue []
+        |> List.map (fun job -> {
+            SourceId = sourceId
+            ScopeId = scopeId
+            JobId = job.JobId
+        })
+
+    // ── Plan ─────────────────────────────────────────────────────────
+
+    /// A declared data source set's delivery contract as a value (Phase
+    /// 1095): every check, then what seeding writes, from the declaration and
+    /// what `observe` read. Pure and total: a refused declaration plans
+    /// nothing, and the refusal names every failing source and what it
+    /// lacks. A source previously seeded with a delivery and now declared
+    /// `Upload` keeps its config and ledger row and has its jobs cancelled;
+    /// every other row no declaration accounts for is retired.
+    let plan
+        (declared: DeclaredDataSources)
+        (observed: DeliveryObservation)
+        : Result<DeliveryPlan, DeclaredDeliveryRefusal list> =
+        let principals = declared.Principals |> List.map (fun p -> p.Name, p) |> Map.ofList
+
+        let delivered = delivered declared
+
+        let checkedSources () =
+            delivered
+            |> List.map (fun (d, name) ->
+                match principals.TryFind name with
+                | Some principal -> checkOne observed principal d
+                | None -> Error(UndeclaredPrincipal(d.Source.Id, name)))
+
+        match shapeRefusals observed.Connectors observed.WatchPoll declared with
+        | _ :: _ as refusals -> Error refusals
+        | [] when not delivered.IsEmpty && not observed.ResolverComposed -> Error [ NoPrincipalResolver ]
+        | [] ->
+            let checkedSources = checkedSources ()
+
+            match errors checkedSources, observed.Ledger with
+            | _ :: _ as refusals, _ -> Error refusals
+            | [], Error reason -> Error [ LedgerUnavailable reason ]
+            | [], Ok previous ->
+                let sources = oks checkedSources
+                let jobs = sources |> List.map (jobsFor observed)
+
+                match errors jobs |> List.concat with
+                | _ :: _ as refusals -> Error refusals
+                | [] ->
+                    let jobs = oks jobs
+
+                    let deliveredRows =
+                        sources |> List.map (fun c -> c.Config.Id, c.Scope.ScopeId) |> Set.ofList
+
+                    let uploadIds =
+                        declared.Sources
+                        |> List.filter (fun d -> d.Delivery = DataSourceDelivery.Upload)
+                        |> List.map _.Source.Id
+                        |> Set.ofList
+
+                    let uploadRows =
+                        previous |> Set.filter (fun (sourceId, _) -> uploadIds.Contains sourceId)
+
+                    let retired =
+                        previous
+                        |> Set.filter (fun ((sourceId, _) as row) ->
+                            not (deliveredRows.Contains row || uploadIds.Contains sourceId))
+
+                    Ok {
+                        Delivered = deliveredRows
+                        Seed =
+                            sources
+                            |> List.filter (fun c ->
+                                observed.Configs.TryFind(c.Config.Id, c.Scope.ScopeId) <> Some c.Config)
+                            |> List.map (fun c -> { Scope = c.Scope; Config = c.Config })
+                        Register = jobs |> List.collect (fun (register, _, _) -> register)
+                        Restamp = jobs |> List.collect (fun (_, restamp, _) -> restamp)
+                        Cancel = [
+                            yield! jobs |> List.collect (fun (_, _, cancel) -> cancel)
+                            for row in Set.union uploadRows retired do
+                                yield! cancelAll observed row
+                        ]
+                        Retire =
+                            retired
+                            |> Set.toList
+                            |> List.map (fun (sourceId, scopeId) -> {
+                                SourceId = sourceId
+                                ScopeId = scopeId
+                            })
+                        LedgerBefore = previous
+                        LedgerAfter = Set.union deliveredRows (Set.difference previous retired)
+                    }
+
+    // ── Observe ──────────────────────────────────────────────────────
+
+    /// Everything `plan` reads, read before anything is written (Phase 1095):
+    /// each delivery's principal resolved once, each watched location read
+    /// through its connector's declared watch, the ledger, the live declared
+    /// jobs and the current configs of every row the plan may touch. Reads
+    /// only. A shape the declaration already fails reads nothing — its
+    /// refusal is named before anything resolves.
+    let observe
+        (resolver: DeclaredPrincipalResolver option)
+        (deps: DeclaredDeliveryDeps)
+        (declared: DeclaredDataSources)
+        : Async<Result<DeliveryObservation, DeclaredDeliveryRefusal list>> =
+        async {
+            let connectors = capabilitiesOf deps.Connectors
+            let delivered = delivered declared
+
+            let nothingRead = {
+                Connectors = connectors
+                WatchPoll = deps.WatchPoll
+                ResolverComposed = resolver.IsSome
+                Resolutions = Map.empty
+                Locations = Map.empty
+                Ledger = Ok Set.empty
+                Live = Map.empty
+                Configs = Map.empty
+                Reissues = false
+            }
+
+            match shapeRefusals connectors deps.WatchPoll declared, resolver with
+            | _ :: _, _ -> return Ok nothingRead
+            | [], None when not delivered.IsEmpty -> return Ok nothingRead
+            | [], resolver ->
+                let used = delivered |> List.map snd |> Set.ofList
+
+                let! resolutions =
+                    match resolver with
+                    | None -> async { return [||] }
+                    | Some resolver ->
+                        declared.Principals
+                        |> List.filter (fun p -> used.Contains p.Name)
+                        |> List.map (fun p -> async {
+                            let! resolved = resolver.Resolve(DeclaredPrincipal.user p)
+                            return p.Name, resolved
+                        })
+                        |> Async.Sequential
+
+                let resolutions = Map.ofArray resolutions
+
+                let persistentScopeOf name =
+                    match resolutions.TryFind name with
+                    | Some(Ok scope) ->
+                        match scope.Storage with
+                        | Some storage when storage.Persist -> Some(scope, storage)
+                        | _ -> None
+                    | _ -> None
+
+                let! locations =
+                    delivered
+                    |> List.choose (fun (d, name) ->
+                        match d.Delivery, persistentScopeOf name, connectorOf deps d.Source.Kind with
+                        | DataSourceDelivery.Watched _, Some(scope, storage), Some connector ->
+                            match ConnectorCapabilities.watchable connector with
+                            | Ok watchable ->
+                                Some(
+                                    async {
+                                        let ctx: DataSourceCallContext = {
+                                            ScopeId = scope.ScopeId
+                                            Config = seededConfig d storage
+                                            Credential = None
+                                        }
+
+                                        let! listed = watchable.ListObjects ctx
+
+                                        return
+                                            d.Source.Id, listed |> Result.map ignore |> Result.mapError (sprintf "%A")
+                                    }
+                                )
+                            | Error _ -> None
+                        | _ -> None)
+                    |> Async.Sequential
+
+                let deliveredRows =
+                    delivered
+                    |> List.choose (fun (d, name) ->
+                        persistentScopeOf name
+                        |> Option.map (fun (scope, _) -> d.Source.Id, scope.ScopeId))
+
+                let! ledger = deps.Ledger.ReadSeeded()
+
+                let rows =
+                    Set.union (Set.ofList deliveredRows) (ledger |> Result.defaultValue Set.empty)
+
+                try
+                    let! listed =
+                        rows
+                        |> Set.map snd
+                        |> Set.toList
+                        |> List.map (fun scopeId -> async {
+                            let! jobs = deps.Scheduler.ListJobs scopeId
+                            return scopeId, jobs
+                        })
+                        |> Async.Sequential
+
+                    let listed = Map.ofArray listed
+
+                    let live =
+                        rows
+                        |> Set.toList
+                        |> List.map (fun ((sourceId, scopeId) as row) ->
+                            row,
+                            listed[scopeId]
+                            |> List.filter (fun job ->
+                                job.Status <> JobStatus.Cancelled
+                                && not (isNull (box job.Tags))
+                                && job.Tags.TryFind SourceTag = Some sourceId))
+                        |> Map.ofList
+
+                    let! configs =
+                        deliveredRows
+                        |> List.map (fun ((sourceId, scopeId) as row) -> async {
+                            let! config = deps.Configs.Get(scopeId, sourceId)
+                            return config |> Option.map (fun config -> row, config)
+                        })
+                        |> Async.Sequential
+
+                    return
+                        Ok {
+                            nothingRead with
+                                Resolutions = resolutions
+                                Locations = Map.ofArray locations
+                                Ledger = ledger
+                                Live = live
+                                Configs = configs |> Array.choose id |> Map.ofArray
+                                Reissues = reissues deps.Scheduler
+                        }
+                with ex ->
+                    return Error [ ObservationFailed ex.Message ]
+        }
+
+    // ── Execute ──────────────────────────────────────────────────────
+
+    /// Re-issue a kept job's carried scope. A scheduler that cannot re-issue
+    /// is a refusal only when the job carries no token.
+    let private restamp (deps: DeclaredDeliveryDeps) (r: DeliveryRestamp) = async {
+        match! JobScopeReissue.reissue deps.Scheduler r.Scope r.Scope.ScopeId r.JobId with
+        | Ok() -> return Ok()
+        | Error ScopeReissueError.Unsupported when r.CarriesToken -> return Ok()
+        | Error ScopeReissueError.Unsupported ->
+            return
+                Error "its job carries no scope and this deployment's scheduler cannot re-issue one (IJobScopeReissue)"
+        | Error refusal -> return Error(sprintf "%A" refusal)
     }
 
-    /// Cancel every declared job for `sourceId` in scope.
-    let private cancelJobs (deps: DeclaredDeliveryDeps) (scopeId: string) (sourceId: DataSourceId) = async {
-        let! live = declaredJobs deps scopeId sourceId
+    /// Perform `plan` — the one effectful step of a declared delivery (Phase
+    /// 1095). In order: write `Seed`, schedule `Register`, re-issue `Restamp`,
+    /// cancel `Cancel`, delete `Retire`, and write the ledger. A step that
+    /// fails is a `SeedFailed` naming its source, and its row's later steps
+    /// are skipped. A delivered source that failed keeps the ledger rows it
+    /// had and retires none of them; a retirement that did not happen keeps
+    /// its row, so the next start retires it. The ledger is written only when
+    /// it changes.
+    let execute
+        (deps: DeclaredDeliveryDeps)
+        (plan: DeliveryPlan)
+        : Async<Result<DeclaredSeedReport, DeclaredDeliveryRefusal list>> =
+        async {
+            let failed = Collections.Generic.Dictionary<DataSourceId * string, string>()
 
-        for job in live do
-            do! deps.Scheduler.Cancel(scopeId, job.JobId)
-    }
+            let perform (row: DataSourceId * string) (work: Async<Result<unit, string>>) = async {
+                if failed.ContainsKey row then
+                    return false
+                else
+                    let! outcome = async {
+                        try
+                            return! work
+                        with ex ->
+                            return Error ex.Message
+                    }
 
-    let private attempt (sourceId: DataSourceId) (work: Async<Result<unit, string>>) = async {
-        try
-            match! work with
-            | Ok() -> return Ok()
-            | Error reason -> return Error(SeedFailed(sourceId, reason))
-        with ex ->
-            return Error(SeedFailed(sourceId, ex.Message))
-    }
+                    match outcome with
+                    | Ok() -> return true
+                    | Error reason ->
+                        failed[row] <- reason
+                        return false
+            }
+
+            let ok () = async { return Ok() }
+
+            for s in plan.Seed do
+                let! _ =
+                    perform
+                        (s.Config.Id, s.Scope.ScopeId)
+                        (async {
+                            do! deps.Configs.Save(s.Scope.ScopeId, s.Config)
+                            return! ok ()
+                        })
+
+                ()
+
+            for r in plan.Register do
+                let! _ =
+                    perform
+                        (r.SourceId, r.Scope.ScopeId)
+                        (async {
+                            match! deps.Scheduler.Schedule(r.Scope, r.Registration) with
+                            | Ok _ -> return Ok()
+                            | Error e -> return Error(sprintf "scheduling its %s job failed: %A" r.JobKey e)
+                        })
+
+                ()
+
+            for r in plan.Restamp do
+                let! _ = perform (r.SourceId, r.Scope.ScopeId) (restamp deps r)
+                ()
+
+            for c in plan.Cancel do
+                let! _ =
+                    perform
+                        (c.SourceId, c.ScopeId)
+                        (async {
+                            do! deps.Scheduler.Cancel(c.ScopeId, c.JobId)
+                            return! ok ()
+                        })
+
+                ()
+
+            let failedDelivered =
+                failed.Keys |> Seq.filter plan.Delivered.Contains |> Seq.map fst |> Set.ofSeq
+
+            let retired = ResizeArray<DataSourceId * string>()
+
+            for r in plan.Retire do
+                let row = r.SourceId, r.ScopeId
+
+                if not (failedDelivered.Contains r.SourceId) then
+                    let! done' =
+                        perform
+                            row
+                            (async {
+                                do! deps.Configs.Delete(r.ScopeId, r.SourceId)
+                                return! ok ()
+                            })
+
+                    if done' then
+                        retired.Add row
+
+            let retiredRows = Set.ofSeq retired
+
+            let unretired =
+                plan.Retire
+                |> List.map (fun r -> r.SourceId, r.ScopeId)
+                |> Set.ofList
+                |> fun rows -> Set.difference rows retiredRows
+
+            let failedRows = failed.Keys |> Set.ofSeq
+
+            let ledger =
+                Set.union
+                    (plan.LedgerAfter
+                     |> Set.filter (fun row -> plan.LedgerBefore.Contains row || not (failedRows.Contains row)))
+                    unretired
+
+            let! written =
+                if ledger = plan.LedgerBefore then
+                    async { return Ok() }
+                else
+                    deps.Ledger.WriteSeeded ledger
+
+            let refusals = [
+                for KeyValue((sourceId, _), reason) in failed do
+                    SeedFailed(sourceId, reason)
+                match written with
+                | Ok() -> ()
+                | Error reason -> LedgerUnavailable reason
+            ]
+
+            let rowId (sourceId, scopeId) = scopeId, sourceId
+
+            return
+                match refusals with
+                | [] ->
+                    Ok {
+                        Seeded = Set.difference plan.Delivered failedRows |> Set.toList |> List.map rowId
+                        Retired = retiredRows |> Set.toList |> List.map rowId
+                    }
+                | refusals -> Error refusals
+        }
 
     // ── Seed ─────────────────────────────────────────────────────────
 
-    /// Seed a deployment's declared data sources: check every declaration
-    /// (writing nothing if any is refused), seed each delivered source's
-    /// config at its principal's scope and align its jobs, retire every
-    /// previously seeded source no declaration now accounts for, and record
-    /// where the sources now stand. `resolver` is the platform's
-    /// `DeclaredPrincipalResolver`; `None` refuses any declared delivery.
+    /// Seed a deployment's declared data sources (Phase 1015): `observe`,
+    /// then `plan`, then `execute` — so every refusal the plan can see is
+    /// named before anything is written, and seeding writes nothing then.
+    /// `resolver` is the platform's `DeclaredPrincipalResolver`; `None`
+    /// refuses any declared delivery.
     ///
     /// An `Upload` declaration seeds nothing (an uploaded source is created
     /// by the request that uploads to it, under that request's scope); a
@@ -598,113 +1095,12 @@ module DeclaredDelivery =
         (declared: DeclaredDataSources)
         : Async<Result<DeclaredSeedReport, DeclaredDeliveryRefusal list>> =
         async {
-            match! checkAll resolver deps declared with
+            match! observe resolver deps declared with
             | Error refusals -> return Error refusals
-            | Ok checkedSources ->
-                match! deps.Ledger.ReadSeeded() with
-                | Error reason -> return Error [ LedgerUnavailable reason ]
-                | Ok previous ->
-                    let! seeded =
-                        checkedSources
-                        |> List.map (fun c -> async {
-                            let sourceId = c.Config.Id
-
-                            let! written =
-                                attempt
-                                    sourceId
-                                    (async {
-                                        do! deps.Configs.Save(c.Scope.ScopeId, c.Config)
-                                        return! syncJobs deps c
-                                    })
-
-                            return written |> Result.map (fun () -> sourceId, c.Scope.ScopeId)
-                        })
-                        |> Async.Sequential
-
-                    let seededRows = Set.ofList (oks seeded)
-
-                    let uploadIds =
-                        declared.Sources
-                        |> List.filter (fun d -> d.Delivery = DataSourceDelivery.Upload)
-                        |> List.map _.Source.Id
-                        |> Set.ofList
-
-                    // A delivered source whose seeding failed keeps the rows
-                    // it had; an `Upload` source keeps its rows (and config)
-                    // with its delivery's jobs cancelled; every other row no
-                    // declaration accounts for is retired.
-                    let failedIds =
-                        checkedSources
-                        |> List.map _.Config.Id
-                        |> List.filter (fun id -> not (seededRows |> Set.exists (fun (s, _) -> s = id)))
-                        |> Set.ofList
-
-                    let uploadRows =
-                        previous |> Set.filter (fun (sourceId, _) -> uploadIds.Contains sourceId)
-
-                    let! stopped =
-                        uploadRows
-                        |> Set.toList
-                        |> List.map (fun (sourceId, scopeId) ->
-                            attempt
-                                sourceId
-                                (async {
-                                    do! cancelJobs deps scopeId sourceId
-                                    return Ok()
-                                }))
-                        |> Async.Sequential
-
-                    let toRetire =
-                        previous
-                        |> Set.filter (fun ((sourceId, _) as row) ->
-                            not (
-                                seededRows.Contains row
-                                || failedIds.Contains sourceId
-                                || uploadIds.Contains sourceId
-                            ))
-
-                    let! retired =
-                        toRetire
-                        |> Set.toList
-                        |> List.map (fun (sourceId, scopeId) -> async {
-                            let! result =
-                                attempt
-                                    sourceId
-                                    (async {
-                                        do! cancelJobs deps scopeId sourceId
-                                        do! deps.Configs.Delete(scopeId, sourceId)
-                                        return Ok()
-                                    })
-
-                            return result |> Result.map (fun () -> sourceId, scopeId)
-                        })
-                        |> Async.Sequential
-
-                    let retiredRows = Set.ofList (oks retired)
-
-                    // A row whose retirement failed stays in the ledger, so
-                    // the next start retires it.
-                    let! written = deps.Ledger.WriteSeeded(Set.union seededRows (Set.difference previous retiredRows))
-
-                    let refusals = [
-                        yield! errors seeded
-                        yield! errors stopped
-                        yield! errors retired
-                        match written with
-                        | Ok() -> ()
-                        | Error reason -> LedgerUnavailable reason
-                    ]
-
-                    let rowId (sourceId, scopeId) = scopeId, sourceId
-
-                    return
-                        match refusals with
-                        | [] ->
-                            Ok {
-                                Seeded = seededRows |> Set.toList |> List.map rowId
-                                Retired = retiredRows |> Set.toList |> List.map rowId
-                            }
-                        | refusals -> Error refusals
+            | Ok observed ->
+                match plan declared observed with
+                | Error refusals -> return Error refusals
+                | Ok planned -> return! execute deps planned
         }
 
     // ── Watch ────────────────────────────────────────────────────────
@@ -738,8 +1134,8 @@ module DeclaredDelivery =
                                 JobResult.PermanentFailure
                                     $"declared watch: data source '{sourceId}' is not configured in its scope"
                         | Some config ->
-                            match connectorOf deps config.Kind with
-                            | Some(:? IWatchableFileSource as watchable) ->
+                            match connectorOf deps config.Kind |> Option.map ConnectorCapabilities.watchable with
+                            | Some(Ok watchable) ->
                                 let call: DataSourceCallContext = {
                                     ScopeId = ctx.ScopeId
                                     Config = config

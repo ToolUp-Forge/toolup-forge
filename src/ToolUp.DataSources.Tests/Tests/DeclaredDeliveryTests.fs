@@ -779,12 +779,10 @@ let tests =
                     | Ok report -> failtestf "seeding was not refused: %A" report
                     | Error refusals -> refusals
 
-                Expect.isNonEmpty refusals "the third source is refused"
-
-                Expect.all
-                    (refusals |> List.map DeclaredDeliveryRefusal.describe)
-                    (fun line -> line.Contains "'c'")
-                    "every refusal names the third source"
+                Expect.equal
+                    refusals
+                    [ UnscopedJob("c", "pull:t") ]
+                    "the third source's unscoped job is refused by name"
 
                 Expect.isEmpty (liveJobs world scope.ScopeId "a") "the first source's job was not registered"
                 Expect.isEmpty (liveJobs world scope.ScopeId "b") "the second source's job was not registered"
@@ -825,6 +823,152 @@ let tests =
                     (onlyJob world scope.ScopeId "drops").Handler
                     DeclaredDelivery.WatchJobHandlerName
                     "its watch is scheduled"
+            }
+
+            test "plan law: a refused declaration plans nothing and seeding performs no effect" {
+                let world = World()
+                let p = world.TeamPrincipal "p"
+                let scope = world.ScopeOf p
+
+                let declared = {
+                    Principals = [ p ]
+                    Sources = [
+                        {
+                            Source = csvSource "good" [ "container", "exports" ] (Some [ "t" ])
+                            Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
+                        }
+                        {
+                            Source = csvSource "bad" [ "container", "exports" ] (Some [ "t" ])
+                            Delivery = DataSourceDelivery.ScheduledPull("whenever", "p")
+                        }
+                    ]
+                }
+
+                let observed =
+                    match
+                        DeclaredDelivery.observe (Some world.Resolver) world.Deps declared
+                        |> Async.RunSynchronously
+                    with
+                    | Ok observed -> observed
+                    | Error refusals -> failtestf "observing was refused: %A" refusals
+
+                match DeclaredDelivery.plan declared observed with
+                | Error [ InvalidCadence("bad", "whenever", _) ] -> ()
+                | other -> failtestf "expected the bad cadence refused, got %A" other
+
+                match seed world declared with
+                | Error [ InvalidCadence("bad", "whenever", _) ] -> ()
+                | other -> failtestf "expected seeding refused, got %A" other
+
+                Expect.isEmpty (liveJobs world scope.ScopeId "good") "no job was registered"
+
+                Expect.isNone
+                    (world.Configs.Get(scope.ScopeId, "good") |> Async.RunSynchronously)
+                    "no config was written"
+
+                Expect.equal
+                    (world.Deps.Ledger.ReadSeeded() |> Async.RunSynchronously)
+                    (Ok Set.empty)
+                    "the ledger was not written"
+            }
+
+            test "plan law: the plan over an unchanged declaration and ledger changes nothing" {
+                let world = World()
+                let p = world.TeamPrincipal "p"
+                let loader = world.TeamPrincipal "loader"
+                let scope = world.ScopeOf p
+
+                let declared = {
+                    Principals = [ p; loader ]
+                    Sources = [
+                        {
+                            Source = csvSource "sales" [ "container", "exports" ] (Some [ "sales"; "returns" ])
+                            Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
+                        }
+                        {
+                            Source = csvSource "drops" [] None
+                            Delivery = DataSourceDelivery.Watched("incoming", "loader")
+                        }
+                    ]
+                }
+
+                let planned () =
+                    match
+                        DeclaredDelivery.observe (Some world.Resolver) world.Deps declared
+                        |> Async.RunSynchronously
+                    with
+                    | Error refusals -> failtestf "observing was refused: %A" refusals
+                    | Ok observed ->
+                        match DeclaredDelivery.plan declared observed with
+                        | Ok plan -> plan
+                        | Error refusals -> failtestf "planning was refused: %A" refusals
+
+                let first = planned ()
+                Expect.hasLength first.Register 3 "a first plan registers two pulls and a watch"
+                Expect.hasLength first.Seed 2 "and writes both configs"
+
+                for r in first.Register do
+                    let key =
+                        r.Registration.Idempotency
+                        |> Option.map _.Key
+                        |> Option.defaultWith (fun () -> failtest "a declared job carries an idempotency key")
+
+                    let cadence =
+                        match r.Registration.Trigger with
+                        | CronTrigger cadence -> cadence
+                        | other -> failtestf "a declared job is on a cron, got %A" other
+
+                    Expect.equal
+                        (DeclaredDelivery.tryParseIdempotencyKey key)
+                        (Some(r.SourceId, r.JobKey, cadence))
+                        $"the registered key '{key}' reads back as its parts"
+
+                seeded world declared |> ignore
+                let again = planned ()
+
+                Expect.isEmpty again.Seed "no config is rewritten"
+                Expect.isEmpty again.Register "no job is registered"
+                Expect.isEmpty again.Cancel "no job is cancelled"
+                Expect.isEmpty again.Retire "nothing is retired"
+                Expect.equal again.LedgerAfter again.LedgerBefore "the ledger is unchanged"
+
+                Expect.equal
+                    (again.Restamp |> List.map _.JobId |> Set.ofList)
+                    (liveJobs world scope.ScopeId "sales"
+                     |> List.map _.JobId
+                     |> Set.ofList
+                     |> Set.union (
+                         liveJobs world (world.ScopeOf loader).ScopeId "drops"
+                         |> List.map _.JobId
+                         |> Set.ofList
+                     ))
+                    "only the kept jobs' carried scopes are re-issued"
+            }
+
+            test "plan law: the idempotency-key grammar round-trips" {
+                let parts = [
+                    "sales", "pull:sales", "0 6 * * *"
+                    "a-b.c_d", "pull:t-1@x:y", "*/5 * * * *"
+                    "x-pull", "pull:pull:z", "0 0 1 * *"
+                    "watch-me", "watch", DeclaredDelivery.DefaultWatchPoll
+                    "w", "pull:ends-watch", "0 6 * * 1"
+                ]
+
+                for sourceId, jobKey, cadence in parts do
+                    let key = DeclaredDelivery.idempotencyKey sourceId jobKey cadence
+
+                    Expect.equal
+                        (DeclaredDelivery.tryParseIdempotencyKey key)
+                        (Some(sourceId, jobKey, cadence))
+                        $"'{key}' round-trips"
+
+                for junk in
+                    [
+                        "declared-data-delivery-"
+                        "other-sales-pull:t@0 6 * * *"
+                        "declared-data-delivery-sales"
+                    ] do
+                    Expect.isNone (DeclaredDelivery.tryParseIdempotencyKey junk) $"'{junk}' is not a key"
             }
         ]
     ]
