@@ -30,6 +30,10 @@ type MyDataSource() =
         /// connector should serve.
         member _.Kind = "MyDataManager"
 
+        /// What the connector can do beyond the five members — a watchable
+        /// location, a native payload format. Nothing, here.
+        member _.Capabilities = ConnectorCapabilities.none
+
         /// Cheap reachability probe — the admin UI's "Test connection"
         /// button and the first step of every ingestion attempt.
         /// Connectors with no cheap probe may return `Ok ()`.

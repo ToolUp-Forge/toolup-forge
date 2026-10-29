@@ -290,6 +290,7 @@ type private RecordedSource(kind: string, declares: IDataSource, schema: TableSc
 
     interface IDataSource with
         member _.Kind = kind
+        member _.Capabilities = declares.Capabilities
         member _.Connect _ = async { return Ok() }
         member _.ListTables _ = async { return Ok [ schema.TableName ] }
 

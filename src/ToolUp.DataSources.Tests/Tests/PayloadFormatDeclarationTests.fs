@@ -82,6 +82,7 @@ let private probing
     let source =
         { new IDataSource with
             member _.Kind = inner.Kind
+            member _.Capabilities = inner.Capabilities
 
             member _.Connect ctx =
                 connected.Value <- true
@@ -101,6 +102,7 @@ let private probing
     | Some need ->
         { new IDataSource with
             member _.Kind = source.Kind
+            member _.Capabilities = source.Capabilities
             member _.Connect ctx = source.Connect ctx
             member _.ListTables ctx = source.ListTables ctx
             member _.GetSchema(ctx, t) = source.GetSchema(ctx, t)

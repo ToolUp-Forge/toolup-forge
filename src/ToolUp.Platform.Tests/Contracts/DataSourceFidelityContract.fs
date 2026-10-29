@@ -889,6 +889,7 @@ type FixtureSource(defect: Defect) =
 
     interface IDataSource with
         member _.Kind = kind
+        member _.Capabilities = ConnectorCapabilities.none
         member _.Connect _ = async { return Ok() }
         member _.ListTables _ = async { return Ok [ fixture.Table ] }
 
