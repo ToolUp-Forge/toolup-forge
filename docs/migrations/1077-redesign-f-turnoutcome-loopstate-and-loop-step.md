@@ -1,7 +1,7 @@
 # A turn is one record in, one outcome out
 
-**Ships in:** ToolUp.AI.Server 0.36.0. Rides the 0.36.0 draft (untagged, publicly unpinned, breaking-class since
-Phase 1128). This change is breaking-class too: one removed function and one record field.
+**Ships in:** ToolUp.AI.Server 0.37.0, the next minor after the tagged 0.36.0. The change is breaking-class: one
+removed function and one record field.
 
 **Affected:** code that calls `AIAgentEngine.runAgentLoop` (the string-prompt entry), and code that builds
 `AIAssistantServerConfig` as a full record literal or reads `MaxHistoryMessages`. A caller of
