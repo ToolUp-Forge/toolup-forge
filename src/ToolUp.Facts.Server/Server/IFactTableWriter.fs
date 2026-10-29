@@ -4,7 +4,6 @@
 namespace ToolUp.Facts
 
 open System
-open System.Security.Cryptography
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
@@ -563,13 +562,6 @@ type FactTableSnapshot = {
 /// Pure snapshot construction, digests and change summaries.
 module FactTableSnapshot =
 
-    let private sha256Hex (s: string) : string =
-        use sha = SHA256.Create()
-
-        sha.ComputeHash(Encoding.UTF8.GetBytes s)
-        |> Array.map (sprintf "%02x")
-        |> String.concat ""
-
     let private scalarOf (value: FactValue) : decimal option =
         match value with
         | Scalar d -> Some d
@@ -605,23 +597,25 @@ module FactTableSnapshot =
 
     /// SHA-256 over the snapshot's canonical content — the watermark's
     /// content digest. Two runs committing the same rows digest the same.
+    ///
+    /// Phase 1089: framed by `CanonicalFrame` — the label and table, then
+    /// per row its subject path (count first), its period endpoints and its
+    /// cells (count first, each metric and value hash).
     let digest (snapshot: FactTableSnapshot) : string =
-        snapshot.Rows
-        |> List.map (fun r ->
-            let cells =
-                r.Cells
-                |> List.map (fun c -> sprintf "%s=%s" c.Metric c.ValueHash)
-                |> String.concat ";"
+        CanonicalFrame.digest [
+            "fact-table-snapshot"
+            snapshot.TableId
+            for r in snapshot.Rows do
+                string r.Subject.Length
+                yield! r.Subject
+                r.From.ToUniversalTime().ToString("o")
+                r.To.ToUniversalTime().ToString("o")
+                string r.Cells.Length
 
-            sprintf
-                "%s|%s|%s|%s"
-                (String.concat ">" r.Subject)
-                (r.From.ToUniversalTime().ToString("o"))
-                (r.To.ToUniversalTime().ToString("o"))
-                cells)
-        |> String.concat "\n"
-        |> sprintf "%s\n%s" snapshot.TableId
-        |> sha256Hex
+                for c in r.Cells do
+                    c.Metric
+                    c.ValueHash
+        ]
 
     /// The readable period of a snapshot row.
     let periodText (row: FactTableSnapshotRow) : string =
