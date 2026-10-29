@@ -30,7 +30,8 @@ open ToolUp.DataSources.Tests.Support
 //      never an empty listing that reads as "nothing landed".
 //   5. The listing is ordered by blob name, so two polls compare.
 //
-// Bound by every connector that implements the seam: the pack takes the
+// Bound by every connector that declares the seam as
+// `ConnectorCapabilities.Watchable` (Phase 1095): the pack takes the
 // connector's `create` over a blob store and its file extension.
 
 [<Literal>]
@@ -52,10 +53,13 @@ let private context (config: DataSourceConfig) : DataSourceCallContext = {
     Credential = None
 }
 
+/// The connector's DECLARED watch (Phase 1095): the pack exercises what the
+/// connector's `Capabilities.Watchable` names, so a connector whose record
+/// does not declare the watch fails here by name rather than being probed.
 let private watchable (create: IBlobStorage -> IDataSource) (storage: IBlobStorage) : IWatchableFileSource =
-    match create storage with
-    | :? IWatchableFileSource as source -> source
-    | other -> failtestf "%s does not implement IWatchableFileSource" other.Kind
+    match ConnectorCapabilities.watchable (create storage) with
+    | Ok source -> source
+    | Error refusal -> failtest (CapabilityNotDeclared.describe refusal)
 
 let private list (source: IWatchableFileSource) =
     match source.ListObjects(context (config [])) |> Async.RunSynchronously with

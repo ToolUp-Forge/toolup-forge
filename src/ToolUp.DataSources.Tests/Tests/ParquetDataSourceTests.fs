@@ -308,6 +308,9 @@ let private nativeTests =
 
                 { new IDataSource with
                     member _.Kind = inner.Kind
+                    // Declares no capability: this wrapper's Query already IS the native
+                    // emission, so the ingestor must not be offered QueryNative beside it.
+                    member _.Capabilities = ConnectorCapabilities.none
                     member _.Connect ctx = inner.Connect ctx
                     member _.ListTables ctx = inner.ListTables ctx
                     member _.GetSchema(ctx, t) = inner.GetSchema(ctx, t)

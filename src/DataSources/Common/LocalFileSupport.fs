@@ -31,20 +31,6 @@ open DataManagementTypes
 // container is scope-derived, so a source can never enumerate another
 // tenant's files.
 
-/// One object at a file source's location, as a watched delivery sees it
-/// (Phase 1015): the table it is, the blob it is stored as, and the
-/// identity that says whether it is new.
-type WatchedObject = {
-    /// The table name the connector reads the object as.
-    Table: string
-    /// The object's blob name within the source's container.
-    BlobName: string
-    /// The object's identity: its blob name, last-modified instant and
-    /// size. A new object, or an object rewritten in place, has an identity
-    /// no ingestion has recorded.
-    Identity: string
-}
-
 /// File acquisition and table↔blob naming for the file-shaped
 /// connectors.
 module Files =
@@ -286,16 +272,6 @@ module Files =
                         |> List.ofArray
                     )
         })
-
-/// A file connector whose location a watched delivery can watch (Phase
-/// 1015). Implemented by the connector because the connector owns its
-/// naming — container, prefix and extension come from ITS reading of the
-/// config — so a watch sees exactly the objects the connector would read.
-/// A connector that does not implement it cannot be declared `Watched`.
-type IWatchableFileSource =
-    /// The objects at the source's configured location, with their
-    /// identities. `Error` when the location cannot be read.
-    abstract ListObjects: ctx: DataSourceCallContext -> Async<Result<WatchedObject list, IngestionError>>
 
 /// Type-probe schema inference over sampled cell text.
 ///

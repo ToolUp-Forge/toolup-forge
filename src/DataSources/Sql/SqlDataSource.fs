@@ -300,6 +300,11 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
     interface IDataSource with
         member _.Kind = kind
 
+        // Phase 1095 — a query against a SQL database has no location a delivery can
+        // watch, and it emits only the CSV it declares: nothing beyond the five
+        // members (what the capability probes answered before the record).
+        member _.Capabilities = ConnectorCapabilities.none
+
         member _.Connect(ctx) =
             Errors.guard $"%s{kind} Connect" (fun () -> async {
                 match! prepare ctx with

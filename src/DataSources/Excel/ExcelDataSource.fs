@@ -548,6 +548,14 @@ type private ExcelDataSourceImpl(storage: IBlobStorage) =
     interface IDataSource with
         member _.Kind = Kind
 
+        // Phase 1095 — a watched delivery can watch this connector's location
+        // (Phase 1015); it has no native format (what the probes answered before
+        // the record).
+        member this.Capabilities = {
+            ConnectorCapabilities.none with
+                Watchable = Some(this :> IWatchableFileSource)
+        }
+
         member _.Connect(ctx) =
             withSettings ctx "Excel Connect" (fun settings -> async {
                 match! Files.listTables storage "Excel Connect" settings.File with
