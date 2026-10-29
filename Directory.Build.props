@@ -903,7 +903,16 @@
       `LoopState.messageParts`; a string-returning executor is unchanged.
       Migration recipe: `docs/migrations/1131-tool-result-block.md`.
     -->
-    <Version>0.37.0</Version>
+    <!--
+      Next draft 0.38.0 (v0.37.0 is tagged and published), opened by Phase
+      1060, additive: `ToolUp.Platform.Core` gains `ScopeKey`,
+      `PlatformShard`, `ScopePersistence`, `AuditScope` and
+      `StorageScope.ofKey`; `ToolUp.Platform.Server` gains
+      `StorageScopeDerivation.tryKeyFromSubject`. Nothing is removed or
+      retyped. The draft is opened at the minor rather than the patch
+      because the wave it heads carries a breaking change (Phase 1095).
+    -->
+    <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

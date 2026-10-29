@@ -13,7 +13,38 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.37.0] — unreleased
+## [0.38.0] — unreleased
+
+_Surface since `v0.37.0`: **additive** — 2 packages moved; 53 members added, 0 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.Platform.Core` — 52 members:
+  - `ToolUp.Platform.AuditScope (class)`
+  - `ToolUp.Platform.AuditScope+Scoped (class)`
+  - `ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }`
+  - `ToolUp.Platform.AuditScope+Tags (class)`
+  - `ToolUp.Platform.AuditScope+Tags.PlatformScope : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditScope+Tags.Scoped : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditScope.IsPlatformScope : System.Boolean { get }`
+  - `ToolUp.Platform.AuditScope.IsScoped : System.Boolean { get }`
+  - `ToolUp.Platform.AuditScope.PlatformScope : ToolUp.Platform.AuditScope { get }`
+  - `ToolUp.Platform.AuditScope.Tag : System.Int32 { get }`
+  - `ToolUp.Platform.AuditScopeModule (class)`
+  - `ToolUp.Platform.AuditScopeModule.streamKey(ToolUp.Platform.AuditScope) : System.String`
+  - `ToolUp.Platform.PlatformShard (class)`
+  - `ToolUp.Platform.PlatformShard.Platform : ToolUp.Platform.PlatformShard { get }`
+  - `ToolUp.Platform.PlatformShard.Tag : System.Int32 { get }`
+  - `ToolUp.Platform.ScopeKey (class)`
+  - `ToolUp.Platform.ScopeKey+Claim (class)`
+  - `ToolUp.Platform.ScopeKey+Claim.claimScopeId : System.String { get }`
+  - `ToolUp.Platform.ScopeKey+Platform (class)`
+  - `ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }`
+  - … and 32 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 1 member:
+  - `ToolUp.Platform.Middleware+StorageScopeDerivation.tryKeyFromSubject(ToolUp.Platform.Subject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]`
+
+## [0.37.0] — 2026-10-29
 
 Migration notes:
 
@@ -53,7 +84,7 @@ _Surface since `v0.36.0`: **breaking** — 6 packages moved; 269 members added, 
   - `ToolUp.AI.AIAgentEngine+LoopState.Stopped : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }`
-  - … and 203 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+  - … and 203 more — `git diff v0.36.0 v0.37.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AuthProviders.Oidc` — 7 members:
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPage (class)`
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule (class)`
@@ -91,7 +122,7 @@ _Surface since `v0.36.0`: **breaking** — 6 packages moved; 269 members added, 
   - `ToolUp.Platform.GroundedProjectionContext.Scope : ToolUp.Platform.ResolvedScope { get }`
   - `ToolUp.Platform.GroundedProjectionContext.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }`
   - `ToolUp.Platform.GroundedProjectionRequest (class)`
-  - … and 8 more — `git diff v0.36.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 8 more — `git diff v0.36.0 v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ### Changed
 
