@@ -918,6 +918,15 @@
       is unchanged. Migration recipe: `docs/migrations/1132-render-tools.md`.
     -->
     <!--
+      Phase 1060 rides the 0.38.0 draft (untagged, publicly unpinned; its
+      surface movement is additive, below the draft's class):
+      `ToolUp.Platform.Core` gains `ScopeKey`, `PlatformShard`,
+      `ScopePersistence`, `AuditScope` and `StorageScope.ofKey`;
+      `ToolUp.Platform.Server` gains
+      `StorageScopeDerivation.tryKeyFromSubject`. Nothing is removed or
+      retyped.
+    -->
+    <!--
       Phase 860 rides the 0.38.0 draft (untagged, publicly unpinned; its
       surface movement is breaking-class, the draft's own class, not above
       it): `ToolUp.Platform.Server`'s `CompositionManifest` gains

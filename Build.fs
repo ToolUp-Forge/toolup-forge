@@ -4283,6 +4283,210 @@ let main args =
             "VerifyUploadResults: OK — no unmarked discarded write or delete result (%d marked best-effort)."
             marked.Length)
 
+    // Phase 1060 — the scope grammar has ONE home.
+    //
+    // `ScopeKey` (src/ToolUp.Platform.Core/Shared/Types/ScopeKey.fs) renders a
+    // scope's storage container (`team-{id}` / `user-{id}` / `session-{id}` /
+    // `_platform`) in one function and reads a container at rest back in one
+    // parser. Before it, the grammar was minted by string interpolation and
+    // parsed back by prefix tests at a dozen sites, so two spellings of one
+    // scope could be produced and a reader could disagree with a writer about
+    // which scope a container named. A helper beside the literals would not
+    // have stopped the next one (the 863 shape: the fix is a pattern the build
+    // refuses, not an alternative it offers).
+    //
+    // The check is textual: a string literal that IS `"_platform"`, or that
+    // opens with `team-` / `user-` / `session-` followed directly by the
+    // closing quote, an interpolation hole or a format specifier (the shapes
+    // that build or test a container: `"team-"`, `$"team-{id}"`,
+    // `sprintf "user-%s"`). A literal that merely begins with the word
+    // (`"team-role"`, `"user-agent"`) is not a site. Scope: production code
+    // under `src/` — directories named `*.Tests` are fixtures and are
+    // excluded, as are comment lines and `ScopeKey.fs` itself.
+    //
+    // A RATCHET, not yet a zero. Phase 1060 swept the files it owned to zero;
+    // the literals left in the rest of the tree are counted per package (the
+    // nearest `.fsproj`) in `scopeLiteralCeilings`, and a package above its
+    // ceiling — or a package absent from the table holding any literal at
+    // all — is red. A package BELOW its ceiling passes and prints the number
+    // to record, so a sibling change that removes a literal never reddens the
+    // gate; the commit that sweeps a package lowers its row (deleting it at
+    // zero). The ceiling is never raised to admit a literal: render the scope
+    // through `ScopeKey.container` / `ScopeKey.scopeId`, or read it through
+    // `ScopeKey.tryParseContainer`.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyScopeLiterals`
+    //        `… -- VerifyScopeLiterals --root <dir>` scans `<dir>/src` (how
+    //        the check is shown red on a planted literal without touching
+    //        the tree). Also a leg of `VerifyAll` in the fast and full lanes.
+    let scopeLiteralCeilings: Map<string, int> =
+        Map.ofList [
+            "ArtefactSigning", 1
+            "AwsS3Storage", 1
+            "AzureBlobStorage", 1
+            "AzureSpeechTranscriptionProvider", 6
+            "ClaudeAIProvider", 2
+            "CopilotAIProvider", 2
+            "Gemini", 2
+            "GitHubAuth", 1
+            "GoogleCloudStorage", 1
+            "GoogleDirectory", 1
+            "InterPlatform", 9
+            "LdapActiveDirectory", 1
+            "LocalEmbeddingProvider", 3
+            "OpenAIEmbeddingProvider", 5
+            "OpenAIProvider", 2
+            "PasskeyAuthProvider", 1
+            "Scim", 1
+            "ToolUp.AI.McpHost", 1
+            "ToolUp.AI.Server", 15
+            "ToolUp.AuditSinks.Cef", 2
+            "ToolUp.AuditSinks.DatadogLogs", 1
+            "ToolUp.AuditSinks.SplunkHec", 1
+            "ToolUp.Calendar.Google", 1
+            "ToolUp.Cli", 2
+            "ToolUp.ExternalCompute.Http", 3
+            "ToolUp.Facts.Server", 6
+            "ToolUp.Forms.Server", 1
+            "ToolUp.KnowledgeBase.Server", 14
+            "ToolUp.MediaLibrary", 3
+            "ToolUp.NotificationChannels.Email.SendGrid", 2
+            "ToolUp.NotificationChannels.Push.WebPush", 2
+            "ToolUp.NotificationChannels.Sms.Twilio", 2
+            "ToolUp.NotificationChannels.WhatsApp.MetaCloud", 2
+            "ToolUp.NotificationChannels.WhatsApp.Twilio", 3
+            "ToolUp.Platform.Client", 1
+            "ToolUp.Platform.Core", 12
+            "ToolUp.Platform.Server", 149
+            "ToolUp.PublicRendering", 2
+            "ToolUp.RAG.Benchmarks", 1
+            "ToolUp.RAG.Server", 5
+            "ToolUp.Reporting.Server", 2
+            "ToolUp.Stripe.Server", 1
+            "WhisperTranscriptionProvider", 4
+        ]
+
+    let runVerifyScopeLiterals (root: string) : int =
+        let srcDir = Path.Combine(root, "src")
+
+        if not (Directory.Exists srcDir) then
+            Trace.traceError (
+                sprintf "VerifyScopeLiterals: no `src` directory under %s — nothing to scan is not a pass." root
+            )
+
+            1
+        else
+            let toSlash (s: string) = s.Replace('\\', '/')
+
+            let rec walk (dir: string) = seq {
+                for d in Directory.EnumerateDirectories dir do
+                    let name = Path.GetFileName d
+
+                    if
+                        name <> "bin"
+                        && name <> "obj"
+                        && name <> "output"
+                        && name <> "node_modules"
+                        && not (name.EndsWith ".Tests")
+                    then
+                        yield! walk d
+
+                yield! Directory.EnumerateFiles(dir, "*.fs")
+            }
+
+            let literal =
+                System.Text.RegularExpressions.Regex("\"_platform\"|\"(team|user|session)-(\"|\\{|%)")
+
+            let isComment (line: string) =
+                let t = line.TrimStart()
+                t.StartsWith "//" || t.StartsWith "(*"
+
+            // The package a file belongs to: the nearest enclosing directory
+            // holding an `.fsproj`, named by that project file.
+            let rec packageOf (dir: string) =
+                if isNull dir || not (dir.StartsWith srcDir) then
+                    "(no project)"
+                else
+                    match Directory.GetFiles(dir, "*.fsproj") |> Array.sort |> Array.tryHead with
+                    | Some proj -> Path.GetFileNameWithoutExtension proj
+                    | None -> packageOf (Path.GetDirectoryName dir)
+
+            let sites = [
+                for file in walk srcDir do
+                    let rel = toSlash (Path.GetRelativePath(root, file))
+
+                    if not (rel.EndsWith "ToolUp.Platform.Core/Shared/Types/ScopeKey.fs") then
+                        for i, line in File.ReadAllLines file |> Array.indexed do
+                            if not (isComment line) then
+                                for _ in literal.Matches line do
+                                    yield packageOf (Path.GetDirectoryName file), rel, i + 1, line.Trim()
+            ]
+
+            let counts = sites |> List.countBy (fun (pkg, _, _, _) -> pkg) |> Map.ofList
+
+            let countOf pkg =
+                counts |> Map.tryFind pkg |> Option.defaultValue 0
+
+            let ceilingOf pkg =
+                scopeLiteralCeilings |> Map.tryFind pkg |> Option.defaultValue 0
+
+            let over = counts |> Map.toList |> List.filter (fun (pkg, n) -> n > ceilingOf pkg)
+
+            let under =
+                scopeLiteralCeilings
+                |> Map.toList
+                |> List.filter (fun (pkg, ceiling) -> countOf pkg < ceiling)
+
+            Trace.tracefn ""
+            Trace.tracefn "VerifyScopeLiterals summary:"
+            Trace.tracefn "  scope literals : %d in %d package(s)" sites.Length counts.Count
+
+            for pkg, ceiling in under do
+                Trace.tracefn
+                    "  ratchet        : %s holds %d against a ceiling of %d — lower its row in scopeLiteralCeilings"
+                    pkg
+                    (countOf pkg)
+                    ceiling
+
+            if over.IsEmpty then
+                Trace.tracefn ""
+                Trace.tracefn "VerifyScopeLiterals: OK — no package holds a scope literal above its ceiling."
+                0
+            else
+                Trace.tracefn ""
+
+                for pkg, n in over do
+                    Trace.traceError (sprintf "  %s: %d scope literal(s) against a ceiling of %d" pkg n (ceilingOf pkg))
+
+                    for (_, rel, line, text) in sites |> List.filter (fun (p, _, _, _) -> p = pkg) do
+                        Trace.traceError (sprintf "    %s:%d: %s" rel line text)
+
+                Trace.traceError (
+                    sprintf
+                        "VerifyScopeLiterals: %d package(s) spell a scope container by hand. Render a scope through `ScopeKey.container` / `ScopeKey.scopeId` (or `ScopeKey.platform` for the reserved shard), and read a container at rest through `ScopeKey.tryParseContainer`, never a hand-written container literal. The ceiling is a ratchet: a sweep lowers it; it is never raised to admit a literal."
+                        over.Length
+                )
+
+                1
+
+    Target.create "VerifyScopeLiterals" (fun _ ->
+        let root =
+            match args |> Array.tryFindIndex ((=) "--root") with
+            | Some i when i + 1 < args.Length -> Path.GetFullPath args[i + 1]
+            | _ -> __SOURCE_DIRECTORY__
+
+        match runVerifyScopeLiterals root with
+        | 0 -> ()
+        | code -> failwithf "VerifyScopeLiterals: exited %d; the sites are printed above." code)
+
+    match TestLane.current with
+    | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "ScopeLiterals" (fun () ->
+            Trace.tracefn "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals)"
+            runVerifyScopeLiterals __SOURCE_DIRECTORY__)
+
     // App-specific target: Azure deployment
     Target.create "Deploy-CD" (fun _ ->
         let dotnet args dir =
