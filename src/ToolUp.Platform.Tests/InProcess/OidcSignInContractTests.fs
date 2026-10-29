@@ -409,6 +409,293 @@ let private phase3bATests: Test =
 
     ]
 
+// ─── Phase 1139 — sign-in failures render as a themed page ───────────
+//
+// Drives the SSR sign-in handlers directly (no host): a stub token endpoint
+// and a stub `IAuthProvider` stand in for the IdP so each failure path can be
+// reached on demand. Every failure must answer an HTML page with a reason from
+// the closed set and a try-again link, keep its status, set no session cookie
+// and never echo IdP-supplied text.
+
+module private FailurePage =
+    open System.IO
+    open System.Threading.Tasks
+    open Microsoft.AspNetCore.DataProtection
+    open Microsoft.Extensions.DependencyInjection
+
+    type StubHandler(status: HttpStatusCode, body: string) =
+        inherit HttpMessageHandler()
+
+        override _.SendAsync(_, _) =
+            Task.FromResult(new HttpResponseMessage(status, Content = new StringContent(body)))
+
+    type StubProvider(result: Result<AuthenticatedUser, string>) =
+        interface IAuthProvider with
+            member _.GetUser _ = async { return AuthenticatedUser.anonymous }
+            member _.ValidateRequest _ = async { return result }
+            member _.IsCryptographicallyVerified = true
+
+    let signedIn: AuthenticatedUser = {
+        AuthenticatedUser.anonymous with
+            UserId = "zoe"
+            DisplayName = "Zoe"
+    }
+
+    let config =
+        OidcSsrSignIn.defaults
+            "https://idp.test/authorize"
+            "https://idp.test/token"
+            "cid"
+            "https://app.test/auth/callback"
+
+    let services (provider: Result<AuthenticatedUser, string>) (dataProtection: bool) : IServiceProvider =
+        let s = ServiceCollection()
+        s.AddSingleton<IAuthProvider>(StubProvider provider) |> ignore
+
+        if dataProtection then
+            s.AddSingleton<IDataProtectionProvider>(EphemeralDataProtectionProvider())
+            |> ignore
+
+        s.BuildServiceProvider() :> IServiceProvider
+
+    /// Run `handler` against a GET and return the context and its body.
+    let run
+        (sp: IServiceProvider)
+        (handler:
+            (HttpContext -> System.Threading.Tasks.Task<HttpContext option>)
+                -> HttpContext
+                -> System.Threading.Tasks.Task<HttpContext option>)
+        (path: string)
+        (query: string)
+        (cookie: string option)
+        : Async<HttpContext * string> =
+        async {
+            let ctx = DefaultHttpContext()
+            ctx.RequestServices <- sp
+            ctx.Request.Method <- "GET"
+            ctx.Request.Path <- PathString path
+            ctx.Request.QueryString <- QueryString query
+            cookie |> Option.iter (fun c -> ctx.Request.Headers["Cookie"] <- c)
+            ctx.Response.Body <- new MemoryStream()
+
+            let! _ =
+                handler (fun c -> Task.FromResult(Some c)) (ctx :> HttpContext)
+                |> Async.AwaitTask
+
+            ctx.Response.Body.Position <- 0L
+            use reader = new StreamReader(ctx.Response.Body)
+            return (ctx :> HttpContext), reader.ReadToEnd()
+        }
+
+    let setCookies (ctx: HttpContext) =
+        ctx.Response.Headers["Set-Cookie"] |> Seq.map string |> Seq.toList
+
+    let queryOf (location: string) (name: string) =
+        let q = location.Substring(location.IndexOf '?' + 1)
+
+        q.Split '&'
+        |> Array.pick (fun kv ->
+            let i = kv.IndexOf '='
+
+            if kv.Substring(0, i) = name then
+                Some(Uri.UnescapeDataString(kv.Substring(i + 1)))
+            else
+                None)
+
+    let b64 (s: string) =
+        Convert.ToBase64String(Encoding.UTF8.GetBytes s).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+    let token (nonce: string) (exp: int64) =
+        let header = b64 "{\"alg\":\"none\"}"
+        let payload = b64 (sprintf "{\"nonce\":\"%s\",\"exp\":%d}" nonce exp)
+        $"{header}.{payload}.sig"
+
+    let tokenBody (t: string) = sprintf "{\"id_token\":\"%s\"}" t
+
+    /// Start a sign-in and return (state-cookie request pair, state, nonce).
+    let start (sp: IServiceProvider) (returnUrl: string) = async {
+        let handler = OidcSsrSignIn.routes (new HttpClient()) config
+        let query = "?returnUrl=" + Uri.EscapeDataString returnUrl
+        let! ctx, _ = run sp handler "/auth/sign-in" query None
+        let location = string ctx.Response.Headers["Location"]
+
+        let cookie =
+            setCookies ctx
+            |> List.find (fun c -> c.StartsWith(OidcSsrSignIn.StateCookieName + "="))
+
+        return cookie.Split(';')[0], queryOf location "state", queryOf location "nonce"
+    }
+
+    let callback
+        (sp: IServiceProvider)
+        (page: OidcSsrSignIn.SignInPage)
+        (http: HttpClient)
+        (query: string)
+        (cookie: string option)
+        : Async<HttpContext * string> =
+        run sp (OidcSsrSignIn.routesWithPage page http config) "/auth/callback" query cookie
+
+    let future = DateTimeOffset.UtcNow.AddHours(1.0).ToUnixTimeSeconds()
+    let past = DateTimeOffset.UtcNow.AddHours(-1.0).ToUnixTimeSeconds()
+
+    let httpOf status body =
+        new HttpClient(new StubHandler(status, body))
+
+let private signInFailurePageTests: Test =
+    let returnUrl = "/reports/q3"
+    let idpText = "EVIL-IDP-TEXT<script>alert(1)</script>"
+    let plain = OidcSsrSignIn.SignInPage.defaults
+    let ok = FailurePage.httpOf HttpStatusCode.OK
+
+    /// Start a sign-in, then call back with `query state` against `http`.
+    let afterStart
+        (provider: Result<AuthenticatedUser, string>)
+        (http: HttpClient)
+        (query: string -> string -> string)
+        =
+        async {
+            let sp = FailurePage.services provider true
+            let! cookie, state, nonce = FailurePage.start sp returnUrl
+            return! FailurePage.callback sp plain http (query state nonce) (Some cookie)
+        }
+
+    let okUser = Ok FailurePage.signedIn
+
+    // (name, status, reason, the failing callback)
+    let cases: (string * int * string * (unit -> Async<HttpContext * string>)) list = [
+        "no sealed state",
+        400,
+        "expired",
+        fun () -> FailurePage.callback (FailurePage.services okUser true) plain (ok "{}") "?code=c&state=s" None
+        "IdP error",
+        401,
+        "declined",
+        fun () ->
+            afterStart okUser (ok "{}") (fun state _ ->
+                $"?error=access_denied&error_description={Uri.EscapeDataString idpText}&state={state}")
+        "state mismatch", 400, "mismatch", fun () -> afterStart okUser (ok "{}") (fun _ _ -> "?code=c&state=forged")
+        "token endpoint failure",
+        502,
+        "exchange-failed",
+        fun () ->
+            afterStart okUser (FailurePage.httpOf HttpStatusCode.InternalServerError idpText) (fun state _ ->
+                $"?code=c&state={state}")
+        "token refused by the provider",
+        401,
+        "not-accepted",
+        fun () ->
+            afterStart
+                (Error idpText)
+                (ok (FailurePage.tokenBody (FailurePage.token "n" FailurePage.future)))
+                (fun state _ -> $"?code=c&state={state}")
+        "nonce mismatch",
+        401,
+        "not-issued-here",
+        fun () ->
+            afterStart
+                okUser
+                (ok (FailurePage.tokenBody (FailurePage.token "other" FailurePage.future)))
+                (fun state _ -> $"?code=c&state={state}")
+    ]
+
+    testList "Phase 1139 — sign-in failures render as a themed page" [
+        for name, status, reason, act in cases do
+            testCaseAsync $"{name}: HTML page, reason '{reason}', try-again link, status {status}, no session"
+            <| async {
+                let! ctx, body = act ()
+                Expect.equal ctx.Response.StatusCode status "the status code is unchanged"
+                Expect.stringStarts ctx.Response.ContentType "text/html" "an HTML page"
+                Expect.equal (string ctx.Response.Headers["Cache-Control"]) "no-store" "not cached"
+                Expect.stringContains body $"data-reason=\"{reason}\"" "the closed reason"
+
+                // The expired path has lost its state, so it falls back to `/`.
+                let target = if reason = "expired" then "/" else returnUrl
+
+                Expect.stringContains
+                    body
+                    ("href=\"/auth/sign-in?returnUrl=" + Uri.EscapeDataString target + "\"")
+                    "a try-again link carrying the return URL"
+
+                Expect.isFalse
+                    (FailurePage.setCookies ctx
+                     |> List.exists (fun c -> c.StartsWith(AuthSession.CookieName + "=")))
+                    "no session cookie"
+
+                for leaked in [ "EVIL-IDP-TEXT"; "access_denied"; "<script>"; "id_token" ] do
+                    Expect.isFalse (body.Contains leaked) $"'{leaked}' never reaches the page"
+            }
+
+        testCaseAsync "token already expired: reason 'token-expired', status 401, no session"
+        <| async {
+            let sp = FailurePage.services okUser true
+            let! cookie, state, nonce = FailurePage.start sp returnUrl
+            let body = FailurePage.tokenBody (FailurePage.token nonce FailurePage.past)
+
+            let! ctx, page = FailurePage.callback sp plain (ok body) $"?code=c&state={state}" (Some cookie)
+
+            Expect.equal ctx.Response.StatusCode 401 "status unchanged"
+            Expect.stringContains page "data-reason=\"token-expired\"" "closed reason"
+
+            Expect.isFalse
+                (FailurePage.setCookies ctx
+                 |> List.exists (fun c -> c.StartsWith(AuthSession.CookieName + "=")))
+                "no session cookie"
+        }
+
+        testCaseAsync "unavailable: DataProtection missing answers 500 without a retry link"
+        <| async {
+            let sp = FailurePage.services okUser false
+
+            let! ctx, body =
+                FailurePage.run sp (OidcSsrSignIn.routes (new HttpClient()) FailurePage.config) "/auth/sign-in" "" None
+
+            Expect.equal ctx.Response.StatusCode 500 "status unchanged"
+            Expect.stringContains body "data-reason=\"unavailable\"" "closed reason"
+            Expect.isFalse (body.Contains "Try again") "retrying cannot help"
+        }
+
+        testCaseAsync "a non-local return URL still becomes '/' in the try-again link"
+        <| async {
+            let sp = FailurePage.services okUser true
+            let! cookie, state, _ = FailurePage.start sp "//evil.example/x"
+
+            let! _, body = FailurePage.callback sp plain (ok "{}") $"?error=x&state={state}" (Some cookie)
+
+            Expect.stringContains body "href=\"/auth/sign-in?returnUrl=%2F\"" "back to /"
+            Expect.isFalse (body.Contains "evil.example") "the foreign URL is gone"
+        }
+
+        testCaseAsync "a configured stylesheet is emitted as one link; the default is inline"
+        <| async {
+            let sp = FailurePage.services okUser true
+            let themed = plain |> OidcSsrSignIn.SignInPage.withStylesheet "/theme.css?v=3"
+
+            let! _, a = FailurePage.callback sp themed (ok "{}") "?code=c&state=s" None
+            let! _, b = FailurePage.callback sp plain (ok "{}") "?code=c&state=s" None
+
+            Expect.stringContains a "<link rel=\"stylesheet\" href=\"/theme.css?v=3\">" "the deployment's theme"
+            Expect.isFalse (a.Contains "<style>") "no inline style when themed"
+            Expect.isFalse (b.Contains "<link") "no link by default"
+            Expect.stringContains b "<style>" "minimal inline styling"
+        }
+
+        test "a stylesheet that is not a local path is refused at composition" {
+            for bad in
+                [
+                    "https://cdn.example/x.css"
+                    "//cdn.example/x.css"
+                    "theme.css"
+                    "/a b.css"
+                    "/a\"b.css"
+                    "/a\\b.css"
+                    ""
+                ] do
+                Expect.throws
+                    (fun () -> plain |> OidcSsrSignIn.SignInPage.withStylesheet bad |> ignore)
+                    $"'{bad}' is refused"
+        }
+    ]
+
 // ─── Test pack ───────────────────────────────────────────────────────
 
 let tests: Test =
@@ -537,4 +824,4 @@ let tests: Test =
             ]
         )
 
-    testList "OIDC sign-in" [ mockIssuerPack; phase3bATests ]
+    testList "OIDC sign-in" [ mockIssuerPack; phase3bATests; signInFailurePageTests ]
