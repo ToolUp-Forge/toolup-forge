@@ -975,6 +975,8 @@ let private registeredTests =
         // Phase 9a follow-up - /dev/version: shape, zero-registration
         // listing, the DI extension, and the gate.
         DevVersionEndpointTests.tests
+        // Phase 1137 - the production-safe /version build identity.
+        BuildIdentityEndpointTests.tests
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
         UiAwarenessInspectToolTests.tests

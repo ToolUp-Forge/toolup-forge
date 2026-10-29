@@ -3453,11 +3453,19 @@ ToolUp.Platform.DescriptorMigrationError+Tags.UnknownDescriptorVersion : System.
 ToolUp.Platform.DescriptorMigrationError+UnknownDescriptorVersion (class)
 ToolUp.Platform.DescriptorMigrationError+UnknownDescriptorVersion.found : System.Int32 { get }
 ToolUp.Platform.DevDiagnosticsHandler (class)
+ToolUp.Platform.DevDiagnosticsHandler.buildIdentityRoute : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
 ToolUp.Platform.DevDiagnosticsHandler.buildReport(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsReport]
 ToolUp.Platform.DevDiagnosticsHandler.buildVersionReport(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.DevDiagnosticsHandler+VersionReport
 ToolUp.Platform.DevDiagnosticsHandler.indexInspectors(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]]], System.IServiceProvider) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]]]
 ToolUp.Platform.DevDiagnosticsHandler.routes(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
 ToolUp.Platform.DevDiagnosticsHandler.snapshotServices(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DevDiagnosticsHandler+ServiceDescriptorSnapshot]
+ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity (class)
+ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity.Commit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity.Version : System.String { get }
+ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule (class)
+ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule.ofAssembly(System.Reflection.Assembly) : ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity
+ToolUp.Platform.DevDiagnosticsHandler+BuildIdentityModule.ofInformationalVersion(System.String) : ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity
 ToolUp.Platform.DevDiagnosticsHandler+CallerSummary (class)
 ToolUp.Platform.DevDiagnosticsHandler+CallerSummary..ctor(System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DevDiagnosticsHandler+ScopeSummary], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.DevDiagnosticsHandler+CallerSummary.IsAnonymous : System.Boolean { get }
@@ -10410,6 +10418,7 @@ ToolUp.Platform.ServerAppModule.withAuditReplicatorOptions(ToolUp.Platform.Audit
 ToolUp.Platform.ServerAppModule.withAuditSink(ToolUp.Platform.IAuditSink, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withBackfillMissedTicks(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withBuildIdentity(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withCompanionMarker(System.String, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -10801,6 +10810,9 @@ ToolUp.Platform.SoftwareBillOfMaterials.DocumentNamespace : System.String { get 
 ToolUp.Platform.SoftwareBillOfMaterials.Scope : ToolUp.Platform.SbomScope { get }
 ToolUp.Platform.SoftwareBillOfMaterials.SerialNumber : System.String { get }
 ToolUp.Platform.SoftwareBillOfMaterials.Subject : ToolUp.Platform.SbomSubject { get }
+ToolUp.Platform.SpaFallbackExcludedPath (class)
+ToolUp.Platform.SpaFallbackExcludedPath..ctor(System.String)
+ToolUp.Platform.SpaFallbackExcludedPath.Path : System.String { get }
 ToolUp.Platform.SpaFallbackMiddleware (class)
 ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
 ToolUp.Platform.SpaFallbackMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]

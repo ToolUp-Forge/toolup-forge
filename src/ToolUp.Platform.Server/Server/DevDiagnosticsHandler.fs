@@ -774,6 +774,36 @@ let private assemblyVersionString (asm: System.Reflection.Assembly) : string =
         let v = asm.GetName().Version
         if isNull v then "<unknown>" else v.ToString()
 
+/// The build identity of one assembly: its informational version with the
+/// `+<metadata>` suffix removed, and the commit that suffix carries. The
+/// single reader behind both `/dev/version` (the Sdk and Commit slots) and
+/// the production `/version` route (Phase 1137), so the two cannot disagree
+/// about what a build's commit is.
+type BuildIdentity = {
+    /// The informational version without its `+<metadata>` suffix.
+    Version: string
+    /// The `+<sha>` build metadata Source Link stamps onto a git build.
+    /// `None` when the build carried none — never guessed.
+    Commit: string option
+}
+
+module BuildIdentity =
+    /// Read the identity out of an informational version string:
+    /// `"1.0.0+abc"` gives `{ Version = "1.0.0"; Commit = Some "abc" }`;
+    /// no `+`, or a `+` with nothing after it, gives no commit.
+    let ofInformationalVersion (informational: string) : BuildIdentity =
+        let version, commit = splitBuildMetadata informational
+
+        {
+            Version = version
+            Commit = commit |> Option.filter (fun c -> not (String.IsNullOrWhiteSpace c))
+        }
+
+    /// The identity of an assembly, read from its informational version
+    /// (falling back to its assembly version).
+    let ofAssembly (asm: System.Reflection.Assembly) : BuildIdentity =
+        ofInformationalVersion (assemblyVersionString asm)
+
 /// Every non-dynamic loaded assembly whose simple name starts with
 /// `ToolUp.`, sorted by name. Read per request rather than once at
 /// module init, so a companion the runtime loads late still appears.
@@ -828,16 +858,16 @@ let private deployedAt () : string option =
 /// reads nothing caller-scoped, so it carries no team-isolation
 /// concern (GP 4).
 let buildVersionReport (ctx: HttpContext) : VersionReport =
-    let sdkVersion, commit = splitBuildMetadata (assemblyVersionString sdkAssembly)
+    let sdk = BuildIdentity.ofAssembly sdkAssembly
     let registered = ctx.RequestServices.GetServices<ComponentVersion>() |> List.ofSeq
 
     let startedAt =
         System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().ToString("o")
 
     {
-        Sdk = sdkVersion
+        Sdk = sdk.Version
         Companions = loadedToolUpAssemblies () @ registered
-        Commit = commit
+        Commit = sdk.Commit
         DeployedAt = deployedAt ()
         StartedAt = startedAt
     }
@@ -1345,6 +1375,31 @@ let private versionHandler: HttpHandler =
         ctx.Response.Headers["Cache-Control"] <- "no-store"
         do! ctx.Response.WriteAsync(JsonSerializer.Serialize(report, jsonOptions))
         return! next ctx
+    }
+
+/// The production-safe `/version` route (Phase 1137). Answers the ENTRY
+/// assembly's version and commit and nothing else: no assembly list, no
+/// path, no timestamp. It is NOT part of `routes`, so `EnableDevEndpoints`
+/// does not govern it; a deployment mounts it with
+/// `ServerApp.withBuildIdentity`. `commit` is omitted, not guessed, when the
+/// build carried none; with no entry assembly (a custom host) the route
+/// does not answer, rather than naming a different assembly.
+let buildIdentityRoute: HttpHandler =
+    GET
+    >=> route "/version"
+    >=> fun next ctx -> task {
+        match System.Reflection.Assembly.GetEntryAssembly() with
+        | null -> return None
+        | entry ->
+            let identity = BuildIdentity.ofAssembly entry
+            let payload = System.Collections.Generic.Dictionary<string, string>()
+            payload["version"] <- identity.Version
+            identity.Commit |> Option.iter (fun c -> payload["commit"] <- c)
+
+            ctx.Response.ContentType <- "application/json; charset=utf-8"
+            ctx.Response.Headers["Cache-Control"] <- "no-store"
+            do! ctx.Response.WriteAsync(JsonSerializer.Serialize payload)
+            return! next ctx
     }
 
 /// Routes for the dev diagnostics endpoint. `/dev/inspect/html` is the

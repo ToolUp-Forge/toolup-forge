@@ -74,6 +74,13 @@ module SpaFallbackPrecedence =
         services.RemoveAll<SpaFallbackPrecedence>() |> ignore
         services.AddSingleton<SpaFallbackPrecedence>(RouterFirst)
 
+/// Phase 1137 — a path the SPA fallback must leave to the server's router
+/// in BOTH precedence orders, registered in DI by a composition that mounts
+/// a server-answered route which is neither under `/api` nor `/dev`
+/// (`ServerApp.withBuildIdentity` registers `/version`). Absent, the
+/// exclusion list is exactly the fixed one above (GP 11).
+type SpaFallbackExcludedPath = { Path: string }
+
 type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
     let publicPath = Path.GetFullPath config.PublicPath
     let indexPath = Path.Combine(publicPath, "index.html")
@@ -86,6 +93,16 @@ type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
         || path.StartsWith("/dev/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/dev", StringComparison.OrdinalIgnoreCase)
 
+    let isRegisteredExclusion (ctx: HttpContext) (path: string) =
+        match ctx.RequestServices with
+        | null -> false
+        | services ->
+            match services.GetService typeof<System.Collections.Generic.IEnumerable<SpaFallbackExcludedPath>> with
+            | :? System.Collections.Generic.IEnumerable<SpaFallbackExcludedPath> as excluded ->
+                excluded
+                |> Seq.exists (fun e -> path.Equals(e.Path, StringComparison.OrdinalIgnoreCase))
+            | _ -> false
+
     member _.InvokeAsync(ctx: HttpContext) = task {
         let path = ctx.Request.Path.Value
         let isGet = HttpMethods.IsGet ctx.Request.Method
@@ -94,6 +111,7 @@ type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
             isGet
             && not (String.IsNullOrEmpty path)
             && not (isExcluded path)
+            && not (isRegisteredExclusion ctx path)
             && not (Path.HasExtension path)
             && File.Exists indexPath
 
