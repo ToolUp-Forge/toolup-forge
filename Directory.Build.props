@@ -916,6 +916,22 @@
       `AIServerApp.create` / `createFrom`); `ToolUp.Facts.Server` gains
       `FactBrowseHandler.factBrowseDeps`. A deployment that composes neither
       is unchanged. Migration recipe: `docs/migrations/1132-render-tools.md`.
+
+      Next draft 0.38.0 (v0.37.0 is tagged and published), breaking:
+      Phase 1095 - `IDataSource` gains the abstract `Capabilities:
+      ConnectorCapabilities` member, so every implementer adds one line
+      (codemod rewrite `1095-capabilities-member`); `IWatchableFileSource` and
+      `WatchedObject` move from `ToolUp.DataSources.Common` into
+      `ToolUp.Platform` beside `IDataSource` (codemod rewrite
+      `1095-watch-seam-namespace` for a fully-qualified reference; a type
+      probe on a capability interface is codemod review rule
+      `1095-capability-probe`); `DeclaredDeliveryRefusal` gains `UnscopedJob`
+      and `ObservationFailed`, so an exhaustive match adds two arms. The rest
+      is additive: `DeliveryPlan`, `DeliveryObservation`,
+      `DeclaredDelivery.observe` / `plan` / `execute`, and the
+      `ConnectorCapabilities` readers. Every shipped connector declares what
+      its probes answered, so ingestion is byte-for-byte unchanged. Migration
+      recipe: `docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md`.
     -->
     <!--
       Phase 1060 rides the 0.38.0 draft (untagged, publicly unpinned; its

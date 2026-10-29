@@ -82,6 +82,7 @@ let private probing
     let source =
         { new IDataSource with
             member _.Kind = inner.Kind
+            member _.Capabilities = inner.Capabilities
 
             member _.Connect ctx =
                 connected.Value <- true
@@ -101,6 +102,7 @@ let private probing
     | Some need ->
         { new IDataSource with
             member _.Kind = source.Kind
+            member _.Capabilities = source.Capabilities
             member _.Connect ctx = source.Connect ctx
             member _.ListTables ctx = source.ListTables ctx
             member _.GetSchema(ctx, t) = source.GetSchema(ctx, t)
@@ -332,6 +334,30 @@ let tests =
                 ExcelDataSource.create (blobs ()))
             IDeclaresCredentialNeedContract.tests "ParquetDataSource" CredentialNeed.NoCredential (fun () ->
                 ParquetDataSource.create (blobs ()))
+        ]
+        // Phase 1095 — each record is exactly what the capability probes
+        // answered before the record existed.
+        testList "ConnectorCapabilities bindings" [
+            IDataSourceContract.capabilities "AthenaDataSource" [] (fun () ->
+                AthenaDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "BigQueryDataSource" [] (fun () ->
+                BigQueryDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "RedshiftDataSource" [] (fun () ->
+                RedshiftDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "SnowflakeDataSource" [] (fun () ->
+                SnowflakeDataSource.createWithKeyFile ())
+            IDataSourceContract.capabilities "SqlDataSource" [] (fun () -> SqlDataSource.createWithoutSecrets ())
+            IDataSourceContract.capabilities "SynapseDataSource" [] (fun () ->
+                SynapseDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "GoogleAnalyticsDataSource" [] googleAnalytics
+            IDataSourceContract.capabilities "CsvDataSource" [ ConnectorCapability.Watchable ] (fun () ->
+                CsvDataSource.create (blobs ()))
+            IDataSourceContract.capabilities "ExcelDataSource" [ ConnectorCapability.Watchable ] (fun () ->
+                ExcelDataSource.create (blobs ()))
+            IDataSourceContract.capabilities
+                "ParquetDataSource"
+                [ ConnectorCapability.Watchable; ConnectorCapability.Native ]
+                (fun () -> ParquetDataSource.create (blobs ()))
         ]
         ingestorTests
         resolveDeclaredTests

@@ -369,6 +369,28 @@ async {
 }
 ```
 
+### Declared data-source deliveries are a plan (Phase 1095)
+
+A data source a deployment declares with a delivery (`ScheduledPull` on a cadence, or `Watched` at a location) is
+scheduled at startup by `DeclaredDelivery.withDeclaredDataSources` (`ToolUp.DataSources.Common`). The startup seeding
+is three steps, and only the last one has an effect:
+
+1. **`DeclaredDelivery.observe`** reads what the world answers: each principal's resolution, each watched location
+   (through the connector's declared `Capabilities.Watchable`), the ledger of where sources were seeded, the live
+   declared jobs, and the configs already seeded.
+2. **`DeclaredDelivery.plan declared observed`** is pure. It runs every check — shape, principal, persistent scope,
+   location, and whether a kept job can be re-scoped — and returns either every refusal or a `DeliveryPlan`:
+   `Seed` (configs to write), `Register` (jobs to schedule, one per pulled table or one watch, each keyed
+   `declared-data-delivery-{sourceId}-{jobKey}@{cadence}`), `Restamp` (kept jobs whose carried scope is re-issued),
+   `Cancel`, `Retire` (configs to delete), and the ledger before and after. A plan over an unchanged declaration and
+   ledger registers, cancels and retires nothing.
+3. **`DeclaredDelivery.execute`** is the one effectful step: it performs `Seed`, `Register`, `Restamp`, `Cancel` and
+   `Retire` in that order, then writes the ledger if it changed. A step that fails is a `SeedFailed` naming its
+   source; that source keeps its old rows and retires nothing, so the next start finishes the job.
+
+`DeclaredDelivery.seed` is the three in order, so a refusal the plan can see never leaves another source half-seeded,
+and a test (or an operator tool) can inspect the plan without running it.
+
 ## Limits
 
 ### Single-instance default

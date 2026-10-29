@@ -359,6 +359,11 @@ module SnowflakeDataSource =
         interface IDataSource with
             member _.Kind = Kind
 
+            // Phase 1095 — a query against Snowflake has no location a delivery can
+            // watch, and it emits only the CSV it declares: nothing beyond the five
+            // members (what the capability probes answered before the record).
+            member _.Capabilities = ConnectorCapabilities.none
+
             member _.Connect(ctx) =
                 Errors.guard "Snowflake Connect" (fun () -> async {
                     match readSettings ctx.Config.ConnectionScope with

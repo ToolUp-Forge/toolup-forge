@@ -12,8 +12,9 @@ namespace ToolUp.Platform
 // CSV at the source. Two seams make that possible without dragging a
 // vendor SDK into `ToolUp.Platform.*` (GP 1):
 //
-//   * `IEmitsNativePayload` — implemented by a connector, alongside
-//     `IDataSource`, that can ALSO emit a native format. Its `Query`
+//   * `IEmitsNativePayload` (beside `IDataSource`, in `IDataSource.fs`) —
+//     declared as `ConnectorCapabilities.Native` by a connector that can
+//     ALSO emit a native format (Phase 1095). Its `Query`
 //     keeps emitting what `IDeclaresPayloadFormat` declares (CSV), so a
 //     deployment that composes no reader for the native format is
 //     byte-for-byte unchanged.
@@ -46,19 +47,6 @@ type IPayloadReader =
     /// for bytes that are not a readable payload of `Format` — a reader
     /// returns `Error` rather than throwing.
     abstract Read: payload: byte[] -> Result<DatasetSchema * DatasetRow list, string>
-
-/// Phase 837 — implemented alongside `IDataSource` by a connector that can
-/// also emit its source's native format. Optional: the ingestor calls
-/// `QueryNative` only when a reader for `NativeFormat` is composed, and
-/// falls back to `IDataSource.Query` (the connector's declared format)
-/// otherwise.
-type IEmitsNativePayload =
-    /// The native format `QueryNative` emits. A constant of the connector.
-    abstract NativeFormat: PayloadFormat
-
-    /// Run a query and return the source's bytes in `NativeFormat`,
-    /// unconverted. Same dialect and error contract as `IDataSource.Query`.
-    abstract QueryNative: ctx: DataSourceCallContext * sql: string -> Async<Result<byte[], IngestionError>>
 
 /// Phase 837 — why a stored payload could not be read through the seam.
 [<RequireQualifiedAccess>]
