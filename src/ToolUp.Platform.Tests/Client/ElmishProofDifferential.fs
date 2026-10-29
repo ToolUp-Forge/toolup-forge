@@ -29,11 +29,12 @@
 /// carries its inputs and the outputs the proved model produced. The
 /// Fable host replays that corpus against the transpiled runtime, and —
 /// since Phase 850, for the ring — ALSO compiles the extraction itself
-/// (laid out by `proofs/normalise-extraction.fsx` into F# both hosts
-/// accept, over a machine-integer `Prims`) and runs it live: the corpus
-/// then doubles as the check that the two shims agree. Until 850 the
-/// extraction compiled on .NET only, because the F* backend's layout
-/// needed a flag Fable does not read; the corpus was the whole bridge.
+/// and runs it live (since Phase 957 Custard's extraction, over `bigint`
+/// on both hosts; before it a normalised legacy extraction over a
+/// machine-integer `Prims` shim, and the corpus doubled as the check that
+/// the two shims agreed). Until 850 the extraction compiled on .NET only,
+/// because the legacy printer's layout needed a flag Fable does not read;
+/// the corpus was the whole bridge.
 ///
 /// Every comparison here returns MISMATCHES (empty is agreement) so
 /// either host can assert on it. The generator is a small LCG rather
