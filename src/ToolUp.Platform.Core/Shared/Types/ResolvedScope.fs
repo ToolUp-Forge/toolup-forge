@@ -23,17 +23,39 @@ namespace ToolUp.Platform
 
 /// Resolved storage scope for a request — determines where data is stored
 /// and whether it persists beyond the session.
+///
+/// Phase 1060 — a projection of `ScopeKey`: `StorageScope.ofKey` renders
+/// `ScopeId` and `Container` from a key, so a scope minted through it can
+/// never spell its container a second way. The record stays constructible
+/// for one minor as the wire of `ScopeResolutionRequest`'s resolvers
+/// (`IStorageScopeResolver.Resolve` returns it) and of the scopes already
+/// carried at rest; new code mints a `ScopeKey` and projects it.
 type StorageScope = {
     /// The shard key every scoped store partitions by: a user id, a team
-    /// id, or an anonymous session id, depending on the platform mode.
-    ScopeId: string // userId, teamId, or sessionId
-    /// The storage container the scope's data lives in — "user-abc",
-    /// "team-xyz", "session-abc".
-    Container: string // "user-abc", "team-xyz", "session-abc"
+    /// id, or an anonymous session id, depending on the platform mode
+    /// (`ScopeKey.scopeId`).
+    ScopeId: string
+    /// The storage container the scope's data lives in — `user-{id}`,
+    /// `team-{id}`, `session-{id}` (`ScopeKey.container`).
+    Container: string
     /// Whether the scope's data persists beyond the session. `false` for
     /// anonymous and ephemeral-authenticated surfaces.
-    Persist: bool // false for anonymous + ephemeral-authenticated surfaces
+    Persist: bool
 }
+
+/// The projection from `ScopeKey` (Phase 1060).
+[<RequireQualifiedAccess>]
+module StorageScope =
+
+    /// The storage scope a key renders to: `ScopeId` is `ScopeKey.scopeId`,
+    /// `Container` is `ScopeKey.container`, and `Persist` is the caller's —
+    /// a key does not know the deployment's `Surfaces` (`ScopeKey.persistence`
+    /// does).
+    let ofKey (persist: bool) (key: ScopeKey) : StorageScope = {
+        ScopeId = ScopeKey.scopeId key
+        Container = ScopeKey.container key
+        Persist = persist
+    }
 
 /// A storage scope the platform's scope resolution minted for the current
 /// request (Phase 797) — or the explicit anonymous scope when it minted

@@ -7612,6 +7612,7 @@ ToolUp.Platform.Middleware+ScopeResolutionMiddleware.InvokeAsync(Microsoft.AspNe
 ToolUp.Platform.Middleware+StorageScopeDerivation (class)
 ToolUp.Platform.Middleware+StorageScopeDerivation.fromSubject(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.ServerConfig, ToolUp.Platform.Subject) : ToolUp.Platform.StorageScope
 ToolUp.Platform.Middleware+StorageScopeDerivation.tryFromSubject(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.ServerConfig, ToolUp.Platform.Subject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]
+ToolUp.Platform.Middleware+StorageScopeDerivation.tryKeyFromSubject(ToolUp.Platform.Subject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]
 ToolUp.Platform.Middleware+SubjectRequestExtractor (class)
 ToolUp.Platform.Middleware+SubjectRequestExtractor.fromHttpContext(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.Auth+IAuthProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.SubjectResolutionRequest]
 ToolUp.Platform.Middleware+SubjectResolutionErrorBridge (class)

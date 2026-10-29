@@ -25,8 +25,10 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 let private teamId = "acme"
 
 /// The key the request middleware (`scope.ScopeId`) and
-/// `PlatformApiHandler` (`teamId`) record this team's rows under.
-let private bareKey = teamId
+/// `PlatformApiHandler` (`teamId`) record this team's rows under —
+/// Phase 1060: the typed rendering, `AuditScope.streamKey`, of the team's
+/// `ScopeKey`. Its bytes are pinned below against the literal at rest.
+let private bareKey = AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team teamId))
 
 type private RecordingAuditLog() =
     let recorded = ConcurrentQueue<string * AuditEvent>()
@@ -141,4 +143,19 @@ let tests =
 
             Expect.equal streams (Set.singleton bareKey) "one team, one audit stream"
         }
+
+        // Phase 1060 — the typed rendering IS the bytes at rest: a team's
+        // stream is its bare id, never its container, and the 1059 helper
+        // spells the same key.
+        testCase "AuditScope.streamKey renders the bare id the rows at rest carry"
+        <| fun _ ->
+            Expect.equal bareKey "acme" "the bare team id"
+            Expect.equal (AuditStreamKey.ofTeam teamId) bareKey "the 1059 helper renders through AuditScope"
+
+            Expect.equal
+                (AuditStreamKey.ofScope (StorageScope.ofKey true (ScopeKey.Team teamId)))
+                bareKey
+                "a team's StorageScope keys the same stream"
+
+            Expect.notEqual bareKey (ScopeKey.container (ScopeKey.Team teamId)) "never the container"
     ]

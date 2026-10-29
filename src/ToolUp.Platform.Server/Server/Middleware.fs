@@ -132,46 +132,6 @@ module StorageScopeDerivation =
         | Subject.ClaimBearer _ -> "ClaimBearer"
         | Subject.PublicationReader _ -> "PublicationReader"
 
-    /// Resolve a subject's persistence flag from the declared
-    /// `Surfaces`. Returns `(persist, defaulted)` where `defaulted` is
-    /// `true` when no `SurfaceProfile` matched the subject kind.
-    ///
-    /// Phase 246 — the no-matching-profile fallback is now **fail-closed**
-    /// (`false` / ephemeral). Previously it was `Option.defaultValue true`
-    /// (persistent): a subject kind absent from a deployment's declared
-    /// `Surfaces` (e.g. an `AnonymousSession` fallback in a deployment
-    /// that never declared `Anonymous`) silently landed in a persistent
-    /// `session-{sid}` container keyed on a client-suppliable session id —
-    /// fail-open data retention under an undeclared scope. Failing closed
-    /// makes the secure default the default; the `defaulted` signal lets
-    /// the caller emit a one-time diagnostic so the gap stays visible.
-    let private persistenceFor (surfaces: SurfaceProfile list) (subject: Subject) : bool * bool =
-        let pick projector =
-            match surfaces |> List.tryPick projector with
-            | Some persistent -> persistent, false
-            | None -> false, true // fail closed (ephemeral) + signal the default fired
-
-        match subject with
-        | AnonymousSession _ ->
-            pick (function
-                | SurfaceProfile.Anonymous cfg -> Some(cfg.Persistence = Persistent)
-                | _ -> None)
-        | Subject.AuthenticatedUser _ ->
-            pick (function
-                | SurfaceProfile.AuthenticatedUser cfg -> Some(cfg.Persistence = Persistent)
-                | _ -> None)
-        | TeamMember _ ->
-            pick (function
-                | SurfaceProfile.Team cfg -> Some(cfg.Persistence = Persistent)
-                | _ -> None)
-        // A claim carries its own persistent scope (BlobShareTokenStore
-        // semantics) — it is never matched against Surfaces, so it never
-        // "defaults".
-        | Subject.ClaimBearer _ -> true, false
-        // Phase 1002 — a publication reader holds no scope, so nothing of
-        // it persists; never matched against Surfaces either.
-        | Subject.PublicationReader _ -> false, false
-
     /// Subject kinds for which the fail-closed default has already been
     /// warned this process — so the diagnostic fires once per kind, not
     /// once per request. A `ConcurrentDictionary` used as a thread-safe
@@ -196,47 +156,38 @@ module StorageScopeDerivation =
                         (DeploymentConfig.surfacesLabel config)
                 )
 
-    /// Derive the storage scope for a subject, if it holds one. `logger`
-    /// (best-effort) receives the one-time fail-closed-default diagnostic
-    /// when the subject's kind is undeclared in `Surfaces` (Phase 246).
-    ///
-    /// Phase 1002 — `None` for a `PublicationReader`: a reader holds no
-    /// scope of its own (no `user-<id>`, `team-<id>` or session container),
-    /// so the middleware stashes no `StorageScope` for it and every scope
-    /// read fails closed. It reads a publishing scope only through the
-    /// audience gate of a `Publication` page that names its readers.
-    let tryFromSubject (logger: ILogger option) (config: ServerConfig) (subject: Subject) : StorageScope option =
-        let persist, defaulted = persistenceFor config.Surfaces subject
-
-        if defaulted then
-            warnUndeclaredKindOnce logger subject config
-
+    /// Phase 1060 — the scope key a subject holds, if it holds one: a
+    /// session, a user, a team or a claim. `None` for a `PublicationReader`
+    /// (Phase 1002), which holds no scope of its own — no `user-<id>`,
+    /// `team-<id>` or session container.
+    let tryKeyFromSubject (subject: Subject) : ScopeKey option =
         match subject with
-        | AnonymousSession sid ->
-            Some {
-                ScopeId = sid
-                Container = $"session-{sid}"
-                Persist = persist
-            }
-        | Subject.AuthenticatedUser uid ->
-            Some {
-                ScopeId = uid
-                Container = $"user-{uid}"
-                Persist = persist
-            }
-        | TeamMember(_, tid) ->
-            Some {
-                ScopeId = tid
-                Container = $"team-{tid}"
-                Persist = persist
-            }
-        | Subject.ClaimBearer claim ->
-            Some {
-                ScopeId = claim.ScopeId
-                Container = claim.ScopeId
-                Persist = persist
-            }
+        | AnonymousSession sid -> Some(ScopeKey.Session sid)
+        | Subject.AuthenticatedUser uid -> Some(ScopeKey.User uid)
+        | TeamMember(_, tid) -> Some(ScopeKey.Team tid)
+        | Subject.ClaimBearer claim -> Some(ScopeKey.Claim claim.ScopeId)
         | Subject.PublicationReader _ -> None
+
+    /// Derive the storage scope for a subject, if it holds one: the
+    /// subject's `ScopeKey` projected through `StorageScope.ofKey`, with
+    /// `Persist` from `ScopeKey.persistence` over the declared `Surfaces`
+    /// (Phase 246's rule — a kind no profile declares fails CLOSED to
+    /// ephemeral). `logger` (best-effort) receives the one-time diagnostic
+    /// when that default fires.
+    ///
+    /// Phase 1002 — `None` for a `PublicationReader`: the middleware stashes
+    /// no `StorageScope` for it and every scope read fails closed. It reads
+    /// a publishing scope only through the audience gate of a `Publication`
+    /// page that names its readers.
+    let tryFromSubject (logger: ILogger option) (config: ServerConfig) (subject: Subject) : StorageScope option =
+        tryKeyFromSubject subject
+        |> Option.map (fun key ->
+            let persistence = ScopeKey.persistence config.Surfaces key
+
+            if persistence.Defaulted then
+                warnUndeclaredKindOnce logger subject config
+
+            StorageScope.ofKey persistence.Persist key)
 
     /// Derive the storage scope for a subject that holds one. Raises for a
     /// `PublicationReader` (Phase 1002), which holds none — a caller that
@@ -336,7 +287,7 @@ let private observeResolverErrorDowngrade
                 let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 
                 auditLog.Record(
-                    "_platform",
+                    AuditScope.streamKey AuditScope.PlatformScope,
                     AuthScopeResolutionFailed {
                         Method = methodName
                         Path = pathStr
@@ -383,7 +334,7 @@ let internal recordPublicationReaderSignIn
                 cache.Set(cacheKey, true, entryOpts) |> ignore
 
                 auditLog.Record(
-                    "_platform",
+                    AuditScope.streamKey AuditScope.PlatformScope,
                     PublicationReaderSignedIn {
                         SubjectKind = AuditSubject.kindString ReaderAuditKind
                         ReaderId = readerId
@@ -488,7 +439,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                 let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 
                 auditLog.Record(
-                    "_platform",
+                    AuditScope.streamKey AuditScope.PlatformScope,
                     AuthScopeResolutionFailed {
                         Method = methodName
                         Path = pathStr
@@ -784,7 +735,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         // factory and the per-route guard see a
                         // populated map. For non-Team scopes the map
                         // stays empty (unrestricted — opt-in RBAC).
-                        if scope.Container.StartsWith "team-" then
+                        // Phase 1060 — "is this a team scope" is read
+                        // through the one parser, not a prefix test.
+                        let isTeamScope =
+                            match ScopeKey.tryParseContainer scope.Container with
+                            | Some(ScopeKey.Team _) -> true
+                            | _ -> false
+
+                        if isTeamScope then
                             match ctx.RequestServices.GetService(typeof<IPermissionStore>) with
                             | :? IPermissionStore as permStore ->
                                 // Phase 1059 — a fault reading this team's permission state

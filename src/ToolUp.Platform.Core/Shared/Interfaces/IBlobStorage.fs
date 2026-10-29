@@ -85,6 +85,22 @@ type ComposeRefusal =
 /// for a docstring-grade invariant already covered upstream and by contract tests
 /// (added weight must justify itself). Revisit only if a future provider
 /// cannot enforce isolation at the resolver boundary.
+///
+/// **Amended 2026-10-29 (Phase 1060): the `container` parameter stays a string BY
+/// DESIGN — not as a deferral.** It is the portability boundary: every
+/// implementation, first-party and companion, takes an opaque string, and the four
+/// reasons above still hold of THIS parameter — one chokepoint mints containers,
+/// legitimate non-scope containers exist, providers treat the name as opaque, and
+/// the contract pack asserts the scope property on every backend. What the
+/// 2026-05-15 decision did not weigh was the other direction: the grammar relating
+/// a scope to its container was minted by interpolation in several places and
+/// parsed back by prefix tests in several more. That is now carried by a type at
+/// the layer that constructs keys — `ScopeKey` (`team` / `user` / `session` /
+/// claim / the reserved `_platform` shard), whose `ScopeKey.container` is the one
+/// function that produces a container string and `ScopeKey.tryParseContainer` the
+/// one reader of names already at rest. Isolation (GP 4) therefore lives where the
+/// key is built, and no `IBlobStorage` implementer moves (GP 12). Nothing further
+/// is planned for this parameter at 1.0.
 type IBlobStorage =
     /// Upload content to a blob. `container` must be a scope-derived name (see type docs).
     abstract Upload: container: string * blobName: string * content: byte[] -> Async<Result<string, string>>

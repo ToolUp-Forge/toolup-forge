@@ -917,6 +917,15 @@
       `FactBrowseHandler.factBrowseDeps`. A deployment that composes neither
       is unchanged. Migration recipe: `docs/migrations/1132-render-tools.md`.
     -->
+    <!--
+      Phase 1060 rides the 0.38.0 draft (untagged, publicly unpinned; its
+      surface movement is additive, below the draft's class):
+      `ToolUp.Platform.Core` gains `ScopeKey`, `PlatformShard`,
+      `ScopePersistence`, `AuditScope` and `StorageScope.ofKey`;
+      `ToolUp.Platform.Server` gains
+      `StorageScopeDerivation.tryKeyFromSubject`. Nothing is removed or
+      retyped.
+    -->
     <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
