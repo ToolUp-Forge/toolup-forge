@@ -109,6 +109,7 @@
              + the metrics seam; placed before the handler that wires it. -->
         <Compile Include="Server\AnswerVerifier.fs" />
         <Compile Include="Server\AIDenialRateMonitor.fs" />
+        <Compile Include="Server\ICitationNormaliser.fs" />
         <Compile Include="Server\AIAgentEngine.fs" />
         <!-- Phase 985 — the grounded narrative run: the agent loop over
              only the tools passed in, its output through the fact tier's
@@ -118,7 +119,6 @@
              After GroundedNarrativeRun, whose wording store, rules and audit
              row it reads. -->
         <Compile Include="Server\NarrativePromptHandler.fs" />
-        <Compile Include="Server\ICitationNormaliser.fs" />
         <!-- Phase 6k - the supervised agent-loop worker. Depends on the
              platform ILogger/Logger only; MUST precede AIAssistantHandler,
              which enqueues onto it, and AICompose, which registers it. -->

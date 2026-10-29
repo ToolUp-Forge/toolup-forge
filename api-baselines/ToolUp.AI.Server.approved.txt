@@ -204,12 +204,17 @@ ToolUp.AI.AIAgentEngine+TurnPlan+Tags.RunLoop : System.Int32 (literal)
 ToolUp.AI.AIAgentEngine+TurnPlanModule (class)
 ToolUp.AI.AIAgentEngine+TurnPlanModule.ofContribution(ToolUp.AI.SystemPromptBuilder+PromptContribution) : ToolUp.AI.AIAgentEngine+TurnPlan
 ToolUp.AI.AIAgentEngine+TurnServices (class)
-ToolUp.AI.AIAgentEngine+TurnServices..ctor(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel])
+ToolUp.AI.AIAgentEngine+TurnServices..ctor(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ICitationNormaliser], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors])
+ToolUp.AI.AIAgentEngine+TurnServices.AnswerAnchors : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.AnswerGate : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.CitationNormaliser : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ICitationNormaliser] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.ClientToolAuthorizer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.DenialAlertChannel : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.DenialRateMonitor : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.EventStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.Logger : ToolUp.Platform.ILogger { get }
+ToolUp.AI.AIAgentEngine+TurnServices.MetricRegistry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.MetricsSink : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink] { get }
 ToolUp.AI.AIAgentEngine+TurnServicesModule (class)
 ToolUp.AI.AIAgentEngine+TurnServicesModule.ofContext(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.AIAgentEngine+TurnServices

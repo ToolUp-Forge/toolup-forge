@@ -1187,12 +1187,6 @@ let private isTerminalStreamEvent =
 /// SSE-broadcast sink, the streaming method takes the stream's channel
 /// sink, and nothing else differs.
 /// Mirrors the pattern from fileManagementApi in FileManagement.fs.
-/// The service `services` registers as `'T`, if any.
-let private tryService<'T> (services: IServiceProvider) : 'T option =
-    match services.GetService(typeof<'T>) with
-    | :? 'T as s -> Some s
-    | _ -> None
-
 /// What `SubmitMessage` resolves in the foreground and hands the turn.
 type private TurnRequest = {
     TaskId: Guid
@@ -1824,20 +1818,17 @@ let aiAssistantApi
     /// composed (RAG with a non-Off policy) and the turn produced both
     /// retrieved sources and assistant text. One audit event per citation
     /// event, best-effort: a wedged event store never fails the turn.
-    let normaliseCitations (turn: TurnRequest) (provider: IAIProvider) (content: string) = async {
-        let services = turn.Background.RequestServices
+    let normaliseCitations (turn: TurnRequest) (services: TurnServices) (provider: IAIProvider) (content: string) = async {
         let sources = turn.Contribution.RetrievedSources
 
-        match services.GetService(typeof<ICitationNormaliser>), services.GetService(typeof<IEventStore>) with
-        | :? ICitationNormaliser as normaliser, store when
-            not (List.isEmpty sources) && not (String.IsNullOrEmpty content)
-            ->
+        match services.CitationNormaliser, services.EventStore with
+        | Some normaliser, store when not (List.isEmpty sources) && not (String.IsNullOrEmpty content) ->
             let providerName = provider.Capabilities.ProviderName
             let providerModel = provider.Capabilities.Model
             let result = normaliser.Normalise(sources, content, providerName, providerModel)
 
             match store with
-            | :? IEventStore as store ->
+            | Some store ->
                 for evt in result.Events do
                     let sourceModule, eventType, sourceIndex =
                         match evt.Action with
@@ -1869,7 +1860,7 @@ let aiAssistantApi
                     with ex ->
                         logger.Warn
                             $"AI citation-audit write failed (taskId={turn.TaskId}, action={eventType}): {ex.Message}. Record dropped; conversation unaffected."
-            | _ -> ()
+            | None -> ()
 
             return result.Text
         | _ -> return content
@@ -1879,19 +1870,17 @@ let aiAssistantApi
     /// content verbatim with no verdict, event, audit or metric (GP 11 /
     /// GP 13); in `Annotate` / `Strict` it verifies every number against the
     /// turn's retrieved facts and returns the verdict the message carries.
-    let verifyAnswer (turn: TurnRequest) (provider: IAIProvider) (content: string) =
-        let services = turn.Background.RequestServices
-
+    let verifyAnswer (turn: TurnRequest) (services: TurnServices) (provider: IAIProvider) (content: string) =
         AnswerVerifier.runVerificationStageWithJoin
-            (tryService<AnswerVerifier.AnswerGate> services)
-            (tryService<Grounding.IMetricRegistry> services)
+            services.AnswerGate
+            services.MetricRegistry
             turn.Contribution.RetrievedSources
             content
-            (tryService<Metrics.IMetricsSink> services)
-            (tryService<IEventStore> services)
+            services.MetricsSink
+            services.EventStore
             {
-                AuditLog = tryService<IAuditLog> services
-                Anchors = tryService<IAnswerProvenanceAnchors> services
+                AuditLog = services.AuditLog
+                Anchors = services.AnswerAnchors
             }
             scope.ScopeId
             turn.TaskId
@@ -1905,15 +1894,16 @@ let aiAssistantApi
     /// final text appended to the UI blob), the assistant turn on the
     /// conversation substrate, and the conversation marked completed. `Some`
     /// provider when this was the conversation's first exchange, to title it.
-    let completeTurn (turn: TurnRequest) (provider: IAIProvider) (finalMessages: AIProviderMessage list) = async {
+    let completeTurn (turn: TurnRequest) (context: TurnContext) (finalMessages: AIProviderMessage list) = async {
+        let provider = context.Provider
         let conversationId = turn.Request.ConversationId
 
         let lastAssistant =
             finalMessages |> List.tryFindBack (fun m -> m.Role = "assistant")
 
         let emitted = lastAssistant |> Option.map _.Content |> Option.defaultValue ""
-        let! normalised = normaliseCitations turn provider emitted
-        let! content, verification = verifyAnswer turn provider normalised
+        let! normalised = normaliseCitations turn context.Services provider emitted
+        let! content, verification = verifyAnswer turn context.Services provider normalised
 
         verification
         |> Option.iter (fun v -> turn.Emit(AnswerVerified(conversationId, v)))
@@ -2016,7 +2006,7 @@ let aiAssistantApi
 
             match! AIAgentEngine.run context plan (windowed conversationId history @ [ userMessage ]) with
             | Error stop -> return Error(TurnFailure.Stopped stop)
-            | Ok state -> return! completeTurn turn provider state.Messages
+            | Ok state -> return! completeTurn turn context state.Messages
     }
 
     /// The turn's stages, each refusing with a typed failure.

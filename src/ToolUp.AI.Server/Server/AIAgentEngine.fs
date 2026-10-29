@@ -342,6 +342,15 @@ type TurnServices = {
     DenialRateMonitor: AIDenialRateMonitor.AIDenialRateMonitor option
     /// The channel the denial rate monitor alerts through.
     DenialAlertChannel: INotificationChannel option
+    /// The post-stream citation normaliser, when RAG composed one.
+    CitationNormaliser: ICitationNormaliser option
+    /// The numeric-fidelity answer gate, when composed, with the metric
+    /// registry it verifies against.
+    AnswerGate: AnswerVerifier.AnswerGate option
+    MetricRegistry: Grounding.IMetricRegistry option
+    /// The audit log and provenance anchors the answer gate's row joins.
+    AuditLog: IAuditLog option
+    AnswerAnchors: IAnswerProvenanceAnchors option
 }
 
 /// Resolving a turn's services.
@@ -367,6 +376,11 @@ module TurnServices =
         ClientToolAuthorizer = optional<IClientToolAuthorizer> services
         DenialRateMonitor = optional<AIDenialRateMonitor.AIDenialRateMonitor> services
         DenialAlertChannel = optional<INotificationChannel> services
+        CitationNormaliser = optional<ICitationNormaliser> services
+        AnswerGate = optional<AnswerVerifier.AnswerGate> services
+        MetricRegistry = optional<Grounding.IMetricRegistry> services
+        AuditLog = optional<IAuditLog> services
+        AnswerAnchors = optional<IAnswerProvenanceAnchors> services
     }
 
     /// The services the request's scope composed, or resolved from it.

@@ -167,7 +167,7 @@
         "src/ToolUp.AI.McpHost/Server/McpAudit.fs": 1,
         "src/ToolUp.AI.McpHost/Server/McpGovernance.fs": 2,
         "src/ToolUp.AI.McpHost/Server/McpHost.fs": 1,
-        "src/ToolUp.AI.Server/Server/AIAgentEngine.fs": 6,
+        "src/ToolUp.AI.Server/Server/AIAgentEngine.fs": 3,
         "src/ToolUp.AI.Server/Server/AIAllowlistDiagnosticsHandler.fs": 1,
         "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs": 16,
         "src/ToolUp.AI.Server/Server/AICancellationRegistry.fs": 1,

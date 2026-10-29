@@ -19,11 +19,11 @@ Migration notes:
 
 - [1077-redesign-f-turnoutcome-loopstate-and-loop-step](docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md)
 
-_Surface since `v0.36.0`: **breaking** — 2 packages moved; 193 members added, 1 member changed, 5 members removed._
+_Surface since `v0.36.0`: **breaking** — 2 packages moved; 198 members added, 1 member changed, 5 members removed._
 
 ### Added
 
-- `ToolUp.AI.Server` — 190 members:
+- `ToolUp.AI.Server` — 195 members:
   - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.exceeded(ToolUp.AI.AIAgentEngine+AgentCallBudget, System.TimeSpan, System.String) : System.String`
   - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.ofLimits(ToolUp.AI.SystemPromptBuilder+AgentLoopLimits) : ToolUp.AI.AIAgentEngine+AgentCallBudget`
   - `ToolUp.AI.AIAgentEngine+AgentLoopStopped (class)`
@@ -44,7 +44,7 @@ _Surface since `v0.36.0`: **breaking** — 2 packages moved; 193 members added, 
   - `ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }`
   - `ToolUp.AI.AIAgentEngine+LoopStateModule (class)`
-  - … and 170 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+  - … and 175 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }`
