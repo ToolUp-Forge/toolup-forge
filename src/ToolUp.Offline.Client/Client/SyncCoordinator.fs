@@ -46,6 +46,24 @@ let private navigatorOnline () : bool = jsNative
 [<Emit("(typeof document !== 'undefined' && document !== null && document.visibilityState === 'visible')")>]
 let private documentVisible () : bool = jsNative
 
+// Phase 1069 — the listener shims (the Phase 755 shape `OidcClient`
+// adopted). Passing an F# closure through `unbox` at BOTH the add and
+// the remove site lets Fable emit two DIFFERENT function objects, so
+// `removeEventListener` silently matches nothing and `Stop()` detached
+// neither listener. An `[<Emit>]` parameter emits the bound identifier
+// itself at both sites, so the two calls agree.
+[<Emit("window.addEventListener($0, $1)")>]
+let private addWindowListener (event: string) (handler: obj) : unit = jsNative
+
+[<Emit("window.removeEventListener($0, $1)")>]
+let private removeWindowListener (event: string) (handler: obj) : unit = jsNative
+
+[<Emit("document.addEventListener($0, $1)")>]
+let private addDocumentListener (event: string) (handler: obj) : unit = jsNative
+
+[<Emit("document.removeEventListener($0, $1)")>]
+let private removeDocumentListener (event: string) (handler: obj) : unit = jsNative
+
 /// Map the SDK-side `OfflineConfig` retry fields onto the companion's
 /// `RetryPolicy`. They are duplicated shapes because `ClientConfig` may
 /// not name a companion type (GP 1); this function is the one place the
@@ -420,15 +438,18 @@ let startRouted
     let intervalId =
         Browser.Dom.window.setInterval ((fun () -> tick false), max 1000 config.PollIntervalMs)
 
-    let onOnline = fun (_: Browser.Types.Event) -> tick wakeForcesSync
+    // Bound ONCE as `obj`, so the add and the remove below pass the same
+    // function object (see the listener shims above). The browser calls
+    // each with an Event, which a `unit -> unit` compiles to ignore.
+    let onOnline: obj = box (fun () -> tick wakeForcesSync)
 
-    let onVisible =
-        fun (_: Browser.Types.Event) ->
+    let onVisible: obj =
+        box (fun () ->
             if documentVisible () then
-                tick wakeForcesSync
+                tick wakeForcesSync)
 
-    Browser.Dom.window.addEventListener ("online", unbox onOnline)
-    Browser.Dom.document.addEventListener ("visibilitychange", unbox onVisible)
+    addWindowListener "online" onOnline
+    addDocumentListener "visibilitychange" onVisible
 
     {
         SyncNow = syncNow
@@ -443,8 +464,8 @@ let startRouted
             fun () ->
                 stopped <- true
                 Browser.Dom.window.clearInterval intervalId
-                Browser.Dom.window.removeEventListener ("online", unbox onOnline)
-                Browser.Dom.document.removeEventListener ("visibilitychange", unbox onVisible)
+                removeWindowListener "online" onOnline
+                removeDocumentListener "visibilitychange" onVisible
     }
 
 /// Start polling with no mergeable channels registered — the

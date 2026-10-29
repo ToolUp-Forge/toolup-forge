@@ -281,6 +281,46 @@ let private wireShapedOption =
 /// treating the line as code errs on the side of a finding.
 let private commentLine = Regex(@"^\s*//", RegexOptions.Compiled)
 
+/// Phase 1069 — the two COMPOSED shapes a literal escapes the catalog
+/// through: `prop.text (sprintf "…" …)` and `prop.text (… + "…" …)`.
+/// `literalProp` sees only a bare literal argument, so a sentence built
+/// with `sprintf` or `+` in front of a reader passed the sweep
+/// (`TeamManagerUI`'s revoke prompt was one). The `+` form captures the
+/// first literal inside a parenthesised argument that contains a `+`.
+let private composedProps = [
+    Regex(
+        @"(?:prop\.(?:text|placeholder|title|ariaLabel)|Html\.text)\s+\(\s*sprintf\s+""((?:[^""\\]|\\.)*)""",
+        RegexOptions.Compiled
+    )
+    Regex(
+        @"(?:prop\.(?:text|placeholder|title|ariaLabel)|Html\.text)\s+\((?=[^()\n]*\+)[^()\n]*?""((?:[^""\\]|\\.)*)""",
+        RegexOptions.Compiled
+    )
+]
+
+/// A `sprintf` format specifier (`%s`, `%d`, `%-5.2f`, …). Stripped before
+/// the letter test, so a format that is only placeholders and punctuation
+/// (`"%s/%s"`) is not text, while `"%s will no longer…"` still is.
+let private formatSpecifier =
+    Regex(@"%[-+0 #]*\d*(?:\.\d+)?[a-zA-Z]", RegexOptions.Compiled)
+
+/// Phase 1069 — composed literals the widened pattern found OUTSIDE this
+/// phase's files, recorded by file name and literal rather than fixed in
+/// passing: each needs a catalog the component does not have today (the
+/// two `Client/UI` / preview components take no messages record), which
+/// is the catalog-reaches-the-component work, not a one-line sweep. The
+/// "every recorded entry is still present" test below fails the moment
+/// one is fixed, so the list can only shrink deliberately.
+let private recordedComposedResidue =
+    set [
+        // An algorithm name beside the digest it labels.
+        "PlatformUsersUI.fs", "sha256: %s"
+        // The unreduced-view preview's placeholder (a composition in progress).
+        "UnreducedViewPreview.fs", "awaiting: %s"
+        // The provenance popover's entity link; the component has no catalog.
+        "CellProvenance.fs", "Open %s →"
+    ]
+
 type private Finding = {
     File: string
     Line: int
@@ -309,16 +349,27 @@ let private scanLine (relativePath: string) (lineNumber: int) (text: string) : F
             |> Seq.map (fun m -> m.Groups[1].Value)
             |> Set.ofSeq
 
+        let fileName = Path.GetFileName relativePath
+
+        let composed =
+            composedProps
+            |> Seq.collect (fun r -> r.Matches text)
+            |> Seq.map (fun m -> m.Groups[1].Value)
+            |> Seq.filter (fun literal -> not (recordedComposedResidue.Contains(fileName, literal)))
+            |> Seq.map (fun literal -> literal, formatSpecifier.Replace(literal, ""))
+
         literalProp.Matches text
-        |> Seq.map (fun m -> m.Groups[1].Value)
-        |> Seq.filter (fun literal ->
+        |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[1].Value)
+        |> Seq.append composed
+        |> Seq.filter (fun (literal, prose) ->
             // Not text: a glyph, an arrow, a separator, a blank. Phase
             // 444's final audit recorded exactly this residue ("—", "×",
             // "▾") and called it not text; a translation has nothing to
             // say about it.
-            literal |> Seq.exists Char.IsLetter
+            prose |> Seq.exists Char.IsLetter
             // Not prose: the label IS the wire value on this line.
             && not (wireValues.Contains literal))
+        |> Seq.map fst
         |> Seq.map (fun literal -> {
             File = relativePath
             Line = lineNumber
@@ -459,6 +510,63 @@ let private sourceGateTests =
                 scanLine "a/B.fs" 7 """Html.option [ prop.value "auto"; prop.text "Automatic" ]"""
 
             Expect.equal (findings |> List.exactlyOne).Literal "Automatic" "a different label is still text"
+        }
+
+        test "a sentence composed with sprintf or + is a finding — go-red (Phase 1069)" {
+            // The exact line `TeamManagerUI.fs` carried before Phase 1069:
+            // the sweep passed it because `literalProp` sees only a bare
+            // literal argument.
+            let sprintfFinding =
+                scanLine
+                    "src/ToolUp.Platform.Client/Client/TeamManagerUI.fs"
+                    1592
+                    """                        prop.text (sprintf "%s will no longer auto-join %s on sign-in." email teamName)"""
+
+            Expect.equal
+                (sprintfFinding |> List.exactlyOne).Literal
+                "%s will no longer auto-join %s on sign-in."
+                "a sprintf format in front of a reader is a finding"
+
+            let concatFinding =
+                scanLine "a/B.fs" 1 """Html.span [ prop.text ("Signed in as " + name) ]"""
+                |> List.exactlyOne
+
+            Expect.equal concatFinding.Literal "Signed in as " "a concatenated literal is a finding"
+
+            Expect.isNonEmpty
+                (scanLine "a/B.fs" 1 """Html.span [ prop.title (name + " (you)") ]""")
+                "on either side of the +"
+
+            Expect.isEmpty
+                (scanLine "a/B.fs" 1 """Html.p [ prop.text (sprintf "%s/%s" container path) ]""")
+                "a format of placeholders and punctuation is not text"
+
+            Expect.isEmpty
+                (scanLine "a/B.fs" 1 """Html.p [ prop.text (msgs.Prompt email teamName) ]""")
+                "a catalog field applied to arguments is the remedy, not a finding"
+        }
+
+        test "every recorded composed residue is still present (Phase 1069)" {
+            // The residue list may only shrink deliberately: an entry whose
+            // line was fixed (or moved) must leave the list in the same
+            // change, or the exemption outlives the thing it exempted.
+            let present =
+                sweptLines.Force()
+                |> List.collect (fun (path, _, text) ->
+                    if commentLine.IsMatch text then
+                        []
+                    else
+                        composedProps
+                        |> List.collect (fun r -> [
+                            for m in r.Matches text -> Path.GetFileName path, m.Groups[1].Value
+                        ]))
+                |> Set.ofList
+
+            let stale = Set.difference recordedComposedResidue present
+
+            Expect.isEmpty
+                stale
+                $"recorded residue no longer in the tree — remove it from the list: %A{Set.toList stale}"
         }
     ]
 

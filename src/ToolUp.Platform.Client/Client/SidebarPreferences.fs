@@ -195,6 +195,20 @@ let save (prefs: UserSidebarPreferences) : unit =
     let json = Json.serialize prefs
     Browser.Dom.window.localStorage.setItem (storageKey, json)
 
+/// Phase 1069 — `save` as an Elmish effect, so the shell's `update` stays
+/// pure (B13). `localStorage.setItem` throws on a full quota, in a private
+/// window and under a blocked site-data policy; the effect catches that
+/// and dispatches `onFailure` (the shell maps it to its `"sidebar-prefs"`
+/// boot-degradation row) instead of throwing out of the dispatch loop.
+/// The in-memory preferences already changed, so the rail still reflects
+/// the user's action for this session — only the persistence failed.
+let persist (onFailure: exn -> 'msg) (prefs: UserSidebarPreferences) : ToolUp.Elmish.Cmd<'msg> =
+    ToolUp.Elmish.Cmd.ofEffect (fun dispatch ->
+        try
+            save prefs
+        with ex ->
+            dispatch (onFailure ex))
+
 /// Toggle a module's pinned state. Returns the updated preferences
 /// (caller decides when to persist). Newly pinned modules land at the
 /// end of the pinned list; unpinning preserves relative order of the

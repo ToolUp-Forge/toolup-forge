@@ -1,5 +1,21 @@
 module ToolUp.Platform.Tests.InProcess.AIProviderEnvValidatorTests
 
+// Phase 653 — the four previously-orphaned env-mutating config-validator
+// packs (Phase 9m.A AIProviderEnvValidator / AIModelEnvValidator /
+// AIProviderProbeValidator + Phase 248 OidcAuthValidatorTimeout), wired
+// under ONE shared `testSequencedGroup` so they serialise against each
+// other. Each snapshot/restores PROCESS-GLOBAL env vars
+// (`TOOLUP_AI_PROVIDER` / `_MODEL` / `_PROBE_ON_STARTUP` /
+// `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `TOOLUP_OIDC_ISSUER` /
+// `_PREFLIGHT_TIMEOUT_MS`); the AI three share `TOOLUP_AI_PROVIDER`, so
+// wrapping each list in its own `testSequenced` would NOT stop them
+// racing — one shared named group is required (a group serialises every
+// member carrying the same label). The pack runs `CLIArguments.Sequenced`
+// by default (see `main`), so this is belt-and-braces for a `--parallel`
+// invocation. Cross-serialising against already-wired env-touching lists
+// (e.g. `AuthProvider.fromEnv`, which also mutates `TOOLUP_OIDC_ISSUER`)
+// is a pre-existing latent `--parallel` coupling, out of scope here.
+
 open System
 open Expecto
 open ToolUp.Platform.AI

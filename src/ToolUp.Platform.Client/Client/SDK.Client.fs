@@ -697,20 +697,11 @@ module Client =
         | Some id -> bootLoadCmd "team-role" (withCsrf (loadActiveTeamRole id)) ActiveTeamRoleLoaded
         | None -> Cmd.ofMsg (ActiveTeamRoleLoaded None)
 
-    /// Banner row label per degradation source key.
+    /// Banner row label per degradation source key — the built-in English
+    /// catalog's entry (Phase 1069: one table, not a second spelling of
+    /// it). An unknown source labels itself.
     let private degradationLabel (source: string) =
-        match source with
-        | "teams" -> "Team memberships"
-        | "active-team" -> "Active team"
-        | "team-auto-select" -> "Team auto-select"
-        | "permissions" -> "Module permissions"
-        | "configs" -> "Saved configuration"
-        | "flags" -> "Feature flags"
-        | "platform-role" -> "Platform-admin role"
-        | "platform-info" -> "Platform info"
-        | "team-role" -> "Team role"
-        | "auth-bridge" -> "Session refresh"
-        | other -> other
+        BootDegradation.localisedLabel MessageCatalog.english.BootDegradation.Sources source source
 
     /// Phase 444 — resolve the active locale and the message catalog the
     /// shell renders from. One definition, called from `view` (chrome +
@@ -769,8 +760,11 @@ module Client =
 
     /// Sources the shell can re-run on demand. The auth bridge retries
     /// itself on its refresh interval, so its banner row carries no
-    /// Retry button.
-    let private degradationRetryable (source: string) = source <> "auth-bridge"
+    /// Retry button. Phase 1069 — a failed sidebar-preference write is not
+    /// a load: there is nothing to re-issue (the next preference change
+    /// writes again), so its row carries no Retry button either.
+    let internal degradationRetryable (source: string) =
+        source <> "auth-bridge" && source <> "sidebar-prefs"
 
     let private degradationEntry (source: string) (error: string) : BootDegradation.BootDegradation = {
         Source = source
@@ -779,6 +773,13 @@ module Client =
         Retryable = degradationRetryable source
         OccurredAt = System.DateTime.UtcNow
     }
+
+    /// Phase 1069 — persist the sidebar preferences as an effect (B13). A
+    /// throwing store (quota, private window, blocked site data) surfaces as
+    /// the `"sidebar-prefs"` banner row rather than an exception out of
+    /// `update`.
+    let private persistSidebarPrefs (prefs: SidebarPreferences.UserSidebarPreferences) : Cmd<Msg> =
+        SidebarPreferences.persist (fun ex -> BootLoadFailed("sidebar-prefs", ex.Message)) prefs
 
     /// The captured shell dispatcher as the shell reads it (see
     /// `shellDispatcher`).
@@ -1619,16 +1620,6 @@ module Client =
                     let currentState = model.ModuleStates |> Map.find model.ActiveModuleId
                     let newState, cmd = moduleImpl.Update moduleMsg currentState
 
-                    // Phase 6g.A: publish the new state to any
-                    // registered observers (a companion can mirror it
-                    // into its own snapshot registry). Side-effect
-                    // inside `update` is the same trade-off as the
-                    // `NotificationClient.publishLocal` toast in the
-                    // ModuleActionReceived branch — companions
-                    // observe state changes without the shell taking
-                    // a compile-time dependency on them.
-                    ModuleStateObserver.publishState moduleImpl.InspectState model.ActiveModuleId newState
-
                     {
                         model with
                             ModuleStates = model.ModuleStates |> Map.add model.ActiveModuleId newState
@@ -1657,20 +1648,19 @@ module Client =
                     else
                         "by a server restart"
 
-                NotificationClient.publishLocal (
-                    NotificationEnvelope.create
-                        ""
-                        (Notification.SystemMessage(
-                            SystemMessageLevel.Warning,
-                            $"Your server session was reset {cause}; please re-upload your files."
-                        ))
-                )
+                // Phase 1069 — published from a `Cmd`, not inline: the
+                // envelope's id and timestamp are minted when the effect
+                // runs, so `update` itself performs no I/O.
+                let text = $"Your server session was reset {cause}; please re-upload your files."
 
                 {
                     model with
                         PrefetchedProcessedData = []
                 },
-                Cmd.none
+                Cmd.ofEffect (fun _ ->
+                    NotificationClient.publishLocal (
+                        NotificationEnvelope.create "" (Notification.SystemMessage(SystemMessageLevel.Warning, text))
+                    ))
 
             | DataSnapshotPrefetched snapshot ->
                 // Boot-time data prefetch: store the snapshot's processed
@@ -2185,6 +2175,7 @@ module Client =
                     | "flags" -> bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
                     | "platform-role" -> bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
                     | "platform-info" -> bootLoadCmd "platform-info" loadPlatformInfo PlatformInfoLoaded
+                    | "data-snapshot" -> bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched
                     | "team-role" -> activeTeamRoleCmd updated.ActiveTeamId
                     | "team-auto-select" -> maybeAutoSelectSoleTeam updated
                     | _ -> Cmd.none
@@ -2304,13 +2295,11 @@ module Client =
 
             | SidebarGroupToggled groupKey ->
                 let prefs = SidebarPreferences.toggleExpanded groupKey model.SidebarPrefs
-                SidebarPreferences.save prefs
-                { model with SidebarPrefs = prefs }, Cmd.none
+                { model with SidebarPrefs = prefs }, persistSidebarPrefs prefs
 
             | SidebarModulePinToggled moduleId ->
                 let prefs = SidebarPreferences.togglePinned moduleId model.SidebarPrefs
-                SidebarPreferences.save prefs
-                { model with SidebarPrefs = prefs }, Cmd.none
+                { model with SidebarPrefs = prefs }, persistSidebarPrefs prefs
 
             | SidebarModuleReordered(groupKey, orderedIds) ->
                 let prefs =
@@ -2319,21 +2308,18 @@ module Client =
                     else
                         SidebarPreferences.setOrder groupKey orderedIds model.SidebarPrefs
 
-                SidebarPreferences.save prefs
-                { model with SidebarPrefs = prefs }, Cmd.none
+                { model with SidebarPrefs = prefs }, persistSidebarPrefs prefs
 
             | SidebarModuleExpandToggled moduleId ->
                 let prefs = SidebarPreferences.toggleModuleExpanded moduleId model.SidebarPrefs
-                SidebarPreferences.save prefs
-                { model with SidebarPrefs = prefs }, Cmd.none
+                { model with SidebarPrefs = prefs }, persistSidebarPrefs prefs
 
             | SidebarEntryHideToggled entryId ->
                 // `toggleHidden` also unpins on the hide leg (the Phase
                 // 572.C rule) — the shell does not re-implement it here,
                 // so pin and hide cannot disagree about the same entry.
                 let prefs = SidebarPreferences.toggleHidden entryId model.SidebarPrefs
-                SidebarPreferences.save prefs
-                { model with SidebarPrefs = prefs }, Cmd.none
+                { model with SidebarPrefs = prefs }, persistSidebarPrefs prefs
 
             | ModuleActionReceived(moduleId, actionKey, payloadJson) ->
                 // Gate 1: module registered in this deployment? If not,
@@ -2396,11 +2382,6 @@ module Client =
                         // Apply the decoded Msg against the target state.
                         let newState, updateCmd = moduleImpl.Update decodedMsg state
 
-                        // Phase 6g.A: same observer publish as the
-                        // ModuleMsg branch — server-emitted action
-                        // arrivals also change module state.
-                        ModuleStateObserver.publishState moduleImpl.InspectState moduleId newState
-
                         let updatedModel = {
                             model with
                                 ModuleStates = model.ModuleStates |> Map.add moduleId newState
@@ -2422,27 +2403,28 @@ module Client =
                         // when the target is inactive. Routes through
                         // `NotificationClient.publishLocal` so the existing
                         // `ToastCentre` picks it up without any additional
-                        // plumbing. Side-effect in update is a trade-off
-                        // for the simpler wiring; the alternative (new
-                        // Elmish toast list + React consumer) is
-                        // strictly more code for the same user-visible
-                        // result. Kept conservative: no toast when the
+                        // plumbing. Kept conservative: no toast when the
                         // target is active (the user is already looking
-                        // at the result).
-                        if moduleId <> model.ActiveModuleId then
-                            let text =
-                                (resolveCatalog _config model.LocaleOverride model.PlatformConfig)
-                                    .Shell.ResultsAvailableIn
-                                    moduleImpl.Definition.Name
+                        // at the result). Phase 1069 — the toast is a
+                        // `Cmd`, not an inline publish: the envelope (user
+                        // id, id, timestamp) is built when the effect runs.
+                        let toastCmd =
+                            if moduleId <> model.ActiveModuleId then
+                                let text =
+                                    (resolveCatalog _config model.LocaleOverride model.PlatformConfig)
+                                        .Shell.ResultsAvailableIn
+                                        moduleImpl.Definition.Name
 
-                            let envelope =
-                                NotificationEnvelope.create
-                                    (UserSession.getUserId ())
-                                    (Notification.SystemMessage(SystemMessageLevel.Info, text))
+                                Cmd.ofEffect (fun _ ->
+                                    NotificationClient.publishLocal (
+                                        NotificationEnvelope.create
+                                            (UserSession.getUserId ())
+                                            (Notification.SystemMessage(SystemMessageLevel.Info, text))
+                                    ))
+                            else
+                                Cmd.none
 
-                            NotificationClient.publishLocal envelope
-
-                        updatedModel, routedCmd
+                        updatedModel, Cmd.batch [ routedCmd; toastCmd ]
 
             | ModuleEventPublished(topic, payload) ->
                 // Fan a cross-module event out to every registered module
@@ -2491,10 +2473,6 @@ module Client =
                                     s, Cmd.none
 
                         let newState, updateCmd = moduleImpl.Update decodedMsg state
-
-                        // Phase 6g.A observer publish — same as the other
-                        // state-changing branches.
-                        ModuleStateObserver.publishState moduleImpl.InspectState moduleId newState
 
                         let routedCmd =
                             if moduleId = accModel.ActiveModuleId then
@@ -2569,6 +2547,68 @@ module Client =
                 |> Cmd.batch
 
         finalModel, Cmd.batch [ cmd; processedDataResetCmds ]
+
+    /// Phase 1069 — the module-state observer publish (Phase 6g.A, 536),
+    /// moved out of `update` so the shell's `update` performs no side
+    /// effect. Called AFTER an update with the module states the model held
+    /// before it: a module the message could have moved — the active module
+    /// on `ModuleMsg`, the target of `ModuleActionReceived`, each subscriber
+    /// of a `ModuleEventPublished` topic — is published when its state
+    /// object changed. A message whose gates dropped it (an unregistered or
+    /// inaccessible target) leaves the state untouched and publishes
+    /// nothing, exactly as the inline calls did.
+    let observeModuleStates
+        (modules: ErasedModule list)
+        (msg: Msg)
+        (priorStates: Map<string, obj>)
+        (next: Model)
+        : unit =
+        let candidates =
+            match msg with
+            | ModuleMsg _ -> [ next.ActiveModuleId ]
+            | ModuleActionReceived(moduleId, _, _) -> [ moduleId ]
+            | ModuleEventPublished(topic, _) ->
+                modules
+                |> List.filter (fun m -> m.EventSubscriptions |> Map.containsKey topic)
+                |> List.map _.Definition.Id
+            | _ -> []
+
+        for moduleId in candidates do
+            match tryFind modules moduleId, next.ModuleStates |> Map.tryFind moduleId with
+            | Some moduleImpl, Some state ->
+                let changed =
+                    match priorStates |> Map.tryFind moduleId with
+                    | Some prior -> not (obj.ReferenceEquals(prior, state))
+                    | None -> true
+
+                if changed then
+                    ModuleStateObserver.publishState moduleImpl.InspectState moduleId state
+            | _ -> ()
+
+    /// Phase 1069 — install `observeModuleStates` as the program's one
+    /// post-update hook, through the fork's `withTrace` seam (no combinator
+    /// changed). `unwrap` recovers the shell message from the program's
+    /// message type and `shellOf` the shell model, so a composer that
+    /// embeds the shell (ToolUp.AI's `AIClientConfig`) installs the same
+    /// hook as `Client.program`. The hook keeps the last module-state map it
+    /// saw, which is what a shell message's prior state was: only shell
+    /// messages move it.
+    let withModuleStateObserver
+        (modules: ErasedModule list)
+        (unwrap: 'msg -> Msg option)
+        (shellOf: 'model -> Model)
+        (prog: Program<'arg, 'model, 'msg, 'view>)
+        : Program<'arg, 'model, 'msg, 'view> =
+        let lastStates: Map<string, obj> ref = ref Map.empty
+
+        prog
+        |> Program.withTrace (fun msg model _ ->
+            match unwrap msg with
+            | Some shellMsg ->
+                let shell = shellOf model
+                observeModuleStates modules shellMsg lastStates.Value shell
+                lastStates.Value <- shell.ModuleStates
+            | None -> ())
 
     /// Controlled team switcher for the page header. Replaces the previous
     /// native `<details>` element, which had neither close-on-outside-click
@@ -4938,6 +4978,7 @@ module Client =
 
         prog
         |> Program.withErrorReporter elmishReporter
+        |> withModuleStateObserver allModules Some id
         |> withShellLifetimeEffects config id
 
     /// Build the shell Elmish Program without running it. Outer composition

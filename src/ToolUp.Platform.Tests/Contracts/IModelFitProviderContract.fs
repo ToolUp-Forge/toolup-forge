@@ -3,6 +3,8 @@
 
 module ToolUp.Platform.Tests.Contracts.IModelFitProviderContract
 
+// Phase 603 — SpecHash opacity contract (submitter-minted, never re-derived).
+
 open System
 open Expecto
 open ToolUp.Platform

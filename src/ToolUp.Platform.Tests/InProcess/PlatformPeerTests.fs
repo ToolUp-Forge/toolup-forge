@@ -1,5 +1,14 @@
 module ToolUp.Platform.Tests.InProcess.PlatformPeerTests
 
+// Phase 18 — inter-platform peer substrate: the IPlatformPeer
+// contract pack (in-process binding) + the buyer→seller TestServer
+// worked example (identity validation, audit emission, matching
+// RootRequestId across the HTTP boundary).
+
+// Phase 308 — job-poll caller-ownership scoping: a parked
+// long-running result is readable only by the peer that
+// scheduled it.
+
 open System
 open System.Collections.Concurrent
 open System.Net.Http

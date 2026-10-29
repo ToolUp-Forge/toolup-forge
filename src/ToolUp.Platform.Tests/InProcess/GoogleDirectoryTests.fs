@@ -3,6 +3,8 @@
 
 module ToolUp.Platform.Tests.InProcess.GoogleDirectoryTests
 
+// Phase 747 — Google Workspace IUserDirectory companion.
+
 open System
 open System.Collections.Concurrent
 open System.Net
