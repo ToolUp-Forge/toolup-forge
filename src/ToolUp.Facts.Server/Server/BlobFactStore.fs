@@ -203,9 +203,7 @@ module internal FactIndexLayout =
     /// UTC offset is within 14 hours).
     let LocalTolerance = TimeSpan.FromDays(2.0).Ticks
 
-    let private hex (s: string) =
-        Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes s)
-        |> Convert.ToHexStringLower
+    let private hex (s: string) = Sha256.hexOfUtf8 s
 
     // A fixed period and method, so the store's own lineage key can be
     // reused as the (subject, metric) key: it canonicalises the subject
@@ -2025,6 +2023,105 @@ type BlobFactStore
                     | Ok _ -> None)
                 |> List.ofArray
         }
+    }
+
+    /// Phase 1089 — move the scope's persisted fact ids onto the canonical
+    /// frame, once. Each fact whose stored id is not `Fact.computeFor` of
+    /// its own fields is re-keyed: written under its recomputed id with its
+    /// `Supersedes` link mapped the same way (`FactIdMigration.plan`), given
+    /// an index leaf, and only then is its old blob and old leaf deleted —
+    /// every write lands before any delete, so a run interrupted anywhere
+    /// is finished by running it again. The metric surfaces of every metric
+    /// that moved are dropped and rebuild on their next read. Idempotent: a
+    /// second run over a migrated scope plans nothing and writes nothing.
+    ///
+    /// `dryRun` reads and plans and writes nothing. A scope holding a blob
+    /// that does not read as its own fact (`ExportScope`'s `Unreadable`)
+    /// is refused, naming each one, before anything is written. Run it
+    /// with the deployment's writers stopped: the plan is a snapshot.
+    member this.MigrateIds(scopeId: string, dryRun: bool) : Async<Result<FactIdMigrationReport, string>> = async {
+        let! export = this.ExportScope scopeId
+
+        match export.Unreadable with
+        | _ :: _ as unreadable ->
+            let named =
+                unreadable
+                |> List.map (fun (name, why) -> sprintf "%s (%s)" name why)
+                |> String.concat "; "
+
+            return
+                Error(
+                    sprintf
+                        "scope %s holds %d blob(s) that do not read as their own fact; nothing was migrated: %s"
+                        scopeId
+                        unreadable.Length
+                        named
+                )
+        | [] ->
+            let changes = FactIdMigration.plan export.Facts
+            let report = FactIdMigration.report scopeId dryRun export.Facts.Length changes
+
+            if dryRun || List.isEmpty changes then
+                return Ok report
+            else
+                let! written =
+                    changes
+                    |> List.map (fun (_, after) -> async {
+                        let! r = storage.Upload(scopeId, blobName after.FactId, serialise after)
+                        return r |> Result.mapError (sprintf "%s: %s" after.FactId)
+                    })
+                    |> BlobFanOut.run
+
+                match
+                    written
+                    |> Array.tryPick (function
+                        | Error e -> Some e
+                        | Ok _ -> None)
+                with
+                | Some failure ->
+                    return
+                        Error(
+                            sprintf
+                                "writing a migrated fact failed and nothing was deleted; run the migration again to finish it: %s"
+                                failure
+                        )
+                | None ->
+                    let! _ = changes |> List.map snd |> writeLeaves scopeId
+
+                    let! deleted =
+                        changes
+                        |> List.filter (fun (before, after) -> before.FactId <> after.FactId)
+                        |> List.map (fun (before, _) -> async {
+                            // An orphaned leaf is ignored by every read (reads
+                            // consult census members only), so its delete is
+                            // tidying; the fact blob's is the one that counts.
+                            let! _ = storage.Delete(scopeId, FactIndexLayout.leafName (deserialise (serialise before)))
+                            let! r = storage.Delete(scopeId, blobName before.FactId)
+                            return r |> Result.mapError (sprintf "%s: %s" before.FactId)
+                        })
+                        |> BlobFanOut.run
+
+                    for metric in changes |> List.map (fun (_, after) -> after.Metric.Value) |> List.distinct do
+                        do! surface.Drop(scopeId, metric)
+
+                        match surfaceCache with
+                        | Some cache -> cache.Evict(scopeId, metric)
+                        | None -> ()
+
+                    match
+                        deleted
+                        |> Array.tryPick (function
+                            | Error e -> Some e
+                            | Ok _ -> None)
+                    with
+                    | Some failure ->
+                        return
+                            Error(
+                                sprintf
+                                    "every fact was written under its new id, but deleting an old copy failed; run the migration again to finish it: %s"
+                                    failure
+                            )
+                    | None -> return Ok report
     }
 
     /// Sample the scope's facts and index leaves and check each side
