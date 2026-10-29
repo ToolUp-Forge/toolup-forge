@@ -856,6 +856,17 @@
       `docs/migrations/1076-tool-outcome-and-conversation-record.md`.
     -->
     <!--
+      Phase 1134 rides the 0.36.0 draft (untagged, publicly unpinned; its
+      surface movement is additive - one new function, no record field,
+      union case or interface member - below the draft's breaking class,
+      which Phase 1076 set):
+      `DisclosureTaintConfig.isTaintInert` names a config whose walk cannot
+      change a verdict, and the disclosure gate decides such a config's
+      checks without loading the derivation graph; concurrent cold series
+      reads of one metric share one surface convergence. Migration recipe:
+      `docs/migrations/1134-inert-taint-walk.md`.
+    -->
+    <!--
       Phase 1077 rides the 0.36.0 draft (untagged, publicly unpinned; its
       surface movement is breaking-class, the draft's own class, not above
       it): `ToolUp.AI.Server` removes the `[<Obsolete>]` string-prompt entry

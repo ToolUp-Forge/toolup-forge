@@ -31,6 +31,21 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // fact is audited (GP 6). An **empty** config (the default) skips the walk
 // entirely — the gate is byte-for-byte the Phase 525 gate (GP 11 / GP 13).
 //
+// **Phase 1134 — an inert config skips the walk too.** A config whose
+// policies are all `Plain`, declare no contributor scope, and that registers
+// no declassifier (`DisclosureTaintConfig.isTaintInert`) is composed for its
+// per-surface stance alone; its walk can seed no taint (only a
+// `TaintPropagating` source does), record no crossing (a routine records one
+// only when it clears taint) and name no contributor. So the check builds no
+// graph and decides as an empty walk would. **The audit shape is decided
+// field by field and does not move:** with a walked outcome the rows carried
+// `ContributorScopes` = the walked lineage's (empty: no scoped policy) and
+// `UnsatisfiedScopes` = [] and no `FactDisclosureDeclassified` row; without
+// one they carry the fact's own registered scope (empty: none is declared)
+// and []. Equal by construction, and pinned by comparing verdicts and audit
+// rows with and without the skip over the taint, multi-party, budget and
+// egress corpora (`DisclosureTaintTests`).
+//
 // **Phase 674 — multi-party conjunction.** When policies declare a
 // contributor scope, the taint verdict becomes a conjunction over the
 // contributing parties: the derivation path must satisfy EVERY one, and a
@@ -373,8 +388,10 @@ module HeldFactRow =
 /// stage walks the derivation graph, which the gate builds from the scope's
 /// whole listing in every form, and reaches the judged fact by id; it never
 /// needs the fact the caller holds. So a row-form check under taint costs the
-/// graph load, as the held form does, and no read per row. (Phase 1093's
-/// write-maintained taint index is what would retire the graph load.)
+/// graph load, as the held form does, and no read per row — and, since Phase
+/// 1134, nothing at all under a config that cannot taint
+/// (`DisclosureTaintConfig.isTaintInert`). (Phase 1093's write-maintained
+/// taint index is what would retire the graph load for a config that can.)
 ///
 /// Composed as part of the platform gate (`FactDisclosureGate`); a door takes
 /// it from its held gate by capability, and a held gate that does not offer it
@@ -404,7 +421,8 @@ type FactDisclosureGate
         purpose: DisclosurePurposeConfig option,
         budgets: DeclassificationBudgetConfig option,
         viewerAware: ViewerAwareDisclosure option,
-        fanOut: DisclosureFanOut
+        fanOut: DisclosureFanOut,
+        walkInert: bool
     ) =
 
     static let jsonOptions = FableConverters.create ()
@@ -412,6 +430,18 @@ type FactDisclosureGate
     let maxConcurrentReads = max 1 fanOut.MaxConcurrentReads
 
     let taintConfig = defaultArg taint DisclosureTaintConfig.empty
+
+    // Phase 1134 — whether a check builds the derivation graph. Only when the
+    // walk can change a verdict or an audit row (`isTaintInert`): a deployment
+    // whose policies are all `Plain`, unscoped and undeclassified registers
+    // them for their per-surface stance alone, and its walk would arrive where
+    // an empty walk starts. `walkInert` is the pre-1134 rule (walk whenever the
+    // config is non-empty), kept internal for the equality pins only.
+    let buildsGraph =
+        if walkInert then
+            not (DisclosureTaintConfig.isEmpty taintConfig)
+        else
+            not (DisclosureTaintConfig.isTaintInert taintConfig)
 
     // Phase 592 — the purpose facet. `None` (no taxonomy declared) keeps
     // the facet absent: no claim is read, no refusal minted, behaviour
@@ -616,13 +646,14 @@ type FactDisclosureGate
                     | Some p -> Some(sprintf "purpose-denied:%s (allowed: %s)" p allowedText)
                     | None -> Some(sprintf "purpose-unclaimed (allowed: %s)" allowedText)
 
-            // The derivation graph is built once per check, and only when a
-            // taint config is composed — a deployment without taint policies
-            // never loads the fact listing (GP 13, byte-identical to 525).
-            // A purpose-refused check never builds it either: every fact is
-            // already denied before any per-fact evaluation.
+            // The derivation graph is built once per check, and only when the
+            // composed taint config can taint (`buildsGraph`, Phase 1134) — a
+            // deployment without taint policies, or whose policies cannot
+            // taint, never loads the fact listing (GP 13). A purpose-refused
+            // check never builds it either: every fact is already denied
+            // before any per-fact evaluation.
             let! graph =
-                if DisclosureTaintConfig.isEmpty taintConfig || Option.isSome purposeRefusal then
+                if not buildsGraph || Option.isSome purposeRefusal then
                     async.Return None
                 else
                     async {
@@ -819,21 +850,37 @@ type FactDisclosureGate
             ?purpose: DisclosurePurposeConfig,
             ?budgets: DeclassificationBudgetConfig
         ) =
-        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, None, DisclosureFanOut.defaults)
+        FactDisclosureGate(
+            store,
+            events,
+            resolvePolicy,
+            taint,
+            purpose,
+            budgets,
+            None,
+            DisclosureFanOut.defaults,
+            false
+        )
 
     /// This gate with the Phase 896 viewer-aware facet armed: every other
     /// facet (resolver, taint, purpose, budgets, fan-out) is kept as it is,
     /// and a `Restricted` fact is decided for the viewer. Composed by
     /// `FactsCompose.withTeamOutputVisibility`.
     member _.WithViewerAwareness(facet: ViewerAwareDisclosure) : IFactDisclosureGate =
-        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, Some facet, fanOut)
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, Some facet, fanOut, walkInert)
         :> IFactDisclosureGate
 
     /// This gate with its per-check read fan-out bounded by `bound`; every
     /// facet is kept as it is. Composed by `FactsCompose.withDisclosureFanOut`.
     member _.WithFanOut(bound: DisclosureFanOut) : IFactDisclosureGate =
-        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, viewerAware, bound)
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, viewerAware, bound, walkInert)
         :> IFactDisclosureGate
+
+    /// Phase 1134 — this gate under the pre-1134 rule: it builds the
+    /// derivation graph whenever any taint config is composed, inert or not.
+    /// The oracle the equality pins compare the skip against; never composed.
+    member internal _.WalkingInertConfigs() : FactDisclosureGate =
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, viewerAware, fanOut, true)
 
     interface IFactDisclosureGate with
 

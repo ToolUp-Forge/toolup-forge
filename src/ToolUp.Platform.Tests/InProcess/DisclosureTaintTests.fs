@@ -756,6 +756,232 @@ let fanOutTests =
         }
     ]
 
+// ── Phase 1134 — an inert config decides exactly as a walked one ──
+//
+// A config whose policies are all `Plain`, unscoped, and that registers no
+// declassifier no longer builds the derivation graph. The skip must change
+// no verdict and no audit row, so each corpus is judged twice — by the
+// shipped gate and by the same gate under the pre-1134 rule
+// (`WalkingInertConfigs`, which walks whenever any config is composed) — on
+// every egress surface, in the id form and the row form, and the verdict
+// maps and the audit streams are compared whole. The corpus carries the
+// shapes the 562 taint, 674 multi-party, 675 budget and 525 egress suites
+// judge: a restricted source and the facts derived from it, a
+// declassifier-shaped `Computed` operation, a joint output over two
+// parties' inputs, `Internal` and unregistered refs, and the consumer
+// deployment's own registration.
+
+/// Every egress surface, so no surface's stance is left out of the
+/// comparison (the union is nullary throughout).
+let private everySurface: FactEgressSurface list =
+    Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<FactEgressSurface>
+    |> Array.map (fun case -> Microsoft.FSharp.Reflection.FSharpValue.MakeUnion(case, [||]) :?> FactEgressSurface)
+    |> List.ofArray
+
+let private plainPolicy (policyRef: string) (surfaces: FactEgressSurface list) : DisclosurePolicy = {
+    PolicyRef = policyRef
+    Mode = Plain
+    PermitSurfaces = surfaces
+    ContributorScope = None
+}
+
+/// The inert configs, each one the corpus's vocabulary with nothing that
+/// can taint: the consumer deployment's registration exactly; the 562
+/// vocabulary with `licensed` made `Plain` and its routine dropped; and the
+/// 674 two-party vocabulary made `Plain` and unscoped.
+let private inertConfigs: (string * DisclosureTaintConfig) list = [
+    "the consumer registration (one Plain policy, four surfaces)",
+    DisclosureTaintConfig.ofLists [
+        plainPolicy "trade-figures" [ FactRetrieval; FactToolResult; FactNarrativePublication; FactBrowse ]
+    ] []
+    "the 562 vocabulary, Plain and undeclassified",
+    DisclosureTaintConfig.ofLists [
+        plainPolicy "licensed" [ FactRetrieval ]
+        plainPolicy "plain-hold" [ FactRetrieval ]
+    ] []
+    "the 674 two-party vocabulary, Plain and unscoped",
+    DisclosureTaintConfig.ofLists [
+        plainPolicy "party-a-licensed" [ FactRetrieval; FactExport ]
+        plainPolicy "party-b-licensed" [ FactRetrieval; FactExport ]
+        plainPolicy "trade-figures" [ FactBrowse ]
+    ] []
+]
+
+/// The corpus, asserted into one scope: what each suite's fixtures build.
+let private equalityCorpus (store: IFactStore) (scope: string) : string list =
+    let put metric method value disclosure inputs =
+        (assertFact store scope (draftOf metric method value disclosure inputs)).FactId
+
+    [
+        // 562 — a restricted source, a passthrough and a declassifier-shaped
+        // aggregate over it, and a Plain-held source with a fact over both.
+        put "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+        put "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
+        put "index" (Computed("aggregate-over-k", "1", "p")) (Scalar 7m) Surfaceable [ "dov-raw" ]
+        put "held" (Computed("load", "1", "p")) (Series "dov-held") (Restricted "plain-hold") []
+        put "mixed" (Computed("passthrough", "1", "p")) (Scalar 3m) Surfaceable [ "dov-raw"; "dov-held" ]
+        // 674 / 675 — two parties' inputs and the joint aggregate over both.
+        put "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted "party-a-licensed") []
+        put "raw-b" (Computed("load", "1", "p")) (Series "dov-b") (Restricted "party-b-licensed") []
+        put "joint" (Computed("aggregate-over-k", "1", "p")) (Scalar 11m) Surfaceable [ "dov-a"; "dov-b" ]
+        // 525 egress — the consumer's policy, Internal, an unregistered ref, a leaf.
+        put "trade" (HumanAsserted "analyst") (Scalar 5m) (Restricted "trade-figures") []
+        put "internal" (HumanAsserted "analyst") (Scalar 6m) Disclosure.Internal []
+        put "unknown" (HumanAsserted "analyst") (Scalar 8m) (Restricted "unregistered") []
+        put "leaf" (HumanAsserted "analyst") (Scalar 9m) Surfaceable []
+        // An id the scope does not hold.
+        "no-such-fact"
+    ]
+
+let private auditRows (events: IEventStore) (scope: string) = async {
+    let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
+
+    return
+        rows
+        |> List.filter (fun e -> e.EventType.StartsWith("FactDisclosure", StringComparison.Ordinal))
+        |> List.map (fun e -> e.EventType, e.Payload)
+}
+
+/// The corpus judged by a gate made from `make` on every surface, in the id
+/// and row forms: the verdicts, the audit rows the judging wrote, and the
+/// fact-blob downloads it cost.
+let private judged
+    (counting: FactStoreTests.CountingBlobStorage)
+    (store: IFactStore)
+    (scope: string)
+    (ids: string list)
+    (make: IEventStore -> FactDisclosureGate)
+    =
+    async {
+        let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+        let gate = make events
+
+        let resolved =
+            StorageScopeResolver.ScopeResolution.ofStorageScope {
+                ScopeId = scope
+                Container = scope
+                Persist = true
+            }
+
+        let! held = store.Query(scope, FactQuery.all)
+        let rows = held |> List.map HeldFactRow.ofFact
+        counting.Reset()
+        let verdicts = ResizeArray()
+
+        for surface in everySurface do
+            let! byId = (gate :> IFactDisclosureGate).Check(scope, "user-1", surface, ids)
+            let! byRows = (gate :> IHeldFactRowDisclosureGate).CheckHeldRows(resolved, "user-1", surface, ids, rows)
+            verdicts.Add(surface, byId, byRows)
+
+        let downloads = counting.Downloads
+        let! audit = auditRows events scope
+        return List.ofSeq verdicts, audit, downloads
+    }
+
+let private inertEqualityTests =
+    testList "Phase 1134 an inert config decides as the walked gate did" [
+        test "the predicate: Plain, unscoped, undeclassified is inert; each live ingredient is not" {
+            let consumer = snd inertConfigs.Head
+            let policy = consumer.Policies |> Map.toList |> List.head |> snd
+
+            Expect.isTrue (DisclosureTaintConfig.isTaintInert DisclosureTaintConfig.empty) "empty is inert"
+            Expect.isTrue (DisclosureTaintConfig.isTaintInert consumer) "the consumer registration is inert"
+            Expect.isFalse (DisclosureTaintConfig.isTaintInert taintCfg) "the 562 vocabulary is live"
+
+            Expect.isFalse
+                (DisclosureTaintConfig.isTaintInert (
+                    DisclosureTaintConfig.ofLists [ { policy with Mode = TaintPropagating } ] []
+                ))
+                "a TaintPropagating policy makes it live"
+
+            Expect.isFalse
+                (DisclosureTaintConfig.isTaintInert (
+                    DisclosureTaintConfig.ofLists [
+                        {
+                            policy with
+                                ContributorScope = Some "party-a"
+                        }
+                    ] []
+                ))
+                "a contributor scope makes it live"
+
+            Expect.isFalse
+                (DisclosureTaintConfig.isTaintInert (
+                    DisclosureTaintConfig.ofLists [ policy ] [
+                        {
+                            OperationId = "aggregate-over-k"
+                            Rationale = "r"
+                            AcceptingScopes = []
+                        }
+                    ]
+                ))
+                "a declassification routine makes it live"
+        }
+
+        for name, config in inertConfigs do
+            for budgeted in [ false; true ] do
+                let label = if budgeted then " with a crossing budget composed" else ""
+
+                testCaseAsync (sprintf "%s%s: the same verdicts and audit rows, without the graph" name label)
+                <| async {
+                    let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+                    let factEvents = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                    let store = BlobFactStore.create counting factEvents
+                    let scope = "team-" + Guid.NewGuid().ToString("N")
+                    let ids = equalityCorpus store scope
+                    let factCount = List.length ids - 1
+
+                    // A budget on the routine the corpus's aggregates name (675):
+                    // with nothing tainted there is no crossing, so nothing charges.
+                    let budgets () =
+                        if budgeted then
+                            Some(
+                                DeclassificationBudgetConfig.create
+                                    (InMemoryPrivacyBudgetLedger(fun () -> DateTimeOffset.UtcNow))
+                                    [ DeclassificationBudget.countedCrossings "aggregate-over-k" 1 ]
+                            )
+                        else
+                            None
+
+                    let gateOn (events: IEventStore) =
+                        FactDisclosureGate(store, events, taint = config, ?budgets = budgets ())
+
+                    let! skipped, skippedAudit, skippedReads = judged counting store scope ids gateOn
+
+                    let! walked, walkedAudit, walkedReads =
+                        judged counting store scope ids (fun events -> (gateOn events).WalkingInertConfigs())
+
+                    // The Phase 525 gate's own cost over the same checks: the id
+                    // form's reads of the ids it judges, and no graph.
+                    let! _, _, baseReads =
+                        judged counting store scope ids (fun events -> FactDisclosureGate(store, events))
+
+                    Expect.equal skipped walked "every verdict, on every surface, in both forms"
+
+                    // The gate judges a check's facts concurrently, so rows are
+                    // compared as a multiset: same rows, field for field.
+                    Expect.equal (List.sort skippedAudit) (List.sort walkedAudit) "every audit row, field for field"
+
+                    // Not vacuous: the corpus both denies and discloses, the
+                    // walked gate really loaded the graph, and the skip did not.
+                    let all =
+                        skipped
+                        |> List.collect (fun (_, byId, byRows) -> Map.toList byId @ Map.toList byRows)
+                        |> List.map snd
+
+                    Expect.contains all FactDisclosable "something discloses"
+                    Expect.isTrue (all |> List.exists (fun v -> v <> FactDisclosable)) "something is denied"
+                    Expect.isNonEmpty skippedAudit "the denials were audited"
+
+                    Expect.isGreaterThanOrEqual
+                        walkedReads
+                        (2 * List.length everySurface * factCount)
+                        "the walked gate loaded the scope at every check"
+
+                    Expect.equal skippedReads baseReads "the skip reads what the taint-free gate reads: no graph"
+                }
+    ]
+
 let tests =
     testList "Phase 562 taint-propagating disclosure" [
         pureWalkTests
@@ -763,4 +989,5 @@ let tests =
         gateTests
         latticeLawTests
         fanOutTests
+        inertEqualityTests
     ]

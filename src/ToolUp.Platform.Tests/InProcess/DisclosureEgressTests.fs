@@ -1275,6 +1275,20 @@ let private rowHarness (taint: DisclosureTaintConfig option) () : IHeldFactRowDi
         Scope = resolvedAt scopeId ("container-" + scopeId)
     }
 
+/// Phase 1134 — a consumer deployment's registration: one `Plain` policy for
+/// its per-surface stance, no contributor scope, no declassifier. The gate
+/// builds no derivation graph under it, and the row form must still judge as
+/// the id form does.
+let private inertTaintCfg =
+    DisclosureTaintConfig.ofLists [
+        {
+            PolicyRef = "trade-figures"
+            Mode = Plain
+            PermitSurfaces = [ FactRetrieval; FactToolResult; FactNarrativePublication; FactBrowse ]
+            ContributorScope = None
+        }
+    ] []
+
 let heldFormTests =
     testList "Phase 1125 the held form judges as the id form" [
         IHeldFactDisclosureGateContract.tests "FactDisclosureGate" (heldHarness id)
@@ -1283,6 +1297,9 @@ let heldFormTests =
         IHeldFactRowDisclosureGateContract.tests
             "FactDisclosureGate under a taint config"
             (rowHarness (Some heldTaintCfg))
+        IHeldFactRowDisclosureGateContract.tests
+            "FactDisclosureGate under an inert taint config"
+            (rowHarness (Some inertTaintCfg))
 
 
         testCaseAsync "viewer-aware: a Restricted fact for a member and for an admin - same verdicts, same audit"
