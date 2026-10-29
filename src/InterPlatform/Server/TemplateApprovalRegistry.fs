@@ -314,7 +314,7 @@ module TemplateCanonical =
 
     /// Lowercase hex SHA-256, the estate's existing digest presentation
     /// (`PeerSurface.export`'s `SurfaceHash` uses the same shape).
-    let private sha256Hex = CountersignatureCanonical.sha256Hex
+    let private sha256Hex = Sha256.hex
 
     /// A template's version: `sha256:{lowercase hex}` over its canonical
     /// encoding. The algorithm is named in the value so a future digest

@@ -502,8 +502,7 @@ module EvaluationRun =
 
     /// Deterministic run id — lowercase SHA-256 hex of `canonical`.
     let id (artifactKeyHash: string) (holdout: DatasetVersionRef) : string =
-        SHA256.HashData(Encoding.UTF8.GetBytes(canonical artifactKeyHash holdout))
-        |> Convert.ToHexStringLower
+        Sha256.hexOfUtf8 (canonical artifactKeyHash holdout)
 
     /// The run's plan, with a pre-652 record reading as `TailHoldout`.
     let plan (run: EvaluationRun) : EvaluationPlan = EvaluationPlan.resolve run.Plan
@@ -549,8 +548,7 @@ module EvaluationFoldOutcome =
 
     /// Deterministic fold-outcome id — lowercase SHA-256 hex of `canonical`.
     let id (runId: string) (foldId: string) : string =
-        SHA256.HashData(Encoding.UTF8.GetBytes(canonical runId foldId))
-        |> Convert.ToHexStringLower
+        Sha256.hexOfUtf8 (canonical runId foldId)
 
 /// Which way a metric improves. Declared by the comparer (task 456.B) — the
 /// declaration is data; forge applies a float comparison in the declared
@@ -764,8 +762,7 @@ module ModelComparison =
         (primaryMetric: string)
         (direction: MetricDirection)
         : string =
-        SHA256.HashData(Encoding.UTF8.GetBytes(canonical scopeId entrants holdout primaryMetric direction))
-        |> Convert.ToHexStringLower
+        Sha256.hexOfUtf8 (canonical scopeId entrants holdout primaryMetric direction)
 
     /// Canonical identity string including the declared fold aggregation
     /// (phase 652). `AggregateMetric` appends nothing, so a comparison
@@ -797,10 +794,7 @@ module ModelComparison =
         (direction: MetricDirection)
         (aggregation: FoldAggregation)
         : string =
-        SHA256.HashData(
-            Encoding.UTF8.GetBytes(canonicalFor scopeId entrants holdout primaryMetric direction aggregation)
-        )
-        |> Convert.ToHexStringLower
+        Sha256.hexOfUtf8 (canonicalFor scopeId entrants holdout primaryMetric direction aggregation)
 
     /// Order entrants by their primary-metric value (task 456.B): a pure
     /// float sort in the declared direction (plan D10 — the only judgment is
@@ -981,8 +975,7 @@ module EvaluationRegistration =
 
     /// Deterministic registration id — lowercase SHA-256 hex of `canonical`.
     let id (artifactKeyHash: string) (holdoutDatasetId: string) : string =
-        SHA256.HashData(Encoding.UTF8.GetBytes(canonical artifactKeyHash holdoutDatasetId))
-        |> Convert.ToHexStringLower
+        Sha256.hexOfUtf8 (canonical artifactKeyHash holdoutDatasetId)
 
 /// `IModelFitProvider.Evaluate` — the evaluation extension member on the
 /// provider seam (task 456.A). Dispatches to the provider's own

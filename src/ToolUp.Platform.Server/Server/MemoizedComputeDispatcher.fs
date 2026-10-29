@@ -160,12 +160,8 @@ type ComputeMemoKey = {
 [<RequireQualifiedAccess>]
 module ComputeMemoKey =
 
-    let private sha256Hex (bytes: byte[]) : string =
-        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData bytes).ToLowerInvariant()
-
     /// SHA-256 (lowercase hex) of a payload string, as `PayloadHash`.
-    let hashPayload (payload: string) : string =
-        sha256Hex (Text.Encoding.UTF8.GetBytes(payload: string))
+    let hashPayload (payload: string) : string = Sha256.hexOfUtf8 payload
 
     /// The key for `spec` under `scopeId`, or `None` when the spec is not
     /// memoizable.
@@ -196,8 +192,7 @@ module ComputeMemoKey =
     /// Blob-name-safe digest of the whole key. Hashed rather than embedded
     /// because `Kind` and the idempotency key are caller-supplied and may
     /// carry anything, and a blob name is not the place to discover that.
-    let digest (key: ComputeMemoKey) : string =
-        sha256Hex (Text.Encoding.UTF8.GetBytes(composite key))
+    let digest (key: ComputeMemoKey) : string = Sha256.hexOfUtf8 (composite key)
 
 /// Phase 485 — where a memo entry lives. Shared so a future sweep job
 /// enumerates exactly what the decorator writes, the reason

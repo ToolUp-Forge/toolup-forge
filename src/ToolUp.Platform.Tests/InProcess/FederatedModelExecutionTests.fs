@@ -2891,6 +2891,53 @@ let private transitionDeclarationTests =
         }
     ]
 
+// ─── Phase 1089 — the model envelope ids, pinned byte for byte ───────
+//
+// These ids are at rest (the registry, the evaluation and promotion
+// records) and the fit key crosses the federation seam as the outcome's
+// `CompositeKeyHash` and a promotion transfer's `ArtifactKey`, which a
+// peer holds. Phase 1089 routed them through `Sha256.hexOfUtf8` and left
+// their recipes alone; each expected value was computed outside this code
+// base (Python's `hashlib` over the canonical text), so a recipe that
+// drifts — including onto the frame without the re-key that must ship with
+// it — goes red here.
+let envelopeIdPinTests =
+    testList "Phase 1089 — model envelope ids are pinned" [
+        testCase "the fit composite key"
+        <| fun () ->
+            let key =
+                FitCompositeKey.compute "sha256:spec-1089" "panel@7" 20260720L "reference-linear" "1.4.0"
+
+            Expect.equal
+                key.Hash
+                "8954a0e7908c9f206648ec62a15f190c80cc4dc554af5cc536e2e0dff259bcf0"
+                "spec=…|dataset=…|seed=…|provider=…|pver=…"
+
+        testCase "the spec hash"
+        <| fun () ->
+            Expect.equal
+                (ModelSpecRef.hashOf "{\"model\":\"linear\"}")
+                "23f084ba8f5afdd6c66a251584475b83b46bc5d13f10dfe8e50e77528ccb9cff"
+                "SHA-256 of the payload's UTF-8 bytes"
+
+        testCase "the evaluation registration, fold outcome and promotion decision ids"
+        <| fun () ->
+            Expect.equal
+                (EvaluationRegistration.id "akh-1089" "holdout-1089")
+                "358868e415bf334014256e7d909c65315e2ca5da91677dbacdbe02ddbbc94990"
+                "evalreg|artifact=…|dataset=…"
+
+            Expect.equal
+                (EvaluationFoldOutcome.id "run-1089" "fold-2")
+                "a0970e30a21ab0a92f5c74bd16820aa6a8ea62ed39357a31de2fcd13b27b6bd0"
+                "evalfold|run=…|fold=…"
+
+            Expect.equal
+                (PromotionDecision.id "team-1089" "akh-1089")
+                "88282ee6a079e9933a9ae04651a69d0e4dec0c71ce14d853d1a9e5a5c285f107"
+                "promotion|scope=…|artifact=…"
+    ]
+
 let tests =
     testList "Phase 638 — federated model execution" [
         roundTripTests
@@ -2917,4 +2964,6 @@ let tests =
         transitionSeamTests
         transitionPeerTests
         transitionDeclarationTests
+        // Phase 1089 — the envelope ids, pinned.
+        envelopeIdPinTests
     ]

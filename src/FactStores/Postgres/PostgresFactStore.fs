@@ -6,7 +6,6 @@ namespace ToolUp.FactStores.Postgres
 open System
 open System.Collections.Generic
 open System.Globalization
-open System.Security.Cryptography
 open System.Text
 open System.Text.Json
 open Microsoft.Extensions.DependencyInjection
@@ -477,16 +476,9 @@ module internal FactRow =
     let deserialise (payload: string) : Fact =
         JsonSerializer.Deserialize<Fact>(payload, jsonOptions)
 
-    let sha256Hex (s: string) =
-        use sha = SHA256.Create()
-
-        sha.ComputeHash(Encoding.UTF8.GetBytes s)
-        |> Array.map (sprintf "%02x")
-        |> String.concat ""
-
     /// The `lineage_hash` column: the SHA-256 of the fact's lineage key.
     let lineageHash (f: Fact) =
-        sha256Hex (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+        Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
 
     /// Write `f` as one row of an open `Sql.copyIn` import. Every column
     /// but the head flag is a projection of the stored payload, so a column
@@ -555,10 +547,8 @@ type PostgresFactStore
 
     let deserialise (payload: string) : Fact = FactRow.deserialise payload
 
-    let sha256Hex (s: string) = FactRow.sha256Hex s
-
     let lineageHashOf (subject: SubjectRef) (metric: MetricRef) (period: TemporalExtent) (method: MethodRef) =
-        sha256Hex (Fact.lineageKey subject metric period method)
+        Sha256.hexOfUtf8 (Fact.lineageKey subject metric period method)
 
     let lineageKeyOf (f: Fact) =
         Fact.lineageKey f.Subject f.Metric f.Period f.Method
