@@ -3,6 +3,8 @@
 
 module ToolUp.Platform.Tests.InProcess.FactPublicationTests
 
+// Phase 971 - Facts: a refused ledger delete fails the consolidation.
+
 // ─── Phase 897 — team-to-team fact publication ───────────────────────
 //
 // What this pack pins, one list each:

@@ -3,6 +3,10 @@
 
 module ToolUp.Platform.Tests.InProcess.GoogleAnalyticsTests
 
+// Phase 10f — Google Analytics 4 connector: IDataSource +
+// IOAuthCredentialFlow contract re-binds over a faked network,
+// query interpretation, schema catalogue, env-gated live arm.
+
 open System
 open System.Collections.Concurrent
 open System.Net
