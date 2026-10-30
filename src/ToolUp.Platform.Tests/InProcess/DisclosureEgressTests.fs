@@ -1604,6 +1604,117 @@ let tableListingTests =
         }
     ]
 
+
+// ── The tool-result door for a level's member names ──────────────
+//
+// A member's name is a subject identity, an egress of its own beside the
+// table's declaration. It is read through the gate fixed at `FactToolResult`
+// and a name no fact of which was admitted never crosses.
+
+/// A gate that admits what `inner` admits for its first `allowed` calls and
+/// denies every fact after, under `trade-figures`: the table is described
+/// (its sample was admitted) and then the member read is denied.
+type private DenyAfterGate(inner: IHeldFactDisclosureGate, allowed: int) =
+    let mutable calls = 0
+
+    let judge (verdicts: Map<string, FactDisclosureVerdict>) =
+        calls <- calls + 1
+
+        if calls > allowed then
+            verdicts |> Map.map (fun _ _ -> FactNotDisclosable "trade-figures")
+        else
+            verdicts
+
+    interface IHeldFactDisclosureGate with
+        member _.CheckHeld(scope, principal, surface, factIds, held) = async {
+            let! verdicts = inner.CheckHeld(scope, principal, surface, factIds, held)
+            return judge verdicts
+        }
+
+let memberListingTests =
+    testList "the tool-result door for a level's member names" [
+        test "a denied table lists no member name" {
+            let w = FactTablesToolTests.TableFixtures.world ()
+
+            let text = FactTablesToolTests.TableFixtures.answer w """{"table":"daily-margin"}"""
+
+            Expect.isFalse (text.Contains "members") "no members block"
+            Expect.isFalse (text.Contains "\"s1\"") "no site name"
+            Expect.isFalse (text.Contains "\"s2\"") "no site name"
+        }
+
+        test "a level whose members are all denied lists no name and counts them" {
+            let w = FactTablesToolTests.TableFixtures.world ()
+
+            let late = {
+                w with
+                    Deps = {
+                        w.Deps with
+                            Gate = DenyAfterGate(w.Gate, 1)
+                    }
+            }
+
+            let answer =
+                FactTablesToolTests.TableFixtures.answerJson late """{"table":"daily-trade"}"""
+
+            let row = FactTablesToolTests.TableFixtures.tableRow answer "daily-trade"
+            let path = row.GetProperty("path").EnumerateArray() |> Seq.last
+            let members = path.GetProperty "members"
+
+            Expect.isTrue (members.GetProperty("listed").GetBoolean()) "the level is listed"
+            Expect.equal (members.GetProperty("names").GetArrayLength()) 0 "no name"
+            Expect.equal (members.GetProperty("unlisted").GetInt32()) 2 "both members counted"
+
+            Expect.equal
+                (members.GetProperty("restrictedUnderPolicies").EnumerateArray()
+                 |> Seq.map _.GetString()
+                 |> List.ofSeq)
+                [ "trade-figures" ]
+                "the policy"
+
+            Expect.isFalse ((string members).Contains "s1") "no site name"
+        }
+
+        test "a partially visible level counts what it withholds" {
+            let w = FactTablesToolTests.TableFixtures.world ()
+
+            w.Gate.Deny [
+                for offset in 0..2 do
+                    FactRenderToolTests.RenderFixtures.revenueFactId w "s2" offset
+            ]
+
+            let answer =
+                FactTablesToolTests.TableFixtures.answerJson w """{"table":"daily-trade"}"""
+
+            let row = FactTablesToolTests.TableFixtures.tableRow answer "daily-trade"
+
+            let members =
+                (row.GetProperty("path").EnumerateArray() |> Seq.last).GetProperty "members"
+
+            Expect.equal
+                (members.GetProperty("names").EnumerateArray()
+                 |> Seq.map _.GetString()
+                 |> List.ofSeq)
+                [ "s1" ]
+                "the visible name"
+
+            Expect.equal (members.GetProperty("unlisted").GetInt32()) 1 "the withheld one counted"
+            Expect.isFalse ((string answer).Contains "\"s2\"") "its name crosses nowhere"
+        }
+
+        test "a level above the cap lists no name" {
+            let w = FactTablesToolTests.TableFixtures.world ()
+
+            let text =
+                FactTablesTool.executeWithOptions { MemberCap = 1 } w.Deps w.Scope "u" """{"table":"daily-trade"}"""
+                |> Async.RunSynchronously
+
+            Expect.isFalse (text.Contains "\"s1\"") "no site name"
+            Expect.isFalse (text.Contains "\"s2\"") "no site name"
+            Expect.stringContains text "\"count\":2" "the count"
+        }
+    ]
+
 // ── The browse door for a reader's pipeline block ────────────────
 //
 // A pipeline block a model's turn attached is drawn for its reader by
@@ -1692,5 +1803,6 @@ let tests =
         renderToolTests
         pipelineToolTests
         tableListingTests
+        memberListingTests
         pipelineBlockTests
     ]

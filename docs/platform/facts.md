@@ -1232,6 +1232,20 @@ the grounded narrative also offers), server-resident, declaring `ReadFacts`.
   existing, with its id, `withheld: true`, the restricting policies and a reason, and nothing more. A table whose
   committed rows carry no value that could be checked is withheld, saying so; a table with no committed row has
   nothing to withhold and is described. The sample is a floor, not a proof, as coverage's probe is.
+- **A small level names its members.** The level a table's rows sit at lists its members' names when it holds at most a
+  declared cap of distinct members; a deployment declares the cap with `FactsCompose.withFactTablesOptions` after `withFactStore` (default 20,
+  `MemberCap = 0` turns it off, `FactTablesOptions.membersOff`); the options are captured at composition, never read from
+  the container per request. On that level's entry of `path` the result carries a
+  `members` block: `listed: true` with `names` (ordinal-sorted), `count` and `unlisted`, or `listed: false` with the
+  `count`, the `cap` and why only a count is given. Names, never values: a member is a subject identity. The model is told
+  to use a listed name as it is, and to find a member of a level above the cap by ranking.
+- **Member names are an egress of their own.** They are read the way a drill-down is, each metric column's ranking paged
+  under the request's scope and judged by the gate fixed at `FactToolResult`. A member is listed when some fact of it was
+  admitted; the rest are counted in `unlisted` (withheld by policy, or carrying no rankable value), with the policies
+  facts of the level were withheld under, and never named. A level above the cap, or one whose ranking could not be read
+  to its end within the ranking ceiling, reports its count and no name. A withheld table gets no member read. The count
+  is the largest distinct-member count any one column reports, so it is a floor. `FactTablesTool.projectWith cap`
+  returns the same typed projection with the members filled for a caller that renders it (`project` names none).
 
 #### The roll-up: a total the answer gate can check
 
