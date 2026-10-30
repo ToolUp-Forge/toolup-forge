@@ -6,6 +6,7 @@ namespace ToolUp.Platform.ExternalCompute.Http
 open System
 open System.Globalization
 open System.Text.Json
+open ToolUp.Platform
 
 // ─── Phase 322 — the generic HTTP/REST compute backend, as config ─────
 //
@@ -326,7 +327,7 @@ module HttpComputeAuth =
     /// A bearer-token header reading `key` from the `_platform` scope.
     let bearer (secretKey: string) : HttpComputeAuth = {
         HeaderName = "Authorization"
-        SecretScope = "_platform"
+        SecretScope = ScopeKey.PlatformContainer
         SecretKey = secretKey
         ValueFormat = "Bearer " + SecretPlaceholder
     }
@@ -334,7 +335,7 @@ module HttpComputeAuth =
     /// An API-key header reading `key` from the `_platform` scope.
     let apiKey (headerName: string) (secretKey: string) : HttpComputeAuth = {
         HeaderName = headerName
-        SecretScope = "_platform"
+        SecretScope = ScopeKey.PlatformContainer
         SecretKey = secretKey
         ValueFormat = SecretPlaceholder
     }
@@ -807,7 +808,7 @@ module HttpComputeConfig =
                     | Some key ->
                         Some {
                             HeaderName = env "AUTH_HEADER" |> Option.defaultValue "Authorization"
-                            SecretScope = env "AUTH_SECRET_SCOPE" |> Option.defaultValue "_platform"
+                            SecretScope = env "AUTH_SECRET_SCOPE" |> Option.defaultValue ScopeKey.PlatformContainer
                             SecretKey = key
                             ValueFormat =
                                 env "AUTH_VALUE_FORMAT"
