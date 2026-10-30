@@ -249,41 +249,14 @@ type ModelEvaluationRunner
             | Error e -> return Error(ModelEvaluationStorage.mapDataObjectError e)
         }
 
-    /// Read every row of a vintage, paging in fixed windows (the Phase 454
-    /// `ModelScorer` idiom). `Error` lifts a `DatasetError` to
-    /// `EvaluationError.InputUnavailable`.
-    let readAllRows (input: DatasetVersionRef) : Async<Result<DatasetRow list, EvaluationError>> =
-        let pageSize = 1000
-
-        let rec loop (offset: int64) (acc: DatasetRow list) : Async<Result<DatasetRow list, EvaluationError>> = async {
-            let query: DatasetPageQuery = {
-                Offset = offset
-                Limit = pageSize
-                Filters = []
-            }
-
-            match! datasets.ReadPage(input.ScopeId, input.DatasetId, input.Version, query) with
-            | Error e -> return Error(EvaluationError.InputUnavailable(DatasetError.describe e))
-            | Ok page ->
-                let acc = acc @ page.Rows
-                let read = offset + int64 (List.length page.Rows)
-
-                if List.isEmpty page.Rows || read >= page.TotalRows then
-                    return Ok acc
-                else
-                    return! loop read acc
-        }
-
-        loop 0L []
-
     /// Read a vintage's schema + all rows. `Error` is `InputUnavailable`.
     let readFrame (input: DatasetVersionRef) : Async<Result<DatasetSchema * DatasetRow list, EvaluationError>> = async {
         match! datasets.GetVersion(input.ScopeId, input.DatasetId, input.Version) with
         | Error e -> return Error(EvaluationError.InputUnavailable(DatasetError.describe e))
         | Ok version ->
-            match! readAllRows input with
-            | Error e -> return Error e
-            | Ok rows -> return Ok(version.Schema, rows)
+            match! DatasetStore.readAll datasets input.ScopeId input.DatasetId input.Version with
+            | Error e -> return Error(EvaluationError.InputUnavailable(DatasetError.describe e))
+            | Ok(_, rows) -> return Ok(version.Schema, rows)
     }
 
     /// The stored evaluation for one `(artifact, holdout vintage)` pair —

@@ -55,7 +55,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// module directly.
 module FactQueryTool =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = FableConverters.shared
 
     let private serialize (value: obj) : string =
         JsonSerializer.Serialize(value, jsonOptions)

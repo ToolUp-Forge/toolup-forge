@@ -353,34 +353,6 @@ type ModelScorer
         specs: IModelSpecStore option
     ) =
 
-    /// Read every row of an input vintage, paging in fixed windows until the
-    /// page's `TotalRows` is reached. `Error` lifts a `DatasetError` to a
-    /// `ScoreError.InputUnavailable`.
-    let readAllRows (input: DatasetVersionRef) : Async<Result<DatasetRow list, ScoreError>> =
-        // The store caps `Limit`; page until we have collected every row.
-        let pageSize = 1000
-
-        let rec loop (offset: int64) (acc: DatasetRow list) : Async<Result<DatasetRow list, ScoreError>> = async {
-            let query: DatasetPageQuery = {
-                Offset = offset
-                Limit = pageSize
-                Filters = []
-            }
-
-            match! datasets.ReadPage(input.ScopeId, input.DatasetId, input.Version, query) with
-            | Error e -> return Error(ScoreError.InputUnavailable(DatasetError.describe e))
-            | Ok page ->
-                let acc = acc @ page.Rows
-                let read = offset + int64 (List.length page.Rows)
-
-                if List.isEmpty page.Rows || read >= page.TotalRows then
-                    return Ok acc
-                else
-                    return! loop read acc
-        }
-
-        loop 0L []
-
     /// Refuse a score: audit a `ModelScoreRefused` row (GP 6) and return the
     /// typed error. One place so every refusal path is audited identically.
     let refuse (request: ScoreRequest) (error: ScoreError) : Async<Result<DatasetVersionRef, ScoreError>> = async {
@@ -466,9 +438,11 @@ type ModelScorer
                                             (String.concat ", " missing)
                                     ))
                         else
-                            match! readAllRows request.Input with
-                            | Error e -> return! refuse request e
-                            | Ok rows ->
+                            let input = request.Input
+
+                            match! DatasetStore.readAll datasets input.ScopeId input.DatasetId input.Version with
+                            | Error e -> return! refuse request (ScoreError.InputUnavailable(DatasetError.describe e))
+                            | Ok(_, rows) ->
                                 // Phase 641 — the provider is handed the
                                 // scoped resolution context, not a naked
                                 // `ArtifactRef`, so it can resolve the model

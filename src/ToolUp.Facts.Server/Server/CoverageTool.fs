@@ -100,7 +100,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// consumers normally never call this module directly.
 module CoverageTool =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = FableConverters.shared
 
     let private serialize (value: obj) : string =
         JsonSerializer.Serialize(value, jsonOptions)

@@ -1273,7 +1273,7 @@ module FactBrowseHandler =
     // ── Per-run notification ─────────────────────────────────────
 
     let private noticeOptions =
-        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+        ToolUp.Remoting.Json.SystemTextJson.FableConverters.shared
 
     /// The notice a committed run publishes — counts only.
     let runNotice (tableId: string) (runId: string) (commit: FactTableCommit) : FactTableRunNotice = {
