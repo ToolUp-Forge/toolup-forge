@@ -145,6 +145,7 @@
         <Compile Include="Contracts\IExternalComputeDispatcherContract.fs" />
         <Compile Include="Contracts\IExternalHandleStoreContract.fs" />
         <Compile Include="Contracts\IFactStoreContract.fs" />
+        <Compile Include="Contracts\IDisclosureTaintIndexSourceContract.fs" />
         <Compile Include="Contracts\IHeldFactDisclosureGateContract.fs" />
         <Compile Include="Contracts\IHeldFactRowDisclosureGateContract.fs" />
         <Compile Include="Contracts\IFactTableWriterContract.fs" />
