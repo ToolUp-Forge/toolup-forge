@@ -12,7 +12,6 @@ ToolUp.SparseIndices.Snowball.SnowballAnalyzer.forLanguage(ToolUp.SparseIndices.
 ToolUp.SparseIndices.Snowball.SnowballAnalyzer.idFor(ToolUp.SparseIndices.Snowball.SnowballAnalyzer+SnowballOptions) : System.String
 ToolUp.SparseIndices.Snowball.SnowballAnalyzer+SnowballAnalyzerConfigurationException (class)
 ToolUp.SparseIndices.Snowball.SnowballAnalyzer+SnowballAnalyzerConfigurationException..ctor()
-ToolUp.SparseIndices.Snowball.SnowballAnalyzer+SnowballAnalyzerConfigurationException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.SparseIndices.Snowball.SnowballAnalyzer+SnowballAnalyzerConfigurationException..ctor(System.String)
 ToolUp.SparseIndices.Snowball.SnowballAnalyzer+SnowballAnalyzerConfigurationException.message : System.String { get }
 ToolUp.SparseIndices.Snowball.SnowballAnalyzer+SnowballOptions (class)
