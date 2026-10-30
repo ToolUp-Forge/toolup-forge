@@ -76,6 +76,13 @@ type VerifiedNumber = {
     /// The content-addressed id of the retrieved fact this token matched,
     /// when `NumberVerified`; `None` otherwise.
     MatchedFactId: string option
+    /// When the token verified against a DERIVED value (a total a fact tool
+    /// computed by declared arithmetic), the ids of the facts it was computed
+    /// from, each itself in the turn's scope; `None` otherwise. The verdict
+    /// names the facts, never the tool that summed them. An option rather
+    /// than a list so a message persisted before the field existed reads
+    /// back as `None` instead of a null list.
+    DerivedFrom: string list option
 }
 
 /// Per-message numeric-fidelity verdict summary. Rides the SSE stream and

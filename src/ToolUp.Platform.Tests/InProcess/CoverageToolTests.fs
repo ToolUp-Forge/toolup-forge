@@ -263,7 +263,7 @@ let registrationTests =
             Expect.stringContains description "never a value" "and is explicit that it reports coverage, not values"
         }
 
-        test "EnabledFactStore declares ALL FOUR fact tools on one knob" {
+        test "EnabledFactStore declares ALL FIVE fact tools on one knob" {
             let app, sp = composedUnder EnabledFactStore None
 
             Expect.equal
@@ -273,6 +273,7 @@ let registrationTests =
                     "query_metric_population"
                     "list_metric_coverage"
                     "list_fact_tables"
+                    "aggregate_metric"
                 ]
                 "discovery arrives with the reads it makes usable — a deployment cannot arm one without the others"
 

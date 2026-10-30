@@ -1190,7 +1190,7 @@ behind the same six-rule-audited `IFactStore` contract.
 There are two doors, and they are armed by different things:
 
 - **The tool door.** `query_facts` / `query_metric_population` /
-  `list_metric_coverage` / `list_fact_tables` — the model asks, and gets an answer. Reliable,
+  `list_metric_coverage` / `list_fact_tables` / `aggregate_metric` — the model asks, and gets an answer. Reliable,
   but it fires only when the model thinks to reach for it. **Armed by**
   composing the fact store AND the AI tier: the store declares the tools,
   and only the AI companion's composition registers them.
@@ -1233,9 +1233,53 @@ the grounded narrative also offers), server-resident, declaring `ReadFacts`.
   committed rows carry no value that could be checked is withheld, saying so; a table with no committed row has
   nothing to withhold and is described. The sample is a floor, not a proof, as coverage's probe is.
 
+#### The roll-up: a total the answer gate can check
+
+The model never adds figures itself. `aggregate_metric(metric, subject_hierarchy, group_by_level, path_prefix?,
+period_from?, period_to?, as_of?)` sums one metric by group, on the server, from facts the disclosure gate admitted.
+It is declared by the same knob as the other fact tools (`FactsCompose.withFactStore`, through
+`NarrativeGrounding.factTools`, which the grounded narrative offers too), server-resident, declaring `ReadFacts`, and
+built on `FactTool.define`.
+
+- **What a group is.** `group_by_level` is one of the hierarchy's declared level labels. The members are the subjects
+  at that level, read once through `IFactStore.QueryPopulation` under the request's scope, and each member's group is
+  its own segment at that level; every segment above it is collapsed. Under `[ "site"; "category" ]`, grouping by
+  `category` sums each category across every site, and `path_prefix` narrows to one site.
+- **Only what adds up is summed.** The metric's `RollUp` must be declared `Additive`. A metric declared
+  `NonAdditive`, or declaring no roll-up, is refused by name with its declaration; so are an unregistered metric, an
+  unknown hierarchy and an unknown level (the refusal lists the declared levels).
+- **Disclosure first, at `FactToolResult`.** Every member passes the gate before anything is summed. A group with a
+  withheld member is reported withheld with its member count, never as the sum of the disclosed remainder: a partial
+  sum is a different number wearing the same label. A group whose every member is withheld is counted
+  (`hiddenGroupCount`) and never named, since its label is part of a withheld subject's identity. Withheld members are
+  also counted by policy ref.
+- **Refused rather than approximated.** A group whose members cover more than one period, or in which one subject
+  holds two competing values (no canonical method declared), is refused with the reason. A population larger than one
+  read returns (`PopulationQuery.MaxTopK`), or holding members with no single value (an absence, an interval, a
+  series), refuses the whole request, because no read can say which group such a member belongs to.
+- **What a total carries.** Its canonical rendering under the metric's `DisplayFormat`, its member count, the one
+  period its inputs cover, `inputFactIds`, and each input's id, subject and rendering. The ceiling mirrors the
+  population read's (`requestedTopK` / `effectiveTopK` / `truncated`). The typed shapes are `AggregateQuery`,
+  `AggregateResult`, `AggregateGroup` and `AggregateRefusal` in `ToolUp.Facts.Core`, so a client can render them.
+
+#### Tool results are in the answer gate's scope
+
+The numeric-fidelity gate verifies an interactive answer against the facts in its turn's scope. That scope is the
+facts fact-first retrieval surfaced AND the facts the turn's fact tools returned: every result, in this turn, of a
+tool that declares `ReadFacts`, read by `AnswerVerifier.toolResultFacts` exactly as the model was shown it. A FACT is
+an object carrying a `factId` and a `rendering` (the shape `query_facts` and `query_metric_population` print); a
+DERIVED value is an object carrying a `rendering`, a `metric` and `inputFactIds` (the shape of an `aggregate_metric`
+total). A withheld fact is never either: the gate decides whether a tool prints a rendering at all, so a refused fact
+is in the result as an id and a policy. The grounded narrative's own scope is unchanged.
+
+A derived value verifies a number only when every input is itself a fact in the same scope, the metric is declared
+`Additive`, and the number equals the total at its apparent precision within the declared tolerance. The verdict then
+carries the inputs (`VerifiedNumber.DerivedFrom`), and the audit row's `CitedFactIds` includes them, so the audit chain
+reaches the facts, never the tool that summed them.
+
 #### The render tools: the model asks for a chart, not a number (Phase 1132)
 
-Beside the four fact tools, two more let the model *show* facts rather than quote them:
+Beside the fact tools, two more let the model *show* facts rather than quote them:
 `render_chart` (a trend, a breakdown or a comparison) and `render_table`. The model writes a
 [presentation request](#from-a-series-to-a-chart-the-presentation-builders-phase-1129), never
 a row. The server reads the series it names through the browse's series read and draws the

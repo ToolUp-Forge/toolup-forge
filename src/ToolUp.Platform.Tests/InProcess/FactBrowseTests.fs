@@ -1270,6 +1270,7 @@ let private composedDemoTests =
                     FactId = factId
                     Rendering = rendering
                     Metric = "revenue"
+                    Inputs = []
                 })
 
             // Phase 889's numeric-fidelity gate, over the delegated mints.

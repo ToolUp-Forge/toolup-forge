@@ -314,6 +314,12 @@ type ScopedFact = {
     /// projection did not carry it (canonicalisation then parses the
     /// rendering symmetrically, which already reflects the display rules).
     Metric: string
+    /// Empty for a fact. For a DERIVED value — a total a fact tool computed
+    /// by declared arithmetic — the ids of the facts it was computed from,
+    /// with `FactId` empty. A derived value verifies a number only when
+    /// every input is itself a fact in the same scope, and only within the
+    /// metric's declared additive tolerance.
+    Inputs: string list
 }
 
 /// Project the fact-origin retrieved sources onto `ScopedFact`s. Non-fact
@@ -328,8 +334,74 @@ let scopedFacts (sources: RetrievedSource list) : ScopedFact list =
                 FactId = s.FactId |> Option.defaultValue ""
                 Rendering = rendering
                 Metric = ""
+                Inputs = []
             }
         | _ -> None)
+
+/// The facts a fact tool's result put in front of the model, read from the
+/// result exactly as the model was shown it. Two shapes are read, at any
+/// depth: a FACT, an object carrying a string `factId` and a string
+/// `rendering` (and, optionally, a string `metric`); and a DERIVED value,
+/// an object carrying a string `rendering`, a string `metric` and an
+/// `inputFactIds` array of strings. A withheld fact is never one of these:
+/// the disclosure gate decides whether a tool prints a rendering at all, so
+/// a fact the gate refused is in the result as an id and a policy, which
+/// neither shape matches. A result that is not JSON contributes nothing.
+///
+/// The caller decides which results are fact-tool results; this reads
+/// whatever it is handed.
+let toolResultFacts (content: string) : ScopedFact list =
+    let text (element: JsonElement) (name: string) =
+        match element.TryGetProperty name with
+        | true, v when v.ValueKind = JsonValueKind.String -> Some(v.GetString())
+        | _ -> None
+
+    let ids (element: JsonElement) (name: string) =
+        match element.TryGetProperty name with
+        | true, v when v.ValueKind = JsonValueKind.Array ->
+            let items = v.EnumerateArray() |> List.ofSeq
+
+            if items |> List.forall (fun i -> i.ValueKind = JsonValueKind.String) then
+                Some(items |> List.map _.GetString())
+            else
+                None
+        | _ -> None
+
+    let rec walk (element: JsonElement) : ScopedFact list =
+        match element.ValueKind with
+        | JsonValueKind.Array -> element.EnumerateArray() |> List.ofSeq |> List.collect walk
+        | JsonValueKind.Object ->
+            let own =
+                match text element "factId", text element "rendering", ids element "inputFactIds" with
+                | Some factId, Some rendering, None when factId <> "" -> [
+                    {
+                        FactId = factId
+                        Rendering = rendering
+                        Metric = text element "metric" |> Option.defaultValue ""
+                        Inputs = []
+                    }
+                  ]
+                | None, Some rendering, Some(_ :: _ as inputs) ->
+                    match text element "metric" with
+                    | Some metric -> [
+                        {
+                            FactId = ""
+                            Rendering = rendering
+                            Metric = metric
+                            Inputs = inputs
+                        }
+                      ]
+                    | None -> []
+                | _ -> []
+
+            own
+            @ (element.EnumerateObject() |> List.ofSeq |> List.collect (fun p -> walk p.Value))
+        | _ -> []
+
+    try
+        use document = JsonDocument.Parse content
+        walk document.RootElement
+    with :? JsonException -> []
 
 // ─── The seam (Phase 523.B) ──────────────────────────────────────────
 
@@ -360,9 +432,11 @@ module NumericFidelity =
         (registry: Grounding.IMetricRegistry option)
         (mode: string)
         : AnswerVerification =
+        let plain, derived = facts |> List.partition (fun f -> List.isEmpty f.Inputs)
+
         // Pre-parse the facts once — `(fact, value, precision)`.
         let parsedFacts =
-            facts
+            plain
             |> List.choose (fun f ->
                 let metric = registry |> Option.bind (fun r -> r.TryGetMetric f.Metric)
 
@@ -375,6 +449,33 @@ module NumericFidelity =
                         | None -> p
 
                     Some(f, v, precision))
+
+        // A derived value counts only when every input is a fact in this
+        // scope, and only for a metric the registry declares additive: its
+        // declared tolerance is the slack the match allows. An undeclared or
+        // non-additive metric's total, or one without a registry to say,
+        // never verifies anything.
+        let inScope =
+            plain |> List.map _.FactId |> List.filter (fun id -> id <> "") |> Set.ofList
+
+        let parsedDerived =
+            derived
+            |> List.choose (fun d ->
+                let tolerance =
+                    registry
+                    |> Option.bind (fun r -> r.TryGetMetric d.Metric)
+                    |> Option.bind _.RollUp
+                    |> Grounding.RollUp.additiveTolerance
+
+                match tolerance, Canonical.parse d.Rendering with
+                | Some tolerance, Some(value, _) when d.Inputs |> List.forall inScope.Contains ->
+                    Some(d, value, tolerance)
+                | _ -> None)
+
+        let derivedMatch (tokenPrecision: int) (tokenValue: decimal) =
+            parsedDerived
+            |> List.tryFind (fun (_, value, tolerance) ->
+                abs (tokenValue - Canonical.round tokenPrecision value) <= tolerance)
 
         let hasFacts = not (List.isEmpty facts)
 
@@ -390,6 +491,7 @@ module NumericFidelity =
                         Canonical = None
                         Verdict = (if hasFacts then NumberUnmatched else NoFactsInScope)
                         MatchedFactId = None
+                        DerivedFrom = None
                     }
                 | Some(tv, tp) ->
                     let canonical = Some((Canonical.round tp tv).ToString(CultureInfo.InvariantCulture))
@@ -400,6 +502,7 @@ module NumericFidelity =
                             Canonical = canonical
                             Verdict = NoFactsInScope
                             MatchedFactId = None
+                            DerivedFrom = None
                         }
                     else
                         match parsedFacts |> List.tryFind (fun (_, fv, _) -> Canonical.valuesMatch tp tv fv) with
@@ -408,13 +511,24 @@ module NumericFidelity =
                             Canonical = canonical
                             Verdict = NumberVerified
                             MatchedFactId = (if f.FactId = "" then None else Some f.FactId)
+                            DerivedFrom = None
                           }
-                        | None -> {
-                            Token = tok.Text
-                            Canonical = canonical
-                            Verdict = NumberUnmatched
-                            MatchedFactId = None
-                          })
+                        | None ->
+                            match derivedMatch tp tv with
+                            | Some(d, _, _) -> {
+                                Token = tok.Text
+                                Canonical = canonical
+                                Verdict = NumberVerified
+                                MatchedFactId = None
+                                DerivedFrom = Some d.Inputs
+                              }
+                            | None -> {
+                                Token = tok.Text
+                                Canonical = canonical
+                                Verdict = NumberUnmatched
+                                MatchedFactId = None
+                                DerivedFrom = None
+                              })
 
         {
             Verified = numbers |> List.filter (fun n -> n.Verdict = NumberVerified) |> List.length
@@ -659,7 +773,9 @@ let provenanceChainHead (citedFactIds: string list) : string option =
         |> Some
 
 /// The post-response numeric-fidelity stage, with the Phase 680 provenance
-/// join. Verifies the answer against the turn's retrieved facts, emits the
+/// join, over an explicit fact scope: the turn's retrieved facts and the
+/// facts its fact tools returned (`toolResultFacts`). Verifies the answer
+/// against that scope, emits the
 /// SSE verification event, audits every unmatched token to `IEventStore`
 /// (GP 6), records verified/unmatched counters (Phase 523.E), records ONE
 /// typed `AnswerVerification*` row through `join.AuditLog` naming the
@@ -671,10 +787,10 @@ let provenanceChainHead (citedFactIds: string list) : string option =
 /// effects — byte-for-byte the pre-523 path (GP 11 / GP 13). An empty
 /// `join` (`AnswerAuditJoin.none`) records no typed row and leaves the
 /// `IEventStore` trail exactly as Phase 523 wrote it.
-let runVerificationStageWithJoin
+let runVerificationStageWithScope
     (gate: AnswerGate option)
     (registry: Grounding.IMetricRegistry option)
-    (sources: RetrievedSource list)
+    (facts: ScopedFact list)
     (answer: string)
     (metricsSink: IMetricsSink option)
     (eventStore: IEventStore option)
@@ -692,7 +808,6 @@ let runVerificationStageWithJoin
         | Some { Mode = AnswerGateOff } -> return (answer, None)
         | Some g ->
             let modeStr = AnswerGateMode.toString g.Mode
-            let facts = scopedFacts sources
             let verification = g.Verifier.Verify(answer, facts, registry, modeStr)
 
             // Metrics — one increment per token outcome (Phase 523.E).
@@ -763,10 +878,11 @@ let runVerificationStageWithJoin
             | Some auditLog ->
                 let citedFactIds =
                     verification.Numbers
-                    |> List.choose (fun n ->
+                    |> List.collect (fun n ->
                         match n.Verdict, n.MatchedFactId with
-                        | NumberVerified, Some id when id <> "" -> Some id
-                        | _ -> None)
+                        | NumberVerified, Some id when id <> "" -> [ id ]
+                        | NumberVerified, _ -> n.DerivedFrom |> Option.defaultValue []
+                        | _ -> [])
                     |> List.distinct
                     |> List.sort
 
@@ -835,6 +951,38 @@ let runVerificationStageWithJoin
 
             return (finalAnswer, Some verification)
     }
+
+/// The verification stage with the provenance join, over the turn's
+/// retrieved facts alone (`scopedFacts sources`).
+let runVerificationStageWithJoin
+    (gate: AnswerGate option)
+    (registry: Grounding.IMetricRegistry option)
+    (sources: RetrievedSource list)
+    (answer: string)
+    (metricsSink: IMetricsSink option)
+    (eventStore: IEventStore option)
+    (join: AnswerAuditJoin)
+    (scopeId: string)
+    (taskId: Guid)
+    (conversationId: Guid)
+    (providerName: string)
+    (providerModel: string)
+    (logger: ILogger)
+    : Async<string * AnswerVerification option> =
+    runVerificationStageWithScope
+        gate
+        registry
+        (scopedFacts sources)
+        answer
+        metricsSink
+        eventStore
+        join
+        scopeId
+        taskId
+        conversationId
+        providerName
+        providerModel
+        logger
 
 /// The pre-Phase-680 entry point, preserved verbatim: the verification
 /// stage with no provenance join. Delegates with `AnswerAuditJoin.none`,

@@ -822,7 +822,10 @@ module FactsCompose =
                     // declares them all. `query_facts` answers about a
                     // subject; `query_metric_population` ranks a metric
                     // across a population and summarises what it ranked
-                    // over. Both take ids and neither can list them, so the
+                    // over; `aggregate_metric` sums a metric the registry
+                    // declares additive by group, so a total is the
+                    // server's arithmetic over gated facts, never the
+                    // model's. They take ids and none can list them, so the
                     // discovery surfaces ride the same knob:
                     // `list_metric_coverage` lists by metric and
                     // `list_fact_tables` by table. A deployment that armed

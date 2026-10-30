@@ -221,6 +221,7 @@ let registrationTests =
                     "query_metric_population"
                     "list_metric_coverage"
                     "list_fact_tables"
+                    "aggregate_metric"
                 ]
                 "the point read, the population read and (Phase 705) the discovery surface arrive together"
 

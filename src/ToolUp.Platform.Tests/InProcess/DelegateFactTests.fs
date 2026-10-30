@@ -486,6 +486,7 @@ let private quotingTests =
                             FactId = best.FactId
                             Rendering = FactRendering.render "" best.Value
                             Metric = "revenue"
+                            Inputs = []
                         }
                     ]
                     (Some registry)

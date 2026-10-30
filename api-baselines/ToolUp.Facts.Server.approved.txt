@@ -3,6 +3,13 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Facts.AggregateMetricTool (class)
+ToolUp.Facts.AggregateMetricTool.definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.AggregateMetricTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.AggregateMetricTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.AggregateMetricTool.populationQuery(ToolUp.Facts.AggregateQuery, System.Int32) : ToolUp.Facts.PopulationQuery
+ToolUp.Facts.AggregateMetricTool.resolve(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.AggregateQuery) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.Grounding.MetricDefinition, System.Int32], ToolUp.Facts.AggregateRefusal]
+ToolUp.Facts.AggregateMetricTool.rollUp(ToolUp.Facts.AggregateQuery, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Decimal, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict], ToolUp.Facts.PopulationResult) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AggregateResult, ToolUp.Facts.AggregateRefusal]
 ToolUp.Facts.AnswerPlanClausePlanner (class)
 ToolUp.Facts.AnswerPlanClausePlanner..ctor(ToolUp.Facts.IAnswerPlanner, System.Int32)
 ToolUp.Facts.AnswerPlanClausePlanner.TryPlan(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.AnswerPlan]

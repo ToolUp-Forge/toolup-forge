@@ -528,6 +528,7 @@ let private compositionTests =
                     "query_metric_population"
                     "list_metric_coverage"
                     "list_fact_tables"
+                    "aggregate_metric"
                 ]
                 "the fact tools, in compose order"
         }
