@@ -405,33 +405,33 @@ type IFactTableWriter =
     /// of it is open, and within the table's refresh cadence, the open is
     /// refused with `FactTableRunInProgress` naming that run.
     abstract OpenRun:
-        scopeId: string * tableId: string * ?provenance: FactTableRunProvenance * ?options: FactTableRunOptions ->
+        scope: ResolvedScope * tableId: string * ?provenance: FactTableRunProvenance * ?options: FactTableRunOptions ->
             Async<Result<FactTableRunRecord, FactTableWriteError>>
 
     /// Stage a batch of rows on an open run. Rows are validated at commit,
     /// not here, so a producer streams without a round trip per defect.
     /// Returns the run's record with its updated staged-row count.
     abstract WriteRows:
-        scopeId: string * runId: string * rows: FactTableRow list ->
+        scope: ResolvedScope * runId: string * rows: FactTableRow list ->
             Async<Result<FactTableRunRecord, FactTableWriteError>>
 
     /// Commit an open run: validate every staged row against the
     /// declaration and either reject the whole run (writing nothing, naming
     /// the rows) or swap it in as the table's current content, minting its
     /// watermark, its change summary and ONE audit record.
-    abstract Commit: scopeId: string * runId: string -> Async<Result<FactTableCommit, FactTableWriteError>>
+    abstract Commit: scope: ResolvedScope * runId: string -> Async<Result<FactTableCommit, FactTableWriteError>>
 
     /// End an open run without committing it. For a `Required` table the
     /// run then reads as a failed run.
     abstract Abandon:
-        scopeId: string * runId: string * reason: string -> Async<Result<FactTableRunRecord, FactTableWriteError>>
+        scope: ResolvedScope * runId: string * reason: string -> Async<Result<FactTableRunRecord, FactTableWriteError>>
 
     /// Every run of a table in a scope, most recently opened first.
-    abstract Runs: scopeId: string * tableId: string -> Async<Result<FactTableRunRecord list, FactTableWriteError>>
+    abstract Runs: scope: ResolvedScope * tableId: string -> Async<Result<FactTableRunRecord list, FactTableWriteError>>
 
     /// A table's standing: freshness against its cadence, its last commit,
     /// and its latest run's derived outcome.
-    abstract Status: scopeId: string * tableId: string -> Async<Result<FactTableStatus, FactTableWriteError>>
+    abstract Status: scope: ResolvedScope * tableId: string -> Async<Result<FactTableStatus, FactTableWriteError>>
 
 /// Pure row validation against a declaration — shared by every writer so
 /// "what a valid run is" has one definition.
@@ -1168,7 +1168,7 @@ type IFactTableOrphanSweep =
     /// Sweep a scope: delete the staged rows, and the provenance the writer
     /// does not keep, of every run its ledger records as ended, and report
     /// what went and what the store refused.
-    abstract SweepOrphans: scopeId: string -> Async<Result<FactTableOrphanSweepReport, FactTableWriteError>>
+    abstract SweepOrphans: scope: ResolvedScope -> Async<Result<FactTableOrphanSweepReport, FactTableWriteError>>
 
 /// Running the orphan sweep, and the sweep the platform writers share.
 module FactTableOrphanSweep =
@@ -1178,10 +1178,10 @@ module FactTableOrphanSweep =
     /// (a writer that keeps no leftovers has none to reclaim).
     let sweep
         (writer: IFactTableWriter)
-        (scopeId: string)
+        (scope: ResolvedScope)
         : Async<Result<FactTableOrphanSweepReport, FactTableWriteError>> =
         match box writer with
-        | :? IFactTableOrphanSweep as sweeper -> sweeper.SweepOrphans scopeId
+        | :? IFactTableOrphanSweep as sweeper -> sweeper.SweepOrphans scope
         | _ -> async { return Ok FactTableOrphanSweepReport.empty }
 
     /// Where a writer keeps a run's leftovers.
@@ -1613,7 +1613,9 @@ type DefaultFactTableWriter
 
     interface IFactTableWriter with
 
-        member _.OpenRun(scopeId, tableId, ?provenance, ?options) = async {
+        member _.OpenRun(scope: ResolvedScope, tableId, ?provenance, ?options) = async {
+            let scopeId = scope.ScopeId
+
             match declared tableId with
             | Error e -> return Error e
             | Ok table ->
@@ -1690,7 +1692,9 @@ type DefaultFactTableWriter
                             return Error e
         }
 
-        member _.WriteRows(scopeId, runId, rows) = async {
+        member _.WriteRows(scope: ResolvedScope, runId, rows) = async {
+            let scopeId = scope.ScopeId
+
             match! openRun scopeId runId with
             | Error e -> return Error e
             | Ok opened ->
@@ -1707,7 +1711,9 @@ type DefaultFactTableWriter
                         | Ok() -> return Ok staged
         }
 
-        member _.Commit(scopeId, runId) = async {
+        member _.Commit(scope: ResolvedScope, runId) = async {
+            let scopeId = scope.ScopeId
+
             match! openRun scopeId runId with
             | Error e -> return Error e
             | Ok opened ->
@@ -1850,12 +1856,14 @@ type DefaultFactTableWriter
 
                                             let drafts = draftsFor table runId provenance options watermark rows removed
 
-                                            match! facts.AssertBatch(scopeId, drafts) with
+                                            match! facts.AssertBatch(scope, drafts) with
                                             | Error e ->
                                                 return
                                                     Error(
                                                         FactTableStorageFailure(
-                                                            sprintf "the fact store refused the run's facts: %s" e
+                                                            sprintf
+                                                                "the fact store refused the run's facts: %s"
+                                                                (FactStoreError.describe e)
                                                         )
                                                     )
                                             | Ok receipt ->
@@ -1927,7 +1935,9 @@ type DefaultFactTableWriter
                                                             return Ok commit
         }
 
-        member _.Abandon(scopeId, runId, reason) = async {
+        member _.Abandon(scope: ResolvedScope, runId, reason) = async {
+            let scopeId = scope.ScopeId
+
             match! openRun scopeId runId with
             | Error e -> return Error e
             | Ok opened ->
@@ -1947,7 +1957,9 @@ type DefaultFactTableWriter
                     return Ok closed
         }
 
-        member _.Runs(scopeId, tableId) = async {
+        member _.Runs(scope: ResolvedScope, tableId) = async {
+            let scopeId = scope.ScopeId
+
             match declared tableId with
             | Error e -> return Error e
             | Ok table ->
@@ -1968,14 +1980,16 @@ type DefaultFactTableWriter
                 | Ok runs -> return Ok(runs |> List.sortByDescending (fun r -> r.OpenedAt, r.BaseSequence, r.RunId))
         }
 
-        member this.Status(scopeId, tableId) = async {
+        member this.Status(scope: ResolvedScope, tableId) = async {
+            let scopeId = scope.ScopeId
+
             match declared tableId with
             | Error e -> return Error e
             | Ok table ->
                 match! currentSequence scopeId tableId with
                 | Error e -> return Error e
                 | Ok(_, head) ->
-                    match! (this :> IFactTableWriter).Runs(scopeId, tableId) with
+                    match! (this :> IFactTableWriter).Runs(scope, tableId) with
                     | Error e -> return Error e
                     | Ok runs ->
                         let at = now ()
@@ -1999,7 +2013,8 @@ type DefaultFactTableWriter
 
     interface IFactTableOrphanSweep with
 
-        member _.SweepOrphans(scopeId) = async {
+        member _.SweepOrphans(scope: ResolvedScope) = async {
+            let scopeId = scope.ScopeId
             let! report = sweepOrphans scopeId
             return Ok report
         }

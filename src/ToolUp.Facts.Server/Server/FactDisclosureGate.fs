@@ -737,30 +737,31 @@ type FactDisclosureGate
             | _ -> []
         | None -> []
 
-    // A store read, as the head the decision procedure judges.
-    let headIn (read: Async<Fact option>) : Async<HeldFactRow option> = async {
-        let! fact = read
+    // A store read, as the head the decision procedure judges. A read the
+    // store could not make is raised (`FactStoreFault`), never judged as a
+    // fact the scope does not hold.
+    let headIn (read: Async<Result<Fact option, FactStoreError>>) : Async<HeldFactRow option> = async {
+        let! fact = read |> FactStoreResult.orRaiseAsync
         return fact |> Option.map HeldFactRow.ofFact
     }
 
     // The scope's disclosure-taint index: read from a store that keeps one,
     // otherwise rebuilt from the scope's listing (the cost of a store that
     // does not offer the index).
-    let taintIndexIn (scopeId: string) (scope: ResolvedScope option) () : Async<DisclosureTaintIndex> =
-        let everything = {
-            FactQuery.all with
-                IncludeSuperseded = true
-        }
+    let taintIndexIn (scope: ResolvedScope) () : Async<DisclosureTaintIndex> =
+        match store with
+        | :? IDisclosureTaintIndexSource as source -> source.ReadTaintIndex scope
+        | _ -> async {
+            let! all =
+                store.Query(
+                    scope,
+                    {
+                        FactQuery.all with
+                            IncludeSuperseded = true
+                    }
+                )
+                |> FactStoreResult.orRaiseAsync
 
-        match store, scope with
-        | :? IDisclosureTaintIndexSource as source, Some s -> source.ReadTaintIndex s
-        | :? IDisclosureTaintIndexSource as source, None -> source.ReadTaintIndex scopeId
-        | _, Some s -> async {
-            let! all = store.Query(s, everything)
-            return DisclosureTaintIndex.ofFacts all
-          }
-        | _, None -> async {
-            let! all = store.Query(scopeId, everything)
             return DisclosureTaintIndex.ofFacts all
           }
 
@@ -966,7 +967,7 @@ type FactDisclosureGate
         : Async<GroundedRead list> =
         read
             (fun factId -> headIn (store.Get(scope, factId)))
-            (taintIndexIn scope.ScopeId (Some scope))
+            (taintIndexIn scope)
             scope.ScopeId
             (scopeTeamOf scope)
             principal
@@ -995,23 +996,10 @@ type FactDisclosureGate
 
     interface IFactDisclosureGate with
 
-        member _.Check(scopeId: string, principal, surface, factIds) =
-            check
-                (fun factId -> headIn (store.Get(scopeId, factId)))
-                (taintIndexIn scopeId None)
-                scopeId
-                None
-                principal
-                surface
-                factIds
-
-        // Phase 797 — the request-path form. The store is asked through
-        // its typed members, so the scope the gate re-resolves ids in is
-        // the one the platform minted, by construction.
         member _.Check(scope: ResolvedScope, principal, surface, factIds) =
             check
                 (fun factId -> headIn (store.Get(scope, factId)))
-                (taintIndexIn scope.ScopeId (Some scope))
+                (taintIndexIn scope)
                 scope.ScopeId
                 (scopeTeamOf scope)
                 principal
@@ -1027,7 +1015,7 @@ type FactDisclosureGate
 
             check
                 (fun factId -> async.Return(Map.tryFind factId byId))
-                (taintIndexIn scope.ScopeId (Some scope))
+                (taintIndexIn scope)
                 scope.ScopeId
                 (scopeTeamOf scope)
                 principal
@@ -1044,7 +1032,7 @@ type FactDisclosureGate
 
             check
                 (fun factId -> async.Return(Map.tryFind factId byId))
-                (taintIndexIn scope.ScopeId (Some scope))
+                (taintIndexIn scope)
                 scope.ScopeId
                 (scopeTeamOf scope)
                 principal

@@ -72,9 +72,9 @@ type NoFactRecomputer() =
 /// discover the delegated paths by a type test, and a composition with no
 /// delegate never sees this interface at all (GP 13).
 ///
-/// Walks are platform-carried work (a coherence sweep, a refresh), so the
-/// members take the persisted `string` scope, as the store's own walk-facing
-/// overloads do.
+/// Walks are platform-carried work (a coherence sweep, a refresh): each runs
+/// under the `ResolvedScope` the resolver re-minted from the work's carried
+/// `ScopeKey`, exactly as a request-path read does.
 type IDelegatedFactWalks =
     inherit IFactStore
 
@@ -85,19 +85,19 @@ type IDelegatedFactWalks =
     /// Ask the table for the delegate's current run — its watermark, row
     /// count and period reach — or `None` when the table has never
     /// committed in this scope.
-    abstract CurrentRun: scopeId: string * metric: MetricRef -> Async<Result<DelegateRun option, DelegateRefusal>>
+    abstract CurrentRun: scope: ResolvedScope * metric: MetricRef -> Async<Result<DelegateRun option, DelegateRefusal>>
 
     /// Ask the table for the current run's rows of the named subjects (a
     /// bounded point read per subject). Subjects the run does not carry are
     /// simply absent from the answer.
     abstract CurrentRows:
-        scopeId: string * metric: MetricRef * subjects: string list list ->
+        scope: ResolvedScope * metric: MetricRef * subjects: string list list ->
             Async<Result<DelegateTableRow list, DelegateRefusal>>
 
     /// Ask the table for the current run's per-parent totals of the
     /// delegate's column (one entry per parent path and period).
     abstract ChildTotals:
-        scopeId: string * metric: MetricRef * periodOverlaps: TemporalExtent option ->
+        scope: ResolvedScope * metric: MetricRef * periodOverlaps: TemporalExtent option ->
             Async<Result<DelegateChildTotal list, DelegateRefusal>>
 
 /// The pure invalidation derivation + the OnQuery inline recompute path.
@@ -142,11 +142,17 @@ module FactInvalidation =
     /// invalidation walk's result (task 561.B). Only current heads are
     /// returned: an already-superseded fact needs no re-invalidation (its
     /// successor is the live head). A method-less, now-visible query
-    /// (`FactQuery.all`) yields the heads; `isInvalidated` filters them.
-    let invalidatedHeads (store: IFactStore) (scopeId: string) (invalidatedInputs: Set<string>) : Async<Fact list> = async {
-        let! heads = store.Query(scopeId, FactQuery.all)
-        return heads |> List.filter (isInvalidated invalidatedInputs)
-    }
+    /// (`FactQuery.all`) yields the heads; `isInvalidated` filters them. A
+    /// store fault is the walk's `Error`, never an empty walk.
+    let invalidatedHeads
+        (store: IFactStore)
+        (scope: ResolvedScope)
+        (invalidatedInputs: Set<string>)
+        : Async<Result<Fact list, FactStoreError>> =
+        async {
+            let! heads = store.Query(scope, FactQuery.all)
+            return heads |> Result.map (List.filter (isInvalidated invalidatedInputs))
+        }
 
     /// The effective `RecomputePolicy` for a fact — its metric's declared
     /// policy, or `Manual` when the metric is unregistered or declares
@@ -189,21 +195,21 @@ module FactInvalidation =
     let recomputeNow
         (store: IFactStore)
         (recomputer: IFactRecomputer)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (fact: Fact)
         : Async<Result<Fact option, string>> =
         async {
-            let! recomputed = recomputer.Recompute(scopeId, fact)
+            let! recomputed = recomputer.Recompute(scope.ScopeId, fact)
 
             match recomputed with
             | Error e -> return Error e
             | Ok None -> return Ok None
             | Ok(Some draft) ->
-                let! asserted = store.Assert(scopeId, draft)
+                let! asserted = store.Assert(scope, draft)
 
                 match asserted with
                 | Ok f -> return Ok(Some f)
-                | Error e -> return Error e
+                | Error e -> return Error(FactStoreError.describe e)
         }
 
     // ── The delegated path (Phase 889) ─────────────────────────────
@@ -229,14 +235,14 @@ module FactInvalidation =
     /// `currentToken`).
     let staleDelegatedHeads
         (store: IFactStore)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (delegateFact: DelegateFact)
         (currentToken: string)
-        : Async<Fact list> =
+        : Async<Result<Fact list, FactStoreError>> =
         async {
             let! heads =
                 store.Query(
-                    scopeId,
+                    scope,
                     {
                         FactQuery.all with
                             Metric = Some delegateFact.Metric
@@ -244,5 +250,7 @@ module FactInvalidation =
                     }
                 )
 
-            return heads |> List.filter (isMintedUnderStaleRun delegateFact currentToken)
+            return
+                heads
+                |> Result.map (List.filter (isMintedUnderStaleRun delegateFact currentToken))
         }

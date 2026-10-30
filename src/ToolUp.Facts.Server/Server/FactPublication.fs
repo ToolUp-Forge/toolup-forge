@@ -365,12 +365,14 @@ module internal Consolidation =
     /// removing every withdrawn origin's rows with absences naming why.
     let commit
         (deps: FactPublicationDeps)
-        (targetScopeId: string)
+        (target: ResolvedScope)
         (table: FactTableDefinition)
         (lookup: string -> PublicationGrant option)
         (publicationRunId: string)
         : Async<Result<FactTableCommit * string list, PublicationRefusal>> =
         async {
+            let targetScopeId = target.ScopeId
+
             match! ledger deps targetScopeId table.Id with
             | Error e -> return Error e
             | Ok origins ->
@@ -432,15 +434,15 @@ module internal Consolidation =
 
                 let rows = inForce |> List.collect (fun o -> o.Rows |> List.map _.Row)
 
-                match! writer.OpenRun(targetScopeId, table.Id, provenance) with
+                match! writer.OpenRun(target, table.Id, provenance) with
                 | Error e -> return Error(storageFailure e)
                 | Ok run ->
-                    match! writer.WriteRows(targetScopeId, run.RunId, rows) with
+                    match! writer.WriteRows(target, run.RunId, rows) with
                     | Error e ->
-                        let! _ = writer.Abandon(targetScopeId, run.RunId, FactTableWriteError.describe e)
+                        let! _ = writer.Abandon(target, run.RunId, FactTableWriteError.describe e)
                         return Error(storageFailure e)
                     | Ok _ ->
-                        match! writer.Commit(targetScopeId, run.RunId) with
+                        match! writer.Commit(target, run.RunId) with
                         | Error e -> return Error(storageFailure e)
                         | Ok commit ->
                             // The withdrawn origins' rows are now absences;
@@ -618,7 +620,7 @@ module internal FactPublicationSeam =
                             ()
                         | None -> ()
 
-                        match! Consolidation.commit deps target table lookup origin.PublicationRunId with
+                        match! Consolidation.commit deps pair.Target table lookup origin.PublicationRunId with
                         | Error e -> return Error e
                         | Ok(commit, _) ->
                             let targetRun = FactTableWatermark.render commit.Watermark
@@ -1193,6 +1195,7 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                             Method = Some method
                     }
                 )
+                |> FactStoreResult.orRaiseAsync
 
             return
                 facts
@@ -1361,7 +1364,7 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                                 match deps.Writer with
                                 | None -> return None
                                 | Some writer ->
-                                    match! writer.Status(source.ScopeId, sourceTable.Id) with
+                                    match! writer.Status(source, sourceTable.Id) with
                                     | Ok status ->
                                         return
                                             status.LastCommit
@@ -1618,7 +1621,7 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                 | Some _, Some table ->
                     let refreshId = Guid.NewGuid().ToString "N"
 
-                    match! Consolidation.commit deps target.ScopeId table lookup refreshId with
+                    match! Consolidation.commit deps target table lookup refreshId with
                     | Error e -> return Error e
                     | Ok(commit, withdrawn) ->
                         let token = FactTableWatermark.render commit.Watermark

@@ -905,9 +905,7 @@ type GroundedNarrativeRunner
                                 CanonicalUrl = None
                             }
 
-                            match!
-                                gate.Check(context.Scope.ScopeId, definition.Principal, definition.Surface, probe)
-                            with
+                            match! gate.Check(context.Scope, definition.Principal, definition.Surface, probe) with
                             | Grounded _ -> drawn.Add((sectionId, elements))
                             | Ungrounded offences ->
                                 offences
@@ -1015,13 +1013,13 @@ type GroundedNarrativeRunner
                     match tryService<INarrativeIngestor> services with
                     | None -> return None
                     | Some ingestor ->
-                        let! outcome = ingestor.Ingest(scope, definition.Principal, document)
+                        let! outcome = ingestor.Ingest(request.Scope, definition.Principal, document)
                         return Some outcome
                 }
 
                 let! certificate =
                     gate.Certify(
-                        request.Scope.ScopeId,
+                        request.Scope,
                         definition.Principal,
                         string narrativeId,
                         NarrativeCitation.factIds citations
@@ -1124,12 +1122,7 @@ type GroundedNarrativeRunner
                                 | Error reason -> return! failed request reason
                                 | Ok document ->
                                     match!
-                                        gate.Check(
-                                            request.Scope.ScopeId,
-                                            definition.Principal,
-                                            definition.Surface,
-                                            document
-                                        )
+                                        gate.Check(request.Scope, definition.Principal, definition.Surface, document)
                                     with
                                     | Grounded citations ->
                                         return! publish request wording gate scope document marks citations

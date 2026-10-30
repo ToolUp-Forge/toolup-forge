@@ -207,92 +207,99 @@ module FactQueryTool =
                     IncludeSuperseded = args.IncludeSuperseded
                 }
 
-                let! facts = store.Query(scope, query)
-
-                // Disclosure at the door (559.B): one gate check over
-                // every returned id at the FactToolResult surface. The
-                // gate audits each deny (GP 6).
-                let! verdicts = gate.Check(scope, principal, FactToolResult, facts |> List.map _.FactId)
-
-                // An id the gate returned no verdict for is denied,
-                // conservatively — the door never fails open.
-                let verdictFor (factId: string) =
-                    verdicts
-                    |> Map.tryFind factId
-                    |> Option.defaultValue (FactNotDisclosable "unknown-fact")
-
-                let disclosable, withheld =
-                    facts
-                    |> List.map (fun fact -> fact, verdictFor fact.FactId)
-                    |> List.partition (fun (_, verdict) -> verdict = FactDisclosable)
-
-                // The typed not-disclosable marker (Phase 525 vocabulary):
-                // fact id + policy ref + the canonical refusal wording —
-                // never the value.
-                let withheldMarkers =
-                    withheld
-                    |> List.map (fun (fact, verdict) ->
-                        let policyRef =
-                            match verdict with
-                            | FactNotDisclosable policyRef -> policyRef
-                            | FactDisclosable -> "unknown-fact" // unreachable — partitioned above
-
-                        {|
-                            factId = fact.FactId
-                            policyRef = policyRef
-                            status = FactDisclosureVerdict.refusalText policyRef
-                        |})
-
-                let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric args.Metric)
-
-                let policy =
-                    metricDef
-                    |> Option.map _.Staleness
-                    |> Option.defaultValue Grounding.UntilSuperseded
-
-                let now = clock().ToUniversalTime()
-
-                let! projected =
-                    disclosable
-                    |> List.map (fun (fact, _) -> async {
-                        // The fact's successor, if a later assertion
-                        // superseded it (an AsOf reconstruction, or an
-                        // include_superseded history read).
-                        let! chain = store.QuerySupersessionChain(scope, fact.FactId)
-
-                        let successor = chain |> List.tryFind (fun g -> g.Supersedes = Some fact.FactId)
-
-                        let freshness, staleSince =
-                            match Freshness.derive policy fact successor.IsNone now with
-                            | Fresh -> "Fresh", None
-                            | Stale since -> "Stale", Some(since.ToUniversalTime().ToString "o")
-
-                        return {|
-                            factId = fact.FactId
-                            subject = SubjectRef.toString fact.Subject
-                            metric = fact.Metric.Value
-                            rendering = FactRendering.renderFor metricDef fact.Value
-                            periodFrom = fact.Period.From.ToUniversalTime().ToString "o"
-                            periodTo = fact.Period.To.ToUniversalTime().ToString "o"
-                            periodLabel = fact.Period.Label
-                            asOf = fact.AsOf.ToUniversalTime().ToString "o"
-                            freshness = freshness
-                            staleSince = staleSince
-                            supersededBy = successor |> Option.map _.FactId
-                            method = Fact.methodIdentity fact.Method
-                            // Phase 994 — the inputs the fact was computed
-                            // from, by content hash, so a cited number
-                            // reaches its source in one hop.
-                            inputs = InputHash.named fact.Evidence
+                match! store.Query(scope, query) with
+                | Error fault ->
+                    return
+                        FactTool.serialize {|
+                            error = FactStoreError.describe fault
                         |}
-                    })
-                    |> Async.Sequential
+                | Ok facts ->
 
-                return
-                    FactTool.serialize {|
-                        facts = Array.toList projected
-                        withheld = withheldMarkers
-                    |}
+                    // Disclosure at the door (559.B): one gate check over
+                    // every returned id at the FactToolResult surface. The
+                    // gate audits each deny (GP 6).
+                    let! verdicts = gate.Check(scope, principal, FactToolResult, facts |> List.map _.FactId)
+
+                    // An id the gate returned no verdict for is denied,
+                    // conservatively — the door never fails open.
+                    let verdictFor (factId: string) =
+                        verdicts
+                        |> Map.tryFind factId
+                        |> Option.defaultValue (FactNotDisclosable "unknown-fact")
+
+                    let disclosable, withheld =
+                        facts
+                        |> List.map (fun fact -> fact, verdictFor fact.FactId)
+                        |> List.partition (fun (_, verdict) -> verdict = FactDisclosable)
+
+                    // The typed not-disclosable marker (Phase 525 vocabulary):
+                    // fact id + policy ref + the canonical refusal wording —
+                    // never the value.
+                    let withheldMarkers =
+                        withheld
+                        |> List.map (fun (fact, verdict) ->
+                            let policyRef =
+                                match verdict with
+                                | FactNotDisclosable policyRef -> policyRef
+                                | FactDisclosable -> "unknown-fact" // unreachable — partitioned above
+
+                            {|
+                                factId = fact.FactId
+                                policyRef = policyRef
+                                status = FactDisclosureVerdict.refusalText policyRef
+                            |})
+
+                    let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric args.Metric)
+
+                    let policy =
+                        metricDef
+                        |> Option.map _.Staleness
+                        |> Option.defaultValue Grounding.UntilSuperseded
+
+                    let now = clock().ToUniversalTime()
+
+                    let! projected =
+                        disclosable
+                        |> List.map (fun (fact, _) -> async {
+                            // The fact's successor, if a later assertion
+                            // superseded it (an AsOf reconstruction, or an
+                            // include_superseded history read).
+                            let! chain =
+                                store.QuerySupersessionChain(scope, fact.FactId) |> FactStoreResult.orRaiseAsync
+
+                            let successor = chain |> List.tryFind (fun g -> g.Supersedes = Some fact.FactId)
+
+                            let freshness, staleSince =
+                                match Freshness.derive policy fact successor.IsNone now with
+                                | Fresh -> "Fresh", None
+                                | Stale since -> "Stale", Some(since.ToUniversalTime().ToString "o")
+
+                            return {|
+                                factId = fact.FactId
+                                subject = SubjectRef.toString fact.Subject
+                                metric = fact.Metric.Value
+                                rendering = FactRendering.renderFor metricDef fact.Value
+                                periodFrom = fact.Period.From.ToUniversalTime().ToString "o"
+                                periodTo = fact.Period.To.ToUniversalTime().ToString "o"
+                                periodLabel = fact.Period.Label
+                                asOf = fact.AsOf.ToUniversalTime().ToString "o"
+                                freshness = freshness
+                                staleSince = staleSince
+                                supersededBy = successor |> Option.map _.FactId
+                                method = Fact.methodIdentity fact.Method
+                                // Phase 994 — the inputs the fact was computed
+                                // from, by content hash, so a cited number
+                                // reaches its source in one hop.
+                                inputs = InputHash.named fact.Evidence
+                            |}
+                        })
+                        |> Async.Sequential
+
+                    return
+                        FactTool.serialize {|
+                            facts = Array.toList projected
+                            withheld = withheldMarkers
+                        |}
         }
 
     // ── HttpContext adapter ───────────────────────────────────────

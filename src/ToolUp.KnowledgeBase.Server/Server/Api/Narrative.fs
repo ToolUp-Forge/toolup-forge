@@ -34,11 +34,11 @@ open KnowledgeBase.ServerApiDeps
 let private disclosureRefusalFor (deps: KnowledgeApiDeps) (document: NarrativeDocument) : Async<string option> = async {
     match deps.DisclosureGate with
     | None -> return None
-    | Some gate ->
+    | Some(gate, factScope) ->
         match NarrativeFacts.factRefs document |> Set.toList with
         | [] -> return None
         | refs ->
-            let! verdicts = gate.Check(deps.Scope.ScopeId, deps.UserId, FactNarrativePublication, refs)
+            let! verdicts = gate.Check(factScope, deps.UserId, FactNarrativePublication, refs)
 
             let offending =
                 verdicts

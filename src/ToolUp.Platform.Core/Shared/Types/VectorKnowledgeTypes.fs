@@ -432,11 +432,15 @@ type ResolvedFact = {
 /// 4): the implementation scope-filters the store query *before* reading,
 /// making a fact from one scope unreachable from another.
 ///
-/// GP 12 audit: identity by value (`scopeId` string, value records); async
+/// The scope is the `ResolvedScope` the platform's scope resolution minted
+/// for the caller — never a string — so no clause can be resolved in a
+/// shard nobody resolved.
+///
+/// GP 12 audit: identity by value (a resolved scope, value records); async
 /// at the boundary; no callbacks; stateless between calls; scope is the
 /// shard key with no cross-scope ordering promise; no timing primitives.
 type IFactResolver =
-    abstract Resolve: scopeId: string * clause: FactClause -> Async<ResolvedFact list>
+    abstract Resolve: scope: ResolvedScope * clause: FactClause -> Async<ResolvedFact list>
 
 // ─── Fact-clause planning seam (Phase 708) ───────────────────────────
 //
@@ -506,21 +510,12 @@ module PlannedFactClauses =
 /// retention the id names; scope is the shard key with no cross-scope
 /// ordering promise; no timing primitives (the bound is the caller's).
 type IFactClausePlanner =
-    /// Compile `question` into pushable clauses under the caller's scope.
-    /// Never throws for an unanswerable question — an unresolvable turn
-    /// returns `PlannedFactClauses.none`, exactly as a turn that named no
-    /// vocabulary does.
-    ///
-    /// The string-keyed form, kept for one release as the compatibility
-    /// path (Phase 821). The request path calls the `ResolvedScope`
-    /// overload below.
-    abstract PlanClauses: scopeId: string * principal: string * question: string -> Async<PlannedFactClauses>
-
-    /// The request-path form (Phase 821): plan under the scope the
-    /// platform's scope resolution minted for the request, so the clauses
-    /// are resolved and disclosure-gated under the resolver's scope rather
-    /// than one the caller derived. Semantics are otherwise exactly the
-    /// string form's over `scope.ScopeId`.
+    /// Compile `question` into pushable clauses under the scope the
+    /// platform's scope resolution minted for the caller, so the clauses are
+    /// resolved and disclosure-gated under the resolver's scope rather than
+    /// one the caller derived. Never throws for an unanswerable question — an
+    /// unresolvable turn returns `PlannedFactClauses.none`, exactly as a turn
+    /// that named no vocabulary does.
     abstract PlanClauses: scope: ResolvedScope * principal: string * question: string -> Async<PlannedFactClauses>
 
 // ─── Disclosure egress seam (Phase 525) ──────────────────────────────
@@ -633,21 +628,12 @@ module FactDisclosureVerdict =
 /// boundary; no callbacks; stateless between calls; scope is the shard key
 /// with no cross-scope ordering promise; no timing primitives.
 type IFactDisclosureGate =
-    /// The string-keyed form. Kept for callers whose scope is carried by
-    /// the platform rather than resolved from a request principal — a
-    /// job's persisted scope, an import, a health sweep — and for one
-    /// release as the compatibility path for consumers on the old shape.
-    /// A request-path door (an AI tool, a handler) takes the
-    /// `ResolvedScope` overload below instead, so it cannot be handed a
-    /// scope the principal did not resolve to (Phase 797).
-    abstract Check:
-        scopeId: string * principal: string * surface: FactEgressSurface * factIds: string list ->
-            Async<Map<string, FactDisclosureVerdict>>
-
-    /// The request-path form (Phase 797): the scope is the one the
-    /// platform's scope resolution minted for this request, which is the
-    /// only way to obtain a `ResolvedScope`. Semantics are otherwise
-    /// exactly the string form's over `scope.ScopeId`.
+    /// The verdict per fact id. The scope is the one the platform's scope
+    /// resolution minted — for a request, the scope it resolved to; for
+    /// platform-carried work, the scope the resolver re-minted from the
+    /// carried `ScopeKey` at execution. It is the only way to obtain a
+    /// `ResolvedScope`, so the gate cannot be asked about a scope nobody
+    /// resolved.
     abstract Check:
         scope: ResolvedScope * principal: string * surface: FactEgressSurface * factIds: string list ->
             Async<Map<string, FactDisclosureVerdict>>
@@ -690,7 +676,7 @@ module FactWebhookEgress =
     /// consults the gate.
     let permittedFactIds
         (gate: IFactDisclosureGate)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (factIds: string list)
         : Async<string list> =
@@ -698,7 +684,7 @@ module FactWebhookEgress =
             match factIds with
             | [] -> return []
             | ids ->
-                let! verdicts = gate.Check(scopeId, principal, FactWebhook, ids)
+                let! verdicts = gate.Check(scope, principal, FactWebhook, ids)
 
                 return
                     ids

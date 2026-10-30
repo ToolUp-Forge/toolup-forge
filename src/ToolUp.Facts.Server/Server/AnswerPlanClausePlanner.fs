@@ -47,7 +47,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// 708.B). The durable event is 560.D's `AnswerPlanRecorded` — the same
 /// one `IAnswerPlanner.Record` writes, from the same plan value.
 ///
-/// GP 12 audit: identity by value (three strings); async at the
+/// GP 12 audit: identity by value (a resolved scope and two strings); async at the
 /// boundary; no callbacks; the retention it reads is bounded and
 /// per-process, so a distributed implementation would carry the plan in
 /// a shared store without changing this signature.
@@ -57,7 +57,7 @@ type IPlannedAnswerRecorder =
     /// retained plan (an id from another process, or one evicted by the
     /// retention bound); the answer stands, it simply carries no plan
     /// node.
-    abstract RecordPlanned: scopeId: string * messageId: string * planId: string -> Async<bool>
+    abstract RecordPlanned: scope: ResolvedScope * messageId: string * planId: string -> Async<bool>
 
 /// The default `IFactClausePlanner` over the Phase 560 answer planner.
 /// Registered in DI by `FactsCompose.withFactStore` alongside the planner
@@ -146,14 +146,9 @@ type AnswerPlanClausePlanner(planner: IAnswerPlanner, retention: int) =
 
     interface IFactClausePlanner with
 
-        member this.PlanClauses(scopeId: string, principal, question) = async {
-            let! plan = planner.Plan(scopeId, principal, question)
-            return this.ClausesFor plan
-        }
-
-        // Phase 821 — the request path: the minted scope reaches the
-        // planner's typed form, so the store reads and gate checks behind
-        // these clauses take the resolver's scope, never a derived string.
+        // The minted scope reaches the planner, so the store reads and gate
+        // checks behind these clauses take the resolver's scope, never a
+        // derived string.
         member this.PlanClauses(scope: ResolvedScope, principal, question) = async {
             let! plan = planner.Plan(scope, principal, question)
             return this.ClausesFor plan
@@ -161,10 +156,10 @@ type AnswerPlanClausePlanner(planner: IAnswerPlanner, retention: int) =
 
     interface IPlannedAnswerRecorder with
 
-        member _.RecordPlanned(scopeId, messageId, planId) = async {
+        member _.RecordPlanned(scope, messageId, planId) = async {
             match retained.TryRemove planId with
             | Some plan ->
-                do! planner.Record(scopeId, messageId, plan)
+                do! planner.Record(scope, messageId, plan)
                 return true
             | None -> return false
         }

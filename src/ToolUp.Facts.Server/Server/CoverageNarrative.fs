@@ -591,20 +591,19 @@ module CoverageNarrative =
     let readHierarchy
         (store: IFactStore)
         (gate: IFactDisclosureGate)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (metricId: string)
         (hierarchy: Grounding.SubjectDefinition)
         : Async<HierarchyCoverage option> =
         async {
-            let! outcome = store.QueryPopulation(scopeId, CoverageTool.coverageQuery metricId hierarchy.Id)
+            let! outcome = store.QueryPopulation(scope, CoverageTool.coverageQuery metricId hierarchy.Id)
 
             match outcome with
-            // A store fault is not a coverage answer. Reported as "this
-            // pair holds nothing" rather than as an error interleaved into
-            // a document: a narrative is not the place to surface a store
-            // fault, and the ordering is explicit so Phase 701's two typed
-            // refusals are both unreachable here.
+            // A storage fault is raised — the regeneration fails and is
+            // logged — never read as a pair holding nothing. The ordering is
+            // explicit, so the store's typed refusals are unreachable here.
+            | Error fault when FactStoreError.isFault fault -> return raise (FactStoreFault fault)
             | Error _ -> return None
             | Ok result when result.Stats.FactCount = 0 -> return None
             | Ok result ->
@@ -620,7 +619,7 @@ module CoverageNarrative =
                 | ranked ->
                     let ids = ranked |> List.map _.FactId
 
-                    let! verdicts = gate.Check(scopeId, principal, FactToolResult, ids)
+                    let! verdicts = gate.Check(scope, principal, FactToolResult, ids)
 
                     // An id the gate returned no verdict for is denied,
                     // conservatively — the door never fails open. Same
@@ -684,7 +683,7 @@ module CoverageNarrative =
     let readCoverage
         (store: IFactStore)
         (gate: IFactDisclosureGate)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (definition: Grounding.MetricDefinition)
         (hierarchies: Grounding.SubjectDefinition list)
@@ -692,7 +691,7 @@ module CoverageNarrative =
         async {
             let! populations =
                 hierarchies
-                |> List.map (fun hierarchy -> readHierarchy store gate scopeId principal definition.Id hierarchy)
+                |> List.map (fun hierarchy -> readHierarchy store gate scope principal definition.Id hierarchy)
                 |> Async.Sequential
 
             return {
@@ -782,7 +781,7 @@ module CoverageNarrative =
         (now: DateTime)
         (store: IFactStore)
         (gate: IFactDisclosureGate)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (definition: Grounding.MetricDefinition)
         (hierarchies: Grounding.SubjectDefinition list)
@@ -799,9 +798,9 @@ module CoverageNarrative =
                 hierarchies
                 |> List.map (fun hierarchy ->
                     match delegateFor hierarchy with
-                    | None -> readHierarchy store gate scopeId principal definition.Id hierarchy
+                    | None -> readHierarchy store gate scope principal definition.Id hierarchy
                     | Some(w, d) -> async {
-                        match! w.CurrentRun(scopeId, d.Metric) with
+                        match! w.CurrentRun(scope, d.Metric) with
                         | Ok(Some run) -> return Some(delegatedHierarchy definition d run hierarchy now)
                         // Never committed, or unreadable: a narrative is not
                         // the place to surface a store fault, so this pair
@@ -819,22 +818,17 @@ module CoverageNarrative =
 
     // ── The compose-time options (707.C) ──────────────────────────
 
-    /// Where a coverage narrative is committed, and as whom.
+    /// Which scopes a coverage narrative is committed in, and as whom.
     ///
-    /// **`CommitScope` exists because the two tiers do not agree about
-    /// containers, and neither can be told to.** The fact store passes
-    /// its `scopeId` straight to `IBlobStorage` as the container, while
-    /// the knowledge base uses the middleware-resolved
-    /// `StorageScope.Container` (`user-{id}` / `team-{id}` / `_platform`
-    /// per the `IBlobStorage` contract). A fact-store scope id is
-    /// therefore NOT a knowledge-base container, and guessing the mapping
-    /// would put a tenant's coverage document in a container that is not
-    /// their knowledge base — silently, and only discoverably by its
-    /// absence. So the deployment says. `None` for a scope means "commit
-    /// nothing for this one", which is also the whole of what an
-    /// undeclared scope gets.
+    /// The narrative is committed under the resolved scope the assertion
+    /// was made in, whose `Storage` names its knowledge-base container — so
+    /// the two tiers can no longer disagree about a container, and nothing
+    /// maps a fact-store scope id to one. `CommitsIn` says which scopes the
+    /// deployment wants summarised, by the scope id each resolves to;
+    /// `false` means "commit nothing for this one", which is also the whole
+    /// of what an undeclared scope gets.
     type CoverageNarrativeOptions = {
-        CommitScope: string -> StorageScope option
+        CommitsIn: string -> bool
         /// The principal the commit is attributed to, and — more
         /// importantly — the principal the disclosure gate judges. A
         /// coverage narrative is a standing corpus document readable by
@@ -847,33 +841,22 @@ module CoverageNarrative =
 
     module CoverageNarrativeOptions =
 
-        /// Commit into exactly the declared scopes, keyed by the
-        /// fact-store scope id each one carries. The ordinary opt-in: a
-        /// deployment names the tenants whose coverage it wants
-        /// summarised, the way `withCoherenceChecks` names the scopes it
-        /// sweeps.
-        let forScopes (principal: string) (scopes: StorageScope list) : CoverageNarrativeOptions =
-            let index = scopes |> List.map (fun scope -> scope.ScopeId, scope) |> Map.ofList
+        /// Commit in exactly the declared scopes, by the scope id each
+        /// resolves to. The ordinary opt-in: a deployment names the tenants
+        /// whose coverage it wants summarised, the way `withCoherenceChecks`
+        /// names the principals whose scopes it sweeps.
+        let forScopes (principal: string) (scopeIds: string list) : CoverageNarrativeOptions =
+            let declared = Set.ofList scopeIds
 
             {
-                CommitScope = index.TryFind
+                CommitsIn = declared.Contains
                 Principal = principal
             }
 
-        /// Commit into the fact scope's own container — correct only for
-        /// a deployment whose knowledge base and fact store share one
-        /// container per scope. Offered because that is exactly the shape
-        /// a single-tenant or test composition takes, and refusing to
-        /// express it would push every such deployment into writing the
-        /// mapping by hand.
-        let sameContainer (principal: string) : CoverageNarrativeOptions = {
-            CommitScope =
-                fun scopeId ->
-                    Some {
-                        ScopeId = scopeId
-                        Container = scopeId
-                        Persist = true
-                    }
+        /// Commit in every scope an assertion is made in — the shape a
+        /// single-tenant or test composition takes.
+        let everyScope (principal: string) : CoverageNarrativeOptions = {
+            CommitsIn = fun _ -> true
             Principal = principal
         }
 
@@ -925,7 +908,9 @@ module CoverageNarrative =
         /// store of derived state to keep coherent with the first.
         let committed = ConcurrentDictionary<string * string, CoverageBand>()
 
-        let regenerate (scopeId: string, metricId: string) : Async<unit> = async {
+        let regenerate (scope: ResolvedScope, metricId: string) : Async<unit> = async {
+            let scopeId = scope.ScopeId
+
             // The second half of the double gate, checked FIRST: no
             // knowledge base composed ⇒ nowhere to commit ⇒ no store
             // work at all (GP 13). The knob may be armed on a
@@ -935,9 +920,9 @@ module CoverageNarrative =
             match tryResolve<INarrativeIngestor> services with
             | None -> return ()
             | Some ingestor ->
-                match options.CommitScope scopeId with
-                | None -> return ()
-                | Some scope ->
+                if not (options.CommitsIn scopeId) then
+                    return ()
+                else
                     // A registry-less deployment has told the platform
                     // nothing about what its facts MEAN (Phase 519),
                     // so there is no metric family to describe and no
@@ -968,7 +953,7 @@ module CoverageNarrative =
                                         (clock().UtcDateTime)
                                         inner
                                         gate
-                                        scopeId
+                                        scope
                                         options.Principal
                                         definition
                                         registry.Subjects
@@ -1017,7 +1002,7 @@ module CoverageNarrative =
         }
 
         let agent =
-            MailboxProcessor<Choice<string * string, AsyncReplyChannel<unit>>>.Start(fun inbox ->
+            MailboxProcessor<Choice<ResolvedScope * string, AsyncReplyChannel<unit>>>.Start(fun inbox ->
                 let rec loop () = async {
                     let! message = inbox.Receive()
 
@@ -1027,10 +1012,10 @@ module CoverageNarrative =
                     // agent regenerates once per distinct
                     // (scope, metric) it finds waiting rather than once
                     // per assertion.
-                    let work = System.Collections.Generic.HashSet<string * string>()
+                    let work = System.Collections.Generic.HashSet<ResolvedScope * string>()
                     let mutable waiters: AsyncReplyChannel<unit> list = []
 
-                    let take (m: Choice<string * string, AsyncReplyChannel<unit>>) =
+                    let take (m: Choice<ResolvedScope * string, AsyncReplyChannel<unit>>) =
                         match m with
                         | Choice1Of2 key -> work.Add key |> ignore
                         | Choice2Of2 reply -> waiters <- reply :: waiters
@@ -1055,7 +1040,7 @@ module CoverageNarrative =
                                 sprintf
                                     "[Phase 707] Coverage narrative regeneration failed for metric '%s' in scope %s: %s"
                                     (snd key)
-                                    (fst key)
+                                    (fst key).ScopeId
                                     ex.Message
                             )
 
@@ -1072,11 +1057,11 @@ module CoverageNarrative =
         /// The one hook both assertion doors call. Takes drafts, not
         /// facts, so the scalar door and the batch door hand it the same
         /// shape and cannot diverge.
-        let noteAssertion (scopeId: string) (drafts: FactDraft list) =
+        let noteAssertion (scope: ResolvedScope) (drafts: FactDraft list) =
             drafts
             |> List.map (fun draft -> draft.Metric.Value)
             |> List.distinct
-            |> List.iter (fun metricId -> agent.Post(Choice1Of2(scopeId, metricId)))
+            |> List.iter (fun metricId -> agent.Post(Choice1Of2(scope, metricId)))
 
         /// Block until every regeneration queued before this call has
         /// completed. For tests and diagnostics; a request path never
@@ -1089,14 +1074,29 @@ module CoverageNarrative =
 
         interface IFactStore with
 
-            // Phase 797 — the typed form delegates to this decorator's own
-            // string form, so an assertion through a resolved scope notes
-            // coverage exactly as one through its shard key does.
-            member this.Assert(scope: ResolvedScope, draft: FactDraft) =
-                (this :> IFactStore).Assert(scope.ScopeId, draft)
+            member _.Assert(scope: ResolvedScope, draft: FactDraft) = async {
+                let! outcome = inner.Assert(scope, draft)
 
-            member this.AssertBatch(scope: ResolvedScope, drafts: FactDraft list) =
-                (this :> IFactStore).AssertBatch(scope.ScopeId, drafts)
+                // Only a successful assertion can have moved coverage.
+                // An idempotent re-assert IS successful and does note —
+                // it costs one coalesced recompute that finds an
+                // unchanged band and commits nothing.
+                match outcome with
+                | Ok _ -> noteAssertion scope [ draft ]
+                | Error _ -> ()
+
+                return outcome
+            }
+
+            member _.AssertBatch(scope: ResolvedScope, drafts: FactDraft list) = async {
+                let! outcome = inner.AssertBatch(scope, drafts)
+
+                match outcome with
+                | Ok _ -> noteAssertion scope drafts
+                | Error _ -> ()
+
+                return outcome
+            }
 
             member _.Get(scope: ResolvedScope, factId: string) = inner.Get(scope, factId)
 
@@ -1109,42 +1109,6 @@ module CoverageNarrative =
                 inner.QuerySupersessionChain(scope, factId)
 
             member _.QueryPopulation(scope: ResolvedScope, query: PopulationQuery) = inner.QueryPopulation(scope, query)
-
-            member _.Assert(scopeId: string, draft: FactDraft) = async {
-                let! outcome = inner.Assert(scopeId, draft)
-
-                // Only a successful assertion can have moved coverage.
-                // An idempotent re-assert IS successful and does note —
-                // it costs one coalesced recompute that finds an
-                // unchanged band and commits nothing.
-                match outcome with
-                | Ok _ -> noteAssertion scopeId [ draft ]
-                | Error _ -> ()
-
-                return outcome
-            }
-
-            member _.AssertBatch(scopeId: string, drafts: FactDraft list) = async {
-                let! outcome = inner.AssertBatch(scopeId, drafts)
-
-                match outcome with
-                | Ok _ -> noteAssertion scopeId drafts
-                | Error _ -> ()
-
-                return outcome
-            }
-
-            member _.Get(scopeId: string, factId: string) = inner.Get(scopeId, factId)
-
-            member _.Query(scopeId: string, query: FactQuery) = inner.Query(scopeId, query)
-
-            member _.QueryWithCompetition(scopeId: string, query: FactQuery) =
-                inner.QueryWithCompetition(scopeId, query)
-
-            member _.QuerySupersessionChain(scopeId: string, factId: string) =
-                inner.QuerySupersessionChain(scopeId, factId)
-
-            member _.QueryPopulation(scopeId: string, query: PopulationQuery) = inner.QueryPopulation(scopeId, query)
 
     /// Decorate a fact store with the coverage-narrative trigger.
     let decorate

@@ -316,11 +316,12 @@ module CoverageTool =
             let! outcome = store.QueryPopulation(scope, coverageQuery metricId subject.Id)
 
             match outcome with
-            // A refusal here is not this tool's to relay: the ordering is
-            // explicit, so Phase 701's two typed refusals are both
-            // unreachable, and anything else is a store fault rather than
-            // an answer about coverage. The pair is reported as holding
-            // nothing rather than as an error interleaved into a list.
+            // A storage fault is raised, never reported as a pair holding
+            // nothing. A refusal is not this tool's to relay: the ordering is
+            // explicit, so the store's typed refusals are unreachable, and the
+            // pair is reported as holding nothing rather than as an error
+            // interleaved into a list.
+            | Error fault when FactStoreError.isFault fault -> return raise (FactStoreFault fault)
             | Error _ -> return None
             | Ok result when result.Stats.FactCount = 0 ->
                 // No facts for this metric in this hierarchy. Omitted

@@ -352,8 +352,15 @@ module ReportSubscriptionJobHandler =
                 | Result.Ok renderer ->
                     let! values =
                         ReportApiHandler.resolveValuesFor
-                            deps.Disclosure
-                            subscription.ScopeId
+                            (deps.Disclosure
+                             |> Option.map (fun (gate, principal) ->
+                                 // The scope the job runs under, as the runner
+                                 // re-minted it; absent, the anonymous shard,
+                                 // where no fact resolves and every ref is
+                                 // withheld (fail-closed).
+                                 gate,
+                                 principal,
+                                 ReportProducerScope.get () |> Option.defaultValue ResolvedScope.anonymous))
                             renderer
                             template.Format
                             request.Values

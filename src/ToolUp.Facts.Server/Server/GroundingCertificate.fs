@@ -160,7 +160,7 @@ module CertificateError =
 /// composed.
 type IGroundingCertificateIssuer =
     abstract Issue:
-        scopeId: string * principal: string * subject: CertificateSubject * depth: int ->
+        scope: ResolvedScope * principal: string * subject: CertificateSubject * depth: int ->
             Async<Result<GroundingCertificate, CertificateError>>
 
 // ─── Certificates on the application signing seam ────────────────────────
@@ -233,7 +233,7 @@ module AttestedCertificateVerdict =
 /// `IArtefactSigner` (GP 13).
 type IAttestedGroundingCertificateIssuer =
     abstract Issue:
-        scopeId: string * principal: string * subject: CertificateSubject * depth: int ->
+        scope: ResolvedScope * principal: string * subject: CertificateSubject * depth: int ->
             Async<Result<AttestedGroundingCertificate, CertificateError>>
 
 // ─── Issuance transparency (Phase 685) ───────────────────────────────────
@@ -492,45 +492,52 @@ module GroundingCertificate =
         // answer plan(s) (Phase 560) are stitched in as `AnswerPlanNode`s
         // with `PlannedBy` / `CitesFact` edges, and both the answer's own
         // citations and the plans' cited facts are walked upstream.
-        let materialise (scopeId: string) (subject: CertificateSubject) (depth: int) : Async<string * ProvenanceChain> = async {
-            match subject with
-            | FactCertificate factId ->
-                let! chain = graph.GetChain(scopeId, FactRef factId, Upstream, depth)
-                return factId, chain
-            | AnswerCertificate(messageId, citedFactIds) ->
-                let! plans = AnswerPlanProvenance.recordedFor events scopeId messageId
-                let planCited = plans |> List.collect AnswerPlan.citedFactIds
-                let allCited = (citedFactIds @ planCited) |> List.distinct
-                let! baseChain = graph.GetChainForMessage(scopeId, messageId, allCited, depth)
-                return messageId, AnswerPlanProvenance.withPlans messageId plans baseChain
-            | NarrativeCertificate(narrativeId, citedFactIds) ->
-                // The answer-side walk, re-rooted: the provenance graph roots
-                // `GetChainForMessage` at a message node, and the narrative is
-                // the same shape of root (something that cites facts) under
-                // its own kind.
-                let! baseChain = graph.GetChainForMessage(scopeId, narrativeId, List.distinct citedFactIds, depth)
+        let materialise
+            (scope: ResolvedScope)
+            (subject: CertificateSubject)
+            (depth: int)
+            : Async<string * ProvenanceChain> =
+            async {
+                let scopeId = scope.ScopeId
 
-                let nodes =
-                    baseChain.Nodes
-                    |> List.map (fun node ->
-                        if node.Id = narrativeId && node.Kind = ConversationMessage then
-                            {
-                                node with
-                                    Kind = NarrativeDocument
-                                    Label = sprintf "narrative: %s" narrativeId
-                            }
-                        else
-                            node)
+                match subject with
+                | FactCertificate factId ->
+                    let! chain = graph.GetChain(scope, FactRef factId, Upstream, depth)
+                    return factId, chain
+                | AnswerCertificate(messageId, citedFactIds) ->
+                    let! plans = AnswerPlanProvenance.recordedFor events scopeId messageId
+                    let planCited = plans |> List.collect AnswerPlan.citedFactIds
+                    let allCited = (citedFactIds @ planCited) |> List.distinct
+                    let! baseChain = graph.GetChainForMessage(scope, messageId, allCited, depth)
+                    return messageId, AnswerPlanProvenance.withPlans messageId plans baseChain
+                | NarrativeCertificate(narrativeId, citedFactIds) ->
+                    // The answer-side walk, re-rooted: the provenance graph roots
+                    // `GetChainForMessage` at a message node, and the narrative is
+                    // the same shape of root (something that cites facts) under
+                    // its own kind.
+                    let! baseChain = graph.GetChainForMessage(scope, narrativeId, List.distinct citedFactIds, depth)
 
-                return narrativeId, { baseChain with Nodes = nodes }
-        }
+                    let nodes =
+                        baseChain.Nodes
+                        |> List.map (fun node ->
+                            if node.Id = narrativeId && node.Kind = ConversationMessage then
+                                {
+                                    node with
+                                        Kind = NarrativeDocument
+                                        Label = sprintf "narrative: %s" narrativeId
+                                }
+                            else
+                                node)
+
+                    return narrativeId, { baseChain with Nodes = nodes }
+            }
 
         // Project one provenance node to a certificate node, consulting the
         // disclosure verdicts for fact nodes. Returns the node + the policy
         // ref it was withheld under (when any), so the caller can collect
         // the sealed-under policy set.
         let projectNode
-            (scopeId: string)
+            (scope: ResolvedScope)
             (verdicts: Map<string, FactDisclosureVerdict>)
             (node: ProvenanceNode)
             : Async<CertificateNode * string option> =
@@ -541,7 +548,7 @@ module GroundingCertificate =
                 | FactNode ->
                     match verdicts.TryFind node.Id with
                     | Some FactDisclosable ->
-                        let! fact = store.Get(scopeId, node.Id)
+                        let! fact = store.Get(scope, node.Id) |> FactStoreResult.orRaiseAsync
 
                         let method, certRef, stance =
                             match fact with
@@ -606,10 +613,10 @@ module GroundingCertificate =
         /// id the sealing key will sign under, bound into the body so it is
         /// covered by whichever signature follows.
         member _.BuildBody
-            (scopeId: string, principal: string, subject: CertificateSubject, depth: int, keyId: string)
+            (scope: ResolvedScope, principal: string, subject: CertificateSubject, depth: int, keyId: string)
             : Async<Result<GroundingCertificateBody, CertificateError>> =
             async {
-                let! root, chain = materialise scopeId subject depth
+                let! root, chain = materialise scope subject depth
 
                 if List.isEmpty chain.Nodes then
                     return Error EmptyChain
@@ -628,9 +635,9 @@ module GroundingCertificate =
                         if List.isEmpty factIds then
                             async { return Map.empty }
                         else
-                            gate.Check(scopeId, principal, FactExport, factIds)
+                            gate.Check(scope, principal, FactExport, factIds)
 
-                    let! projected = chain.Nodes |> List.map (projectNode scopeId verdicts) |> Async.Parallel
+                    let! projected = chain.Nodes |> List.map (projectNode scope verdicts) |> Async.Parallel
 
                     let nodes = projected |> Array.map fst |> Array.toList
 
@@ -671,17 +678,17 @@ module GroundingCertificate =
     type private DefaultIssuer(builder: CertificateBuilder, signer: IArtefactSigner option, audit: IAuditLog option) =
 
         interface IGroundingCertificateIssuer with
-            member _.Issue(scopeId, principal, subject, depth) = async {
+            member _.Issue(scope, principal, subject, depth) = async {
                 match signer with
                 | None -> return Error SigningUnavailable
                 | Some signer ->
-                    match! builder.BuildBody(scopeId, principal, subject, depth, signer.KeyId()) with
+                    match! builder.BuildBody(scope, principal, subject, depth, signer.KeyId()) with
                     | Error e -> return Error e
                     | Ok body ->
                         match! signer.Sign(canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
                         | Ok signature ->
-                            do! recordIssuance audit scopeId DetachedJwsSeal body
+                            do! recordIssuance audit scope.ScopeId DetachedJwsSeal body
                             return Ok { Body = body; Signature = signature }
             }
 
@@ -692,17 +699,17 @@ module GroundingCertificate =
         =
 
         interface IAttestedGroundingCertificateIssuer with
-            member _.Issue(scopeId, principal, subject, depth) = async {
+            member _.Issue(scope, principal, subject, depth) = async {
                 match signer with
                 | None -> return Error SigningUnavailable
                 | Some signer ->
-                    match! builder.BuildBody(scopeId, principal, subject, depth, signer.ActiveKeyId()) with
+                    match! builder.BuildBody(scope, principal, subject, depth, signer.ActiveKeyId()) with
                     | Error e -> return Error e
                     | Ok body ->
                         match! signer.SignPayload(Format, canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
                         | Ok envelope ->
-                            do! recordIssuance audit scopeId ApplicationSeal body
+                            do! recordIssuance audit scope.ScopeId ApplicationSeal body
                             return Ok { Body = body; Envelope = envelope }
             }
 

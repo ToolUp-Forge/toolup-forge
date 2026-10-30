@@ -215,10 +215,10 @@ type IArtifactProvenanceSource =
 /// nodes.
 type IFactEvidenceSource =
     /// The evidence for one fact, or `None`.
-    abstract GetFact: scopeId: string * factId: string -> Async<FactEvidence option>
+    abstract GetFact: scope: ResolvedScope * factId: string -> Async<FactEvidence option>
     /// Every fact whose evidence is the given result (the downstream
     /// "what facts were computed from this result" step). Empty when none.
-    abstract FactsForResult: scopeId: string * resultId: string -> Async<FactEvidence list>
+    abstract FactsForResult: scope: ResolvedScope * resultId: string -> Async<FactEvidence list>
 
 /// Read-only provenance chain traversal — a view over `ILineageStore` +
 /// (optionally) `IFactEvidenceSource`. Scope-bounded throughout (GP 4): a
@@ -236,7 +236,8 @@ type IProvenanceGraph =
     /// `GetChainForMessage` below. Use that for a message root; this
     /// method's empty answer is honest, not a gap.
     abstract GetChain:
-        scopeId: string * root: ProvenanceRef * direction: ProvenanceDirection * depth: int -> Async<ProvenanceChain>
+        scope: ResolvedScope * root: ProvenanceRef * direction: ProvenanceDirection * depth: int ->
+            Async<ProvenanceChain>
 
     /// The answer-side hook (Phase 524.C): from a conversation message and
     /// the fact ids it cited, resolve the upstream chain in one call — the
@@ -244,4 +245,4 @@ type IProvenanceGraph =
     /// message is the root; each cited fact is a `CitesFact` edge whose
     /// upstream is then walked.
     abstract GetChainForMessage:
-        scopeId: string * messageId: string * citedFactIds: string list * depth: int -> Async<ProvenanceChain>
+        scope: ResolvedScope * messageId: string * citedFactIds: string list * depth: int -> Async<ProvenanceChain>

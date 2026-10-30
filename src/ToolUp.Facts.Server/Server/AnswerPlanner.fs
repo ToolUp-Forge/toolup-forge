@@ -126,40 +126,21 @@ type AnswerPlanRecordedEvent = {
 /// `FactsCompose.withFactStore` whenever the fact store is composed —
 /// one compose knob, never several (GP 13).
 type IAnswerPlanner =
-    /// Compile `question` into candidate triples (560.B) and resolve
-    /// each to a typed `PlanStep` (560.C) under the caller's resolved
-    /// storage scope (GP 4). Never throws for an unanswerable question —
-    /// the refusal is typed data in the returned plan.
-    ///
-    /// The string-keyed form, kept for one release as the compatibility
-    /// path (Phase 821). A request-path caller takes the `ResolvedScope`
-    /// overload below, so the plan cannot be resolved under a scope the
-    /// principal did not resolve to.
-    abstract Plan: scopeId: string * principal: string * question: string -> Async<AnswerPlan>
-
-    /// The request-path form (Phase 821): compile and resolve `question`
-    /// under the scope the platform's scope resolution minted for the
-    /// request. Every store read and disclosure check the plan makes takes
-    /// the store's and the gate's `ResolvedScope` members, so the scope a
-    /// plan step was resolved and gated under is the resolver's. Semantics
-    /// are otherwise exactly the string form's over `scope.ScopeId`.
+    /// Compile `question` into candidate triples (560.B) and resolve each
+    /// to a typed `PlanStep` (560.C) under the scope the platform's scope
+    /// resolution minted for the caller (GP 4). Every store read and
+    /// disclosure check the plan makes takes that scope, so the scope a plan
+    /// step was resolved and gated under is the resolver's. Never throws for
+    /// an unanswerable question — the refusal is typed data in the returned
+    /// plan; a storage fault is raised (`FactStoreFault`), never planned as a
+    /// miss.
     abstract Plan: scope: ResolvedScope * principal: string * question: string -> Async<AnswerPlan>
 
     /// Record a compiled plan against the answer message it produced
     /// (560.D) — the durable `AnswerPlanRecorded` event the provenance
     /// chain walk (`AnswerPlanProvenance.chainForMessage`) surfaces as a
     /// plan node.
-    abstract Record: scopeId: string * messageId: string * plan: AnswerPlan -> Async<unit>
-
-/// The scope a plan resolves under (Phase 821): the minted one on the
-/// request path, or — for the one release the string form is kept — the
-/// caller's string. Each store and gate call dispatches to the member of
-/// the same form, so a minted scope is never lowered to a string on the
-/// way to the fact tier.
-[<RequireQualifiedAccess>]
-type internal PlanScope =
-    | Minted of ResolvedScope
-    | Legacy of string
+    abstract Record: scope: ResolvedScope * messageId: string * plan: AnswerPlan -> Async<unit>
 
 /// The default `IAnswerPlanner` over the composed fact tier. Construct
 /// via `AnswerPlanner.create` / `createWithClock`; registered in DI by
@@ -182,34 +163,23 @@ type AnswerPlanner
 
     static let jsonOptions = FableConverters.create ()
 
-    // ── Scope dispatch (Phase 821) ────────────────────────────────
+    // ── The store and the gate, under the plan's one scope ───────
 
-    let queryHeads (scope: PlanScope) (query: FactQuery) =
-        match scope with
-        | PlanScope.Minted minted -> store.Query(minted, query)
-        | PlanScope.Legacy scopeId -> store.Query(scopeId, query)
+    let queryHeads (scope: ResolvedScope) (query: FactQuery) =
+        store.Query(scope, query) |> FactStoreResult.orRaiseAsync
 
-    let querySupersessionChain (scope: PlanScope) (factId: string) =
-        match scope with
-        | PlanScope.Minted minted -> store.QuerySupersessionChain(minted, factId)
-        | PlanScope.Legacy scopeId -> store.QuerySupersessionChain(scopeId, factId)
+    let querySupersessionChain (scope: ResolvedScope) (factId: string) =
+        store.QuerySupersessionChain(scope, factId) |> FactStoreResult.orRaiseAsync
 
-    let queryPopulation (scope: PlanScope) (query: PopulationQuery) =
-        match scope with
-        | PlanScope.Minted minted -> store.QueryPopulation(minted, query)
-        | PlanScope.Legacy scopeId -> store.QueryPopulation(scopeId, query)
-
-    let checkRetrieval (scope: PlanScope) (principal: string) (factIds: string list) =
-        match scope with
-        | PlanScope.Minted minted -> gate.Check(minted, principal, FactRetrieval, factIds)
-        | PlanScope.Legacy scopeId -> gate.Check(scopeId, principal, FactRetrieval, factIds)
+    let checkRetrieval (scope: ResolvedScope) (principal: string) (factIds: string list) =
+        gate.Check(scope, principal, FactRetrieval, factIds)
 
     // ── Per-triple resolution (560.C) ─────────────────────────────
 
     // Vocabulary validation is deterministic and conservative: an id the
     // registry does not declare refuses, naming the id (GP 9) — the
     // planner never "helpfully" resolves a near-miss.
-    let resolveCandidate (scope: PlanScope) (principal: string) (candidate: TripleCandidate) : Async<PlanStep> = async {
+    let resolveCandidate (scope: ResolvedScope) (principal: string) (candidate: TripleCandidate) : Async<PlanStep> = async {
         let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric candidate.Metric)
 
         let subjectDef =
@@ -326,7 +296,7 @@ type AnswerPlanner
     // disclose differently from one store. What is genuinely new here is
     // only the freshness disposition of a *population*, which a point
     // read has no analogue for.
-    let resolvePopulation (scope: PlanScope) (principal: string) (triple: PopulationTriple) : Async<PlanStep> = async {
+    let resolvePopulation (scope: ResolvedScope) (principal: string) (triple: PopulationTriple) : Async<PlanStep> = async {
         let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric triple.Metric)
 
         let subjectDef =
@@ -379,14 +349,14 @@ type AnswerPlanner
                         Methods = CanonicalMethodOnly
                     }
 
-                    let! outcome = queryPopulation scope query
+                    let! outcome = store.QueryPopulation(scope, query)
 
                     match outcome with
-                    // Phase 701's `Error` is a typed REFUSAL — an
-                    // unregistered direction-of-better, or one declared
-                    // `Neutral` — never a failure, and it already names
-                    // its own remedy.
-                    | Error refusal -> return Refuse(PopulationNotOrderable(metric.Id, refusal))
+                    // A typed REFUSAL — an unregistered direction-of-better,
+                    // or one declared `Neutral` — names its own remedy. A
+                    // storage fault is raised, never planned as a refusal.
+                    | Error(FactStoreError.Refused refusal) -> return Refuse(PopulationNotOrderable(metric.Id, refusal))
+                    | Error fault -> return raise (FactStoreFault fault)
                     | Ok result when result.Stats.FactCount = 0 ->
                         // MISS at population scale, resolved by 560's own
                         // rule: computable when the registry maps the
@@ -517,8 +487,8 @@ type AnswerPlanner
         AnswerPlanner(store, gate, registry, events, compilerFor, clock)
 
     /// Phase 986 — the per-plan form: `compilerFor` picks the compiler from
-    /// the plan's resolved storage scope (`None` for the anonymous scope and
-    /// the string-keyed compatibility form) and its principal.
+    /// the plan's resolved storage scope (`None` for the anonymous scope)
+    /// and its principal.
     static member internal PerPlan
         (
             store: IFactStore,
@@ -530,7 +500,7 @@ type AnswerPlanner
         ) : AnswerPlanner =
         AnswerPlanner(store, gate, registry, events, compilerFor, clock)
 
-    member private _.PlanUnder (scope: PlanScope) (principal: string) (question: string) : Async<AnswerPlan> = async {
+    member private _.PlanUnder (scope: ResolvedScope) (principal: string) (question: string) : Async<AnswerPlan> = async {
         let planId = "plan-" + Guid.NewGuid().ToString "N"
         let compiledAt = clock().ToUniversalTime()
 
@@ -542,12 +512,7 @@ type AnswerPlanner
             Refusal = Some(QuestionNotCompiled detail)
         }
 
-        let storage =
-            match scope with
-            | PlanScope.Minted minted -> minted.Storage
-            | PlanScope.Legacy _ -> None
-
-        let! compiled = compilerFor storage principal question
+        let! compiled = compilerFor scope.Storage principal question
 
         match compiled with
         | Error detail -> return unanswerable detail
@@ -589,18 +554,14 @@ type AnswerPlanner
 
     interface IAnswerPlanner with
 
-        member this.Plan(scopeId: string, principal, question) =
-            this.PlanUnder (PlanScope.Legacy scopeId) principal question
+        member this.Plan(scope: ResolvedScope, principal, question) = this.PlanUnder scope principal question
 
-        member this.Plan(scope: ResolvedScope, principal, question) =
-            this.PlanUnder (PlanScope.Minted scope) principal question
-
-        member _.Record(scopeId, messageId, plan) = async {
+        member _.Record(scope: ResolvedScope, messageId, plan) = async {
             do!
                 events.Write {
                     Id = Guid.NewGuid()
                     OccurredAt = clock().ToUniversalTime()
-                    ScopeId = scopeId
+                    ScopeId = scope.ScopeId
                     SourceModule = FactEvents.SourceModule
                     EventType = PlanEvents.RecordedType
                     Payload =
@@ -1225,13 +1186,13 @@ module AnswerPlanProvenance =
     let chainForMessage
         (graph: IProvenanceGraph)
         (events: IEventStore)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (messageId: string)
         (depth: int)
         : Async<ProvenanceChain> =
         async {
-            let! plans = recordedFor events scopeId messageId
+            let! plans = recordedFor events scope.ScopeId messageId
             let citedIds = plans |> List.collect AnswerPlan.citedFactIds |> List.distinct
-            let! chain = graph.GetChainForMessage(scopeId, messageId, citedIds, depth)
+            let! chain = graph.GetChainForMessage(scope, messageId, citedIds, depth)
             return withPlans messageId plans chain
         }

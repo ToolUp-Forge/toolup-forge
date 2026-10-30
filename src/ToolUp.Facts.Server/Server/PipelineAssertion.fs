@@ -430,11 +430,14 @@ module PipelineAssertion =
                     | Error refusal -> return Error refusal
                     | Ok drafts ->
                         match! deps.Store.AssertBatch(scope, drafts) with
-                        | Error reason -> return Error(PipelineRefusal.AssertionFailed reason)
+                        | Error reason -> return Error(PipelineRefusal.AssertionFailed(FactStoreError.describe reason))
                         | Ok receipt ->
                             let ids = drafts |> List.map factIdOf
 
-                            let! stored = ids |> List.map (fun id -> deps.Store.Get(scope, id)) |> Async.Sequential
+                            let! stored =
+                                ids
+                                |> List.map (fun id -> deps.Store.Get(scope, id) |> FactStoreResult.orRaiseAsync)
+                                |> Async.Sequential
 
                             let held = stored |> Array.choose id |> List.ofArray
 

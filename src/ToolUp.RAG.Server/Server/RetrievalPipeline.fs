@@ -977,7 +977,7 @@ type RetrievalPipeline
                     // still be executing when the turn moves on, so it
                     // returns its stage marks instead of appending them.
                     let resolveAndDisclose = async {
-                        let! resolved = resolver.Resolve(factScope.ScopeId, clause)
+                        let! resolved = resolver.Resolve(factScope, clause)
 
                         // Phase 525.B — disclosure egress filter, applied to the
                         // resolved facts BEFORE merge. Default-deny at retrieval:

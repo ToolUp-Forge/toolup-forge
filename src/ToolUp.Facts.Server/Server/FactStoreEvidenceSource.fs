@@ -16,7 +16,8 @@ open ToolUp.Platform
 
 /// Projects an `IFactStore` onto the `IFactEvidenceSource` the provenance
 /// graph reads. Scope-bounded (GP 4) — every read forwards the caller's
-/// `scopeId` to the store.
+/// resolved scope to the store, and a store fault is raised as
+/// `FactStoreFault`, never read as a missing fact.
 type FactStoreEvidenceSource(store: IFactStore) =
 
     // A stored fact → the flattened evidence the provenance graph needs.
@@ -33,23 +34,24 @@ type FactStoreEvidenceSource(store: IFactStore) =
     }
 
     interface IFactEvidenceSource with
-        member _.GetFact(scopeId: string, factId: string) : Async<FactEvidence option> = async {
-            let! fact = store.Get(scopeId, factId)
+        member _.GetFact(scope: ResolvedScope, factId: string) : Async<FactEvidence option> = async {
+            let! fact = store.Get(scope, factId) |> FactStoreResult.orRaiseAsync
             return fact |> Option.map toEvidence
         }
 
-        member _.FactsForResult(scopeId: string, resultId: string) : Async<FactEvidence list> = async {
+        member _.FactsForResult(scope: ResolvedScope, resultId: string) : Async<FactEvidence list> = async {
             // Include superseded facts: "what was computed from this result"
             // is a provenance question, so a since-corrected fact still
             // belongs in the chain.
             let! facts =
                 store.Query(
-                    scopeId,
+                    scope,
                     {
                         FactQuery.all with
                             IncludeSuperseded = true
                     }
                 )
+                |> FactStoreResult.orRaiseAsync
 
             return
                 facts

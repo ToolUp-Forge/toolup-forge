@@ -50,17 +50,6 @@ let private disclosureGateOf (ctx: HttpContext) : IFactDisclosureGate option =
     | :? IFactDisclosureGate as gate -> Some gate
     | _ -> None
 
-/// The caller's resolved storage-scope id — the same tenant boundary
-/// `NarrativePublisher` scopes reads by, and the shard the fact store
-/// resolves fact ids within (GP 4).
-let private scopeIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as scope) -> scope.ScopeId
-    | _ ->
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
 let private userIdOf (ctx: HttpContext) : string =
     match ctx.Items.TryGetValue "ToolUp.UserId" with
     | true, (:? string as id) -> id
@@ -81,7 +70,8 @@ let private deniedFactsIn
             match NarrativeFacts.factRefs document |> Set.toList with
             | [] -> return []
             | refs ->
-                let! verdicts = gate.Check(scopeIdOf ctx, userIdOf ctx, surface, refs)
+                let! verdicts =
+                    gate.Check(StorageScopeResolver.ScopeResolution.forRequest ctx, userIdOf ctx, surface, refs)
 
                 return
                     verdicts

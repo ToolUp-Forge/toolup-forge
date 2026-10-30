@@ -18,11 +18,11 @@ open ToolUp.Platform
 // (`AsOf`), and supersession chains are walkable.
 //
 // **Six portability rules (GP 12).**
-//  1. Identity by value — `string` scope / fact ids, domain records; no
-//     live handles.
+//  1. Identity by value — `ResolvedScope` values, `string` fact ids,
+//     domain records; no live handles.
 //  2. Async at every boundary — every method returns `Async<_>`.
-//  3. Retry / failure as data — `Assert` returns `Result<_, string>`; no
-//     `OnFailure` callbacks.
+//  3. Retry / failure as data — every member returns
+//     `Result<_, FactStoreError>`; no `OnFailure` callbacks.
 //  4. Stateless between calls — no per-call state survives on the store;
 //     every read recomputes from the backing store.
 //  5. No cross-shard ordering — ordering is only meaningful within one
@@ -175,20 +175,21 @@ type FactWithCompetition = {
 }
 
 /// The bitemporal, append-only, content-addressed fact base. Team-scoped
-/// throughout (GP 4): `scopeId` is a resolved storage scope, and a fact
-/// asserted in one scope is structurally unreachable from another.
+/// throughout (GP 4): a fact asserted in one scope is structurally
+/// unreachable from another.
 ///
-/// **Two forms of every member (Phase 797).** The `ResolvedScope` overloads
-/// are the request-path form: the scope is the value the platform's scope
-/// resolution minted for the request, which is the only way to obtain
-/// one, so a door that calls them cannot be handed a scope the principal
-/// did not resolve to. The `string` overloads are the platform-carried
-/// form — a job's persisted scope, an import, a coherence sweep, a
-/// knowledge-base dependency record — and the one-release compatibility
-/// path for consumers on the old shape; their semantics are unchanged. An
-/// implementation keys both on the same shard: the typed form is exactly
-/// the string form over `scope.ScopeId`, and the anonymous scope keys the
-/// `"anonymous"` shard like any other id — never a wildcard.
+/// **One scope form.** Every member takes a `ResolvedScope` — the value the
+/// platform's scope resolution minted, which is the only way to obtain one.
+/// A request-path door holds the scope its request resolved to; a
+/// platform-carried caller (a job, an import, a recompute, a sweep) carries
+/// a `ScopeKey` across its persistence boundary and is handed the scope the
+/// resolver re-minted at execution. No member takes a scope as a string, so
+/// no caller can address a shard nobody resolved. The anonymous scope is a
+/// shard like any other — never a wildcard.
+///
+/// **One error.** Every member answers `Result<_, FactStoreError>`. A storage
+/// fault is `Error(StorageFault …)` on a read as on a write — never a shorter
+/// answer, never an absent fact. An empty answer is `Ok []` / `Ok None`.
 type IFactStore =
     /// Assert a fact (law L1/L2/L3). Content-addressed: asserting an
     /// identical (subject, metric, period, method, inputHashes) returns
@@ -199,19 +200,15 @@ type IFactStore =
     /// yields a *competing* fact (both current, never merged — D19).
     /// Returns the stored fact with `FactId` / `AsOf` / `Supersedes`
     /// populated. Every assert (and supersession) is audited (GP 6).
-    abstract Assert: scopeId: string * draft: FactDraft -> Async<Result<Fact, string>>
+    abstract Assert: scope: ResolvedScope * draft: FactDraft -> Async<Result<Fact, FactStoreError>>
 
-    /// `Assert` over the request's resolved scope (Phase 797).
-    abstract Assert: scope: ToolUp.Platform.ResolvedScope * draft: FactDraft -> Async<Result<Fact, string>>
-
-    /// Assert many drafts as one operation (Phase 704) — the write-side
-    /// twin of `QueryPopulation`. **Per-fact semantics are exactly
-    /// `Assert`'s**: each draft gets its own content-addressed id, is
-    /// idempotent against an identical stored tuple (L2), and derives its
-    /// own supersession edge within its own lineage (L3) — including
-    /// against an EARLIER DRAFT OF THE SAME BATCH, so a batch carrying two
-    /// versions of one lineage settles exactly as two sequential
-    /// `Assert`s would.
+    /// Assert many drafts as one operation — the write-side twin of
+    /// `QueryPopulation`. **Per-fact semantics are exactly `Assert`'s**: each
+    /// draft gets its own content-addressed id, is idempotent against an
+    /// identical stored tuple (L2), and derives its own supersession edge
+    /// within its own lineage (L3) — including against an EARLIER DRAFT OF
+    /// THE SAME BATCH, so a batch carrying two versions of one lineage
+    /// settles exactly as two sequential `Assert`s would.
     ///
     /// What differs is cost and audit. Storage round trips are amortised
     /// across the batch, and the audit is **one summarised
@@ -223,87 +220,103 @@ type IFactStore =
     ///
     /// **A malformed batch commits nothing.** Every draft is checked for
     /// structural well-formedness (`FactDraft.defects`) BEFORE the first
-    /// write, and one offender refuses the whole batch with an `Error`
-    /// naming the offenders by position — the batch is the atom the
-    /// producer retries, so it must decide before it starts. That
-    /// pre-flight is **specific to this member**: `Assert` is unchanged
-    /// and still accepts any draft it accepts today (GP 11).
+    /// write, and one offender refuses the whole batch with
+    /// `MalformedDrafts`, naming the offenders by position — the batch is
+    /// the atom the producer retries, so it must decide before it starts.
+    /// That pre-flight is **specific to this member**: `Assert` accepts any
+    /// draft it accepted before batches existed (GP 11).
     ///
-    /// A *storage* failure part-way through is reported the same way —
-    /// `Error`, naming what failed — but is honest about what it leaves
-    /// behind: facts already written stay written. There is no rollback
-    /// in an append-only store, and none is needed, because re-running
-    /// the identical batch is exact by content address (D1): the
-    /// already-written drafts come back as idempotent skips and the rest
-    /// complete.
+    /// A *storage* failure part-way through is a `StorageFault`, honest
+    /// about what it leaves behind: facts already written stay written.
+    /// There is no rollback in an append-only store, and none is needed,
+    /// because re-running the identical batch is exact by content address
+    /// (D1): the already-written drafts come back as idempotent skips and
+    /// the rest complete.
     ///
     /// An empty draft list is `Ok BatchAssertReceipt.empty` with no
     /// write and no audit row — "nothing to do" is an answer.
-    abstract AssertBatch: scopeId: string * drafts: FactDraft list -> Async<Result<BatchAssertReceipt, string>>
-
-    /// `AssertBatch` over the request's resolved scope (Phase 797).
     abstract AssertBatch:
-        scope: ToolUp.Platform.ResolvedScope * drafts: FactDraft list -> Async<Result<BatchAssertReceipt, string>>
+        scope: ResolvedScope * drafts: FactDraft list -> Async<Result<BatchAssertReceipt, FactStoreError>>
 
-    /// A fact by its content-addressed id, or `None`.
-    abstract Get: scopeId: string * factId: string -> Async<Fact option>
-
-    /// `Get` over the request's resolved scope (Phase 797).
-    abstract Get: scope: ToolUp.Platform.ResolvedScope * factId: string -> Async<Fact option>
+    /// A fact by its content-addressed id: `Ok None` when the scope holds
+    /// no such fact, `Error` when the store could not read it.
+    abstract Get: scope: ResolvedScope * factId: string -> Async<Result<Fact option, FactStoreError>>
 
     /// Query the fact base under `query` (see `FactQuery`). Honours L4
     /// `AsOf` visibility and the competing-fact / supersession rules.
     /// A method-less query against a metric with a registry-declared
-    /// canonical method (Phase 566) returns the canonical lineage's head
-    /// among the competitors; an explicit `Method` clause overrides, an
+    /// canonical method returns the canonical lineage's head among the
+    /// competitors; an explicit `Method` clause overrides, an
     /// `IncludeSuperseded` listing is untouched, and a metric with no
     /// declaration behaves exactly as before (GP 11).
-    abstract Query: scopeId: string * query: FactQuery -> Async<Fact list>
-
-    /// `Query` over the request's resolved scope (Phase 797).
-    abstract Query: scope: ToolUp.Platform.ResolvedScope * query: FactQuery -> Async<Fact list>
+    abstract Query: scope: ResolvedScope * query: FactQuery -> Async<Result<Fact list, FactStoreError>>
 
     /// `Query` with a derived competition annotation per returned fact:
     /// the method identities of the *other* current heads for the same
     /// (subject, metric, period), so an answer surface can disclose that
-    /// alternatives were computed (Phase 566 / GP 9 — selection is
-    /// visible, never silent). Selection semantics are identical to
-    /// `Query` (canonical default, explicit-`Method` override,
-    /// `IncludeSuperseded` listing untouched).
-    abstract QueryWithCompetition: scopeId: string * query: FactQuery -> Async<FactWithCompetition list>
-
-    /// `QueryWithCompetition` over the request's resolved scope (Phase 797).
+    /// alternatives were computed (GP 9 — selection is visible, never
+    /// silent). Selection semantics are identical to `Query`.
     abstract QueryWithCompetition:
-        scope: ToolUp.Platform.ResolvedScope * query: FactQuery -> Async<FactWithCompetition list>
+        scope: ResolvedScope * query: FactQuery -> Async<Result<FactWithCompetition list, FactStoreError>>
 
     /// The supersession chain a fact belongs to — every fact in its
     /// lineage from the earliest to the latest, ordered by `AsOf`
     /// ascending. A single-fact lineage returns just that fact; an unknown
     /// id returns the empty list.
-    abstract QuerySupersessionChain: scopeId: string * factId: string -> Async<Fact list>
+    abstract QuerySupersessionChain: scope: ResolvedScope * factId: string -> Async<Result<Fact list, FactStoreError>>
 
-    /// `QuerySupersessionChain` over the request's resolved scope (Phase 797).
-    abstract QuerySupersessionChain: scope: ToolUp.Platform.ResolvedScope * factId: string -> Async<Fact list>
-
-    /// The **cross-subject** read (Phase 701): rank one metric across a
-    /// subject population and summarise what was ranked over. Resolves
-    /// over the current heads visible at `PopulationQuery.AsOf` (law L4
-    /// — a superseded value never ranks), honours the D19 canonical /
+    /// The **cross-subject** read: rank one metric across a subject
+    /// population and summarise what was ranked over. Resolves over the
+    /// current heads visible at `PopulationQuery.AsOf` (law L4 — a
+    /// superseded value never ranks), honours the D19 canonical /
     /// all-competing method selection, and clamps the ranking to
     /// `PopulationQuery.MaxTopK`: the answer is a ranking plus a summary,
     /// never the population.
     ///
-    /// `Error` is a **typed refusal, not a failure** — the ordering could
-    /// not be resolved (a `RegistryDirection` request against a metric
-    /// that is unregistered or declared `Neutral`), so the store declines
-    /// to invent a sort order (GP 9). An empty population is `Ok` with an
-    /// empty ranking and the empty summary; "nothing matched" is an
+    /// `Error(Refused …)` is a **typed refusal, not a failure** — the
+    /// ordering could not be resolved (a `RegistryDirection` request against
+    /// a metric that is unregistered or declared `Neutral`), so the store
+    /// declines to invent a sort order (GP 9). An empty population is `Ok`
+    /// with an empty ranking and the empty summary; "nothing matched" is an
     /// answer.
-    abstract QueryPopulation: scopeId: string * query: PopulationQuery -> Async<Result<PopulationResult, string>>
-
-    /// `QueryPopulation` over the request's resolved scope (Phase 797).
     abstract QueryPopulation:
-        scope: ToolUp.Platform.ResolvedScope * query: PopulationQuery -> Async<Result<PopulationResult, string>>
+        scope: ResolvedScope * query: PopulationQuery -> Async<Result<PopulationResult, FactStoreError>>
+
+/// A fact-store `Error` raised by a caller whose own signature has no
+/// failure channel to carry it in. Raised, never swallowed: a fault the
+/// caller cannot report is still not an absence.
+exception FactStoreFault of error: FactStoreError with
+    override this.Message = FactStoreError.describe this.error
+
+/// Reading an `IFactStore` answer where the enclosing surface has no
+/// `Result` to return it through.
+[<RequireQualifiedAccess>]
+module FactStoreResult =
+
+    /// The answer, or `FactStoreFault` raised over the store's `Error`.
+    let orRaise (result: Result<'T, FactStoreError>) : 'T =
+        match result with
+        | Ok value -> value
+        | Error error -> raise (FactStoreFault error)
+
+    /// `orRaise` over an asynchronous answer.
+    let orRaiseAsync (answer: Async<Result<'T, FactStoreError>>) : Async<'T> = async {
+        let! result = answer
+        return orRaise result
+    }
+
+    /// A store executor's read, answered as the interface types it: the
+    /// answer, or the fault the read met as `StorageFault` (a fault already
+    /// raised as `FactStoreFault` keeps its own error). A fact the store
+    /// cannot read is never dropped from an answer.
+    let ofRead (operation: string) (read: Async<'T>) : Async<Result<'T, FactStoreError>> = async {
+        try
+            let! answer = read
+            return Ok answer
+        with
+        | FactStoreFault fault -> return Error fault
+        | ex -> return Error(FactStoreError.StorageFault(operation, ex.Message))
+    }
 
 /// Writing a plan's audit rows — the one serialisation every
 /// store executor writes `WritePlan.Audit` through, so a row's type, time

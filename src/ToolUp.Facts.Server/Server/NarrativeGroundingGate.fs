@@ -500,16 +500,16 @@ type FactNarrativeGroundingGate
 
         GroundingCurrent([ rendering ], value, asFraction)
 
-    let resolveFacts (scopeId: string) (principal: string) (surface: FactEgressSurface) (factIds: string list) = async {
+    let resolveFacts (scope: ResolvedScope) (principal: string) (surface: FactEgressSurface) (factIds: string list) = async {
         match factIds with
         | [] -> return Map.empty
         | ids ->
-            let! verdicts = disclosure.Check(scopeId, principal, surface, ids)
+            let! verdicts = disclosure.Check(scope, principal, surface, ids)
 
             let! resolved =
                 ids
                 |> List.map (fun id -> async {
-                    let! chain = store.QuerySupersessionChain(scopeId, id)
+                    let! chain = store.QuerySupersessionChain(scope, id) |> FactStoreResult.orRaiseAsync
 
                     match List.tryFind (fun (f: Fact) -> f.FactId = id) chain with
                     | None -> return id, GroundingUnresolved
@@ -552,15 +552,19 @@ type FactNarrativeGroundingGate
     static member CertificateDepth = 8
 
     interface INarrativeGroundingGate with
-        member _.Check(scopeId, principal, surface, document) = async {
+        member _.Check(scope, principal, surface, document) = async {
             let references = NarrativeGrounding.references document
 
             let factIds, declared =
                 references
                 |> List.partition (fun r -> fst (NarrativeGrounding.referenceKind r) = NarrativeGrounding.FactKind)
 
-            let! facts = resolveFacts scopeId principal surface factIds
-            let! others = declared |> List.map (resolveDeclared scopeId principal) |> Async.Sequential
+            let! facts = resolveFacts scope principal surface factIds
+
+            let! others =
+                declared
+                |> List.map (resolveDeclared scope.ScopeId principal)
+                |> Async.Sequential
 
             let resolutions =
                 Map.fold (fun acc k v -> Map.add k v acc) (Map.ofArray others) facts
@@ -571,10 +575,10 @@ type FactNarrativeGroundingGate
             return NarrativeGrounding.check policy resolve document
         }
 
-        member _.Certify(scopeId, principal, narrativeId, citedFactIds) = async {
+        member _.Certify(scope, principal, narrativeId, citedFactIds) = async {
             let! issued =
                 issuer.Issue(
-                    scopeId,
+                    scope,
                     principal,
                     NarrativeCertificate(narrativeId, citedFactIds),
                     FactNarrativeGroundingGate.CertificateDepth

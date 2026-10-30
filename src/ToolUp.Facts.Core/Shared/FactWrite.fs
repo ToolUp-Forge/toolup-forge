@@ -354,11 +354,75 @@ type WriteShape =
     | ScalarAssert
     | BatchAssert
 
-/// Why a write was refused before anything was read or written.
+/// A batch draft that is not well-formed (`FactDraft.defects`): its
+/// position in the batch, the draft, and the defects.
+type DraftDefect = {
+    Position: int
+    Draft: FactDraft
+    Defects: string list
+}
+
+/// Why a fact store answered `Error` — the one error every `IFactStore`
+/// member returns. Three kinds, and they never blur: a write refused before
+/// anything was read or written, a storage fault, and a typed refusal to
+/// answer. A storage fault is NEVER reported as absence: a fact the store
+/// could not read is an `Error`, not a shorter answer.
 type FactStoreError =
-    /// A batch draft that is not well-formed (`FactDraft.defects`): its
-    /// position in the batch, the draft, and the defects.
-    | MalformedDraft of position: int * draft: FactDraft * defects: string list
+    /// A batch with a malformed draft, refused whole before anything was
+    /// written: the batch's size and every offender, by position.
+    | MalformedDrafts of total: int * offenders: DraftDefect list
+    /// The backing storage failed: what the store was doing, and why. Facts
+    /// a write had already written stay written (an append-only store has no
+    /// rollback, and re-running the identical write is exact by content
+    /// address).
+    | StorageFault of operation: string * reason: string
+    /// The store declined to answer the query as asked — a population
+    /// ordering it cannot resolve, a read a delegated table cannot serve.
+    /// An answer, typed; never a fault.
+    | Refused of reason: string
+
+/// Rendering and classification for `FactStoreError`.
+[<RequireQualifiedAccess>]
+module FactStoreError =
+
+    /// One sentence naming why. A malformed batch names its offenders by
+    /// POSITION — a malformed draft's content address is meaningless, and
+    /// position is what the producer indexes its own input by — plus the
+    /// subject and metric each claimed, at most ten of them.
+    let describe (error: FactStoreError) : string =
+        match error with
+        | MalformedDrafts(total, offenders) ->
+            let named =
+                offenders
+                |> List.truncate 10
+                |> List.map (fun d ->
+                    sprintf
+                        "#%d %s / %s: %s"
+                        d.Position
+                        (SubjectRef.toString d.Draft.Subject)
+                        d.Draft.Metric.Value
+                        (String.concat ", " d.Defects))
+                |> String.concat "; "
+
+            let more =
+                let hidden = List.length offenders - 10
+                if hidden > 0 then sprintf " (and %d more)" hidden else ""
+
+            sprintf
+                "fact store batch rejected: %d of %d drafts are malformed and none were committed — %s%s"
+                (List.length offenders)
+                total
+                named
+                more
+        | StorageFault(operation, reason) -> sprintf "fact store %s failed: %s" operation reason
+        | Refused reason -> reason
+
+    /// `true` for a storage fault — the one kind a retry can change.
+    let isFault (error: FactStoreError) : bool =
+        match error with
+        | StorageFault _ -> true
+        | MalformedDrafts _
+        | Refused _ -> false
 
 /// One draft with its content address and lineage key — what a store needs
 /// to decide which facts and heads to read before the plan is made.
@@ -487,47 +551,21 @@ module FactWrite =
                 | _ -> Some f)
             None
 
-    /// The caller-facing refusal for a batch whose drafts are not all
-    /// well-formed. Names offenders by POSITION — a malformed draft's
-    /// content address is meaningless, and position is what the producer
-    /// indexes its own input by — plus the subject and metric it claimed,
-    /// at most ten of them.
-    let renderOffenders (total: int) (errors: FactStoreError list) : string =
-        let named =
-            errors
-            |> List.truncate 10
-            |> List.map (fun (MalformedDraft(position, draft, defects)) ->
-                sprintf
-                    "#%d %s / %s: %s"
-                    position
-                    (SubjectRef.toString draft.Subject)
-                    draft.Metric.Value
-                    (String.concat ", " defects))
-            |> String.concat "; "
-
-        let more =
-            let hidden = List.length errors - 10
-            if hidden > 0 then sprintf " (and %d more)" hidden else ""
-
-        sprintf
-            "fact store batch rejected: %d of %d drafts are malformed and none were committed — %s%s"
-            (List.length errors)
-            total
-            named
-            more
-
     /// The pre-flight, before any read: a batch with a malformed draft is
     /// refused whole, naming every offender; otherwise each draft is
     /// addressed. A scalar write is never refused here.
-    let prepare (shape: WriteShape) (drafts: FactDraft list) : Result<WriteRequest, FactStoreError list> =
+    let prepare (shape: WriteShape) (drafts: FactDraft list) : Result<WriteRequest, FactStoreError> =
         let offenders =
             match shape with
             | WriteShape.ScalarAssert -> []
             | WriteShape.BatchAssert ->
                 drafts
-                |> List.mapi (fun position draft -> position, draft, FactDraft.defects draft)
-                |> List.filter (fun (_, _, defects) -> not (List.isEmpty defects))
-                |> List.map MalformedDraft
+                |> List.mapi (fun position draft -> {
+                    Position = position
+                    Draft = draft
+                    Defects = FactDraft.defects draft
+                })
+                |> List.filter (fun d -> not (List.isEmpty d.Defects))
 
         match offenders with
         | [] ->
@@ -535,7 +573,7 @@ module FactWrite =
                 Shape = shape
                 Drafts = drafts |> List.map address
             }
-        | _ -> Error offenders
+        | _ -> Error(MalformedDrafts(List.length drafts, offenders))
 
     /// The plan. `isStored` says whether a content address is already
     /// stored; `stored` carries stored facts of the lineages the request

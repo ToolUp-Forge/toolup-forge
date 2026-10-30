@@ -1273,7 +1273,7 @@ module FactsCompose =
     /// |> ServerApp.withStorage blob
     /// |> FactsCompose.withFactStore
     /// |> FactsCompose.withCoverageNarratives
-    ///        (CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [ tenantScope ])
+    ///        (CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [ tenantScopeId ])
     /// |> ServerApp.run
     /// ```
     ///
@@ -1313,19 +1313,54 @@ module FactsCompose =
         | Some walks -> walks :> IFactStore
         | None -> sp.GetRequiredService<IFactStore>()
 
+    /// A declared principal's scope, resolved through the platform's
+    /// `DeclaredPrincipalResolver` — the resolver seam declared work takes, so
+    /// a sweep never reads a shard nobody resolved.
+    let private resolveDeclared
+        (sp: IServiceProvider)
+        (principal: DeclaredPrincipal)
+        : Async<Result<ResolvedScope, string>> =
+        async {
+            match tryService<DeclaredPrincipalResolver> sp with
+            | None ->
+                return
+                    Error
+                        "this deployment composes no DeclaredPrincipalResolver — compose the server through the platform, whose scope-resolution registration provides it"
+            | Some resolver ->
+                let! resolved = resolver.Resolve(DeclaredPrincipal.user principal)
+
+                return
+                    resolved
+                    |> Result.mapError (fun e ->
+                        sprintf
+                            "the declared principal '%s' lacks %s"
+                            principal.UserId
+                            (DeclaredPrincipal.missingGrant e))
+        }
+
     let private registerCoherenceChecks
         (config: CoherenceConfig)
         (cadence: Trigger)
-        (scopes: string list)
+        (principals: DeclaredPrincipal list)
         (services: IServiceCollection)
         : IServiceCollection =
-        services
-            // The health probe surfaces current findings for
-            // `config.HealthScope` — a fresh re-scan per call (GP 12 rule 4).
-            .AddSingleton<HealthChecks.IHealthCheck>(
+        // The health probe surfaces current findings for the scope the
+        // declared health principal resolves to — resolved and re-scanned per
+        // call (GP 12 rule 4). No principal, no probe.
+        match config.HealthPrincipal with
+        | Some principal ->
+            services.AddSingleton<HealthChecks.IHealthCheck>(
                 Func<IServiceProvider, HealthChecks.IHealthCheck>(fun sp ->
-                    CoherenceHealthCheck.create (coherenceStore sp) (tryService<Grounding.IMetricRegistry> sp) config)
+                    CoherenceHealthCheck.create
+                        (coherenceStore sp)
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        config
+                        (fun () -> resolveDeclared sp principal))
             )
+            |> ignore
+        | None -> ()
+
+        services
             // Schedule the standing check on the opt-in cadence. The
             // scheduler + metric registry are only resolvable from the built
             // container, so registration happens in a startup hosted service
@@ -1361,40 +1396,40 @@ module FactsCompose =
 
                                 scheduler.RegisterHandler(CoherenceJobHandler.HandlerName, handler)
 
-                                let effectiveScopes =
-                                    if List.isEmpty scopes then
-                                        [ ScopeKey.PlatformContainer ]
-                                    else
-                                        scopes
-
                                 let scheduleAll = async {
-                                    for scopeId in effectiveScopes do
-                                        let registration: JobRegistration = {
-                                            ScopeId = scopeId
-                                            Handler = CoherenceJobHandler.HandlerName
-                                            Payload = ""
-                                            Trigger = cadence
-                                            Idempotency =
-                                                Some {
-                                                    Key = sprintf "coherence-%s" scopeId
-                                                    TtlSeconds = 60 * 60 * 24 * 365
-                                                }
-                                            RetryPolicy = JobRetryPolicy.defaults
-                                            ShardKey = None
-                                            Precision = JobPrecision.Minute
-                                            CreatedBy = "_facts.coherence"
-                                            Tags = Map.ofList [ "origin", "fact-coherence" ]
-                                        }
+                                    for principal in principals do
+                                        match! resolveDeclared sp principal with
+                                        | Error reason ->
+                                            logger.Warn(sprintf "The coherence check was not scheduled: %s" reason)
+                                        | Ok scope ->
+                                            let scopeId = scope.ScopeId
 
-                                        match! scheduler.Schedule registration with
-                                        | Ok _ -> ()
-                                        | Error err ->
-                                            logger.Warn(
-                                                sprintf
-                                                    "Failed to schedule the coherence check in scope %s: %A"
-                                                    scopeId
-                                                    err
-                                            )
+                                            let registration: JobRegistration = {
+                                                ScopeId = scopeId
+                                                Handler = CoherenceJobHandler.HandlerName
+                                                Payload = ""
+                                                Trigger = cadence
+                                                Idempotency =
+                                                    Some {
+                                                        Key = sprintf "coherence-%s" scopeId
+                                                        TtlSeconds = 60 * 60 * 24 * 365
+                                                    }
+                                                RetryPolicy = JobRetryPolicy.defaults
+                                                ShardKey = None
+                                                Precision = JobPrecision.Minute
+                                                CreatedBy = "_facts.coherence"
+                                                Tags = Map.ofList [ "origin", "fact-coherence" ]
+                                            }
+
+                                            match! scheduler.Schedule(scope, registration) with
+                                            | Ok _ -> ()
+                                            | Error err ->
+                                                logger.Warn(
+                                                    sprintf
+                                                        "Failed to schedule the coherence check in scope %s: %A"
+                                                        scopeId
+                                                        err
+                                                )
                                 }
 
                                 Async.StartAsTask(scheduleAll, cancellationToken = ct) :> System.Threading.Tasks.Task
@@ -1414,9 +1449,13 @@ module FactsCompose =
         services
 
     /// Compose the standing fact-base coherence check with an explicit
-    /// `config` + `cadence` (a cron `Trigger`) + the `scopes` to sweep
-    /// (empty ⇒ `["_platform"]`). Registers the coherence `IHealthCheck` +
-    /// the scheduled sweep on top of an already-enabled fact store. A
+    /// `config` + `cadence` (a cron `Trigger`) + the declared `principals`
+    /// whose scopes to sweep — each resolved through the platform's
+    /// `DeclaredPrincipalResolver` when the sweep is scheduled, and the job
+    /// runs under the scope it resolved to (empty ⇒ no sweep is scheduled: a
+    /// sweep never reads a shard nobody resolved). Registers the coherence
+    /// `IHealthCheck` when `config.HealthPrincipal` names one, and the
+    /// scheduled sweep, on top of an already-enabled fact store. A
     /// `NoFactStore` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
@@ -1425,31 +1464,38 @@ module FactsCompose =
     /// ServerApp.empty
     /// |> ServerApp.withStorage blob
     /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withCoherenceChecksConfig cfg cadence [ "_platform" ]
+    /// |> FactsCompose.withCoherenceChecksConfig cfg cadence [ sweepPrincipal ]
     /// |> ServerApp.run
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withCoherenceChecksConfig
         (config: CoherenceConfig)
         (cadence: Trigger)
-        (scopes: string list)
+        (principals: DeclaredPrincipal list)
         (app: ServerApp)
         : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
         | EnabledFactStore ->
-            let register = registerCoherenceChecks config cadence scopes
+            let register = registerCoherenceChecks config cadence principals
 
             app |> contribute register
 
-    /// `withCoherenceChecksConfig` with `CoherenceConfig.defaults` and the
-    /// default `_platform` sweep scope — the one-liner opt-in. `cadence` is
-    /// the recurring `Trigger` the standing check runs on (e.g. a daily
-    /// `CronTrigger`); the check is also fireable on demand and re-scanned
-    /// by the `/ready` health probe.
+    /// `withCoherenceChecksConfig` with `CoherenceConfig.defaults`, sweeping
+    /// and health-probing the scope `principal` resolves to — the one-liner
+    /// opt-in. `cadence` is the recurring `Trigger` the standing check runs on
+    /// (e.g. a daily `CronTrigger`); the check is also fireable on demand and
+    /// re-scanned by the `/ready` health probe.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withCoherenceChecks (cadence: Trigger) (app: ServerApp) : ServerApp =
-        withCoherenceChecksConfig CoherenceConfig.defaults cadence [] app
+    let withCoherenceChecks (cadence: Trigger) (principal: DeclaredPrincipal) (app: ServerApp) : ServerApp =
+        withCoherenceChecksConfig
+            {
+                CoherenceConfig.defaults with
+                    HealthPrincipal = Some principal
+            }
+            cadence
+            [ principal ]
+            app
 
     // ─── Phase 887 — the default fact-table writer (opt-in) ───────────
     //

@@ -176,8 +176,13 @@ module PublicationRead =
     /// 2. The store is read under the PUBLISHING scope — the scope the page
     ///    names, never the reader's.
     /// 3. Disclosure still applies: the narrative's fact refs are checked at
-    ///    `FactNarrativePublication` in the publishing scope, with the
-    ///    reader as principal; any deny withholds the whole narrative. No
+    ///    `FactNarrativePublication` in the publishing scope — the
+    ///    `ResolvedScope` the caller resolved for it (a declared principal of
+    ///    the publishing team, through the platform's
+    ///    `DeclaredPrincipalResolver`), never one built from the page's
+    ///    string — with the reader as principal; any deny withholds the whole
+    ///    narrative, and a narrative citing facts with no resolved publishing
+    ///    scope (or one naming another shard) is withheld whole. No
     ///    gate composed ⇒ no classified facts to deny (GP 13).
     /// 4. Every READ is audited (`PublicationAudit`) — served, withheld, or
     ///    nothing published — naming the reader, the publishing scope, the
@@ -189,7 +194,7 @@ module PublicationRead =
     ///    (`PublicationAudit.pageRow`).
     let latestNarrative
         (store: INarrativeStore)
-        (disclosure: IFactDisclosureGate option)
+        (disclosure: (IFactDisclosureGate * ResolvedScope option) option)
         (events: IEventStore option)
         (audience: PublicationAudience)
         (slug: string)
@@ -224,8 +229,12 @@ module PublicationRead =
                             match disclosure, NarrativeFacts.factRefs entry.Document |> Set.toList with
                             | None, _
                             | _, [] -> return []
-                            | Some gate, refs ->
-                                let! verdicts = gate.Check(scope, reader.UserId, FactNarrativePublication, refs)
+                            | Some(gate, publishing), refs ->
+                                let! verdicts =
+                                    match publishing with
+                                    | Some resolved when resolved.ScopeId = scope ->
+                                        gate.Check(resolved, reader.UserId, FactNarrativePublication, refs)
+                                    | _ -> async.Return Map.empty
 
                                 // Fail-closed: a ref without an affirmative
                                 // verdict is denied.
@@ -262,8 +271,11 @@ module PublicationRead =
     /// `latestNarrative` over the services composed in `services`: the
     /// `INarrativeStore` (none composed ⇒ `NothingPublished`, audited), the
     /// `IFactDisclosureGate` and the `IEventStore`, when present.
+    /// `publishing` is the resolved publishing scope the disclosure check
+    /// runs in (see `latestNarrative`).
     let latestNarrativeIn
         (services: IServiceProvider)
+        (publishing: ResolvedScope option)
         (audience: PublicationAudience)
         (slug: string)
         (tag: string)
@@ -273,7 +285,7 @@ module PublicationRead =
 
         let disclosure =
             match services.GetService(typeof<IFactDisclosureGate>) with
-            | :? IFactDisclosureGate as g -> Some g
+            | :? IFactDisclosureGate as g -> Some(g, publishing)
             | _ -> None
 
         match services.GetService(typeof<INarrativeStore>) with

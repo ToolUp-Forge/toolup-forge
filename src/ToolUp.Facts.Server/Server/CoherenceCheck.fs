@@ -101,11 +101,13 @@ type CoherenceConfig = {
     /// How close the parent/children ratio must be to a power of ten
     /// (relative) to classify `UnitSlip`. Default: 1%.
     UnitSlipRelativeTolerance: decimal
-    /// The scope the `IHealthCheck` probe re-scans for current findings.
-    /// Default: the reserved `_platform` scope. Multi-tenant deployments
-    /// rely on the per-scope scheduled job's audit rows + alerts; the
-    /// health probe is a coarse process-level signal for this one scope.
-    HealthScope: string
+    /// The declared principal whose scope the `IHealthCheck` probe re-scans
+    /// for current findings, resolved through the deployment's own scope
+    /// resolver on every probe. `None` (the default) composes no probe: a
+    /// sweep never reads a shard nobody resolved. Multi-tenant deployments
+    /// rely on the per-scope scheduled job's audit rows + alerts; the health
+    /// probe is a coarse process-level signal for this one scope.
+    HealthPrincipal: DeclaredPrincipal option
     /// Derive each metric's vintage window from its registry
     /// `StalenessPolicy` instead of applying `VintageWindow` globally.
     ///
@@ -136,12 +138,12 @@ type CoherenceConfig = {
 /// Construction for `CoherenceConfig`.
 module CoherenceConfig =
     /// The zero-config posture: a one-day vintage window, a 1% unit-slip
-    /// sensitivity, the `_platform` health scope, and the global vintage
-    /// window rather than per-metric derivation.
+    /// sensitivity, no health probe, and the global vintage window rather
+    /// than per-metric derivation.
     let defaults: CoherenceConfig = {
         VintageWindow = TimeSpan.FromDays 1.0
         UnitSlipRelativeTolerance = 0.01m
-        HealthScope = ScopeKey.PlatformContainer
+        HealthPrincipal = None
         DeriveVintageFromStaleness = false
     }
 
@@ -531,7 +533,7 @@ module CoherenceCheck =
         (walks: IDelegatedFactWalks)
         (reg: Grounding.IMetricRegistry)
         (config: CoherenceConfig)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (heads: Fact list)
         : Async<CoherenceFinding list> =
         async {
@@ -550,7 +552,7 @@ module CoherenceCheck =
             let! perDelegate =
                 additive
                 |> List.map (fun (d, tolerance) -> async {
-                    match! walks.CurrentRun(scopeId, d.Metric) with
+                    match! walks.CurrentRun(scope, d.Metric) with
                     | Error _
                     | Ok None -> return []
                     | Ok(Some run) ->
@@ -569,7 +571,7 @@ module CoherenceCheck =
                             if List.isEmpty parents then
                                 return []
                             else
-                                match! walks.ChildTotals(scopeId, d.Metric, None) with
+                                match! walks.ChildTotals(scope, d.Metric, None) with
                                 | Error _ -> return []
                                 | Ok totals ->
                                     return childSideFindings reg config tolerance d committedAt parents totals
@@ -589,7 +591,7 @@ module CoherenceCheck =
                                 let parentPaths =
                                     groups |> List.map (fun ((path, _, _), _) -> path) |> List.distinct
 
-                                match! walks.CurrentRows(scopeId, d.Metric, parentPaths) with
+                                match! walks.CurrentRows(scope, d.Metric, parentPaths) with
                                 | Error _ -> return []
                                 | Ok rows -> return parentSideFindings reg config tolerance d committedAt groups rows
                         }
@@ -604,19 +606,21 @@ module CoherenceCheck =
     /// The findings for one scope — the whole-store walk, taking the
     /// delegated path when the store it is handed carries delegates. Over a
     /// store with none this is exactly `check` over the current heads (GP 11).
+    /// A store fault is raised (`FactStoreFault`), never read as a scope with
+    /// nothing to check.
     let findings
         (store: IFactStore)
         (registry: Grounding.IMetricRegistry option)
         (config: CoherenceConfig)
-        (scopeId: string)
+        (scope: ResolvedScope)
         : Async<CoherenceFinding list> =
         async {
-            let! heads = store.Query(scopeId, FactQuery.all)
+            let! heads = store.Query(scope, FactQuery.all) |> FactStoreResult.orRaiseAsync
 
             match store, registry with
             | (:? IDelegatedFactWalks as walks), Some reg when not (List.isEmpty walks.Delegates) ->
                 let ordinary = heads |> List.filter (ownedByDelegate walks.Delegates >> not)
-                let! delegated = delegatedFindings walks reg config scopeId ordinary
+                let! delegated = delegatedFindings walks reg config scope ordinary
                 return check registry config ordinary @ delegated
             | _ -> return check registry config heads
         }
@@ -659,7 +663,7 @@ module CoherenceCheck =
         |> List.map (fun (cause, n) -> sprintf "%s×%d" cause n)
         |> String.concat ", "
 
-    /// Run the standing coherence check against `scopeId` (task 563.C): query
+    /// Run the standing coherence check against `scope` (task 563.C): query
     /// the current heads, derive the findings, emit one audit row per finding
     /// under `_facts`, and publish a single `INotificationChannel` alert when
     /// any finding exists. Reads only — never mutates a stored fact (GP 9:
@@ -672,10 +676,11 @@ module CoherenceCheck =
         (notifications: INotificationChannel)
         (config: CoherenceConfig)
         (clock: unit -> DateTime)
-        (scopeId: string)
+        (scope: ResolvedScope)
         : Async<CoherenceFinding list> =
         async {
-            let! findings = findings store registry config scopeId
+            let scopeId = scope.ScopeId
+            let! findings = findings store registry config scope
             let now = clock().ToUniversalTime()
 
             for finding in findings do
@@ -697,10 +702,13 @@ module CoherenceCheck =
 // ─── Standing execution — job handler + health check (task 563.C) ─────
 
 /// `IJobHandler` that runs one coherence sweep for the scope in its
-/// `JobContext`. Scheduled on an opt-in cadence via `IJobScheduler`
+/// `JobContext`, under the scope the runner re-minted for the job
+/// (`JobContext.Scope`). Scheduled on an opt-in cadence via `IJobScheduler`
 /// (`FactsCompose.withCoherenceChecks`) and fireable on demand
-/// (`IJobScheduler.TriggerOnce`). Stateless between invocations (GP 12
-/// rule 4): everything arrives via `JobContext` + the injected substrate.
+/// (`IJobScheduler.TriggerOnce`). A job registered under a shard that
+/// carries no re-minted scope is refused by name — a sweep never reads a
+/// shard nobody resolved. Stateless between invocations (GP 12 rule 4):
+/// everything arrives via `JobContext` + the injected substrate.
 type CoherenceJobHandler
     (
         store: IFactStore,
@@ -713,21 +721,30 @@ type CoherenceJobHandler
     ) =
     interface IJobHandler with
         member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            try
-                let! findings = CoherenceCheck.run store registry events notifications config clock ctx.ScopeId
+            if ctx.Scope.IsAnonymous && ctx.ScopeId <> ResolvedScope.AnonymousScopeId then
+                return
+                    JobResult.PermanentFailure(
+                        sprintf
+                            "coherence check job %A is registered under '%s' but carries no resolver-minted scope — refused; re-schedule it under a declared principal"
+                            ctx.JobId
+                            ctx.ScopeId
+                    )
+            else
+                try
+                    let! findings = CoherenceCheck.run store registry events notifications config clock ctx.Scope
 
-                logger.Info(
-                    sprintf "[Phase 563] Coherence check for scope %s — %d finding(s)." ctx.ScopeId findings.Length
-                )
+                    logger.Info(
+                        sprintf "[Phase 563] Coherence check for scope %s — %d finding(s)." ctx.ScopeId findings.Length
+                    )
 
-                return JobResult.Success
-            with ex ->
-                let msg =
-                    sprintf "[Phase 563] Coherence check failed for scope %s: %s" ctx.ScopeId ex.Message
+                    return JobResult.Success
+                with ex ->
+                    let msg =
+                        sprintf "[Phase 563] Coherence check failed for scope %s: %s" ctx.ScopeId ex.Message
 
-                logger.Warn msg
-                // A scan / store hiccup is transient — retry on the next tick.
-                return JobResult.TransientFailure msg
+                    logger.Warn msg
+                    // A scan / store hiccup is transient — retry on the next tick.
+                    return JobResult.TransientFailure msg
         }
 
 /// Construction + the compose-time scheduled-job name.
@@ -750,30 +767,42 @@ module CoherenceJobHandler =
         CoherenceJobHandler(store, registry, notifications, events, config, clock, logger) :> IJobHandler
 
 /// `IHealthCheck` surfacing the fact base's current coherence for the
-/// configured scope (task 563.C). Re-scans on each probe (GP 12 rule 4 —
-/// reads fresh state, never a cached flag) and reports `Degraded` when any
-/// finding stands. It NEVER reports `Unhealthy`: a data-quality signal must
-/// not trip `/ready` to 503 and take the process out of rotation.
-type CoherenceHealthCheck(store: IFactStore, registry: Grounding.IMetricRegistry option, config: CoherenceConfig) =
+/// configured scope (task 563.C) — the scope the declared health principal
+/// resolves to, resolved through the deployment's scope resolver on every
+/// probe (`resolveScope`). Re-scans on each probe (GP 12 rule 4 — reads fresh
+/// state, never a cached flag) and reports `Degraded` when any finding
+/// stands, or when the principal no longer resolves. It NEVER reports
+/// `Unhealthy`: a data-quality signal must not trip `/ready` to 503 and take
+/// the process out of rotation.
+type CoherenceHealthCheck
+    (
+        store: IFactStore,
+        registry: Grounding.IMetricRegistry option,
+        config: CoherenceConfig,
+        resolveScope: unit -> Async<Result<ResolvedScope, string>>
+    ) =
     interface IHealthCheck with
         member _.Name = "fact_coherence"
         member _.Kind = Readiness
         member _.Timeout = IHealthCheck.defaultTimeout
 
         member _.Check() : Async<HealthResult> = async {
-            let! found = CoherenceCheck.findings store registry config config.HealthScope
+            match! resolveScope () with
+            | Error reason -> return Degraded(sprintf "the coherence health scope did not resolve: %s" reason)
+            | Ok scope ->
+                let! found = CoherenceCheck.findings store registry config scope
 
-            match found with
-            | [] -> return Healthy
-            | findings ->
-                return
-                    Degraded(
-                        sprintf
-                            "%d fact-base coherence finding(s) in scope %s (%s)"
-                            findings.Length
-                            config.HealthScope
-                            (CoherenceCheck.summarise findings)
-                    )
+                match found with
+                | [] -> return Healthy
+                | findings ->
+                    return
+                        Degraded(
+                            sprintf
+                                "%d fact-base coherence finding(s) in scope %s (%s)"
+                                findings.Length
+                                scope.ScopeId
+                                (CoherenceCheck.summarise findings)
+                        )
         }
 
 /// Construction for `CoherenceHealthCheck`.
@@ -782,5 +811,6 @@ module CoherenceHealthCheck =
         (store: IFactStore)
         (registry: Grounding.IMetricRegistry option)
         (config: CoherenceConfig)
+        (resolveScope: unit -> Async<Result<ResolvedScope, string>>)
         : IHealthCheck =
-        CoherenceHealthCheck(store, registry, config) :> IHealthCheck
+        CoherenceHealthCheck(store, registry, config, resolveScope) :> IHealthCheck

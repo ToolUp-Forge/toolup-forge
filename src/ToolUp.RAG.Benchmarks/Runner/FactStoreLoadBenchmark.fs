@@ -278,9 +278,9 @@ let private seedThroughBatches (store: IFactStore) (scope: string) (total: int) 
                     seededDraft subject metric w
             ]
 
-            match! store.AssertBatch(scope, drafts) with
+            match! store.AssertBatch(ResolvedScope.anonymous, drafts) with
             | Ok _ -> ()
-            | Error e -> failwithf "seeding failed: %s" e
+            | Error e -> failwithf "seeding failed: %s" (FactStoreError.describe e)
         })
         |> fun batches -> Async.Parallel(batches, maxDegreeOfParallelism = 8)
 
@@ -433,9 +433,16 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
             let counting = backend.Counting
             let store = backend.Store
 
+            // The benchmark measures in the anonymous shard — the one
+            // resolved scope a process outside the platform's server tier can
+            // hold — of a store built for this run alone.
+            let resolved = ResolvedScope.anonymous
+
             let scope =
-                backend.Reused
-                |> Option.defaultWith (fun () -> "load-" + Guid.NewGuid().ToString("N").Substring(0, 12))
+                match backend.Reused with
+                | Some reused when reused <> resolved.ScopeId ->
+                    failwithf "a kept table is measured in the anonymous shard; '%s' names another" reused
+                | _ -> resolved.ScopeId
 
             let latest = cell.Weeks - 1
             // Phase 962 — the asserts' input tags carry a per-run salt, so a
@@ -463,7 +470,7 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
             // writes it; the database stamps its own clock), so it is the
             // one field not compared.
             let probe = seededFact (cell.Subjects / 2) 0 latest
-            let! readBack = store.Get(scope, probe.FactId)
+            let! readBack = store.Get(resolved, probe.FactId) |> FactStoreResult.orRaiseAsync
 
             match readBack with
             | Some found when { found with AsOf = probe.AsOf } = probe -> ()
@@ -478,7 +485,7 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                             PeriodOverlaps = Some(week latest)
                     }
 
-                    let! facts = store.Query(scope, query)
+                    let! facts = store.Query(resolved, query) |> FactStoreResult.orRaiseAsync
 
                     if List.length facts <> 1 then
                         failwithf "point read for subject %d returned %d facts, expected 1" subject (List.length facts)
@@ -488,7 +495,7 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                 measureOperation "point read by fact id" counting cell (fun round i -> async {
                     let subject = (round * cell.OpsPerRound + i) * 7919 % cell.Subjects
                     let fact = seededFact subject (i % cell.Metrics) latest
-                    let! found = store.Get(scope, fact.FactId)
+                    let! found = store.Get(resolved, fact.FactId) |> FactStoreResult.orRaiseAsync
 
                     if found.IsNone then
                         failwithf "fact %s is missing" fact.FactId
@@ -505,14 +512,14 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                 measureOperation "population read (one metric, latest week, top 10)" counting cell (fun _ i -> async {
                     let query = populationQuery (i % cell.Metrics)
 
-                    match! store.QueryPopulation(scope, query) with
+                    match! store.QueryPopulation(resolved, query) with
                     | Ok result when result.Stats.SubjectCount = cell.Subjects -> ()
                     | Ok result ->
                         failwithf
                             "population read ranked %d subjects, expected %d"
                             result.Stats.SubjectCount
                             cell.Subjects
-                    | Error e -> failwithf "population read refused: %s" e
+                    | Error e -> failwithf "population read refused: %s" (FactStoreError.describe e)
                 })
 
             // Phase 962 — the rows that read touches, from its executed
@@ -535,9 +542,9 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                     let subject = (round * cell.OpsPerRound + i) % cell.Subjects
                     let tag = sprintf "single-%s-%d-%d" salt round i
 
-                    match! store.Assert(scope, draftFor subject 0 latest tag) with
+                    match! store.Assert(resolved, draftFor subject 0 latest tag) with
                     | Ok _ -> ()
-                    | Error e -> failwithf "assert failed: %s" e
+                    | Error e -> failwithf "assert failed: %s" (FactStoreError.describe e)
                 })
 
             let batch =
@@ -550,9 +557,9 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                             draftFor ((first + k) % cell.Subjects) (1 % cell.Metrics) latest tag
                     ]
 
-                    match! store.AssertBatch(scope, drafts) with
+                    match! store.AssertBatch(resolved, drafts) with
                     | Ok _ -> ()
-                    | Error e -> failwithf "batch assert failed: %s" e
+                    | Error e -> failwithf "batch assert failed: %s" (FactStoreError.describe e)
                 })
 
             backend.Cleanup()

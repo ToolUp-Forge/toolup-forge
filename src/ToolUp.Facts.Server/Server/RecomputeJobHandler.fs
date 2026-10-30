@@ -30,55 +30,13 @@ open ToolUp.Platform
 // arrives via `JobContext` (`Scope` / `ScopeId`) + the deserialised payload
 // (the target `FactId`); no in-memory state survives across dispatches.
 //
-// **Which scope form it uses (Phases 818 and 930).** A recompute job
-// scheduled with a resolver-minted scope (`IJobScheduler.Schedule(scope, …)`
-// with this handler's name and `payloadFor`) runs through the store's
-// `ResolvedScope` members, under the scope the scheduling request resolved
-// to. Since Phase 930 that is what the reactive path does whenever the data
-// write it reacts to was made under a resolved scope: the write's scope rides
-// the change as `DataChangeScope.Resolved` (see `ReactiveDataChange.fs`),
-// `reactToResolvedChange` walks and schedules through the typed members, and
-// the scheduler re-mints the scope when the job runs.
-//
-// **The carried arm stays, and why (Phase 930's premise check).** Two kinds of
-// recompute still arrive with only a string, and neither can be typed without
-// promoting that string to a resolved scope, which Phase 797 forbids:
-//
-//   * a write made off the request path, or into a shard other than the one
-//     the request resolved (a boot seed, an ingestion or import job, a
-//     cross-scope write) reaches the reactive path as
-//     `DataChangeScope.Carried` and is scheduled through the string overload;
-//   * a scheduler that cannot re-mint — one with no platform carrier to
-//     redeem through, or a job whose carried token did not redeem (Phase 935;
-//     both shipped schedulers now re-mint) — hands even a typed-scheduled job
-//     back with the anonymous scope on `JobContext.Scope` and the carried
-//     `ScopeId` beside it.
-//
-// For both, the handler keys the store on the carried `ScopeId`, as it did
-// before Phase 818. Reading the anonymous shard for them instead would find
-// nothing and report success, which is a silent GP 11 regression. What the
-// handler never does is read a scope OTHER than the job's own shard: a typed
-// scope that disagrees with the registration's `ScopeId` is refused.
-
-/// The scope a data-object write was made under, as the reactive path
-/// receives it with the change (Phase 930). The resolved form is the
-/// platform's own value, carried from the write; the carried form is the
-/// shard string alone. Nothing converts the second into the first.
-[<RequireQualifiedAccess>]
-type DataChangeScope =
-    /// The write named the shard the platform resolved for the principal
-    /// making it, and that resolved scope rides the change.
-    | Resolved of scope: ResolvedScope
-    /// Only the shard string rode the write: an off-request write (a boot
-    /// seed, an ingestion or import job) or a write into a shard other than
-    /// the one the request resolved.
-    | Carried of scopeId: string
-
-    /// The shard the write landed in, in either form.
-    member this.ScopeId =
-        match this with
-        | Resolved scope -> scope.ScopeId
-        | Carried scopeId -> scopeId
+// **One scope form.** A recompute job runs under the `ResolvedScope` the
+// platform's runner re-minted for it at execution — the job's scope crosses
+// its persistence boundary as the carrier's sealed key, never as a string the
+// handler trusts. A job that carries no re-minted scope (one scheduled before
+// the carriers were typed, or by a scheduler that cannot re-mint) is REFUSED
+// by name: reading its carried shard id would promote a string to a scope,
+// and reading the anonymous shard would silently find nothing.
 
 /// Recompute-job payload (JSON). The scope is carried by `JobContext`, so
 /// the payload only names the fact to recompute.
@@ -102,32 +60,6 @@ type InvalidationOutcome =
     /// carried for diagnostics.
     | ScheduleFailed of factId: string * error: string
 
-/// `FactInvalidation.recomputeNow` over a `ResolvedScope` (Phase 818): the
-/// same recompute-then-re-assert, with the re-assert through the store's
-/// typed member. The recompute engine itself (`IFactRecomputer`) keys on
-/// the shard string — it computes a value, it does not read the fact base
-/// through a door.
-module private RecomputeUnder =
-    let resolvedScope
-        (store: IFactStore)
-        (recomputer: IFactRecomputer)
-        (scope: ResolvedScope)
-        (fact: Fact)
-        : Async<Result<Fact option, string>> =
-        async {
-            let! recomputed = recomputer.Recompute(scope.ScopeId, fact)
-
-            match recomputed with
-            | Error e -> return Error e
-            | Ok None -> return Ok None
-            | Ok(Some draft) ->
-                let! asserted = store.Assert(scope, draft)
-
-                match asserted with
-                | Ok f -> return Ok(Some f)
-                | Error e -> return Error e
-        }
-
 /// Construction + compose registration + the reactive orchestration.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RecomputeJobHandler =
@@ -140,20 +72,20 @@ module RecomputeJobHandler =
     /// the deployment's `IFactRecomputer`, and re-assert.
     let job (store: IFactStore) (recomputer: IFactRecomputer) (logger: ILogger) : RunJob<RecomputeJobPayload> =
         RunJob.ofPayload HandlerName (fun ctx payload -> async {
-            // A job whose scope the scheduler re-minted (scheduled through
-            // the typed `Schedule`) reads and writes the fact store through
-            // the `ResolvedScope` members. A job whose scope was only
-            // carried — scheduled through the string `Schedule`, which is
-            // what `reactToDataChange` does for a carried write, or handed
-            // back un-minted by a scheduler outside the server tier — runs
-            // under the anonymous scope on `ctx.Scope`, and reading the
-            // anonymous shard for it would silently find nothing; its
-            // carried `ScopeId` keys the store instead (GP 11). Both key one
-            // shard: the typed form is the string form over `ScopeId`.
-            let resolved =
-                not ctx.Scope.IsAnonymous || ctx.ScopeId = ResolvedScope.AnonymousScopeId
-
-            if resolved && ctx.Scope.ScopeId <> ctx.ScopeId then
+            if ctx.Scope.IsAnonymous && ctx.ScopeId <> ResolvedScope.AnonymousScopeId then
+                // No re-minted scope for a job registered under a real shard:
+                // an unmigrated payload. Refused by name — never read under
+                // its carried string, never under the anonymous shard.
+                return
+                    Error(
+                        RunFailure.Terminal(
+                            sprintf
+                                "job %A is registered under '%s' but carries no resolver-minted scope — refused; re-schedule it under a resolved scope"
+                                ctx.JobId
+                                ctx.ScopeId
+                        )
+                    )
+            elif ctx.Scope.ScopeId <> ctx.ScopeId then
                 // A typed scope naming a shard other than the job's own is
                 // never read under. A scheduler that re-mints hands back the
                 // scope it registered under, so this is a defect upstream,
@@ -169,27 +101,25 @@ module RecomputeJobHandler =
                         )
                     )
             else
-                let! fact =
-                    if resolved then
-                        store.Get(ctx.Scope, payload.factId)
-                    else
-                        store.Get(ctx.ScopeId, payload.factId)
-
-                match fact with
-                | None ->
+                match! store.Get(ctx.Scope, payload.factId) with
+                | Error fault ->
+                    return
+                        Error(
+                            RunFailure.Retryable(
+                                sprintf
+                                    "recompute of fact %s could not read it — %s"
+                                    payload.factId
+                                    (FactStoreError.describe fault)
+                            )
+                        )
+                | Ok None ->
                     // The fact no longer resolves (already superseded /
                     // erased). Nothing to recompute; retrying will not
                     // change that — a no-op success, not a failure.
                     logger.Info(sprintf "%s: fact %s not found — nothing to recompute" HandlerName payload.factId)
                     return Ok()
-                | Some fact ->
-                    let! result =
-                        if resolved then
-                            RecomputeUnder.resolvedScope store recomputer ctx.Scope fact
-                        else
-                            FactInvalidation.recomputeNow store recomputer ctx.ScopeId fact
-
-                    match result with
+                | Ok(Some fact) ->
+                    match! FactInvalidation.recomputeNow store recomputer ctx.Scope fact with
                     // Ok (Some _) re-asserted (idempotent when unchanged);
                     // Ok None means no recompute path — both are terminal
                     // success, nothing to retry.
@@ -242,51 +172,35 @@ module RecomputeJobHandler =
         Tags = Map.ofList [ "origin", "fact-invalidation" ]
     }
 
-    /// Schedule (do not yet fire) a recompute job for one invalidated fact.
-    /// Idempotency keys on the fact id, so a fact invalidated repeatedly
-    /// within the TTL coalesces to one live job. `ShardKey` = the fact id
-    /// so a distributed scheduler serialises a fact's recomputes
-    /// (portability rule 5). This is the CARRIED form: the scope is a
-    /// string, so the job is scheduled through the string overload and runs
-    /// with the anonymous scope on `JobContext.Scope` (Phase 818); the
-    /// handler then keys the store on the carried `ScopeId`.
+    /// Schedule (do not yet fire) a recompute job for one invalidated fact
+    /// under the scope the data write was resolved under: the scheduler
+    /// carries the scope and hands it back re-minted on `JobContext.Scope`
+    /// when the job runs. Idempotency keys on the fact id, so a fact
+    /// invalidated repeatedly within the TTL coalesces to one live job.
+    /// `ShardKey` = the fact id so a distributed scheduler serialises a
+    /// fact's recomputes (portability rule 5).
     let scheduleRecompute
-        (scheduler: IJobScheduler)
-        (scopeId: string)
-        (fact: Fact)
-        : Async<Result<ScheduleOutcome, ScheduleError>> =
-        scheduler.Schedule(registrationFor scopeId fact)
-
-    /// Schedule a recompute job for one invalidated fact under the scope the
-    /// data write was RESOLVED under (Phase 930), through the typed
-    /// `Schedule` overload: the scheduler persists the scope and hands it
-    /// back re-minted on `JobContext.Scope` when the job runs, so the handler
-    /// reads and re-asserts through the store's typed members. Same
-    /// idempotency and shard key as `scheduleRecompute`.
-    let scheduleRecomputeUnder
         (scheduler: IJobScheduler)
         (scope: ResolvedScope)
         (fact: Fact)
         : Async<Result<ScheduleOutcome, ScheduleError>> =
         scheduler.Schedule(scope, registrationFor scope.ScopeId fact)
 
-    /// Apply each invalidated head's metric `RecomputePolicy`. `schedule`
-    /// is the scope form the change arrived in; the fire and the outcome
-    /// classification are the same for both.
+    /// Apply each invalidated head's metric `RecomputePolicy`.
     let private applyPolicies
         (scheduler: IJobScheduler)
         (registry: Grounding.IMetricRegistry option)
-        (scopeId: string)
-        (schedule: Fact -> Async<Result<ScheduleOutcome, ScheduleError>>)
+        (scope: ResolvedScope)
         (heads: Fact list)
         : Async<InvalidationOutcome list> =
         async {
+            let scopeId = scope.ScopeId
             let mutable outcomes = []
 
             for fact in heads do
                 match FactInvalidation.policyFor registry fact with
                 | Grounding.Eager ->
-                    let! scheduled = schedule fact
+                    let! scheduled = scheduleRecompute scheduler scope fact
 
                     match scheduled with
                     | Ok(Scheduled jobId | Coalesced jobId) ->
@@ -324,30 +238,13 @@ module RecomputeJobHandler =
     /// additive: with no invalidated facts (or no scheduler-eligible
     /// policy) it schedules nothing (GP 11 / GP 13).
     ///
-    /// This is the CARRIED form: the scope is the shard string a data write
-    /// carried, so the walk and the schedule use the string members. A
-    /// write made under a resolved scope takes `reactToResolvedChange`.
+    /// The one recompute path: the heads are read under the resolved scope
+    /// the write was made under, and each `Eager` recompute is scheduled
+    /// under it, so the job runs under the same scope. Lineage is keyed on
+    /// the shard id the resolved scope names (the typed-to-string direction,
+    /// never the reverse). A store fault on the walk is raised
+    /// (`FactStoreFault`), never read as nothing to invalidate.
     let reactToDataChange
-        (lineage: ILineageStore)
-        (store: IFactStore)
-        (scheduler: IJobScheduler)
-        (registry: Grounding.IMetricRegistry option)
-        (scopeId: string)
-        (changedObjectIds: string list)
-        : Async<InvalidationOutcome list> =
-        async {
-            let! invalidated = FactInvalidation.invalidationSet lineage scopeId changedObjectIds
-            let! heads = FactInvalidation.invalidatedHeads store scopeId invalidated
-            return! applyPolicies scheduler registry scopeId (scheduleRecompute scheduler scopeId) heads
-        }
-
-    /// `reactToDataChange` for a write made under a RESOLVED scope (Phase
-    /// 930): the heads are read through the store's typed `Query`, and each
-    /// `Eager` recompute is scheduled through the typed `Schedule`, so the
-    /// job runs under the scope the write carried. Lineage is keyed on the
-    /// shard string the resolved scope names; that is the typed-to-string
-    /// direction, which Phase 797 allows, never the reverse.
-    let reactToResolvedChange
         (lineage: ILineageStore)
         (store: IFactStore)
         (scheduler: IJobScheduler)
@@ -357,21 +254,10 @@ module RecomputeJobHandler =
         : Async<InvalidationOutcome list> =
         async {
             let! invalidated = FactInvalidation.invalidationSet lineage scope.ScopeId changedObjectIds
-            let! allHeads = store.Query(scope, FactQuery.all)
-            let heads = allHeads |> List.filter (FactInvalidation.isInvalidated invalidated)
-            return! applyPolicies scheduler registry scope.ScopeId (scheduleRecomputeUnder scheduler scope) heads
-        }
 
-    /// Route a change to the form its scope arrived in (Phase 930).
-    let reactToChange
-        (lineage: ILineageStore)
-        (store: IFactStore)
-        (scheduler: IJobScheduler)
-        (registry: Grounding.IMetricRegistry option)
-        (scope: DataChangeScope)
-        (changedObjectIds: string list)
-        : Async<InvalidationOutcome list> =
-        match scope with
-        | DataChangeScope.Resolved resolved ->
-            reactToResolvedChange lineage store scheduler registry resolved changedObjectIds
-        | DataChangeScope.Carried scopeId -> reactToDataChange lineage store scheduler registry scopeId changedObjectIds
+            let! heads =
+                FactInvalidation.invalidatedHeads store scope invalidated
+                |> FactStoreResult.orRaiseAsync
+
+            return! applyPolicies scheduler registry scope heads
+        }

@@ -525,16 +525,13 @@ module FactStoreMigration =
         ]
         |> List.distinct
 
-    let private readIds (store: IFactStore) (scope: string) (t: DateTime) (history: bool) = async {
+    let private readIds (read: FactQuery -> Async<Fact list>) (t: DateTime) (history: bool) = async {
         let! facts =
-            store.Query(
-                scope,
-                {
-                    FactQuery.all with
-                        AsOf = Some t
-                        IncludeSuperseded = history
-                }
-            )
+            read {
+                FactQuery.all with
+                    AsOf = Some t
+                    IncludeSuperseded = history
+            }
 
         return HashSet<string>(facts |> List.map _.FactId, ordinal)
     }
@@ -633,8 +630,8 @@ module FactStoreMigration =
             // The AsOf reads, through each store's own read path.
             for t in sampleInstants facts options.AsOfSamples do
                 for history in [ false; true ] do
-                    let! onSource = readIds (source :> IFactStore) scope t history
-                    let! onTarget = readIds (target :> IFactStore) scope t history
+                    let! onSource = readIds (fun q -> source.QueryShard(scope, q)) t history
+                    let! onTarget = readIds (fun q -> target.QueryShard(scope, q)) t history
 
                     for id in onSource |> Seq.filter (onTarget.Contains >> not) |> Seq.sort do
                         differences.Add(AsOfReadDiffers(t, id, true))

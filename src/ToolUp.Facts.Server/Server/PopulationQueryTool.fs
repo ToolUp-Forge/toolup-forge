@@ -502,6 +502,7 @@ module PopulationQueryTool =
                             AsOf = asOf
                     }
                 )
+                |> FactStoreResult.orRaiseAsync
 
             let samePeriod =
                 found
@@ -558,9 +559,13 @@ module PopulationQueryTool =
 
                 match outcome with
                 // The store's `Error` is a typed REFUSAL — an unregistered
-                // metric, or one declared `Neutral` — never a failure. It
-                // names its own remedy, so it reaches the model verbatim.
-                | Error refusal -> return FactTool.serialize {| error = refusal |}
+                // metric, or one declared `Neutral` — or a storage fault. Each
+                // names itself, so it reaches the model verbatim.
+                | Error refusal ->
+                    return
+                        FactTool.serialize {|
+                            error = FactStoreError.describe refusal
+                        |}
                 | Ok result ->
                     // Disclosure at the door: one gate check over
                     // the ranked ids at the FactToolResult surface. The

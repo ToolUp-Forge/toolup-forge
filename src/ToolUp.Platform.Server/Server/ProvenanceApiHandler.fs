@@ -133,7 +133,7 @@ module ProvenanceApiHandler =
     /// not affirmatively permit is one nothing said may cross.
     let private applyDisclosure
         (disclosure: (IFactDisclosureGate * string) option)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (nodes: ProvenanceNode list)
         : Async<WireProvenanceNode list * WireWithheldNode list> =
         async {
@@ -151,7 +151,7 @@ module ProvenanceApiHandler =
             | None, _
             | _, [] -> return nodes |> List.map toWireNode, []
             | Some(gate, principal), ids ->
-                let! verdicts = gate.Check(scopeId, principal, FactExport, ids)
+                let! verdicts = gate.Check(scope, principal, FactExport, ids)
 
                 let refusalOf (id: string) : string option =
                     match verdicts.TryFind id with
@@ -214,12 +214,12 @@ module ProvenanceApiHandler =
     /// attach a fact's disclosure class or an artifact's status.
     let private incident
         (graph: IProvenanceGraph)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (r: ProvenanceRef)
         : Async<ProvenanceNode list * ProvenanceEdge list> =
         async {
-            let! upstream = graph.GetChain(scopeId, r, Upstream, 1)
-            let! downstream = graph.GetChain(scopeId, r, Downstream, 1)
+            let! upstream = graph.GetChain(scope, r, Upstream, 1)
+            let! downstream = graph.GetChain(scope, r, Downstream, 1)
 
             let nodes =
                 (upstream.Nodes @ downstream.Nodes)
@@ -241,7 +241,7 @@ module ProvenanceApiHandler =
         (disclosure: (IFactDisclosureGate * string) option)
         (graph: IProvenanceGraph)
         (caps: WireProvenanceCaps)
-        (scopeId: string)
+        (scope: ResolvedScope)
         : IProvenanceQueryApi =
         {
             GetCaps = fun () -> async.Return caps
@@ -249,7 +249,7 @@ module ProvenanceApiHandler =
             GetNode =
                 fun r -> async {
                     let id = WireProvenanceRef.id r
-                    let! nodes, edges = incident graph scopeId (ofWireRef r)
+                    let! nodes, edges = incident graph scope (ofWireRef r)
 
                     let seed = nodes |> List.tryFind (fun n -> n.Id = id)
 
@@ -267,7 +267,7 @@ module ProvenanceApiHandler =
 
                     match seed, resolved with
                     | Some node, true ->
-                        let! readable, withheld = applyDisclosure disclosure scopeId [ node ]
+                        let! readable, withheld = applyDisclosure disclosure scope [ node ]
 
                         match readable, withheld with
                         | n :: _, _ -> return WireProvenanceNodeAnswer.Found n
@@ -279,7 +279,7 @@ module ProvenanceApiHandler =
             GetEdges =
                 fun r -> async {
                     let id = WireProvenanceRef.id r
-                    let! _, edges = incident graph scopeId (ofWireRef r)
+                    let! _, edges = incident graph scope (ofWireRef r)
 
                     return {
                         Ref = id
@@ -297,7 +297,7 @@ module ProvenanceApiHandler =
                     else
                         let! chain =
                             graph.GetChain(
-                                scopeId,
+                                scope,
                                 ofWireRef request.Root,
                                 ofWireDirection request.Direction,
                                 request.Depth
@@ -310,7 +310,7 @@ module ProvenanceApiHandler =
                             // indistinguishable from a complete one.
                             return Result.Error(ProvenanceChainExceedsNodeCap(reached, caps.MaxNodes))
                         else
-                            let! readable, withheld = applyDisclosure disclosure scopeId chain.Nodes
+                            let! readable, withheld = applyDisclosure disclosure scope chain.Nodes
 
                             return
                                 Result.Ok {
@@ -331,8 +331,8 @@ module ProvenanceApiHandler =
     /// The right shape for a deployment with no fact tier — nothing
     /// classified its nodes, so there is nothing for a gate to judge and
     /// none is constructed (GP 13).
-    let create (graph: IProvenanceGraph) (caps: WireProvenanceCaps) (scopeId: string) : IProvenanceQueryApi =
-        createCore None graph caps scopeId
+    let create (graph: IProvenanceGraph) (caps: WireProvenanceCaps) (scope: ResolvedScope) : IProvenanceQueryApi =
+        createCore None graph caps scope
 
     /// `create` with the disclosure door engaged: every fact node in
     /// every answer is checked through the supplied gate at the
@@ -340,7 +340,7 @@ module ProvenanceApiHandler =
     /// `WireWithheldNode` marker naming the policy rather than vanishing.
     ///
     /// `principal` is the resolved caller the gate audits denies against
-    /// — resolve it upstream alongside `scopeId`, since both are
+    /// — resolve it upstream alongside `scope`, since both are
     /// per-caller. The gate arrives from DI wherever the fact store is
     /// composed; the fact tier cannot be composed without it.
     let createWithDisclosureGate
@@ -348,6 +348,6 @@ module ProvenanceApiHandler =
         (principal: string)
         (graph: IProvenanceGraph)
         (caps: WireProvenanceCaps)
-        (scopeId: string)
+        (scope: ResolvedScope)
         : IProvenanceQueryApi =
-        createCore (Some(gate, principal)) graph caps scopeId
+        createCore (Some(gate, principal)) graph caps scope

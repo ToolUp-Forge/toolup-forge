@@ -91,13 +91,13 @@ type INarrativeGroundingGate =
     /// stated value is that reference's value. Refusals name every
     /// offending span.
     abstract Check:
-        scopeId: string * principal: string * surface: FactEgressSurface * document: NarrativeDocument ->
+        scope: ResolvedScope * principal: string * surface: FactEgressSurface * document: NarrativeDocument ->
             Async<NarrativeGroundingVerdict>
 
     /// Issue a grounding certificate over a published narrative. `Error`
     /// carries the reason (for example, no signing substrate composed).
     abstract Certify:
-        scopeId: string * principal: string * narrativeId: string * citedFactIds: string list ->
+        scope: ResolvedScope * principal: string * narrativeId: string * citedFactIds: string list ->
             Async<Result<NarrativeGroundingCertificate, string>>
 
 /// One section of a grounded narrative's shape. The heading is the

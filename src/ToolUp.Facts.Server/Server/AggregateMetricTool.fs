@@ -431,7 +431,7 @@ module AggregateMetricTool =
                 | Error refusal -> return refuse refusal
                 | Ok(metricDef, levelIndex) ->
                     match! store.QueryPopulation(scope, populationQuery query levelIndex) with
-                    | Error reason -> return refuse (StoreRefused reason)
+                    | Error reason -> return refuse (StoreRefused(FactStoreError.describe reason))
                     | Ok population ->
                         let! verdicts =
                             gate.Check(scope, principal, FactToolResult, population.Ranked |> List.map _.FactId)

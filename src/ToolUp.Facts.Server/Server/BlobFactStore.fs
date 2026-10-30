@@ -1971,6 +1971,17 @@ type BlobFactStore
         return! writeLeaves scopeId all
     }
 
+    /// The store's own answer to `query` in the shard `scopeId`, through the
+    /// read path `IFactStore.Query` takes. An OPERATOR surface, like
+    /// `ExportScope` beside it: reachable only by code holding the concrete
+    /// executor (a composition root's operator task, such as the migration's
+    /// differential check), never through `IFactStore`, whose every member
+    /// takes a resolved scope.
+    member _.QueryShard(scopeId: string, query: FactQuery) : Async<Fact list> = async {
+        let! _, listing = answerQuery scopeId query false
+        return listing
+    }
+
     /// How many fact blobs the scope holds (Phase 964) — one listing, no
     /// download, so a caller can refuse a scope too large to read whole
     /// before reading any of it.
@@ -2181,7 +2192,6 @@ type BlobFactStore
         BlobFactStore(storage, events, None, clock)
 
     interface IDisclosureTaintIndexSource with
-        member _.ReadTaintIndex(scopeId: string) = readTaintIndex scopeId
         member _.ReadTaintIndex(scope: ResolvedScope) = readTaintIndex scope.ScopeId
 
     interface IFactSeriesRowRead with
@@ -2189,44 +2199,21 @@ type BlobFactStore
 
     interface IFactStore with
 
-        // ── Phase 797 — the request-path form. Each typed member is the
-        // string member over the resolved scope's shard key; the store
-        // keys on nothing else, so the two forms cannot diverge. ──
+        // The store keys on the resolved scope's shard id and on nothing
+        // else. A read that meets a storage fault answers `StorageFault`
+        // (counted and logged where it was met) — never a shorter answer.
 
-        member this.Assert(scope: ResolvedScope, draft: FactDraft) : Async<Result<Fact, string>> =
-            (this :> IFactStore).Assert(scope.ScopeId, draft)
+        member _.Assert(scope: ResolvedScope, draft: FactDraft) : Async<Result<Fact, FactStoreError>> = async {
+            let scopeId = scope.ScopeId
 
-        member this.AssertBatch
-            (scope: ResolvedScope, drafts: FactDraft list)
-            : Async<Result<BatchAssertReceipt, string>> =
-            (this :> IFactStore).AssertBatch(scope.ScopeId, drafts)
-
-        member this.Get(scope: ResolvedScope, factId: string) : Async<Fact option> =
-            (this :> IFactStore).Get(scope.ScopeId, factId)
-
-        member this.Query(scope: ResolvedScope, query: FactQuery) : Async<Fact list> =
-            (this :> IFactStore).Query(scope.ScopeId, query)
-
-        member this.QueryWithCompetition(scope: ResolvedScope, query: FactQuery) : Async<FactWithCompetition list> =
-            (this :> IFactStore).QueryWithCompetition(scope.ScopeId, query)
-
-        member this.QuerySupersessionChain(scope: ResolvedScope, factId: string) : Async<Fact list> =
-            (this :> IFactStore).QuerySupersessionChain(scope.ScopeId, factId)
-
-        member this.QueryPopulation
-            (scope: ResolvedScope, query: PopulationQuery)
-            : Async<Result<PopulationResult, string>> =
-            (this :> IFactStore).QueryPopulation(scope.ScopeId, query)
-
-        member _.Assert(scopeId: string, draft: FactDraft) : Async<Result<Fact, string>> = async {
             try
                 // A request of one. Everything but the surface
                 // fold is the plan's: the scalar shape audits per fact.
                 match FactWrite.prepare WriteShape.ScalarAssert [ draft ] with
-                | Error offenders -> return Error(FactWrite.renderOffenders 1 offenders)
+                | Error refused -> return Error refused
                 | Ok request ->
                     match! writeDrafts scopeId request with
-                    | Error e -> return Error e
+                    | Error e -> return Error(FactStoreError.StorageFault("assert", e))
                     | Ok { Plan = plan } ->
                         // Audit (GP 6): the plan's rows — a FactAsserted
                         // event, and the supersession edge when there is one.
@@ -2252,106 +2239,143 @@ type BlobFactStore
                                 // beats silently overwriting it with a fact
                                 // this call happens to be able to reconstruct.
                                 return
-                                    Error(sprintf "fact store read failed: %s is in the census but unreadable" factId)
+                                    Error(
+                                        FactStoreError.StorageFault(
+                                            "read",
+                                            sprintf "%s is in the census but unreadable" factId
+                                        )
+                                    )
                         | facts, unchanged ->
                             return
                                 Error(
-                                    sprintf
-                                        "fact store assert failed: %d dispositions for one draft"
-                                        (List.length facts + List.length unchanged)
+                                    FactStoreError.StorageFault(
+                                        "assert",
+                                        sprintf
+                                            "%d dispositions for one draft"
+                                            (List.length facts + List.length unchanged)
+                                    )
                                 )
             with ex ->
-                return Error(sprintf "fact store assert failed: %s" ex.Message)
+                return Error(FactStoreError.StorageFault("assert", ex.Message))
         }
 
-        member _.AssertBatch(scopeId: string, drafts: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
-            try
-                // The pre-flight decides over the WHOLE batch before the
-                // first read: the batch is the atom the producer retries, so
-                // a batch that cannot be asserted must decide that before it
-                // has written anything (task 704.B).
-                match FactWrite.prepare WriteShape.BatchAssert drafts with
-                | Error offenders -> return Error(FactWrite.renderOffenders (List.length drafts) offenders)
-                | Ok request when List.isEmpty request.Drafts -> return Ok BatchAssertReceipt.empty
-                | Ok request ->
-                    match! writeDrafts scopeId request with
-                    | Error e -> return Error e
-                    | Ok {
-                             Plan = plan
-                             ScopeInHand = scopeInHand
-                         } ->
-                        // ONE summarised audit row per batch,
-                        // carrying the receipt (the plan's), even for an
-                        // all-idempotent batch.
-                        do! FactAudit.write events scopeId plan.Audit
+        member _.AssertBatch
+            (scope: ResolvedScope, drafts: FactDraft list)
+            : Async<Result<BatchAssertReceipt, FactStoreError>> =
+            async {
+                let scopeId = scope.ScopeId
 
-                        // Phase 702 — one fold per touched metric, through
-                        // the same seam the scalar path uses; since Phase
-                        // 1124 an absent snapshot is built here as well
-                        // when the write core read the whole scope.
-                        do! maintainSurfaceBatch scopeId scopeInHand plan.Facts
+                try
+                    // The pre-flight decides over the WHOLE batch before the
+                    // first read: the batch is the atom the producer retries,
+                    // so a batch that cannot be asserted must decide that
+                    // before it has written anything.
+                    match FactWrite.prepare WriteShape.BatchAssert drafts with
+                    | Error refused -> return Error refused
+                    | Ok request when List.isEmpty request.Drafts -> return Ok BatchAssertReceipt.empty
+                    | Ok request ->
+                        match! writeDrafts scopeId request with
+                        | Error e -> return Error(FactStoreError.StorageFault("batch assert", e))
+                        | Ok {
+                                 Plan = plan
+                                 ScopeInHand = scopeInHand
+                             } ->
+                            // ONE summarised audit row per batch, carrying
+                            // the receipt (the plan's), even for an
+                            // all-idempotent batch.
+                            do! FactAudit.write events scopeId plan.Audit
 
-                        return Ok plan.Receipt
-            with ex ->
-                return Error(sprintf "fact store batch assert failed: %s" ex.Message)
-        }
+                            // One fold per touched metric, through the same
+                            // seam the scalar path uses; an absent snapshot
+                            // is built here as well when the write core read
+                            // the whole scope.
+                            do! maintainSurfaceBatch scopeId scopeInHand plan.Facts
 
-        member _.Get(scopeId: string, factId: string) : Async<Fact option> = load scopeId factId
+                            return Ok plan.Receipt
+                with ex ->
+                    return Error(FactStoreError.StorageFault("batch assert", ex.Message))
+            }
 
-        member _.Query(scopeId: string, query: FactQuery) : Async<Fact list> = async {
-            let! _, listing = answerQuery scopeId query false
-            return listing
-        }
+        member _.Get(scope: ResolvedScope, factId: string) : Async<Result<Fact option, FactStoreError>> =
+            FactStoreResult.ofRead "get" (load scope.ScopeId factId)
 
-        member _.QueryWithCompetition(scopeId: string, query: FactQuery) : Async<FactWithCompetition list> = async {
-            let! heads, listing = answerQuery scopeId query true
-
-            return
-                listing
-                |> List.map (fun f -> {
-                    Fact = f
-                    CompetingMethods = FactCompetition.competingMethods heads f
+        member _.Query(scope: ResolvedScope, query: FactQuery) : Async<Result<Fact list, FactStoreError>> =
+            FactStoreResult.ofRead
+                "query"
+                (async {
+                    let! _, listing = answerQuery scope.ScopeId query false
+                    return listing
                 })
-        }
 
-        member _.QueryPopulation(scopeId: string, query: PopulationQuery) : Async<Result<PopulationResult, string>> =
-            runPopulation scopeId query
+        member _.QueryWithCompetition
+            (scope: ResolvedScope, query: FactQuery)
+            : Async<Result<FactWithCompetition list, FactStoreError>> =
+            FactStoreResult.ofRead
+                "query"
+                (async {
+                    let! heads, listing = answerQuery scope.ScopeId query true
 
-        member _.QuerySupersessionChain(scopeId: string, factId: string) : Async<Fact list> = async {
-            let! target = load scopeId factId
+                    return
+                        listing
+                        |> List.map (fun f -> {
+                            Fact = f
+                            CompetingMethods = FactCompetition.competingMethods heads f
+                        })
+                })
 
-            match target with
-            | None -> return []
-            | Some f ->
-                let key = lineageKeyOf f
+        member _.QueryPopulation
+            (scope: ResolvedScope, query: PopulationQuery)
+            : Async<Result<PopulationResult, FactStoreError>> =
+            async {
+                match! FactStoreResult.ofRead "population query" (runPopulation scope.ScopeId query) with
+                | Ok(Ok result) -> return Ok result
+                | Ok(Error refusal) -> return Error(FactStoreError.Refused refusal)
+                | Error fault -> return Error fault
+            }
 
-                // Phase 890 — the lineage's own facts through the index when
-                // it is complete; the enumeration (repairing an incomplete
-                // index) otherwise. Either way the lineage key itself makes
-                // the final cut, over facts in census order.
-                let! facts =
-                    if not indexOptions.Enabled then
-                        loadAll scopeId
-                    else
-                        async {
-                            let! names = storage.List(scopeId, factsPrefix)
-                            let! index = readIndex scopeId names
+        member _.QuerySupersessionChain
+            (scope: ResolvedScope, factId: string)
+            : Async<Result<Fact list, FactStoreError>> =
+            let scopeId = scope.ScopeId
 
-                            match index with
-                            | Complete(leaves, census) ->
-                                return!
-                                    lineageLeaves leaves f.Subject f.Metric f.Period f.Method
-                                    |> admittedNames census
-                                    |> loadNames scopeId
-                            | Incomplete indexed ->
-                                let! all = loadNames scopeId names
-                                do! repairIndex scopeId all indexed
-                                return all
-                            | NotConsulted -> return! loadNames scopeId names
-                        }
+            FactStoreResult.ofRead
+                "supersession chain"
+                (async {
+                    let! target = load scopeId factId
 
-                return facts |> List.filter (fun g -> lineageKeyOf g = key) |> List.sortBy _.AsOf
-        }
+                    match target with
+                    | None -> return []
+                    | Some f ->
+                        let key = lineageKeyOf f
+
+                        // The lineage's own facts through the index when it
+                        // is complete; the enumeration (repairing an
+                        // incomplete index) otherwise. Either way the
+                        // lineage key itself makes the final cut, over facts
+                        // in census order.
+                        let! facts =
+                            if not indexOptions.Enabled then
+                                loadAll scopeId
+                            else
+                                async {
+                                    let! names = storage.List(scopeId, factsPrefix)
+                                    let! index = readIndex scopeId names
+
+                                    match index with
+                                    | Complete(leaves, census) ->
+                                        return!
+                                            lineageLeaves leaves f.Subject f.Metric f.Period f.Method
+                                            |> admittedNames census
+                                            |> loadNames scopeId
+                                    | Incomplete indexed ->
+                                        let! all = loadNames scopeId names
+                                        do! repairIndex scopeId all indexed
+                                        return all
+                                    | NotConsulted -> return! loadNames scopeId names
+                                }
+
+                        return facts |> List.filter (fun g -> lineageKeyOf g = key) |> List.sortBy _.AsOf
+                })
 
 /// Construction for `BlobFactStore`.
 module BlobFactStore =

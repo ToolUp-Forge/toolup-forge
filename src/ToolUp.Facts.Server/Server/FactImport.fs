@@ -326,7 +326,9 @@ module FactImportRefusal =
 /// names, ids, a public key, JSON text); async at the boundary; failure as
 /// data (`Result`, no callbacks); stateless between calls — every input
 /// arrives as a parameter and the anchors are fixed at composition; scoped
-/// by `scopeId`, with no ordering promised across scopes; no timing
+/// by the resolved scope the caller holds (a request's, or the one the
+/// resolver re-minted from an import job's carried `ScopeKey`), with no
+/// ordering promised across scopes; no timing
 /// primitive.
 type IFactImportDoor =
     /// Import `offer` from `peerId` under the DSSE-wrapped certificate in
@@ -334,7 +336,7 @@ type IFactImportDoor =
     /// predicate type the document itself declares. Returns the asserted
     /// local fact, or a typed refusal — in which case nothing was written.
     abstract Import:
-        scopeId: string * peerId: string * offer: ImportedFactOffer * certificateJson: string ->
+        scope: ResolvedScope * peerId: string * offer: ImportedFactOffer * certificateJson: string ->
             Async<Result<Fact, FactImportRefusal>>
 
 module FactImport =
@@ -426,7 +428,8 @@ module FactImport =
     type private DefaultDoor(store: IFactStore, anchors: Map<string, PeerTrustAnchor>, audit: IAuditLog) =
 
         interface IFactImportDoor with
-            member _.Import(scopeId, peerId, offer, certificateJson) = async {
+            member _.Import(scope, peerId, offer, certificateJson) = async {
+                let scopeId = scope.ScopeId
                 let derived = ImportedFactOffer.derivedFactId offer
 
                 // Every refusal path ends here, and none of them has
@@ -605,8 +608,12 @@ module FactImport =
                                                 Disclosure = effective
                                             }
 
-                                            match! store.Assert(scopeId, draft) with
-                                            | Error reason -> return! refuse payload (ImportRejectedByStore reason)
+                                            match! store.Assert(scope, draft) with
+                                            | Error reason ->
+                                                return!
+                                                    refuse
+                                                        payload
+                                                        (ImportRejectedByStore(FactStoreError.describe reason))
                                             | Ok fact ->
                                                 do!
                                                     audit.Record(

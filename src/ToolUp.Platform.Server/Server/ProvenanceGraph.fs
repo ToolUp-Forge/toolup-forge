@@ -79,12 +79,13 @@ type DefaultProvenanceGraph
     // seed. `nodes`/`edges` accumulate; `visited` guards cycles +
     // re-expansion; `maxDepth` bounds the fact / message hops.
     let run
-        (scopeId: string)
+        (scope: ResolvedScope)
         (seeds: ProvenanceRef list)
         (direction: ProvenanceDirection)
         (maxDepth: int)
         : Async<ProvenanceChain> =
         async {
+            let scopeId = scope.ScopeId
             let nodes = Dictionary<string, ProvenanceNode>()
             let edges = HashSet<string * string * ProvenanceEdgeKind>()
             let visited = HashSet<string>()
@@ -155,7 +156,7 @@ type DefaultProvenanceGraph
                         match factSource with
                         | None -> ()
                         | Some source ->
-                            let! ev = source.GetFact(scopeId, factId)
+                            let! ev = source.GetFact(scope, factId)
 
                             match ev with
                             | None -> ()
@@ -200,7 +201,7 @@ type DefaultProvenanceGraph
 
                         match factSource with
                         | Some source ->
-                            let! facts = source.FactsForResult(scopeId, objId)
+                            let! facts = source.FactsForResult(scope, objId)
 
                             for ev in facts do
                                 nodes[ev.FactId] <- node ev.FactId FactNode (Some ev.Disclosure)
@@ -250,13 +251,13 @@ type DefaultProvenanceGraph
         }
 
     interface IProvenanceGraph with
-        member _.GetChain(scopeId, root, direction, depth) = run scopeId [ root ] direction depth
+        member _.GetChain(scope, root, direction, depth) = run scope [ root ] direction depth
 
-        member _.GetChainForMessage(scopeId, messageId, citedFactIds, depth) = async {
+        member _.GetChainForMessage(scope, messageId, citedFactIds, depth) = async {
             // Root the chain at the message; each cited fact is a CitesFact
             // edge whose upstream is then walked. Facts are seeded together
             // so one BFS covers them.
-            let! chain = run scopeId (citedFactIds |> List.map FactRef) Upstream depth
+            let! chain = run scope (citedFactIds |> List.map FactRef) Upstream depth
 
             let messageNode: ProvenanceNode = {
                 Id = messageId

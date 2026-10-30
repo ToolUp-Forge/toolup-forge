@@ -68,35 +68,28 @@ open ToolUp.Platform
 // root and unobservable in production — the exact shape that let Phase
 // 561's gap sit unnoticed. The cost is bounded by the gate above.
 //
-// **The scope rides the change (Phase 930).** Phase 818 gave jobs a typed
-// scope, but could not type this hop: `IDataObjectStore.Save` / `Recover`
-// hand the decorator a `scopeId: string` and nothing else, and minting a
-// `ResolvedScope` from that string would be precisely the forgery Phase 797
-// makes uncompilable. Phase 930 carries the ORIGIN's scope instead. A save
-// made while serving a request is made under the scope the platform resolved
-// for that request, and the decorator is handed that scope, never a string,
-// through `currentScope` (in a composed deployment,
-// `ScopeResolution.forRequest` over the ambient request, see `requestScope`).
-// When the resolved scope names the shard the write landed in, the resolver's
-// own value rides the change as `DataChangeScope.Resolved`, the recompute is
-// scheduled through the typed `Schedule`, and the job runs under it.
+// **The scope rides the change.** `IDataObjectStore.Save` / `Recover` hand
+// the decorator a `scopeId: string` and nothing else, and promoting that
+// string to a `ResolvedScope` would be precisely the forgery the scope type
+// exists to prevent. So the decorator carries the ORIGIN's scope instead,
+// through `currentScope`: the scope the platform resolved for the request
+// making the write, or the scope the job runner re-minted for the job making
+// it (`ScopeResolution.current`). When that scope names the shard the write
+// landed in, it rides the change, the recompute is scheduled under it, and
+// the job runs under it. The equality test SELECTS the resolved scope; it
+// never builds one.
 //
-// The equality test SELECTS the resolved scope; it never builds one. A write
-// into any other shard, or one made off the request path (a boot seed, an
-// ingestion or import job), rides as `DataChangeScope.Carried` with its
-// string, and is scheduled through the string overload exactly as before.
-// That arm is not a fallback waiting to be deleted: nothing on those paths
-// holds a resolved scope, so the only way to type them would be the
-// promotion 797 forbids. `RecomputeJobHandler.fs` states the other reason
-// its carried arm stays (a scheduler that cannot re-mint).
+// A write with no resolved scope for its shard — one made off every request
+// and every job, or into a shard other than the one the writer resolved —
+// reacts with nothing and says so (a Warn naming the object and the shard):
+// no recompute is ever scheduled under a scope nobody resolved.
 
-/// The reaction a data-object version arrival triggers: given the scope
-/// the write was made under (resolved, or carried as a string — Phase 930)
-/// and the changed input identities, drive whatever the fact tier does
+/// The reaction a data-object version arrival triggers: given the resolved
+/// scope the write was made under and the changed input identities, drive whatever the fact tier does
 /// about it. Kept as a function seam (rather than a hard dependency on
 /// `RecomputeJobHandler`) so the decorator is directly testable and the
 /// DI resolution lives in `FactsCompose`.
-type FactDataChangeReaction = DataChangeScope -> string list -> Async<unit>
+type FactDataChangeReaction = ResolvedScope -> string list -> Async<unit>
 
 /// Decorator over the composed `IDataObjectStore` that drives fact
 /// invalidation when a version lands. Every non-version-producing member
@@ -112,12 +105,12 @@ type ReactiveDataObjectStore
         logger: ILogger
     ) =
 
-    /// The scope the change rides under: the resolved scope when it names
-    /// the shard the write landed in, the carried string otherwise.
-    let changeScope (scopeId: string) : DataChangeScope =
+    /// The scope the change rides under: the resolved scope, when it names
+    /// the shard the write landed in.
+    let changeScope (scopeId: string) : ResolvedScope option =
         match currentScope () with
-        | Some scope when scope.ScopeId = scopeId -> DataChangeScope.Resolved scope
-        | _ -> DataChangeScope.Carried scopeId
+        | Some scope when scope.ScopeId = scopeId -> Some scope
+        | _ -> None
 
     /// Seed the invalidation walk from a landed version. Failures are
     /// contained — the write has already committed.
@@ -136,7 +129,15 @@ type ReactiveDataObjectStore
                     |> List.filter (String.IsNullOrWhiteSpace >> not)
                     |> List.distinct
 
-                do! react (changeScope scopeId) changedIds
+                match changeScope scopeId with
+                | Some scope -> do! react scope changedIds
+                | None ->
+                    logger.Warn(
+                        sprintf
+                            "Fact invalidation skipped for data object %s in scope %s — the write carried no resolved scope for that shard, so no recompute is scheduled under one"
+                            dataObject.ObjectId
+                            scopeId
+                    )
             with ex ->
                 logger.Warn(
                     sprintf
@@ -268,7 +269,7 @@ module ReactiveDataChange =
                 | None -> return ()
                 | Some jobs ->
                     let! outcomes =
-                        RecomputeJobHandler.reactToChange
+                        RecomputeJobHandler.reactToDataChange
                             (lineage ())
                             (factStore ())
                             jobs
@@ -475,17 +476,20 @@ module GroundedNarrativeTrigger =
         (store: IFactStore)
         (scheduler: IJobScheduler)
         (registry: GroundedNarrativeRegistry)
-        (changeScope: DataChangeScope)
+        (resolved: ResolvedScope)
         (changedIds: string list)
         : Async<string list * string list> =
         async {
-            match changeScope with
-            | DataChangeScope.Carried _ -> return [], []
-            | DataChangeScope.Resolved _ when List.isEmpty changedIds || not (reacts registry) -> return [], []
-            | DataChangeScope.Resolved resolved ->
+            if List.isEmpty changedIds || not (reacts registry) then
+                return [], []
+            else
                 let scopeId = resolved.ScopeId
                 let! invalidated = FactInvalidation.invalidationSet lineage scopeId changedIds
-                let! heads = FactInvalidation.invalidatedHeads store scopeId invalidated
+
+                let! heads =
+                    FactInvalidation.invalidatedHeads store resolved invalidated
+                    |> FactStoreResult.orRaiseAsync
+
                 let mutable enqueued = []
                 let mutable refused = []
 
@@ -524,7 +528,7 @@ module GroundedNarrativeTrigger =
         (store: IFactStore)
         (scheduler: IJobScheduler)
         (registry: GroundedNarrativeRegistry)
-        (changeScope: DataChangeScope)
+        (changeScope: ResolvedScope)
         (changedIds: string list)
         : Async<string list> =
         async {
@@ -597,7 +601,8 @@ module GroundedNarrativeTrigger =
                         let depends = Set.ofList definition.DependsOnMetrics
 
                         let! pending =
-                            FactInvalidation.invalidatedHeads store ctx.ScopeId (Set.ofList payload.InvalidatedInputs)
+                            FactInvalidation.invalidatedHeads store ctx.Scope (Set.ofList payload.InvalidatedInputs)
+                            |> FactStoreResult.orRaiseAsync
 
                         let racing =
                             pending

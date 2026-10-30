@@ -170,8 +170,10 @@ type KnowledgeApiDeps = {
     /// `ingestNarrative` refuses to commit a narrative whose Metric spans
     /// reference facts the gate denies at the `FactNarrativePublication`
     /// surface. `None` (no fact store composed) ⇒ the commit path is
-    /// byte-identical (GP 13).
-    DisclosureGate: IFactDisclosureGate option
+    /// byte-identical (GP 13). The gate judges in the resolved scope
+    /// paired with it — the request's, or the one a server-side producer
+    /// committed under — never one derived from a string.
+    DisclosureGate: (IFactDisclosureGate * ResolvedScope) option
     /// Phase 511 — archive-expansion resource guards for `importBatch`,
     /// registered by `withArchiveImportPolicy`. `ArchiveImportPolicy.defaults`
     /// when absent — the one KB policy whose uncomposed default is NOT
@@ -215,6 +217,7 @@ module KnowledgeApiDeps =
     /// its loud logging are unchanged.
     let resolveFrom
         (services: IServiceProvider)
+        (factScope: ResolvedScope)
         (resolvedScope: StorageScope option)
         (userId: string)
         : KnowledgeApiDeps =
@@ -447,7 +450,7 @@ module KnowledgeApiDeps =
         // when the fact companion's compose registered the fact store.
         let disclosureGate =
             match services.GetService(typeof<IFactDisclosureGate>) with
-            | :? IFactDisclosureGate as g -> Some g
+            | :? IFactDisclosureGate as g -> Some(g, factScope)
             | _ -> None
 
         // Phase 511 — bulk-import policies. The archive guards default to
@@ -560,7 +563,7 @@ module KnowledgeApiDeps =
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        resolveFrom ctx.RequestServices resolvedScope userId
+        resolveFrom ctx.RequestServices (StorageScopeResolver.ScopeResolution.forRequest ctx) resolvedScope userId
 
     /// Fail-closed guard for destructive KB operations. Returns `Error`
     /// when scope resolution collapsed onto the shared `user-anonymous`

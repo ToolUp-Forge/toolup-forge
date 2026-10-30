@@ -213,7 +213,7 @@ module FactBrowseHandler =
 
     let private listing
         (deps: FactBrowseDeps)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (table: FactTableDefinition)
         : Async<FactTableListing> =
         async {
@@ -239,7 +239,7 @@ module FactBrowseHandler =
             match deps.Writer with
             | None -> return blank
             | Some writer ->
-                match! writer.Status(scopeId, table.Id) with
+                match! writer.Status(scope, table.Id) with
                 | Error e ->
                     return {
                         blank with
@@ -395,7 +395,7 @@ module FactBrowseHandler =
         let! rows =
             deps.Tables.Tables
             |> List.sortBy _.Id
-            |> List.map (listing deps scope.ScopeId)
+            |> List.map (listing deps scope)
             |> Async.Sequential
 
         return Ok(List.ofArray rows)
@@ -439,7 +439,7 @@ module FactBrowseHandler =
             match declared deps tableId with
             | Error e -> return Error e
             | Ok table ->
-                let! row = listing deps scope.ScopeId table
+                let! row = listing deps scope table
                 return Ok(detailOf deps table row)
         }
 
@@ -468,7 +468,7 @@ module FactBrowseHandler =
                 match deps.Writer with
                 | None -> return Ok empty
                 | Some writer ->
-                    match! writer.Runs(scope.ScopeId, tableId) with
+                    match! writer.Runs(scope, tableId) with
                     | Error e -> return Error(FactTableWriteError.describe e)
                     | Ok runs ->
                         let now = deps.Clock().ToUniversalTime()
@@ -519,7 +519,7 @@ module FactBrowseHandler =
             | Error e, _ -> return Error e
             | Ok _, None -> return Error "No fact table writer is composed in this deployment."
             | Ok table, Some writer ->
-                match! writer.Runs(scope.ScopeId, tableId) with
+                match! writer.Runs(scope, tableId) with
                 | Error e -> return Error(FactTableWriteError.describe e)
                 | Ok runs ->
                     match runs |> List.tryFind (fun r -> r.RunId = runId) with
@@ -549,7 +549,7 @@ module FactBrowseHandler =
                                                 IncludeSuperseded = true
                                         }
 
-                                        let! history = deps.Store.Query(scope, query)
+                                        let! history = deps.Store.Query(scope, query) |> FactStoreResult.orRaiseAsync
 
                                         let samePeriod =
                                             history |> List.filter (fun f -> periodText f.Period = mover.Period)
@@ -681,7 +681,7 @@ module FactBrowseHandler =
                 }
 
                 match! deps.Store.QueryPopulation(scope, query) with
-                | Error refusal -> return Error refusal
+                | Error refusal -> return Error(FactStoreError.describe refusal)
                 | Ok result ->
                     // One gate call over the whole ranking up to the
                     // window's end — the tool's own call for this top-k —
@@ -755,56 +755,61 @@ module FactBrowseHandler =
         : Async<Result<FactDetailView, string>> =
         async {
             match! deps.Store.Get(scope, factId) with
-            | None -> return Error "No fact with that id is visible in this scope."
-            | Some fact ->
-                let! chain = deps.Store.QuerySupersessionChain(scope, factId)
-                let! verdictFor = judge deps scope principal (fact :: chain)
+            | Error fault -> return Error(FactStoreError.describe fault)
+            | Ok None -> return Error "No fact with that id is visible in this scope."
+            | Ok(Some fact) ->
+                match! deps.Store.QuerySupersessionChain(scope, factId) with
+                | Error fault -> return Error(FactStoreError.describe fault)
+                | Ok chain ->
+                    let! verdictFor = judge deps scope principal (fact :: chain)
 
-                match verdictFor fact.FactId with
-                | FactNotDisclosable policy -> return Error(FactDisclosureVerdict.refusalText policy)
-                | FactDisclosable ->
-                    let now = deps.Clock().ToUniversalTime()
-                    let metric = fact.Metric |> fun (MetricRef m) -> m
-                    let render = renderOf deps metric
+                    match verdictFor fact.FactId with
+                    | FactNotDisclosable policy -> return Error(FactDisclosureVerdict.refusalText policy)
+                    | FactDisclosable ->
+                        let now = deps.Clock().ToUniversalTime()
+                        let metric = fact.Metric |> fun (MetricRef m) -> m
+                        let render = renderOf deps metric
 
-                    let steps =
-                        chain
-                        |> List.filter (fun f -> f.FactId <> fact.FactId)
-                        |> List.sortByDescending _.AsOf
+                        let steps =
+                            chain
+                            |> List.filter (fun f -> f.FactId <> fact.FactId)
+                            |> List.sortByDescending _.AsOf
 
-                    let visible, hidden =
-                        steps |> List.partition (fun f -> verdictFor f.FactId = FactDisclosable)
+                        let visible, hidden =
+                            steps |> List.partition (fun f -> verdictFor f.FactId = FactDisclosable)
 
-                    let run = tableRunOf fact.Evidence.TriggerRef
+                        let run = tableRunOf fact.Evidence.TriggerRef
 
-                    let tableId =
-                        match fact.Method, run with
-                        | Computed(_, _, paramHash), Some(t, _) when t = paramHash && (deps.Tables.TryGetTable t).IsSome ->
-                            Some t
-                        | _ -> None
+                        let tableId =
+                            match fact.Method, run with
+                            | Computed(_, _, paramHash), Some(t, _) when
+                                t = paramHash && (deps.Tables.TryGetTable t).IsSome
+                                ->
+                                Some t
+                            | _ -> None
 
-                    return
-                        Ok {
-                            Row = rowOf deps now 0 fact
-                            Metric = metric
-                            Disclosure = Disclosure.toString fact.Disclosure
-                            Method = Fact.methodIdentity fact.Method
-                            TableId = tableId
-                            RunId = tableId |> Option.bind (fun _ -> run |> Option.map snd)
-                            ResultRef = fact.Evidence.ResultRef
-                            InputHashes = fact.Evidence.InputHashes
-                            TriggerRef = fact.Evidence.TriggerRef
-                            Chain =
-                                visible
-                                |> List.map (fun f -> {
-                                    FactId = f.FactId
-                                    Rendering = render f.Value
-                                    AsOf = f.AsOf
-                                    Method = Fact.methodIdentity f.Method
-                                    Supersedes = f.Supersedes
-                                })
-                            ChainWithheldCount = List.length hidden
-                        }
+                        return
+                            Ok {
+                                Row = rowOf deps now 0 fact
+                                Metric = metric
+                                Disclosure = Disclosure.toString fact.Disclosure
+                                Method = Fact.methodIdentity fact.Method
+                                TableId = tableId
+                                RunId = tableId |> Option.bind (fun _ -> run |> Option.map snd)
+                                ResultRef = fact.Evidence.ResultRef
+                                InputHashes = fact.Evidence.InputHashes
+                                TriggerRef = fact.Evidence.TriggerRef
+                                Chain =
+                                    visible
+                                    |> List.map (fun f -> {
+                                        FactId = f.FactId
+                                        Rendering = render f.Value
+                                        AsOf = f.AsOf
+                                        Method = Fact.methodIdentity f.Method
+                                        Supersedes = f.Supersedes
+                                    })
+                                ChainWithheldCount = List.length hidden
+                            }
         }
 
     /// The head query the series and slice reads ask the store: one
@@ -863,7 +868,7 @@ module FactBrowseHandler =
                 match rows with
                 | Some rows -> return rows |> List.map (SeriesHead.ofRow metric)
                 | None ->
-                    let! facts = deps.Store.Query(scope, query)
+                    let! facts = deps.Store.Query(scope, query) |> FactStoreResult.orRaiseAsync
                     return facts |> List.map SeriesHead.ofFact
             }
 
@@ -1101,7 +1106,7 @@ module FactBrowseHandler =
                         |> Option.bind (fun r -> r.TryGetSubject table.Hierarchy)
                         |> Option.bind (fun subject -> FactTableDefinition.levelDepth subject table.Level)
 
-                    let! listingRow = listing deps scope.ScopeId table
+                    let! listingRow = listing deps scope table
 
                     let! perMetric =
                         metrics
@@ -1301,13 +1306,14 @@ module FactBrowseHandler =
     /// a refresh hint, not a record.
     let notifyingWriter (channel: INotificationChannel) (inner: IFactTableWriter) : IFactTableWriter =
         { new IFactTableWriter with
-            member _.OpenRun(scopeId, tableId, ?provenance, ?options) =
-                inner.OpenRun(scopeId, tableId, ?provenance = provenance, ?options = options)
+            member _.OpenRun(scope, tableId, ?provenance, ?options) =
+                inner.OpenRun(scope, tableId, ?provenance = provenance, ?options = options)
 
-            member _.WriteRows(scopeId, runId, rows) = inner.WriteRows(scopeId, runId, rows)
+            member _.WriteRows(scope, runId, rows) = inner.WriteRows(scope, runId, rows)
 
-            member _.Commit(scopeId, runId) = async {
-                let! outcome = inner.Commit(scopeId, runId)
+            member _.Commit(scope: ResolvedScope, runId) = async {
+                let scopeId = scope.ScopeId
+                let! outcome = inner.Commit(scope, runId)
 
                 match outcome with
                 | Ok commit ->
@@ -1328,14 +1334,13 @@ module FactBrowseHandler =
                 return outcome
             }
 
-            member _.Abandon(scopeId, runId, reason) = inner.Abandon(scopeId, runId, reason)
-            member _.Runs(scopeId, tableId) = inner.Runs(scopeId, tableId)
-            member _.Status(scopeId, tableId) = inner.Status(scopeId, tableId)
+            member _.Abandon(scope, runId, reason) = inner.Abandon(scope, runId, reason)
+            member _.Runs(scope, tableId) = inner.Runs(scope, tableId)
+            member _.Status(scope, tableId) = inner.Status(scope, tableId)
           // Phase 977 — the orphan sweep passes through, so the decorated
           // writer still reclaims its ended runs' leftovers.
           interface IFactTableOrphanSweep with
-              member _.SweepOrphans(scopeId) =
-                  FactTableOrphanSweep.sweep inner scopeId
+              member _.SweepOrphans(scope) = FactTableOrphanSweep.sweep inner scope
         }
 
     let private decorateWriter (services: IServiceCollection) : IServiceCollection =
