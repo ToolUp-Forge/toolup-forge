@@ -22,6 +22,7 @@ Migration notes:
 - [1069-redesign-e-defects-client-shell](docs/migrations/1069-redesign-e-defects-client-shell.md)
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
+- [1133-fuaran-co-resolution](docs/migrations/1133-fuaran-co-resolution.md)
 - [1145-pipeline-tool](docs/migrations/1145-pipeline-tool.md)
 
 _Surface since `v0.37.0`: **breaking** — 11 packages moved; 540 members added, 13 members changed, 65 members removed; 1 package new._
