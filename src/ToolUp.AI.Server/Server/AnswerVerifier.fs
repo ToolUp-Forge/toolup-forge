@@ -167,8 +167,10 @@ module Canonical =
     /// Decimal-place precision implied by a .NET numeric format string, in
     /// *fraction* space — so a percent format `"P1"` (one decimal on the
     /// ×100 value) is three fraction decimals. `None` for an empty / verbatim
-    /// format (`""`). Used to canonicalise a stored `FactValue`'s precision
-    /// under the metric registry's declared `DisplayFormat` (Phase 519).
+    /// format (`""`) and for a custom format (`"£#,##0"`), which names no
+    /// precision. The verifier itself reads a fact's precision off its
+    /// rendering, so this is the declared precision a caller can read
+    /// without rendering.
     let formatPrecision (fmt: string) : int option =
         if String.IsNullOrWhiteSpace fmt then
             None
@@ -423,9 +425,11 @@ type IAnswerVerifier =
 module NumericFidelity =
 
     /// Pure verification: extract, canonicalise, and match every numeric
-    /// token against the fact tier. `registry` (when present) supplies each
-    /// fact's declared display precision (Phase 519); absent, the fact's own
-    /// canonical rendering is parsed symmetrically.
+    /// token against the fact tier. A fact is read from its canonical
+    /// rendering, which already carries the precision its metric declares;
+    /// a token matches when the two agree rounded to the token's own
+    /// precision. `registry` (when present) supplies each derived total's
+    /// additive tolerance.
     let verify
         (answer: string)
         (facts: ScopedFact list)
@@ -434,21 +438,10 @@ module NumericFidelity =
         : AnswerVerification =
         let plain, derived = facts |> List.partition (fun f -> List.isEmpty f.Inputs)
 
-        // Pre-parse the facts once — `(fact, value, precision)`.
+        // Pre-parse the facts once — `(fact, value)`.
         let parsedFacts =
             plain
-            |> List.choose (fun f ->
-                let metric = registry |> Option.bind (fun r -> r.TryGetMetric f.Metric)
-
-                match Canonical.parse f.Rendering with
-                | None -> None
-                | Some(v, p) ->
-                    let precision =
-                        match metric |> Option.bind (fun m -> Canonical.formatPrecision m.DisplayFormat) with
-                        | Some fp -> max p fp
-                        | None -> p
-
-                    Some(f, v, precision))
+            |> List.choose (fun f -> Canonical.parse f.Rendering |> Option.map (fun (v, _) -> f, v))
 
         // A derived value counts only when every input is a fact in this
         // scope, and only for a metric the registry declares additive: its
@@ -505,8 +498,8 @@ module NumericFidelity =
                             DerivedFrom = None
                         }
                     else
-                        match parsedFacts |> List.tryFind (fun (_, fv, _) -> Canonical.valuesMatch tp tv fv) with
-                        | Some(f, _, _) -> {
+                        match parsedFacts |> List.tryFind (fun (_, fv) -> Canonical.valuesMatch tp tv fv) with
+                        | Some(f, _) -> {
                             Token = tok.Text
                             Canonical = canonical
                             Verdict = NumberVerified

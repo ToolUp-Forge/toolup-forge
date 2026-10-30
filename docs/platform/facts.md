@@ -955,6 +955,37 @@ else the team store, else the two well-known containers.
 with `--dry-run` to plan only. Without a composed Postgres store only `--ids` runs, over the blob
 store, and the copying modes say what the composition is missing.
 
+## How a value renders: the metric's format, and its currency
+
+A fact's rendering is the form an answer quotes verbatim, and every door renders it the same way:
+the retrieval resolver, `query_facts`, `query_metric_population` (its members and its statistics),
+`aggregate_metric`'s total, the browse handler and the narrative grounding gate all call
+`FactRendering.renderFor` with the metric the registry declares. The rendering is invariant culture
+throughout, because it is a wire and prompt value, never a localised one.
+
+`renderFor` reads the metric's `DisplayFormat`, and for money its currency too. A metric whose
+`Dimensionality` is `currency`, whose `Unit` is an ISO 4217 code and whose format is a `C` format
+renders with that currency's symbol: `GBP` under `C0` is `£21,240`, `EUR` under `C2` is `€1,299.00`,
+`USD` under `C0` is `$7,729`. The grouping, the decimal separator and the negative form `(£21,240)`
+stay invariant; only the symbol is the currency's. Invariant culture's own currency symbol is the
+generic `¤`, which is what a `C` format rendered before the unit was read.
+
+- **The symbols are a table, not culture data.** `CurrencySymbols.table` in Facts.Core maps each code
+  it knows to its English prefix form (`A$` and `CA$` for the Australian and Canadian dollars, so the
+  bare `$` is the US dollar's alone). It reads no ICU data, so a container running with
+  `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` renders exactly what a desktop does.
+- **An unknown code is its own prefix.** A three-letter code the table does not hold renders as
+  `CHF 1,299`, never `¤1,299`.
+- **Everything else renders as the format alone says.** A non-currency metric, a currency metric under
+  an `N`, `F` or custom format, a `Unit` that is not an ISO code (`"£"`), and a metric the registry does
+  not hold all render exactly as `FactRendering.render <format>` does. `render` itself is unchanged,
+  for a caller that holds only a format string.
+
+The numeric answer gate reads a quoted `£21,240` as 21240 and matches it against the fact's rendering
+at the precision the rendering states, so a `C0` money metric verifies exactly as an `N0` one does. A
+custom format such as `"£#,##0"` is no longer needed to show the symbol; `C0` / `C2` say the same and
+name the currency in the unit, where every door can read it.
+
 ## Fact vs result vs model artifact
 
 The fact store sits **above** the analysis-result and model-artifact

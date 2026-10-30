@@ -570,6 +570,8 @@ let private registeredTests =
         ToolAwareRagFramingTests.tests
         FactFirstRetrievalTests.tests
         AnswerVerifierTests.tests
+        FactRenderingTests.tests
+        FactRenderingTests.invariantGlobalizationTests
         DisclosureEgressTests.tests
         DisclosureExportWebhookTests.tests
         DisclosureTaintTests.tests
@@ -1109,6 +1111,8 @@ let private laneDeclaration: TestLaneFilter.LaneDeclaration = {
         // 20.7 s / 11 cases — four cases outlive a 4 s server-token lifetime
         // (Phase 1047, measured 2026-10-21); slowest case 4.9 s.
         StreamAuthBothSignInsTests.tests
+        // ~10 s / 2 cases — one case starts a child run of this pack.
+        FactRenderingTests.invariantGlobalizationTests
     ]
     // Deliberately EMPTY, and that is a declaration rather than an
     // omission. `pure` means "touches no filesystem, process, socket or

@@ -498,6 +498,51 @@ let tests =
                 Expect.equal (verdict |> Option.map _.Verified) (Some 1) "one verified figure"
         ]
 
+        // ── A figure in the metric's declared currency ────────────────
+        testList "a declared currency" [
+            let gbp = {
+                revenueMetric with
+                    Id = "revenue_gbp"
+                    DisplayFormat = "C0"
+                    RollUp = None
+            }
+
+            let gbpRegistry = MetricRegistry.build [ { Module = "test"; Definition = gbp } ] []
+
+            let rendering =
+                ToolUp.Facts.FactRendering.renderFor (Some gbp) (ToolUp.Facts.Scalar 21240.4m)
+
+            let verify answer facts =
+                NumericFidelity.verify answer facts (Some gbpRegistry) "Strict"
+
+            testCase "a £ figure verifies against a GBP C0 fact at the declared precision"
+            <| fun _ ->
+                Expect.equal rendering "£21,240" "the fact renders in its currency, at the C0 precision"
+                Expect.equal (Canonical.formatPrecision gbp.DisplayFormat) (Some 0) "C0 declares no decimals"
+
+                let v = verify "Revenue was £21,240." [ scoped "f1" rendering "revenue_gbp" ]
+
+                Expect.equal v.Verified 1 "£21,240 verifies"
+                Expect.equal (v.Numbers |> List.head).MatchedFactId (Some "f1") "against the GBP fact"
+
+            testCase "a figure finer than the declared precision, or a different one, does not"
+            <| fun _ ->
+                let facts = [ scoped "f1" rendering "revenue_gbp" ]
+
+                Expect.equal (verify "Revenue was £21,240.40." facts).Unmatched 1 "the fact states no pence"
+                Expect.equal (verify "Revenue was £21,241." facts).Unmatched 1 "a different figure"
+
+            testCase "the fact's precision is read off its rendering, so a custom format verifies alike"
+            <| fun _ ->
+                // A custom format declares no precision the gate can read,
+                // and the gate needs none: the rendering carries it.
+                Expect.isNone (Canonical.formatPrecision "£#,##0") "a custom format names no precision"
+
+                let custom = verify "Revenue was £21,240." [ scoped "f1" "£21,240" "" ]
+
+                Expect.equal custom.Verified 1 "the same verdict as the C0 rendering"
+        ]
+
         // ── Gate-mode parse round-trip ────────────────────────────────
         testList "AnswerGateMode.parse" [
             testCase "recognised modes"

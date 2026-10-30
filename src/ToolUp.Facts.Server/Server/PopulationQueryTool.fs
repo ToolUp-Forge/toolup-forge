@@ -462,9 +462,6 @@ module PopulationQueryTool =
                         |> Option.map _.Staleness
                         |> Option.defaultValue Grounding.UntilSuperseded
 
-                    let displayFormat =
-                        metricDef |> Option.map _.DisplayFormat |> Option.defaultValue ""
-
                     let now = clock().ToUniversalTime()
 
                     // The same derivation the store's own freshness
@@ -486,7 +483,7 @@ module PopulationQueryTool =
                                 factId = fact.FactId
                                 subject = SubjectRef.toString fact.Subject
                                 metric = fact.Metric.Value
-                                rendering = FactRendering.render displayFormat fact.Value
+                                rendering = FactRendering.renderFor metricDef fact.Value
                                 periodFrom = fact.Period.From.ToUniversalTime().ToString "o"
                                 periodTo = fact.Period.To.ToUniversalTime().ToString "o"
                                 periodLabel = fact.Period.Label
@@ -509,7 +506,7 @@ module PopulationQueryTool =
                     let renderPath (path: string list) = String.concat ">" path
 
                     let renderStat (value: decimal option) =
-                        value |> Option.map (fun d -> FactRendering.render displayFormat (Scalar d))
+                        value |> Option.map (fun d -> FactRendering.renderFor metricDef (Scalar d))
 
                     let directionLabel =
                         match result.Direction with

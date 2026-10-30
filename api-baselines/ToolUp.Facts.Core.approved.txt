@@ -182,6 +182,10 @@ ToolUp.Facts.Confidence (class)
 ToolUp.Facts.Confidence..ctor(System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Confidence.Basis : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.Confidence.Value : System.Decimal { get }
+ToolUp.Facts.CurrencySymbols (class)
+ToolUp.Facts.CurrencySymbols.prefix(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Facts.CurrencySymbols.table : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Facts.CurrencySymbols.tryFind(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DeclaredMethod (class)
 ToolUp.Facts.DeclaredMethod..ctor(System.String, System.String)
 ToolUp.Facts.DeclaredMethod.MethodId : System.String { get }
@@ -533,6 +537,7 @@ ToolUp.Facts.FactPublicationTargetModule.create(System.String, System.String) : 
 ToolUp.Facts.FactPublicationTargetModule.defects(ToolUp.Facts.FactPublicationTarget, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDefinition], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.FactRendering (class)
 ToolUp.Facts.FactRendering.render(System.String, ToolUp.Facts.FactValue) : System.String
+ToolUp.Facts.FactRendering.renderFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.MetricDefinition], ToolUp.Facts.FactValue) : System.String
 ToolUp.Facts.FactStoreError (class)
 ToolUp.Facts.FactStoreError.Tag : System.Int32 { get }
 ToolUp.Facts.FactStoreError.defects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

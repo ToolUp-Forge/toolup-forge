@@ -484,15 +484,10 @@ type FactNarrativeGroundingGate
 
     let kindsByName = kinds |> List.map (fun k -> k.Kind, k) |> Map.ofList
 
-    let displayFormatOf (fact: Fact) : string =
-        registry
-        |> Option.bind (fun r -> r.TryGetMetric fact.Metric.Value)
-        |> Option.map _.DisplayFormat
-        |> Option.defaultValue ""
-
     let currentOf (fact: Fact) : GroundingResolution =
-        let format = displayFormatOf fact
-        let rendering = FactRendering.render format fact.Value
+        let metric = registry |> Option.bind (fun r -> r.TryGetMetric fact.Metric.Value)
+        let format = metric |> Option.map _.DisplayFormat |> Option.defaultValue ""
+        let rendering = FactRendering.renderFor metric fact.Value
 
         let value =
             match fact.Value with

@@ -461,7 +461,7 @@ module AggregateMetricTool =
                             |> Option.defaultValue (FactNotDisclosable "unknown-fact")
 
                         let render (value: decimal) =
-                            FactRendering.render metricDef.DisplayFormat (Scalar value)
+                            FactRendering.renderFor (Some metricDef) (Scalar value)
 
                         match rollUp query levelIndex render verdictFor population with
                         | Error refusal -> return refuse refusal

@@ -14,8 +14,8 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // conversational. The model asks the store a (subject, metric, period)
 // question mid-turn; the executor runs the scope-resolved
 // `IFactStore.Query` and projects each returned fact to a typed result
-// carrying its fact id, the canonical rendering (`FactRendering.render`
-// under the metric registry's `DisplayFormat`), derived freshness
+// carrying its fact id, the canonical rendering (`FactRendering.renderFor`
+// under the metric registry's declaration), derived freshness
 // (`Freshness.derive` — never stored), a supersession pointer when a
 // later assertion corrected it, the method identity, and (Phase 994) the
 // content hashes of the inputs it was computed from (`InputHash.named`) —
@@ -276,9 +276,6 @@ module FactQueryTool =
                     |> Option.map _.Staleness
                     |> Option.defaultValue Grounding.UntilSuperseded
 
-                let displayFormat =
-                    metricDef |> Option.map _.DisplayFormat |> Option.defaultValue ""
-
                 let now = clock().ToUniversalTime()
 
                 let! projected =
@@ -300,7 +297,7 @@ module FactQueryTool =
                             factId = fact.FactId
                             subject = SubjectRef.toString fact.Subject
                             metric = fact.Metric.Value
-                            rendering = FactRendering.render displayFormat fact.Value
+                            rendering = FactRendering.renderFor metricDef fact.Value
                             periodFrom = fact.Period.From.ToUniversalTime().ToString "o"
                             periodTo = fact.Period.To.ToUniversalTime().ToString "o"
                             periodLabel = fact.Period.Label
