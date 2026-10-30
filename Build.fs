@@ -4819,11 +4819,21 @@ let main args =
 
             Path.Combine(Path.GetTempPath(), "toolup-fuaran-cobuild-" + key.Substring(0, 12).ToLowerInvariant())
 
+        // The tool resolver cache is machine-wide (`~/.dotnet/toolResolverCache`)
+        // and records the path a local tool was restored to. Restored under this
+        // leg's private NUGET_PACKAGES, the Fable entry pointed into a worktree's
+        // `obj/`; once that worktree was removed, every `dotnet fable` on the
+        // machine answered "Run dotnet tool restore" while restore kept reporting
+        // success. The cache lives in the scratch directory instead, and goes
+        // with it.
+        let cliHome = Path.Combine(scratch, "cli-home")
+
         let run (workDir: string) (exe: string) (argv: string list) =
             let result =
                 CreateProcess.fromRawCommand exe argv
                 |> CreateProcess.withWorkingDirectory workDir
                 |> CreateProcess.setEnvironmentVariable "NUGET_PACKAGES" packages
+                |> CreateProcess.setEnvironmentVariable "DOTNET_CLI_HOME" cliHome
                 |> CreateProcess.redirectOutput
                 |> Proc.run
 
@@ -4902,6 +4912,7 @@ let main args =
         let clientDir = Path.Combine(scratch, "Client")
         Directory.ensure serverDir
         Directory.ensure (Path.Combine(clientDir, ".config"))
+        Directory.ensure cliHome
 
         let ownFeed =
             match toolUpVersion with
