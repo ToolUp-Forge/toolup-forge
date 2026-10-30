@@ -86,7 +86,7 @@ module MetaWhatsAppSettings =
 
     /// Secret-store scope every Meta WhatsApp secret is read from.
     [<Literal>]
-    let SecretScope = "_platform"
+    let SecretScope = ScopeKey.PlatformContainer
 
     /// Secret key of the System User access token (sends + health probe).
     [<Literal>]

@@ -303,7 +303,7 @@ type MetaWhatsAppInboundWebhookHandler
 
             let targets =
                 match matches with
-                | [] -> [ "_platform", [] ]
+                | [] -> [ ScopeKey.PlatformContainer, [] ]
                 | _ ->
                     matches
                     |> List.groupBy fst
