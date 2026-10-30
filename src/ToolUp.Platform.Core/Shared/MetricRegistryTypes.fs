@@ -339,6 +339,21 @@ type IDescribesSubjects =
     /// undescribed or unregistered.
     abstract TryGetSubjectDescription: subjectId: string -> SubjectDescription option
 
+/// The optional capability of a metric registry that keeps which module
+/// declared each metric and subject. A capability beside `IMetricRegistry`
+/// rather than a member on it, so no external implementation breaks: a
+/// reader probes for it (`MetricRegistry.tryRegistrations`). The registry
+/// answers `MetricsByModule` for a module it is told, and nothing at all for
+/// a subject; this is the enumeration a reader needs to group by module
+/// without knowing the module names. The composed registry implements it.
+type IAttributesDeclarations =
+    /// Every metric with its declaring module, in declaration order, one
+    /// entry per `(module, id)`.
+    abstract MetricRegistrations: MetricRegistration list
+    /// Every subject hierarchy with its declaring module, in declaration
+    /// order, one entry per `(module, id)`.
+    abstract SubjectRegistrations: SubjectRegistration list
+
 /// Read surface over the composed metric & subject registry, resolved
 /// from DI by server-side consumers (fact store, planner, discovery
 /// tooling). A compose-time immutable projection — every lookup is a
@@ -394,6 +409,13 @@ module MetricRegistry =
         interface IDescribesSubjects with
             member _.TryGetSubjectDescription subjectId =
                 descriptionById |> Map.tryFind subjectId
+
+        interface IAttributesDeclarations with
+            member _.MetricRegistrations =
+                metrics |> List.distinctBy (fun r -> r.Module, r.Definition.Id)
+
+            member _.SubjectRegistrations =
+                subjects |> List.distinctBy (fun r -> r.Module, r.Definition.Id)
 
         interface IMetricRegistry with
             member _.Metrics = metricDefs
@@ -565,6 +587,15 @@ module MetricRegistry =
     let trySubjectDescription (registry: IMetricRegistry) (subjectId: string) : SubjectDescription option =
         match registry with
         | :? IDescribesSubjects as described -> described.TryGetSubjectDescription subjectId
+        | _ -> None
+
+    /// The metric and subject registrations a registry keeps, with their
+    /// declaring modules: `None` when the registry does not carry them
+    /// (`IAttributesDeclarations` is an optional capability).
+    let tryRegistrations (registry: IMetricRegistry) : (MetricRegistration list * SubjectRegistration list) option =
+        match registry with
+        | :? IAttributesDeclarations as attributed ->
+            Some(attributed.MetricRegistrations, attributed.SubjectRegistrations)
         | _ -> None
 
     /// The empty registry — what a composition that registered nothing

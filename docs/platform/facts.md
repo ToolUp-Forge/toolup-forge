@@ -1031,6 +1031,28 @@ ServerModule.create "trade"
 
 Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-descriptions.md).
 
+## Preflight names what is undescribed
+
+A description is optional, and an optional field nobody is told about stays empty. A deployment that declares twenty
+metrics with no `Context` gets discovery tools that report names and units only, and nothing says so. Composing the fact
+store (`FactsCompose.withFactStore`) therefore registers one preflight validator, `fact-declarations-described`
+(`FactDeclarationsValidator`), that names what is undescribed:
+
+- **Three kinds, one finding.** Each registered metric without `Context`, each declared fact table without a
+  description and each subject without a description, grouped by declaring module, with a count per kind and the one
+  registration call each needs (`ServerModule.declareMetrics`, `ServerModule.describeFactTables`,
+  `ServerModule.describeSubjects`). A blank text counts as none.
+- **Information, never a refusal.** The preflight result type has no informational severity, and a `Warning` would move
+  every deployment that has not described itself to `Warned` on its readiness report. So the finding is logged at Info
+  through the composed `ILogger`, and the validator answers `Ok`. It cannot stop a start.
+- **Nothing to say, nothing said.** A fully described deployment, or one that declares no metric, table or subject,
+  logs nothing. Nothing changes at runtime.
+- **Module names come from the registry.** The composed `IMetricRegistry` also implements the optional capability
+  `IAttributesDeclarations`, which `MetricRegistry.tryRegistrations` probes for. A registry that does not carry it is
+  still audited; its metrics and subjects are listed under one group, `(module not recorded)`.
+- **Order-independent.** The validator reads the registries and the logger from the service collection when preflight
+  runs, so it does not matter whether modules are added before or after the fact store is composed.
+
 ## Disclosure at birth
 
 Every fact carries a `Disclosure` from its first assertion (plan D14).
