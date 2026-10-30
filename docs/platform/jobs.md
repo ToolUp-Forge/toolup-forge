@@ -241,6 +241,12 @@ replayed request inside the TTL, which is also what lets a request re-run a job 
 failed. Closing that without losing the retry is a scheduler-contract change — a trigger absorbed by
 a run of the same job that has not yet started — and is not made here.
 
+Both data-arrival sites are closed against a double run, each in the way its key calls for: the
+narrative trigger fires only a `Scheduled` job, and the recompute fires its vessel on both outcomes.
+There is deliberately no shared helper that fires only on `Scheduled` for both: at the recompute
+site it would leave a fact stale after a second, different change inside the TTL, which is the
+guard the second-site pin holds.
+
 ### Lifecycle events
 
 Five events emit to `IEventStore` under `SourceModule = "_platform.jobs"`:

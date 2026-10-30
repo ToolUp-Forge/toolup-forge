@@ -126,6 +126,46 @@ watermark, freshness against the cadence, and the latest run's outcome:
 A table whose last commit is older than its cadence reads as `Stale`: a missed refresh shows up
 through the cadence, not as silence.
 
+### The run record and its lifecycle
+
+A run is one record, `FactTableRunRecord`, and everything a run declared when it was opened rides
+it. `OpenRun`'s options (the inputs, the period slice, the method) are kept on the record as
+`Options : RunOptions`, so `OpenRun`, `Runs` and `Status` all return them and a commit observer
+reads which inputs and period a run published from the record alone:
+
+```fsharp skip=fragment
+let! runs = writer.Runs(scopeId, "sku-daily")
+match runs with
+| Ok(latest :: _) ->
+    latest.Options.Inputs       // the content hashes the run declared
+    latest.Options.Slice        // the period it replaced, if any
+    latest.Options.Method       // the method that produced it, if any
+| _ -> ()
+```
+
+`RunOptions` is the record form in `ToolUp.Platform.Core`; `FactTableRunOptions` stays the builder a
+producer opens a run with (`FactTableRunOptions.toRun` / `ofRun` move between the two). A record
+written before the options were kept reads with `Options = RunOptions.empty` and
+`RecordVersion = 0`; a record written now carries `RecordVersion = FactTableRunRecord.CurrentVersion`.
+
+The lifecycle is one pure state machine over the record, `FactTableRun`, and every writer executes
+it rather than restating it:
+
+| Transition | From | To |
+|---|---|---|
+| `FactTableRun.opened` | — | `Open`, nothing staged, carrying its options |
+| `FactTableRun.stage` | `Open` | `Open`, more rows staged |
+| `FactTableRun.commit` | `Open` | `Committed` |
+| `FactTableRun.reject` | `Open` | `Rejected` (nothing was written) |
+| `FactTableRun.abandon` | `Open` | `Abandoned` |
+
+Every transition but `opened` takes an `OpenFactTableRun`, which only `FactTableRun.tryOpen` hands
+out, and only for an `Open` record. An ended run is refused there, naming its status (the writer's
+`FactTableRunClosed`), so no transition out of a terminal outcome can be written. Where a run is kept,
+the one-open-run claim that serialises opens, and the commit's writes stay the executing writer's.
+An orphan sweep reclaims only the leftovers of a run that has ended (`FactTableRun.hasEnded`); an
+open run is never swept, and an open run past its cadence reads `Failed` or `Discarded` by the clock.
+
 ## The default writer
 
 `DefaultFactTableWriter` writes each cell as an ordinary fact through the composed `IFactStore`, so
