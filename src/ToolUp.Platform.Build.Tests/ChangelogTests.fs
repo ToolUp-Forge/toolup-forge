@@ -444,5 +444,114 @@ let tests =
                 let text = File.ReadAllText(path).Replace("\r\n", "\n")
                 Expect.stringStarts text header "generated header"
                 Expect.stringContains text "\n## [" "at least one release section"
+
+            testCase "carries the released sections only — the draft is rendered on demand, never committed"
+            <| fun () ->
+                let text =
+                    File.ReadAllText(Path.Combine(repoRoot (), "CHANGELOG.md")).Replace("\r\n", "\n")
+
+                let draftHeadings =
+                    linesOf text
+                    |> List.filter (fun l -> l.StartsWith "## [" && l.EndsWith "— unreleased")
+
+                Expect.isEmpty
+                    draftHeadings
+                    "an `unreleased` section in the tracked file is the per-change form every concurrent landing conflicted on; `-- Changelog --draft` prints it instead"
+        ]
+
+        // The tracked file is rendered at release instead of by each change.
+        // That is only safe if dropping the draft moves no released byte, and
+        // if the section a release renders is the one the draft showed: the
+        // former per-change regeneration and the release render then produce
+        // the same released file, which is what the first two cases pin over
+        // a fixture release line. The third pins where the render now runs.
+        testList "rendered at release" [
+            let older = {
+                release [ entryOf mixed ] [ "docs/migrations/0.2.0-alpha-widening.md" ] with
+                    Version = "0.2.0"
+            }
+
+            let oldest = {
+                release [] [] with
+                    Version = "0.1.0"
+                    Tag = Some "v0.1.0"
+                    Date = Some "2026-01-01"
+                    Since = None
+                    Surface = NoBaselines
+            }
+
+            let pending = {
+                release [ entryOf { mixed with Package = "Demo.Next" } ] [ "docs/migrations/257-scorecard.md" ] with
+                    Version = "0.3.0"
+                    Tag = None
+                    Date = None
+                    Since = Some "v0.2.0"
+            }
+
+            let released = [ older; oldest ]
+
+            testCase "the former per-change file is the draft section over the release render, byte for byte"
+            <| fun () ->
+                let perChange = render defaultLimits (pending :: released)
+                let atRelease = render defaultLimits released
+
+                Expect.equal
+                    perChange
+                    (header + renderRelease defaultLimits pending + atRelease.Substring header.Length)
+                    "dropping the draft section moves no released byte"
+
+            testCase "a tagged release renders the section its draft showed, under a dated heading"
+            <| fun () ->
+                let asDraft = renderRelease defaultLimits pending
+
+                let asRelease =
+                    renderRelease defaultLimits {
+                        pending with
+                            Tag = Some "v0.3.0"
+                            Date = Some "2026-02-03"
+                    }
+
+                let body (s: string) = s.Substring(s.IndexOf '\n')
+
+                Expect.stringStarts asRelease "## [0.3.0] — 2026-02-03\n" "the release heading carries the tag's date"
+                Expect.stringStarts asDraft "## [0.3.0] — unreleased\n" "the draft heading carries none"
+                Expect.equal (body asRelease) (body asDraft) "everything below the heading is the same bytes"
+
+                // The release render at the tag is the former per-change
+                // render of the tagged tree: there the draft is empty, so
+                // both are `render` over the same release line.
+                let tagged = {
+                    pending with
+                        Tag = Some "v0.3.0"
+                        Date = Some "2026-02-03"
+                }
+
+                Expect.equal
+                    (render defaultLimits (tagged :: released))
+                    (header + asRelease + (render defaultLimits released).Substring header.Length)
+                    "the new section lands on top of the released file unchanged"
+
+            testCase "the publish workflow renders the CHANGELOG on the tag, before the pack, and keeps it"
+            <| fun () ->
+                let path = Path.Combine(repoRoot (), ".github", "workflows", "publish-nuget.yml")
+                Expect.isTrue (File.Exists path) "publish-nuget.yml is committed"
+                let lines = File.ReadAllLines path |> List.ofArray
+
+                let indexOf (needle: string) =
+                    lines |> List.tryFindIndex (fun l -> l.Contains needle)
+
+                match indexOf "Build.fsproj -- Changelog", indexOf "Build.fsproj -- Publish" with
+                | Some render, Some publish ->
+                    Expect.isLessThan render publish "the CHANGELOG is rendered before the pack"
+                | None, _ -> failtest "publish-nuget.yml does not run the Changelog target"
+                | _, None -> failtest "publish-nuget.yml does not run the Publish target"
+
+                Expect.isTrue
+                    (lines |> List.exists (fun l -> l.Trim() = "name: changelog"))
+                    "the rendered file is uploaded as the run's `changelog` artefact"
+
+                Expect.isTrue
+                    (lines |> List.exists (fun l -> l.Trim() = "path: CHANGELOG.md"))
+                    "the artefact is the rendered CHANGELOG.md"
         ]
     ]

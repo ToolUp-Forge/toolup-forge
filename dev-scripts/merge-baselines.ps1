@@ -47,6 +47,19 @@
                        name (`Type.Member`, `Type..ctor`, or the type itself),
                        so an overload set shares one key.
 
+      -Mode draftnote  `Directory.Build.props`. Not a projection: an ordinary
+                       three-way merge (`git merge-file`), with ONE rule on
+                       top. The draft note below `<Version>` is append-only —
+                       each change adds one line at the end of the list under
+                       the marker line, and never edits one — so two branches
+                       that each appended a line conflict only because git's
+                       line merge cannot order two insertions at one point. A
+                       conflict that lies inside that list and is a pure
+                       insertion on both sides is resolved as ours, then
+                       theirs. Every other conflict, including an edit to a
+                       note already in the list and any disagreement over
+                       `<Version>` itself, is left with its markers.
+
     Exit 0 with the merged bytes in %A, or exit 1 with %A carrying standard
     conflict markers and the reason on stderr.
 
@@ -76,7 +89,7 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][ValidateSet('coverage', 'members')][string]$Mode,
+    [Parameter(Mandatory)][ValidateSet('coverage', 'members', 'draftnote')][string]$Mode,
     [Parameter(Mandatory, Position = 0)][string]$Base,
     [Parameter(Mandatory, Position = 1)][string]$Ours,
     [Parameter(Mandatory, Position = 2)][string]$Theirs,
@@ -529,7 +542,97 @@ function Invoke-MembersMerge() {
     exit 0
 }
 
+# ─── Mode: draftnote ─────────────────────────────────────────────────
+
+# The marker line that opens the append-only list, compared after a trim. It
+# is spelled with `=` because an XML comment cannot contain `--`. The list it
+# opens ends at the comment's closing line.
+$script:DraftNoteMarker = '==== draft notes: append ONE line per change below this marker, never edit one ===='
+
+function Invoke-DraftNoteMerge() {
+    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    $where = if ([string]::IsNullOrWhiteSpace($Pathname)) { 'Directory.Build.props' } else { $Pathname }
+
+    if ($null -eq $git) {
+        [Console]::Error.WriteLine("merge-baselines (draftnote): ``git`` is not on PATH, so $where cannot be merged here; resolve it by hand.")
+        Write-LfFile $Ours (Join-Lines @('<<<<<<< ours') (Read-LfLines $Ours) @('=======') (Read-LfLines $Theirs) @('>>>>>>> theirs'))
+        exit 1
+    }
+
+    # In place on %A, which is where git reads the result from. The exit code
+    # is the number of conflicts, or negative on an error.
+    & $git.Source merge-file --diff3 -L ours -L base -L theirs (Resolve-AgainstCwd $Ours) (Resolve-AgainstCwd $Base) (Resolve-AgainstCwd $Theirs)
+    $conflicts = $LASTEXITCODE
+    if ($conflicts -eq 0) { exit 0 }
+
+    if ($conflicts -lt 0 -or $conflicts -ge 128) {
+        [Console]::Error.WriteLine("merge-baselines (draftnote): git merge-file failed on $where (exit $conflicts); resolve it by hand.")
+        exit 1
+    }
+
+    $lines = Read-LfLines $Ours
+    $out = [System.Collections.Generic.List[string]]::new()
+    $inList = $false
+    $left = 0
+    $i = 0
+
+    while ($i -lt $lines.Length) {
+        $line = $lines[$i]
+
+        if (-not $line.StartsWith('<<<<<<< ')) {
+            $trimmed = $line.Trim()
+            if ($trimmed -ceq $script:DraftNoteMarker) { $inList = $true }
+            elseif ($inList -and $trimmed -ceq '-->') { $inList = $false }
+            $out.Add($line)
+            $i++
+            continue
+        }
+
+        # One diff3 hunk: ours, ||||||| base, =======, theirs, >>>>>>>.
+        $part = 'ours'
+        $hunk = @{ ours = [System.Collections.Generic.List[string]]::new(); base = [System.Collections.Generic.List[string]]::new(); theirs = [System.Collections.Generic.List[string]]::new() }
+        $raw = [System.Collections.Generic.List[string]]::new()
+        $raw.Add($line)
+        $i++
+
+        while ($i -lt $lines.Length) {
+            $l = $lines[$i]
+            $raw.Add($l)
+            $i++
+            if ($l.StartsWith('>>>>>>> ')) { break }
+            if ($l.StartsWith('||||||| ')) { $part = 'base'; continue }
+            if ($l -ceq '=======') { $part = 'theirs'; continue }
+            $hunk[$part].Add($l)
+        }
+
+        # Pure insertions on both sides, inside the list, carrying neither the
+        # marker nor the closing line: two appended notes. Anything else is a
+        # disagreement this rule does not decide.
+        $added = @($hunk.ours) + @($hunk.theirs)
+        $structural = @($added | Where-Object { $_.Trim() -ceq '-->' -or $_.Trim() -ceq $script:DraftNoteMarker })
+
+        if ($inList -and $hunk.base.Count -eq 0 -and $structural.Count -eq 0) {
+            foreach ($l in $hunk.ours) { $out.Add($l) }
+            foreach ($l in $hunk.theirs) { $out.Add($l) }
+        }
+        else {
+            foreach ($l in $raw) { $out.Add($l) }
+            $left++
+        }
+    }
+
+    Write-LfFile $Ours ([string[]]$out.ToArray())
+
+    if ($left -gt 0) {
+        [Console]::Error.WriteLine("merge-baselines (draftnote): $where left CONFLICTED — $left conflict(s) outside the append-only draft note, or editing a note already in it. Resolve them as an ordinary merge.")
+        exit 1
+    }
+
+    exit 0
+}
+
 switch ($Mode) {
     'coverage' { Invoke-CoverageMerge }
     'members' { Invoke-MembersMerge }
+    'draftnote' { Invoke-DraftNoteMerge }
 }

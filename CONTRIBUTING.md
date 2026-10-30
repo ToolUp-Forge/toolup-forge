@@ -31,7 +31,8 @@ maintenance commitment, and how to sign your work.
    [`checks.yml`](.github/workflows/checks.yml) CI workflow, which scans every PR
    commit for a `Signed-off-by:` trailer matching the commit author.
 5. **Run `dotnet run --project Build.fsproj -- Setup` once per clone.** It registers the
-   three-way merge driver for the generated `api-baselines/` projections — see
+   three-way merge drivers for the generated `api-baselines/` projections and the append-only
+   draft note in `Directory.Build.props` — see
    [Generated baselines and their merge driver](#generated-baselines-and-their-merge-driver).
 6. **Run the gates** locally — the same commands CI runs, so a green run here
    predicts a green run there:
@@ -340,9 +341,10 @@ $env:TOOLUP_APPROVE_API = $null
 dotnet run --project Build.fsproj -- Setup
 ```
 
-This registers a three-way **merge driver** for those two paths in your clone's
-`.git/config`. It is a one-time, per-clone step, and it is not optional if you
-work on more than one branch at a time.
+This registers a three-way **merge driver** for those two paths, and for the
+draft note in `Directory.Build.props` (below), in your clone's `.git/config`. It
+is a one-time, per-clone step, and it is not optional if you work on more than
+one branch at a time.
 
 Why it cannot be automatic: `.gitattributes` (which this repo does commit) can
 name a driver per path, but git reads the driver's **command** from
@@ -350,6 +352,27 @@ name a driver per path, but git reads the driver's **command** from
 to everyone who clones it. So the name is in the tree and the command is not,
 and a clone that has not run `Setup` simply gets git's built-in text merge.
 Nothing breaks; you just see the conflict the driver would have resolved.
+
+**The registration names the PRIMARY checkout's script, whichever checkout runs
+`Setup`.** A clone's `.git/config` is shared by every worktree of that clone, so a
+command naming one worktree's copy of the script stops working the moment that
+worktree is removed, and from then on git reports every merge of these files, in
+every worktree, as a conflict. That happened on 2026-10-29: `Setup` had been run
+from a worktree that was later removed, and a landing was refused for files the
+driver exists to merge. `Setup` now resolves the script through the clone's common
+directory (`git rev-parse --git-common-dir`, whose parent is the primary checkout),
+so it is safe to run from any checkout; keep the primary checkout current, because
+every worktree runs its copy of the script, and `Setup` warns when that copy
+differs from the one in the checkout you ran it from.
+
+```
+dotnet run --project Build.fsproj -- Setup --check
+```
+
+writes nothing and fails naming each driver that is unregistered, or registered
+to a shell or script that does not exist. `VerifyAll` prints one warning for a
+driver registered to a missing path, and the merge-driver tests in the Platform
+pack fail on one.
 
 ### What the driver resolves, and what it refuses
 
@@ -361,17 +384,42 @@ It resolves the case git's line merge cannot: two branches that each **added**
 to the same sorted region. For the member lists it takes the union of both
 sides' additions and re-emits them in the generator's own order; for the
 coverage rows it computes `base + (ours − base) + (theirs − base)` on both
-numbers, and takes a row that exists on only one side as-is.
+numbers, and takes a row that exists on only one side as-is. A member line
+removed on one side while the other side left it untouched is taken as
+removed: that side's own baseline already carried the removal, so the breaking
+change reached its reviewer on the branch that made it (a retype is such a
+removal plus an addition).
 
 It refuses, leaving ordinary conflict markers and a reason on stderr, when:
 
-- a member present in the merge base is **missing from either side**. A removal
-  is a breaking change under the SemVer-on-`0.x` policy, and the whole point of
-  the both-directions gate (Phase 618) is that a human sees it;
+- a row was removed on **both** sides and the two sides replaced it
+  differently — deleted on one and retyped on the other, or retyped two ways;
 - a coverage row's arithmetic goes negative, or would leave more documented
   members than members;
-- a row was removed on one side and changed on the other;
+- both sides rewrote the generated header differently;
 - a line in either file cannot be parsed at all.
+
+### The draft note is append-only, and the CHANGELOG is not yours to regenerate
+
+A change that moves a public surface records it in two places, and neither is
+`CHANGELOG.md`:
+
+- its regenerated baselines, above;
+- **one line** appended at the end of the draft-note list in
+  `Directory.Build.props`, below the `<Version>` it rides and its marker line,
+  in the form `- <phase> (<version>): <class> — <one sentence>`. Never insert a
+  paragraph, and never edit or reorder a line already there. Two branches that
+  each append a line still collide under git's line merge (both insert at one
+  point), so `Setup` registers a third mode of the same driver for that file. It
+  runs an ordinary three-way merge and resolves only a conflict that is a pure
+  insertion on both sides inside the list, ours first; anything else in the
+  file, a disagreement over `<Version>` included, is left with its markers.
+
+`CHANGELOG.md` is rendered from the release tags at release time and changes
+once per release — see
+[the release process](docs/platform/release-process.md#the-changelog-is-rendered-at-release).
+To read what the next release will say, print the unreleased section:
+`dotnet run --project Build.fsproj -- Changelog --draft`.
 
 ### Never resolve a baseline conflict by picking a side
 

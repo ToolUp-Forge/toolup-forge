@@ -208,6 +208,27 @@ jobs:
       - name: Verify the declared version matches the public-surface diff
         run: dotnet run --project Build.fsproj -- VerifySemVerBump
 
+      # The CHANGELOG is rendered HERE, on the tag, and nowhere else. The
+      # tracked file carries the released sections only, so no change that
+      # merely moves a baseline touches it, and concurrent landings stop
+      # conflicting on it. This run has every input the render reads: the
+      # full history and tags (`fetch-depth: 0` above), each tag's
+      # baselines, and the migration docs. So the section it adds for this
+      # tag is the one a local render after `git fetch --tags` produces,
+      # byte for byte. Before the pack, so a renderer that cannot read the
+      # release fails before a credential is minted; the file is kept as
+      # the run's `changelog` artefact, and the release's follow-up commit
+      # carries it to `main` (docs/platform/release-process.md).
+      - name: Render the CHANGELOG for this release
+        run: dotnet run --project Build.fsproj -- Changelog
+
+      - name: Keep the rendered CHANGELOG
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG.md
+          if-no-files-found: error
+
       # The one-hour temp key comfortably covers the ~10-minute pack that
       # follows; one OIDC token buys exactly one temporary key.
       - name: NuGet login (OIDC → temp API key)
