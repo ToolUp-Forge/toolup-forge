@@ -1143,7 +1143,13 @@ type GoogleCalendarBridge
             | Ok(Some(events, nextSyncToken)) ->
                 match nextSyncToken with
                 | Some token ->
-                    let! _ = secretStore.SetSecret(link.ScopeId, syncTokenKey link, token) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
+                    // The sync token is a resumable cursor, and the events it
+                    // follows are already in hand. A refused write leaves the
+                    // previous token (or none) at rest, so the next pull reads
+                    // a SUPERSET from the older cursor or the `updatedMin`
+                    // bound, and the caller reconciles events by value
+                    // (`ICalendarBridge.Pull`). The bridge holds no logger.
+                    let! _ = secretStore.SetSecret(link.ScopeId, syncTokenKey link, token) // best-effort-write: resumable sync cursor — a refused write re-reads a superset from the older cursor next pull, reconciled by value
                     ()
                 | None -> ()
 

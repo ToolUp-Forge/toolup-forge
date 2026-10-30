@@ -96,7 +96,9 @@ type InvalidationOutcome =
     /// `Manual` metric — the changed state is surfaced only; a human or an
     /// explicit trigger drives any recompute.
     | SurfacedOnly of factId: string
-    /// `Eager` metric — scheduling the recompute job failed; the error is
+    /// `Eager` metric — scheduling the recompute job failed, or (Phase 1105)
+    /// it was scheduled and its `TriggerOnce` was refused, so a `Manual`
+    /// job that never fires on its own has not started; the error is
     /// carried for diagnostics.
     | ScheduleFailed of factId: string * error: string
 
@@ -291,9 +293,21 @@ module RecomputeJobHandler =
                         // Manual-trigger job — fire it now so the recompute
                         // actually runs (invalidation is the trigger). The
                         // scope id here is the job's LOOKUP key, never a
-                        // scope the job runs under.
-                        let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                        outcomes <- Enqueued(fact.FactId, jobId) :: outcomes
+                        // scope the job runs under. Phase 1105 — a refused
+                        // trigger is not `Enqueued`: the job never fires on
+                        // its own, so it is reported as not started (and the
+                        // next invalidation of the fact coalesces onto the
+                        // same job and triggers it again).
+                        match! scheduler.TriggerOnce(scopeId, jobId, Actor) with
+                        | Ok() -> outcomes <- Enqueued(fact.FactId, jobId) :: outcomes
+                        | Error refusal ->
+                            let error =
+                                sprintf
+                                    "recompute job %O was scheduled but its trigger was refused: %s"
+                                    jobId
+                                    (TriggerError.message refusal)
+
+                            outcomes <- ScheduleFailed(fact.FactId, error) :: outcomes
                     | Error err -> outcomes <- ScheduleFailed(fact.FactId, sprintf "%A" err) :: outcomes
                 | Grounding.OnQuery -> outcomes <- DeferredToQuery fact.FactId :: outcomes
                 | Grounding.Manual -> outcomes <- SurfacedOnly fact.FactId :: outcomes

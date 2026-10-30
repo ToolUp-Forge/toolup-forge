@@ -158,6 +158,51 @@ let tests =
             | Error e -> failtestf "DownloadExport must succeed; got %s" e
         }
 
+        // Phase 1105 — a `Manual` export job never fires on its own, so a
+        // refused trigger is an export that will never run: the caller is
+        // told, and the ticket is Failed rather than left Preparing.
+        testCaseAsync "a refused trigger fails the request and the ticket, never returning a Preparing ticket"
+        <| async {
+            let exporters: IDataExporter list = [ FakeExporter "kb" :> IDataExporter ]
+            let store = BlobBackedBackgroundExportStore.create (InMemoryBlobStorage())
+            // No handler registered: the scheduler refuses the fire.
+            let scheduler = InlineScheduler()
+            let notified = ConcurrentQueue<ExportTicket * ExportStatus>()
+
+            let deps: DsrAsyncDeps = {
+                Store = store
+                Scheduler = scheduler
+                Notify = fun ticket status -> async { notified.Enqueue((ticket, status)) }
+                Signer = None
+            }
+
+            let api =
+                DataSubjectRequestApiHandler.create
+                    exporters
+                    []
+                    ErasurePolicy.Tombstone
+                    "team-1"
+                    "admin"
+                    adminContext
+                    (CapturingAudit()).Callback
+                    (Some deps)
+
+            match! api.RequestExportAsync input with
+            | Ok ticket -> failtestf "a ticket whose job never starts was returned: %A" ticket
+            | Error e -> Expect.stringContains e "could not start" "the caller is told the export did not start"
+
+            let ticket, _ = notified |> Seq.head
+            let! status = store.GetStatus ticket
+
+            match status with
+            | ExportStatus.Failed reason -> Expect.stringContains reason "trigger refused" "the ticket names why"
+            | other -> failtestf "the ticket must be Failed, got %A" other
+
+            match Seq.last notified with
+            | _, ExportStatus.Failed _ -> ()
+            | _, other -> failtestf "watchers must be told the ticket failed, last saw %A" other
+        }
+
         testCaseAsync "Cancel before the job runs leaves the ticket Cancelled (job skips Complete)"
         <| async {
             // Drive the store + handler directly so we can cancel between

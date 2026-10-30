@@ -102,7 +102,7 @@ let private registryWith (defs: MetricDefinition list) : IMetricRegistry =
 
 // ─── Recording IJobScheduler (records Schedule + TriggerOnce) ─────────
 
-type private RecordingScheduler() =
+type private RecordingScheduler(?refuseTrigger: TriggerError) =
     let scheduled = ConcurrentQueue<JobRegistration>()
     let triggered = ConcurrentQueue<JobId>()
 
@@ -133,8 +133,11 @@ type private RecordingScheduler() =
         member _.GetRecentRuns(_, _, _) = async { return [] }
 
         member _.TriggerOnce(_, jobId, _) = async {
-            triggered.Enqueue jobId
-            return Ok()
+            match refuseTrigger with
+            | Some refusal -> return Error refusal
+            | None ->
+                triggered.Enqueue jobId
+                return Ok()
         }
 
         member _.NotifyEventWritten(_, _, _) = async { return () }
@@ -340,6 +343,54 @@ let tests =
             let reg = scheduler.Scheduled.[0]
             Expect.equal reg.Handler RecomputeJobHandler.HandlerName "scheduled against the recompute handler"
             Expect.equal reg.ScopeId scope "scheduled in the fact's scope"
+        }
+
+        // Phase 1105 — a `Manual` recompute job never fires on its own, so a
+        // refused trigger is a recompute that did not start: never `Enqueued`.
+        testCaseAsync "a refused recompute trigger is ScheduleFailed, never Enqueued"
+        <| async {
+            let store = newStore ()
+            let lineage = newLineage ()
+            let scheduler = RecordingScheduler(TriggerError.SchedulerStopping)
+            let scope = newScope ()
+
+            let! _ = store.Assert(scope, draftFor "eager_m" "v1" 1m)
+            let registry = registryWith [ metricDef "eager_m" UntilUpstreamChange (Some Eager) ]
+
+            let! outcomes =
+                RecomputeJobHandler.reactToDataChange lineage store (scheduler :> IJobScheduler) (Some registry) scope [
+                    "v1"
+                ]
+
+            match outcomes with
+            | [ ScheduleFailed(_, error) ] ->
+                Expect.stringContains error "trigger was refused" "the outcome says the job did not start"
+            | other -> failtestf "expected one ScheduleFailed outcome, got %A" other
+
+            Expect.hasLength scheduler.Scheduled 1 "the job was scheduled"
+            Expect.isEmpty scheduler.Triggered "and nothing fired"
+        }
+
+        testCaseAsync "the recompute reaction raises a refused trigger, for the decorator to log"
+        <| async {
+            let store = newStore ()
+            let lineage = newLineage ()
+            let scheduler = RecordingScheduler(TriggerError.SchedulerStopping) :> IJobScheduler
+            let scope = newScope ()
+
+            let! _ = store.Assert(scope, draftFor "eager_m" "v1" 1m)
+            let registry = registryWith [ metricDef "eager_m" UntilUpstreamChange (Some Eager) ]
+
+            let react =
+                ReactiveDataChange.reaction (fun () -> store) (fun () -> lineage) (fun () -> Some scheduler) (fun () ->
+                    Some registry)
+
+            let! outcome = react (DataChangeScope.Carried scope) [ "v1" ] |> Async.Catch
+
+            match outcome with
+            | Choice2Of2 ex ->
+                Expect.stringContains ex.Message "did not start" "the raise names the unstarted recompute"
+            | Choice1Of2() -> failtest "a refused recompute trigger must not be dropped by the reaction"
         }
 
         testCaseAsync "no registry ⇒ every invalidated fact is Manual (surfaced only); nothing scheduled"

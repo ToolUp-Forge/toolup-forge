@@ -379,4 +379,46 @@ let tests =
             let! stillExists = creds.Exists credId
             Expect.isFalse stillExists "removed credential is gone"
         }
+
+        // Phase 1105 — callers cache the resolved secret for the process's
+        // life, so a generated secret the store refused must never be served:
+        // every session it signed would fail on any other instance or restart.
+        testCaseAsync "a signing secret the store refuses to persist is raised, never served"
+        <| async {
+            let refusing =
+                { new ToolUp.Platform.Secrets.ISecretStore with
+                    member _.GetSecret(_, _) = async { return None }
+                    member _.SetSecret(_, _, _) = async { return Error "store is read-only" }
+                    member _.DeleteSecret(_, _) = async { return Ok() }
+                    member _.ListKeys _ = async { return [] }
+                }
+
+            let! outcome = resolveSigningSecret refusing |> Async.Catch
+
+            match outcome with
+            | Choice1Of2 secret -> failtestf "an unpersisted secret was served (%d chars)" secret.Length
+            | Choice2Of2 ex -> Expect.stringContains ex.Message "store is read-only" "the raise carries the refusal"
+        }
+
+        testCaseAsync "a refused write still adopts a secret a concurrent caller persisted"
+        <| async {
+            let stored = ref (None: string option)
+
+            let racing =
+                { new ToolUp.Platform.Secrets.ISecretStore with
+                    member _.GetSecret(_, _) = async { return stored.Value }
+
+                    member _.SetSecret(_, _, _) = async {
+                        // A peer's write landed first; ours is refused.
+                        stored.Value <- Some "peer-secret"
+                        return Error "conflict"
+                    }
+
+                    member _.DeleteSecret(_, _) = async { return Ok() }
+                    member _.ListKeys _ = async { return [] }
+                }
+
+            let! secret = resolveSigningSecret racing
+            Expect.equal secret "peer-secret" "converges on the persisted secret"
+        }
     ]

@@ -443,8 +443,22 @@ let create
                                 // Fire immediately (Manual trigger) so the
                                 // export does not wait for the next scheduler
                                 // tick. TriggerOnce enqueues the attempt now.
-                                let! _ = deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                                return Result.Ok ticket
+                                // Phase 1105 — a `Manual` job never fires on
+                                // its own, so a refused trigger is an export
+                                // that will never run: the ticket is failed
+                                // (as a refused schedule fails it) and its
+                                // watchers told, the job is cancelled so no
+                                // later re-run works a failed ticket, and the
+                                // caller gets the refusal — never a ticket
+                                // that stays Preparing.
+                                match! deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId) with
+                                | Result.Ok() -> return Result.Ok ticket
+                                | Result.Error refusal ->
+                                    let reason = $"trigger refused: {TriggerError.message refusal}"
+                                    do! deps.Store.Fail(ticket, reason)
+                                    do! deps.Notify ticket (ExportStatus.Failed reason)
+                                    do! deps.Scheduler.Cancel(scopeId, jobId)
+                                    return Result.Error $"Scheduled the export job but could not start it: {reason}"
                         with ex ->
                             return Result.Error ex.Message
             }

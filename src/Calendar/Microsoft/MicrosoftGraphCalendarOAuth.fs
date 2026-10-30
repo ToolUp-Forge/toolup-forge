@@ -455,21 +455,36 @@ let createFlow
                         // the new token under the substrate's own key
                         // before handing back the access token — an
                         // unpersisted rotation reads as `invalid_grant`
-                        // on the next refresh.
-                        match g.RefreshToken with
-                        | Some rotated when rotated <> refreshToken ->
-                            let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey ctx.DataSourceId, rotated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
+                        // on the next refresh. Phase 1105 — so a refused
+                        // persist fails the refresh, exactly as the
+                        // refresher's own path bails before caching an
+                        // access token over a stranded connection.
+                        let! persisted =
+                            match g.RefreshToken with
+                            | Some rotated when rotated <> refreshToken ->
+                                secretStore.SetSecret(ctx.ScopeId, refreshTokenKey ctx.DataSourceId, rotated)
+                            | _ -> async { return Ok() }
 
-                            ()
-                        | _ -> ()
+                        match persisted with
+                        | Error e ->
+                            return
+                                Error(
+                                    OAuthFlowFailed(
+                                        sprintf
+                                            "Microsoft rotated the refresh token for data source '%s' (flow '%s') but the secret store refused to persist it (%s); the access token was withheld — retry the refresh, and reconnect if the previous token is already invalid"
+                                            ctx.DataSourceId
+                                            FlowName
+                                            e
+                                    )
+                                )
+                        | Ok() ->
+                            let expiresIn = g.ExpiresInSeconds |> Option.defaultValue DefaultExpirySeconds
 
-                        let expiresIn = g.ExpiresInSeconds |> Option.defaultValue DefaultExpirySeconds
-
-                        return
-                            Ok {
-                                Token = g.AccessToken
-                                ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
-                            }
+                            return
+                                Ok {
+                                    Token = g.AccessToken
+                                    ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
+                                }
         }
 
         member _.Revoke(ctx, _refreshToken) = async {

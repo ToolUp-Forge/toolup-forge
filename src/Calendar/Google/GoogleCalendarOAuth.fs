@@ -337,20 +337,36 @@ let create
                     // Google does not rotate refresh tokens today; if a
                     // response ever carries a changed one, persist it so
                     // the rotation cannot surface later as invalid_grant.
-                    match grant.RefreshToken with
-                    | Some rotated when rotated <> refreshToken ->
-                        let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
+                    // Phase 1105 — a refused persist is the refresh's
+                    // failure, not a footnote: the rotated token is the one
+                    // irreplaceable credential, so the access token is not
+                    // handed out over a connection that is already stranded.
+                    let! persisted =
+                        match grant.RefreshToken with
+                        | Some rotated when rotated <> refreshToken ->
+                            secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated)
+                        | _ -> async { return Ok() }
 
-                        ()
-                    | _ -> ()
+                    match persisted with
+                    | Error e ->
+                        return
+                            Error(
+                                OAuthFlowFailed(
+                                    sprintf
+                                        "Google rotated the refresh token for data source '%s' (flow '%s') but the secret store refused to persist it (%s); the access token was withheld — retry the refresh, and reconnect if the previous token is already invalid"
+                                        ctx.DataSourceId
+                                        flowName
+                                        e
+                                )
+                            )
+                    | Ok() ->
+                        let expiresIn = grant.ExpiresInSeconds |> Option.defaultValue DefaultExpirySeconds
 
-                    let expiresIn = grant.ExpiresInSeconds |> Option.defaultValue DefaultExpirySeconds
-
-                    return
-                        Ok {
-                            Token = grant.AccessToken
-                            ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
-                        }
+                        return
+                            Ok {
+                                Token = grant.AccessToken
+                                ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
+                            }
         }
 
         member _.Revoke(ctx, refreshToken) = async {

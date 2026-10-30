@@ -136,6 +136,30 @@ let tests =
             | Error e -> failtestf "expected Ok, got %s" (OAuthError.toMessage e)
         }
 
+        // Phase 1105 — a refused rotation persist fails the refresh, naming
+        // the data source, instead of handing out an access token over a
+        // connection whose next refresh is already `invalid_grant`.
+        testCaseAsync "RefreshAccessToken fails, naming the data source, when the store refuses the rotated token"
+        <| async {
+            let inner = FakeSecretStore(seededCreds) :> ISecretStore
+
+            let refusing =
+                { new ISecretStore with
+                    member _.GetSecret(s, k) = inner.GetSecret(s, k)
+                    member _.SetSecret(_, _, _) = async { return Error "store is read-only" }
+                    member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                    member _.ListKeys s = inner.ListKeys s
+                }
+
+            match! (mkFlow refusing).RefreshAccessToken(mkCtx (), "old-refresh-token") with
+            | Error(OAuthFlowFailed message) ->
+                Expect.stringContains message "ds-1" "names the data source"
+                Expect.stringContains message "store is read-only" "carries the store's refusal"
+                Expect.isFalse (message.Contains "ghr_rotated") "never echoes the token"
+            | Error e -> failtestf "expected OAuthFlowFailed, got %s" (OAuthError.toMessage e)
+            | Ok _ -> failtest "a refused rotation persist must not read as a successful refresh"
+        }
+
         testCaseAsync "Revoke deletes the grant and returns Ok"
         <| async {
             let flow = mkFlow (FakeSecretStore(seededCreds) :> ISecretStore)

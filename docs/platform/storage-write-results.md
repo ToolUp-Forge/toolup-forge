@@ -182,6 +182,29 @@ The gate is textual. A result dropped some other way — through a helper that r
 upload's `Result` under another name, say — is the same defect, and a reviewer holds it to the
 same rule.
 
+**Every result-bearing write, not only blob writes (Phase 1059).** The same discard shapes are
+reported for `ISecretStore.SetSecret`, `IJobScheduler.TriggerOnce`, a store's
+`Remove`, and the team store's `SetActiveTeam` and `DeleteTeam`: each returns a `Result`, and each
+lies the same way when it is dropped. Phase 1059 fixed the discards inside its own footprint (the
+`TenantLifecycleAggregator` offboard trigger among them) and marked the rest
+`// best-effort-write: UNREVIEWED - Phase 1105 …`, which kept the gate green without claiming a
+reason. Phase 1105 judged each of those seventeen lines (sixteen sites; the provider connect seed
+and refresh each write a token and its expiry):
+
+| Site | The write | Answer | A refusal is now |
+|---|---|---|---|
+| `GoogleCalendarOAuth`, `MicrosoftGraphCalendarOAuth`, `GitHubAppFlow`, `GoogleOAuthFlow` — `RefreshAccessToken` | a rotated refresh token | propagated | `OAuthFlowFailed` naming the data source and the flow, with the access token withheld — as the refresh substrate already bails before caching an access token over a stranded connection. Swallowed, the connection worked until the access token expired and then failed `invalid_grant` with nothing naming why |
+| `ProviderOAuthConnect.refreshEntry` | the minted access token and its expiry | propagated | `TransientFailure` with health `Degraded`. The expiry is written only once the token landed: a fresh expiry over a stale token held the entry at `NotDue` while every call failed |
+| `ProviderOAuthConnect.completeConnect` | the access-token cache seed | best-effort | a Warning naming the key; the connect stands. The expiry is written only after the token, and a refused token write clears the expiry key, so the first scheduled refresh mints and caches a token |
+| `DataSubjectRequestApiHandler.RequestExportAsync` | the `Manual` export job's trigger | propagated | the ticket `Failed` (and its watchers told), the job cancelled, and the caller answered `Error` — never a ticket that stays `Preparing` for an export that will not run |
+| `RecomputeJobHandler.applyPolicies` | the `Manual` recompute job's trigger | propagated | `ScheduleFailed`, not `Enqueued`; the recompute reaction raises it, and the reactive decorator logs it at Warn beside the object and scope (the write stands). The next invalidation of the fact coalesces onto the job and triggers it again |
+| `GroundedNarrativeTrigger.enqueueFor` | the `Manual` narrative job's trigger | propagated | the run is not in the enqueued list; the reaction raises once every run was attempted, for the decorator to log. `ReactiveDataChangeComposition.combine` runs both reactions before raising, so a refusal in one never skips the other |
+| `MicrosoftGraphCalendarBridge.ensureSubscription` | a new subscription's id | propagated | the subscription is deleted again at Graph and `LinkResource` answers `Unreachable` — an unrecorded subscription could be neither renewed nor deleted (the Google bridge's watch-channel rule) |
+| `AISettingsHandler.SaveInstance` — the revert of a key that failed verification | the previous key (or its removal) and profile | propagated | the refusal says the change could NOT be fully reverted and names what is still at rest; "the API key was not saved" is answered only when the undo landed |
+| `PasskeyStores.resolveSigningSecret` | a generated session signing secret | propagated | a raise (`Async<string>` has no failure channel) unless a concurrent caller's secret is now at rest. Callers cache the secret for the process's life, so serving an unpersisted one signed sessions no other instance or restart could verify |
+| `GoogleCalendarBridge.Pull` | the sync token | best-effort (marker) | nothing: a resumable cursor over events already in hand. The older cursor (or the `updatedMin` bound) reads a superset next pull, and the caller reconciles by value. The bridge holds no logger |
+| `MicrosoftGraphCalendarBridge` — the delta cursor, written and advanced | the delta link | best-effort (marker) | nothing: the same cursor argument; an older delta link reads a superset, or Graph answers 410 and the bridge starts a fresh round |
+
 ## Choosing: propagate, or declare best-effort
 
 **Propagate** when the write IS the operation — the canonical record, the thing a later read or

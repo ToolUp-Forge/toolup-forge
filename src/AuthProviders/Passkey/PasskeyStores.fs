@@ -181,15 +181,36 @@ type PasskeyCredentialStore(blobs: IBlobStorage) =
 /// generate so concurrent first-callers converge on whichever write
 /// landed — a token minted under a superseded secret would otherwise
 /// fail validation.
+///
+/// Phase 1105 — a generated secret the store REFUSED is never served.
+/// Callers cache the resolved secret for the life of the process, so a
+/// refused write would have signed every session with a key no other
+/// instance (and no restart) holds. When the write is refused and the
+/// re-read finds no secret a concurrent caller persisted, this raises:
+/// the signature has no failure channel, and the raise is the honest
+/// answer — the next request resolves again.
 let resolveSigningSecret (secrets: ISecretStore) : Async<string> = async {
     match! secrets.GetSecret(PasskeyConfig.PlatformContainer, PasskeyConfig.SigningKeySecretName) with
     | Some s when s <> "" -> return s
     | _ ->
         let generated = Convert.ToBase64String(RandomNumberGenerator.GetBytes 32)
 
-        let! _ = secrets.SetSecret(PasskeyConfig.PlatformContainer, PasskeyConfig.SigningKeySecretName, generated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
+        let! written = secrets.SetSecret(PasskeyConfig.PlatformContainer, PasskeyConfig.SigningKeySecretName, generated)
 
         match! secrets.GetSecret(PasskeyConfig.PlatformContainer, PasskeyConfig.SigningKeySecretName) with
         | Some s when s <> "" -> return s
-        | _ -> return generated
+        | _ ->
+            match written with
+            | Ok() -> return generated
+            | Error e ->
+                return
+                    raise (
+                        InvalidOperationException(
+                            sprintf
+                                "passkey session signing secret '%s' could not be persisted in '%s' (%s); no session is signed with an unpersisted key"
+                                PasskeyConfig.SigningKeySecretName
+                                PasskeyConfig.PlatformContainer
+                                e
+                        )
+                    )
 }
