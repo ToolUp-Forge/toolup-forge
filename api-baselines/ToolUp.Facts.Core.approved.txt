@@ -257,6 +257,34 @@ ToolUp.Facts.DisclosureTaintConfigModule.resolver(ToolUp.Facts.DisclosureTaintCo
 ToolUp.Facts.DisclosureTaintConfigModule.routineClears(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, System.String) : System.Boolean
 ToolUp.Facts.DisclosureTaintConfigModule.scopeOf(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DisclosureTaintConfigModule.taintVocabulary(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.DisclosureTaintDelta (class)
+ToolUp.Facts.DisclosureTaintDelta..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]])
+ToolUp.Facts.DisclosureTaintDelta.Entries : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]] { get }
+ToolUp.Facts.DisclosureTaintIndex (class)
+ToolUp.Facts.DisclosureTaintIndex..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DisclosureTaintNode])
+ToolUp.Facts.DisclosureTaintIndex.Nodes : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DisclosureTaintNode] { get }
+ToolUp.Facts.DisclosureTaintIndexModule (class)
+ToolUp.Facts.DisclosureTaintIndexModule.apply(ToolUp.Facts.DisclosureTaintDelta, ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.deltaOf(ToolUp.Facts.WritePlan) : ToolUp.Facts.DisclosureTaintDelta
+ToolUp.Facts.DisclosureTaintIndexModule.deltaOfFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.DisclosureTaintDelta
+ToolUp.Facts.DisclosureTaintIndexModule.empty : ToolUp.Facts.DisclosureTaintIndex { get }
+ToolUp.Facts.DisclosureTaintIndexModule.factIds(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Facts.DisclosureTaintIndexModule.ofEntries(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]]) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.ofFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.restrictTo(Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.toEntries(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]]
+ToolUp.Facts.DisclosureTaintIndexModule.tryNode(System.String, ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintNode]
+ToolUp.Facts.DisclosureTaintIndexModule.union(ToolUp.Facts.DisclosureTaintIndex, ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.upstream(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Facts.DisclosureTaintNode (class)
+ToolUp.Facts.DisclosureTaintNode..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.DisclosureTaintNode.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNode.Operations : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNode.Policies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNode.Produces : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNodeModule (class)
+ToolUp.Facts.DisclosureTaintNodeModule.join(ToolUp.Facts.DisclosureTaintNode, ToolUp.Facts.DisclosureTaintNode) : ToolUp.Facts.DisclosureTaintNode
+ToolUp.Facts.DisclosureTaintNodeModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.DisclosureTaintNode
 ToolUp.Facts.DisclosureViewer (class)
 ToolUp.Facts.DisclosureViewer..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.TeamVisibilityLevel)
 ToolUp.Facts.DisclosureViewer.IsPlatformAdmin : System.Boolean { get }
@@ -449,6 +477,9 @@ ToolUp.Facts.FreshnessHistogram (class)
 ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
 ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
 ToolUp.Facts.FreshnessHistogram.StaleCount : System.Int32 { get }
+ToolUp.Facts.IDisclosureTaintIndexSource (interface)
+ToolUp.Facts.IDisclosureTaintIndexSource.ReadTaintIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DisclosureTaintIndex]
+ToolUp.Facts.IDisclosureTaintIndexSource.ReadTaintIndex(ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DisclosureTaintIndex]
 ToolUp.Facts.IndexDelta (class)
 ToolUp.Facts.IndexDelta..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.Facts.IndexDelta.Head : System.String { get }

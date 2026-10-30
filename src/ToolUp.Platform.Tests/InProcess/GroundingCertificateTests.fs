@@ -250,6 +250,53 @@ let tests =
                     "the withheld fact's value must never appear in the certificate"
         }
 
+        testCaseAsync "an answer's recorded plan joins its certificate exactly as it joins the answer chain"
+        <| async {
+            let secrets = InMemorySecretStore() :> ISecretStore
+            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
+
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage.InMemoryBlobStorage()) events
+            let gate = FactDisclosureGate.create store events
+            let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
+
+            let graph =
+                ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
+
+            let issuer = GroundingCertificate.createIssuer graph store gate events (Some signer)
+            let messageId = "msg-planned"
+
+            let plan = {
+                PlanId = "plan-1"
+                Question = "revenue?"
+                CompiledAt = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+                Steps = []
+                Refusal = None
+            }
+
+            let planner = AnswerPlanner.create store gate None events AnswerPlanner.noCompiler
+
+            do! planner.Record(scope, messageId, plan)
+
+            let! chain = AnswerPlanProvenance.chainForMessage graph events scope messageId 5
+
+            match! issuer.Issue(scope, "auditor", AnswerCertificate(messageId, []), 5) with
+            | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
+            | Ok cert ->
+                Expect.equal
+                    (cert.Body.Nodes |> List.map _.Id |> List.sort)
+                    (chain.Nodes |> List.map _.Id |> List.sort)
+                    "the certificate holds the answer chain's nodes, the plan node among them"
+
+                Expect.equal
+                    (cert.Body.Edges |> List.map (fun e -> e.From, e.To) |> List.sort)
+                    (chain.Edges |> List.map (fun e -> e.From, e.To) |> List.sort)
+                    "and its edges, message to plan among them"
+
+                Expect.contains (cert.Body.Nodes |> List.map _.Id) "plan-1" "the plan is a node"
+        }
+
         testCaseAsync "no signing substrate composed → issuance refuses (GP 13), never throws"
         <| async {
             let! issuer, factId = issuerWith None
