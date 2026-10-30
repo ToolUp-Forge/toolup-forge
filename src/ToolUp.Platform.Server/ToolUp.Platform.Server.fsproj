@@ -107,6 +107,7 @@
         <Compile Include="Server\Remoting\Types.fs" />
         <Compile Include="Server\Remoting\CallContext.fs" />
         <Compile Include="Server\Remoting\Auth.fs" />
+        <Compile Include="Server\Remoting\BoundedFifo.fs" />
         <Compile Include="Server\Remoting\RateLimit.fs" />
         <Compile Include="Server\Remoting\Audit.fs" />
         <Compile Include="Server\Remoting\Idempotency.fs" />

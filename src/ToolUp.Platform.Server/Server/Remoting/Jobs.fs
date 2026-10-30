@@ -56,8 +56,7 @@ type InMemoryJobDispatcher(?maxJobs: int) =
     // caller using the matching `JobHandle<'T>` (compile-time
     // type-safety on the handle preserves correctness in practice).
     //
-    // Bounded by `maxJobs` (default 100_000) — once the cap is reached
-    // the oldest entry (by enqueue order) is evicted on next Enqueue.
+    // Bounded by `maxJobs` (default 100_000) through `BoundedFifo`.
     // Long-running deployments don't accumulate completed job records
     // forever; consumers that need persistence wire a Redis / Postgres
     // backing IJobDispatcher impl.
@@ -65,95 +64,58 @@ type InMemoryJobDispatcher(?maxJobs: int) =
     let statuses = ConcurrentDictionary<string, obj>()
     let owners = ConcurrentDictionary<string, string option>()
     let cancellations = ConcurrentDictionary<string, CancellationTokenSource>()
-    let order = ConcurrentQueue<string>()
 
-    /// True if `status` is a terminal state — Succeeded / Failed /
-    /// Cancelled. Queued and Running are live and must NOT be evicted
-    /// (a client polling against a live job would see "job-not-found",
-    /// indistinguishable from a genuine failure; the background runner
-    /// also continues writing to the evicted slot, silently re-adding
-    /// it as a phantom entry).
-    let isTerminal (status: obj) =
-        let t = status.GetType()
+    // Each job's terminal test, captured at Enqueue where `'T` is known, so the
+    // answer comes from a match over `JobStatus<'T>` and not from where a case
+    // sits in the declaration.
+    let terminalTests = ConcurrentDictionary<string, obj -> bool>()
 
-        if not t.IsGenericType then
-            false
-        else
-            // JobStatus<'T> is a DU; the case tag is exposed as `Tag` int.
-            // 0 = Queued, 1 = Running, 2 = Succeeded, 3 = Failed, 4 = Cancelled.
-            // (Order matches the DU declaration in Types.fs.)
-            let tag =
-                t.GetProperty "Tag"
-                |> Option.ofObj
-                |> Option.bind (fun pi -> pi.GetValue status |> Option.ofObj)
-                |> Option.map unbox<int>
-                |> Option.defaultValue -1
-
-            tag >= 2
+    /// True if `status` is terminal for `jobId`. Queued and Running are live and
+    /// must NOT be evicted: a client polling against a live job would see
+    /// "job-not-found", indistinguishable from a genuine failure.
+    let isTerminal (jobId: string) (status: obj) =
+        match terminalTests.TryGetValue jobId with
+        | true, test -> test status
+        | false, _ -> false
 
     let forget (jobId: string) =
         statuses.TryRemove jobId |> ignore
         owners.TryRemove jobId |> ignore
+        terminalTests.TryRemove jobId |> ignore
 
         match cancellations.TryRemove jobId with
         | true, cts -> cts.Dispose()
         | false, _ -> ()
 
-    /// Opportunistically drain stale heads from `order` — keys that were
-    /// already removed from `statuses` (e.g. by a prior eviction).
-    /// Keeps `order.Count` close to `statuses.Count` so subsequent
-    /// eviction work doesn't scan through ghost entries.
-    let compactStaleHeads () =
-        let mutable peeked = Unchecked.defaultof<string>
-        let mutable keepCompacting = true
-
-        while keepCompacting && order.TryPeek(&peeked) do
-            if statuses.ContainsKey peeked then
-                keepCompacting <- false
-            else
-                let mutable _ignored = Unchecked.defaultof<string>
-                order.TryDequeue(&_ignored) |> ignore
-
-    let evictOldestIfFull () =
-        // Drain stale heads first so the cap-check below isn't perturbed
-        // by ghost entries still occupying `order`.
-        compactStaleHeads ()
-
-        // Only evict TERMINAL entries — Queued / Running stay until they
-        // complete (or the host shuts down). Walk forward through `order`
-        // skipping live ids; if none are terminal but the cap is
-        // exceeded, refuse the new Enqueue with a saturation signal so
-        // the operator sees the pressure instead of silent job loss.
-        let mutable evicted = false
-        let mutable scanned = 0
-
-        while not evicted && statuses.Count >= cap && scanned < statuses.Count do
-            let mutable candidate = Unchecked.defaultof<string>
-
-            if order.TryDequeue(&candidate) then
-                match statuses.TryGetValue candidate with
-                | true, status when isTerminal status ->
-                    forget candidate
-                    evicted <- true
-                | true, _liveStatus ->
-                    // Live job — push back to the tail of `order` so
-                    // it stays in the FIFO sweep but doesn't block.
-                    order.Enqueue candidate
-                    scanned <- scanned + 1
-                | false, _ ->
-                    // Already gone (race with lazy expiry / Get). Treat
-                    // as a successful eviction.
-                    evicted <- true
-            else
-                scanned <- statuses.Count // exit the loop
-
-        if not evicted && statuses.Count >= cap then
-            invalidOp (
-                "InMemoryJobDispatcher saturated: every tracked job is live "
-                + "(Queued or Running) and the maxJobs cap has been reached. "
-                + "Increase `maxJobs` at construction time, or wire a "
-                + "distributed `IJobDispatcher` impl for production loads."
-            )
+    // Only TERMINAL entries go. Queued / Running stay until they complete (or
+    // the host shuts down); if none is terminal at the cap, the new Enqueue is
+    // refused with a saturation signal so the operator sees the pressure
+    // instead of silent job loss.
+    let fifo =
+        BoundedFifo(
+            cap,
+            (fun () -> statuses.Count),
+            statuses.ContainsKey,
+            forget,
+            {
+                DrainBatch = 1
+                Evictable =
+                    fun jobId ->
+                        match statuses.TryGetValue jobId with
+                        | true, status -> isTerminal jobId status
+                        | false, _ -> true
+                OnPressure =
+                    function
+                    | FifoPressure.AllHeld ->
+                        invalidOp (
+                            "InMemoryJobDispatcher saturated: every tracked job is live "
+                            + "(Queued or Running) and the maxJobs cap has been reached. "
+                            + "Increase `maxJobs` at construction time, or wire a "
+                            + "distributed `IJobDispatcher` impl for production loads."
+                        )
+                    | _ -> ()
+            }
+        )
 
     /// 69i.E — may the current caller see / act on `jobId`? The owner, a
     /// job-admin caller, and any caller of an ownerless job. Unknown ids
@@ -170,21 +132,35 @@ type InMemoryJobDispatcher(?maxJobs: int) =
     /// outcome that landed first, never a later overwrite.
     let trySetTerminal (jobId: string) (terminal: obj) =
         match statuses.TryGetValue jobId with
-        | true, current when isTerminal current -> false
+        | true, current when isTerminal jobId current -> false
         | true, current -> statuses.TryUpdate(jobId, terminal, current)
         | false, _ -> false
 
     interface IJobDispatcher with
         member _.Enqueue<'T>(work: Async<'T>) : Async<JobHandle<'T>> = async {
-            evictOldestIfFull ()
             let jobId = Guid.NewGuid().ToString("N")
             let owner = CallContext.subjectId ()
             let correlation = CallContext.correlationId ()
-            let cts = new CancellationTokenSource()
-            owners[jobId] <- owner
-            cancellations[jobId] <- cts
-            statuses[jobId] <- box (JobStatus<'T>.Queued)
-            order.Enqueue jobId
+
+            let isTerminalStatus (status: obj) =
+                match status :?> JobStatus<'T> with
+                | JobStatus.Succeeded _
+                | JobStatus.Failed _
+                | JobStatus.Cancelled -> true
+                | JobStatus.Queued
+                | JobStatus.Running _ -> false
+
+            let cts =
+                fifo.Admit(
+                    jobId,
+                    fun () ->
+                        let cts = new CancellationTokenSource()
+                        terminalTests[jobId] <- isTerminalStatus
+                        owners[jobId] <- owner
+                        cancellations[jobId] <- cts
+                        statuses[jobId] <- box (JobStatus<'T>.Queued)
+                        cts
+                )
 
             // Background runner. Updates status to Running on
             // start, then Succeeded / Failed on completion. The

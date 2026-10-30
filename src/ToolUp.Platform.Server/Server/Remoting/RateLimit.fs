@@ -56,64 +56,37 @@ module RateLimitWindow =
 /// single-instance deployments; distributed deployments wire Redis or
 /// equivalent against the `IRateLimitStore` contract.
 ///
-/// Admission is atomic per key (Phase 870): N callers released together
-/// against one remaining slot admit exactly one.
+/// Admission is atomic per key: N callers released together against one
+/// remaining slot admit exactly one.
 ///
-/// Bounded by `maxBuckets` (default 100_000). Once the cap is reached,
-/// the oldest bucket (by first-insertion time) is evicted on next
-/// `TryAcquire`. Cardinality-bounded so a deployment hit by many
-/// distinct IPs (or subject ids) can't OOM the host.
+/// Bounded by `maxBuckets` (default 100_000) through `BoundedFifo`: a new key
+/// at the cap evicts the oldest bucket (by first insertion), so a deployment
+/// hit by many distinct IPs or subject ids cannot OOM the host.
 type InMemoryRateLimitStore(?maxBuckets: int) =
     let cap = defaultArg maxBuckets 100_000
     let buckets = ConcurrentDictionary<string, ConcurrentQueue<DateTimeOffset>>()
-    let order = ConcurrentQueue<string>()
 
-    /// Opportunistically drain stale heads from `order` — keys that were
-    /// already removed from `buckets` (e.g. by a prior eviction whose
-    /// victim got re-added later). Keeps `order.Count` close to
-    /// `buckets.Count` so subsequent eviction work doesn't scan
-    /// through ghost entries.
-    let compactStaleHeads () =
-        let mutable peeked = Unchecked.defaultof<string>
-        let mutable keepCompacting = true
-
-        while keepCompacting && order.TryPeek(&peeked) do
-            if buckets.ContainsKey peeked then
-                keepCompacting <- false
-            else
-                let mutable _ignored = Unchecked.defaultof<string>
-                order.TryDequeue(&_ignored) |> ignore
-
-    let evictOldestIfFull () =
-        compactStaleHeads ()
-
-        while buckets.Count >= cap do
-            let mutable victim = Unchecked.defaultof<string>
-
-            if order.TryDequeue(&victim) then
-                buckets.TryRemove victim |> ignore
-            else if buckets.Count >= cap then
-                buckets.Clear()
+    let fifo =
+        BoundedFifo(
+            cap,
+            (fun () -> buckets.Count),
+            buckets.ContainsKey,
+            (fun key -> buckets.TryRemove key |> ignore),
+            BoundedFifoPolicy.oldestFirst ignore
+        )
 
     interface IRateLimitStore with
         member _.TryAcquire(key, count, window) = async {
             let now = DateTimeOffset.UtcNow
             let cutoff = now - window
-            let mutable createdNew = false
 
             let queue =
-                buckets.GetOrAdd(
-                    key,
-                    fun _ ->
-                        createdNew <- true
-                        ConcurrentQueue<DateTimeOffset>()
-                )
+                match buckets.TryGetValue key with
+                | true, existing -> existing
+                | false, _ ->
+                    fifo.Admit(key, fun () -> buckets.GetOrAdd(key, fun _ -> ConcurrentQueue<DateTimeOffset>()))
 
-            if createdNew then
-                evictOldestIfFull ()
-                order.Enqueue key
-
-            // Phase 870 — evict, check and admit under ONE per-key lock.
+            // Evict, check and admit under ONE per-key lock.
             // `ConcurrentQueue` makes each operation safe, not their
             // composition: `Count < count` then `Enqueue` is
             // check-then-act, so N callers arriving together at

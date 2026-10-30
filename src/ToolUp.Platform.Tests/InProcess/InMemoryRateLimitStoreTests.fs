@@ -1,9 +1,27 @@
 module ToolUp.Platform.Tests.InProcess.InMemoryRateLimitStoreTests
 
 open System
+open System.Collections.Generic
+open System.Reflection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+
+/// Reaches the remoting store's insertion-order index and empties it, leaving
+/// the buckets in place: the state a lost marker leaves behind, which the
+/// public surface cannot reach deterministically.
+let private loseOrderMarkers (store: ToolUp.Remoting.Server.InMemoryRateLimitStore) =
+    let fieldOf (owner: obj) (fieldType: Type) =
+        owner.GetType().GetFields(BindingFlags.NonPublic ||| BindingFlags.Instance)
+        |> Array.find (fun f -> f.FieldType = fieldType)
+        |> fun f -> f.GetValue owner
+
+    let fifo = fieldOf store typeof<ToolUp.Remoting.Server.BoundedFifo>
+    (fieldOf fifo typeof<Queue<string>> :?> Queue<string>).Clear()
+
+let private remotingStore (cap: int) =
+    let store = ToolUp.Remoting.Server.InMemoryRateLimitStore(maxBuckets = cap)
+    store, (store :> ToolUp.Remoting.Server.IRateLimitStore)
 
 /// Smoke tests for `InMemoryRateLimitStore` — the Phase 56
 /// single-instance default. Covers the atomic-increment-and-check
@@ -11,6 +29,59 @@ open ToolUp.Platform.Tests.Contracts
 /// surface used by the Phase 61 PlatformAdmin rate-limit event log.
 let tests =
     testList "InMemoryRateLimitStore" [
+        testCaseAsync "remoting store: at cap with an empty order queue it keeps every bucket it holds"
+        <| async {
+            let cap = 8
+            let store, limiter = remotingStore cap
+            let window = TimeSpan.FromMinutes 1.0
+
+            for i in 1..cap do
+                let! _ = limiter.TryAcquire(sprintf "k%d" i, 10, window)
+                ()
+
+            let held = store.BucketCount
+            loseOrderMarkers store
+
+            let! _ = limiter.TryAcquire("k-new", 10, window)
+
+            Expect.isGreaterThanOrEqual
+                store.BucketCount
+                held
+                "the buckets held before the insert survive it; nothing wipes them"
+        }
+
+        testCaseAsync "remoting store: a one-bucket store still counts against the bucket it holds"
+        <| async {
+            let _, limiter = remotingStore 1
+            let window = TimeSpan.FromMinutes 1.0
+
+            let! first = limiter.TryAcquire("only", 1, window)
+            let! second = limiter.TryAcquire("only", 1, window)
+
+            match first, second with
+            | ToolUp.Remoting.Server.RateLimitAllowed, ToolUp.Remoting.Server.RateLimitDenied _ -> ()
+            | other -> failtestf "the second call must be denied; a wiped bucket forgets the first: %A" other
+        }
+
+        testCaseAsync "remoting store: a new key at the cap evicts the oldest bucket only"
+        <| async {
+            let cap = 3
+            let store, limiter = remotingStore cap
+            let window = TimeSpan.FromMinutes 1.0
+
+            for i in 1 .. cap + 1 do
+                let! _ = limiter.TryAcquire(sprintf "k%d" i, 1, window)
+                ()
+
+            let! newest = limiter.TryAcquire(sprintf "k%d" (cap + 1), 1, window)
+
+            match newest with
+            | ToolUp.Remoting.Server.RateLimitDenied _ -> ()
+            | ToolUp.Remoting.Server.RateLimitAllowed -> failtest "the newest bucket keeps its count through eviction"
+
+            Expect.isLessThanOrEqual store.BucketCount cap "the store stays within its cap"
+        }
+
         testCaseAsync "first request below threshold returns AllowWithRemaining"
         <| async {
             let store = InMemoryRateLimitStore.create ()

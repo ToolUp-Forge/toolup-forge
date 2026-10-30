@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.IdempotencyStoreEvictionTests
 
 open System
 open System.Collections.Concurrent
+open System.Collections.Generic
 open System.Reflection
 open Expecto
 open ToolUp.Remoting.Server
@@ -47,17 +48,18 @@ type private CapturingLogger() =
         member _.Warn m = warns.Enqueue m
         member _.Error(_, _) = ()
 
-/// The count/queue race is timing-dependent through the public API, so the
-/// deterministic recovery test reproduces it white-box: empty the internal
-/// FIFO queue while the dictionary stays full. The queue is the sole
-/// `ConcurrentQueue<string>` field on the store — find it by type so the
-/// test is robust to F# field-name mangling.
+/// An entry that has lost its marker is timing-dependent through the public
+/// API, so the deterministic recovery test reproduces it white-box: empty the
+/// `BoundedFifo` order queue while the dictionary stays full. Found by type so
+/// the test is robust to F# field-name mangling.
 let private emptyInternalOrderQueue (store: InMemoryIdempotencyStore) =
-    let field =
-        typeof<InMemoryIdempotencyStore>.GetFields(BindingFlags.NonPublic ||| BindingFlags.Instance)
-        |> Array.find (fun f -> typeof<ConcurrentQueue<string>>.IsAssignableFrom f.FieldType)
+    let fieldOf (owner: obj) (fieldType: Type) =
+        owner.GetType().GetFields(BindingFlags.NonPublic ||| BindingFlags.Instance)
+        |> Array.find (fun f -> f.FieldType = fieldType)
+        |> fun f -> f.GetValue owner
 
-    (field.GetValue store :?> ConcurrentQueue<string>).Clear()
+    let fifo = fieldOf store typeof<BoundedFifo>
+    (fieldOf fifo typeof<Queue<string>> :?> Queue<string>).Clear()
 
 // Sequenced (not run in parallel with the rest of the pack). The concurrency
 // smoke case below drives an 8-worker `Async.Parallel` insert storm.
