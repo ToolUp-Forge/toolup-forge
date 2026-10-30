@@ -912,21 +912,6 @@ type DatasetRevintageJobPayload = { SpecRef: DatasetVersionRef }
 
 module DatasetRevintage =
 
-    let private jsonOptions =
-        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
-
-    /// Serialise a re-vintage job payload.
-    let serialiseJobPayload (payload: DatasetRevintageJobPayload) : string =
-        System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions)
-
-    /// Parse a persisted re-vintage job payload. The job handler treats a
-    /// parse failure as a `PermanentFailure`.
-    let tryParseJobPayload (payload: string) : Result<DatasetRevintageJobPayload, string> =
-        try
-            Ok(System.Text.Json.JsonSerializer.Deserialize<DatasetRevintageJobPayload>(payload, jsonOptions))
-        with ex ->
-            Error ex.Message
-
     /// Re-bind one source to current data: a `DatasetVersion` source
     /// re-resolves to the **latest** version of the same dataset (an
     /// upstream refresh appends versions and the replay reads the newest);
@@ -1038,39 +1023,40 @@ module DatasetRevintage =
                                 return Ok produced
         }
 
-/// `IJobHandler` bound to `_platform.dataset.revintage` (Phase 601): the
-/// cron-shaped recurring re-vintage ("weekly data refresh"). A malformed
-/// payload / missing version / unrecorded or unreadable spec is a
-/// `PermanentFailure` (no retry recovers it); an unresolvable source or a
-/// downstream storage failure is a `TransientFailure` (a lagging upstream
-/// refresh may land before the retry). Consumer-wired, like the Phase 454
-/// scoring + Phase 599 batch-item handlers.
-type DatasetRevintageJobHandler
-    (executor: IDatasetAssemblyExecutor, datasets: IDatasetStore, audit: IAuditLog, logger: ILogger) =
-    interface IJobHandler with
-        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match DatasetRevintage.tryParseJobPayload ctx.Payload with
-            | Error e ->
-                logger.Error(sprintf "DatasetRevintageJobHandler: malformed payload -- %s" e, None)
-                return PermanentFailure(sprintf "malformed DatasetRevintageJobPayload: %s" e)
-            | Ok payload ->
-                match! DatasetRevintage.revintage executor datasets audit payload.SpecRef ctx.AccessContext.UserId with
-                | Ok _ -> return Success
-                | Error(RevintageError.SourceUnresolvable _ as e) ->
-                    logger.Warn(sprintf "DatasetRevintageJobHandler: %s" (RevintageError.describe e))
-                    return TransientFailure(RevintageError.describe e)
-                | Error(RevintageError.AssemblyFailed(AssemblyError.StorageFailure _) as e) ->
-                    logger.Warn(sprintf "DatasetRevintageJobHandler: %s" (RevintageError.describe e))
-                    return TransientFailure(RevintageError.describe e)
-                | Error e ->
-                    logger.Warn(sprintf "DatasetRevintageJobHandler: %s" (RevintageError.describe e))
-                    return PermanentFailure(RevintageError.describe e)
-        }
-
+/// The job bound to `_platform.dataset.revintage`: the cron-shaped recurring
+/// re-vintage ("weekly data refresh"). Consumer-wired, like the scoring and
+/// batch-item jobs.
 module DatasetRevintageJobHandler =
     /// Reserved scheduler handler name for the re-vintage job.
     [<Literal>]
     let HandlerName = "_platform.dataset.revintage"
+
+    /// A re-vintage failure as the scheduler acts on it. An unresolvable
+    /// source or a downstream storage failure may clear (a lagging upstream
+    /// refresh may land before the retry); a missing version and an
+    /// unrecorded or unreadable spec will not, and neither will any other
+    /// assembly failure.
+    let failureOf (error: RevintageError) : RunFailure =
+        match error with
+        | RevintageError.SourceUnresolvable _
+        | RevintageError.AssemblyFailed(AssemblyError.StorageFailure _) ->
+            RunFailure.Retryable(RevintageError.describe error)
+        | RevintageError.VersionNotFound _
+        | RevintageError.NoRecordedSpec _
+        | RevintageError.SpecUnreadable _
+        | RevintageError.AssemblyFailed _ -> RunFailure.Terminal(RevintageError.describe error)
+
+    /// The re-vintage job.
+    let job
+        (executor: IDatasetAssemblyExecutor)
+        (datasets: IDatasetStore)
+        (audit: IAuditLog)
+        : RunJob<DatasetRevintageJobPayload> =
+        RunJob.ofPayload HandlerName (fun ctx payload -> async {
+            match! DatasetRevintage.revintage executor datasets audit payload.SpecRef ctx.AccessContext.UserId with
+            | Ok _ -> return Ok()
+            | Error e -> return Error(failureOf e)
+        })
 
     /// Construct the re-vintage job handler.
     let create
@@ -1079,4 +1065,4 @@ module DatasetRevintageJobHandler =
         (audit: IAuditLog)
         (logger: ILogger)
         : IJobHandler =
-        DatasetRevintageJobHandler(executor, datasets, audit, logger) :> IJobHandler
+        RunJob.handler logger (job executor datasets audit)

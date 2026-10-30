@@ -3,15 +3,12 @@
 
 namespace ToolUp.Platform
 
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
-
-// ─── Phase 454 — batch scoring job + IJobHandler ────────────────────────
+// ─── Batch scoring job ──────────────────────────────────────────────────
 //
 // `ModelScorer` (in `IModelScorer.fs`) is the small-frame synchronous path
 // for interactive scoring. This file fuses the same envelope onto
 // `IJobScheduler` for scheduled / batch scoring: a `ScoreJobRequest` is the
-// persisted job payload, and `ModelScoringJobHandler` reconstructs the
+// persisted job payload, and the `ModelScoringJobHandler` job reconstructs the
 // governed artifact from `IModelRegistry` before delegating to the scorer.
 //
 // The payload references the artifact by its composite-key hash rather than
@@ -28,9 +25,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 type ScoreJobRequest = {
     /// Scope the score runs + writes under (GP 4).
     ScopeId: string
-    /// Composite-key hash of the artifact to score with (Phase 453).
+    /// Composite-key hash of the artifact to score with.
     ArtifactKeyHash: string
-    /// The immutable input vintage to score (Phase 448).
+    /// The immutable input vintage to score.
     Input: DatasetVersionRef
     /// Dataset id the predictions land under.
     OutputDatasetId: string
@@ -38,79 +35,48 @@ type ScoreJobRequest = {
     ScoredBy: string
 }
 
-module ModelScoringEnvelope =
-    /// STJ options with the full F# converter set — matches the
-    /// Fable-compatible wire shape used everywhere else in the SDK, so a
-    /// persisted `ScoreJobRequest` round-trips faithfully.
-    let private jsonOptions = FableConverters.create ()
-
-    /// Serialise a `ScoreJobRequest` to the persisted job-payload string.
-    let serialiseRequest (request: ScoreJobRequest) : string =
-        JsonSerializer.Serialize(request, jsonOptions)
-
-    /// Parse a persisted job payload back into a `ScoreJobRequest`. `Error`
-    /// carries the failure detail; a malformed payload is a `PermanentFailure`
-    /// (it will not recover on retry).
-    let tryParseRequest (payload: string) : Result<ScoreJobRequest, string> =
-        try
-            Ok(JsonSerializer.Deserialize<ScoreJobRequest>(payload, jsonOptions))
-        with ex ->
-            Error ex.Message
-
-/// `IJobHandler` bound to `_platform.modelscore.run`. Deserialises a
-/// `ScoreJobRequest`, fetches the governed artifact from `IModelRegistry`,
-/// and runs it through the scorer. Failure mapping:
-///   * malformed payload / artifact not found / terminal `ScoreError`
-///     (`ProviderNotFound` / `NotApproved` / `InputSchemaMismatch`) →
-///     `PermanentFailure` (no retry recovers it);
-///   * registry / input / storage / provider faults
-///     (`InputUnavailable` / `StorageFailure` / `ProviderFailed`) →
-///     `TransientFailure` (a later attempt may succeed).
-type ModelScoringJobHandler(registry: IModelRegistry, scorer: IModelScorer, logger: ILogger) =
-    interface IJobHandler with
-        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match ModelScoringEnvelope.tryParseRequest ctx.Payload with
-            | Error e ->
-                logger.Error($"ModelScoringJobHandler: malformed ScoreJobRequest payload — {e}", None)
-                return PermanentFailure $"malformed ScoreJobRequest payload: {e}"
-            | Ok request ->
-                match! registry.Get(request.ScopeId, request.ArtifactKeyHash) with
-                | Error ModelRegistryError.NotFound ->
-                    logger.Warn
-                        $"ModelScoringJobHandler: no artifact '{request.ArtifactKeyHash}' in scope '{request.ScopeId}'"
-
-                    return PermanentFailure $"model artifact '{request.ArtifactKeyHash}' not found in scope"
-                | Error e ->
-                    logger.Warn $"ModelScoringJobHandler: registry read failed — {ModelRegistryError.describe e}"
-                    return TransientFailure(ModelRegistryError.describe e)
-                | Ok artifact ->
-                    let scoreRequest: ScoreRequest = {
-                        ScopeId = request.ScopeId
-                        Artifact = artifact
-                        Input = request.Input
-                        OutputDatasetId = request.OutputDatasetId
-                        ScoredBy = request.ScoredBy
-                    }
-
-                    match! scorer.Score scoreRequest with
-                    | Ok _ -> return Success
-                    | Error(ScoreError.ProviderNotFound _ as e)
-                    | Error(ScoreError.NotApproved _ as e)
-                    | Error(ScoreError.InputSchemaMismatch _ as e) ->
-                        logger.Warn $"ModelScoringJobHandler: terminal refusal — {ScoreError.describe e}"
-                        return PermanentFailure(ScoreError.describe e)
-                    | Error(ScoreError.InputUnavailable _ as e)
-                    | Error(ScoreError.StorageFailure _ as e)
-                    | Error(ScoreError.ProviderFailed _ as e) ->
-                        logger.Warn $"ModelScoringJobHandler: transient failure — {ScoreError.describe e}"
-                        return TransientFailure(ScoreError.describe e)
-        }
-
+/// The batch-scoring job, bound to `_platform.modelscore.run`: parse a
+/// `ScoreJobRequest`, fetch the governed artifact from `IModelRegistry`, and
+/// run it through the scorer.
 module ModelScoringJobHandler =
     /// Reserved scheduler handler name for the batch-scoring job.
     [<Literal>]
     let HandlerName = "_platform.modelscore.run"
 
+    /// A scoring failure as the scheduler acts on it: a missing provider, an
+    /// unapproved artifact and an input-schema mismatch are terminal; an
+    /// unavailable input, a storage fault and a provider fault may clear.
+    let failureOf (error: ScoreError) : RunFailure =
+        match error with
+        | ScoreError.ProviderNotFound _
+        | ScoreError.NotApproved _
+        | ScoreError.InputSchemaMismatch _ -> RunFailure.Terminal(ScoreError.describe error)
+        | ScoreError.InputUnavailable _
+        | ScoreError.StorageFailure _
+        | ScoreError.ProviderFailed _ -> RunFailure.Retryable(ScoreError.describe error)
+
+    /// The batch-scoring job. An artifact the scope does not hold is
+    /// terminal; any other registry failure may clear.
+    let job (registry: IModelRegistry) (scorer: IModelScorer) : RunJob<ScoreJobRequest> =
+        RunJob.ofPayload HandlerName (fun _ request -> async {
+            match! registry.Get(request.ScopeId, request.ArtifactKeyHash) with
+            | Error ModelRegistryError.NotFound ->
+                return Error(RunFailure.Terminal $"model artifact '{request.ArtifactKeyHash}' not found in scope")
+            | Error e -> return Error(RunFailure.Retryable(ModelRegistryError.describe e))
+            | Ok artifact ->
+                let scoreRequest: ScoreRequest = {
+                    ScopeId = request.ScopeId
+                    Artifact = artifact
+                    Input = request.Input
+                    OutputDatasetId = request.OutputDatasetId
+                    ScoredBy = request.ScoredBy
+                }
+
+                match! scorer.Score scoreRequest with
+                | Ok _ -> return Ok()
+                | Error e -> return Error(failureOf e)
+        })
+
     /// Construct the batch-scoring job handler.
     let create (registry: IModelRegistry) (scorer: IModelScorer) (logger: ILogger) : IJobHandler =
-        ModelScoringJobHandler(registry, scorer, logger) :> IJobHandler
+        RunJob.handler logger (job registry scorer)

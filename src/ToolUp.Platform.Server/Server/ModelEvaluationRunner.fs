@@ -4,8 +4,6 @@
 namespace ToolUp.Platform
 
 open System
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Phase 456 — model evaluation runner + champion-challenger gate ─────
 //
@@ -153,11 +151,9 @@ type IModelEvaluationRunner =
     /// Every standing re-evaluation registration in the scope.
     abstract ListReevaluationRegistrations: scopeId: string -> Async<EvaluationRegistration list>
 
-/// Storage plumbing for the evaluation records — the `BlobModelRegistry`
-/// idiom over `IDataObjectStore` (no new storage concept, plan Stage 6):
-/// queryable coordinates mirrored into the metadata sidecar, content decoded
-/// only for matches. A private module (not class-local bindings) because the
-/// helpers are generic over the stored record type.
+/// The evaluation records' data types and sidecar keys. Each record type is
+/// one `SidecarStore` over `IDataObjectStore` (no new storage concept, plan
+/// Stage 6): runs indexed by artifact, fold outcomes by run.
 module private ModelEvaluationStorage =
 
     [<Literal>]
@@ -190,8 +186,6 @@ module private ModelEvaluationStorage =
     [<Literal>]
     let RegistrationDatasetKey = "registration.datasetId"
 
-    let jsonOptions = FableConverters.create ()
-
     let mapDataObjectError (e: DataObjectError) : EvaluationError =
         match e with
         | DataObjectError.NotFound -> EvaluationError.NotFound
@@ -199,63 +193,6 @@ module private ModelEvaluationStorage =
         | DataObjectError.DeleteForbidden -> EvaluationError.StorageFailure "record delete forbidden"
         | DataObjectError.PolicyMismatch _ -> EvaluationError.StorageFailure "record versioning policy mismatch"
         | DataObjectError.StorageFailure m -> EvaluationError.StorageFailure m
-
-    /// Decode a stored record of type `'T`; an unreadable blob is a typed
-    /// storage failure, never a throw.
-    let decode<'T> (bytes: byte[]) : Result<'T, EvaluationError> =
-        try
-            Ok(JsonSerializer.Deserialize<'T>(bytes, jsonOptions))
-        with ex ->
-            Error(EvaluationError.StorageFailure $"stored evaluation record is unreadable: {ex.Message}")
-
-    /// Persist a record under `objectId` with the given sidecar. `Versioned`
-    /// — a re-run of the same deterministic id appends a fresh version;
-    /// reads return the latest.
-    let save
-        (dataObjects: IDataObjectStore)
-        (scopeId: string)
-        (objectId: string)
-        (dataType: string)
-        (createdBy: string)
-        (metadata: Map<string, string>)
-        (record: 'T)
-        : Async<Result<unit, EvaluationError>> =
-        async {
-            let content = JsonSerializer.SerializeToUtf8Bytes(record, jsonOptions)
-
-            match! dataObjects.Save(scopeId, objectId, content, dataType, createdBy, metadata, Versioned) with
-            | Ok _ -> return Ok()
-            | Error e -> return Error(mapDataObjectError e)
-        }
-
-    /// Materialise every record of `dataType` in the scope whose metadata
-    /// sidecar satisfies `sidecarMatches` (the `BlobModelRegistry.queryBy`
-    /// idiom). Undecodable matches are skipped.
-    let queryBy<'T>
-        (dataObjects: IDataObjectStore)
-        (scopeId: string)
-        (dataType: string)
-        (sidecarMatches: Map<string, string> -> bool)
-        : Async<'T list> =
-        async {
-            let! objs = dataObjects.ListObjects scopeId
-
-            let candidates =
-                objs
-                |> List.filter (fun d -> d.DataType = dataType && sidecarMatches d.Metadata)
-
-            let results = ResizeArray<'T>()
-
-            for dobj in candidates do
-                match! dataObjects.GetContent(scopeId, dobj.ContentHash) with
-                | Ok bytes ->
-                    match decode<'T> bytes with
-                    | Ok record -> results.Add record
-                    | Error _ -> ()
-                | Error _ -> ()
-
-            return List.ofSeq results
-        }
 
 /// Default `IModelEvaluationRunner` over the composed modelling substrate.
 /// Providers are resolved from the Phase 449 fit-provider registry by the
@@ -270,6 +207,47 @@ type ModelEvaluationRunner
         dataObjects: IDataObjectStore,
         audit: IAuditLog
     ) =
+
+    let runStore =
+        SidecarStore<EvaluationRun>(
+            dataObjects,
+            SidecarStore.json ModelEvaluationStorage.RunDataType Versioned [ ModelEvaluationStorage.ArtifactKey ]
+        )
+
+    let foldStore =
+        SidecarStore<EvaluationFoldOutcome>(
+            dataObjects,
+            SidecarStore.json ModelEvaluationStorage.FoldDataType Versioned [ ModelEvaluationStorage.FoldRunKey ]
+        )
+
+    let comparisonStore =
+        SidecarStore<ModelComparison>(
+            dataObjects,
+            SidecarStore.json ModelEvaluationStorage.ComparisonDataType Versioned []
+        )
+
+    let registrationStore =
+        SidecarStore<EvaluationRegistration>(
+            dataObjects,
+            SidecarStore.json ModelEvaluationStorage.RegistrationDataType Versioned []
+        )
+
+    /// Persist a record under `objectId` with the given sidecar. `Versioned`
+    /// — a re-run of the same deterministic id appends a fresh version;
+    /// reads return the latest.
+    let saveTo
+        (store: SidecarStore<'T>)
+        (scopeId: string)
+        (objectId: string)
+        (createdBy: string)
+        (sidecar: Map<string, string>)
+        (record: 'T)
+        : Async<Result<unit, EvaluationError>> =
+        async {
+            match! store.Save(scopeId, objectId, SidecarStore.encode record, createdBy, sidecar) with
+            | Ok _ -> return Ok()
+            | Error e -> return Error(ModelEvaluationStorage.mapDataObjectError e)
+        }
 
     /// Read every row of a vintage, paging in fixed windows (the Phase 454
     /// `ModelScorer` idiom). `Error` lifts a `DatasetError` to
@@ -312,22 +290,14 @@ type ModelEvaluationRunner
     /// `None` when the pair has never been evaluated (or the record is
     /// unreadable). The comparison's per-entrant metric source.
     let tryGetRun (scopeId: string) (artifactKeyHash: string) (holdout: DatasetVersionRef) = async {
-        match! dataObjects.Get(scopeId, EvaluationRun.id artifactKeyHash holdout) with
-        | Ok(_, bytes) ->
-            match ModelEvaluationStorage.decode<EvaluationRun> bytes with
-            | Ok run -> return Some run
-            | Error _ -> return None
+        match! runStore.Get(scopeId, EvaluationRun.id artifactKeyHash holdout) with
+        | Ok run -> return Some run
         | Error _ -> return None
     }
 
     /// Every stored per-fold outcome of one run, in family order.
     let foldOutcomesOf (scopeId: string) (runId: string) = async {
-        let! outcomes =
-            ModelEvaluationStorage.queryBy<EvaluationFoldOutcome>
-                dataObjects
-                scopeId
-                ModelEvaluationStorage.FoldDataType
-                (fun m -> Map.tryFind ModelEvaluationStorage.FoldRunKey m = Some runId)
+        let! outcomes = foldStore.QueryBy(scopeId, ModelEvaluationStorage.FoldRunKey, runId)
 
         return outcomes |> List.sortBy _.FoldIndex
     }
@@ -410,11 +380,10 @@ type ModelEvaluationRunner
                                     ]
 
                                 match!
-                                    ModelEvaluationStorage.save
-                                        dataObjects
+                                    saveTo
+                                        foldStore
                                         request.ScopeId
                                         outcome.OutcomeId
-                                        ModelEvaluationStorage.FoldDataType
                                         request.EvaluatedBy
                                         foldSidecar
                                         outcome
@@ -494,16 +463,7 @@ type ModelEvaluationRunner
                                             ModelEvaluationStorage.HoldoutKey, DatasetVersionRef.key request.Holdout
                                         ]
 
-                                    match!
-                                        ModelEvaluationStorage.save
-                                            dataObjects
-                                            request.ScopeId
-                                            runId
-                                            ModelEvaluationStorage.RunDataType
-                                            request.EvaluatedBy
-                                            sidecar
-                                            run
-                                    with
+                                    match! saveTo runStore request.ScopeId runId request.EvaluatedBy sidecar run with
                                     | Error e -> return Error e
                                     | Ok() ->
                                         do!
@@ -524,14 +484,8 @@ type ModelEvaluationRunner
         }
 
         member _.GetTrackRecord(scopeId, artifactKeyHash) = async {
-            let! runs =
-                ModelEvaluationStorage.queryBy<EvaluationRun>
-                    dataObjects
-                    scopeId
-                    ModelEvaluationStorage.RunDataType
-                    (fun m -> Map.tryFind ModelEvaluationStorage.ArtifactKey m = Some artifactKeyHash)
-
-            return runs |> List.sortBy _.EvaluatedAt
+            let! track = runStore.QueryBy(scopeId, ModelEvaluationStorage.ArtifactKey, artifactKeyHash)
+            return track |> List.sortBy _.EvaluatedAt
         }
 
         member _.GetFoldOutcomes(scopeId, runId) = foldOutcomesOf scopeId runId
@@ -593,25 +547,16 @@ type ModelEvaluationRunner
             let sidecar =
                 Map [ ModelEvaluationStorage.HoldoutKey, DatasetVersionRef.key request.Holdout ]
 
-            match!
-                ModelEvaluationStorage.save
-                    dataObjects
-                    request.ScopeId
-                    comparisonId
-                    ModelEvaluationStorage.ComparisonDataType
-                    request.ComparedBy
-                    sidecar
-                    comparison
-            with
+            match! saveTo comparisonStore request.ScopeId comparisonId request.ComparedBy sidecar comparison with
             | Error e -> return Error e
             | Ok() -> return Ok comparison
         }
 
         member _.GetComparison(scopeId, comparisonId) = async {
-            match! dataObjects.Get(scopeId, comparisonId) with
+            match! comparisonStore.Get(scopeId, comparisonId) with
             | Error DataObjectError.NotFound -> return Error EvaluationError.NotFound
             | Error e -> return Error(ModelEvaluationStorage.mapDataObjectError e)
-            | Ok(_, bytes) -> return ModelEvaluationStorage.decode<ModelComparison> bytes
+            | Ok comparison -> return Ok comparison
         }
 
         member _.RegisterReevaluation(scopeId, artifactKeyHash, holdoutDatasetId, registeredBy) = async {
@@ -619,8 +564,8 @@ type ModelEvaluationRunner
 
             // Idempotent: an existing (artifact, dataset) registration is
             // returned unchanged — no new version, nothing re-declared.
-            match! dataObjects.Get(scopeId, registrationId) with
-            | Ok(_, bytes) -> return ModelEvaluationStorage.decode<EvaluationRegistration> bytes
+            match! registrationStore.Get(scopeId, registrationId) with
+            | Ok registration -> return Ok registration
             | Error DataObjectError.NotFound ->
                 let registration: EvaluationRegistration = {
                     RegistrationId = registrationId
@@ -637,27 +582,13 @@ type ModelEvaluationRunner
                         ModelEvaluationStorage.RegistrationDatasetKey, holdoutDatasetId
                     ]
 
-                match!
-                    ModelEvaluationStorage.save
-                        dataObjects
-                        scopeId
-                        registrationId
-                        ModelEvaluationStorage.RegistrationDataType
-                        registeredBy
-                        sidecar
-                        registration
-                with
+                match! saveTo registrationStore scopeId registrationId registeredBy sidecar registration with
                 | Error e -> return Error e
                 | Ok() -> return Ok registration
             | Error e -> return Error(ModelEvaluationStorage.mapDataObjectError e)
         }
 
-        member _.ListReevaluationRegistrations(scopeId) =
-            ModelEvaluationStorage.queryBy<EvaluationRegistration>
-                dataObjects
-                scopeId
-                ModelEvaluationStorage.RegistrationDataType
-                (fun _ -> true)
+        member _.ListReevaluationRegistrations(scopeId) = registrationStore.Sweep scopeId
 
 module ModelEvaluationRunner =
     /// Construct the default evaluation runner over the composed modelling
@@ -803,77 +734,48 @@ module ChampionChallengerGate =
         : ChampionChallengerGate =
         ChampionChallengerGate(registry, runner, audit, policy)
 
-module ModelEvaluationEnvelope =
-    /// STJ options with the full F# converter set — the SDK-standard wire
-    /// shape, so persisted job payloads round-trip faithfully.
-    let private jsonOptions = FableConverters.create ()
-
-    /// Serialise an `EvaluationRequest` to the persisted job-payload string.
-    let serialiseRequest (request: EvaluationRequest) : string =
-        JsonSerializer.Serialize(request, jsonOptions)
-
-    /// Parse a persisted job payload back into an `EvaluationRequest`.
-    /// `Error` carries the failure detail; a malformed payload is a
-    /// `PermanentFailure` (it will not recover on retry).
-    let tryParseRequest (payload: string) : Result<EvaluationRequest, string> =
-        try
-            Ok(JsonSerializer.Deserialize<EvaluationRequest>(payload, jsonOptions))
-        with ex ->
-            Error ex.Message
-
-    /// Whether an `EvaluationError` is terminal (no retry recovers it) —
-    /// the job handlers' `PermanentFailure` / `TransientFailure` split.
-    let isTerminal (error: EvaluationError) : bool =
-        match error with
-        | EvaluationError.ArtifactNotFound
-        | EvaluationError.ProviderNotFound _
-        | EvaluationError.EvaluationUnsupported _
-        | EvaluationError.ProviderRefused _
-        // Phase 652 — neither an undeclared plan kind nor an invalid plan
-        // becomes valid on retry: the plan is data, and the holdout frame is
-        // an immutable vintage.
-        | EvaluationError.PlanUnsupported _
-        | EvaluationError.PlanInvalid _
-        | EvaluationError.NotFound -> true
-        | EvaluationError.ScoreFailed(ScoreError.ProviderNotFound _)
-        | EvaluationError.ScoreFailed(ScoreError.NotApproved _)
-        | EvaluationError.ScoreFailed(ScoreError.InputSchemaMismatch _) -> true
-        | EvaluationError.ScoreFailed _
-        | EvaluationError.RegistryFailure _
-        | EvaluationError.ProviderFailed _
-        | EvaluationError.InputUnavailable _
-        | EvaluationError.StorageFailure _ -> false
-
-/// `IJobHandler` bound to `_platform.modeleval.run` (task 456.A — runs are
-/// jobs). Deserialises an `EvaluationRequest` and runs it through the
-/// evaluation runner. Terminal refusals map to `PermanentFailure`;
-/// registry / input / storage / provider faults map to `TransientFailure`.
-type ModelEvaluationJobHandler(runner: IModelEvaluationRunner, logger: ILogger) =
-    interface IJobHandler with
-        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match ModelEvaluationEnvelope.tryParseRequest ctx.Payload with
-            | Error e ->
-                logger.Error($"ModelEvaluationJobHandler: malformed EvaluationRequest payload — {e}", None)
-                return PermanentFailure $"malformed EvaluationRequest payload: {e}"
-            | Ok request ->
-                match! runner.Evaluate request with
-                | Ok _ -> return Success
-                | Error e when ModelEvaluationEnvelope.isTerminal e ->
-                    logger.Warn $"ModelEvaluationJobHandler: terminal refusal — {EvaluationError.describe e}"
-                    return PermanentFailure(EvaluationError.describe e)
-                | Error e ->
-                    logger.Warn $"ModelEvaluationJobHandler: transient failure — {EvaluationError.describe e}"
-                    return TransientFailure(EvaluationError.describe e)
-        }
-
+/// The evaluation job, bound to `_platform.modeleval.run` (runs are jobs):
+/// parse an `EvaluationRequest` and run it through the evaluation runner.
 module ModelEvaluationJobHandler =
     /// Reserved scheduler handler name for the evaluation job.
     [<Literal>]
     let HandlerName = "_platform.modeleval.run"
 
+    /// An evaluation failure as the scheduler acts on it. A refusal that no
+    /// retry recovers — a missing artifact or provider, an unsupported or
+    /// invalid plan (the plan is data, and the holdout frame an immutable
+    /// vintage), a scoring refusal — is terminal; a registry, input,
+    /// storage or provider fault may clear.
+    let failureOf (error: EvaluationError) : RunFailure =
+        let described = EvaluationError.describe error
+
+        match error with
+        | EvaluationError.ArtifactNotFound
+        | EvaluationError.ProviderNotFound _
+        | EvaluationError.EvaluationUnsupported _
+        | EvaluationError.ProviderRefused _
+        | EvaluationError.PlanUnsupported _
+        | EvaluationError.PlanInvalid _
+        | EvaluationError.NotFound
+        | EvaluationError.ScoreFailed(ScoreError.ProviderNotFound _)
+        | EvaluationError.ScoreFailed(ScoreError.NotApproved _)
+        | EvaluationError.ScoreFailed(ScoreError.InputSchemaMismatch _) -> RunFailure.Terminal described
+        | EvaluationError.ScoreFailed _
+        | EvaluationError.RegistryFailure _
+        | EvaluationError.ProviderFailed _
+        | EvaluationError.InputUnavailable _
+        | EvaluationError.StorageFailure _ -> RunFailure.Retryable described
+
+    /// The evaluation job.
+    let job (runner: IModelEvaluationRunner) : RunJob<EvaluationRequest> =
+        RunJob.ofPayload HandlerName (fun _ request -> async {
+            match! runner.Evaluate request with
+            | Ok _ -> return Ok()
+            | Error e -> return Error(failureOf e)
+        })
+
     /// Construct the evaluation job handler.
-    let create (runner: IModelEvaluationRunner) (logger: ILogger) : IJobHandler =
-        ModelEvaluationJobHandler(runner, logger) :> IJobHandler
+    let create (runner: IModelEvaluationRunner) (logger: ILogger) : IJobHandler = RunJob.handler logger (job runner)
 
 /// The persisted payload for a `_platform.modeleval.revintage` sweep: which
 /// scope to sweep and who the resulting runs are attributed to.
@@ -884,22 +786,7 @@ type ReevaluationSweepRequest = {
     EvaluatedBy: string
 }
 
-module ReevaluationSweepEnvelope =
-    let private jsonOptions = FableConverters.create ()
-
-    /// Serialise a `ReevaluationSweepRequest` to the persisted job payload.
-    let serialiseRequest (request: ReevaluationSweepRequest) : string =
-        JsonSerializer.Serialize(request, jsonOptions)
-
-    /// Parse a persisted sweep payload. `Error` detail for the terminal
-    /// malformed-payload case.
-    let tryParseRequest (payload: string) : Result<ReevaluationSweepRequest, string> =
-        try
-            Ok(JsonSerializer.Deserialize<ReevaluationSweepRequest>(payload, jsonOptions))
-        with ex ->
-            Error ex.Message
-
-/// `IJobHandler` bound to `_platform.modeleval.revintage` — the standing
+/// The job bound to `_platform.modeleval.revintage` — the standing
 /// re-evaluation sweep (task 456.D). For each standing registration in the
 /// scope: resolve the holdout dataset's latest vintage and, if the artifact
 /// has not yet been evaluated against it, run the evaluation — so the
@@ -911,95 +798,93 @@ module ReevaluationSweepEnvelope =
 /// Failure posture: a registration whose evaluation fails *terminally*
 /// (e.g. its provider was uncomposed) is logged and skipped — one broken
 /// registration must not wedge the standing sweep; a *transient* failure
-/// fails the sweep `TransientFailure`, so the scheduler retries and the
+/// fails the sweep as retryable, so the scheduler retries and the
 /// idempotent skip re-runs only what is still missing.
-type VintageReevaluationJobHandler(runner: IModelEvaluationRunner, datasets: IDatasetStore, logger: ILogger) =
-    interface IJobHandler with
-        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match ReevaluationSweepEnvelope.tryParseRequest ctx.Payload with
-            | Error e ->
-                logger.Error($"VintageReevaluationJobHandler: malformed ReevaluationSweepRequest — {e}", None)
-                return PermanentFailure $"malformed ReevaluationSweepRequest payload: {e}"
-            | Ok request ->
-                let! registrations = runner.ListReevaluationRegistrations request.ScopeId
-
-                let mutable evaluated = 0
-                let mutable transientFailures: string list = []
-
-                for registration in registrations do
-                    match! datasets.GetLatest(request.ScopeId, registration.HoldoutDatasetId) with
-                    | Error DatasetError.NotFound ->
-                        // No vintage has landed yet — the registration is
-                        // simply waiting; nothing to do this sweep.
-                        ()
-                    | Error e ->
-                        transientFailures <-
-                            sprintf
-                                "dataset '%s' unreadable: %s"
-                                registration.HoldoutDatasetId
-                                (DatasetError.describe e)
-                            :: transientFailures
-                    | Ok latest ->
-                        let latestRef: DatasetVersionRef = {
-                            ScopeId = request.ScopeId
-                            DatasetId = registration.HoldoutDatasetId
-                            Version = latest.Version
-                        }
-
-                        let! trackRecord = runner.GetTrackRecord(request.ScopeId, registration.ArtifactKeyHash)
-
-                        let alreadyEvaluated =
-                            trackRecord |> List.exists (fun run -> run.Holdout = latestRef)
-
-                        if not alreadyEvaluated then
-                            let evaluation: EvaluationRequest = {
-                                ScopeId = request.ScopeId
-                                ArtifactKeyHash = registration.ArtifactKeyHash
-                                Holdout = latestRef
-                                // A standing registration declares an
-                                // artifact + dataset, not a fold family, so
-                                // the sweep runs the degenerate plan — the
-                                // Phase 456 behaviour, unchanged by phase
-                                // 652.
-                                Plan = None
-                                EvaluatedBy = request.EvaluatedBy
-                            }
-
-                            match! runner.Evaluate evaluation with
-                            | Ok _ -> evaluated <- evaluated + 1
-                            | Error e when ModelEvaluationEnvelope.isTerminal e ->
-                                logger.Warn(
-                                    sprintf
-                                        "VintageReevaluationJobHandler: registration for artifact '%s' skipped (terminal): %s"
-                                        registration.ArtifactKeyHash
-                                        (EvaluationError.describe e)
-                                )
-                            | Error e -> transientFailures <- EvaluationError.describe e :: transientFailures
-
-                if List.isEmpty transientFailures then
-                    logger.Info(
-                        sprintf
-                            "VintageReevaluationJobHandler: swept %d registration(s), %d new evaluation(s)"
-                            registrations.Length
-                            evaluated
-                    )
-
-                    return Success
-                else
-                    return
-                        TransientFailure(
-                            sprintf
-                                "%d registration(s) failed transiently: %s"
-                                transientFailures.Length
-                                (String.concat "; " (List.rev transientFailures))
-                        )
-        }
-
 module VintageReevaluationJobHandler =
     /// Reserved scheduler handler name for the standing re-evaluation sweep.
     [<Literal>]
     let HandlerName = "_platform.modeleval.revintage"
 
+    /// The standing re-evaluation sweep.
+    let job
+        (runner: IModelEvaluationRunner)
+        (datasets: IDatasetStore)
+        (logger: ILogger)
+        : RunJob<ReevaluationSweepRequest> =
+        RunJob.ofPayload HandlerName (fun _ request -> async {
+            let! registrations = runner.ListReevaluationRegistrations request.ScopeId
+
+            let mutable evaluated = 0
+            let mutable retryable: string list = []
+
+            for registration in registrations do
+                match! datasets.GetLatest(request.ScopeId, registration.HoldoutDatasetId) with
+                | Error DatasetError.NotFound ->
+                    // No vintage has landed yet — the registration is simply
+                    // waiting; nothing to do this sweep.
+                    ()
+                | Error e ->
+                    retryable <-
+                        sprintf "dataset '%s' unreadable: %s" registration.HoldoutDatasetId (DatasetError.describe e)
+                        :: retryable
+                | Ok latest ->
+                    let latestRef: DatasetVersionRef = {
+                        ScopeId = request.ScopeId
+                        DatasetId = registration.HoldoutDatasetId
+                        Version = latest.Version
+                    }
+
+                    // The track record is one indexed read per registration.
+                    let! trackRecord = runner.GetTrackRecord(request.ScopeId, registration.ArtifactKeyHash)
+
+                    if not (trackRecord |> List.exists (fun run -> run.Holdout = latestRef)) then
+                        let evaluation: EvaluationRequest = {
+                            ScopeId = request.ScopeId
+                            ArtifactKeyHash = registration.ArtifactKeyHash
+                            Holdout = latestRef
+                            // A standing registration declares an artifact
+                            // and a dataset, not a fold family, so the sweep
+                            // runs the degenerate plan.
+                            Plan = None
+                            EvaluatedBy = request.EvaluatedBy
+                        }
+
+                        match! runner.Evaluate evaluation with
+                        | Ok _ -> evaluated <- evaluated + 1
+                        | Error e ->
+                            match ModelEvaluationJobHandler.failureOf e with
+                            | RunFailure.Terminal reason ->
+                                logger.Warn(
+                                    sprintf
+                                        "%s: registration for artifact '%s' skipped (terminal): %s"
+                                        HandlerName
+                                        registration.ArtifactKeyHash
+                                        reason
+                                )
+                            | RunFailure.Retryable reason -> retryable <- reason :: retryable
+
+            if List.isEmpty retryable then
+                logger.Info(
+                    sprintf
+                        "%s: swept %d registration(s), %d new evaluation(s)"
+                        HandlerName
+                        registrations.Length
+                        evaluated
+                )
+
+                return Ok()
+            else
+                return
+                    Error(
+                        RunFailure.Retryable(
+                            sprintf
+                                "%d registration(s) failed transiently: %s"
+                                retryable.Length
+                                (String.concat "; " (List.rev retryable))
+                        )
+                    )
+        })
+
     /// Construct the standing re-evaluation sweep handler.
     let create (runner: IModelEvaluationRunner) (datasets: IDatasetStore) (logger: ILogger) : IJobHandler =
-        VintageReevaluationJobHandler(runner, datasets, logger) :> IJobHandler
+        RunJob.handler logger (job runner datasets logger)

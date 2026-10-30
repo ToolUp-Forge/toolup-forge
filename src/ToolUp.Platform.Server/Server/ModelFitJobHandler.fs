@@ -4,10 +4,8 @@
 namespace ToolUp.Platform
 
 open System
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 
-// ─── Phase 449 — fit-run envelope + IJobHandler ─────────────────────────
+// ─── Fit-run envelope and job ───────────────────────────────────────────
 //
 // The envelope orchestrates one fit: resolve the provider by kind, compute
 // the forge-owned composite key, execute the provider, evaluate the gates,
@@ -22,26 +20,6 @@ open ToolUp.Remoting.Json.SystemTextJson
 // identity + gate outcome cannot be forged by a misbehaving provider.
 
 module ModelFitEnvelope =
-    /// STJ options with the full F# converter set — matches the
-    /// Fable-compatible wire shape used everywhere else in the SDK, so a
-    /// persisted `FitRequest` job payload round-trips faithfully (DU /
-    /// Option / record / list / Map).
-    let private jsonOptions = FableConverters.create ()
-
-    /// Serialise a `FitRequest` to the persisted job-payload string.
-    let serialiseRequest (request: FitRequest) : string =
-        JsonSerializer.Serialize(request, jsonOptions)
-
-    /// Parse a persisted job payload back into a `FitRequest`. `Error`
-    /// carries the failure detail; the job handler treats a parse failure
-    /// as a `PermanentFailure` (a malformed payload will not recover on
-    /// retry).
-    let tryParseRequest (payload: string) : Result<FitRequest, string> =
-        try
-            Ok(JsonSerializer.Deserialize<FitRequest>(payload, jsonOptions))
-        with ex ->
-            Error ex.Message
-
     /// Run one fit through the envelope. Resolves the provider, computes the
     /// forge-owned composite key, executes the provider, evaluates the
     /// requested gates, and emits `ModelFitStarted` / `ModelFitCompleted`
@@ -140,42 +118,33 @@ module ModelFitEnvelope =
                         return Ok outcome
         }
 
-/// `IJobHandler` bound to `_platform.modelfit.run`. Deserialises a
-/// `FitRequest` from the job payload and runs it through the envelope. A
-/// malformed payload or an unknown provider kind is a `PermanentFailure`
-/// (no retry recovers it); a provider exception is a `TransientFailure`
-/// (the fit may succeed on a later attempt).
-type ModelFitJobHandler(registry: ModelFitProviderRegistry, audit: IAuditLog, logger: ILogger) =
-    interface IJobHandler with
-        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match ModelFitEnvelope.tryParseRequest ctx.Payload with
-            | Error e ->
-                logger.Error($"ModelFitJobHandler: malformed FitRequest payload — {e}", None)
-                return PermanentFailure $"malformed FitRequest payload: {e}"
-            | Ok request ->
-                match! ModelFitEnvelope.runFit registry audit request with
-                | Ok _ -> return Success
-                | Error(ModelFitError.ProviderNotFound k) ->
-                    logger.Warn $"ModelFitJobHandler: no provider registered for kind '{k}'"
-                    return PermanentFailure(ModelFitError.describe (ModelFitError.ProviderNotFound k))
-                | Error(ModelFitError.ProviderFailed(k, m)) ->
-                    logger.Warn $"ModelFitJobHandler: provider '{k}' failed — {m}"
-                    return TransientFailure(ModelFitError.describe (ModelFitError.ProviderFailed(k, m)))
-                | Error(ModelFitError.GateUnitMismatch _ as refused) ->
-                    // Terminal: the same request against the same provider
-                    // reports the same units, so a retry cannot succeed.
-                    logger.Warn $"ModelFitJobHandler: {ModelFitError.describe refused}"
-                    return PermanentFailure(ModelFitError.describe refused)
-        }
-
+/// The fit-run job, bound to `_platform.modelfit.run`: parse a `FitRequest`
+/// and run it through the envelope.
 module ModelFitJobHandler =
     /// Reserved scheduler handler name for the fit-run job.
     [<Literal>]
     let HandlerName = "_platform.modelfit.run"
 
+    /// A fit failure as the scheduler acts on it. An unknown provider kind
+    /// and a gate-unit mismatch are terminal — the same request against the
+    /// same providers fails the same way; a provider exception may clear.
+    let failureOf (error: ModelFitError) : RunFailure =
+        match error with
+        | ModelFitError.ProviderNotFound _
+        | ModelFitError.GateUnitMismatch _ -> RunFailure.Terminal(ModelFitError.describe error)
+        | ModelFitError.ProviderFailed _ -> RunFailure.Retryable(ModelFitError.describe error)
+
+    /// The fit-run job.
+    let job (registry: ModelFitProviderRegistry) (audit: IAuditLog) : RunJob<FitRequest> =
+        RunJob.ofPayload HandlerName (fun _ request -> async {
+            match! ModelFitEnvelope.runFit registry audit request with
+            | Ok _ -> return Ok()
+            | Error e -> return Error(failureOf e)
+        })
+
     /// Construct the fit-run job handler.
     let create (registry: ModelFitProviderRegistry) (audit: IAuditLog) (logger: ILogger) : IJobHandler =
-        ModelFitJobHandler(registry, audit, logger) :> IJobHandler
+        RunJob.handler logger (job registry audit)
 
 // ─── Phase 599 — batch fit submission ───────────────────────────────────
 //
@@ -217,20 +186,6 @@ module ModelFitBatch =
     /// Reserved scheduler handler name for one batch item's fit run.
     [<Literal>]
     let ItemHandlerName = "_platform.modelfit.batchitem"
-
-    let private jsonOptions = FableConverters.create ()
-
-    /// Serialise a batch item payload to the persisted job-payload string.
-    let serialiseItem (item: FitBatchItemPayload) : string =
-        JsonSerializer.Serialize(item, jsonOptions)
-
-    /// Parse a persisted batch item payload. `Error` detail is diagnostic;
-    /// the item handler treats a parse failure as a `PermanentFailure`.
-    let tryParseItem (payload: string) : Result<FitBatchItemPayload, string> =
-        try
-            Ok(JsonSerializer.Deserialize<FitBatchItemPayload>(payload, jsonOptions))
-        with ex ->
-            Error ex.Message
 
     /// Phase 451 — take one budget reservation per item, releasing every
     /// reservation already taken if any item is refused. `Ok` carries the
@@ -355,11 +310,14 @@ module ModelFitBatch =
 
                     for index, request in List.indexed batch.Requests do
                         let payload =
-                            serialiseItem {
-                                BatchId = batch.BatchId
-                                Index = index
-                                Request = request
-                            }
+                            JobPayload.serialise (
+                                {
+                                    BatchId = batch.BatchId
+                                    Index = index
+                                    Request = request
+                                }
+                                : FitBatchItemPayload
+                            )
 
                         let registration = {
                             ScopeId = batch.ScopeId

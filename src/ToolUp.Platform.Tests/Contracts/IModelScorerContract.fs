@@ -712,7 +712,7 @@ let tests =
             }
 
             let goodPayload =
-                ModelScoringEnvelope.serialiseRequest {
+                JobPayload.serialise<ScoreJobRequest> {
                     ScopeId = "team-1"
                     ArtifactKeyHash = artifact.CompositeKey.Hash
                     Input = input
@@ -755,7 +755,7 @@ let tests =
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload =
-                    ModelScoringEnvelope.serialiseRequest {
+                    JobPayload.serialise<ScoreJobRequest> {
                         ScopeId = "team-1"
                         ArtifactKeyHash = "no-such-artifact"
                         Input = input
@@ -800,7 +800,7 @@ let tests =
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload =
-                    ModelScoringEnvelope.serialiseRequest {
+                    JobPayload.serialise<ScoreJobRequest> {
                         ScopeId = "team-1"
                         ArtifactKeyHash = artifact.CompositeKey.Hash
                         Input = input

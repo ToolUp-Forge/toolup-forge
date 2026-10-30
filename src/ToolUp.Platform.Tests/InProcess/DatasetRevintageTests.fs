@@ -285,7 +285,8 @@ let tests =
             }
 
             // Success path — a new version lands on cadence.
-            let goodPayload = DatasetRevintage.serialiseJobPayload { SpecRef = producedRef }
+            let goodPayload =
+                JobPayload.serialise<DatasetRevintageJobPayload> { SpecRef = producedRef }
 
             let! ok = handler.Execute(ctx goodPayload)
             Expect.equal ok Success "a well-formed payload replays to Success"
@@ -316,7 +317,7 @@ let tests =
             | Ok _ -> ()
 
             let plainPayload =
-                DatasetRevintage.serialiseJobPayload {
+                JobPayload.serialise<DatasetRevintageJobPayload> {
                     SpecRef = {
                         ScopeId = "team-1"
                         DatasetId = "plain"

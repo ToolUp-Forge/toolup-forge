@@ -28,9 +28,10 @@ open ToolUp.Remoting.Json.SystemTextJson
 //
 // **Query index.** Each artifact's queryable coordinates (spec hash, dataset
 // version, status, provider id) are mirrored into the data object's metadata
-// sidecar, so `QueryBySpecHash` / `QueryByDatasetVersion` / `QueryByStatus`
-// filter on `ListObjects` metadata and download the content blob only for the
-// matches they materialise.
+// sidecar, and the records live in a `SidecarStore` indexed by spec hash and
+// dataset version: `QueryBySpecHash` / `QueryByDatasetVersion` read one
+// bucket and one object per match, whatever the size of the scope.
+// `QueryByStatus` names most of the scope at once, so it scans.
 //
 // **Lineage (plan Stage 4, 8a).** When an `ILineageStore` is composed,
 // registration emits the artifact → dataset-version edge (`FromObjectId` =
@@ -205,25 +206,28 @@ type BlobModelRegistry
         RegisteredAt = artifact.RegisteredAt
     }
 
+    /// The artifact records, indexed by the two coordinates a query reads by
+    /// that name few artifacts each — the spec hash and the dataset version.
+    /// `Status` names most of the scope at once, so it is read by scanning.
+    let records =
+        SidecarStore<ModelArtifact>(
+            dataObjects,
+            {
+                DataType = DataType
+                Policy = VersioningPolicy.StrictlyVersioned
+                Keys = [ SpecHashKey; DatasetVersionKey ]
+                Decode = fun dobj bytes -> toArtifact dobj bytes |> Result.mapError ModelRegistryError.describe
+            }
+        )
+
     /// Persist a stored artifact under its composite-key hash. `StrictlyVersioned`
     /// so registration + every transition is an immutable, append-only
     /// version (GP 5).
     let save (scopeId: string) (stored: StoredModelArtifact) (status: ModelArtifactStatus) = async {
-        let objectId = stored.CompositeKey.Hash
         let content = JsonSerializer.SerializeToUtf8Bytes(stored, jsonOptions)
         let meta = buildMetadata stored.CompositeKey status
 
-        match!
-            dataObjects.Save(
-                scopeId,
-                objectId,
-                content,
-                DataType,
-                stored.RegisteredBy,
-                meta,
-                VersioningPolicy.StrictlyVersioned
-            )
-        with
+        match! records.Save(scopeId, stored.CompositeKey.Hash, content, stored.RegisteredBy, meta) with
         | Ok dobj -> return toArtifact dobj content
         | Error e -> return Error(mapDataObjectError e)
     }
@@ -246,30 +250,6 @@ type BlobModelRegistry
 
             let! _ = store.Record(scopeId, link)
             return ()
-    }
-
-    /// Materialise every artifact in the scope whose metadata sidecar
-    /// satisfies `sidecarMatches`, downloading the content blob only for the
-    /// matches. Undecodable matches are skipped (a corrupt blob does not fail
-    /// the whole query).
-    let queryBy (scopeId: string) (sidecarMatches: Map<string, string> -> bool) = async {
-        let! objs = dataObjects.ListObjects scopeId
-
-        let candidates =
-            objs
-            |> List.filter (fun d -> d.DataType = DataType && sidecarMatches d.Metadata)
-
-        let results = ResizeArray<ModelArtifact>()
-
-        for dobj in candidates do
-            match! dataObjects.GetContent(scopeId, dobj.ContentHash) with
-            | Ok bytes ->
-                match toArtifact dobj bytes with
-                | Ok artifact -> results.Add artifact
-                | Error _ -> ()
-            | Error _ -> ()
-
-        return List.ofSeq results
     }
 
     /// The whole of registration, reporting the novelty it decided (Phase
@@ -390,14 +370,14 @@ type BlobModelRegistry
         }
 
         member _.QueryBySpecHash(scopeId, specHash) =
-            queryBy scopeId (fun m -> Map.tryFind SpecHashKey m = Some specHash)
+            records.QueryBy(scopeId, SpecHashKey, specHash)
 
         member _.QueryByDatasetVersion(scopeId, datasetVersion) =
-            queryBy scopeId (fun m -> Map.tryFind DatasetVersionKey m = Some datasetVersion)
+            records.QueryBy(scopeId, DatasetVersionKey, datasetVersion)
 
         member _.QueryByStatus(scopeId, status) =
             let target = ModelArtifactStatus.name status
-            queryBy scopeId (fun m -> Map.tryFind StatusKey m = Some target)
+            records.Where(scopeId, (fun m -> Map.tryFind StatusKey m = Some target))
 
         member _.QueryPage(scopeId, query, cursor, limit) = async {
             // Phase 599 — sidecar pre-filter on the indexed coordinates
@@ -425,7 +405,31 @@ type BlobModelRegistry
                             | Some s -> List.contains s query.Statuses
                             | None -> false))
 
-                let! candidates = queryBy scopeId sidecarMatches
+                // A query naming spec hashes or dataset versions reads their
+                // buckets; only a query naming neither scans the scope.
+                let readEach (key: string) (values: string list) = async {
+                    let! found =
+                        values
+                        |> List.distinct
+                        |> List.map (fun value -> records.QueryBy(scopeId, key, value))
+                        |> Async.Sequential
+
+                    return
+                        found
+                        |> List.concat
+                        |> List.distinctBy _.CompositeKey.Hash
+                        |> List.filter (fun artifact ->
+                            sidecarMatches (buildMetadata artifact.CompositeKey artifact.Status))
+                }
+
+                let! candidates =
+                    if not (List.isEmpty query.SpecHashes) then
+                        readEach SpecHashKey query.SpecHashes
+                    elif not (List.isEmpty query.DatasetVersions) then
+                        readEach DatasetVersionKey query.DatasetVersions
+                    else
+                        records.Where(scopeId, sidecarMatches)
+
                 let matched = candidates |> List.filter (ModelRegistryQuery.matches query)
                 return Ok(ModelArtifactPage.page cursor limit matched)
         }

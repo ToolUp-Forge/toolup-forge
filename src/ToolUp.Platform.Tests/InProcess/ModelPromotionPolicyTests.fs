@@ -200,6 +200,51 @@ let private evaluateOk (evaluator: ModelPromotionPolicyEvaluator) (keyHash: stri
 let tests =
     testList "Phase 645 — registry promotion policies" [
 
+        testCaseAsync "a decision is read through its artifact's bucket, not by listing the scope"
+        <| async {
+            let tempDir =
+                Path.Combine(Path.GetTempPath(), "toolup-promotion-count-" + Guid.NewGuid().ToString("N"))
+
+            Directory.CreateDirectory tempDir |> ignore
+
+            let counting =
+                ToolUp.Platform.Tests.Contracts.IModelRegistryContract.CountingDataObjectStore(
+                    DataObjectStore(LocalFileStorage.LocalFileStorage(tempDir))
+                )
+
+            let audit = RecordingAuditLog()
+
+            let stack = {
+                Registry = BlobModelRegistry.create counting audit
+                DataObjects = counting
+                Audit = audit
+            }
+
+            let evaluator =
+                ModelPromotionPolicyEvaluator.create [ tolerantPolicy ] (depsOf stack None)
+
+            let mutable keys = []
+
+            for seed in 1L .. 6L do
+                let! artifact = register stack seed [ "error", 0.4; "score", 0.9 ]
+                let! _ = evaluateOk evaluator artifact.CompositeKey.Hash
+                keys <- artifact.CompositeKey.Hash :: keys
+
+            let! _ = evaluator.GetDecision(scope, List.head keys)
+            counting.Reset()
+
+            let target = List.last keys
+            let! decision = evaluator.GetDecision(scope, target)
+
+            Expect.equal
+                (decision |> Option.map _.ArtifactKeyHash)
+                (Some target)
+                "the standing decision for that artifact"
+
+            Expect.equal counting.Listings 0 "no listing of the scope"
+            Expect.equal counting.ObjectReads 3 "the manifest, the bucket and the one decision"
+        }
+
         // ─── The pure judge ─────────────────────────────────────────────
 
         test "judge auto-promotes a candidate inside every declared tolerance" {
@@ -702,7 +747,7 @@ let tests =
             let! artifact = register stack 1L [ "error", 0.4; "score", 0.9 ]
 
             let good =
-                PromotionEvaluationEnvelope.serialiseRequest {
+                JobPayload.serialise<PromotionEvaluationRequest> {
                     ScopeId = scope
                     ArtifactKeyHash = artifact.CompositeKey.Hash
                 }
@@ -717,7 +762,7 @@ let tests =
             | other -> failtestf "a malformed payload must be a PermanentFailure; got %A" other
 
             let unknown =
-                PromotionEvaluationEnvelope.serialiseRequest {
+                JobPayload.serialise<PromotionEvaluationRequest> {
                     ScopeId = scope
                     ArtifactKeyHash = "no-such-artifact"
                 }

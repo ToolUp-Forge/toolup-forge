@@ -128,7 +128,7 @@ let private executeItems (handler: IJobHandler) (batch: FitRequestBatch) = async
 
     for index, request in List.indexed batch.Requests do
         let payload =
-            ModelFitBatch.serialiseItem {
+            JobPayload.serialise<FitBatchItemPayload> {
                 BatchId = batch.BatchId
                 Index = index
                 Request = request

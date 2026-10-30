@@ -3,8 +3,6 @@
 
 namespace ToolUp.Facts
 
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── RecomputeJobHandler (Phase 561 — reactive fact recomputation) ────
@@ -86,18 +84,6 @@ type DataChangeScope =
 /// the payload only names the fact to recompute.
 type RecomputeJobPayload = { factId: string }
 
-module private RecomputeJson =
-    let private options = FableConverters.create ()
-
-    let serialize (value: 'T) : string =
-        JsonSerializer.Serialize(value, options)
-
-    let tryDeserialize (json: string) : RecomputeJobPayload option =
-        try
-            Some(JsonSerializer.Deserialize<RecomputeJobPayload>(json, options))
-        with _ ->
-            None
-
 /// Per-fact classification of what the invalidation walk did — for audit,
 /// telemetry, and tests.
 type InvalidationOutcome =
@@ -140,94 +126,77 @@ module private RecomputeUnder =
                 | Error e -> return Error e
         }
 
-/// `IJobHandler` that runs one recompute: load the target fact, recompute
-/// its value through the deployment's `IFactRecomputer`, and re-assert.
-type RecomputeJobHandler(store: IFactStore, recomputer: IFactRecomputer, logger: ILogger) =
-    interface IJobHandler with
-        member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match RecomputeJson.tryDeserialize ctx.Payload with
-            | None ->
-                let msg =
-                    sprintf "RecomputeJobHandler: malformed payload for job %A — %s" ctx.JobId ctx.Payload
-
-                logger.Warn msg
-                return JobResult.PermanentFailure msg
-            | Some payload ->
-                // Phase 818 — a job whose scope the scheduler re-minted
-                // (scheduled through the typed `Schedule`) reads and writes
-                // the fact store through the `ResolvedScope` members. A job
-                // whose scope was only carried — scheduled through the
-                // string `Schedule`, which is what `reactToDataChange`
-                // does for a carried write, or handed back un-minted by a
-                // scheduler outside the server tier — runs under the
-                // anonymous scope on `ctx.Scope`, and reading the
-                // anonymous shard for it would silently find nothing; its
-                // carried `ScopeId` keys the store instead, exactly as
-                // before this phase (GP 11). Both key one shard: the typed
-                // form is the string form over `ScopeId` (Phase 797).
-                let resolved =
-                    not ctx.Scope.IsAnonymous || ctx.ScopeId = ResolvedScope.AnonymousScopeId
-
-                if resolved && ctx.Scope.ScopeId <> ctx.ScopeId then
-                    // Phase 930 — a typed scope naming a shard other than the
-                    // job's own is never read under. A scheduler that re-mints
-                    // hands back the scope it registered under, so this is a
-                    // defect upstream, and retrying cannot mend it.
-                    let msg =
-                        sprintf
-                            "RecomputeJobHandler: job %A carries scope '%s' but is registered under '%s' — refused rather than read across shards"
-                            ctx.JobId
-                            ctx.Scope.ScopeId
-                            ctx.ScopeId
-
-                    logger.Warn msg
-                    return JobResult.PermanentFailure msg
-                else
-                    let! fact =
-                        if resolved then
-                            store.Get(ctx.Scope, payload.factId)
-                        else
-                            store.Get(ctx.ScopeId, payload.factId)
-
-                    match fact with
-                    | None ->
-                        // The fact no longer resolves (already superseded /
-                        // erased). Nothing to recompute; retrying will not
-                        // change that — a no-op success, not a failure.
-                        logger.Info(
-                            sprintf "RecomputeJobHandler: fact %s not found — nothing to recompute" payload.factId
-                        )
-
-                        return JobResult.Success
-                    | Some fact ->
-                        let! result =
-                            if resolved then
-                                RecomputeUnder.resolvedScope store recomputer ctx.Scope fact
-                            else
-                                FactInvalidation.recomputeNow store recomputer ctx.ScopeId fact
-
-                        match result with
-                        | Ok _ ->
-                            // Ok (Some _) re-asserted (idempotent when
-                            // unchanged); Ok None means no recompute path —
-                            // both are terminal success, nothing to retry.
-                            return JobResult.Success
-                        | Error err ->
-                            let msg =
-                                sprintf "RecomputeJobHandler: recompute of fact %s failed — %s" payload.factId err
-
-                            logger.Warn msg
-                            // Recompute engines / stores fail transiently
-                            // (upstream busy, lock contention); retry.
-                            return JobResult.TransientFailure msg
-        }
-
 /// Construction + compose registration + the reactive orchestration.
 module RecomputeJobHandler =
 
     /// Logical handler name registered with the scheduler at compose time.
     [<Literal>]
     let HandlerName = "_facts.recompute.run"
+
+    /// The recompute job: load the target fact, recompute its value through
+    /// the deployment's `IFactRecomputer`, and re-assert.
+    let job (store: IFactStore) (recomputer: IFactRecomputer) (logger: ILogger) : RunJob<RecomputeJobPayload> =
+        RunJob.ofPayload HandlerName (fun ctx payload -> async {
+            // A job whose scope the scheduler re-minted (scheduled through
+            // the typed `Schedule`) reads and writes the fact store through
+            // the `ResolvedScope` members. A job whose scope was only
+            // carried — scheduled through the string `Schedule`, which is
+            // what `reactToDataChange` does for a carried write, or handed
+            // back un-minted by a scheduler outside the server tier — runs
+            // under the anonymous scope on `ctx.Scope`, and reading the
+            // anonymous shard for it would silently find nothing; its
+            // carried `ScopeId` keys the store instead (GP 11). Both key one
+            // shard: the typed form is the string form over `ScopeId`.
+            let resolved =
+                not ctx.Scope.IsAnonymous || ctx.ScopeId = ResolvedScope.AnonymousScopeId
+
+            if resolved && ctx.Scope.ScopeId <> ctx.ScopeId then
+                // A typed scope naming a shard other than the job's own is
+                // never read under. A scheduler that re-mints hands back the
+                // scope it registered under, so this is a defect upstream,
+                // and retrying cannot mend it.
+                return
+                    Error(
+                        RunFailure.Terminal(
+                            sprintf
+                                "job %A carries scope '%s' but is registered under '%s' — refused rather than read across shards"
+                                ctx.JobId
+                                ctx.Scope.ScopeId
+                                ctx.ScopeId
+                        )
+                    )
+            else
+                let! fact =
+                    if resolved then
+                        store.Get(ctx.Scope, payload.factId)
+                    else
+                        store.Get(ctx.ScopeId, payload.factId)
+
+                match fact with
+                | None ->
+                    // The fact no longer resolves (already superseded /
+                    // erased). Nothing to recompute; retrying will not
+                    // change that — a no-op success, not a failure.
+                    logger.Info(sprintf "%s: fact %s not found — nothing to recompute" HandlerName payload.factId)
+                    return Ok()
+                | Some fact ->
+                    let! result =
+                        if resolved then
+                            RecomputeUnder.resolvedScope store recomputer ctx.Scope fact
+                        else
+                            FactInvalidation.recomputeNow store recomputer ctx.ScopeId fact
+
+                    match result with
+                    // Ok (Some _) re-asserted (idempotent when unchanged);
+                    // Ok None means no recompute path — both are terminal
+                    // success, nothing to retry.
+                    | Ok _ -> return Ok()
+                    // Recompute engines / stores fail transiently (upstream
+                    // busy, lock contention); retry.
+                    | Error err ->
+                        return
+                            Error(RunFailure.Retryable(sprintf "recompute of fact %s failed — %s" payload.factId err))
+        })
 
     /// The synthesised actor recorded as `CreatedBy` on a recompute job
     /// (the invalidation walk runs with no interactive user).
@@ -236,11 +205,11 @@ module RecomputeJobHandler =
 
     /// The serialised payload targeting one fact by id.
     let payloadFor (factId: string) : string =
-        RecomputeJson.serialize { factId = factId }
+        JobPayload.serialise { factId = factId }
 
     /// Create the handler over the fact store + the deployment's recomputer.
     let create (store: IFactStore) (recomputer: IFactRecomputer) (logger: ILogger) : IJobHandler =
-        RecomputeJobHandler(store, recomputer, logger) :> IJobHandler
+        RunJob.handler logger (job store recomputer logger)
 
     /// The compose-time declaration that registers the recompute handler
     /// with the scheduler (a `Manual` trigger — recompute jobs are fired

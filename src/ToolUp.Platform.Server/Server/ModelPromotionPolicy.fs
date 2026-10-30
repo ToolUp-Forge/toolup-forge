@@ -5,8 +5,6 @@ namespace ToolUp.Platform
 
 open System
 open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Phase 645 — registry promotion policies ────────────────────────────
 //
@@ -659,9 +657,8 @@ type PromotionPolicyDeps = {
     Now: unit -> DateTimeOffset
 }
 
-/// Storage plumbing for decision records — the `ModelEvaluationStorage`
-/// idiom over `IDataObjectStore`: queryable coordinates mirrored into the
-/// metadata sidecar, content decoded only for matches.
+/// Storage plumbing for decision records: one `SidecarStore` over
+/// `IDataObjectStore`, indexed by the artifact a decision is about.
 module private ModelPromotionStorage =
 
     [<Literal>]
@@ -676,8 +673,6 @@ module private ModelPromotionStorage =
     [<Literal>]
     let PolicyKey = "promotion.policy"
 
-    let jsonOptions = FableConverters.create ()
-
     let mapDataObjectError (e: DataObjectError) : PromotionPolicyError =
         match e with
         | DataObjectError.NotFound -> PromotionPolicyError.StorageFailure "decision record not found"
@@ -686,62 +681,41 @@ module private ModelPromotionStorage =
         | DataObjectError.PolicyMismatch _ -> PromotionPolicyError.StorageFailure "record versioning policy mismatch"
         | DataObjectError.StorageFailure m -> PromotionPolicyError.StorageFailure m
 
-    /// Persist a decision. `Versioned` — a re-evaluation of the same
+    /// The decision records. `Versioned` — a re-evaluation of the same
     /// artifact appends a fresh version under the same deterministic id, and
     /// reads return the latest, so the queue reflects the standing verdict
-    /// rather than every verdict ever reached.
-    let save (deps: PromotionPolicyDeps) (decision: PromotionDecision) : Async<Result<unit, PromotionPolicyError>> = async {
-        let content = JsonSerializer.SerializeToUtf8Bytes(decision, jsonOptions)
+    /// rather than every verdict ever reached. A decision nobody can read is
+    /// skipped by every multi-record read rather than blocking a queue read.
+    let decisions (dataObjects: IDataObjectStore) =
+        SidecarStore<PromotionDecision>(
+            dataObjects,
+            SidecarStore.json<PromotionDecision> DecisionDataType Versioned [ ArtifactKey ]
+        )
 
-        let metadata =
-            Map [
-                ArtifactKey, decision.ArtifactKeyHash
-                VerdictKey, decision.Verdict
-                PolicyKey, decision.PolicyId
-            ]
-
-        match!
-            deps.DataObjects.Save(
-                decision.ScopeId,
-                decision.DecisionId,
-                content,
-                DecisionDataType,
-                decision.PolicyId,
-                metadata,
-                Versioned
-            )
-        with
-        | Ok _ -> return Ok()
-        | Error e -> return Error(mapDataObjectError e)
-    }
-
-    /// Every stored decision in the scope whose sidecar satisfies
-    /// `sidecarMatches`. Undecodable records are skipped — a decision nobody
-    /// can read is not a decision that should block a queue read.
-    let queryBy
-        (deps: PromotionPolicyDeps)
-        (scopeId: string)
-        (sidecarMatches: Map<string, string> -> bool)
-        : Async<PromotionDecision list> =
+    /// Persist a decision.
+    let save
+        (store: SidecarStore<PromotionDecision>)
+        (decision: PromotionDecision)
+        : Async<Result<unit, PromotionPolicyError>> =
         async {
-            let! objs = deps.DataObjects.ListObjects scopeId
+            let metadata =
+                Map [
+                    ArtifactKey, decision.ArtifactKeyHash
+                    VerdictKey, decision.Verdict
+                    PolicyKey, decision.PolicyId
+                ]
 
-            let candidates =
-                objs
-                |> List.filter (fun d -> d.DataType = DecisionDataType && sidecarMatches d.Metadata)
-
-            let results = ResizeArray<PromotionDecision>()
-
-            for dobj in candidates do
-                match! deps.DataObjects.GetContent(scopeId, dobj.ContentHash) with
-                | Ok bytes ->
-                    try
-                        results.Add(JsonSerializer.Deserialize<PromotionDecision>(bytes, jsonOptions))
-                    with _ ->
-                        ()
-                | Error _ -> ()
-
-            return List.ofSeq results
+            match!
+                store.Save(
+                    decision.ScopeId,
+                    decision.DecisionId,
+                    SidecarStore.encode decision,
+                    decision.PolicyId,
+                    metadata
+                )
+            with
+            | Ok _ -> return Ok()
+            | Error e -> return Error(mapDataObjectError e)
         }
 
 /// The policy evaluator: judge a newly registered artifact against the
@@ -754,6 +728,8 @@ module private ModelPromotionStorage =
 /// never constructs it is byte-for-byte unchanged (GP 11), and Phase 453
 /// transitions stay exactly as they were.
 type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: PromotionPolicyDeps) =
+
+    let decisionStore = ModelPromotionStorage.decisions deps.DataObjects
 
     let transitionDeps: ModelTransitionDeps = {
         Registry = deps.Registry
@@ -859,7 +835,7 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
     /// this, because one would be a second thing to configure, secure and
     /// replicate for a stream the audit substrate already carries.
     let recordDecision (decision: PromotionDecision) : Async<Result<PromotionDecision, PromotionPolicyError>> = async {
-        match! ModelPromotionStorage.save deps decision with
+        match! ModelPromotionStorage.save decisionStore decision with
         | Error e -> return Error e
         | Ok() ->
             do!
@@ -1062,9 +1038,7 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
 
     /// The standing decision for one artifact, when it has been judged.
     member _.GetDecision(scopeId: string, artifactKeyHash: string) : Async<PromotionDecision option> = async {
-        let! decisions =
-            ModelPromotionStorage.queryBy deps scopeId (fun sidecar ->
-                Map.tryFind ModelPromotionStorage.ArtifactKey sidecar = Some artifactKeyHash)
+        let! decisions = decisionStore.QueryBy(scopeId, ModelPromotionStorage.ArtifactKey, artifactKeyHash)
 
         return decisions |> List.sortByDescending _.DecidedAt |> List.tryHead
     }
@@ -1083,8 +1057,10 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
             PromotionPolicyVerdict.name PromotionPolicyVerdict.QueueForCuration
 
         let! decisions =
-            ModelPromotionStorage.queryBy deps scopeId (fun sidecar ->
-                Map.tryFind ModelPromotionStorage.VerdictKey sidecar = Some queuedLabel)
+            decisionStore.Where(
+                scopeId,
+                (fun sidecar -> Map.tryFind ModelPromotionStorage.VerdictKey sidecar = Some queuedLabel)
+            )
 
         let! pending = deps.Registry.QueryByStatus(scopeId, ModelArtifactStatus.Fitted)
 
@@ -1202,58 +1178,10 @@ type PromotionEvaluationRequest = {
     ArtifactKeyHash: string
 }
 
-[<RequireQualifiedAccess>]
-module PromotionEvaluationEnvelope =
-
-    /// STJ options with the full F# converter set — the SDK-standard wire
-    /// shape, so persisted job payloads round-trip faithfully.
-    let private jsonOptions = FableConverters.create ()
-
-    /// Serialise a request to the persisted job-payload string.
-    let serialiseRequest (request: PromotionEvaluationRequest) : string =
-        JsonSerializer.Serialize(request, jsonOptions)
-
-    /// Parse a persisted job payload back into a request. `Error` carries
-    /// the failure detail; a malformed payload is a `PermanentFailure` (it
-    /// will not recover on retry).
-    let tryParseRequest (payload: string) : Result<PromotionEvaluationRequest, string> =
-        try
-            Ok(JsonSerializer.Deserialize<PromotionEvaluationRequest>(payload, jsonOptions))
-        with ex ->
-            Error ex.Message
-
-    /// Whether an envelope error is terminal. A missing artifact will not
-    /// appear on retry; a registry or storage fault may clear.
-    let isTerminal (error: PromotionPolicyError) : bool =
-        match error with
-        | PromotionPolicyError.ArtifactNotFound -> true
-        | PromotionPolicyError.RegistryFailure _
-        | PromotionPolicyError.StorageFailure _ -> false
-
-/// Fuses the evaluator onto `IJobScheduler` so a refit pipeline can enqueue
+/// The promotion-evaluation job, bound to `_platform.modelpromotion.evaluate`:
+/// fuses the evaluator onto `IJobScheduler` so a refit pipeline can enqueue
 /// "decide about this artifact" rather than call it inline. Consumer-wired,
-/// like the Phase 454 scoring and Phase 599 batch-item handlers.
-type ModelPromotionJobHandler(evaluator: ModelPromotionPolicyEvaluator, logger: ILogger) =
-    interface IJobHandler with
-        member _.Execute(context: JobContext) : Async<JobResult> = async {
-            match PromotionEvaluationEnvelope.tryParseRequest context.Payload with
-            | Error reason -> return PermanentFailure $"malformed promotion-evaluation payload: {reason}"
-            | Ok request ->
-                match! evaluator.Evaluate(request.ScopeId, request.ArtifactKeyHash) with
-                | Ok decision ->
-                    logger.Info
-                        $"promotion policy '{decision.PolicyId}' judged {decision.ArtifactKeyHash}: {decision.Verdict}"
-
-                    return Success
-                | Error error ->
-                    let described = PromotionPolicyError.describe error
-
-                    if PromotionEvaluationEnvelope.isTerminal error then
-                        return PermanentFailure described
-                    else
-                        return TransientFailure described
-        }
-
+/// like the scoring and batch-item jobs.
 [<RequireQualifiedAccess>]
 module ModelPromotionJobHandler =
 
@@ -1262,6 +1190,27 @@ module ModelPromotionJobHandler =
     [<Literal>]
     let HandlerName = "_platform.modelpromotion.evaluate"
 
+    /// A policy-evaluation failure as the scheduler acts on it. A missing
+    /// artifact will not appear on retry; a registry or storage fault may
+    /// clear.
+    let failureOf (error: PromotionPolicyError) : RunFailure =
+        match error with
+        | PromotionPolicyError.ArtifactNotFound -> RunFailure.Terminal(PromotionPolicyError.describe error)
+        | PromotionPolicyError.RegistryFailure _
+        | PromotionPolicyError.StorageFailure _ -> RunFailure.Retryable(PromotionPolicyError.describe error)
+
+    /// The promotion-evaluation job.
+    let job (evaluator: ModelPromotionPolicyEvaluator) (logger: ILogger) : RunJob<PromotionEvaluationRequest> =
+        RunJob.ofPayload HandlerName (fun _ request -> async {
+            match! evaluator.Evaluate(request.ScopeId, request.ArtifactKeyHash) with
+            | Ok decision ->
+                logger.Info
+                    $"promotion policy '{decision.PolicyId}' judged {decision.ArtifactKeyHash}: {decision.Verdict}"
+
+                return Ok()
+            | Error error -> return Error(failureOf error)
+        })
+
     /// Construct the handler. Consumer-wired — nothing in forge registers it.
     let create (evaluator: ModelPromotionPolicyEvaluator) (logger: ILogger) : IJobHandler =
-        ModelPromotionJobHandler(evaluator, logger) :> IJobHandler
+        RunJob.handler logger (job evaluator logger)

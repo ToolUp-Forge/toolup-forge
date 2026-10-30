@@ -70,7 +70,10 @@ type private Stack = {
     Audit: RecordingAuditLog
 }
 
-let private stackWith (fitProvider: IModelFitProvider) : Stack =
+/// The stack over `fitProvider`, its evaluation runner reading and writing
+/// through `runnerStore` applied to the stack's data-object store (so a test
+/// can count the runner's reads alone).
+let private stackOver (runnerStore: IDataObjectStore -> IDataObjectStore) (fitProvider: IModelFitProvider) : Stack =
     let tempDir =
         Path.Combine(Path.GetTempPath(), "toolup-eval-test-" + Guid.NewGuid().ToString("N"))
 
@@ -93,9 +96,11 @@ let private stackWith (fitProvider: IModelFitProvider) : Stack =
         Datasets = datasets
         DataObjects = dataObjects
         Registry = registry
-        Runner = ModelEvaluationRunner.create fitProviders registry scorer datasets dataObjects audit
+        Runner = ModelEvaluationRunner.create fitProviders registry scorer datasets (runnerStore dataObjects) audit
         Audit = audit
     }
+
+let private stackWith (fitProvider: IModelFitProvider) : Stack = stackOver id fitProvider
 
 let private freshStack () : Stack =
     stackWith (ReferenceModelFitProvider.create ())
@@ -1200,6 +1205,49 @@ let tests =
 
         // ── 456.D — standing re-evaluation across vintages ────────────
 
+        testCaseAsync "a re-evaluation sweep over N registrations lists the scope once, not once per registration"
+        <| async {
+            let mutable counting =
+                Unchecked.defaultof<ToolUp.Platform.Tests.Contracts.IModelRegistryContract.CountingDataObjectStore>
+
+            let stack =
+                stackOver
+                    (fun inner ->
+                        counting <-
+                            ToolUp.Platform.Tests.Contracts.IModelRegistryContract.CountingDataObjectStore(inner)
+
+                        counting :> IDataObjectStore)
+                    (ReferenceModelFitProvider.create ())
+
+            let! training = seedVintage stack.Datasets "team-1" "training" 0.0
+
+            for seed in 1L .. 4L do
+                let! artifact = fitAndRegister stack "team-1" seed training
+
+                match! stack.Runner.RegisterReevaluation("team-1", artifact.CompositeKey.Hash, "holdout", "u1") with
+                | Ok _ -> ()
+                | Error e -> failtestf "registration failed: %s" (EvaluationError.describe e)
+
+            let! _ = seedVintage stack.Datasets "team-1" "holdout" 0.0
+
+            let sweep =
+                VintageReevaluationJobHandler.create stack.Runner stack.Datasets silentLogger
+
+            let payload =
+                JobPayload.serialise<ReevaluationSweepRequest> {
+                    ScopeId = "team-1"
+                    EvaluatedBy = "system"
+                }
+
+            let! first = sweep.Execute(jobCtx payload)
+            Expect.equal first Success "the first sweep evaluates every registration"
+            counting.Reset()
+
+            let! again = sweep.Execute(jobCtx payload)
+            Expect.equal again Success "a sweep with nothing new succeeds"
+            Expect.equal counting.Listings 1 "one listing, for the registrations; each track record is an indexed read"
+        }
+
         testCaseAsync "a standing registration accumulates an out-of-time track record across two vintages"
         <| async {
             let stack = freshStack ()
@@ -1223,7 +1271,7 @@ let tests =
                 VintageReevaluationJobHandler.create stack.Runner stack.Datasets silentLogger
 
             let payload =
-                ReevaluationSweepEnvelope.serialiseRequest {
+                JobPayload.serialise<ReevaluationSweepRequest> {
                     ScopeId = "team-1"
                     EvaluatedBy = "system"
                 }
@@ -1276,7 +1324,7 @@ let tests =
             let handler = ModelEvaluationJobHandler.create stack.Runner silentLogger
 
             let goodPayload =
-                ModelEvaluationEnvelope.serialiseRequest {
+                JobPayload.serialise<EvaluationRequest> {
                     ScopeId = "team-1"
                     ArtifactKeyHash = artifact.CompositeKey.Hash
                     Holdout = holdout
@@ -1294,7 +1342,7 @@ let tests =
             | other -> failtestf "a malformed payload must be a PermanentFailure; got %A" other
 
             let unknownArtifact =
-                ModelEvaluationEnvelope.serialiseRequest {
+                JobPayload.serialise<EvaluationRequest> {
                     ScopeId = "team-1"
                     ArtifactKeyHash = "no-such-artifact"
                     Holdout = holdout
@@ -1561,8 +1609,9 @@ let tests =
             | Error(EvaluationError.PlanInvalid reason) ->
                 Expect.stringContains reason "12" "the refusal says what the family needed"
 
-                Expect.isTrue
-                    (ModelEvaluationEnvelope.isTerminal (EvaluationError.PlanInvalid reason))
+                Expect.equal
+                    (ModelEvaluationJobHandler.failureOf (EvaluationError.PlanInvalid reason))
+                    (RunFailure.Terminal(EvaluationError.describe (EvaluationError.PlanInvalid reason)))
                     "and is terminal"
             | other -> failtestf "a family longer than the frame must refuse; got %A" other
         }

@@ -356,7 +356,7 @@ let tests =
                 DeadLetterDestination = None
             }
 
-            let goodPayload = ModelFitEnvelope.serialiseRequest (request "team-1" 21L [])
+            let goodPayload = JobPayload.serialise<FitRequest> (request "team-1" 21L [])
             let! ok = handler.Execute(ctx goodPayload)
             Expect.equal ok Success "a well-formed FitRequest payload runs to Success"
 
@@ -386,7 +386,7 @@ let tests =
                 TriggerSource = ScheduledManually "system"
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
-                Payload = ModelFitEnvelope.serialiseRequest req
+                Payload = JobPayload.serialise<FitRequest> req
                 DeadLetterDestination = None
             }
 
