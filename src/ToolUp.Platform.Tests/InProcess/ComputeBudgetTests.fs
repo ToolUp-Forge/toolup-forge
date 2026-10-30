@@ -84,16 +84,19 @@ let private silentChannel =
     }
 
 type private RecordingAuditLog() =
+    // The fit-enqueue path records from a background job while a test reads
+    // the counts, so every read snapshots under the same lock the writes take.
     let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
+    let gate = obj ()
+    member _.Events = lock gate (fun () -> List.ofSeq recorded)
     member this.Kinds = this.Events |> List.map (snd >> AuditEvent.eventTypeName)
 
     member this.CountOf(name: string) =
         this.Kinds |> List.filter ((=) name) |> List.length
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.Record(scopeId, audit) = async { lock gate (fun () -> recorded.Add((scopeId, audit))) }
+        member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq) }
 
 /// A dispatcher that records every spec it was handed and mints a handle.
 /// The submission COUNT is the load-bearing observation in most of these
