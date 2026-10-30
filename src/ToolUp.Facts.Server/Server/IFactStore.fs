@@ -5,207 +5,9 @@ namespace ToolUp.Facts
 
 open System
 open System.Text
-
-// ─── Fact-store audit events (Phase 520) ─────────────────────────────
-//
-// The fact store audits to `IEventStore` under a **reserved source
-// module** (`_facts`) rather than adding cases to the core `AuditEvent`
-// DU — the `ILineageStore` pattern (which writes `_platform.lineage`
-// events). This keeps the companion self-contained (GP 1: no core edit)
-// while producing a durable, scope-isolated, queryable audit record
-// (`IEventStore.ReadBySource scope "_facts"`) that the later provenance
-// chain (Phase 524) walks. PII-free: identifiers + classification only.
-
-/// Reserved source-module + event-type discriminators for the fact-store
-/// audit trail.
-module FactEvents =
-    /// `ModuleEvent.SourceModule` for every fact-store audit event. Filter
-    /// `IEventStore.ReadBySource scope FactEvents.SourceModule` for the
-    /// fact audit trail in isolation.
-    [<Literal>]
-    let SourceModule = "_facts"
-
-    /// A new fact was asserted.
-    [<Literal>]
-    let AssertedType = "FactAsserted"
-
-    /// An assertion superseded the current head of its lineage.
-    [<Literal>]
-    let SupersededType = "FactSuperseded"
-
-    /// A **batch** assertion completed (Phase 704) — one summarised row
-    /// per `IFactStore.AssertBatch` call, carrying its
-    /// `BatchAssertReceipt`, in place of the per-fact `FactAsserted` /
-    /// `FactSuperseded` pair a scalar `Assert` emits.
-    [<Literal>]
-    let BatchAssertedType = "FactBatchAsserted"
-
-/// Payload of a `FactAsserted` audit event (JSON-serialised into
-/// `ModuleEvent.Payload`).
-type FactAssertedEvent = {
-    FactId: string
-    /// Readable subject reference (`hierarchy/level>level`).
-    Subject: string
-    Metric: string
-    /// Method identity (`computed:op:ver:hash` / `asserted:principal` /
-    /// `imported:cert`).
-    Method: string
-    /// Disclosure class at birth (`Surfaceable` / `Internal` /
-    /// `Restricted(policy)`).
-    Disclosure: string
-    /// Transaction time the fact entered the store.
-    AsOf: DateTime
-}
-
-/// Payload of a `FactSuperseded` audit event.
-type FactSupersededEvent = {
-    NewFactId: string
-    SupersededFactId: string
-    Subject: string
-    Metric: string
-    AsOf: DateTime
-}
-
-// ─── Batch assertion (Phase 704) ─────────────────────────────────────
-//
-// The write-side twin of the Phase 701 cross-subject read. A
-// population-scale computation run asserts one fact per subject over
-// 10⁵–10⁶ subjects; through the per-fact `Assert` that is 10⁵+ audit
-// events and blob round trips per run. `AssertBatch` amortises the
-// round trips and summarises the audit into ONE row, with every per-fact
-// semantic unchanged — each draft still gets its content-addressed id,
-// its idempotency (law L2), and its derived supersession edge within its
-// own lineage (law L3).
-//
-// What is deliberately NOT amortised is attribution. GP 6 says every
-// assertion is audited; the batch keeps that promise through a digest
-// over the batch's full ordered disposition rather than through one row
-// each, so a summarised event still pins exactly which facts were
-// asserted, which superseded, and which were skipped — recomputable by
-// anyone holding the drafts.
-
-/// The disposition of one draft inside a batch assertion — the three
-/// outcomes `IFactStore.AssertBatch` distinguishes. They **partition** a
-/// batch: every draft is exactly one of them.
-type BatchAssertOutcome =
-    /// Newly stored, and first in its lineage — nothing was superseded.
-    | BatchAsserted
-    /// Newly stored, and it superseded its lineage's current head. Still
-    /// a write; counted apart because "how much of this population
-    /// actually moved" is the question a producer asks of a re-run.
-    | BatchSuperseding
-    /// Its content address was already stored, so the batch wrote
-    /// nothing for it (law L2). Re-running an unchanged population is
-    /// all-idempotent, and the receipt says so.
-    | BatchIdempotent
-
-/// The canonical spelling of a `BatchAssertOutcome` — one renderer,
-/// shared by the receipt's digest and the audit payload, so the digest a
-/// verifier recomputes is the digest the store wrote.
-module BatchAssertOutcome =
-
-    let toString (outcome: BatchAssertOutcome) : string =
-        match outcome with
-        | BatchAsserted -> "asserted"
-        | BatchSuperseding -> "superseding"
-        | BatchIdempotent -> "idempotent"
-
-/// What one `AssertBatch` call did. The three counts partition
-/// `DraftCount`; the per-outcome id lists are **capped**
-/// (`BatchAssertReceipt.IdListCap`) so a receipt over a million drafts
-/// stays a receipt rather than becoming the batch again, and `Digest`
-/// covers the FULL ordered set regardless of the cap.
-type BatchAssertReceipt = {
-    /// Drafts submitted.
-    DraftCount: int
-    /// Drafts newly stored as the first fact of their lineage.
-    AssertedCount: int
-    /// Drafts newly stored that superseded a predecessor.
-    SupersedingCount: int
-    /// Drafts whose content address was already stored — no write.
-    IdempotentCount: int
-    /// Content addresses of the newly-asserted facts, capped.
-    AssertedFactIds: string list
-    /// Content addresses of the superseding facts, capped.
-    SupersedingFactIds: string list
-    /// Content addresses of the idempotent skips, capped.
-    IdempotentFactIds: string list
-    /// Whether any of the three lists was truncated by the cap. Stated
-    /// rather than inferred from a length, so a reader never mistakes a
-    /// capped list for a complete one.
-    Truncated: bool
-    /// SHA-256 over the batch's full ordered disposition — every draft's
-    /// outcome and content address, in submission order. This is what
-    /// keeps the summarised audit honest (GP 6): a producer holding the
-    /// drafts recomputes it and learns whether the store saw the batch it
-    /// sent, in the order it sent it, with the outcomes it was told.
-    Digest: string
-}
-
-/// Folding a batch's ordered dispositions into its receipt, and the
-/// digest that pins the full set. Shared rather than restated in each
-/// store, so two implementations of `AssertBatch` produce the same
-/// digest over the same batch by construction.
-module BatchAssertReceipt =
-
-    /// How many fact ids a receipt carries per outcome before it
-    /// truncates. Sized so an ordinary batch is reported in full and a
-    /// population-scale one is reported by digest.
-    [<Literal>]
-    let IdListCap = 64
-
-    /// The digest over a batch's full ordered disposition. Order is
-    /// submission order and it is significant: two batches over the same
-    /// drafts in different orders can legitimately produce different
-    /// supersession outcomes, so a digest blind to order would call them
-    /// the same batch.
-    ///
-    /// Phase 1089: framed by `CanonicalFrame` — the label, then each
-    /// disposition's outcome and content address as two fields.
-    let digest (dispositions: (BatchAssertOutcome * string) list) : string =
-        ToolUp.Platform.CanonicalFrame.digest [
-            "batch-assert-receipt"
-            for outcome, factId in dispositions do
-                BatchAssertOutcome.toString outcome
-                factId
-        ]
-
-    /// Fold a batch's ordered dispositions into its receipt.
-    let ofDispositions (dispositions: (BatchAssertOutcome * string) list) : BatchAssertReceipt =
-        let idsOf outcome =
-            dispositions |> List.filter (fun (o, _) -> o = outcome) |> List.map snd
-
-        let asserted = idsOf BatchAsserted
-        let superseding = idsOf BatchSuperseding
-        let idempotent = idsOf BatchIdempotent
-
-        {
-            DraftCount = List.length dispositions
-            AssertedCount = List.length asserted
-            SupersedingCount = List.length superseding
-            IdempotentCount = List.length idempotent
-            AssertedFactIds = asserted |> List.truncate IdListCap
-            SupersedingFactIds = superseding |> List.truncate IdListCap
-            IdempotentFactIds = idempotent |> List.truncate IdListCap
-            Truncated =
-                [ asserted; superseding; idempotent ]
-                |> List.exists (fun ids -> List.length ids > IdListCap)
-            Digest = digest dispositions
-        }
-
-    /// The receipt of a batch that asserted nothing — an empty draft
-    /// list. "Nothing to do" is an answer, not a failure.
-    let empty: BatchAssertReceipt = ofDispositions []
-
-/// Payload of a `FactBatchAsserted` audit event — the whole receipt, so
-/// the audit trail carries what the caller was told rather than a
-/// re-rendering of it.
-type FactBatchAssertedEvent = {
-    Receipt: BatchAssertReceipt
-    /// Transaction time of the batch: the latest `AsOf` it stamped, or
-    /// the store's clock when it stamped none (an all-idempotent batch).
-    AsOf: DateTime
-}
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform
 
 // ─── IFactStore (Phase 520) ──────────────────────────────────────────
 //
@@ -250,75 +52,6 @@ type FactBatchAssertedEvent = {
 // at the start of the call and discarded at the end), and rule 6 is
 // unchanged: the batch stamps `AsOf` from the same clock under the same
 // strictly-increasing-within-a-lineage rule.
-
-/// A caller's proposed fact — everything except the machine-derived
-/// fields. The store computes the content-addressed `FactId`, stamps the
-/// transaction time (`AsOf`) from its clock, and derives the `Supersedes`
-/// edge; a caller never supplies those.
-type FactDraft = {
-    Subject: SubjectRef
-    Metric: MetricRef
-    Value: FactValue
-    Period: TemporalExtent
-    Method: MethodRef
-    Evidence: Evidence
-    Confidence: Confidence option
-    Disclosure: Disclosure
-}
-
-/// Structural well-formedness of a draft (Phase 704).
-module FactDraft =
-
-    /// The structural defects that make a draft unassertable, or the
-    /// empty list. Each defect is a short phrase the caller-facing
-    /// refusal quotes verbatim beside the draft's position.
-    ///
-    /// **Deliberately narrow: this is well-formedness, not semantics.**
-    /// It refuses only what the store's own laws cannot express — an
-    /// unaddressable identity component (an empty metric id, hierarchy,
-    /// path member, or method identity field), and a valid-time extent
-    /// that is not half-open (`From >= To`), which no period-overlap
-    /// clause can ever match, so such a fact is written and then invisible
-    /// to every read that filters by period. It does NOT check the metric
-    /// against a registry, the subject against a hierarchy, or the value
-    /// against a unit: those are grounding questions, answered by the
-    /// registry-aware layers above, and a store that refused on them would
-    /// make an unregistered intermediate unassertable.
-    ///
-    /// **Applied by `AssertBatch`, NOT by `Assert`** — see the
-    /// `AssertBatch` contract for why (GP 11: a scalar `Assert` that
-    /// began refusing drafts it accepts today is a break, and the scalar
-    /// path has no atomicity claim that a pre-flight protects).
-    let defects (draft: FactDraft) : string list = [
-        if String.IsNullOrWhiteSpace draft.Metric.Value then
-            "metric id is empty"
-
-        if String.IsNullOrWhiteSpace draft.Subject.Hierarchy then
-            "subject hierarchy id is empty"
-
-        if draft.Subject.Path |> List.exists String.IsNullOrWhiteSpace then
-            "subject path has an empty member id"
-
-        // Raw comparison, not a `ToUniversalTime` normalisation — the
-        // store's own `periodsOverlap` compares these values as they
-        // stand, so this refuses exactly the extents that can never match.
-        if draft.Period.From >= draft.Period.To then
-            "period is not a half-open [From, To) extent"
-
-        match draft.Method with
-        | Computed(operationId, version, _) ->
-            if String.IsNullOrWhiteSpace operationId then
-                "method operation id is empty"
-
-            if String.IsNullOrWhiteSpace version then
-                "method version is empty"
-        | HumanAsserted principal ->
-            if String.IsNullOrWhiteSpace principal then
-                "method principal is empty"
-        | Imported certificateRef ->
-            if String.IsNullOrWhiteSpace certificateRef then
-                "method certificate ref is empty"
-    ]
 
 /// A subject branch — every subject instance in one hierarchy, optionally
 /// under a path prefix and at one depth (Phase 1123). The shape
@@ -571,6 +304,37 @@ type IFactStore =
     /// `QueryPopulation` over the request's resolved scope (Phase 797).
     abstract QueryPopulation:
         scope: ToolUp.Platform.ResolvedScope * query: PopulationQuery -> Async<Result<PopulationResult, string>>
+
+/// Writing a plan's audit rows — the one serialisation every
+/// store executor writes `WritePlan.Audit` through, so a row's type, time
+/// and payload are decided by the plan and rendered once.
+[<RequireQualifiedAccess>]
+module FactAudit =
+
+    let private jsonOptions = FableConverters.create ()
+
+    /// The row's JSON payload — the event record the plan built, as is.
+    let payload (event: FactAuditEvent) : string =
+        match event with
+        | FactAuditEvent.AssertedRow e -> JsonSerializer.Serialize(e, jsonOptions)
+        | FactAuditEvent.SupersededRow e -> JsonSerializer.Serialize(e, jsonOptions)
+        | FactAuditEvent.BatchAssertedRow e -> JsonSerializer.Serialize(e, jsonOptions)
+
+    /// Write a plan's audit rows to the scope's event log, in order, under
+    /// the reserved `_facts` source module.
+    let write (events: IEventStore) (scopeId: string) (audit: FactAuditEvent list) : Async<unit> = async {
+        for event in audit do
+            do!
+                events.Write {
+                    Id = Guid.NewGuid()
+                    OccurredAt = FactAuditEvent.occurredAt event
+                    ScopeId = scopeId
+                    SourceModule = FactEvents.SourceModule
+                    EventType = FactAuditEvent.eventType event
+                    Payload = payload event
+                }
+    }
+
 // ─── Phase 1089 — moving persisted fact ids onto the canonical frame ──
 //
 // `Fact.compute` changed recipe once, at Phase 1089: the fields it digests

@@ -68,36 +68,6 @@ ToolUp.Facts.AttestedGroundingCertificate (class)
 ToolUp.Facts.AttestedGroundingCertificate..ctor(ToolUp.Facts.GroundingCertificateBody, ToolUp.ArtefactSigning.SignedPayloadEnvelope)
 ToolUp.Facts.AttestedGroundingCertificate.Body : ToolUp.Facts.GroundingCertificateBody { get }
 ToolUp.Facts.AttestedGroundingCertificate.Envelope : ToolUp.ArtefactSigning.SignedPayloadEnvelope { get }
-ToolUp.Facts.BatchAssertOutcome (class)
-ToolUp.Facts.BatchAssertOutcome.BatchAsserted : ToolUp.Facts.BatchAssertOutcome { get }
-ToolUp.Facts.BatchAssertOutcome.BatchIdempotent : ToolUp.Facts.BatchAssertOutcome { get }
-ToolUp.Facts.BatchAssertOutcome.BatchSuperseding : ToolUp.Facts.BatchAssertOutcome { get }
-ToolUp.Facts.BatchAssertOutcome.IsBatchAsserted : System.Boolean { get }
-ToolUp.Facts.BatchAssertOutcome.IsBatchIdempotent : System.Boolean { get }
-ToolUp.Facts.BatchAssertOutcome.IsBatchSuperseding : System.Boolean { get }
-ToolUp.Facts.BatchAssertOutcome.Tag : System.Int32 { get }
-ToolUp.Facts.BatchAssertOutcome+Tags (class)
-ToolUp.Facts.BatchAssertOutcome+Tags.BatchAsserted : System.Int32 (literal)
-ToolUp.Facts.BatchAssertOutcome+Tags.BatchIdempotent : System.Int32 (literal)
-ToolUp.Facts.BatchAssertOutcome+Tags.BatchSuperseding : System.Int32 (literal)
-ToolUp.Facts.BatchAssertOutcomeModule (class)
-ToolUp.Facts.BatchAssertOutcomeModule.toString(ToolUp.Facts.BatchAssertOutcome) : System.String
-ToolUp.Facts.BatchAssertReceipt (class)
-ToolUp.Facts.BatchAssertReceipt..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, System.String)
-ToolUp.Facts.BatchAssertReceipt.AssertedCount : System.Int32 { get }
-ToolUp.Facts.BatchAssertReceipt.AssertedFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.BatchAssertReceipt.Digest : System.String { get }
-ToolUp.Facts.BatchAssertReceipt.DraftCount : System.Int32 { get }
-ToolUp.Facts.BatchAssertReceipt.IdempotentCount : System.Int32 { get }
-ToolUp.Facts.BatchAssertReceipt.IdempotentFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.BatchAssertReceipt.SupersedingCount : System.Int32 { get }
-ToolUp.Facts.BatchAssertReceipt.SupersedingFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.BatchAssertReceipt.Truncated : System.Boolean { get }
-ToolUp.Facts.BatchAssertReceiptModule (class)
-ToolUp.Facts.BatchAssertReceiptModule.IdListCap : System.Int32 (literal)
-ToolUp.Facts.BatchAssertReceiptModule.digest(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.BatchAssertOutcome, System.String]]) : System.String
-ToolUp.Facts.BatchAssertReceiptModule.empty : ToolUp.Facts.BatchAssertReceipt { get }
-ToolUp.Facts.BatchAssertReceiptModule.ofDispositions(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.BatchAssertOutcome, System.String]]) : ToolUp.Facts.BatchAssertReceipt
 ToolUp.Facts.BlobFactStore (class)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
@@ -110,6 +80,7 @@ ToolUp.Facts.BlobFactStore.IndexConsistencyCheck(System.String, System.Int32) : 
 ToolUp.Facts.BlobFactStore.MigrateIds(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]
 ToolUp.Facts.BlobFactStore.ReadFaults : System.Int64 { get }
 ToolUp.Facts.BlobFactStore.RebuildIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Facts.BlobFactStore.SurfaceFaults : System.Int64 { get }
 ToolUp.Facts.BlobFactStoreModule (class)
 ToolUp.Facts.BlobFactStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
@@ -576,18 +547,9 @@ ToolUp.Facts.DisclosureViewerSources.OutputVisibility : Microsoft.FSharp.Core.FS
 ToolUp.Facts.DisclosureViewerSources.TeamRole : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]] { get }
 ToolUp.Facts.EventStoreAmendmentAudit (class)
 ToolUp.Facts.EventStoreAmendmentAudit..ctor(ToolUp.Platform.IEventStore, System.String)
-ToolUp.Facts.FactAssertedEvent (class)
-ToolUp.Facts.FactAssertedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTime)
-ToolUp.Facts.FactAssertedEvent.AsOf : System.DateTime { get }
-ToolUp.Facts.FactAssertedEvent.Disclosure : System.String { get }
-ToolUp.Facts.FactAssertedEvent.FactId : System.String { get }
-ToolUp.Facts.FactAssertedEvent.Method : System.String { get }
-ToolUp.Facts.FactAssertedEvent.Metric : System.String { get }
-ToolUp.Facts.FactAssertedEvent.Subject : System.String { get }
-ToolUp.Facts.FactBatchAssertedEvent (class)
-ToolUp.Facts.FactBatchAssertedEvent..ctor(ToolUp.Facts.BatchAssertReceipt, System.DateTime)
-ToolUp.Facts.FactBatchAssertedEvent.AsOf : System.DateTime { get }
-ToolUp.Facts.FactBatchAssertedEvent.Receipt : ToolUp.Facts.BatchAssertReceipt { get }
+ToolUp.Facts.FactAudit (class)
+ToolUp.Facts.FactAudit.payload(ToolUp.Facts.FactAuditEvent) : System.String
+ToolUp.Facts.FactAudit.write(ToolUp.Platform.IEventStore, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Facts.FactBrowseHandler (class)
 ToolUp.Facts.FactBrowseHandler.api(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Facts.IFactBrowseApi
 ToolUp.Facts.FactBrowseHandler.atSurface(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.IHeldFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate
@@ -630,23 +592,6 @@ ToolUp.Facts.FactDisclosureGateModule.createConfiguredWithBudgets(Microsoft.FSha
 ToolUp.Facts.FactDisclosureGateModule.createWithPolicyResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDisclosureGateModule.createWithTaint(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDisclosureGateModule.held(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate
-ToolUp.Facts.FactDraft (class)
-ToolUp.Facts.FactDraft..ctor(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.FactValue, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, ToolUp.Facts.Evidence, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence], ToolUp.Facts.Disclosure)
-ToolUp.Facts.FactDraft.Confidence : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence] { get }
-ToolUp.Facts.FactDraft.Disclosure : ToolUp.Facts.Disclosure { get }
-ToolUp.Facts.FactDraft.Evidence : ToolUp.Facts.Evidence { get }
-ToolUp.Facts.FactDraft.Method : ToolUp.Facts.MethodRef { get }
-ToolUp.Facts.FactDraft.Metric : ToolUp.Facts.MetricRef { get }
-ToolUp.Facts.FactDraft.Period : ToolUp.Facts.TemporalExtent { get }
-ToolUp.Facts.FactDraft.Subject : ToolUp.Facts.SubjectRef { get }
-ToolUp.Facts.FactDraft.Value : ToolUp.Facts.FactValue { get }
-ToolUp.Facts.FactDraftModule (class)
-ToolUp.Facts.FactDraftModule.defects(ToolUp.Facts.FactDraft) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Facts.FactEvents (class)
-ToolUp.Facts.FactEvents.AssertedType : System.String (literal)
-ToolUp.Facts.FactEvents.BatchAssertedType : System.String (literal)
-ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
-ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
 ToolUp.Facts.FactIdChange (class)
 ToolUp.Facts.FactIdChange..ctor(System.String, System.String)
 ToolUp.Facts.FactIdChange.From : System.String { get }
@@ -839,13 +784,6 @@ ToolUp.Facts.FactStoreFactResolverModule.create(ToolUp.Facts.IFactStore, Microso
 ToolUp.Facts.FactStoreFactResolverModule.createReactive(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataObjectStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactRecomputer]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
 ToolUp.Facts.FactStoreFactResolverModule.createReactiveWithClock(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataObjectStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactRecomputer], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
 ToolUp.Facts.FactStoreFactResolverModule.createWithClock(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Platform.VectorKnowledgeTypes+IFactResolver
-ToolUp.Facts.FactSupersededEvent (class)
-ToolUp.Facts.FactSupersededEvent..ctor(System.String, System.String, System.String, System.String, System.DateTime)
-ToolUp.Facts.FactSupersededEvent.AsOf : System.DateTime { get }
-ToolUp.Facts.FactSupersededEvent.Metric : System.String { get }
-ToolUp.Facts.FactSupersededEvent.NewFactId : System.String { get }
-ToolUp.Facts.FactSupersededEvent.Subject : System.String { get }
-ToolUp.Facts.FactSupersededEvent.SupersededFactId : System.String { get }
 ToolUp.Facts.FactSurface (class)
 ToolUp.Facts.FactSurface.Prefix : System.String (literal)
 ToolUp.Facts.FactSurface.blobName(System.String) : System.String

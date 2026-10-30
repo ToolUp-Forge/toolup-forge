@@ -244,20 +244,10 @@ module DelegateMint =
         }
 
     /// A draft as the fact it would be, recorded at `asOf` — how a quote
-    /// from a run that is no longer current is reconstructed.
-    let reconstruct (draft: FactDraft) (asOf: DateTime) : Fact = {
-        FactId = Fact.compute draft.Subject draft.Metric draft.Period draft.Method draft.Evidence.InputHashes
-        Subject = draft.Subject
-        Metric = draft.Metric
-        Value = draft.Value
-        Period = draft.Period
-        AsOf = asOf
-        Method = draft.Method
-        Evidence = draft.Evidence
-        Confidence = draft.Confidence
-        Supersedes = None
-        Disclosure = draft.Disclosure
-    }
+    /// from a run that is no longer current is reconstructed. The write
+    /// plan's own draft-to-fact step (`FactWrite.recordedAt`),
+    /// so a quote is addressed exactly as a write of the same draft is.
+    let reconstruct (draft: FactDraft) (asOf: DateTime) : Fact = FactWrite.recordedAt draft asOf
 
 /// Resolution of the composition's delegated tables into delegate records.
 module DelegateFacts =
@@ -958,13 +948,22 @@ type DelegatedFactStore
 
             // A run whose provenance cannot be read retires nothing now
             // rather than minting an absence that names the wrong origin;
-            // the next read retries, as a failed assertion is retried.
+            // the next read retries. An absence that fails to assert fails
+            // the read: the stale head it was to retire would
+            // otherwise be served as current.
             match minting with
-            | Error _ -> ()
+            | Error _ -> return Ok()
             | Ok minting ->
-                for _, fact in removed do
-                    let! _ = ops.Assert(DelegateMint.removedDraftMinted minting d run fact)
-                    ()
+                let rec retire (remaining: (MethodRef * Fact) list) = async {
+                    match remaining with
+                    | [] -> return Ok()
+                    | (_, fact) :: rest ->
+                        match! ops.Assert(DelegateMint.removedDraftMinted minting d run fact) with
+                        | Ok _ -> return! retire rest
+                        | Error e -> return Error e
+                }
+
+                return! retire removed
         }
 
     // The point door's refusal: a typed `Absent` fact whose reason is the
@@ -1029,11 +1028,14 @@ type DelegatedFactStore
                         match! mint ops d commit.Run rows with
                         | Error e -> return Error(refusal d e)
                         | Ok _ ->
-                            do! retireRemoved ops d commit.Run subject rows
-                            // The minted facts are ordinary heads now, so the
-                            // inner store answers with its own selection,
-                            // history and competition rules intact.
-                            return Ok None
+                            match! retireRemoved ops d commit.Run subject rows with
+                            | Error e -> return Error(refusal d e)
+                            | Ok() ->
+                                // The minted facts are ordinary heads now, so
+                                // the inner store answers with its own
+                                // selection, history and competition rules
+                                // intact.
+                                return Ok None
                 | Some t, _ ->
                     match d.History with
                     | SnapshotFidelity.Approximate ->

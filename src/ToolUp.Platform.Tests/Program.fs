@@ -113,6 +113,7 @@ let private registeredTests =
             IFactTableOrphanSweepContract.notifyingWriterFactory
         CanonicalFrameTests.tests
         FactStoreTests.tests
+        FactWriteTests.tests
         FactStoreTests.factIdTests
         FactStoreTests.auditAndFreshnessTests
         FactStoreTests.batchAssertTests

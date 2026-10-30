@@ -1462,8 +1462,16 @@ let private boundedCacheTests =
     ]
 
 /// Every Phase 889 case.
+/// The `IFactStore` contract pack, its write-plan law among it, over the
+/// delegated store: a write through the decorator is the inner store's plan.
+let private contractTests =
+    ToolUp.Platform.Tests.Contracts.IFactStoreContract.tests "DelegatedFactStore" (fun () ->
+        let w = delegatedWorld FactTableHistoryMode.AppendByRun
+        w.Store, newScope (), newScope ())
+
 let tests =
     testList "Phase 889 — delegate facts" [
+        contractTests
         equivalenceTests
         quotedOnlyTests
         quotingTests

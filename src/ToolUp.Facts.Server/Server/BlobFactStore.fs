@@ -57,24 +57,14 @@ open ToolUp.Platform.BlobStorage
 // module (the `ILineageStore` pattern) — a durable, scope-isolated,
 // queryable record without a core `AuditEvent` edit.
 
-/// What the store decided about one draft, inside the shared write core
-/// (Phase 704). `Written` carries the fact for a draft that was stored —
-/// the audit and surface-maintenance steps read it — and is `None` for an
-/// idempotent skip, which by definition produced no new fact.
-type internal DraftDisposition = {
-    Outcome: BatchAssertOutcome
-    FactId: string
-    Written: Fact option
-}
-
-/// What the write core hands back (Phase 704): one disposition per draft,
+/// What the write core hands back: the plan it executed,
 /// and — when it read the whole scope to find lineage heads — the scope's
 /// facts as it read them, so the batch path can build an absent metric
 /// surface with no further read (Phase 1124). `ScopeInHand` is `None` when
 /// the core read only the touched lineages through a complete index, or
 /// read nothing (every draft already stored).
 type internal DraftsWritten = {
-    Dispositions: DraftDisposition list
+    Plan: WritePlan
     ScopeInHand: Fact list option
 }
 
@@ -413,6 +403,19 @@ type BlobFactStore
     // read fails with it.
     let readFaults: int64[] = Array.zeroCreate 1
 
+    // Every surface-maintenance step of the write executor that
+    // failed, counted and logged. The surface is derived and the read path
+    // reconciles against the log, so such a failure never fails a write; it
+    // is still a fault an operator must be able to see.
+    let surfaceFaults: int64[] = Array.zeroCreate 1
+
+    let surfaceFault (scopeId: string) (metric: string) (step: string) (ex: exn) =
+        Interlocked.Increment(&surfaceFaults[0]) |> ignore
+
+        logger
+        |> Option.iter (fun l ->
+            l.Warn(sprintf "fact surface %s failed in scope %s for metric %s: %s" step scopeId metric ex.Message))
+
     // One blob per fact under the scope's `_facts/` prefix.
     let factsPrefix = "_facts/"
     let blobName (factId: string) = sprintf "%s%s.json" factsPrefix factId
@@ -644,17 +647,6 @@ type BlobFactStore
         leaves
         |> List.filter (FactIndexLayout.mayShareLineage subjectMetric period methodHash)
 
-    /// The enumeration's head rule over one lineage's facts in census
-    /// order: the FIRST fact seen among equal `AsOf` values wins.
-    let headOf (facts: Fact list) : Fact option =
-        facts
-        |> List.fold
-            (fun (acc: Fact option) f ->
-                match acc with
-                | Some existing when existing.AsOf >= f.AsOf -> acc
-                | _ -> Some f)
-            None
-
     /// The facts a query's clauses can concern. Narrowed through the index
     /// when the query names a subject AND a metric and the index is
     /// complete; every fact otherwise — the enumeration, repairing the
@@ -685,11 +677,6 @@ type BlobFactStore
         | _ -> return! loadAll scopeId
     }
 
-    // Readable projections for the audit payloads (shared renderers, so
-    // the audit / provenance / evidence surfaces never drift).
-    let subjectString = SubjectRef.toString
-    let disclosureString = Disclosure.toString
-
     // Law L4 visibility: facts visible at `t` are those asserted by `t`
     // that no by-`t` successor supersedes.
     //
@@ -716,30 +703,10 @@ type BlobFactStore
 
     // ─── Canonical-method selection (Phase 566 — D19 closure) ─────────
 
-    // The competition key: two current heads *compete* when they share
-    // (subject, metric, period) but were produced by different methods
-    // (D19). The period `Label` is cosmetic and excluded, mirroring the
-    // lineage key's canonical period.
-    let competitionKey (f: Fact) =
-        f.Subject, f.Metric, f.Period.From, f.Period.To
-
-    // Resolve a method-less query's competing heads to the metric's
-    // registry-declared canonical method, where one is declared. Per
-    // competing group: no registry / no declaration → every head (the
-    // pre-566 behaviour, GP 11); a declaration with at least one matching
-    // head → only the matching head(s); a declaration no head matches →
-    // every head (an empty canonical lineage must surface the competitors,
-    // never hide the metric entirely — GP 9, and the competition indicator
-    // still discloses the contest).
+    // The competition key and canonical selection are `FactCompetition`'s
+    // (Facts.Core): one definition every store reads.
     let selectCanonical (heads: Fact list) : Fact list =
-        match registry with
-        | None -> heads
-        | Some reg ->
-            PopulationSelection.canonicalHeads
-                competitionKey
-                (fun f -> Fact.methodIdentity f.Method)
-                (fun f -> reg.TryGetMetric f.Metric.Value |> Option.bind _.CanonicalMethod)
-                heads
+        FactCompetition.selectCanonical registry heads
 
     // The shared query pipeline: clause filters → L4 visibility → (for a
     // method-less current-heads query) canonical selection. Returns the
@@ -796,20 +763,6 @@ type BlobFactStore
         heads,
         listing
         |> List.sortBy (fun f -> f.Subject.Hierarchy, f.Metric.Value, f.Period.From)
-
-    // The derived competition indicator for one returned fact: the method
-    // identities of the *other* current heads sharing its (subject,
-    // metric, period). A superseded fact in an `IncludeSuperseded`
-    // listing never lists its own lineage's head (same method identity).
-    let competingMethods (heads: Fact list) (f: Fact) : string list =
-        let key = competitionKey f
-        let ownMethod = Fact.methodIdentity f.Method
-
-        heads
-        |> List.filter (fun g -> competitionKey g = key)
-        |> List.map (fun g -> Fact.methodIdentity g.Method)
-        |> List.filter (fun identity -> identity <> ownMethod)
-        |> List.distinct
 
     // ─── Population read (Phase 701) ──────────────────────────────────
     //
@@ -1448,11 +1401,13 @@ type BlobFactStore
 
                     if still.IsSome then
                         do! surface.MarkStale(scopeId, fact.Metric.Value)
-            with _ ->
+            with ex ->
+                surfaceFault scopeId fact.Metric.Value "fold" ex
+
                 try
                     do! surface.MarkStale(scopeId, fact.Metric.Value)
-                with _ ->
-                    ()
+                with ex ->
+                    surfaceFault scopeId fact.Metric.Value "stale mark" ex
     }
 
     // Assert-time maintenance for a BATCH (task 704.B). The same seam,
@@ -1524,9 +1479,9 @@ type BlobFactStore
                 try
                     let! _ = rebuildSurfaceFrom scopeId metric all
                     ()
-                with _ ->
+                with ex ->
                     // Best effort: the metric's first read builds it.
-                    ()
+                    surfaceFault scopeId metric.Value "build" ex
     }
 
     let maintainSurfaceBatch (scopeId: string) (scopeInHand: Fact list option) (facts: Fact list) : Async<unit> = async {
@@ -1561,49 +1516,36 @@ type BlobFactStore
 
                             if still.IsSome then
                                 do! surface.MarkStale(scopeId, metric.Value)
-                with _ ->
+                with ex ->
+                    surfaceFault scopeId metric.Value "batch fold" ex
+
                     try
                         do! surface.MarkStale(scopeId, metric.Value)
-                    with _ ->
-                        ()
+                    with ex ->
+                        surfaceFault scopeId metric.Value "stale mark" ex
 
             match scopeInHand with
             | Some before when absent.Count > 0 ->
                 try
                     do! buildAbsentSurfaces scopeId before facts (List.ofSeq absent)
-                with _ ->
-                    ()
+                with ex ->
+                    surfaceFault scopeId "(listing)" "build" ex
             | _ -> ()
     }
 
-    // GP 6 audit — one ModuleEvent under the reserved `_facts` source
-    // module per state change (assert / supersession).
-    let writeEvent (scopeId: string) (occurredAt: DateTime) (eventType: string) (payload: string) : Async<unit> =
-        events.Write {
-            Id = Guid.NewGuid()
-            OccurredAt = occurredAt
-            ScopeId = scopeId
-            SourceModule = FactEvents.SourceModule
-            EventType = eventType
-            Payload = payload
-        }
-
-    // ─── The write core (Phase 704) ───────────────────────────────────
+    // ─── The blob executor ────────────────────────────────────────────
     //
-    // ONE implementation of what asserting drafts means — the scalar
-    // `Assert` is a batch of one, not a second copy of the derivation.
-    // That is the point of the phase as much as the amortisation is: the
-    // content address, the idempotency test, the lineage-head lookup, the
-    // `AsOf` rule and the write all have exactly one definition, so
-    // "scalar and batch agree" is a property of the code rather than a
-    // pair of tests.
+    // What asserting drafts MEANS is `FactWrite.plan` (Facts.Core): the
+    // idempotency test, the lineage heads, the `AsOf` rule, the supersession
+    // edges, the receipt and the audit rows. This executor reads what the
+    // plan needs — the census, and the heads of the lineages the request
+    // touches — asks for the plan, and persists the facts it names, with
+    // their point-read index leaves. The scalar `Assert` is a request of
+    // one, not a second copy of the derivation.
     //
-    // What the core does NOT do is audit or maintain the surface. Those
-    // are the two things that legitimately differ between the two
-    // callers — per-fact rows versus one summarised row; one fold versus
-    // one fold per metric — so each caller does its own, over the
-    // dispositions the core hands back.
-    let writeDrafts (scopeId: string) (drafts: FactDraft list) : Async<Result<DraftsWritten, string>> = async {
+    // The caller writes the plan's audit rows and maintains the surface,
+    // the two steps that differ between the scalar and batch members.
+    let writeDrafts (scopeId: string) (request: WriteRequest) : Async<Result<DraftsWritten, string>> = async {
         // The census. The blob name IS the fact id (the same property
         // Phase 702's surface rests on), so presence is decided by a
         // single `List` call — no download per draft, at any batch size.
@@ -1611,31 +1553,19 @@ type BlobFactStore
         // round trip rather than one per subject.
         let! names = storage.List(scopeId, factsPrefix)
         let stored = HashSet<string>(names |> List.map factIdOfBlob, StringComparer.Ordinal)
+        let addressed = request.Drafts
 
-        let addressed =
-            drafts
-            |> List.map (fun d ->
-                let inputHashes = Fact.effectiveInputHashes d.Method d.Evidence d.Value
-                d, Fact.compute d.Subject d.Metric d.Period d.Method inputHashes)
-
-        if addressed |> List.forall (fun (_, factId) -> stored.Contains factId) then
+        if addressed |> List.forall (fun d -> stored.Contains d.FactId) then
             // Every draft is already stored, so no lineage head is needed
             // and the log is never read. An empty batch takes this branch
             // too, vacuously.
             return
                 Ok {
-                    Dispositions =
-                        addressed
-                        |> List.map (fun (_, factId) -> {
-                            Outcome = BatchIdempotent
-                            FactId = factId
-                            Written = None
-                        })
+                    Plan = FactWrite.plan (clock().ToUniversalTime()) stored.Contains [] request
                     ScopeInHand = None
                 }
         else
             let! index = readIndex scopeId names
-            let heads = Dictionary<string, Fact>(StringComparer.Ordinal)
 
             // Phase 1124 — the scope as read, when this call reads all of
             // it (the enumerating branch below).
@@ -1655,7 +1585,7 @@ type BlobFactStore
                 | NotConsulted when indexOptions.Enabled ->
                     let unstored =
                         addressed
-                        |> List.map snd
+                        |> List.map _.FactId
                         |> List.distinct
                         |> List.filter (fun factId -> not (stored.Contains factId))
                         |> List.length
@@ -1663,170 +1593,108 @@ type BlobFactStore
                     List.length names + unstored >= indexOptions.MinimumFacts
                 | _ -> false
 
-            match index with
-            | Complete(leaves, census) ->
-                // Phase 890 — the heads of the lineages this batch touches,
-                // and no others, through the index. A leaf names its fact's
-                // `AsOf`, so each lineage's head is DECIDED from the leaves
-                // and only the winner is read, to confirm it: one read per
-                // touched lineage that has a head, none for a new lineage.
-                // A winner that does not confirm (unreadable, another
-                // lineage behind a tolerant leaf, a leaf that disagrees
-                // with its fact) sends that lineage to the full rule over
-                // every candidate that reads.
-                let touched =
-                    addressed
-                    |> List.filter (fun (_, factId) -> not (stored.Contains factId))
-                    |> List.map (fun (d, _) -> Fact.lineageKey d.Subject d.Metric d.Period d.Method, d)
-                    |> List.distinctBy fst
-
-                let candidates =
-                    touched
-                    |> List.map (fun (key, d) ->
-                        let lineage = lineageLeaves leaves d.Subject d.Metric d.Period d.Method
-                        let names = lineage |> admittedNames census
-
-                        // The winner by the head rule over the leaves' own
-                        // `AsOf`, in census order: first among equals.
-                        let ticksOf =
-                            lineage
-                            |> List.map (fun l -> l.FactId, l.AsOfTicks)
-                            |> List.distinctBy fst
-                            |> dict
-
-                        let winner =
-                            names
-                            |> List.fold
-                                (fun acc name ->
-                                    let ticks = ticksOf[factIdOfBlob name]
-
-                                    match acc with
-                                    | Some(_, best) when best >= ticks -> acc
-                                    | _ -> Some(name, ticks))
-                                None
-
-                        key, names, winner)
-
-                let! confirmed =
-                    candidates
-                    |> List.map (fun (key, _, winner) -> async {
-                        match winner with
-                        | None -> return key, None
-                        | Some(name, ticks) ->
-                            let! read = loadNames scopeId [ name ]
-
-                            match read with
-                            | [ f ] when lineageKeyOf f = key && f.AsOf.Ticks = ticks -> return key, Some(Ok f)
-                            | _ -> return key, Some(Error())
-                    })
-                    |> BlobFanOut.run
-
-                for (key, names, _), (_, outcome) in Seq.zip candidates confirmed do
-                    match outcome with
-                    | None -> ()
-                    | Some(Ok head) -> heads[key] <- head
-                    | Some(Error()) ->
-                        let! lineage = loadNames scopeId names
-
-                        match lineage |> List.filter (fun f -> lineageKeyOf f = key) |> headOf with
-                        | Some head -> heads[key] <- head
-                        | None -> ()
-            | NotConsulted
-            | Incomplete _ ->
-                let! all = loadAll scopeId
-                scopeInHand.Value <- Some all
-
-                // The current head of every lineage in scope, indexed once.
-                // The scalar path re-derives this per assert by scanning the
-                // whole log; a batch of 10⁵ would scan it 10⁵ times. Keeping
-                // the FIRST fact seen among equal `AsOf` values matches the
-                // scalar path's stable `sortByDescending _.AsOf |> tryHead`.
-                for f in all do
-                    let key = lineageKeyOf f
-
-                    match heads.TryGetValue key with
-                    | true, existing when existing.AsOf >= f.AsOf -> ()
-                    | _ -> heads[key] <- f
-
+            // The stored facts the plan derives heads from.
+            let! lineageFacts = async {
                 match index with
-                | Incomplete indexed -> do! repairIndex scopeId all indexed
-                // Crossing: the facts already stored are in hand, so their
-                // leaves cost writes and no reads; this batch's own follow
-                // its fact writes below.
-                | NotConsulted when crossesThreshold ->
-                    do! repairIndex scopeId all (HashSet<string>(StringComparer.Ordinal))
-                | _ -> ()
+                | Complete(leaves, census) ->
+                    // The heads of the lineages this request
+                    // touches, and no others, through the index. A leaf names
+                    // its fact's `AsOf`, so each lineage's head is DECIDED from
+                    // the leaves and only the winner is read, to confirm it:
+                    // one read per touched lineage that has a head, none for a
+                    // new lineage. A winner that does not confirm (unreadable,
+                    // another lineage behind a tolerant leaf, a leaf that
+                    // disagrees with its fact) sends that lineage to the full
+                    // rule over every candidate that reads.
+                    let touched =
+                        addressed
+                        |> List.filter (fun d -> not (stored.Contains d.FactId))
+                        |> List.distinctBy _.Lineage
 
-            // Derivation first, in submission order and entirely in
-            // memory: each draft's head comes from the log OR from an
-            // earlier draft of this same batch, which is what makes a
-            // batch carrying two versions of one lineage settle exactly as
-            // two sequential `Assert`s would. Nothing is written until the
-            // whole batch is derived, so no derivation ever sees a
-            // half-written log.
-            let seen = HashSet<string>(stored, StringComparer.Ordinal)
-            let dispositions = ResizeArray<DraftDisposition>()
+                    let candidates =
+                        touched
+                        |> List.map (fun d ->
+                            let lineage =
+                                lineageLeaves leaves d.Draft.Subject d.Draft.Metric d.Draft.Period d.Draft.Method
 
-            for draft, factId in addressed do
-                if seen.Contains factId then
-                    dispositions.Add {
-                        Outcome = BatchIdempotent
-                        FactId = factId
-                        Written = None
-                    }
-                else
-                    let key = Fact.lineageKey draft.Subject draft.Metric draft.Period draft.Method
+                            let names = lineage |> admittedNames census
 
-                    let currentHead =
-                        match heads.TryGetValue key with
-                        | true, head -> Some head
-                        | _ -> None
+                            // The winner by the head rule over the leaves' own
+                            // `AsOf`, in census order: first among equals.
+                            let ticksOf =
+                                lineage
+                                |> List.map (fun l -> l.FactId, l.AsOfTicks)
+                                |> List.distinctBy fst
+                                |> dict
 
-                    // Transaction time — strictly greater than the head's,
-                    // so supersession chains stay acyclic (law L3) even
-                    // when the clock is coarse or frozen, which is exactly
-                    // the case a batch makes ordinary rather than rare.
-                    let now = clock().ToUniversalTime()
+                            let winner =
+                                names
+                                |> List.fold
+                                    (fun acc name ->
+                                        let ticks = ticksOf[factIdOfBlob name]
 
-                    let asOf =
-                        match currentHead with
-                        | Some head when head.AsOf >= now -> head.AsOf.AddTicks 1L
-                        | _ -> now
+                                        match acc with
+                                        | Some(_, best) when best >= ticks -> acc
+                                        | _ -> Some(name, ticks))
+                                    None
 
-                    let fact = {
-                        FactId = factId
-                        Subject = draft.Subject
-                        Metric = draft.Metric
-                        Value = draft.Value
-                        Period = draft.Period
-                        AsOf = asOf
-                        Method = draft.Method
-                        Evidence = draft.Evidence
-                        Confidence = draft.Confidence
-                        Supersedes = currentHead |> Option.map _.FactId
-                        Disclosure = draft.Disclosure
-                    }
+                            d.Lineage, names, winner)
 
-                    seen.Add factId |> ignore
-                    heads[key] <- fact
+                    let! confirmed =
+                        candidates
+                        |> List.map (fun (key, _, winner) -> async {
+                            match winner with
+                            | None -> return None
+                            | Some(name, ticks) ->
+                                let! read = loadNames scopeId [ name ]
 
-                    dispositions.Add {
-                        Outcome =
-                            if currentHead.IsSome then
-                                BatchSuperseding
-                            else
-                                BatchAsserted
-                        FactId = factId
-                        Written = Some fact
-                    }
+                                match read with
+                                | [ f ] when lineageKeyOf f = key && f.AsOf.Ticks = ticks -> return Some(Ok f)
+                                | _ -> return Some(Error())
+                        })
+                        |> BlobFanOut.run
+
+                    let heads = ResizeArray<Fact>()
+
+                    for (key, names, _), outcome in Seq.zip candidates confirmed do
+                        match outcome with
+                        | None -> ()
+                        | Some(Ok head) -> heads.Add head
+                        | Some(Error()) ->
+                            let! lineage = loadNames scopeId names
+
+                            match lineage |> List.filter (fun f -> lineageKeyOf f = key) |> FactWrite.headOf with
+                            | Some head -> heads.Add head
+                            | None -> ()
+
+                    return List.ofSeq heads
+                | NotConsulted
+                | Incomplete _ ->
+                    let! all = loadAll scopeId
+                    scopeInHand.Value <- Some all
+
+                    match index with
+                    | Incomplete indexed -> do! repairIndex scopeId all indexed
+                    // Crossing: the facts already stored are in hand, so their
+                    // leaves cost writes and no reads; this request's own
+                    // follow its fact writes below.
+                    | NotConsulted when crossesThreshold ->
+                        do! repairIndex scopeId all (HashSet<string>(StringComparer.Ordinal))
+                    | _ -> ()
+
+                    return all
+            }
+
+            // The plan, entirely in memory: nothing is written until every
+            // draft is derived, so no derivation ever sees a half-written log.
+            let plan =
+                FactWrite.plan (clock().ToUniversalTime()) stored.Contains lineageFacts request
 
             // The writes. Independent by construction — one blob per
-            // content address, and the `seen` set guarantees a batch never
-            // writes the same address twice — so they parallelise without
-            // ordering risk.
+            // content address, and the plan never names one address twice —
+            // so they parallelise without ordering risk.
             let! writeResults =
-                dispositions
-                |> Seq.choose _.Written
+                plan.Facts
                 |> Seq.map (fun f -> async {
                     let! r = storage.Upload(scopeId, blobName f.FactId, serialise f)
                     return f, r
@@ -1838,7 +1706,7 @@ type BlobFactStore
             // leaf ever names a fact this call failed to store. A leaf that
             // fails is noticed by the next consulting read's census check,
             // which enumerates and rewrites it. Below the threshold — counted
-            // after this batch's writes — none.
+            // after this request's writes — none.
             match index with
             | NotConsulted when not crossesThreshold -> ()
             | NotConsulted
@@ -1865,7 +1733,7 @@ type BlobFactStore
             | [||] ->
                 return
                     Ok {
-                        Dispositions = List.ofSeq dispositions
+                        Plan = plan
                         ScopeInHand = scopeInHand.Value
                     }
             | [| (_, e) |] ->
@@ -1895,37 +1763,6 @@ type BlobFactStore
                             more
                     )
     }
-
-    /// The caller-facing refusal for a batch whose drafts are not all
-    /// well-formed. Names offenders by POSITION — a malformed draft's
-    /// content address is meaningless, and position is what the producer
-    /// indexes its own input by — plus the subject and metric it claimed,
-    /// rendered through the shared `SubjectRef.toString` so the refusal
-    /// reads the way every other fact surface reads.
-    let renderOffenders (total: int) (offenders: (int * FactDraft * string list) list) : string =
-        let named =
-            offenders
-            |> List.truncate 10
-            |> List.map (fun (index, draft, defects) ->
-                sprintf
-                    "#%d %s / %s: %s"
-                    index
-                    (subjectString draft.Subject)
-                    draft.Metric.Value
-                    (String.concat ", " defects))
-            |> String.concat "; "
-
-        let more =
-            let hidden = List.length offenders - 10
-
-            if hidden > 0 then sprintf " (and %d more)" hidden else ""
-
-        sprintf
-            "fact store batch rejected: %d of %d drafts are malformed and none were committed — %s%s"
-            (List.length offenders)
-            total
-            named
-            more
 
     /// The pre-702 four-argument shape, on the default surface policy.
     /// An explicit secondary constructor rather than an optional parameter
@@ -1965,6 +1802,11 @@ type BlobFactStore
     /// How many fact reads have failed with a `FactReadFault` since this
     /// store was built. Each one also failed the read that met it.
     member _.ReadFaults = Interlocked.Read(&readFaults[0])
+
+    /// How many surface-maintenance steps of a write have failed since this
+    /// store was built — a fold, a stale mark, or a build of an
+    /// absent snapshot. None failed the write that met it; each was logged.
+    member _.SurfaceFaults = Interlocked.Read(&surfaceFaults[0])
 
     /// Rebuild the point-read index (Phase 890) from the scope's facts —
     /// the Phase 9f `Rebuild` shape. Idempotent, safe to run concurrently
@@ -2222,143 +2064,78 @@ type BlobFactStore
 
         member _.Assert(scopeId: string, draft: FactDraft) : Async<Result<Fact, string>> = async {
             try
-                // Phase 704 — a batch of one. The content address, the
-                // idempotency test, the lineage-head lookup, the `AsOf`
-                // rule and the write all live in `writeDrafts`; what stays
-                // here is the part that is genuinely scalar — the per-fact
-                // audit shape, which the batch path deliberately does not
-                // emit.
-                let! written = writeDrafts scopeId [ draft ]
+                // A request of one. Everything but the surface
+                // fold is the plan's: the scalar shape audits per fact.
+                match FactWrite.prepare WriteShape.ScalarAssert [ draft ] with
+                | Error offenders -> return Error(FactWrite.renderOffenders 1 offenders)
+                | Ok request ->
+                    match! writeDrafts scopeId request with
+                    | Error e -> return Error e
+                    | Ok { Plan = plan } ->
+                        // Audit (GP 6): the plan's rows — a FactAsserted
+                        // event, and the supersession edge when there is one.
+                        do! FactAudit.write events scopeId plan.Audit
 
-                match written |> Result.map _.Dispositions with
-                | Error e -> return Error e
-                | Ok [ { Written = Some fact } ] ->
-                    // Audit (GP 6): a FactAsserted event, and — when it
-                    // superseded a predecessor — the supersession edge.
-                    let assertedPayload: FactAssertedEvent = {
-                        FactId = fact.FactId
-                        Subject = subjectString fact.Subject
-                        Metric = fact.Metric.Value
-                        Method = Fact.methodIdentity fact.Method
-                        Disclosure = disclosureString fact.Disclosure
-                        AsOf = fact.AsOf
-                    }
-
-                    do!
-                        writeEvent
-                            scopeId
-                            fact.AsOf
-                            FactEvents.AssertedType
-                            (JsonSerializer.Serialize(assertedPayload, jsonOptions))
-
-                    match fact.Supersedes with
-                    | Some supersededId ->
-                        let supersededPayload: FactSupersededEvent = {
-                            NewFactId = fact.FactId
-                            SupersededFactId = supersededId
-                            Subject = subjectString fact.Subject
-                            Metric = fact.Metric.Value
-                            AsOf = fact.AsOf
-                        }
-
-                        do!
-                            writeEvent
-                                scopeId
-                                fact.AsOf
-                                FactEvents.SupersededType
-                                (JsonSerializer.Serialize(supersededPayload, jsonOptions))
-                    | None -> ()
-
-                    // Phase 702 — fold the new head into the derived
-                    // read model, in the same logical operation. The
-                    // fact is already durable; this cannot fail the
-                    // assert (see `maintainSurface`).
-                    do! maintainSurface scopeId fact
-
-                    return Ok fact
-                | Ok [ { FactId = factId; Written = None } ] ->
-                    // Idempotent (law L2): an identical tuple already
-                    // stored is a no-op — return it unchanged, no new
-                    // write, no audit (nothing changed state).
-                    let! existing = load scopeId factId
-
-                    match existing with
-                    | Some fact -> return Ok fact
-                    | None ->
-                        // The census named this id and the blob will not
-                        // read back. Reporting the corrupt store beats
-                        // silently overwriting it with a fact this call
-                        // happens to be able to reconstruct.
-                        return Error(sprintf "fact store read failed: %s is in the census but unreadable" factId)
-                | Ok other ->
-                    return Error(sprintf "fact store assert failed: %d dispositions for one draft" other.Length)
+                        match plan.Facts, plan.Unchanged with
+                        | [ fact ], [] ->
+                            // Fold the new head into the derived
+                            // read model, in the same logical operation. The
+                            // fact is already durable; this cannot fail the
+                            // assert (see `maintainSurface`).
+                            do! maintainSurface scopeId fact
+                            return Ok fact
+                        | [], [ factId ] ->
+                            // Idempotent (law L2): an identical tuple already
+                            // stored is a no-op — return it unchanged, no new
+                            // write, no audit (nothing changed state).
+                            match! load scopeId factId with
+                            | Some fact -> return Ok fact
+                            | None ->
+                                // The census named this id and the blob will
+                                // not read back. Reporting the corrupt store
+                                // beats silently overwriting it with a fact
+                                // this call happens to be able to reconstruct.
+                                return
+                                    Error(sprintf "fact store read failed: %s is in the census but unreadable" factId)
+                        | facts, unchanged ->
+                            return
+                                Error(
+                                    sprintf
+                                        "fact store assert failed: %d dispositions for one draft"
+                                        (List.length facts + List.length unchanged)
+                                )
             with ex ->
                 return Error(sprintf "fact store assert failed: %s" ex.Message)
         }
 
         member _.AssertBatch(scopeId: string, drafts: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
             try
-                // Pre-flight over the WHOLE batch, before the first write:
-                // the batch is the atom the producer retries, so a batch
-                // that cannot be asserted must decide that before it has
-                // written anything (task 704.B).
-                let offenders =
-                    drafts
-                    |> List.mapi (fun index draft -> index, draft, FactDraft.defects draft)
-                    |> List.filter (fun (_, _, defects) -> not (List.isEmpty defects))
-
-                if not (List.isEmpty offenders) then
-                    return Error(renderOffenders (List.length drafts) offenders)
-                elif List.isEmpty drafts then
-                    return Ok BatchAssertReceipt.empty
-                else
-                    let! written = writeDrafts scopeId drafts
-
-                    match written with
+                // The pre-flight decides over the WHOLE batch before the
+                // first read: the batch is the atom the producer retries, so
+                // a batch that cannot be asserted must decide that before it
+                // has written anything (task 704.B).
+                match FactWrite.prepare WriteShape.BatchAssert drafts with
+                | Error offenders -> return Error(FactWrite.renderOffenders (List.length drafts) offenders)
+                | Ok request when List.isEmpty request.Drafts -> return Ok BatchAssertReceipt.empty
+                | Ok request ->
+                    match! writeDrafts scopeId request with
                     | Error e -> return Error e
                     | Ok {
-                             Dispositions = dispositions
+                             Plan = plan
                              ScopeInHand = scopeInHand
                          } ->
-                        let receipt =
-                            dispositions
-                            |> List.map (fun d -> d.Outcome, d.FactId)
-                            |> BatchAssertReceipt.ofDispositions
-
-                        let facts = dispositions |> List.choose _.Written
-
-                        // The batch's transaction time: the latest `AsOf`
-                        // it stamped, so the audit row sorts after every
-                        // fact it reports. An all-idempotent batch stamped
-                        // none, so it is timed by the clock.
-                        let asOf =
-                            match facts with
-                            | [] -> clock().ToUniversalTime()
-                            | _ -> facts |> List.map _.AsOf |> List.max
-
-                        // Task 704.C — ONE summarised audit event per
-                        // batch, carrying the receipt. This fires even for
-                        // an all-idempotent batch, where the scalar path
-                        // writes nothing: "the population re-ran and
-                        // nothing moved" is a different claim from "no
-                        // fact changed", and it is the one a producer
-                        // needs to be able to prove.
-                        let payload: FactBatchAssertedEvent = { Receipt = receipt; AsOf = asOf }
-
-                        do!
-                            writeEvent
-                                scopeId
-                                asOf
-                                FactEvents.BatchAssertedType
-                                (JsonSerializer.Serialize(payload, jsonOptions))
+                        // ONE summarised audit row per batch,
+                        // carrying the receipt (the plan's), even for an
+                        // all-idempotent batch.
+                        do! FactAudit.write events scopeId plan.Audit
 
                         // Phase 702 — one fold per touched metric, through
                         // the same seam the scalar path uses; since Phase
                         // 1124 an absent snapshot is built here as well
                         // when the write core read the whole scope.
-                        do! maintainSurfaceBatch scopeId scopeInHand facts
+                        do! maintainSurfaceBatch scopeId scopeInHand plan.Facts
 
-                        return Ok receipt
+                        return Ok plan.Receipt
             with ex ->
                 return Error(sprintf "fact store batch assert failed: %s" ex.Message)
         }
@@ -2377,7 +2154,7 @@ type BlobFactStore
                 listing
                 |> List.map (fun f -> {
                     Fact = f
-                    CompetingMethods = competingMethods heads f
+                    CompetingMethods = FactCompetition.competingMethods heads f
                 })
         }
 
