@@ -143,12 +143,7 @@ type InMemoryJobDispatcher(?maxJobs: int) =
             let correlation = CallContext.correlationId ()
 
             let isTerminalStatus (status: obj) =
-                match status :?> JobStatus<'T> with
-                | JobStatus.Succeeded _
-                | JobStatus.Failed _
-                | JobStatus.Cancelled -> true
-                | JobStatus.Queued
-                | JobStatus.Running _ -> false
+                JobStatusTerminal.isTerminal (status :?> JobStatus<'T>)
 
             let cts =
                 fifo.Admit(

@@ -492,6 +492,16 @@ type JobStatus<'T> =
     | Failed of message: string
     | Cancelled
 
+module internal JobStatusTerminal =
+    /// True once a job can no longer change status.
+    let isTerminal (status: JobStatus<'T>) =
+        match status with
+        | JobStatus.Succeeded _
+        | JobStatus.Failed _
+        | JobStatus.Cancelled -> true
+        | JobStatus.Queued
+        | JobStatus.Running _ -> false
+
 /// Substrate for long-running operations. `Enqueue` starts
 /// the supplied async work in the background and returns a typed
 /// handle the caller can use to poll for status. `GetStatus`
