@@ -11,6 +11,7 @@ open Org.BouncyCastle.Crypto.Parameters
 open Org.BouncyCastle.Crypto.Signers
 open Org.BouncyCastle.Crypto.Generators
 open Org.BouncyCastle.Security
+open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
 // ─── Phase 40 — signing internals ──────────────────────────────────────
@@ -54,7 +55,7 @@ module internal SigningKeyMaterial =
 
     /// Reserved `ISecretStore` scope for platform signing keys.
     [<Literal>]
-    let SecretScope = "_platform"
+    let SecretScope = ScopeKey.PlatformContainer
 
     let secretKey (keyId: string) = $"signing/{keyId}"
 
