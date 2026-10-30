@@ -303,6 +303,10 @@ module FactBrowseHandler =
         |> Option.map _.DisplayFormat
         |> Option.defaultValue ""
 
+    /// The rendering of a value of `metric`, as the registry declares it.
+    let private renderOf (deps: FactBrowseDeps) (metric: string) : FactValue -> string =
+        FactRendering.renderFor (deps.Registry |> Option.bind (fun r -> r.TryGetMetric metric))
+
     let private stalenessOf (deps: FactBrowseDeps) (metric: string) : StalenessPolicy =
         deps.Registry
         |> Option.bind (fun r -> r.TryGetMetric metric)
@@ -376,7 +380,7 @@ module FactBrowseHandler =
             FactId = fact.FactId
             Subject = SubjectRef.toString fact.Subject
             SubjectPath = fact.Subject.Path
-            Rendering = FactRendering.render (displayFormatOf deps metric) fact.Value
+            Rendering = renderOf deps metric fact.Value
             PeriodFrom = fact.Period.From
             PeriodTo = fact.Period.To
             PeriodLabel = fact.Period.Label
@@ -594,10 +598,7 @@ module FactBrowseHandler =
                                         | FactNotDisclosable policy, _
                                         | _, FactNotDisclosable policy -> mover, Error policy)
 
-                            let format = fun (metric: string) -> displayFormatOf deps metric
-
-                            let render (metric: string) (value: decimal) =
-                                FactRendering.render (format metric) (Scalar value)
+                            let render (metric: string) (value: decimal) = renderOf deps metric (Scalar value)
 
                             let shown =
                                 judged
@@ -706,8 +707,8 @@ module FactBrowseHandler =
                             | FactNotDisclosable policy -> Some policy)
 
                     let stats = PopulationDisclosure.disclosedStats disclosure result.Stats
-                    let format = displayFormatOf deps request.Metric
-                    let renderStat = Option.map (fun d -> FactRendering.render format (Scalar d))
+                    let render = renderOf deps request.Metric
+                    let renderStat = Option.map (Scalar >> render)
 
                     return
                         Ok {
@@ -764,7 +765,7 @@ module FactBrowseHandler =
                 | FactDisclosable ->
                     let now = deps.Clock().ToUniversalTime()
                     let metric = fact.Metric |> fun (MetricRef m) -> m
-                    let format = displayFormatOf deps metric
+                    let render = renderOf deps metric
 
                     let steps =
                         chain
@@ -797,7 +798,7 @@ module FactBrowseHandler =
                                 visible
                                 |> List.map (fun f -> {
                                     FactId = f.FactId
-                                    Rendering = FactRendering.render format f.Value
+                                    Rendering = render f.Value
                                     AsOf = f.AsOf
                                     Method = Fact.methodIdentity f.Method
                                     Supersedes = f.Supersedes
@@ -996,6 +997,7 @@ module FactBrowseHandler =
 
                         let now = deps.Clock().ToUniversalTime()
                         let format = displayFormatOf deps request.Metric
+                        let render = renderOf deps request.Metric
                         let staleness = stalenessOf deps request.Metric
 
                         let pointOf (head: SeriesHead) : FactSeriesPoint =
@@ -1012,11 +1014,7 @@ module FactBrowseHandler =
                                     match withheld, head.Value with
                                     | false, Scalar d -> Some d
                                     | _ -> None
-                                Rendering =
-                                    if withheld then
-                                        None
-                                    else
-                                        Some(FactRendering.render format head.Value)
+                                Rendering = if withheld then None else Some(render head.Value)
                                 FactId = head.FactId
                                 AsOf = head.AsOf
                                 Freshness = freshness
@@ -1132,7 +1130,7 @@ module FactBrowseHandler =
                         let now = deps.Clock().ToUniversalTime()
 
                         let cellsOf (metric: string, heads: SeriesHead list) =
-                            let format = displayFormatOf deps metric
+                            let render = renderOf deps metric
                             let staleness = stalenessOf deps metric
 
                             let positions (direction: RankDirection) =
@@ -1168,7 +1166,7 @@ module FactBrowseHandler =
                                         | _ -> None
                                     Rendering =
                                         match policy with
-                                        | None -> Some(FactRendering.render format h.Value)
+                                        | None -> Some(render h.Value)
                                         | Some _ -> None
                                     AsOf = h.AsOf
                                     Freshness = freshnessOf staleness now h.AsOf

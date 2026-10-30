@@ -14,9 +14,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // onto the store's typed `FactQuery` (subject / metric / period / AsOf),
 // then projects each current head to a `ResolvedFact`:
 //
-//   - **Rendering** under the metric registry's declared `DisplayFormat`
-//     (Phase 519) — the canonical display form the answer quotes verbatim
-//     and the numeric-fidelity gate (Phase 523) canonicalises against. An
+//   - **Rendering** as the metric registry declares it
+//     (`FactRendering.renderFor`: the `DisplayFormat`, and the currency a
+//     money metric names) — the canonical display form the answer quotes
+//     verbatim and the numeric-fidelity gate canonicalises against. An
 //     unregistered metric (or an empty format) renders verbatim.
 //   - **Freshness** derived per the metric's `Grounding.StalenessPolicy`
 //     via `FactInvalidation.deriveFreshness` — never stored, so it cannot
@@ -118,12 +119,6 @@ type FactStoreFactResolver
         IncludeSuperseded = false
     }
 
-    // Canonical display rendering under the metric's `DisplayFormat` —
-    // the one shared implementation (`FactRendering.render`, Facts.Core),
-    // also consumed by the `query_facts` tool (Phase 559) so a value never
-    // renders two ways at two doors.
-    let renderValue (format: string) (value: FactValue) : string = FactRendering.render format value
-
     /// Phase 623.B — has any data object this fact cites as an input
     /// gained a version since the fact was asserted? Derived per call from
     /// `IDataObjectStore` (law L1: never a stored flag). `None` store, no
@@ -204,8 +199,6 @@ type FactStoreFactResolver
             let probeUpstream =
                 policy = Grounding.UntilUpstreamChange || recomputePolicy = Grounding.OnQuery
 
-            let displayFormat = metric |> Option.map _.DisplayFormat |> Option.defaultValue ""
-
             let now = clock().ToUniversalTime()
 
             let! resolved =
@@ -255,7 +248,7 @@ type FactStoreFactResolver
 
                     return {
                         FactId = fact.FactId
-                        Rendering = renderValue displayFormat fact.Value
+                        Rendering = FactRendering.renderFor metric fact.Value
                         Freshness = freshness
                         SupersededBy = successor |> Option.map _.FactId
                         Metric = fact.Metric.Value
