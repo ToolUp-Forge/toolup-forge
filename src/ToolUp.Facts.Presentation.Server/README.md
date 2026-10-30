@@ -26,6 +26,10 @@ message carries.
   carries a pipeline block that persists the request and never a row. A reader's panel sends that
   request to the endpoint, which evaluates it again for the reader under the disclosure gate at the
   browse door.
+- **`PresentationCompose.withDerivedAssertions`** lets `evaluate_pipeline` assert one numeric
+  column of its result as facts of a registered derived metric (the `assert` argument), each naming
+  the facts it was computed from, so a figure the assistant quotes verifies and a narrative may cite
+  it. Without it the argument is absent and refused.
 
 ```fsharp skip=fragment
 open ToolUp.AI.AICompose
@@ -34,6 +38,7 @@ open ToolUp.Facts.Presentation
 AIServerApp.createFrom factory providerProfile app
 |> PresentationCompose.withRenderTools
 |> PresentationCompose.withPipelineTool
+|> PresentationCompose.withDerivedAssertions // optional
 |> composeAI
 ```
 

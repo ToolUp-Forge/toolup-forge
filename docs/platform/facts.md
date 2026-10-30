@@ -1456,6 +1456,67 @@ refusal, never an empty grid. Migration notes: [`docs/migrations/1145-pipeline-t
 (the executor) and [`docs/migrations/1156-pipeline-tool-composed.md`](../migrations/1156-pipeline-tool-composed.md)
 (the composition).
 
+#### Asserting a result: a derived figure becomes a fact (Phase 1146)
+
+A figure the pipeline computes is shown and never retyped, so it can appear in no answer and no
+grounded narrative. The grounding gate's rule for a derived figure (a margin computed from revenue and
+cost; see [grounded narratives](grounded-narratives.md)) is that it is asserted as a fact first, with a
+`Computed` method naming its inputs. Derived assertions apply exactly that rule: they satisfy it rather
+than relax it, and no arithmetic runs inside a gate.
+
+A deployment opts in with one line beside the pipeline tool:
+
+```fsharp skip=fragment
+AIServerApp.createFrom factory providerProfile app
+|> PresentationCompose.withPipelineTool
+|> PresentationCompose.withDerivedAssertions
+|> composeAI
+```
+
+The tool then declares an `assert` argument (`column`, `as_metric`, `level`) and the write it may make
+(`WriteState "_facts"`) beside its read, so a tool policy that admits no writes refuses it at compose.
+Without the line the argument is absent from the declaration, and a request carrying it is refused
+(`AssertionNotOffered`).
+
+- **One fact per result row** (`PipelineAssertion.draft`). The subject is the row's key: a result
+  column that copies the slice's `subject` or `subject_path`, resolved against the slice's rows at the
+  slice's level, which is the level the request must name. The period is the slice's range. The value
+  is the column's number. The method is `Computed("fuaran.compute.pipeline", <the Fuaran.Compute.DataFrame
+  version>, <the pipeline hash>)`, so the pipeline keys the lineage: re-running after an input moved
+  supersedes, and an unchanged re-run is idempotent.
+- **Each fact names its inputs.** Its evidence lists every slice fact the row was computed from as
+  `fact:<id>` (`FactInput`). Where the pipeline is subject-local, those are the facts of the row's own
+  subject. That means every aggregation keeps the subject among its keys, every window partitions by it,
+  no `limit` precedes an aggregation, and the column reads no ranking or row position. Otherwise they are
+  every fact the column reads. Both are supersets of what the value depends on, never subsets. A row
+  whose value reads no fact is refused: its inputs cannot be named.
+- **Refused by name:** a column the result lacks; a withheld column (its values are partial); a
+  non-numeric column; a column through a host-rounded function (`exp`, `ln`, `log10`, a non-integer
+  power), which two hosts may differ on in the last place; a metric that is not registered, or not
+  registered with `ProducingOperation = Some "fuaran.compute.pipeline"`, so the assistant never asserts
+  a source metric; a level other than the slice's; a result whose rows name no subject or one subject
+  twice; and a row with no value or more inputs than `PipelineAssertion.MaxInputs`.
+- **Disclosure is the join of the inputs' labels.** A derived fact is `Surfaceable` in its own right.
+  The taint walk reads the facts its evidence names as a computed lineage, so a `TaintPropagating`
+  restricted input taints it at every door. A declassification routine registered for
+  `fuaran.compute.pipeline` is the one thing that clears it.
+- **One audited batch.** The drafts are written through `IFactStore.AssertBatch`. The facts are read
+  back and judged at `FactToolResult`, and the text the model reads carries each fact's id, subject
+  and rendering (or the withholding policy) and the receipt's digest. The answer gate reads those
+  facts from the turn's tool results, so a figure the model quotes verifies against the fact. The
+  grounding gate resolves a citation of it like any other fact.
+
+A derived metric is registered before it is asserted, with its display format and roll-up:
+
+```fsharp skip=fragment
+{ Id = "site_total"; Name = "Site total"; Unit = "GBP"; Dimensionality = "currency"
+  Direction = HigherIsBetter; DisplayFormat = "N2"; Staleness = UntilSuperseded
+  ProducingOperation = Some PipelineAssertion.OperationId
+  CanonicalMethod = None; RecomputePolicy = None; RollUp = Some(Additive 0.01m); Context = None }
+```
+
+Migration note: [`docs/migrations/1146-pipeline-assertion.md`](../migrations/1146-pipeline-assertion.md).
+
 #### The question compiler (Phase 986)
 
 The planner takes its compiler from the first of these that the

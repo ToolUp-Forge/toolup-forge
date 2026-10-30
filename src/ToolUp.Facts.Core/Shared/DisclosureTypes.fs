@@ -820,12 +820,52 @@ module DisclosurePurposeConfig =
             AllowedBySurface = Map.ofList allowed
         }
 
+// ─── A fact computed from named facts ────────────────────────────────
+//
+// A fact the assistant's pipeline computed (`PipelineAssertion`) names the
+// facts it was computed from in its `Evidence.InputHashes`, one entry per
+// input, each `fact:<id>`: the fact's content address under the reference
+// kind a narrative cites a fact by. The entry is in the content-hash form
+// (`InputHash.isContentHash`), so a reader tells it from a run token or a bare
+// value hash, and it enters the derived fact's content address, so a moved
+// input mints a new fact that supersedes the old within its lineage.
+//
+// The taint walk reads these entries as the derived fact's COMPUTED lineage:
+// the computation named what flowed in, so nothing is inferred
+// (`DisclosureTaint`).
+
+/// The evidence entry naming a fact a derived fact was computed from.
+[<RequireQualifiedAccess>]
+module FactInput =
+
+    /// The prefix every entry carries: the reference kind of a fact.
+    [<Literal>]
+    let Prefix = "fact:"
+
+    /// The entry naming the fact `factId`.
+    let ofFactId (factId: string) : string = Prefix + factId
+
+    /// The fact an entry names, when it names one.
+    let tryFactId (entry: string) : string option =
+        if
+            not (isNull entry)
+            && entry.Length > Prefix.Length
+            && entry.StartsWith(Prefix, System.StringComparison.Ordinal)
+        then
+            Some(entry.Substring Prefix.Length)
+        else
+            None
+
+    /// The facts an evidence list names, in its order.
+    let factIdsOf (inputs: string list) : string list = inputs |> List.choose tryFactId
+
 // ─── The disclosure-taint index ──────────────────────────────────────
 //
 // What the taint walk reads of a scope, maintained by the writes that change
 // it, so a gated check reads the index instead of listing every fact in the
 // scope. A fact-to-fact derivation edge exists where a fact's evidence names
-// a data-object version another fact produced as its `Series` value;
+// a data-object version another fact produced as its `Series` value, and
+// where it names another fact outright (`FactInput`);
 // supersession is not a derivation and adds no edge, so a write only ever
 // ADDS entries (a superseded fact stays a node: a downstream fact may still
 // cite what it produced).
@@ -874,6 +914,15 @@ module DisclosureTaintNode =
             | Series version -> [ version ]
             | _ -> []
     }
+
+    /// The facts the node's evidence names outright (`FactInput`), in its
+    /// order: its computed lineage.
+    let namedInputs (node: DisclosureTaintNode) : string list = FactInput.factIdsOf node.Inputs
+
+    /// The node's other evidence inputs: the data-object versions whose
+    /// producers the walk infers.
+    let inferredInputs (node: DisclosureTaintNode) : string list =
+        node.Inputs |> List.filter (FactInput.tryFactId >> Option.isNone)
 
     /// Two nodes for one address. Equal nodes join to themselves, so a
     /// well-formed index keeps every field in the fact's own order; unequal
