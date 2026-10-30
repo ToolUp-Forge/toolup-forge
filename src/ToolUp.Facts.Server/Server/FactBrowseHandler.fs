@@ -397,6 +397,34 @@ module FactBrowseHandler =
         return Ok(List.ofArray rows)
     }
 
+    /// A table's detail beside the listing row `listTables` read for it: the
+    /// declaration and its description, with no further read. Public so the
+    /// table listing tool (`FactTablesTool`) projects the rows `listTables`
+    /// answered rather than reading each table's standing a second time.
+    let detailOf (deps: FactBrowseDeps) (table: FactTableDefinition) (row: FactTableListing) : FactTableDetail =
+        let description = FactTableRegistry.tryDescription deps.Tables table.Id
+
+        let columnDescription (metric: string) =
+            description
+            |> Option.bind (fun d -> d.Columns |> List.tryFind (fun (m, _) -> m = metric) |> Option.map snd)
+
+        {
+            Listing = row
+            Columns =
+                table.Columns
+                |> List.map (fun column -> {
+                    Metric = column.Metric
+                    Shape = sprintf "%A" column.Shape
+                    Disclosure = tableDisclosureLabel (FactTableDefinition.columnDisclosure table column)
+                    Description = columnDescription column.Metric
+                })
+            ProducingOperation = table.ProducingOperation
+            SchemaVersion = table.SchemaVersion
+            RefreshCadenceSeconds = int64 table.RefreshCadence.TotalSeconds
+            Requirement = sprintf "%A" table.Requirement
+            Description = description |> Option.map _.Description
+        }
+
     /// One table's declaration and standing.
     let getTable
         (deps: FactBrowseDeps)
@@ -408,29 +436,7 @@ module FactBrowseHandler =
             | Error e -> return Error e
             | Ok table ->
                 let! row = listing deps scope.ScopeId table
-                let description = FactTableRegistry.tryDescription deps.Tables tableId
-
-                let columnDescription (metric: string) =
-                    description
-                    |> Option.bind (fun d -> d.Columns |> List.tryFind (fun (m, _) -> m = metric) |> Option.map snd)
-
-                return
-                    Ok {
-                        Listing = row
-                        Columns =
-                            table.Columns
-                            |> List.map (fun column -> {
-                                Metric = column.Metric
-                                Shape = sprintf "%A" column.Shape
-                                Disclosure = tableDisclosureLabel (FactTableDefinition.columnDisclosure table column)
-                                Description = columnDescription column.Metric
-                            })
-                        ProducingOperation = table.ProducingOperation
-                        SchemaVersion = table.SchemaVersion
-                        RefreshCadenceSeconds = int64 table.RefreshCadence.TotalSeconds
-                        Requirement = sprintf "%A" table.Requirement
-                        Description = description |> Option.map _.Description
-                    }
+                return Ok(detailOf deps table row)
         }
 
     /// One page of a table's run history, most recently opened first.

@@ -114,8 +114,8 @@ RAGServerApp.create factory providerProfile embedder
 ```
 
 `IGroundedNarrativeRun.Run` takes the run key and a **resolved** scope. The model is offered exactly
-the tools passed in — the fact tier's `NarrativeGrounding.factTools` (`list_metric_coverage`,
-`query_facts`, `query_metric_population`) plus any reference tools — and answers in a fixed format:
+the tools passed in — the fact tier's `NarrativeGrounding.factTools` (`query_facts`,
+`query_metric_population`, `list_metric_coverage`, `list_fact_tables`) plus any reference tools — and answers in a fixed format:
 
 ```json
 {"sections":[{"id":"summary","paragraphs":["Acme revenue was [[Revenue|1,250|<fact id>]] yesterday."]}]}
