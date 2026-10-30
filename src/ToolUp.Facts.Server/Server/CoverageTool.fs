@@ -127,7 +127,7 @@ module CoverageTool =
     let definition: AIToolDefinition = {
         Name = "list_metric_coverage"
         Description =
-            "Describe WHAT VERIFIED DATA THIS DEPLOYMENT HOLDS — call this FIRST, before `query_facts` or `query_metric_population`, whenever you do not already have a metric id and a subject-hierarchy id from the conversation. Neither of those tools has a discovery parameter: they answer about ids you name, and an id you guessed is refused rather than approximated. This tool is where the ids come from. It returns, for every registered metric: its id (the exact token the other tools take), its display name, its unit and dimensionality, its declared direction-of-better (and therefore whether `best_first` ordering is available on it), its canonical display format, its staleness policy, and — where the deployment declared one — the analyst's CONTEXT for the metric family: what the quantity means, how it is computed, and how to read its sign and magnitude. Quote that context when explaining a metric rather than inventing an interpretation. For each metric it also reports the subject hierarchies that actually hold facts and, per hierarchy, how many distinct subjects and facts, the range of valid-time periods covered, how many facts are currently fresh versus stale, and the mix of methods that produced them — so you can say \"this deployment tracks elasticity across roughly 300,000 SKUs, weekly, from one estimator\" from a single call, and reach for the population tool knowing it will hit. It reports COUNTS AND COVERAGE ONLY and never a value, a minimum, a maximum or an average: ask `query_metric_population` for values, which returns them through the disclosure gate. Where you are not permitted to see a metric's facts at all, this tool says the facts exist and names the restricting policy, and reports nothing further about them. The result is bounded by how many metrics the deployment registered, never by how many subjects it holds. Results are scoped to the current user/team."
+            "Describe WHAT VERIFIED DATA THIS DEPLOYMENT HOLDS — call this FIRST, before `query_facts` or `query_metric_population`, whenever you do not already have a metric id and a subject-hierarchy id from the conversation. Neither of those tools has a discovery parameter: they answer about ids you name, and an id you guessed is refused rather than approximated. This tool is where the ids come from. It returns, for every registered metric: its id (the exact token the other tools take), its display name, its unit and dimensionality, its declared direction-of-better (and therefore whether `best_first` ordering is available on it), its canonical display format, its staleness policy, and — where the deployment declared one — the analyst's CONTEXT for the metric family: what the quantity means, how it is computed, and how to read its sign and magnitude. Quote that context when explaining a metric rather than inventing an interpretation. For each metric it also reports the subject hierarchies that actually hold facts and, per hierarchy, how many distinct subjects and facts, the range of valid-time periods covered, how many facts are currently fresh versus stale, and the mix of methods that produced them — so you can say \"this deployment tracks elasticity across roughly 300,000 SKUs, weekly, from one estimator\" from a single call, and reach for the population tool knowing it will hit. It reports COUNTS AND COVERAGE ONLY and never a value, a minimum, a maximum or an average: ask `query_metric_population` for values, which returns them through the disclosure gate. Where you are not permitted to see a metric's facts at all, this tool says the facts exist and names the restricting policy, and reports nothing further about them. The result also lists every registered subject hierarchy with its levels, root to leaf; where the deployment declared one, a hierarchy carries a DESCRIPTION of what it is and how its levels nest, and a description of what each described level holds — read those rather than guessing from a level label. The result is bounded by how many metrics the deployment registered, never by how many subjects it holds. Results are scoped to the current user/team."
         Parameters = [
             {
                 Name = "metric"
@@ -378,6 +378,39 @@ module CoverageTool =
                         )
         }
 
+    // ── Subject rendering ─────────────────────────────────────────
+
+    /// One registered hierarchy. Where the module declared a description
+    /// (`ServerModule.describeSubjects`) the row also carries what the
+    /// subject is and what its described levels hold; a hierarchy with none
+    /// serialises exactly as it did before descriptions existed — the
+    /// fields are absent, not null.
+    let private subjectRow (registry: Grounding.IMetricRegistry) (s: Grounding.SubjectDefinition) : obj =
+        match Grounding.MetricRegistry.trySubjectDescription registry s.Id with
+        | None ->
+            box {|
+                id = s.Id
+                name = s.Name
+                levels = s.Levels
+                calendar = s.Calendar
+            |}
+        | Some d ->
+            box {|
+                id = s.Id
+                name = s.Name
+                levels = s.Levels
+                calendar = s.Calendar
+                description = d.Description
+                levelDescriptions =
+                    // Declaration order, root to leaf, whatever order the
+                    // module listed them in.
+                    s.Levels
+                    |> List.choose (fun level ->
+                        d.Levels
+                        |> List.tryFind (fun (l, _) -> l = level)
+                        |> Option.map (fun (_, text) -> {| level = level; description = text |}))
+            |}
+
     // ── Execution ─────────────────────────────────────────────────
 
     /// The executor over explicit dependencies — the testable core
@@ -479,14 +512,7 @@ module CoverageTool =
                             metricCount = List.length metrics
                             metrics = rows |> Array.toList
 
-                            subjectHierarchies =
-                                subjects
-                                |> List.map (fun s -> {|
-                                    id = s.Id
-                                    name = s.Name
-                                    levels = s.Levels
-                                    calendar = s.Calendar
-                                |})
+                            subjectHierarchies = subjects |> List.map (subjectRow resolved)
 
                             note = note
                         |}

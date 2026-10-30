@@ -980,6 +980,13 @@
       `FactTableRegistry.tryDescription`. Migration recipe:
       `docs/migrations/1150-fact-table-descriptions.md`.
     -->
+    <!--
+      Phase 1151 rides the same draft: `ServerModule` and `ServerApp` gain a subject-description field each
+      (`SubjectDescriptions` / `RegisteredSubjectDescriptions`; a full record literal adds it, or builds from
+      `create` / `empty`). Additive otherwise: `SubjectDescription`, `IDescribesSubjects`,
+      `ServerModule.describeSubjects`, `ServerApp.metricRegistry`, `MetricRegistry.buildDescribed`,
+      `MetricRegistry.trySubjectDescription`. Recipe: `docs/migrations/1150-fact-table-descriptions.md`.
+    -->
     <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
