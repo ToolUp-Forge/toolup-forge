@@ -21,7 +21,7 @@ open ToolUp.Platform.HealthChecks
 // deployment has this live list exercise the current key.
 
 [<Literal>]
-let private healthContainer = "_platform"
+let private healthContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private healthProbePrefix = "health/probe"
