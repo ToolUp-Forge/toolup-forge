@@ -726,14 +726,14 @@ type private DispatchingScheduler() =
             let id = Guid.NewGuid()
             jobs[id] <- (registration, scope)
             scheduled.Enqueue((registration, scope))
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Schedule(registration: JobRegistration) = async {
             let id = Guid.NewGuid()
             jobs[id] <- (registration, ResolvedScope.anonymous)
             scheduled.Enqueue((registration, ResolvedScope.anonymous))
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Cancel(_, _) = async { return () }
@@ -745,10 +745,12 @@ type private DispatchingScheduler() =
 
         member _.TriggerOnce(scopeId, jobId, byUserId) = async {
             match jobs.TryGetValue jobId with
-            | false, _ -> return Error "unknown job"
+            | false, _ -> return Error(TriggerError.DispatchRefused "unknown job")
             | true, (registration, scope) ->
                 match handlers.TryGetValue registration.Handler with
-                | false, _ -> return Error(sprintf "no handler registered for %s" registration.Handler)
+                | false, _ ->
+                    return
+                        Error(TriggerError.DispatchRefused(sprintf "no handler registered for %s" registration.Handler))
                 | true, handler ->
                     let! result =
                         handler.Execute {
@@ -1989,7 +1991,7 @@ let budgetTests =
 
             let jobId =
                 match jobs.Schedule(deployment.Scope, registration) |> Async.RunSynchronously with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "schedule refused: %A" e
 
             match
@@ -1997,7 +1999,7 @@ let budgetTests =
                 |> Async.RunSynchronously
             with
             | Ok() -> ()
-            | Error e -> failtestf "trigger refused: %s" e
+            | Error e -> failtestf "trigger refused: %A" e
 
             let runs () =
                 jobs.GetRecentRuns(deployment.TeamId, jobId, 20) |> Async.RunSynchronously
@@ -2446,16 +2448,15 @@ let wordingTests =
         }
     ]
 
-// ─── The double run's first site, pinned pending ────────────────────
+// ─── The double run's first site ────────────────────────────────────
 //
 // `GroundedNarrativeTrigger.enqueueFor` schedules the run's job and then
-// triggers the job it got back. A scheduler that coalesces on the
-// idempotency key hands back the job already pending, so a change replayed
-// inside the TTL triggers that one job twice. Pending until the scheduler
-// says which job it returned (`ScheduleOutcome.Coalesced`, Phase 1066);
-// Phase 998 fixes both sites and turns this on. The second site,
-// `RecomputeJobHandler.applyPolicies`, is pinned in
-// ReactiveRecomputeComposeTests.
+// triggers it. A scheduler that coalesces on the idempotency key hands back
+// the job already pending, so a change replayed inside the TTL used to
+// trigger that one job twice. The scheduler now says which it returned
+// (`ScheduleOutcome.Coalesced`), and the trigger fires only a job it
+// created. The second site, `RecomputeJobHandler.applyPolicies`, is pinned
+// pending in ReactiveRecomputeComposeTests.
 
 /// Coalesces on the idempotency key, as a real scheduler does, and counts
 /// the triggers its jobs receive.
@@ -2472,7 +2473,10 @@ type private CoalescingScheduler() =
             |> Option.map _.Key
             |> Option.defaultWith (fun () -> Guid.NewGuid().ToString "N")
 
-        Ok(byKey.GetOrAdd(key, fun _ -> Guid.NewGuid()))
+        let fresh = Guid.NewGuid()
+        let jobId = byKey.GetOrAdd(key, fresh)
+
+        Ok(if jobId = fresh then Scheduled jobId else Coalesced jobId)
 
     interface IJobScheduler with
         member _.RegisterHandler(_, _) = ()
@@ -2501,7 +2505,7 @@ type private CoalescingScheduler() =
 let doubleRunTests =
     testList "double run, first site" [
 
-        ptestCaseAsync
+        testCaseAsync
             "998: a replayed change coalesced onto its pending narrative job is not triggered again (GroundedNarrativeTrigger.enqueueFor)"
         <| async {
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore

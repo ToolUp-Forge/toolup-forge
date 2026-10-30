@@ -70,7 +70,7 @@ let private unscopedJob (scheduler: IJobScheduler) (scopeId: string) : JobId =
     }
 
     match scheduler.Schedule registration |> Async.RunSynchronously with
-    | Ok jobId -> jobId
+    | Ok(Scheduled jobId | Coalesced jobId) -> jobId
     | Error e -> failtestf "schedule failed: %A" e
 
 let tests (name: string) (factory: unit -> ReissueSubject) =

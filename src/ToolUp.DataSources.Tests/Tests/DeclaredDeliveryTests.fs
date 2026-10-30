@@ -292,7 +292,7 @@ let private legacyPullJob (world: World) (principal: DeclaredPrincipal) (sourceI
         (world.Scheduler :> IJobScheduler).Schedule registration
         |> Async.RunSynchronously
     with
-    | Ok jobId -> jobId
+    | Ok outcome -> ScheduleOutcome.jobId outcome
     | Error e -> failtestf "the legacy job could not be scheduled: %A" e
 
 let tests =

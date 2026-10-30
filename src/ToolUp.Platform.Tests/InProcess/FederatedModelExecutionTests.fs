@@ -262,7 +262,7 @@ type private DeferredScheduler() =
         member _.Schedule(registration) = async {
             let jobId = Guid.NewGuid()
             lock pending (fun () -> pending.Add((jobId, registration)))
-            return Ok jobId
+            return Ok(Scheduled jobId)
         }
 
         member _.TriggerOnce(_scopeId, _jobId, _byUserId) = async { return Ok() }

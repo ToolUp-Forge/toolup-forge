@@ -12,30 +12,30 @@ open Quartz
 open ToolUp.Platform
 open ToolUp.Platform.JobSchedulers.QuartzStore
 
-// ─── Phase 9c.E — IJobScheduler over Quartz.NET ──────────────────────
+// ─── IJobScheduler over Quartz.NET ───────────────────────────────────
 //
-// The second implementation of `IJobScheduler` / `IJobStore`, and the
-// first written by someone holding a framework the interfaces were not
-// designed around. The split of responsibilities is deliberate and is
-// what keeps each side doing what it is good at:
+// The second implementation of `IJobScheduler` / `IJobStore`, and the first
+// written by someone holding a framework the interfaces were not designed
+// around. The split of responsibilities is what keeps each side doing what it
+// is good at:
 //
-//   * POLICY lives here — the `Schedule` validation chain, idempotency,
-//     status transitions, and the synthesis of a `JobDefinition` from a
-//     `JobRegistration`. All of it is expressed against the SDK's own
-//     vocabulary, and the cron subset is validated with forge's own
-//     `CronExpression.tryParse` so `ScheduleError.InvalidCron` means
-//     exactly what it means on the in-process default.
-//   * PROJECTION lives in `QuartzJobStore` — every definition written
-//     becomes a Quartz job detail and, for an active cron job, a Quartz
-//     trigger.
-//   * EVALUATION AND DISPATCH live in Quartz — trigger firing, thread
-//     pool, misfire handling and retry backoff are the backend's, not
-//     re-implemented here.
+//   * POLICY is the platform's `SchedulerPolicy` — the `Schedule` validation
+//     chain and its idempotency, status transitions, the synthesis of a
+//     `JobDefinition` from a `JobRegistration`, and which jobs a manual fire or
+//     an event may dispatch — the same module the in-process default runs, so
+//     `ScheduleError.InvalidCron` (and every other answer) means exactly what
+//     it means there. How a fired run ends is `JobLifecycle.transition`, also
+//     shared (`QuartzJobStore`'s dispatch job).
+//   * PROJECTION lives in `QuartzJobStore` — every definition written becomes
+//     a Quartz job detail and, for an active cron job, a Quartz trigger.
+//   * EVALUATION AND DISPATCH live in Quartz — trigger firing, thread pool,
+//     misfire handling and retry backoff are the backend's, not re-implemented
+//     here.
 //
 // **Licence posture (GP 1 / GP 2).** Quartz.NET is Apache-2.0 with no
-// commercial tier, which is why this companion exists at all: the
-// obvious alternative was rejected on licensing, not on capability. See
-// the companion README.
+// commercial tier, which is why this companion exists at all: the obvious
+// alternative was rejected on licensing, not on capability. See the companion
+// README.
 
 /// The system user id a scheduler-driven run is attributed to.
 [<Literal>]
@@ -70,143 +70,16 @@ type QuartzJobScheduler
 
     let jobStore = store :> IJobStore
 
-    // ─── Trigger → NextRunAt ─────────────────────────────────────
-    //
-    // Computed with forge's own cron parser rather than Quartz's, on
-    // purpose: `NextRunAt` is a field of the SHARED `JobDefinition` that
-    // an admin UI renders and `IJobStore.DueJobs` selects on, so it must
-    // mean the same thing under every implementation. Quartz's trigger
-    // is what actually fires; after a run the adapter writes Quartz's
-    // own next-fire time back, so the two converge on the backend's
-    // answer once the job has run at least once.
-    let computeNextRunAt (trigger: Trigger) (after: DateTime) : DateTime option =
-        match trigger with
-        | CronTrigger expression ->
-            match CronExpression.tryParse expression with
-            | Ok cron -> CronExpression.nextRunAfter cron after
-            | Error _ -> None
-        | OnEvent _
-        | Manual -> None
-
-    // ─── Schedule validation chain ───────────────────────────────
-    //
-    // Same order and same errors as the in-process default: cron parse,
-    // then handler registration, then precision.
-    //
-    // **`Second` is rejected, and that is a statement about the TRIGGER
-    // VOCABULARY, not about Quartz.** Quartz's own cron dialect carries
-    // a seconds field and would happily fire sub-minute. Forge's
-    // `Trigger.CronTrigger` is five-field crontab, whose finest
-    // granularity IS one minute, so there is no way to ASK for a
-    // sub-minute schedule through this interface — and portability rule
-    // 6 says an implementation that cannot honour a precision rejects it
-    // at registration rather than silently delaying dispatch.
-    let validateRegistration (registration: JobRegistration) : Result<unit, ScheduleError> =
-        let cronCheck =
-            match registration.Trigger with
-            | CronTrigger expression ->
-                match CronExpression.tryParse expression with
-                | Ok _ -> Ok()
-                | Error reason -> Error(InvalidCron(expression, reason))
-            | _ -> Ok()
-
-        match cronCheck with
-        | Error e -> Error e
-        | Ok() ->
-            if not (handlers.IsRegistered registration.Handler) then
-                Error(HandlerNotRegistered registration.Handler)
-            elif registration.Precision = Second then
-                Error(PrecisionUnsupported(Second, [ Minute ]))
-            else
-                Ok()
-
-    let persistNewJob (jobId: JobId) (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> = async {
-        let now = DateTime.UtcNow
-
-        let definition: JobDefinition = {
-            JobId = jobId
-            ScopeId = registration.ScopeId
-            Handler = registration.Handler
-            Payload = registration.Payload
-            Trigger = registration.Trigger
-            Idempotency = registration.Idempotency
-            RetryPolicy = registration.RetryPolicy
-            ShardKey = registration.ShardKey
-            Precision = registration.Precision
-            Status = Active
-            CreatedAt = now
-            CreatedBy = registration.CreatedBy
-            NextRunAt = computeNextRunAt registration.Trigger now
-            LastRunAt = None
-            LastRunStatus = None
-            LastRunError = None
-            ConsecutiveFailures = 0
-            Tags = registration.Tags
-        }
-
-        try
-            do! jobStore.Save definition
-            return Ok definition.JobId
-        with ex ->
-            return Error(ScheduleError.StorageFailure ex.Message)
-    }
-
-    /// `tagsFor` settles the persisted tags once the job id exists — the
-    /// typed `Schedule` seals its scope token for that id (Phase 935).
-    let createNewJob
-        (tagsFor: JobId -> Result<Map<string, string>, string>)
-        (registration: JobRegistration)
-        : Async<Result<JobId, ScheduleError>> =
-        async {
-            let jobId = Guid.NewGuid()
-
-            match tagsFor jobId with
-            | Error reason -> return Error(ScheduleError.StorageFailure reason)
-            | Ok tags -> return! persistNewJob jobId { registration with Tags = tags }
-        }
+    /// Set when the host begins stopping this companion. A manual fire offered
+    /// after it is refused as `SchedulerStopping`, as the in-process default
+    /// refuses one, rather than reaching a Quartz scheduler mid-shutdown.
+    let mutable stopping = false
 
     /// Both `Schedule` overloads, once each has settled the registration's
-    /// scope and how its tags are persisted: validate, honour idempotency
-    /// (a job recovered by its key keeps the token it was issued), persist.
-    let scheduleValidated
-        (tagsFor: JobId -> Result<Map<string, string>, string>)
-        (registration: JobRegistration)
-        : Async<Result<JobId, ScheduleError>> =
-        async {
-            match validateRegistration registration with
-            | Error e -> return Error e
-            | Ok() ->
-                match registration.Idempotency with
-                | Some key ->
-                    let! existing =
-                        jobStore.FindByIdempotencyKey(registration.ScopeId, key.Key, key.TtlSeconds, DateTime.UtcNow)
-
-                    match existing with
-                    | Some jobId -> return Ok jobId
-                    | None -> return! createNewJob tagsFor registration
-                | None -> return! createNewJob tagsFor registration
-        }
-
-    /// Status transition. Writing through the projecting store is what
-    /// removes the Quartz trigger on `Disable` / `Cancel` and restores
-    /// it on `Enable`, so the schedule and the record can never disagree
-    /// about whether a job should fire.
-    let setStatus (scopeId: string) (jobId: JobId) (status: JobStatus) = async {
-        match! jobStore.Get(scopeId, jobId) with
-        | None -> ()
-        | Some job when job.Status = status -> ()
-        | Some job ->
-            let updated = {
-                job with
-                    Status = status
-                    NextRunAt =
-                        match status with
-                        | Active -> computeNextRunAt job.Trigger DateTime.UtcNow
-                        | _ -> None
-            }
-
-            do! jobStore.Update updated
-    }
+    /// scope and how its tags are persisted. This companion has no event
+    /// store, so a new job is announced to nobody.
+    let scheduleValidated (tagsFor: JobId -> Result<Map<string, string>, string>) (registration: JobRegistration) =
+        SchedulerPolicy.scheduleValidated jobStore handlers.IsRegistered (fun _ -> async.Return()) tagsFor registration
 
     /// Fire a job now, whatever its trigger says. Re-projects the
     /// definition first when Quartz has no job to fire — which is what a
@@ -252,7 +125,7 @@ type QuartzJobScheduler
             return Ok()
         }
 
-        // Phase 818 / 935 — the typed overload registers under
+        // The typed overload registers under
         // `scope.ScopeId` and persists, as an opaque string on the
         // definition's tags, the token the platform's carrier issued for
         // the job. At a fire the dispatch asks the platform to redeem it
@@ -274,11 +147,18 @@ type QuartzJobScheduler
             let stripped = CarriedJobScope.strip registration.Tags
             scheduleValidated (fun _ -> Ok stripped) registration
 
-        member _.Cancel(scopeId, jobId) = setStatus scopeId jobId Cancelled
+        // Written through the projecting store, which is what removes the
+        // Quartz trigger on `Disable` / `Cancel` and restores it on `Enable`,
+        // so the schedule and the record never disagree about whether a job
+        // should fire.
+        member _.Cancel(scopeId, jobId) =
+            SchedulerPolicy.setStatus jobStore scopeId jobId Cancelled
 
-        member _.Disable(scopeId, jobId) = setStatus scopeId jobId Disabled
+        member _.Disable(scopeId, jobId) =
+            SchedulerPolicy.setStatus jobStore scopeId jobId Disabled
 
-        member _.Enable(scopeId, jobId) = setStatus scopeId jobId Active
+        member _.Enable(scopeId, jobId) =
+            SchedulerPolicy.setStatus jobStore scopeId jobId Active
 
         member _.Get(scopeId, jobId) = jobStore.Get(scopeId, jobId)
 
@@ -288,13 +168,10 @@ type QuartzJobScheduler
             jobStore.GetRecentRuns(scopeId, jobId, min count MaxRunsPerJob)
 
         member _.TriggerOnce(scopeId, jobId, byUserId) = async {
-            match! jobStore.Get(scopeId, jobId) with
-            | None -> return Error $"Job %A{jobId} not found in scope %s{scopeId}"
-            | Some job when job.Status = Cancelled -> return Error "Cannot trigger a cancelled job"
-            // Phase 1064 — ruling 12: a disabled job refuses a manual fire,
-            // as the in-process scheduler does.
-            | Some job when job.Status = Disabled -> return Error "Cannot trigger a disabled job; enable it first"
-            | Some job ->
+            match! SchedulerPolicy.triggerable jobStore scopeId jobId with
+            | Error refusal -> return Error refusal
+            | Ok _ when stopping -> return Error TriggerError.SchedulerStopping
+            | Ok job ->
                 try
                     let data = JobDataMap()
                     data.Add(QuartzDataKeys.TriggerSource, "manual")
@@ -310,19 +187,11 @@ type QuartzJobScheduler
                     do! fireNow job data
                     return Ok()
                 with ex ->
-                    return Error $"Quartz refused the manual fire: {ex.Message}"
+                    return Error(TriggerError.DispatchRefused $"Quartz refused the manual fire: {ex.Message}")
         }
 
         member _.NotifyEventWritten(scopeId, eventType, eventId) = async {
-            let! jobs = jobStore.ListJobs scopeId
-
-            let matches =
-                jobs
-                |> List.filter (fun job ->
-                    job.Status = Active
-                    && match job.Trigger with
-                       | OnEvent declared -> declared = eventType
-                       | _ -> false)
+            let! matches = SchedulerPolicy.eventTriggered jobStore scopeId eventType
 
             for job in matches do
                 try
@@ -336,12 +205,12 @@ type QuartzJobScheduler
                         $"[QuartzJobScheduler] event=event_fire_failed jobId={job.JobId} eventType=%s{eventType}: {ex.Message}"
         }
 
-    // Phase 935 — composition binds the deployment's carrier; the dispatch
+    // Composition binds the deployment's carrier; the dispatch
     // context holds the same cell, so a fire redeems through it.
     interface IScopeCarrierBinding with
         member _.BindScopeCarrier(carrier) = scopeCarrier.Value <- carrier
 
-    // Phase 991 — re-issue a job's token through the platform's one re-issue
+    // Re-issue a job's token through the platform's one re-issue
     // (`CarriedJobScope.reissue`), written through the projecting store like
     // every other definition change. The Quartz trigger is untouched: the
     // token rides the definition, and a fire redeems whatever it carries.
@@ -379,6 +248,8 @@ type QuartzJobScheduler
             Async.StartAsTask(work, cancellationToken = cancellationToken) :> Task
 
         member _.StopAsync(cancellationToken) =
+            stopping <- true
+
             let work = async {
                 try
                     do! awaitVoid (quartz.Shutdown(false, cancellationToken))
@@ -445,7 +316,7 @@ module QuartzJobScheduler =
         async {
             let handlers = QuartzHandlerRegistry()
 
-            // Phase 935 — this companion's own carrier until composition
+            // This companion's own carrier until composition
             // binds the deployment's (`IScopeCarrierBinding`).
             let scopeCarrier = ref (ScopeCarrier.ephemeral ())
 

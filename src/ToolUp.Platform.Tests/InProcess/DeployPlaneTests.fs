@@ -323,7 +323,7 @@ type DeployPlaneJobScheduler(dispatchOnTrigger: bool) =
         member _.Schedule(registration) = async {
             let id = Guid.NewGuid()
             jobs[id] <- registration
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Cancel(_scopeId, jobId) = async { jobs.TryRemove jobId |> ignore }
@@ -336,13 +336,17 @@ type DeployPlaneJobScheduler(dispatchOnTrigger: bool) =
 
         member _.TriggerOnce(_scopeId, jobId, byUserId) = async {
             match jobs.TryGetValue jobId with
-            | false, _ -> return Error(sprintf "job %O not scheduled" jobId)
+            | false, _ -> return Error(TriggerError.DispatchRefused(sprintf "job %O not scheduled" jobId))
             | true, registration ->
                 if not dispatchOnTrigger then
                     return Ok()
                 else
                     match handlers.TryGetValue registration.Handler with
-                    | false, _ -> return Error(sprintf "handler %s not registered" registration.Handler)
+                    | false, _ ->
+                        return
+                            Error(
+                                TriggerError.DispatchRefused(sprintf "handler %s not registered" registration.Handler)
+                            )
                     | true, handler ->
                         let now = DateTime.UtcNow
 

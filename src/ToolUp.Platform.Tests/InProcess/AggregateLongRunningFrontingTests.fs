@@ -180,7 +180,7 @@ type private DeferredScheduler() =
                 pending.Add((jobId, registration))
                 everScheduled.Add jobId)
 
-            return Ok jobId
+            return Ok(Scheduled jobId)
         }
 
         member _.TriggerOnce(_scopeId, _jobId, _byUserId) = async { return Ok() }

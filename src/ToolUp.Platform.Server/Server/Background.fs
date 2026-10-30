@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 869 — fire-and-forget work that cannot take the process down and
+/// Fire-and-forget work that cannot take the process down and
 /// that a service can account for at shutdown.
 ///
 /// `Async.Start` leaves nothing to observe a throw (an escaping exception is
@@ -73,14 +73,17 @@ type DrainSet() =
         return result.Value
     }
 
-/// Start `work` without awaiting it, under `drain`'s token and tracked by it.
-/// A throw is caught and logged at `Error` with `label` as the message, so one
-/// failed piece of work never becomes an unhandled exception that takes the
-/// process down. Work offered after `drain` was cancelled is not started, and
-/// that is logged too: a stopping service accepts nothing new.
-let start (drain: DrainSet) (logger: ILogger) (label: string) (work: Async<unit>) : unit =
+/// Start `work` without awaiting it, under `drain`'s token and tracked by it,
+/// and answer whether it started. A throw is caught and logged at `Error` with
+/// `label` as the message, so one failed piece of work never becomes an
+/// unhandled exception that takes the process down. Work offered after `drain`
+/// was cancelled is not started, which is logged and answered `false`: a
+/// stopping service accepts nothing new, and a caller that promised its own
+/// caller a dispatch can say so instead of reporting one that never runs.
+let tryStart (drain: DrainSet) (logger: ILogger) (label: string) (work: Async<unit>) : bool =
     if drain.Token.IsCancellationRequested then
         logger.Warn(sprintf "%s — not started: the service is stopping" label)
+        false
     else
         let guarded = async {
             try
@@ -90,8 +93,13 @@ let start (drain: DrainSet) (logger: ILogger) (label: string) (work: Async<unit>
         }
 
         drain.Track(Async.StartAsTask(guarded, cancellationToken = drain.Token))
+        true
 
-/// Phase 1006 / 1024 / 1025 — the warning a failed fire-and-forget write is
+/// `tryStart` for a caller with nobody to tell that the work was refused.
+let start (drain: DrainSet) (logger: ILogger) (label: string) (work: Async<unit>) : unit =
+    tryStart drain logger label work |> ignore
+
+/// The warning a failed fire-and-forget write is
 /// logged as, without a request in hand. It names the source, the write,
 /// where it failed (`onWhat`, e.g. `" on GET /x"`, or `""`), the exception
 /// type seen through an async boundary's wrapper, and what the failure did
@@ -106,7 +114,7 @@ let internal writeFailureLogger
     : string -> exn -> unit =
     fun what ex ->
         // The cause, not the `AggregateException` an `Async.AwaitTask`
-        // boundary wraps it in (Phase 972).
+        // boundary wraps it in.
         let cause = ToolUp.Platform.ProviderExceptions.unwrap ex
 
         try
@@ -125,7 +133,7 @@ let internal writeFailureLogger
         with _ ->
             ()
 
-/// Phase 1006 / 1024 — the request's `ILogger`, resolved while the request
+/// The request's `ILogger`, resolved while the request
 /// is live: an asynchronous write failure arrives after the response, when
 /// the request's services are already disposed. `None` when none is
 /// composed, or when resolving it throws.
@@ -137,23 +145,23 @@ let internal requestLogger (ctx: HttpContext) : ILogger option =
     with _ ->
         None
 
-/// Phase 1006 / 1024 — the warning to log when a fire-and-forget write
+/// The warning to log when a fire-and-forget write
 /// started on a request fails. It names the source, the write, the method
 /// and path (never the query string) and the exception type, seen through
 /// an async boundary's wrapper. Built while
 /// the request is live (see `requestLogger`); the response is unaffected
 /// either way, and a logger that itself throws is ignored. The formatting
-/// is `writeFailureLogger`'s (Phase 1025), shared with the
+/// is `writeFailureLogger`'s, shared with the
 /// stores that have no request in hand.
 let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
     let route = sprintf " on %s %s" ctx.Request.Method (string ctx.Request.Path)
     writeFailureLogger source logger route "the response"
 
-/// Phase 1006 / 1024 — start a write without awaiting it, observing its
+/// Start a write without awaiting it, observing its
 /// failure. The ONE helper for this shape: the surface denial trail, every
 /// fire-and-forget write in `ScopeResolutionMiddleware` (Middleware.fs),
-/// the conversation and result stores' event and lineage writes (Phase 1025)
-/// and every request-bound audit record (Phase 1026) go through it.
+/// the conversation and result stores' event and lineage writes
+/// and every request-bound audit record go through it.
 /// Service-lifetime work with a stop to drain for uses `start` above instead.
 ///
 /// A bare `Async.Start` of a write that fails is not merely untidy. A
@@ -166,7 +174,7 @@ let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: 
 /// `Async` exists, is the caller's `try ... with ex -> warn what ex`. The
 /// write is evaluated there, eagerly, not delayed into the started async:
 /// a sink's synchronous prefix (an enqueue, a buffer append) then runs in
-/// the caller's order, as it did under the bare start (Phase 1026).
+/// the caller's order, as it did under the bare start.
 let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
     async {
         match! Async.Catch work with

@@ -591,6 +591,8 @@
              scheduler (startup scan / sweep / flush) and the notify decorator
              (live advance), both of which consume it. -->
         <Compile Include="Server\JobTriggerWatermark.fs" />
+        <Compile Include="Server\SchedulerPolicy.fs" />
+        <Compile Include="Server\JobLifecycle.fs" />
         <Compile Include="Server\JobScheduler.fs" />
         <!-- Phase 164 — opt-in TTL sweep for BlobIdempotencyStore. After the
              job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;

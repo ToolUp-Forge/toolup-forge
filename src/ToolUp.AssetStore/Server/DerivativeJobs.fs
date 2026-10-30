@@ -339,7 +339,7 @@ type DerivativeJobCoordinator
                         let message = sprintf "derivation job scheduling failed: %A" scheduleError
                         logger.Warn(sprintf "[AssetStore] %s" message)
                         return StatusFailed(message, 0, DateTimeOffset.UtcNow)
-                    | Ok jobId ->
+                    | Ok(Scheduled jobId | Coalesced jobId) ->
                         let correlationId = string jobId
                         let pending = StatusPending(correlationId, DateTimeOffset.UtcNow)
 
@@ -360,7 +360,10 @@ type DerivativeJobCoordinator
 
                         match! scheduler.TriggerOnce(scopeContainer, jobId, "_assetstore") with
                         | Ok() -> ()
-                        | Error message -> logger.Warn(sprintf "[AssetStore] derivation TriggerOnce failed: %s" message)
+                        | Error refusal ->
+                            logger.Warn(
+                                sprintf "[AssetStore] derivation TriggerOnce failed: %s" (TriggerError.message refusal)
+                            )
 
                         return pending
             finally

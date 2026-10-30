@@ -1749,13 +1749,13 @@ type private HeldScheduler() =
         member _.Schedule(registration: JobRegistration) = async {
             do! released.Task |> Async.AwaitTask
             scheduled.Enqueue registration
-            return Ok(Guid.NewGuid())
+            return Ok(Scheduled(Guid.NewGuid()))
         }
 
         member _.Schedule(_: ResolvedScope, registration: JobRegistration) = async {
             do! released.Task |> Async.AwaitTask
             scheduled.Enqueue registration
-            return Ok(Guid.NewGuid())
+            return Ok(Scheduled(Guid.NewGuid()))
         }
 
         member _.Cancel(_, _) = async { return () }

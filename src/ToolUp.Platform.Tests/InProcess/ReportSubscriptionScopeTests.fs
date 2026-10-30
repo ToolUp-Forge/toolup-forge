@@ -1082,9 +1082,11 @@ let reissueTests =
                 { new IJobScheduler with
                     member _.RegisterHandler(_, _) = ()
                     member _.RegisterHandlerAsync(_, _) = async { return Ok() }
-                    member _.Schedule(_: JobRegistration) = async { return Ok(Guid.NewGuid()) }
+                    member _.Schedule(_: JobRegistration) = async { return Ok(Scheduled(Guid.NewGuid())) }
 
-                    member _.Schedule(_: ResolvedScope, _: JobRegistration) = async { return Ok(Guid.NewGuid()) }
+                    member _.Schedule(_: ResolvedScope, _: JobRegistration) = async {
+                        return Ok(Scheduled(Guid.NewGuid()))
+                    }
 
                     member _.Cancel(_, _) = async { return () }
                     member _.Disable(_, _) = async { return () }

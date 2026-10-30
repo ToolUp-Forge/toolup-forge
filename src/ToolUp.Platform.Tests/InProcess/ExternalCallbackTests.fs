@@ -617,12 +617,12 @@ let private scheduleAndHandOff (fixture: Fixture) (handler: IJobHandler) : strin
 
     let jobId =
         match scheduler.Schedule registration |> Async.RunSynchronously with
-        | Ok id -> id
+        | Ok(Scheduled id | Coalesced id) -> id
         | Error e -> failtestf "schedule failed: %A" e
 
     match scheduler.TriggerOnce(scope, jobId, "test") |> Async.RunSynchronously with
     | Ok() -> ()
-    | Error e -> failtestf "TriggerOnce failed: %s" e
+    | Error e -> failtestf "TriggerOnce failed: %A" e
 
     // Wait for the hand-off to land. `AwaitingExternal` is written before
     // the lease is released, so the row is the FIRST settle signal — but

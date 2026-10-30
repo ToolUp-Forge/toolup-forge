@@ -282,7 +282,7 @@ module RecomputeJobHandler =
         (scheduler: IJobScheduler)
         (scopeId: string)
         (fact: Fact)
-        : Async<Result<JobId, ScheduleError>> =
+        : Async<Result<ScheduleOutcome, ScheduleError>> =
         scheduler.Schedule(registrationFor scopeId fact)
 
     /// Schedule a recompute job for one invalidated fact under the scope the
@@ -295,7 +295,7 @@ module RecomputeJobHandler =
         (scheduler: IJobScheduler)
         (scope: ResolvedScope)
         (fact: Fact)
-        : Async<Result<JobId, ScheduleError>> =
+        : Async<Result<ScheduleOutcome, ScheduleError>> =
         scheduler.Schedule(scope, registrationFor scope.ScopeId fact)
 
     /// Apply each invalidated head's metric `RecomputePolicy`. `schedule`
@@ -305,7 +305,7 @@ module RecomputeJobHandler =
         (scheduler: IJobScheduler)
         (registry: Grounding.IMetricRegistry option)
         (scopeId: string)
-        (schedule: Fact -> Async<Result<JobId, ScheduleError>>)
+        (schedule: Fact -> Async<Result<ScheduleOutcome, ScheduleError>>)
         (heads: Fact list)
         : Async<InvalidationOutcome list> =
         async {
@@ -317,7 +317,7 @@ module RecomputeJobHandler =
                     let! scheduled = schedule fact
 
                     match scheduled with
-                    | Ok jobId ->
+                    | Ok(Scheduled jobId | Coalesced jobId) ->
                         // Manual-trigger job — fire it now so the recompute
                         // actually runs (invalidation is the trigger). The
                         // scope id here is the job's LOOKUP key, never a

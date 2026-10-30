@@ -617,18 +617,18 @@ type IngestionBackgroundService
 
             try
                 match! scheduler.Schedule registration with
-                | Ok jobId ->
+                | Ok(Scheduled jobId | Coalesced jobId) ->
                     // Manual trigger sits until fired; dispatch it now so
                     // the retry runs (the handler applies the backoff).
                     match! scheduler.TriggerOnce(doc.ScopeId, jobId, "system") with
                     | Ok() -> ()
-                    | Error err ->
+                    | Error refusal ->
                         logger.Warn(
                             sprintf
                                 "[IngestionBackgroundService] event=retry_trigger_failed doc=%s chunk=%s: %s; dead-lettering"
                                 doc.DocumentId
                                 chunkId
-                                err
+                                (TriggerError.message refusal)
                         )
 
                         do! deadLetterNow ()

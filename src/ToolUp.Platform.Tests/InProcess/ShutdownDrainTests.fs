@@ -471,12 +471,12 @@ let private jobScheduler =
 
             let jobId =
                 match scheduled with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "schedule failed: %A" e
 
             match! api.TriggerOnce("scope-869", jobId, "test") with
             | Ok() -> ()
-            | Error e -> failtestf "TriggerOnce failed: %s" e
+            | Error e -> failtestf "TriggerOnce failed: %A" e
 
             let! running = waitUntil 10000 (fun () -> started.Task.IsCompleted)
             Expect.isTrue running "the dispatch is in flight"

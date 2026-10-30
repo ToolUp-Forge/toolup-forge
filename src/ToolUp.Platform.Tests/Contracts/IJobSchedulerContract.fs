@@ -71,9 +71,10 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             member _.Execute(_) = async { return JobResult.Success }
         }
 
-    let okOrFail label result =
+    /// The job id a `Schedule` named, created or coalesced.
+    let jobIdOrFail label result =
         match result with
-        | Ok v -> v
+        | Ok outcome -> ScheduleOutcome.jobId outcome
         | Error err -> failtestf "%s: expected Ok, got %A" label err
 
     testList $"{name} — IJobScheduler contract" [
@@ -128,7 +129,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let registration = mkRegistration scopeA "h" (CronTrigger "0 9 * * *")
 
             let jobId =
-                okOrFail "Schedule" (scheduler.Schedule registration |> Async.RunSynchronously)
+                jobIdOrFail "Schedule" (scheduler.Schedule registration |> Async.RunSynchronously)
 
             Expect.notEqual jobId Guid.Empty "non-empty JobId returned"
         }
@@ -141,14 +142,15 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let registration = mkRegistration scopeA "h" Manual
 
             let _ =
-                okOrFail "Schedule (Manual)" (scheduler.Schedule registration |> Async.RunSynchronously)
+                jobIdOrFail "Schedule (Manual)" (scheduler.Schedule registration |> Async.RunSynchronously)
 
             ()
         }
 
         // ─── Idempotency ──────────────────────────────────────
 
-        testCaseAsync "Idempotency: re-Schedule same key inside TTL returns existing JobId"
+        testCaseAsync
+            "Idempotency: re-Schedule same key inside TTL is Coalesced onto the existing job and creates nothing"
         <| async {
             let scheduler, scopeA, _ = factory ()
             scheduler.RegisterHandler("h", nullHandler)
@@ -162,13 +164,26 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
                         }
             }
 
-            let firstId =
-                okOrFail "first Schedule" (scheduler.Schedule registration |> Async.RunSynchronously)
+            let! first = scheduler.Schedule registration
+            let! second = scheduler.Schedule registration
 
-            let secondId =
-                okOrFail "second Schedule" (scheduler.Schedule registration |> Async.RunSynchronously)
+            match first, second with
+            | Ok(Scheduled firstId), Ok(Coalesced secondId) ->
+                Expect.equal secondId firstId "the second Schedule names the job the first created"
+            | other -> failtestf "expected Scheduled then Coalesced, got %A" other
 
-            Expect.equal secondId firstId "same key inside TTL returns same JobId"
+            let! jobs = scheduler.ListJobs scopeA
+            Expect.hasLength jobs 1 "the coalesced Schedule created no second job"
+        }
+
+        testCaseAsync "Schedule without an idempotency key is Scheduled"
+        <| async {
+            let scheduler, scopeA, _ = factory ()
+            scheduler.RegisterHandler("h", nullHandler)
+
+            match! scheduler.Schedule(mkRegistration scopeA "h" Manual) with
+            | Ok(Scheduled _) -> ()
+            | other -> failtestf "expected Scheduled, got %A" other
         }
 
         testCaseAsync "Idempotency: different key gets a fresh JobId"
@@ -186,8 +201,11 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
                     Idempotency = Some { Key = "k2"; TtlSeconds = 3600 }
             }
 
-            let id1 = okOrFail "Schedule k1" (scheduler.Schedule r1 |> Async.RunSynchronously)
-            let id2 = okOrFail "Schedule k2" (scheduler.Schedule r2 |> Async.RunSynchronously)
+            let id1 =
+                jobIdOrFail "Schedule k1" (scheduler.Schedule r1 |> Async.RunSynchronously)
+
+            let id2 =
+                jobIdOrFail "Schedule k2" (scheduler.Schedule r2 |> Async.RunSynchronously)
 
             Expect.notEqual id1 id2 "different keys → different JobIds"
         }
@@ -207,10 +225,10 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             }
 
             let aId =
-                okOrFail "Schedule A" (scheduler.Schedule registration |> Async.RunSynchronously)
+                jobIdOrFail "Schedule A" (scheduler.Schedule registration |> Async.RunSynchronously)
 
             let bId =
-                okOrFail
+                jobIdOrFail
                     "Schedule B"
                     (scheduler.Schedule { registration with ScopeId = scopeB }
                      |> Async.RunSynchronously)
@@ -225,7 +243,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let scheduler, scopeA, _ = factory ()
             scheduler.RegisterHandler("h", nullHandler)
             let r = mkRegistration scopeA "h" Manual
-            let jobId = okOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
+            let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
 
             do! scheduler.Cancel(scopeA, jobId)
 
@@ -239,7 +257,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let scheduler, scopeA, _ = factory ()
             scheduler.RegisterHandler("h", nullHandler)
             let r = mkRegistration scopeA "h" Manual
-            let jobId = okOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
+            let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
 
             do! scheduler.Cancel(scopeA, jobId)
             do! scheduler.Cancel(scopeA, jobId) // second call must not throw
@@ -250,7 +268,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let scheduler, scopeA, _ = factory ()
             scheduler.RegisterHandler("h", nullHandler)
             let r = mkRegistration scopeA "h" (CronTrigger "0 9 * * *")
-            let jobId = okOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
+            let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
 
             do! scheduler.Disable(scopeA, jobId)
 
@@ -283,12 +301,12 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let scheduler, scopeA, _ = factory ()
             scheduler.RegisterHandler("h", nullHandler)
             let r = mkRegistration scopeA "h" Manual
-            let jobId = okOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
+            let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
             do! scheduler.Cancel(scopeA, jobId)
 
             match! scheduler.TriggerOnce(scopeA, jobId, "alice") with
-            | Error _ -> ()
-            | Ok _ -> failtest "expected Error when triggering a cancelled job"
+            | Error TriggerError.JobCancelled -> ()
+            | other -> failtestf "expected Error JobCancelled when triggering a cancelled job, got %A" other
         }
 
         // Phase 1064 — ruling 12: `Disable` stops dispatch, and a manual
@@ -310,12 +328,12 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             )
 
             let r = mkRegistration scopeA "h" Manual
-            let jobId = okOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
+            let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
             do! scheduler.Disable(scopeA, jobId)
 
             match! scheduler.TriggerOnce(scopeA, jobId, "alice") with
-            | Error _ -> ()
-            | Ok _ -> failtest "expected Error when triggering a disabled job"
+            | Error TriggerError.JobDisabled -> ()
+            | other -> failtestf "expected Error JobDisabled when triggering a disabled job, got %A" other
 
             // A would-be dispatch is asynchronous on both schedulers; give
             // it time to land before asserting it did not.
@@ -324,6 +342,53 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let! runs = scheduler.GetRecentRuns(scopeA, jobId, 10)
             Expect.isEmpty runs "a refused manual fire writes no run row"
             Expect.equal executed.Value 0 "and runs no handler"
+        }
+
+        // A stopping scheduler starts nothing, and says so: answering `Ok`
+        // would report a run that never happens.
+        testCaseAsync "TriggerOnce while the scheduler is stopping returns SchedulerStopping and writes no run row"
+        <| async {
+            let scheduler, scopeA, _ = factory ()
+            let executed = ref 0
+
+            scheduler.RegisterHandler(
+                "h",
+                { new IJobHandler with
+                    member _.Execute(_) = async {
+                        Threading.Interlocked.Increment(&executed.contents) |> ignore
+                        return JobResult.Success
+                    }
+                }
+            )
+
+            let jobId =
+                jobIdOrFail "Schedule" (scheduler.Schedule(mkRegistration scopeA "h" Manual) |> Async.RunSynchronously)
+
+            match box scheduler with
+            | :? Microsoft.Extensions.Hosting.IHostedService as hosted ->
+                do! hosted.StopAsync Threading.CancellationToken.None |> Async.AwaitTask
+
+                match! scheduler.TriggerOnce(scopeA, jobId, "alice") with
+                | Error TriggerError.SchedulerStopping -> ()
+                | other ->
+                    failtestf "expected Error SchedulerStopping after the host stopped the scheduler, got %A" other
+
+                do! Async.Sleep 500
+                let! runs = scheduler.GetRecentRuns(scopeA, jobId, 10)
+                Expect.isEmpty runs "a refused manual fire writes no run row"
+                Expect.equal executed.Value 0 "and runs no handler"
+            | _ -> skiptest "this scheduler is not a hosted service, so the pack cannot stop it"
+        }
+
+        testCaseAsync "TriggerOnce on an unknown job returns JobNotFound"
+        <| async {
+            let scheduler, scopeA, _ = factory ()
+            let unknown = Guid.NewGuid()
+
+            match! scheduler.TriggerOnce(scopeA, unknown, "alice") with
+            | Error(TriggerError.JobNotFound(scope, jobId)) ->
+                Expect.equal (scope, jobId) (scopeA, unknown) "the refusal names the scope and the job"
+            | other -> failtestf "expected Error JobNotFound, got %A" other
         }
 
         // ─── Read paths ──────────────────────────────────────
@@ -343,8 +408,8 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             scheduler.RegisterHandler("h", nullHandler)
 
             let r1 = mkRegistration scopeA "h" Manual
-            let id1 = okOrFail "Schedule 1" (scheduler.Schedule r1 |> Async.RunSynchronously)
-            let id2 = okOrFail "Schedule 2" (scheduler.Schedule r1 |> Async.RunSynchronously)
+            let id1 = jobIdOrFail "Schedule 1" (scheduler.Schedule r1 |> Async.RunSynchronously)
+            let id2 = jobIdOrFail "Schedule 2" (scheduler.Schedule r1 |> Async.RunSynchronously)
 
             let! jobs = scheduler.ListJobs scopeA
             let ids = jobs |> List.map _.JobId |> Set.ofList
@@ -357,7 +422,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let scheduler, scopeA, scopeB = factory ()
             scheduler.RegisterHandler("h", nullHandler)
             let r = mkRegistration scopeA "h" Manual
-            let _ = okOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
+            let _ = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
 
             let! bJobs = scheduler.ListJobs scopeB
             Expect.isEmpty bJobs "scope B sees no scope A jobs"
@@ -395,7 +460,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             }
 
             let jobId =
-                okOrFail "Schedule" (scheduler.Schedule registration |> Async.RunSynchronously)
+                jobIdOrFail "Schedule" (scheduler.Schedule registration |> Async.RunSynchronously)
 
             match! scheduler.Get(scopeA, jobId) with
             | Some job ->
@@ -443,16 +508,18 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             }
 
             let aId =
-                okOrFail "Schedule A" (scheduler.Schedule(keyed (Some shared)) |> Async.RunSynchronously)
+                jobIdOrFail "Schedule A" (scheduler.Schedule(keyed (Some shared)) |> Async.RunSynchronously)
 
             let bId =
-                okOrFail "Schedule B" (scheduler.Schedule(keyed (Some shared)) |> Async.RunSynchronously)
+                jobIdOrFail "Schedule B" (scheduler.Schedule(keyed (Some shared)) |> Async.RunSynchronously)
 
             let otherId =
-                okOrFail "Schedule other" (scheduler.Schedule(keyed (Some "tenant-reports")) |> Async.RunSynchronously)
+                jobIdOrFail
+                    "Schedule other"
+                    (scheduler.Schedule(keyed (Some "tenant-reports")) |> Async.RunSynchronously)
 
             let unkeyedId =
-                okOrFail "Schedule unkeyed" (scheduler.Schedule(keyed None) |> Async.RunSynchronously)
+                jobIdOrFail "Schedule unkeyed" (scheduler.Schedule(keyed None) |> Async.RunSynchronously)
 
             let! listed = scheduler.ListJobs scopeA
 
@@ -539,12 +606,12 @@ let restartTests (name: string) (factory: unit -> RestartableScheduler) =
 
             let jobId =
                 match first.Schedule registration |> Async.RunSynchronously with
-                | Ok id -> id
+                | Ok outcome -> ScheduleOutcome.jobId outcome
                 | Error e -> failtestf "Schedule: %A" e
 
             match! first.TriggerOnce(scope, jobId, "alice") with
             | Ok() -> ()
-            | Error e -> failtestf "TriggerOnce (before restart): %s" e
+            | Error e -> failtestf "TriggerOnce (before restart): %A" e
 
             Expect.isTrue (waitFor 30_000 (fun () -> not firstSeen.IsEmpty)) "the handler ran before the restart"
 
@@ -578,7 +645,7 @@ let restartTests (name: string) (factory: unit -> RestartableScheduler) =
 
             match! second.TriggerOnce(scope, jobId, "bob") with
             | Ok() -> ()
-            | Error e -> failtestf "TriggerOnce (after restart): %s" e
+            | Error e -> failtestf "TriggerOnce (after restart): %A" e
 
             Expect.isTrue
                 (waitFor 30_000 (fun () -> not secondSeen.IsEmpty))
@@ -684,15 +751,15 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
         Tags = Map.empty
     }
 
-    let scheduled label (result: Result<JobId, ScheduleError>) : JobId =
+    let scheduled label (result: Result<ScheduleOutcome, ScheduleError>) : JobId =
         match result with
-        | Ok id -> id
+        | Ok outcome -> ScheduleOutcome.jobId outcome
         | Error e -> failtestf "%s: %A" label e
 
     let fire (scheduler: IJobScheduler) (scopeId: string) (jobId: JobId) = async {
         match! scheduler.TriggerOnce(scopeId, jobId, "alice") with
         | Ok() -> ()
-        | Error e -> failtestf "TriggerOnce: %s" e
+        | Error e -> failtestf "TriggerOnce: %A" e
     }
 
     testList $"{name} — the carried scope mint (Phases 818 and 935)" [

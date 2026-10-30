@@ -58,7 +58,7 @@ type private InMemoryJobScheduler() =
             }
 
             jobs[id] <- def
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Cancel(_scopeId, jobId) = async {
@@ -293,7 +293,7 @@ let tests =
 
             let pollJobId =
                 match scheduled with
-                | Ok id -> id
+                | Ok outcome -> ScheduleOutcome.jobId outcome
                 | Error e -> failwithf "setup schedule failed: %A" e
 
             let handler = ScheduledDeprovisionJobHandler.create (servicesWith sched)

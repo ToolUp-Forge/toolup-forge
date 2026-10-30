@@ -444,7 +444,8 @@ module GroundedNarrativeTrigger =
         registry.DependentOn(heads |> List.map _.Metric.Value |> List.distinct)
 
     /// The data-arrival reaction: enqueue (schedule + fire) one job per run
-    /// whose metrics the change invalidated. Returns the run keys enqueued.
+    /// whose metrics the change invalidated. Returns the run keys this change
+    /// enqueued; a run whose job it coalesced onto is not among them.
     let enqueueFor
         (lineage: ILineageStore)
         (store: IFactStore)
@@ -467,10 +468,15 @@ module GroundedNarrativeTrigger =
                     let registration = registrationFor scopeId definition.Key invalidated
                     let! scheduled = scheduler.Schedule(resolved, registration)
 
+                    // Only a job this change created is fired. A replayed change
+                    // inside the idempotency window coalesces onto the job the
+                    // first delivery created and fired, so it fires nothing:
+                    // the narrative runs once.
                     match scheduled with
-                    | Ok jobId ->
+                    | Ok(Scheduled jobId) ->
                         let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                         enqueued <- definition.Key :: enqueued
+                    | Ok(Coalesced _)
                     | Error _ -> ()
 
                 return List.rev enqueued

@@ -250,8 +250,8 @@ type JobSchedulerSmoke(scheduler: IJobScheduler, eventStore: IEventStore) =
 
                     match scheduleOutcome with
                     | Error err -> return Fail(sprintf "Schedule failed: %A" err)
-                    | Ok jobId ->
-                        scheduledJobId <- Some jobId
+                    | Ok outcome ->
+                        scheduledJobId <- Some(ScheduleOutcome.jobId outcome)
 
                         let! events = eventStore.ReadByType(SmokeTest.SentinelScope, "JobScheduled")
 

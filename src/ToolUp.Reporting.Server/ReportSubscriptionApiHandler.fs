@@ -196,7 +196,7 @@ let private syncJob
 
         let! scheduled =
             match live with
-            | Some job when job.Trigger = registration.Trigger -> async { return Result.Ok job.JobId }
+            | Some job when job.Trigger = registration.Trigger -> async { return Result.Ok(Coalesced job.JobId) }
             | _ -> async {
                 match live with
                 | Some stale -> do! deps.Scheduler.Cancel(subscription.ScopeId, stale.JobId)
@@ -210,14 +210,17 @@ let private syncJob
 
         let! restamped =
             match scheduled with
-            | Result.Ok jobId when carried && restamp -> restampJob deps requestScope subscription.ScopeId jobId
+            | Result.Ok outcome when carried && restamp ->
+                restampJob deps requestScope subscription.ScopeId (ScheduleOutcome.jobId outcome)
             | _ -> async { return Ok() }
 
         match scheduled, restamped with
         | Result.Error(InvalidCron(expr, reason)), _ -> return Error(InvalidSchedule(expr, reason))
         | Result.Error err, _ -> return Error(SchedulerUnavailable(sprintf "%A" err))
         | Result.Ok _, Error e -> return Error e
-        | Result.Ok jobId, Ok() ->
+        | Result.Ok outcome, Ok() ->
+            let jobId = ScheduleOutcome.jobId outcome
+
             if subscription.Enabled then
                 do! deps.Scheduler.Enable(subscription.ScopeId, jobId)
             else
@@ -372,7 +375,7 @@ let private build
                         return
                             match fired with
                             | Result.Ok() -> Ok()
-                            | Result.Error e -> Error(SchedulerUnavailable e)
+                            | Result.Error refusal -> Error(SchedulerUnavailable(TriggerError.message refusal))
             }
     }
 

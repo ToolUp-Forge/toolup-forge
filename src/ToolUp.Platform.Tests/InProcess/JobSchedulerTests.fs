@@ -580,7 +580,7 @@ let private scheduleManualJob (fixture: HandoffFixture) (handler: IJobHandler) (
     }
 
     match scheduler.Schedule registration |> Async.RunSynchronously with
-    | Ok jobId -> scope, jobId
+    | Ok(Scheduled jobId | Coalesced jobId) -> scope, jobId
     | Error e -> failtestf "schedule failed: %A" e
 
 let private triggerOnce (fixture: HandoffFixture) (scope: string) (jobId: JobId) =
@@ -589,7 +589,7 @@ let private triggerOnce (fixture: HandoffFixture) (scope: string) (jobId: JobId)
         |> Async.RunSynchronously
     with
     | Ok() -> ()
-    | Error e -> failtestf "TriggerOnce failed: %s" e
+    | Error e -> failtestf "TriggerOnce failed: %A" e
 
 /// The newest run row for a job, or `None`.
 let private latestRun (fixture: HandoffFixture) (scope: string) (jobId: JobId) : JobRun option =
@@ -1174,7 +1174,7 @@ let private handoffTests =
 
             let jobId =
                 match iface.Schedule registration |> Async.RunSynchronously with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "schedule failed: %A" e
 
             // Reconciliation is a no-op, and safe to call.
@@ -1183,7 +1183,7 @@ let private handoffTests =
             // An ordinary handler still behaves exactly as before (GP 11).
             match iface.TriggerOnce(scope, jobId, "test") |> Async.RunSynchronously with
             | Ok() -> ()
-            | Error e -> failtestf "TriggerOnce failed: %s" e
+            | Error e -> failtestf "TriggerOnce failed: %A" e
 
             Expect.isTrue (waitFor 5000 (fun () -> handler.Executed.Length >= 1)) "the in-process handler ran"
 
@@ -1426,7 +1426,7 @@ let private defect1064Tests =
 
             let jobId =
                 match ijs.Schedule registration |> Async.RunSynchronously with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "schedule failed: %A" e
 
             triggerOnce fixture scope jobId
@@ -1554,7 +1554,7 @@ let private restartContractTests =
 let private carriedScopeContractTests =
     IJobSchedulerContract.carriedScopeTests "InProcessJobScheduler" restartBinding
 
-let private pinJobId (jobId: JobId) = jobId
+let private pinJobId (outcome: ScheduleOutcome) = ScheduleOutcome.jobId outcome
 
 /// Captured from the tree before the eleven terminal sites moved onto
 /// `JobLifecycle.transition`; regenerate only for a deliberate behaviour change.
@@ -2011,6 +2011,215 @@ let private pinTests =
         }
     ]
 
+// ─── JobLifecycle — one transition, one apply ────────────────────────
+//
+// The pin above holds the scheduler to what it did before; these hold the
+// function itself to the properties the pin cannot name: an outcome ends the
+// same way whoever reports it, only the dispatch loop re-advances
+// `NextRunAt`, and `apply` performs a transition in one order.
+
+let private lifecycleNow = DateTime(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc)
+
+let private lifecycleJob: JobDefinition = {
+    JobId = Guid.Parse "11111111-1111-1111-1111-111111111111"
+    ScopeId = "team-lifecycle"
+    Handler = "lifecycle-handler"
+    Payload = "{}"
+    Trigger = CronTrigger "0 * * * *"
+    Idempotency = None
+    RetryPolicy = {
+        JobRetryPolicy.defaults with
+            MaxAttempts = 3
+    }
+    ShardKey = None
+    Precision = Minute
+    Status = Active
+    CreatedAt = lifecycleNow.AddDays -1.0
+    CreatedBy = "test"
+    NextRunAt = Some(lifecycleNow.AddMinutes -1.0)
+    LastRunAt = None
+    LastRunStatus = None
+    LastRunError = None
+    ConsecutiveFailures = 2
+    Tags = Map.empty
+}
+
+let private lifecycleHandle: ExternalHandle = {
+    HandleId = Guid.Parse "22222222-2222-2222-2222-222222222222"
+    Backend = "gpu-pool"
+    ScopeId = "team-lifecycle"
+    NativeRef = "native-1"
+    SubmittedAt = lifecycleNow.AddMinutes -10.0
+}
+
+let private lifecycleRun (attempt: int) : JobRun = {
+    RunId = Guid.Parse "33333333-3333-3333-3333-333333333333"
+    JobId = lifecycleJob.JobId
+    ScopeId = lifecycleJob.ScopeId
+    Attempt = attempt
+    StartedAt = lifecycleNow.AddMinutes -10.0
+    CompletedAt = None
+    Status = Running
+    Error = None
+    DurationMs = None
+    ExternalHandle = None
+}
+
+let private ended (origin: JobLifecycle.TransitionOrigin) (attempt: int) (outcome: JobLifecycle.RunOutcome) =
+    JobLifecycle.transition origin (Some lifecycleJob) (lifecycleRun attempt) lifecycleNow outcome
+
+let private externally (outcome: ExternalOutcome) =
+    JobLifecycle.External(lifecycleHandle, outcome)
+
+let private eventsOf (eventType: string) (t: JobLifecycle.Transition) =
+    t.Events |> List.filter (fun e -> e.EventType = eventType)
+
+let private lifecycleTests =
+    testList "JobLifecycle — one transition, one apply" [
+
+        test "a backend's terminal failure dead-letters with the bytes an in-process one does" {
+            let inProcess =
+                ended (JobLifecycle.Loop(600_000L, None)) 1 (JobLifecycle.Terminal "boom")
+
+            let external =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "boom"; Retriable = false }))
+                    1
+                    (JobLifecycle.Terminal "boom")
+
+            Expect.equal
+                (eventsOf "JobDeadLettered" external)
+                (eventsOf "JobDeadLettered" inProcess)
+                "the JobDeadLettered payload is byte-identical"
+
+            Expect.equal external.Notify inProcess.Notify "the same notification"
+            Expect.equal external.Row inProcess.Row "the same row (the awaited time equals the attempt's duration here)"
+
+            Expect.equal
+                (external.Events |> List.map _.EventType)
+                [ "JobExternalReconciled"; "JobDeadLettered" ]
+                "the external companion event rides beside it, never instead of it"
+        }
+
+        test "a backend's success completes with the bytes an in-process success does" {
+            let inProcess = ended (JobLifecycle.Loop(600_000L, None)) 2 JobLifecycle.Completed
+
+            let external =
+                ended (externally (ExternalOutcome.Succeeded "s3://result")) 2 JobLifecycle.Completed
+
+            Expect.equal (eventsOf "JobCompleted" external) (eventsOf "JobCompleted" inProcess) "JobCompleted"
+            Expect.equal external.Definition.Value.ConsecutiveFailures 0 "success resets the failure budget"
+        }
+
+        test "only the dispatch loop re-advances NextRunAt; a reconciliation never does" {
+            let loop = ended (JobLifecycle.Loop(5L, None)) 1 JobLifecycle.Completed
+
+            let external =
+                ended (externally (ExternalOutcome.Succeeded "s3://result")) 1 JobLifecycle.Completed
+
+            Expect.equal
+                loop.Definition.Value.NextRunAt
+                (SchedulerPolicy.computeNextRunAt lifecycleJob.Trigger lifecycleNow)
+                "the loop computes the next occurrence"
+
+            Expect.equal external.Definition.Value.NextRunAt lifecycleJob.NextRunAt "the reconciliation leaves it"
+        }
+
+        test "a retriable failure retries in the loop without folding, and folds and retries outside it" {
+            let loop = ended (JobLifecycle.Loop(5L, None)) 1 (JobLifecycle.Retriable "blip")
+            Expect.equal loop.Continue (JobLifecycle.RetryAt 2) "the loop retries at the next attempt"
+            Expect.isNone loop.Definition "and folds nothing until it ends"
+
+            let external =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "blip"; Retriable = true }))
+                    1
+                    (JobLifecycle.Retriable "blip")
+
+            Expect.equal external.Continue (JobLifecycle.RetryAt 2) "an external retriable failure starts attempt 2"
+
+            Expect.equal
+                (external.Definition |> Option.map _.LastRunStatus)
+                (Some(Some Failed))
+                "and records the failed attempt"
+        }
+
+        test "the retry budget decides between a retry and a dead letter" {
+            let loop = ended (JobLifecycle.Loop(5L, None)) 3 (JobLifecycle.Retriable "blip")
+            Expect.equal loop.Continue JobLifecycle.Exhausted "the loop's last attempt is promoted"
+
+            let external =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "blip"; Retriable = true }))
+                    3
+                    (JobLifecycle.Retriable "blip")
+
+            Expect.equal external.Continue JobLifecycle.Stop "a backend's spent attempt is the run's end"
+            Expect.equal (external.Row |> Option.map _.Status) (Some DeadLettered) "dead-lettered"
+            Expect.equal external.Definition.Value.ConsecutiveFailures 3 "and counted"
+        }
+
+        test "a definition that no longer exists abandons the run whatever the outcome" {
+            for outcome in
+                [
+                    JobLifecycle.Completed
+                    JobLifecycle.Terminal "boom"
+                    JobLifecycle.ExternallyCancelled
+                ] do
+                let t =
+                    JobLifecycle.transition JobLifecycle.Reconciliation None (lifecycleRun 1) lifecycleNow outcome
+
+                Expect.equal (t.Row |> Option.map _.Status) (Some DeadLettered) "the run leaves AwaitingExternal"
+                Expect.isEmpty t.Events "with nothing to announce"
+                Expect.isNone t.Definition "and nothing to fold"
+        }
+
+        testAsync "apply writes the row, the gate, the events, the notification and the definition, in that order" {
+            let log = ResizeArray<string>()
+
+            let effects: JobLifecycle.LifecycleEffects = {
+                RecordRun = fun _ -> async { log.Add "row" }
+                Emit = fun _ e -> async { log.Add("event " + e.EventType) }
+                Notify = fun _ _ -> async { log.Add "notify" }
+                Update = fun _ -> async { log.Add "definition" }
+            }
+
+            let t =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "boom"; Retriable = false }))
+                    1
+                    (JobLifecycle.Terminal "boom")
+
+            let! announced =
+                JobLifecycle.apply
+                    effects
+                    (async {
+                        log.Add "gate"
+                        return true
+                    })
+                    t
+
+            Expect.isTrue announced "an open gate lets the rest through"
+
+            Expect.equal
+                (List.ofSeq log)
+                [
+                    "row"
+                    "gate"
+                    "event JobExternalReconciled"
+                    "event JobDeadLettered"
+                    "notify"
+                    "definition"
+                ]
+                "row, gate, events, notification, definition"
+
+            log.Clear()
+            let! refused = JobLifecycle.apply effects (async { return false }) t
+            Expect.isFalse refused "a closed gate is reported"
+            Expect.equal (List.ofSeq log) [ "row" ] "and stops everything after the row"
+        }
+    ]
+
 let tests =
     let factory () =
         let scheduler = buildScheduler () :> IJobScheduler
@@ -2028,4 +2237,5 @@ let tests =
         handoffTests
         defect1064Tests
         pinTests
+        lifecycleTests
     ]

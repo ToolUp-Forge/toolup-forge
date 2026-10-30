@@ -185,7 +185,7 @@ type RecordingScheduler() =
                                     Tags = registration.Tags
                             }
 
-                            return Result.Ok job.JobId
+                            return Result.Ok(Coalesced job.JobId)
                         | None ->
                             let jobId = Guid.NewGuid()
 
@@ -210,7 +210,7 @@ type RecordingScheduler() =
                                 Tags = registration.Tags
                             }
 
-                            return Result.Ok jobId
+                            return Result.Ok(Scheduled jobId)
             | _ -> return Result.Error(ScheduleError.StorageFailure "this fake only schedules cron triggers")
         }
 
@@ -252,7 +252,7 @@ type RecordingScheduler() =
             | true, _ ->
                 lock triggered (fun () -> triggered.Add(jobId, byUserId))
                 return Result.Ok()
-            | _ -> return Result.Error "unknown job"
+            | _ -> return Result.Error(TriggerError.DispatchRefused "unknown job")
         }
 
         member _.NotifyEventWritten(_, _, _) = async { return () }

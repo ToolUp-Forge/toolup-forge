@@ -508,7 +508,7 @@ let private nullScheduler =
                     ScopeId = scope.ScopeId
             }
 
-        member _.Schedule(_) = async { return Ok(Guid.NewGuid()) }
+        member _.Schedule(_) = async { return Ok(Scheduled(Guid.NewGuid())) }
         member _.Cancel(_, _) = async { return () }
         member _.Disable(_, _) = async { return () }
         member _.Enable(_, _) = async { return () }
