@@ -25,7 +25,7 @@ open ToolUp.Platform.HealthChecks
 // point.
 
 [<Literal>]
-let private healthContainer = "_platform"
+let private healthContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private healthProbePrefix = "health/probe"

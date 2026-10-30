@@ -4328,7 +4328,6 @@ let main args =
     //        the tree). Also a leg of `VerifyAll` in the fast and full lanes.
     let scopeLiteralCeilings: Map<string, int> =
         Map.ofList [
-            "AwsS3Storage", 1
             "AzureBlobStorage", 1
             "AzureSpeechTranscriptionProvider", 6
             "ClaudeAIProvider", 2
