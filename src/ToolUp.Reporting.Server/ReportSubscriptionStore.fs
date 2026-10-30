@@ -77,7 +77,7 @@ type IStandingSubscriptionLedger =
 module ReportSubscriptionStore =
 
     [<Literal>]
-    let private PlatformContainer = "_platform"
+    let private PlatformContainer = ScopeKey.PlatformContainer
 
     let private scopePrefix (scopeId: string) =
         $"{ReportSubscription.StorePrefix}/{scopeId}/"

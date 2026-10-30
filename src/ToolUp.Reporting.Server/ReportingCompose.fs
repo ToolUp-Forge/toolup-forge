@@ -491,7 +491,8 @@ let seedStandingSubscriptions
                     toRetire
                     |> Set.toList
                     |> List.map (fun (key, scopeId) -> async {
-                        let api = ReportSubscriptionApiHandler.create deps.Api "_platform" scopeId
+                        let api =
+                            ReportSubscriptionApiHandler.create deps.Api AuditSubject.PlatformSentinelUserId scopeId
 
                         match! api.DeleteSubscription(StandingReportSubscription.subscriptionId key) with
                         | Ok()
