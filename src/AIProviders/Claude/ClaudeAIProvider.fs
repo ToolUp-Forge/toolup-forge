@@ -194,7 +194,7 @@ type ClaudeAIProvider
     /// reconstruction. `maxTokens` defaults to `DefaultMaxTokens` (4096).
     new(secretStore: ISecretStore, ?model: string, ?maxTokens: int) =
         ClaudeAIProvider(
-            (fun () -> secretStore.GetSecret("_platform", "ANTHROPIC_API_KEY")),
+            (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, "ANTHROPIC_API_KEY")),
             defaultArg model DefaultModel,
             defaultArg maxTokens DefaultMaxTokens,
             sharedClient.Value,
