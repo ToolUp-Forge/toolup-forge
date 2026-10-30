@@ -25,6 +25,69 @@ open ToolUp.Platform.DataObjectStore
 //   * registration emits the artifact → dataset-version lineage edge (8a);
 //   * scope isolation (GP 4).
 
+/// A data-object store that counts the reads a caller makes — the listings
+/// of a whole scope, the single-object reads, the content reads — and
+/// forwards every call (including the version claim, so an index over it
+/// is maintained) to `inner`. The read-cost pins of the sidecar stores are
+/// written over it.
+type CountingDataObjectStore(inner: IDataObjectStore) =
+    let mutable listings = 0
+    let mutable objectReads = 0
+    let mutable contentReads = 0
+
+    /// `ListObjects` calls — each one reads the metadata of every object in
+    /// the scope.
+    member _.Listings = listings
+    /// `Get` calls.
+    member _.ObjectReads = objectReads
+    /// `GetContent` calls.
+    member _.ContentReads = contentReads
+
+    /// Zero every counter.
+    member _.Reset() =
+        listings <- 0
+        objectReads <- 0
+        contentReads <- 0
+
+    interface IDataObjectStore with
+        member _.Save(scopeId, objectId, content, dataType, createdBy, metadata, policy) =
+            inner.Save(scopeId, objectId, content, dataType, createdBy, metadata, policy)
+
+        member _.Get(scopeId, objectId) =
+            objectReads <- objectReads + 1
+            inner.Get(scopeId, objectId)
+
+        member _.GetVersion(scopeId, objectId, version) =
+            inner.GetVersion(scopeId, objectId, version)
+
+        member _.GetContent(scopeId, contentHash) =
+            contentReads <- contentReads + 1
+            inner.GetContent(scopeId, contentHash)
+
+        member _.ListVersions(scopeId, objectId) = inner.ListVersions(scopeId, objectId)
+
+        member _.ListObjects scopeId =
+            listings <- listings + 1
+            inner.ListObjects scopeId
+
+        member _.Recover(scopeId, objectId, version, createdBy) =
+            inner.Recover(scopeId, objectId, version, createdBy)
+
+        member _.Delete(scopeId, objectId) = inner.Delete(scopeId, objectId)
+        member _.Evict(scopeId, objectId) = inner.Evict(scopeId, objectId)
+        member _.Purge scopeId = inner.Purge scopeId
+
+        member _.Erase(scopeId, subjectUserId, policy, dryRun) =
+            inner.Erase(scopeId, subjectUserId, policy, dryRun)
+
+    interface IConditionalDataObjectStore with
+        member _.SaveIfVersion(scopeId, objectId, content, dataType, createdBy, metadata, policy, expectedVersion) =
+            (inner :?> IConditionalDataObjectStore)
+                .SaveIfVersion(scopeId, objectId, content, dataType, createdBy, metadata, policy, expectedVersion)
+
+        member _.DeleteIfVersion(scopeId, objectId, expectedVersion) =
+            (inner :?> IConditionalDataObjectStore).DeleteIfVersion(scopeId, objectId, expectedVersion)
+
 /// Records every `Record` call so a test can assert audit shape + count.
 type private RecordingAuditLog() =
     let recorded = ResizeArray<string * AuditEvent>()
@@ -189,6 +252,34 @@ let tests =
             Expect.notEqual ka kb "a changed seed is a different artifact"
             Expect.notEqual ka kc "a changed vintage is a different artifact"
             Expect.notEqual kb kc "seed and vintage are both part of the identity"
+        }
+
+        testCaseAsync "a query by spec hash reads its bucket and one artifact per match, not the scope"
+        <| async {
+            let tempDir =
+                Path.Combine(Path.GetTempPath(), "toolup-mr-count-" + Guid.NewGuid().ToString("N"))
+
+            Directory.CreateDirectory tempDir |> ignore
+
+            let counting =
+                CountingDataObjectStore(DataObjectStore(LocalFileStorage.LocalFileStorage(tempDir)))
+
+            let registry = BlobModelRegistry.create counting (RecordingAuditLog())
+
+            for i in 1..8 do
+                let! _ = registry.Register("team-1", outcome $"spec-{i}" "team-1/sales@v1" 1L, "alice", Map.empty, "")
+                ()
+
+            let! _ = registry.Register("team-1", outcome "spec-1" "team-1/sales@v2" 1L, "alice", Map.empty, "")
+            // The first read by a key backfills its index once.
+            let! _ = registry.QueryBySpecHash("team-1", "spec-2")
+            counting.Reset()
+
+            let! bySpec = registry.QueryBySpecHash("team-1", "spec-1")
+            Expect.equal bySpec.Length 2 "both vintages of spec-1"
+            Expect.equal counting.Listings 0 "no listing of the scope"
+            Expect.equal counting.ContentReads 0 "no content scan"
+            Expect.equal counting.ObjectReads 4 "the manifest, the bucket and the two matches"
         }
 
         testCaseAsync "query-by-spec-hash returns the full vintage history of one modelling decision in one call"

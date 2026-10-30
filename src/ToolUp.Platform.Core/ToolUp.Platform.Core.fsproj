@@ -612,6 +612,10 @@
              `ProvenanceFraming.frame` is the frame's field writer. The
              frame text is Fable-safe; the hash is a small .NET-only arm. -->
         <Compile Include="Shared\Sha256.fs" />
+        <!-- `RunKind`: the nine kinds of run in the grounding
+             and modelling plane, their frame label and their scheduler
+             handler name. Pure data, Fable-compatible. -->
+        <Compile Include="Shared\RunTypes.fs" />
         <Compile Include="Shared\Types\DeployManifestTypes.fs" />
         <!-- Phase 26 — supporting types for the four deploy-plane substrate
              interfaces (BuildRequest/BuildSummary, ProvisioningRequest,

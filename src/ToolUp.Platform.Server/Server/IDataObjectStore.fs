@@ -361,6 +361,16 @@ type IConditionalDataObjectStore =
 /// Probe-and-fall-back helper over the Phase 753 capability, so every
 /// consumer shares one probe site and one documented fallback.
 module ConditionalDataObjectStore =
+    /// Whether `store` claims a version atomically, so a conditional save
+    /// through it has no lost-update window. A caller whose correctness
+    /// rests on the claim (a maintained index, which would silently miss
+    /// an entry a lost update dropped) reads this rather than probing the
+    /// store itself.
+    let isAtomic (store: IDataObjectStore) : bool =
+        match store with
+        | :? IConditionalDataObjectStore -> true
+        | _ -> false
+
     /// Conditional save through `store`. When `store` implements
     /// `IConditionalDataObjectStore` the claim is atomic. Otherwise this
     /// reads the head with `ListVersions`, compares it to

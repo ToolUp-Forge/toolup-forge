@@ -284,6 +284,8 @@
         <Compile Include="InProcess\ModelPromotionPolicyTests.fs" />
         <Compile Include="InProcess\ModelRegistrationObserverTests.fs" />
         <Compile Include="InProcess\ModelPromotionTransferTests.fs" />
+        <Compile Include="InProcess\SidecarStoreTests.fs" />
+        <Compile Include="InProcess\RunJobTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\SqliteLogStoreTests.fs" />

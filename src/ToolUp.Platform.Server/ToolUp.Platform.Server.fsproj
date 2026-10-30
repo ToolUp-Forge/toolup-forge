@@ -286,6 +286,9 @@
         <Compile Include="Server\Infra\PersistentEventStore.fs" />
         <Compile Include="Server\IDataObjectStore.fs" />
         <Compile Include="Server\DataObjectStore.fs" />
+        <!-- SidecarStore: records over IDataObjectStore with declared,
+             indexed sidecar keys. -->
+        <Compile Include="Server\SidecarStore.fs" />
         <!-- Phase 482 — privacy-provenance label persistence (JSON sidecar +
              metadata carriage). Compiled before BlobDatasetStore, which reads
              and preserves the label sidecar. -->
@@ -450,6 +453,9 @@
         <Compile Include="Server\InProcessDistributedLock.fs" />
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
+        <!-- RunJob: a platform job as a name, a parse and a run; the one
+             handler shape and the one job-payload codec. -->
+        <Compile Include="Server\RunJob.fs" />
         <!-- Phase 935 — the platform-owned scope carrier. Before
              IJobScheduler.fs, whose carried job scope redeems through it. -->
         <Compile Include="Server\CarriedScopeToken.fs" />

@@ -50,6 +50,8 @@ let private registeredTests =
         ModelPromotionPolicyTests.tests
         ModelRegistrationObserverTests.tests
         ModelPromotionTransferTests.tests
+        SidecarStoreTests.tests
+        RunJobTests.tests
         ModelFitBatchTests.tests
         ModelExecutionApiTests.tests
         ModelExecutionComposeTests.tests
