@@ -1456,8 +1456,153 @@ let private scopeLoadTests =
         }
     ]
 
+// ── A fact computed from named facts ──────────────────────────────
+//
+// A derived fact whose evidence names its inputs (`fact:<id>`) carries the
+// join of their labels as a computed lineage: a taint-propagating input
+// taints it at every door, a routine registered for its own operation clears
+// it, and nothing else does.
+
+let private derivedCfg (routines: string list) =
+    DisclosureTaintConfig.ofLists
+        [
+            {
+                PolicyRef = "licensed"
+                Mode = TaintPropagating
+                PermitSurfaces = [ FactRetrieval ]
+                ContributorScope = None
+            }
+            {
+                PolicyRef = "licensed-b"
+                Mode = TaintPropagating
+                PermitSurfaces = [ FactRetrieval ]
+                ContributorScope = None
+            }
+            plainPolicy "plain-hold" [ FactRetrieval ]
+        ]
+        (routines
+         |> List.map (fun operationId -> {
+             OperationId = operationId
+             Rationale = "an approved derivation"
+             AcceptingScopes = []
+         }))
+
+let private derivedMethod =
+    Computed(PipelineAssertion.OperationId, "0.42.0", "pipeline-hash")
+
+let derivedFactTests =
+    testList "a fact computed from named facts" [
+
+        test "its label is the join of its inputs' labels, computed rather than inferred" {
+            let a =
+                mkFact "a" "raw" (Computed("load", "1", "p")) (Scalar 5m) (Restricted "licensed") []
+
+            let b =
+                mkFact "b" "raw" (Computed("load", "1", "p")) (Scalar 6m) (Restricted "licensed-b") []
+
+            let c =
+                mkFact "c" "raw" (Computed("load", "1", "p")) (Scalar 7m) (Restricted "plain-hold") []
+
+            let d =
+                mkFact
+                    "d"
+                    "total"
+                    derivedMethod
+                    (Scalar 18m)
+                    Surfaceable
+                    ([ "a"; "b"; "c" ] |> List.map FactInput.ofFactId)
+
+            let outcome =
+                DisclosureTaint.analyze (derivedCfg []) (DisclosureTaint.buildGraph [ a; b; c; d ]) "d"
+
+            Expect.equal
+                outcome.InheritedLabel
+                (TaintLabel.joinAll [
+                    TaintLabel.ofPolicyRef "licensed"
+                    TaintLabel.ofPolicyRef "licensed-b"
+                    TaintLabel.bottom
+                ])
+                "both taint-propagating inputs reach it; the plain one does not"
+
+            Expect.equal outcome.InheritedPolicyRef (Some "licensed") "the nearest input names the deny"
+            Expect.isEmpty outcome.Findings "the lineage was computed, so nothing was inferred"
+        }
+
+        test "over clean inputs it carries nothing" {
+            let a = mkFact "a" "raw" (Computed("load", "1", "p")) (Scalar 5m) Surfaceable []
+
+            let d =
+                mkFact "d" "total" derivedMethod (Scalar 5m) Surfaceable [ FactInput.ofFactId "a" ]
+
+            let outcome =
+                DisclosureTaint.analyze (derivedCfg []) (DisclosureTaint.buildGraph [ a; d ]) "d"
+
+            Expect.equal outcome.InheritedLabel TaintLabel.bottom "clean"
+            Expect.isEmpty outcome.Findings "and computed"
+        }
+
+        testCaseAsync "it is barred at every door its restricted input is, and only its own routine clears it"
+        <| async {
+            let store, events = newStore ()
+            let scope = "team-" + Guid.NewGuid().ToString("N")
+
+            let input =
+                assertFact
+                    store
+                    scope
+                    (draftOf "raw" (Computed("load", "1", "p")) (Scalar 5m) (Restricted "licensed") [])
+
+            let derived =
+                assertFact
+                    store
+                    scope
+                    (draftOf "total" derivedMethod (Scalar 5m) Surfaceable [ FactInput.ofFactId input.FactId ])
+
+            let verdictsUnder (config: DisclosureTaintConfig) (factId: string) = async {
+                let gate = FactDisclosureGate.createWithTaint config store events
+
+                let! verdicts =
+                    everySurface
+                    |> List.map (fun surface -> async {
+                        let! v = gate.Check(scope, "user-1", surface, [ factId ])
+                        return surface, v.TryFind factId
+                    })
+                    |> Async.Sequential
+
+                return List.ofArray verdicts
+            }
+
+            let! inputVerdicts = verdictsUnder (derivedCfg []) input.FactId
+            let! untouched = verdictsUnder (derivedCfg []) derived.FactId
+
+            for (surface, verdict) in inputVerdicts do
+                if verdict <> Some FactDisclosable then
+                    Expect.equal
+                        (untouched |> List.find (fst >> (=) surface) |> snd)
+                        (Some(FactNotDisclosable "licensed"))
+                        (sprintf "barred at %A, where its input is" surface)
+
+            Expect.isTrue
+                (untouched |> List.forall (snd >> (=) (Some(FactNotDisclosable "licensed"))))
+                "and at every other door: taint denies wherever it reaches"
+
+            let! otherRoutine = verdictsUnder (derivedCfg [ "aggregate-over-k" ]) derived.FactId
+
+            Expect.isTrue
+                (otherRoutine |> List.forall (snd >> (=) (Some(FactNotDisclosable "licensed"))))
+                "a routine for another operation clears nothing"
+
+            let! ownRoutine = verdictsUnder (derivedCfg [ PipelineAssertion.OperationId ]) derived.FactId
+
+            Expect.isTrue
+                (ownRoutine |> List.forall (snd >> (=) (Some FactDisclosable)))
+                (sprintf "the routine for its own operation clears it: %A" ownRoutine)
+        }
+    ]
+
 let tests =
     testList "Phase 562 taint-propagating disclosure" [
+        derivedFactTests
         indexLawTests
         stageTests
         scopeLoadTests

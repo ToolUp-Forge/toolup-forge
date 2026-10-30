@@ -79,9 +79,18 @@ module PipelineAnsweringTool =
         FactIdCount = result.FactIdCount
     }
 
+    /// An evaluation answered as `text` and the block part.
+    let private answered (text: string) (result: PipelineToolResult) : ToolHelpers.ToolAnswer =
+        match PipelineBlock.frame<unit> (requestOf result) (resultOf result) with
+        | Error defect -> refusal (PipelineRefusal.EvaluationFailed(PresentationDefect.describe defect))
+        | Ok block -> {
+            Text = text
+            Parts = [ BlockPart(Fuaran.UI.Generated.encodeNode block.Node, block.Provenance) ]
+          }
+
     /// The executor over explicit dependencies: the slice read under `scope`
     /// for `principal`, with the gate asked at `FactToolResult`, answered as
-    /// the summary and the block part.
+    /// the summary and the block part. Arguments carrying `assert` are refused.
     let answerWith
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
@@ -91,14 +100,24 @@ module PipelineAnsweringTool =
         async {
             match! PipelineTool.answerWith deps scope principal argsJson with
             | Error refused -> return refusal refused
-            | Ok result ->
-                match PipelineBlock.frame<unit> (requestOf result) (resultOf result) with
-                | Error defect -> return refusal (PipelineRefusal.EvaluationFailed(PresentationDefect.describe defect))
-                | Ok block ->
-                    return {
-                        Text = PipelineTool.summary result
-                        Parts = [ BlockPart(Fuaran.UI.Generated.encodeNode block.Node, block.Provenance) ]
-                    }
+            | Ok result -> return answered (PipelineTool.summary result) result
+        }
+
+    /// The executor composed with derived assertions: the answer `answerWith`
+    /// gives, and, when the arguments carry `assert`, the asserted facts in the
+    /// text the model reads (`PipelineAssertion.text`), where the answer
+    /// verifier finds them. The block part is the evaluation's, unchanged.
+    let answerAssertingWith
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<ToolHelpers.ToolAnswer> =
+        async {
+            match! PipelineAssertion.answerWith deps scope principal argsJson with
+            | Error refused -> return refusal refused
+            | Ok(result, Some asserted) -> return answered (PipelineAssertion.text asserted) result
+            | Ok(result, None) -> return answered (PipelineTool.summary result) result
         }
 
     /// A persisted request evaluated again for `principal` under `scope`, with
@@ -146,6 +165,22 @@ module PipelineAnsweringTool =
     /// The tool, as `AIServerApp.withAIAnsweringTools` takes it.
     let tool: AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>) =
         PipelineTool.definition, answer
+
+    /// The registered executor with derived assertions.
+    let answerAsserting (ctx: HttpContext) (argsJson: string) : Async<ToolHelpers.ToolAnswer> =
+        match FactBrowseHandler.factBrowseDeps ctx with
+        | Some deps ->
+            answerAssertingWith deps (StorageScopeResolver.ScopeResolution.forRequest ctx) (userIdOf ctx) argsJson
+        | None ->
+            async.Return {
+                Text = sprintf "%s refused the request: %s." PipelineTool.Name notComposed
+                Parts = []
+            }
+
+    /// The tool with derived assertions: the `assert` argument in its
+    /// declaration, and the executor that asserts.
+    let assertingTool: AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>) =
+        PipelineTool.definitionWithAssertions, answerAsserting
 
     /// The per-request re-run API, for the request's user.
     let api (ctx: HttpContext) : IPipelineBlockApi = {

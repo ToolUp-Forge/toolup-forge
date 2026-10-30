@@ -77,3 +77,35 @@ module PresentationCompose =
             }
 
             AIServerApp.withAIAnsweringTools [ PipelineAnsweringTool.tool ] mounted
+
+    /// Let `evaluate_pipeline` assert a result column as facts of a registered
+    /// derived metric: the tool gains the `assert` argument, and the write it
+    /// may make into the fact store is declared beside its read. Composes the
+    /// pipeline tool first when it is not composed (`withPipelineTool`). Only
+    /// under `EnabledFactStore`; under `NoFactStore` the app is returned
+    /// unchanged. A deployment that never calls this offers no `assert`
+    /// argument, and a request carrying one is refused. **Sets** the composed
+    /// tool's declaration and executor; idempotent.
+    ///
+    /// ```fsharp skip=fragment
+    /// AIServerApp.createFrom factory providerProfile app
+    /// |> PresentationCompose.withPipelineTool
+    /// |> PresentationCompose.withDerivedAssertions
+    /// |> composeAI
+    /// ```
+    let withDerivedAssertions (app: AIServerApp) : AIServerApp =
+        match app.Base.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let composed = withPipelineTool app
+
+            {
+                composed with
+                    AIAnsweringTools =
+                        composed.AIAnsweringTools
+                        |> List.map (fun (definition, answer) ->
+                            if definition.Name = ToolUp.Facts.PipelineTool.Name then
+                                PipelineAnsweringTool.assertingTool
+                            else
+                                definition, answer)
+            }

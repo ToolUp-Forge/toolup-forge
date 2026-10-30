@@ -9,7 +9,7 @@ open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
-// ─── evaluate_pipeline (Phase 1145) ──────────────────────────────────
+// ─── evaluate_pipeline ───────────────────────────────────────────────
 //
 // The assistant computes over a gated fact slice with a `Fuaran.Compute`
 // pipeline it writes, and never a number it types. The executor:
@@ -122,6 +122,41 @@ module PipelineTool =
         Effects = ToolEffectDeclaration.readFacts
     }
 
+    /// The argument asking that a result column be asserted as facts.
+    [<Literal>]
+    let AssertArgument = "assert"
+
+    let private assertParameter: ToolParameterSchema =
+        ToolSchema.parameter
+            AssertArgument
+            "Assert one numeric column of the result as facts, so a figure you then quote has a fact id and verifies. Omit to evaluate only. Each result row must be one subject: group by subject (or subject_path) so the rows name subjects."
+            false
+            (ToolSchema.objectOf [
+                ToolSchema.field "column" "The result column whose values are asserted." true ToolSchema.text
+                ToolSchema.field
+                    "as_metric"
+                    "The registered derived metric the values are facts of."
+                    true
+                    ToolSchema.text
+                ToolSchema.field
+                    "level"
+                    "The hierarchy level the result's subject key names: the fact table's level."
+                    true
+                    ToolSchema.text
+            ])
+
+    /// The declaration a deployment composing derived assertions offers: the
+    /// `assert` argument, and the write it may make into the fact store
+    /// declared beside the read.
+    let definitionWithAssertions: AIToolDefinition = {
+        definition with
+            Description =
+                description
+                + " With the assert argument, the server also asserts one numeric column as facts of a registered derived metric, one per subject row, each naming the facts it was computed from, and answers their fact ids and renderings: quote an asserted figure by its rendering."
+            Parameters = parameters @ [ assertParameter ]
+            Effects = ToolEffectDeclaration.declare [ ReadFacts; ComputeFacts; WriteState FactEvents.SourceModule ]
+    }
+
     // ── The request ───────────────────────────────────────────────
 
     let private malformed (reason: string) =
@@ -200,6 +235,46 @@ module PipelineTool =
             | _, _, _, Error e, _, _
             | _, _, _, _, Error e, _
             | _, _, _, _, _, Error e -> Error e
+
+    /// The assertion the arguments ask for, when they carry the `assert`
+    /// argument. Arguments that are not a JSON object carry none; `requestOf`
+    /// refuses them.
+    let assertionOf (argsJson: string) : Result<PipelineAssertionRequest option, PipelineRefusal> =
+        let root =
+            try
+                Some((JsonDocument.Parse argsJson).RootElement.Clone())
+            with _ ->
+                None
+
+        match root with
+        | Some root when root.ValueKind = JsonValueKind.Object ->
+            match root.TryGetProperty AssertArgument with
+            | false, _ -> Ok None
+            | true, v when v.ValueKind = JsonValueKind.Null -> Ok None
+            | true, v when v.ValueKind = JsonValueKind.Object ->
+                let member' (name: string) =
+                    match textOf name v with
+                    | Ok text -> Ok text
+                    | Error _ ->
+                        Error(PipelineRefusal.MalformedAssertion(sprintf "'%s' is required: a non-empty string" name))
+
+                match member' "column", member' "as_metric", member' "level" with
+                | Ok column, Ok metric, Ok level ->
+                    Ok(
+                        Some {
+                            Column = column
+                            AsMetric = metric
+                            Level = level
+                        }
+                    )
+                | Error e, _, _
+                | _, Error e, _
+                | _, _, Error e -> Error e
+            | true, _ ->
+                Error(
+                    PipelineRefusal.MalformedAssertion "it must be an object naming 'column', 'as_metric' and 'level'"
+                )
+        | _ -> Ok None
 
     // ── The pipeline, step by step ────────────────────────────────
 
@@ -410,9 +485,17 @@ module PipelineTool =
 
         go 1 (SchemaWalk.ofSchema schema) start pipeline
 
+    /// Every output column's lineage over `schema`: the slice columns its
+    /// values, and the rows it is computed over, depend on.
+    let internal lineageOf
+        (schema: Schema)
+        (pipeline: Transform list)
+        : Result<Map<string, Set<string>>, PipelineRefusal> =
+        walk schema pipeline
+
     // ── The slice's withheld cells ────────────────────────────────
 
-    let private cellsOf (name: string) (table: Table) : Cell list =
+    let internal cellsOf (name: string) (table: Table) : Cell list =
         table
         |> Table.tryColumn name
         |> Option.map Column.toCells
@@ -450,7 +533,7 @@ module PipelineTool =
         ]
 
     /// True when a lineage reads any of metric `m`'s columns.
-    let private readsMetric (metric: string) (read: Set<string>) : bool =
+    let internal readsMetric (metric: string) (read: Set<string>) : bool =
         read
         |> Set.exists (fun c -> c = metric || c.StartsWith(metric + "/", StringComparison.Ordinal))
 
@@ -628,15 +711,14 @@ module PipelineTool =
     let refusalText (refusal: PipelineRefusal) : string =
         sprintf "%s refused the request: %s." Name (PipelineRefusal.describe refusal)
 
-    /// The executor over explicit dependencies. `deps` are the fact browse's;
-    /// the slice is read under `scope` for `principal`, with the gate asked at
-    /// `FactToolResult`.
-    let answerWith
+    /// The evaluation, with the gated slice it was computed over. The `assert`
+    /// argument is not read here.
+    let internal evaluateSliced
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
         (argsJson: string)
-        : Async<Result<PipelineToolResult, PipelineRefusal>> =
+        : Async<Result<FactSlice * PipelineToolResult, PipelineRefusal>> =
         async {
             match requestOf argsJson with
             | Error refusal -> return Error refusal
@@ -679,5 +761,24 @@ module PipelineTool =
                                         : PipelineWithheldCount))
                                 )
                             )
-                    | Ok slice -> return evaluate request pipeline slice readAt
+                    | Ok slice -> return evaluate request pipeline slice readAt |> Result.map (fun r -> slice, r)
+        }
+
+    /// The executor over explicit dependencies. `deps` are the fact browse's;
+    /// the slice is read under `scope` for `principal`, with the gate asked at
+    /// `FactToolResult`. Arguments carrying `assert` are refused: asserting is
+    /// offered only where a deployment composes it (`PipelineAssertion`).
+    let answerWith
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<Result<PipelineToolResult, PipelineRefusal>> =
+        async {
+            match assertionOf argsJson with
+            | Ok None ->
+                let! evaluated = evaluateSliced deps scope principal argsJson
+                return evaluated |> Result.map snd
+            | Ok(Some _)
+            | Error _ -> return Error PipelineRefusal.AssertionNotOffered
         }
