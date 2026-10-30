@@ -32,6 +32,8 @@ type CodemodMigration =
     /// `IModelFitProvider`, `IModelRegistry` and `IExternalComputeDispatcher`
     /// declare what an implementation can do as a `Capabilities` record.
     | ModelCapabilities
+    /// The caller-less remoting members removed with no mechanical replacement.
+    | RemotingLeftovers
     /// Phase 1066 — `IJobScheduler.Schedule` answers `ScheduleOutcome`
     /// (`Scheduled` / `Coalesced`) and `TriggerOnce` refuses with a typed
     /// `TriggerError`.
@@ -49,6 +51,7 @@ module CodemodMigration =
         | CodemodMigration.ShellSlots -> "docs/migrations/879-shell-slots.md"
         | CodemodMigration.AgentLoop -> "docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md"
         | CodemodMigration.Capabilities -> "docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md"
+        | CodemodMigration.RemotingLeftovers -> "docs/migrations/1053-redesign-b-defects-remoting.md"
         | CodemodMigration.JobOutcomes ->
             "docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md"
         | CodemodMigration.ModelCapabilities ->
@@ -66,6 +69,7 @@ module CodemodMigration =
         | CodemodMigration.Capabilities -> "Phase 1095"
         | CodemodMigration.JobOutcomes -> "Phase 1066"
         | CodemodMigration.ModelCapabilities -> "Phase 1094"
+        | CodemodMigration.RemotingLeftovers -> "Phase 1053"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -817,6 +821,48 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmember\s+\w+\.(?:Schedule|TriggerOnce)\b"
             "an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy"
+        review
+            "1053-thread-safe-cell"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bThreadSafeCell\.(?:create|set|get|computeOnce)\b"
+            "`ThreadSafeCell` is removed with no replacement; a `Lazy<'T>` covers `computeOnce`"
+        review
+            "1053-reader"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\b(?:ReaderBuilder\b|Reader\.(?:run|returnM|bindM)\b|Remoting\.fromReader\b)"
+            "`Reader`, `ReaderBuilder` and `Remoting.fromReader` are removed: use `Remoting.fromContext` and read services from the context"
+        review
+            "1053-get-service"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\b(?:getService|resolve)<"
+            "the global `Extensions` module is removed: `getService<'T>` is Giraffe's `ctx.GetService<'T>()`, and `resolve<'T>` goes with `Reader`. A local function of this name is not affected"
+        review
+            "1053-stackalloc"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bWrite\.stackalloc\b"
+            "`Write.stackalloc` is removed: it returned a span over a popped frame. Allocate the buffer with `NativePtr.stackalloc` in the function that reads it"
+        review
+            "1053-parsing-arguments-error"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bParsingArgumentsError\b"
+            "`ParsingArgumentsError` is removed: `DecodeError.render` is the sentence it carried"
+        review
+            "1053-interpret-integer-as"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\binterpretIntegerAs\b"
+            "`Read.interpretIntegerAs typ n` is removed: it was `Read.interpretIntegerAsFrom typ 64 n`, and a caller that knows the source width should say it"
+        review
+            "1053-write-fable"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bWrite\.Fable\b"
+            "`Write.Fable` no longer ships: no browser path writes MessagePack. Copy `src/ToolUp.AI.Client.Tests/Remoting/MsgPackWrite.fs` if you need the writer"
     ]
 
 

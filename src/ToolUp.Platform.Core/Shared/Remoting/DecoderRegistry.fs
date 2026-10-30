@@ -38,14 +38,10 @@ open ToolUp.Remoting.MsgPack
 // `None`, which is the reflection path: a miss costs the algebra, never
 // correctness.
 
-/// Phase 785 — a registered decoder, erased to `obj` so one table holds
-/// decoders for many types.
-///
-/// The erasure is the eighth boundary of the kind `CLAUDE.md`
-/// enumerates, and it is symmetric in the same way as the others: the
-/// only way to put a decoder in is `register<'T>`, which boxes the
-/// result of a `Decoder<'T>`, and the only way to get one out is a
-/// lookup by that same `'T`'s identity. Nothing casts blind.
+/// A registered decoder, erased to `obj` so one table holds decoders for many
+/// types. The erasure is symmetric: the only way to put a decoder in is
+/// `register<'T>`, which boxes the result of a `Decoder<'T>`, and the only way
+/// to get one out is a lookup by that same `'T`'s identity. Nothing casts blind.
 type RegisteredDecoder = Value -> Result<obj, DecodeError>
 
 // ─── Phase 801 — the differential gate ───────────────────────────────
