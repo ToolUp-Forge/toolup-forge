@@ -106,7 +106,7 @@ open ToolUp.Platform.Secrets
 module internal PeerJwt =
 
     /// Reserved SDK-level secret scope (see `ISecretStore`).
-    let platformScope = "_platform"
+    let platformScope = ScopeKey.PlatformContainer
 
     /// Secret-store key holding a peer's symmetric HS256 signing key.
     let signingKeyFor (peerId: string) = $"peers/{peerId}/signing-key"

@@ -4,6 +4,7 @@
 namespace ToolUp.InterPlatform
 
 open System.Text
+open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 
@@ -36,7 +37,7 @@ open ToolUp.Platform.BlobStorage
 /// stays byte-for-byte pre-339 (GP 11); the call refuses at the
 /// transport.
 type BlobPeerRegistry(blobs: IBlobStorage, policy: PeerTransportPolicy) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let prefix = "peers/"
 
     /// Phase 334 — `peerId` is interpolated into a BLOB NAME, which

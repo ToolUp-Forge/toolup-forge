@@ -225,7 +225,7 @@ type PeerJobDocument = {
 /// secondary constructors keep the original signature intact, so this
 /// phase's surface diff is purely additive (GP 11).
 type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPolicy, now: unit -> DateTimeOffset) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let policy = retention
     let clock = now
     let blobNameFor (scopeId: string) (jobId: PeerJobId) = $"peers/jobs/{scopeId}/{jobId}.json"
@@ -365,7 +365,7 @@ module PeerJob =
     /// the same scope the SDK's own internal handlers use. Peer calls are
     /// not tenant-scoped in the foundation.
     [<Literal>]
-    let Scope = "_platform"
+    let Scope = ScopeKey.PlatformContainer
 
     /// The audit `SourceModule` peer lifecycle events flow under.
     [<Literal>]
@@ -724,7 +724,7 @@ type PeerGroupJobDocument = {
 /// from the emitted surface (the same reasoning `BlobPeerJobResultStore`
 /// records).
 type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy, now: unit -> DateTimeOffset) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let policy = retention
     let clock = now
 

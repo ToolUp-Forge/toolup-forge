@@ -197,7 +197,7 @@ type InMemoryPeerReplayGuard(capacity: int, now: unit -> DateTimeOffset) =
 /// a storage-growth problem, and turning it into a refused peer call
 /// would trade a slow leak for an outage.
 type BlobPeerReplayGuard(blobs: IBlobStorage, now: unit -> DateTimeOffset) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let prefix = "peers/replay/"
 
     let cas =

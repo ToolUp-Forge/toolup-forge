@@ -598,7 +598,7 @@ type PeerKeyTemplateApprovalSigner(secrets: ISecretStore, algorithm: PeerSignatu
 /// to the blob store, so two instances of a deployment see the same
 /// approvals without coordination.
 type BlobTemplateApprovalRegistry(blobs: IBlobStorage, signer: ITemplateApprovalSigner) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let root = "peer-template-approvals/"
 
     /// A template id reaches a BLOB NAME here, exactly as a peer id does

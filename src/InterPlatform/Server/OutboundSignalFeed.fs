@@ -671,7 +671,7 @@ type InMemoryFeedStateStore() =
 /// double delivery and a double ε spend. Refusing loudly at compose time
 /// beats discovering it at the first tick.
 type BlobFeedStateStore(blobs: IBlobStorage) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let prefix = "signal-feeds/"
 
     let cas =

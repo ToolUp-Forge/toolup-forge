@@ -446,7 +446,7 @@ type IRoundStateStore =
 /// through to the blob store, so a second instance, or a restarted
 /// process, resumes exactly what the first left.
 type BlobRoundStateStore(blobs: IBlobStorage) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let blobNameFor (scopeId: string) (runId: string) = $"peers/rounds/{scopeId}/{runId}.json"
 
     interface IRoundStateStore with
