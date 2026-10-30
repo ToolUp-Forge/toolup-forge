@@ -120,6 +120,21 @@ type PopulationQuery = {
     /// starts with these segments ("every SKU under this brand"). `None`
     /// admits the whole hierarchy.
     PathPrefix: string list option
+    /// Optional any-of filter — admit only subjects whose
+    /// `Path` starts with at least one of these prefixes ("these three
+    /// sites"). AND-combined with `PathPrefix`, so the two together admit
+    /// the listed branches that lie under the prefix. `Some []` lists no
+    /// prefix and therefore admits no subject: an empty disjunction is
+    /// never read as "every subject". `None` applies no any-of clause.
+    PathAnyOf: string list list option
+    /// Optional exclusion filter — drop every subject whose
+    /// `Path` starts with any of these prefixes ("outside the UK").
+    /// Applied after the inclusion clauses (`PathPrefix`, `PathAnyOf`) and,
+    /// like them, by the store before ranking and before the statistics,
+    /// so a member's rank, the `TopK` ceiling and `PopulationStats` all
+    /// describe the population that matched. An empty prefix `[]` in the
+    /// list excludes every subject; `None` or `Some []` excludes nothing.
+    PathExclude: string list list option
     /// Optional valid-time filter — admit only facts whose `Period`
     /// overlaps this extent. `None` admits every period, and the result's
     /// `PopulationStats` then reports the period coverage it actually saw.
@@ -382,6 +397,20 @@ module PopulationOrdering =
                         metricId
                 )
 
+/// What a population query's path clauses come to for a reader that can
+/// apply exactly ONE path prefix — a delegated table's declared query, say.
+/// See `PopulationQuery.asOnePrefix`.
+type OnePrefixPath =
+    /// The clauses admit exactly the subjects under this prefix (`[]` is
+    /// the whole hierarchy).
+    | UnderPrefix of prefix: string list
+    /// The clauses admit no subject at all.
+    | NoSubject
+    /// The clauses cannot be stated as one prefix. Carries the name of the
+    /// clause that cannot (`PathAnyOf` or `PathExclude`), so a reader that
+    /// refuses can say which filter it was asked for.
+    | NotOnePrefix of filter: string
+
 /// Construction, the ceiling, and the subject-set predicate. The
 /// predicate lives here rather than inside a store so that every
 /// implementation — enumerating or indexed — admits exactly the same
@@ -403,6 +432,8 @@ module PopulationQuery =
         Hierarchy = hierarchy
         Level = None
         PathPrefix = None
+        PathAnyOf = None
+        PathExclude = None
         PeriodOverlaps = None
         Threshold = None
         Ordering = RegistryDirection
@@ -422,15 +453,71 @@ module PopulationQuery =
     /// Reconstruct the fact base as of a transaction time (law L4).
     let asOf (t: DateTime) (query: PopulationQuery) : PopulationQuery = { query with AsOf = Some t }
 
+    /// Whether `path` starts with `prefix`, segment by segment. The empty
+    /// prefix starts every path.
+    let pathStartsWith (prefix: string list) (path: string list) : bool =
+        List.length path >= List.length prefix
+        && List.forall2 (=) prefix (path |> List.truncate (List.length prefix))
+
     /// Whether a subject instance is in the query's subject set —
-    /// hierarchy, then depth, then path prefix.
+    /// hierarchy, then depth, then the inclusion clauses (`PathPrefix`,
+    /// `PathAnyOf`), then the exclusion clause (`PathExclude`).
     let matchesSubject (query: PopulationQuery) (subject: SubjectRef) : bool =
         subject.Hierarchy = query.Hierarchy
         && (query.Level |> Option.forall (fun level -> List.length subject.Path = level))
         && (query.PathPrefix
-            |> Option.forall (fun prefix ->
-                List.length subject.Path >= List.length prefix
-                && List.forall2 (=) prefix (subject.Path |> List.truncate (List.length prefix))))
+            |> Option.forall (fun prefix -> pathStartsWith prefix subject.Path))
+        && (query.PathAnyOf
+            |> Option.forall (List.exists (fun prefix -> pathStartsWith prefix subject.Path)))
+        && not (
+            query.PathExclude
+            |> Option.exists (List.exists (fun prefix -> pathStartsWith prefix subject.Path))
+        )
+
+    /// The query's three path clauses (`PathPrefix`, `PathAnyOf`,
+    /// `PathExclude`) restated as one prefix, where they can be. Exact, never
+    /// approximate: `UnderPrefix p` admits precisely the subjects
+    /// `matchesSubject` admits on path, so a reader applying it is never
+    /// silently wider or narrower. An any-of list reduces when, once each
+    /// entry is narrowed to `PathPrefix`, one surviving entry lies above all
+    /// the others; an exclusion reduces when it covers the whole included
+    /// branch (`NoSubject`) or lies outside it (it removes nothing). Anything
+    /// else — two disjoint branches, or a hole cut inside one — is
+    /// `NotOnePrefix`, naming the clause.
+    let asOnePrefix (query: PopulationQuery) : OnePrefixPath =
+        let prefix = query.PathPrefix |> Option.defaultValue []
+
+        let included =
+            match query.PathAnyOf with
+            | None -> UnderPrefix prefix
+            | Some anyOf ->
+                let narrowed =
+                    anyOf
+                    |> List.choose (fun branch ->
+                        if pathStartsWith prefix branch then Some branch
+                        elif pathStartsWith branch prefix then Some prefix
+                        else None)
+                    |> List.distinct
+
+                match narrowed with
+                | [] -> NoSubject
+                | _ ->
+                    match
+                        narrowed
+                        |> List.tryFind (fun top -> narrowed |> List.forall (pathStartsWith top))
+                    with
+                    | Some top -> UnderPrefix top
+                    | None -> NotOnePrefix "PathAnyOf"
+
+        match included, query.PathExclude with
+        | UnderPrefix branch, Some excluded when not (List.isEmpty excluded) ->
+            if excluded |> List.exists (fun e -> pathStartsWith e branch) then
+                NoSubject
+            elif excluded |> List.exists (pathStartsWith branch) then
+                NotOnePrefix "PathExclude"
+            else
+                included
+        | _ -> included
 
 /// Canonical-method selection over competing current heads (plan D19).
 module PopulationSelection =

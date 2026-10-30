@@ -246,23 +246,19 @@ module CoverageTool =
 
     /// The population read one coverage row is derived from. Ordering is
     /// explicit rather than registry-directed: a `Neutral` metric has no
-    /// best-first order and Phase 701 refuses to invent one, but it very
+    /// best-first order and the store refuses to invent one, but it very
     /// much has coverage — so the discovery surface must never ask a
     /// question the registry can refuse. `AllCompetingMethods` because
     /// coverage reports what the store HOLDS, not what a default query
     /// would select. `TopK` is the disclosure probe's sample, not a
-    /// result: no ranked member is reported by this tool.
-    let private coverageQuery (metricId: string) (hierarchyId: string) : PopulationQuery = {
-        Metric = MetricRef metricId
-        Hierarchy = hierarchyId
-        Level = None
-        PathPrefix = None
-        PeriodOverlaps = None
-        Threshold = None
-        Ordering = Descending
-        TopK = DisclosureProbeK
-        AsOf = None
-        Methods = AllCompetingMethods
+    /// result: no ranked member is reported by this tool. The coverage
+    /// narrative reads through this same query, so the committed document
+    /// and the tool describe one population.
+    let internal coverageQuery (metricId: string) (hierarchyId: string) : PopulationQuery = {
+        PopulationQuery.create (MetricRef metricId) hierarchyId with
+            Ordering = Descending
+            TopK = DisclosureProbeK
+            Methods = AllCompetingMethods
     }
 
     /// One population row, in ONE shape whatever the probe decided.

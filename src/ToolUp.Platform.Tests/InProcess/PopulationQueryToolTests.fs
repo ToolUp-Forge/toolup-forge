@@ -863,6 +863,26 @@ let validationTests =
             "an inverted value band is refused"
 
         expectError """{"metric":42,"subject_hierarchy":"brand"}""" "metric" "a non-string metric is refused"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","path_any_of":"acme"}"""
+            "path_any_of"
+            "a path_any_of that is not an array is refused by name"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","path_exclude":[]}"""
+            "path_exclude"
+            "an empty path_exclude is refused by name rather than read as no filter"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","path_any_of":["acme",7]}"""
+            "path_any_of"
+            "a non-string path_any_of entry is refused by name"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","path_exclude":["acme"," > "]}"""
+            "path_exclude"
+            "a path_exclude entry naming no member is refused, never read as the whole hierarchy"
     ]
 
 // ── Subject-set filters (703.A) ───────────────────────────────────
@@ -906,6 +926,69 @@ let subjectSetTests =
                 (items underAcme "ranked" |> List.map (fun f -> str f "subject"))
                 [ "brand/acme>gadget"; "brand/acme>widget" ]
                 "the subtree filter admits only that brand's SKUs"
+
+        testCase "path_any_of and path_exclude narrow the population the store ranks, and the result echoes them"
+        <| fun () ->
+            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let scope = newScope ()
+            let store = sp.GetRequiredService<IFactStore>()
+
+            for path, value in
+                [
+                    [ "acme"; "widget" ], 500m
+                    [ "acme"; "gadget" ], 700m
+                    [ "globex"; "thing" ], 800m
+                    [ "initech"; "stapler" ], 900m
+                ] do
+                assertFact store scope (draftFor path (Scalar value) Surfaceable) |> ignore
+
+            let anyOf =
+                executeVia
+                    sp
+                    scope
+                    """{"metric":"revenue","subject_hierarchy":"brand","level":2,"path_any_of":["acme>widget","globex"],"top_k":1}"""
+
+            Expect.equal
+                (items anyOf "ranked" |> List.map (fun f -> str f "subject"))
+                [ "brand/globex>thing" ]
+                "the best of the two named branches, not of the hierarchy"
+
+            Expect.equal
+                (num (anyOf.GetProperty "population") "subjectCount")
+                2
+                "the statistics count the matched subjects"
+
+            Expect.equal
+                (items (anyOf.GetProperty "filters") "pathAnyOf" |> List.map _.GetString())
+                [ "acme>widget"; "globex" ]
+                "the any-of filter is echoed as it was asked"
+
+            let outsideInitech =
+                executeVia
+                    sp
+                    scope
+                    """{"metric":"revenue","subject_hierarchy":"brand","level":2,"path_exclude":["initech"]}"""
+
+            let ranked = items outsideInitech "ranked"
+
+            Expect.equal
+                (ranked |> List.map (fun f -> str f "subject"))
+                [ "brand/globex>thing"; "brand/acme>gadget"; "brand/acme>widget" ]
+                "the excluded branch is gone"
+
+            Expect.equal (num ranked.Head "rank") 1 "and the first remaining member is rank one, not two"
+
+            Expect.equal
+                (items (outsideInitech.GetProperty "filters") "pathExclude"
+                 |> List.map _.GetString())
+                [ "initech" ]
+                "the exclusion is echoed"
+
+            let nobody =
+                executeVia sp scope """{"metric":"revenue","subject_hierarchy":"brand","path_any_of":["umbrella"]}"""
+
+            Expect.isFalse (nobody.TryGetProperty("error") |> fst) "a path naming no subject is not an error"
+            Expect.isEmpty (items nobody "ranked") "it is an empty population"
     ]
 
 // ── The demo-facing acceptance, made executable ───────────────────

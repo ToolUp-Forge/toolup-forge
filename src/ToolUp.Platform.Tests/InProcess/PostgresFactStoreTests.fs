@@ -1750,6 +1750,31 @@ let private liveTests (conn: string) =
                     touched
                     (int64 HistorySubjects + 10L)
                     "the rows touched are the asked week's population, not the metric's history"
+
+                // The any-of and exclusion path filters are predicates over
+                // the path the covering index carries, so the filtered read
+                // stays index-only and filters in the database.
+                let filtered = {
+                    query with
+                        PathAnyOf = Some [ [ "h0001" ]; [ "h0002" ]; [ "h0003" ] ]
+                        PathExclude = Some [ [ "h0002" ] ]
+                }
+
+                let! filteredPlan = s.ExplainPopulation(scope, filtered)
+                let _, filteredSequential = touchedRows filteredPlan
+
+                Expect.isFalse filteredSequential "the path-filtered read scans no table"
+
+                Expect.isTrue
+                    (scanNodes filteredPlan
+                     |> List.contains ("Index Only Scan", table + "_population_idx"))
+                    "the path-filtered heads are read index-only from the covering population index"
+
+                match! facts.QueryPopulation(scope, filtered) with
+                | Ok result ->
+                    Expect.equal result.Stats.SubjectCount 2 "h0001 and h0003; h0002 is excluded"
+                    Expect.equal result.Stats.FactCount 2 "the summary counts the matched heads only"
+                | Error e -> failtestf "path-filtered population read refused: %s" e
             }
         ]
     ]

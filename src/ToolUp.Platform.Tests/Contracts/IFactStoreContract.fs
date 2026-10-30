@@ -1236,6 +1236,185 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             Expect.equal empty.Stats PopulationStats.empty "an empty population is an answer, not a refusal"
         }
 
+        // ── The any-of and exclusion path filters ──────────────────────
+        //
+        // Both run in the store, before ranking and before the summary, so
+        // a rank, the ceiling and the statistics all describe the subjects
+        // that matched — never a wider population filtered afterwards.
+
+        testCaseAsync "an any-of path filter ranks the union of its prefixes"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = seedPopulation store scopeA
+
+            let! r =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        level2Descending with
+                            PathAnyOf = Some [ [ "eu"; "uk" ]; [ "na"; "us" ] ]
+                    }
+                )
+
+            let population = okResult "any-of" r
+            Expect.equal (scalars population.Ranked) [ 60m; 30m ] "us and uk, and nothing else"
+            Expect.equal population.Stats.FactCount 2 "only the matched heads are counted"
+            Expect.equal population.Stats.SubjectCount 2 "two subjects matched"
+            Expect.equal population.Stats.Minimum (Some 30m) "the smallest matched value"
+            Expect.equal population.Stats.Maximum (Some 60m) "the largest matched value, not fr's 99"
+            Expect.equal population.Stats.Mean (Some 45m) "the mean of the matched values"
+
+            let! underNa =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        level2Descending with
+                            PathPrefix = Some [ "na" ]
+                            PathAnyOf = Some [ [ "eu"; "uk" ]; [ "na"; "us" ] ]
+                    }
+                )
+
+            Expect.equal
+                (scalars (okResult "any-of under a prefix" underNa).Ranked)
+                [ 60m ]
+                "the prefix and the any-of clause AND-combine"
+
+            let! noPrefix =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        level2Descending with
+                            PathAnyOf = Some []
+                    }
+                )
+
+            let empty = okResult "an any-of naming no prefix" noPrefix
+            Expect.isEmpty empty.Ranked "an empty disjunction admits no subject"
+            Expect.equal empty.Stats PopulationStats.empty "and the summary is of nothing"
+        }
+
+        testCaseAsync "an excluded path prefix is dropped before ranking and before the statistics"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = seedPopulation store scopeA
+
+            let! r =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        level2Descending with
+                            PathExclude = Some [ [ "eu"; "fr" ] ]
+                    }
+                )
+
+            let population = okResult "exclusion" r
+            Expect.equal (scalars population.Ranked) [ 60m; 30m ] "both competing fr heads are gone"
+            Expect.equal population.Stats.FactCount 4 "us, uk, ca and mx"
+            Expect.equal population.Stats.SubjectCount 4 "four subjects remain"
+            Expect.equal population.Stats.ComparableCount 2 "us and uk carry a magnitude"
+            Expect.equal population.Stats.NonComparableCount 2 "ca and mx are counted, never ranked"
+            Expect.equal population.Stats.Maximum (Some 60m) "the excluded 99 is not the maximum"
+            Expect.equal population.Stats.Mean (Some 45m) "the mean of what remains"
+
+            let! nothingNamed =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        level2Descending with
+                            PathExclude = Some [ [ "apac" ] ]
+                    }
+                )
+
+            Expect.equal
+                (scalars (okResult "an exclusion naming no member" nothingNamed).Ranked)
+                [ 99m; 60m; 30m; 20m ]
+                "an exclusion that names no subject excludes nothing"
+        }
+
+        testCaseAsync "an exclusion inside an inclusion removes the excluded branch from the included one"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = seedPopulation store scopeA
+
+            let everyDepth = {
+                PopulationQuery.create (MetricRef "elasticity") "geography" with
+                    Ordering = Descending
+                    TopK = 20
+            }
+
+            let! underEu =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        everyDepth with
+                            PathPrefix = Some [ "eu" ]
+                            PathExclude = Some [ [ "eu"; "uk" ] ]
+                    }
+                )
+
+            Expect.equal
+                (scalars (okResult "eu without uk" underEu).Ranked)
+                [ 99m; 20m; 10m ]
+                "the branch root and fr remain; uk is gone"
+
+            let! anyOfLessOne =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        level2Descending with
+                            PathAnyOf = Some [ [ "eu" ]; [ "na" ] ]
+                            PathExclude = Some [ [ "eu"; "fr" ]; [ "na"; "us" ] ]
+                    }
+                )
+
+            let rest = okResult "any-of less two" anyOfLessOne
+            Expect.equal (scalars rest.Ranked) [ 30m ] "uk is the one comparable member left"
+            Expect.equal rest.Stats.FactCount 3 "uk, ca and mx"
+        }
+
+        testCaseAsync "an exclusion that removes every member is an empty answer, not a refusal"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = seedPopulation store scopeA
+
+            for exclusion in [ [ [ "eu" ]; [ "na" ] ]; [ [] ] ] do
+                let! r =
+                    store.QueryPopulation(
+                        scopeA,
+                        {
+                            level2Descending with
+                                PathExclude = Some exclusion
+                        }
+                    )
+
+                let empty = okResult (sprintf "excluding %A" exclusion) r
+                Expect.isEmpty empty.Ranked "no member remains"
+                Expect.isFalse empty.Truncated "nothing was cut"
+                Expect.equal empty.Stats PopulationStats.empty "the summary is of nothing"
+        }
+
+        testCaseAsync "the ceiling and the ranks are over the matched members only"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = seedPopulation store scopeA
+
+            let! r =
+                store.QueryPopulation(
+                    scopeA,
+                    {
+                        level2Descending with
+                            TopK = 1
+                            PathExclude = Some [ [ "eu"; "fr" ] ]
+                    }
+                )
+
+            let population = okResult "top one outside fr" r
+            Expect.equal (scalars population.Ranked) [ 60m ] "us is first once fr is excluded"
+            Expect.isTrue population.Truncated "uk was matched and cut by the ceiling"
+            Expect.equal population.Stats.ComparableCount 2 "the summary still covers every matched member"
+            Expect.equal population.Stats.Maximum (Some 60m) "and none of the excluded ones"
+        }
+
         testCaseAsync "the statistics describe the population, counting the shapes that cannot be ranked"
         <| async {
             let store, scopeA, _ = factory ()
@@ -1756,6 +1935,49 @@ let private populationMatrix: (string * PopulationQuery) list =
             baseQuery with
                 Ordering = Descending
                 PathPrefix = Some [ "apac" ]
+        }
+        "path any-of",
+        {
+            baseQuery with
+                Ordering = Descending
+                PathAnyOf = Some [ [ "eu"; "sku-000003" ]; [ "eu"; "sku-000010" ]; [ "apac" ] ]
+        }
+        "path any-of naming no prefix",
+        {
+            baseQuery with
+                Ordering = Descending
+                PathAnyOf = Some []
+        }
+        "path exclusion",
+        {
+            level2 with
+                Ordering = Descending
+                PathExclude = Some [ [ "eu"; "sku-000003" ] ]
+        }
+        "path exclusion inside a prefix",
+        {
+            baseQuery with
+                Ordering = Ascending
+                PathPrefix = Some [ "eu" ]
+                PathExclude = Some [ [ "eu"; "sku-000004" ]; [ "eu"; "sku-000002" ] ]
+        }
+        "path any-of over awkward segments",
+        {
+            baseQuery with
+                Ordering = Descending
+                PathAnyOf = Some [ awkwardDifferentialPath; [ "uk" ]; [ "eu"; "" ] ]
+        }
+        "path exclusion of awkward segments",
+        {
+            baseQuery with
+                Ordering = Descending
+                PathExclude = Some [ awkwardDifferentialPath; [ "eu"; "" ] ]
+        }
+        "path exclusion of everything",
+        {
+            level2 with
+                Ordering = Descending
+                PathExclude = Some [ [] ]
         }
         "threshold AtLeast",
         {

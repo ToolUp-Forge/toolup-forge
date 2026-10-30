@@ -575,26 +575,6 @@ module CoverageNarrative =
 
     // ── Reading the coverage (the impure half) ────────────────────
 
-    /// The population read one coverage record is derived from —
-    /// deliberately the SAME query `list_metric_coverage` issues, for the
-    /// same reasons stated there: an explicit ordering so a `Neutral`
-    /// metric cannot provoke Phase 701's registry refusal from a surface
-    /// that is only asking what exists, and `AllCompetingMethods` because
-    /// coverage reports what the store HOLDS rather than what a default
-    /// query would select.
-    let private coverageQuery (metricId: string) (hierarchyId: string) : PopulationQuery = {
-        Metric = MetricRef metricId
-        Hierarchy = hierarchyId
-        Level = None
-        PathPrefix = None
-        PeriodOverlaps = None
-        Threshold = None
-        Ordering = Descending
-        TopK = CoverageTool.DisclosureProbeK
-        AsOf = None
-        Methods = AllCompetingMethods
-    }
-
     let private periodLabel (period: TemporalExtent) =
         match period.Label with
         | Some label when not (String.IsNullOrWhiteSpace label) -> label
@@ -617,7 +597,7 @@ module CoverageNarrative =
         (hierarchy: Grounding.SubjectDefinition)
         : Async<HierarchyCoverage option> =
         async {
-            let! outcome = store.QueryPopulation(scopeId, coverageQuery metricId hierarchy.Id)
+            let! outcome = store.QueryPopulation(scopeId, CoverageTool.coverageQuery metricId hierarchy.Id)
 
             match outcome with
             // A store fault is not a coverage answer. Reported as "this

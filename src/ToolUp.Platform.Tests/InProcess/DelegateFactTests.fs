@@ -325,6 +325,94 @@ let private equivalenceTests =
                 Expect.equal d.Stats p.Stats "same statistics"
         }
 
+        test
+            "a path filter the table's query can state as one prefix is translated, and answers as the plain store does" {
+            let rows = population 500
+            let plain = plainWorld FactTableHistoryMode.AppendByRun
+            let delegated = delegatedWorld FactTableHistoryMode.AppendByRun
+            commit plain rows |> ignore
+            commit delegated rows |> ignore
+
+            for configure in
+                [
+                    (fun (q: PopulationQuery) -> {
+                        q with
+                            PathAnyOf = Some [ [ "brand-03" ] ]
+                    })
+                    (fun q -> {
+                        q with
+                            PathAnyOf = Some [ [ "brand-03" ]; [ "brand-03"; "sku-000013" ] ]
+                    })
+                    (fun q -> {
+                        q with
+                            PathPrefix = Some [ "brand-03" ]
+                            PathAnyOf = Some [ [ "brand-03" ]; [ "brand-04" ] ]
+                    })
+                    (fun q -> {
+                        q with
+                            PathPrefix = Some [ "brand-03" ]
+                            PathExclude = Some [ [ "brand-04" ] ]
+                    })
+                    (fun q -> {
+                        q with
+                            PathAnyOf = Some [ [ "brand-99" ] ]
+                    })
+                    (fun q -> { q with PathExclude = Some [ [] ] })
+                    (fun q -> {
+                        q with
+                            PathAnyOf = Some [ [ "brand-03" ] ]
+                            PathExclude = Some [ [ "brand-03" ] ]
+                    })
+                ] do
+                let p = top plain 10 configure
+                let d = top delegated 10 configure
+
+                let shape (r: PopulationResult) =
+                    r.Ranked |> List.map (fun f -> f.FactId, f.Subject, f.Value)
+
+                Expect.equal (shape d) (shape p) "same ranking, same ids"
+                Expect.equal d.Truncated p.Truncated "same truncation"
+                Expect.equal d.Stats p.Stats "same statistics"
+        }
+
+        test "a path filter the table's query cannot state as one prefix is refused by name, never widened" {
+            let delegated = delegatedWorld FactTableHistoryMode.AppendByRun
+            commit delegated (population 100) |> ignore
+
+            for filter, configure in
+                [
+                    "PathAnyOf",
+                    (fun (q: PopulationQuery) -> {
+                        q with
+                            PathAnyOf = Some [ [ "brand-03" ]; [ "brand-04" ] ]
+                    })
+                    "PathExclude",
+                    (fun q -> {
+                        q with
+                            PathExclude = Some [ [ "brand-03" ] ]
+                    })
+                    "PathExclude",
+                    (fun q -> {
+                        q with
+                            PathPrefix = Some [ "brand-03" ]
+                            PathExclude = Some [ [ "brand-03"; "sku-000013" ] ]
+                    })
+                ] do
+                let q =
+                    {
+                        PopulationQuery.create (MetricRef "revenue") "products" with
+                            TopK = 10
+                            Ordering = Descending
+                    }
+                    |> configure
+
+                match delegated.Store.QueryPopulation(delegated.Scope, q) |> Async.RunSynchronously with
+                | Ok r -> failtestf "%s: expected a refusal, got %d ranked" filter (List.length r.Ranked)
+                | Error refusal ->
+                    Expect.stringContains refusal filter "the refusal names the filter"
+                    Expect.stringContains refusal "sku-sales" "and the table"
+        }
+
         test "a point read quotes the value the plain store holds, under the same id" {
             let rows = population 50
             let plain = plainWorld FactTableHistoryMode.AppendByRun

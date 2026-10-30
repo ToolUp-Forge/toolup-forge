@@ -164,7 +164,7 @@ is open and recorded in the migration note.
 | | Point read (`Query`) | Population read (`QueryPopulation`) |
 |---|---|---|
 | Asks | "what is metric M for subject S in period P?" | "which subjects rank highest/lowest on M, and what does that population look like?" |
-| Subject | one instance, a branch (Phase 1123), both, or an open filter | a **set** — hierarchy + optional depth + optional path prefix |
+| Subject | one instance, a branch (Phase 1123), both, or an open filter | a **set** — hierarchy + optional depth + optional path prefix, any-of branches and excluded branches |
 | Returns | every matching fact, unordered, unbounded | a **bounded ranking** plus a **summary** |
 | Ordering | none | declared — registry direction, or the caller's explicit choice |
 | History | `IncludeSuperseded` available | deliberately absent |
@@ -251,6 +251,60 @@ of the pipeline (the subject predicate, the threshold, the ordering
 resolution, the ranking and the statistics fold) live in
 `PopulationQueryTypes` and are shared, so an indexed implementation is
 equivalent by construction rather than by a second reading of this page.
+
+### Narrowing the set: any of several branches, and branches left out
+
+"The top four countries outside the UK" and "these three sites" are
+populations too, and they are asked as populations rather than by ranking a
+wider one and filtering it by eye. Filtering afterwards gets three things
+wrong: a member's rank is its place in the wider population, the statistics
+describe members the question excluded, and a ceiling-capped ranking can
+omit members the narrower question would have reached.
+
+`PopulationQuery` therefore carries two path filters beside `PathPrefix`:
+
+- `PathAnyOf` admits a subject whose path starts with **any** listed prefix.
+  It AND-combines with `PathPrefix`. `Some []` lists no prefix and admits no
+  subject: an empty disjunction is never read as "everyone".
+- `PathExclude` drops a subject whose path starts with any listed prefix,
+  applied after the inclusion clauses. An empty prefix in the list excludes
+  every subject.
+
+```fsharp skip=fragment
+// "The top four countries outside the UK."
+let! outsideUk =
+    store.QueryPopulation(
+        scope,
+        { PopulationQuery.create (MetricRef "revenue") "geography" with
+            Level = Some 1
+            PathExclude = Some [ [ "uk" ] ]
+            Ordering = Descending
+            TopK = 4 })
+```
+
+Both are part of the subject predicate, `PopulationQuery.matchesSubject`, so
+they apply exactly where `PathPrefix` does: in the store, before the ranking,
+the `TopK` ceiling and `PopulationStats`. Every backend applies them:
+
+- **`BlobFactStore`** through the shared predicate, on both the enumerating
+  and the surface path.
+- **`PostgresFactStore`** as `WHERE` predicates over the indexed path (an `OR`
+  of prefix slices, and its negation). The path is carried by the covering
+  population index, so the read stays index-only; the live arm's `EXPLAIN`
+  case pins that.
+- **`DelegatedFactStore`** translates them into its table's declared query,
+  which reads one prefix. `PopulationQuery.asOnePrefix` restates the three
+  path clauses as one prefix exactly where they can be: an any-of whose
+  branches lie under one of them, an exclusion covering the whole branch (no
+  subject), or an exclusion outside it (nothing removed). Anything else (two
+  disjoint branches, or a hole cut inside one) is **refused, naming the
+  filter**, rather than answered over a wider population.
+
+A path that names no subject is not an error: the answer is an empty
+population, with empty statistics. `query_metric_population` exposes the two
+as `path_any_of` and `path_exclude` (arrays of `>`-separated paths), refuses a
+malformed value by name, and echoes the filters it applied under `filters`.
+Migration: [`docs/migrations/1142-population-path-filters.md`](../migrations/1142-population-path-filters.md).
 
 ### How the blob store serves a point read (Phase 890)
 
