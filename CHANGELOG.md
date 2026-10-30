@@ -19,12 +19,11 @@ Migration notes:
 
 - [1052-serviceconfig-append-and-contribution-service](docs/migrations/1052-serviceconfig-append-and-contribution-service.md)
 - [1069-redesign-e-defects-client-shell](docs/migrations/1069-redesign-e-defects-client-shell.md)
-- [1089-redesign-h-sha256-hex-and-canonicalframe](docs/migrations/1089-redesign-h-sha256-hex-and-canonicalframe.md)
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 - [1145-pipeline-tool](docs/migrations/1145-pipeline-tool.md)
 
-_Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added, 5 members changed, 9 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 11 packages moved; 295 members added, 6 members changed, 8 members removed; 1 package new._
 
 ### Added
 
@@ -55,12 +54,7 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added,
   - `ToolUp.DataSources.Common.DeliveryCancel.SourceId : System.String { get }`
   - `ToolUp.DataSources.Common.DeliveryObservation (class)`
   - … and 40 more — `git diff v0.37.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
-- `ToolUp.FactStores.Postgres` — 3 members:
-  - `ToolUp.FactStores.Postgres.FactStoreMigration.migrateIds(ToolUp.FactStores.Postgres.PostgresFactStore, System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]`
-  - `ToolUp.FactStores.Postgres.MigrationSql.deleteRow(System.String) : System.String`
-  - `ToolUp.FactStores.Postgres.MigrationSql.rekeyRow(System.String) : System.String`
-- `ToolUp.Facts.Core` — 93 members:
-  - `ToolUp.Facts.FactModule.IdLabel : System.String (literal)`
+- `ToolUp.Facts.Core` — 92 members:
   - `ToolUp.Facts.PipelineRefusal (class)`
   - `ToolUp.Facts.PipelineRefusal+EvaluationFailed (class)`
   - `ToolUp.Facts.PipelineRefusal+EvaluationFailed.reason : System.String { get }`
@@ -80,30 +74,21 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added,
   - `ToolUp.Facts.PipelineRefusal+OpenSchema (class)`
   - `ToolUp.Facts.PipelineRefusal+OpenSchema.reason : System.String { get }`
   - `ToolUp.Facts.PipelineRefusal+OpenSchema.step : System.Int32 { get }`
-  - … and 73 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
+  - `ToolUp.Facts.PipelineRefusal+ResultOverCap (class)`
+  - … and 72 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
 - `ToolUp.Facts.Presentation.Server` — new package (21 public members)
-- `ToolUp.Facts.Server` — 28 members:
-  - `ToolUp.Facts.BlobFactStore.MigrateIds(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]`
+- `ToolUp.Facts.Server` — 11 members:
   - `ToolUp.Facts.FactBrowseHandler.atSurface(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.IHeldFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate`
   - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
-  - `ToolUp.Facts.FactIdChange (class)`
-  - `ToolUp.Facts.FactIdChange..ctor(System.String, System.String)`
-  - `ToolUp.Facts.FactIdChange.From : System.String { get }`
-  - `ToolUp.Facts.FactIdChange.To : System.String { get }`
-  - `ToolUp.Facts.FactIdMigration (class)`
-  - `ToolUp.Facts.FactIdMigration.plan(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.Fact, ToolUp.Facts.Fact]]`
-  - `ToolUp.Facts.FactIdMigration.render(ToolUp.Facts.FactIdMigrationReport) : System.String`
-  - `ToolUp.Facts.FactIdMigration.report(System.String, System.Boolean, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.Fact, ToolUp.Facts.Fact]]) : ToolUp.Facts.FactIdMigrationReport`
-  - `ToolUp.Facts.FactIdMigrationReport (class)`
-  - `ToolUp.Facts.FactIdMigrationReport..ctor(System.String, System.Boolean, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactIdChange])`
-  - `ToolUp.Facts.FactIdMigrationReport.DryRun : System.Boolean { get }`
-  - `ToolUp.Facts.FactIdMigrationReport.FactsRead : System.Int32 { get }`
-  - `ToolUp.Facts.FactIdMigrationReport.FirstDivergent : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactIdChange] { get }`
-  - `ToolUp.Facts.FactIdMigrationReport.Rekeyed : System.Int32 { get }`
-  - `ToolUp.Facts.FactIdMigrationReport.Relinked : System.Int32 { get }`
-  - `ToolUp.Facts.FactIdMigrationReport.ScopeId : System.String { get }`
   - `ToolUp.Facts.PipelineTool (class)`
-  - … and 8 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - `ToolUp.Facts.PipelineTool.Name : System.String (literal)`
+  - `ToolUp.Facts.PipelineTool.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]`
+  - `ToolUp.Facts.PipelineTool.decode(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.PipelineRefusal]`
+  - `ToolUp.Facts.PipelineTool.definition : ToolUp.Platform.AIToolDefinition { get }`
+  - `ToolUp.Facts.PipelineTool.evaluate(ToolUp.Facts.PipelineToolRequest, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.FactSlice, System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]`
+  - `ToolUp.Facts.PipelineTool.refusalText(ToolUp.Facts.PipelineRefusal) : System.String`
+  - `ToolUp.Facts.PipelineTool.requestOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolRequest, ToolUp.Facts.PipelineRefusal]`
+  - `ToolUp.Facts.PipelineTool.summary(ToolUp.Facts.PipelineToolResult) : System.String`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }`
@@ -118,7 +103,7 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added,
   - `ToolUp.Platform.TeamManagerMessages.RevokeInvitePrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }`
   - `ToolUp.Platform.TeamManagerMessages.TransferSelectedMemberFallback : System.String { get }`
   - `Toolup.UIToolkit.Layout.registerHeaderIdentityAction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]) : System.Void`
-- `ToolUp.Platform.Core` — 59 members:
+- `ToolUp.Platform.Core` — 52 members:
   - `ToolUp.Platform.AuditScope (class)`
   - `ToolUp.Platform.AuditScope+Scoped (class)`
   - `ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }`
@@ -131,22 +116,29 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added,
   - `ToolUp.Platform.AuditScope.Tag : System.Int32 { get }`
   - `ToolUp.Platform.AuditScopeModule (class)`
   - `ToolUp.Platform.AuditScopeModule.streamKey(ToolUp.Platform.AuditScope) : System.String`
-  - `ToolUp.Platform.CanonicalFrame (class)`
-  - `ToolUp.Platform.CanonicalFrame.digest(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String`
-  - `ToolUp.Platform.CanonicalFrame.frame(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Byte[]`
-  - `ToolUp.Platform.CanonicalFrame.text(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String`
   - `ToolUp.Platform.PlatformShard (class)`
   - `ToolUp.Platform.PlatformShard.Platform : ToolUp.Platform.PlatformShard { get }`
   - `ToolUp.Platform.PlatformShard.Tag : System.Int32 { get }`
   - `ToolUp.Platform.ScopeKey (class)`
-  - … and 39 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 54 members:
+  - `ToolUp.Platform.ScopeKey+Claim (class)`
+  - `ToolUp.Platform.ScopeKey+Claim.claimScopeId : System.String { get }`
+  - `ToolUp.Platform.ScopeKey+Platform (class)`
+  - `ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }`
+  - … and 32 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 64 members:
   - `ToolUp.Platform.CapabilityNotDeclared (class)`
   - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
   - `ToolUp.Platform.CapabilityNotDeclared.Capability : ToolUp.Platform.ConnectorCapability { get }`
   - `ToolUp.Platform.CapabilityNotDeclared.Kind : System.String { get }`
   - `ToolUp.Platform.CapabilityNotDeclaredModule (class)`
   - `ToolUp.Platform.CapabilityNotDeclaredModule.describe(ToolUp.Platform.CapabilityNotDeclared) : System.String`
+  - `ToolUp.Platform.CompositionManifest.LiveInterfaceTools : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.Platform.CompositionManifestModule.LiveInterfaceSchemaVersion : System.Int32 (literal)`
+  - `ToolUp.Platform.CompositionManifestModule.isLiveInterfaceTool(ToolUp.Platform.AIToolDefinition) : System.Boolean`
+  - `ToolUp.Platform.CompositionManifestModule.liveInterfaceTools(ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
+  - `ToolUp.Platform.CompositionManifestModule.liveInterfaceToolsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
+  - `ToolUp.Platform.CompositionManifestModule.recordsLiveInterfaceTools(ToolUp.Platform.CompositionManifest) : System.Boolean`
+  - `ToolUp.Platform.CompositionManifestModule.withLiveInterfaceTools(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest`
   - `ToolUp.Platform.ConnectorCapabilities (class)`
   - `ToolUp.Platform.ConnectorCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload])`
   - `ToolUp.Platform.ConnectorCapabilities.Native : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload] { get }`
@@ -154,14 +146,7 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added,
   - `ToolUp.Platform.ConnectorCapabilitiesModule (class)`
   - `ToolUp.Platform.ConnectorCapabilitiesModule.declared(ToolUp.Platform.ConnectorCapabilities) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConnectorCapability]`
   - `ToolUp.Platform.ConnectorCapabilitiesModule.declares(ToolUp.Platform.ConnectorCapability, ToolUp.Platform.ConnectorCapabilities) : System.Boolean`
-  - `ToolUp.Platform.ConnectorCapabilitiesModule.native(ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IEmitsNativePayload, ToolUp.Platform.CapabilityNotDeclared]`
-  - `ToolUp.Platform.ConnectorCapabilitiesModule.none : ToolUp.Platform.ConnectorCapabilities { get }`
-  - `ToolUp.Platform.ConnectorCapabilitiesModule.require(ToolUp.Platform.ConnectorCapability, ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CapabilityNotDeclared]`
-  - `ToolUp.Platform.ConnectorCapabilitiesModule.watchable(ToolUp.Platform.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IWatchableFileSource, ToolUp.Platform.CapabilityNotDeclared]`
-  - `ToolUp.Platform.ConnectorCapability (class)`
-  - `ToolUp.Platform.ConnectorCapability+Tags (class)`
-  - `ToolUp.Platform.ConnectorCapability+Tags.Native : System.Int32 (literal)`
-  - … and 34 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 44 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — 1 member:
   - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
 
@@ -174,7 +159,8 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added,
 - `ToolUp.Platform.Client` — 2 members:
   - `ToolUp.Platform.BootSourceMessages..ctor` — `ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)`
   - `ToolUp.Platform.TeamManagerMessages..ctor` — `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)`
-- `ToolUp.Platform.Server` — 1 member:
+- `ToolUp.Platform.Server` — 2 members:
+  - `ToolUp.Platform.CompositionManifest..ctor` — `ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod])` → `ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
   - `ToolUp.Platform.ServerApp..ctor` — `ToolUp.Platform.ServerApp..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ComposeExtensions, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleQueryHandler]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.FileProcessor+DataType]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HealthChecks+IHealthCheck], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidation+IConfigValidator], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ISeedPack], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Usage.ITeamQuotaPolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Providers+IProviderProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IAuditSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditReplicatorOptions], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableBinding], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RegisteredPurpose], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Tracing.IActivitySink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDescriptor], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SmokeTests+ISmokeTest], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IDataExporter], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IErasureHandler], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IOAuthCredentialFlow], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IOAuth1aFlow], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnonymousSessionMigrator], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.IShareTokenStore, ToolUp.Platform.IShareTokenStore]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IUserDirectory], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModuleBindingVerifier], ToolUp.Platform.TransientFault+ResilienceMode, ToolUp.Platform.TransientFault+ResilienceMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleLoadOutcome]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ComponentId]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.GrantPolicy]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleAIExposure]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantNotification+GrantNotificationSettings], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComposeModelExecution+ModelExecutionComposeOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamOutputVisibilitySettings])` → `ToolUp.Platform.ServerApp..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ComposeExtensions, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleQueryHandler]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.FileProcessor+DataType]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.HealthChecks+IHealthCheck], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidation+IConfigValidator], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ISeedPack], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Usage.ITeamQuotaPolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Providers+IProviderProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IAuditSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditReplicatorOptions], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableBinding], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RegisteredPurpose], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Tracing.IActivitySink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDescriptor], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SmokeTests+ISmokeTest], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IDataExporter], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IErasureHandler], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IOAuthCredentialFlow], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IOAuth1aFlow], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnonymousSessionMigrator], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.IShareTokenStore, ToolUp.Platform.IShareTokenStore]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IUserDirectory], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModuleBindingVerifier], ToolUp.Platform.TransientFault+ResilienceMode, ToolUp.Platform.TransientFault+ResilienceMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleLoadOutcome]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ComponentId]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.GrantPolicy]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleAIExposure]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantNotification+GrantNotificationSettings], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComposeModelExecution+ModelExecutionComposeOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamOutputVisibilitySettings], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Contribution])`
 
 ### Removed
@@ -189,8 +175,6 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added,
   - `ToolUp.DataSources.Common.WatchedObject.Table : System.String { get }`
 - `ToolUp.Platform.Client` — 1 member:
   - `Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement`
-- `ToolUp.Platform.Server` — 1 member:
-  - `ToolUp.Platform.CountersignatureCanonical.sha256Hex(System.Byte[]) : System.String`
 
 ## [0.37.0] — 2026-10-29
 
