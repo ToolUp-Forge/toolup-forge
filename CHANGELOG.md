@@ -21,13 +21,14 @@ Migration notes:
 - [1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition](docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md)
 - [1069-redesign-e-defects-client-shell](docs/migrations/1069-redesign-e-defects-client-shell.md)
 - [1089-redesign-h-sha256-hex-and-canonicalframe](docs/migrations/1089-redesign-h-sha256-hex-and-canonicalframe.md)
+- [1090-sidecarstore-and-runjob](docs/migrations/1090-sidecarstore-and-runjob.md)
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 - [1133-fuaran-co-resolution](docs/migrations/1133-fuaran-co-resolution.md)
 - [1145-pipeline-tool](docs/migrations/1145-pipeline-tool.md)
 - [1150-fact-table-descriptions](docs/migrations/1150-fact-table-descriptions.md)
 
-_Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added, 16 members changed, 66 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 13 packages moved; 683 members added, 16 members changed, 102 members removed; 1 package new._
 
 ### Added
 
@@ -85,7 +86,7 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Facts.PipelineRefusal+OpenSchema.step : System.Int32 { get }`
   - … and 73 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
 - `ToolUp.Facts.Presentation.Server` — new package (21 public members)
-- `ToolUp.Facts.Server` — 28 members:
+- `ToolUp.Facts.Server` — 29 members:
   - `ToolUp.Facts.BlobFactStore.MigrateIds(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]`
   - `ToolUp.Facts.FactBrowseHandler.atSurface(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.IHeldFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate`
   - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
@@ -106,7 +107,7 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Facts.FactIdMigrationReport.Relinked : System.Int32 { get }`
   - `ToolUp.Facts.FactIdMigrationReport.ScopeId : System.String { get }`
   - `ToolUp.Facts.PipelineTool (class)`
-  - … and 8 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - … and 9 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.Facts.Shared` — 2 members:
   - `ToolUp.Facts.FactTableColumnView.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
   - `ToolUp.Facts.FactTableDetail.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
@@ -127,7 +128,7 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Platform.TeamManagerMessages.RevokeInvitePrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }`
   - `ToolUp.Platform.TeamManagerMessages.TransferSelectedMemberFallback : System.String { get }`
   - `Toolup.UIToolkit.Layout.registerHeaderIdentityAction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]) : System.Void`
-- `ToolUp.Platform.Core` — 73 members:
+- `ToolUp.Platform.Core` — 107 members:
   - `ToolUp.Platform.AuditScope (class)`
   - `ToolUp.Platform.AuditScope+Scoped (class)`
   - `ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }`
@@ -148,8 +149,8 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Platform.Grounding.FactTableDescription..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])`
   - `ToolUp.Platform.Grounding.FactTableDescription.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }`
   - `ToolUp.Platform.Grounding.FactTableDescription.Description : System.String { get }`
-  - … and 53 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 310 members:
+  - … and 87 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 370 members:
   - `ToolUp.Platform.Background.tryStart(ToolUp.Platform.Background+DrainSet, ToolUp.Platform.ILogger, System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]) : System.Boolean`
   - `ToolUp.Platform.CapabilityNotDeclared (class)`
   - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
@@ -164,13 +165,13 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Platform.CompositionManifestModule.liveInterfaceToolsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
   - `ToolUp.Platform.CompositionManifestModule.recordsLiveInterfaceTools(ToolUp.Platform.CompositionManifest) : System.Boolean`
   - `ToolUp.Platform.CompositionManifestModule.withLiveInterfaceTools(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest`
+  - `ToolUp.Platform.ConditionalDataObjectStore.isAtomic(ToolUp.Platform.IDataObjectStore) : System.Boolean`
   - `ToolUp.Platform.ConnectorCapabilities (class)`
   - `ToolUp.Platform.ConnectorCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload])`
   - `ToolUp.Platform.ConnectorCapabilities.Native : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload] { get }`
   - `ToolUp.Platform.ConnectorCapabilities.Watchable : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource] { get }`
   - `ToolUp.Platform.ConnectorCapabilitiesModule (class)`
-  - `ToolUp.Platform.ConnectorCapabilitiesModule.declared(ToolUp.Platform.ConnectorCapabilities) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConnectorCapability]`
-  - … and 290 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 350 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — 1 member:
   - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
 
@@ -209,10 +210,17 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.DataSources.Common.WatchedObject.BlobName : System.String { get }`
   - `ToolUp.DataSources.Common.WatchedObject.Identity : System.String { get }`
   - `ToolUp.DataSources.Common.WatchedObject.Table : System.String { get }`
+- `ToolUp.Facts.Server` — 2 members:
+  - `ToolUp.Facts.RecomputeJobHandler (class)`
+  - `ToolUp.Facts.RecomputeJobHandler..ctor(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, ToolUp.Platform.ILogger)`
 - `ToolUp.Platform.Client` — 1 member:
   - `Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement`
-- `ToolUp.Platform.Server` — 58 members:
+- `ToolUp.Platform.Server` — 92 members:
   - `ToolUp.Platform.CountersignatureCanonical.sha256Hex(System.Byte[]) : System.String`
+  - `ToolUp.Platform.DatasetRevintage.serialiseJobPayload(ToolUp.Platform.DatasetRevintageJobPayload) : System.String`
+  - `ToolUp.Platform.DatasetRevintage.tryParseJobPayload(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetRevintageJobPayload, System.String]`
+  - `ToolUp.Platform.DatasetRevintageJobHandler (class)`
+  - `ToolUp.Platform.DatasetRevintageJobHandler..ctor(ToolUp.Platform.IDatasetAssemblyExecutor, ToolUp.Platform.IDatasetStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)`
   - `ToolUp.Platform.JobScheduler+JobCompletedPayload (class)`
   - `ToolUp.Platform.JobScheduler+JobCompletedPayload..ctor(System.Guid, System.String, System.String, System.Guid, System.Int32, System.Int64)`
   - `ToolUp.Platform.JobScheduler+JobCompletedPayload.Attempt : System.Int32 { get }`
@@ -258,11 +266,7 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Platform.JobScheduler+JobExternalReconciledPayload.NativeRef : System.String { get }`
   - `ToolUp.Platform.JobScheduler+JobExternalReconciledPayload.Outcome : System.String { get }`
   - `ToolUp.Platform.JobScheduler+JobExternalReconciledPayload.ResultRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
-  - `ToolUp.Platform.JobScheduler+JobExternalReconciledPayload.Retriable : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }`
-  - `ToolUp.Platform.JobScheduler+JobExternalReconciledPayload.RunId : System.Guid { get }`
-  - `ToolUp.Platform.JobScheduler+JobExternalReconciledPayload.ScopeId : System.String { get }`
-  - `ToolUp.Platform.JobScheduler+JobFailedPayload (class)`
-  - … and 8 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 42 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ## [0.37.0] — 2026-10-29
 
