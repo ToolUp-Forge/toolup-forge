@@ -100,11 +100,6 @@
              composition change: a deployment that never exports one pays
              nothing (GP 13). -->
         <Compile Include="Server\CertificateEnvelope.fs" />
-        <!-- Phase 985 — the narrative grounding gate: every number in a
-             model-written narrative must be a current, disclosable Fact
-             reference stating its value. After the certificate files (it
-             certifies a published narrative through the issuer). -->
-        <Compile Include="Server\NarrativeGroundingGate.fs" />
         <!-- Phase 683 — the consuming half of the imported-fact provenance
              case: verify a peer's certificate offline against key material
              held for THAT peer, re-derive the content-addressed id, refuse
@@ -132,10 +127,21 @@
         <!-- The preflight report of what a deployment left undescribed;
              compiled before the root that registers it. -->
         <Compile Include="Server\FactDeclarationsValidator.fs" />
-        <Compile Include="Server\FactsCompose.fs" />
-        <!-- Phase 895 — the fact browse read surface (IFactBrowseApi) and its
-             per-run notification decoration of the table writer. -->
+        <!-- The fact browse read surface (IFactBrowseApi) and its per-run
+             notification decoration of the table writer. After the table
+             writer it reads and decorates; before the table listing tool,
+             which projects its reads. -->
         <Compile Include="Server\FactBrowseHandler.fs" />
+        <!-- list_fact_tables: the declared tables projected over the browse
+             reads. Before the narrative grounding gate and the compose root,
+             which both declare it beside the other fact tools. -->
+        <Compile Include="Server\FactTablesTool.fs" />
+        <!-- The narrative grounding gate: every number in a model-written
+             narrative must be a current, disclosable Fact reference stating
+             its value. After the certificate files (it certifies a published
+             narrative through the issuer) and the fact tools it offers. -->
+        <Compile Include="Server\NarrativeGroundingGate.fs" />
+        <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 1145 — evaluate_pipeline: a Fuaran.Compute pipeline the
              model writes, evaluated over the fact browse's gated view slice.
              After the browse handler, whose slice read it calls. -->

@@ -1190,7 +1190,7 @@ behind the same six-rule-audited `IFactStore` contract.
 There are two doors, and they are armed by different things:
 
 - **The tool door.** `query_facts` / `query_metric_population` /
-  `list_metric_coverage` — the model asks, and gets an answer. Reliable,
+  `list_metric_coverage` / `list_fact_tables` — the model asks, and gets an answer. Reliable,
   but it fires only when the model thinks to reach for it. **Armed by**
   composing the fact store AND the AI tier: the store declares the tools,
   and only the AI companion's composition registers them.
@@ -1208,9 +1208,34 @@ Composing the store on its own therefore arms neither door fully: with no
 AI tier the tools are never registered, and with no compiler the planner
 refuses every question, so the push door is dormant.
 
+#### The table listing: the model sees what tables exist before it asks
+
+`list_metric_coverage` reports by metric. `list_fact_tables(table?)` reports by table: which metrics sit together, in
+which hierarchy, at which level and grain, refreshed how often and when last. A model asked for "the top four countries
+for orders" learns from it, before it plans, whether any table holds orders at the country level. It is declared by the
+same knob as the other fact tools (`FactsCompose.withFactStore`, through `NarrativeGrounding.factTools`, the one list
+the grounded narrative also offers), server-resident, declaring `ReadFacts`.
+
+- **What it returns per table.** The id and description; the hierarchy, the level and the path of levels from the
+  root to it, each with its description; each metric column with its id, name, unit, display format, `Context` and
+  column description; and the grain, refresh cadence, history mode, row count, last committed run, freshness and the
+  latest run's outcome. With `table`, one table; an unknown id is refused by name.
+- **One projection, over the browse reads.** `FactTablesTool.project` reads the tables through the browse's
+  `listTables` / `getTable` (and `FactBrowseHandler.detailOf` beside each listing row) under the request's scope, and
+  adds the registry's declarations. It returns a typed `FactTableView` list, which the tool serialises and which a
+  prompt fragment can render; it is not a second read of the store.
+- **Declarations and counts, never a value.** The bound `list_metric_coverage` keeps.
+- **Disclosure, at `FactToolResult`.** Each metric column's first drill-down page (`queryRows`, the table's own method
+  lineage, `CoverageTool.DisclosureProbeK` rows) is judged by the gate fixed at the tool-result surface; the rows are
+  dropped where they are read. A table with some disclosable sampled fact is described, naming on the table and the
+  column the policies anything sampled was withheld under. A table whose sampled facts are all withheld is reported as
+  existing, with its id, `withheld: true`, the restricting policies and a reason, and nothing more. A table whose
+  committed rows carry no value that could be checked is withheld, saying so; a table with no committed row has
+  nothing to withhold and is described. The sample is a floor, not a proof, as coverage's probe is.
+
 #### The render tools: the model asks for a chart, not a number (Phase 1132)
 
-Beside the three fact tools, two more let the model *show* facts rather than quote them:
+Beside the four fact tools, two more let the model *show* facts rather than quote them:
 `render_chart` (a trend, a breakdown or a comparison) and `render_table`. The model writes a
 [presentation request](#from-a-series-to-a-chart-the-presentation-builders-phase-1129), never
 a row. The server reads the series it names through the browse's series read and draws the

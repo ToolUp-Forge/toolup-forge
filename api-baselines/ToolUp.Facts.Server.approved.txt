@@ -579,6 +579,7 @@ ToolUp.Facts.FactAudit.write(ToolUp.Platform.IEventStore, System.String, Microso
 ToolUp.Facts.FactBrowseHandler (class)
 ToolUp.Facts.FactBrowseHandler.api(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Facts.IFactBrowseApi
 ToolUp.Facts.FactBrowseHandler.atSurface(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.IHeldFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate
+ToolUp.Facts.FactBrowseHandler.detailOf(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.Grounding.FactTableDefinition, ToolUp.Facts.FactTableListing) : ToolUp.Facts.FactTableDetail
 ToolUp.Facts.FactBrowseHandler.factBrowseApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Facts.IFactBrowseApi
 ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]
 ToolUp.Facts.FactBrowseHandler.getFact(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]
@@ -854,6 +855,20 @@ ToolUp.Facts.FactTableImportedCell.From : System.DateTime { get }
 ToolUp.Facts.FactTableImportedCell.Metric : System.String { get }
 ToolUp.Facts.FactTableImportedCell.Subject : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactTableImportedCell.To : System.DateTime { get }
+ToolUp.Facts.FactTableLevelView (class)
+ToolUp.Facts.FactTableLevelView..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.FactTableLevelView.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableLevelView.Level : System.String { get }
+ToolUp.Facts.FactTableMetricView (class)
+ToolUp.Facts.FactTableMetricView..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.FactTableMetricView.Context : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableMetricView.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableMetricView.DisplayFormat : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableMetricView.Metric : System.String { get }
+ToolUp.Facts.FactTableMetricView.Name : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableMetricView.RestrictedUnderPolicies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableMetricView.Shape : System.String { get }
+ToolUp.Facts.FactTableMetricView.Unit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.FactTableOrphanSweep (class)
 ToolUp.Facts.FactTableOrphanSweep.sweep(ToolUp.Facts.IFactTableWriter, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableOrphanSweepReport, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.FactTableOrphanSweepReport (class)
@@ -913,6 +928,26 @@ ToolUp.Facts.FactTableRunProvenance+Tags.ComputedRun : System.Int32 (literal)
 ToolUp.Facts.FactTableRunProvenance+Tags.ImportedRun : System.Int32 (literal)
 ToolUp.Facts.FactTableRunProvenanceModule (class)
 ToolUp.Facts.FactTableRunProvenanceModule.rewrite(ToolUp.Facts.FactTableRunProvenance) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactDraft, ToolUp.Facts.FactDraft]
+ToolUp.Facts.FactTableShown (class)
+ToolUp.Facts.FactTableShown..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableLevelView], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableMetricView], System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.FactTableShown.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableMetricView] { get }
+ToolUp.Facts.FactTableShown.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableShown.Freshness : System.String { get }
+ToolUp.Facts.FactTableShown.Hierarchy : System.String { get }
+ToolUp.Facts.FactTableShown.HierarchyDescription : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableShown.HierarchyName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableShown.HistoryMode : System.String { get }
+ToolUp.Facts.FactTableShown.LastRefreshedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.FactTableShown.LastRun : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableShown.LatestRunOutcome : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableShown.Level : System.String { get }
+ToolUp.Facts.FactTableShown.OverdueBySeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Facts.FactTableShown.Path : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableLevelView] { get }
+ToolUp.Facts.FactTableShown.PeriodGrain : System.String { get }
+ToolUp.Facts.FactTableShown.RefreshCadenceSeconds : System.Int64 { get }
+ToolUp.Facts.FactTableShown.RestrictedUnderPolicies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableShown.RowCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.FactTableShown.TableId : System.String { get }
 ToolUp.Facts.FactTableSnapshot (class)
 ToolUp.Facts.FactTableSnapshot..ctor(System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableSnapshotRow])
 ToolUp.Facts.FactTableSnapshot.Rows : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableSnapshotRow] { get }
@@ -940,6 +975,22 @@ ToolUp.Facts.FactTableValidation (class)
 ToolUp.Facts.FactTableValidation.defects(ToolUp.Platform.Grounding.FactTableDefinition, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.FactTableRow]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRowDefect]
 ToolUp.Facts.FactTableValidation.outsideSlice(ToolUp.Platform.Grounding.FactTableDefinition, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.FactTableRow]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRowDefect]
 ToolUp.Facts.FactTableValidation.subjectText(ToolUp.Platform.Grounding.FactTableDefinition, ToolUp.Facts.FactTableRow) : System.String
+ToolUp.Facts.FactTableView (class)
+ToolUp.Facts.FactTableView.IsShown : System.Boolean { get }
+ToolUp.Facts.FactTableView.IsWithheld : System.Boolean { get }
+ToolUp.Facts.FactTableView.Tag : System.Int32 { get }
+ToolUp.Facts.FactTableView+Shown (class)
+ToolUp.Facts.FactTableView+Shown.Item : ToolUp.Facts.FactTableShown { get }
+ToolUp.Facts.FactTableView+Tags (class)
+ToolUp.Facts.FactTableView+Tags.Shown : System.Int32 (literal)
+ToolUp.Facts.FactTableView+Tags.Withheld : System.Int32 (literal)
+ToolUp.Facts.FactTableView+Withheld (class)
+ToolUp.Facts.FactTableView+Withheld.Item : ToolUp.Facts.FactTableWithheld { get }
+ToolUp.Facts.FactTableWithheld (class)
+ToolUp.Facts.FactTableWithheld..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
+ToolUp.Facts.FactTableWithheld.Reason : System.String { get }
+ToolUp.Facts.FactTableWithheld.RestrictedUnderPolicies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableWithheld.TableId : System.String { get }
 ToolUp.Facts.FactTableWriteError (class)
 ToolUp.Facts.FactTableWriteError.IsFactTableCommitConflict : System.Boolean { get }
 ToolUp.Facts.FactTableWriteError.IsFactTableNotBoundHere : System.Boolean { get }
@@ -990,6 +1041,14 @@ ToolUp.Facts.FactTableWriteError+Tags.FactTableUndeclared : System.Int32 (litera
 ToolUp.Facts.FactTableWriteErrorModule (class)
 ToolUp.Facts.FactTableWriteErrorModule.RenderedDefectCap : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteErrorModule.describe(ToolUp.Facts.FactTableWriteError) : System.String
+ToolUp.Facts.FactTablesTool (class)
+ToolUp.Facts.FactTablesTool.Name : System.String (literal)
+ToolUp.Facts.FactTablesTool.RestrictedReason : System.String (literal)
+ToolUp.Facts.FactTablesTool.UnsampledReason : System.String (literal)
+ToolUp.Facts.FactTablesTool.definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.FactTablesTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.FactTablesTool.executeWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.FactTablesTool.project(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableView], System.String]]
 ToolUp.Facts.FactTool (class)
 ToolUp.Facts.FactTool.define(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactToolContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactToolContext (class)
