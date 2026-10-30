@@ -1,6 +1,7 @@
 module ToolUp.Platform.NotificationChannels.Push.WebPushHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -13,7 +14,7 @@ open ToolUp.Platform.Secrets
 // upstream service to ping at probe time.
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKey = "WEBPUSH_VAPID_PRIVATE"

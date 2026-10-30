@@ -42,7 +42,7 @@ open ToolUp.Platform.ProviderExceptions
 let private ProviderName = "WebPush"
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private VapidPrivateKeyName = "WEBPUSH_VAPID_PRIVATE"
