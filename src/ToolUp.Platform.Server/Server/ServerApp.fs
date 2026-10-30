@@ -3286,6 +3286,12 @@ module ServerApp =
         // Phase 684's envelope now reads back out of the manifest rather
         // than computing a second time.
         |> CompositionManifest.withCanonicalMethods (CompositionManifest.canonicalMethodsOf app.RegisteredMetrics)
+        // Phase 860 — which composed tools are live-interface tools, from
+        // the same definitions `tools` above names, through the predicate
+        // the tool-aware RAG framing uses. Not sealed.
+        |> CompositionManifest.withLiveInterfaceTools (
+            CompositionManifest.liveInterfaceToolsOf (app.AITools |> List.map fst)
+        )
 
     /// Phase 657 — run the boot verification preflight over the composition
     /// THIS app derived, and decide whether it may serve.
@@ -3790,7 +3796,13 @@ module ServerApp =
                 services.AddSingleton<StartupModes.DescribeRenderer>(ReflectionTools.describeRenderer)
                 |> ignore
 
-                services)
+                // Phase 860 — the readiness report's live-interface posture
+                // for a deployment without RAG, read from the manifest bound
+                // above (never re-projected per request); a RAG composition's
+                // own summary wins in either registration order.
+                DeploymentReadinessReport.registerManifestLiveInterface
+                    (CompositionManifest.liveInterfaceTools inspectedManifest)
+                    services)
 
         let extensions = {
             withProviderProfileService with

@@ -65,8 +65,12 @@ module ToolFraming =
     /// live-interface tool silently missed the framing, and a
     /// server-resident tool that merely happened to carry the prefix
     /// wrongly tripped it. The flag replaces it; no name is inspected.
+    ///
+    /// Phase 860 — the predicate itself is `CompositionManifest.isLiveInterfaceTool`,
+    /// so the composition manifest's `LiveInterfaceTools` and this framing
+    /// share one definition rather than two that happen to agree.
     let private isLiveUiTool (def: AIToolDefinition) : bool =
-        def.IsLiveInterface || def.Location = ClientResident
+        CompositionManifest.isLiveInterfaceTool def
 
     /// Derive the framing summary from the deployment's full tool list
     /// (the `AIToolDefinition`s aggregated on the base `ServerApp`, which
