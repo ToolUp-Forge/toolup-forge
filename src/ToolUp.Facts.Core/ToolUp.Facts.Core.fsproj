@@ -12,6 +12,7 @@
         <None Include="..\ToolUp.Facts\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="Shared\CurrencySymbols.fs" />
         <Compile Include="Shared\FactTypes.fs" />
         <Compile Include="Shared\PopulationQueryTypes.fs" />
         <Compile Include="Shared\AggregateQueryTypes.fs" />

@@ -251,15 +251,13 @@ module Disclosure =
 /// resolver and the fact-reading tool surfaces so a value never renders
 /// two ways at two doors. Invariant culture throughout — the rendering is
 /// a wire/prompt value, never localised.
+///
+/// A door that holds the metric renders with `renderFor`, which reads the
+/// metric's declared currency; `render` is for a caller holding only a
+/// format string.
 module FactRendering =
 
-    let render (displayFormat: string) (value: FactValue) : string =
-        let fmt (d: decimal) =
-            if String.IsNullOrWhiteSpace displayFormat then
-                d.ToString CultureInfo.InvariantCulture
-            else
-                d.ToString(displayFormat, CultureInfo.InvariantCulture)
-
+    let private renderWith (fmt: decimal -> string) (value: FactValue) : string =
         match value with
         | Scalar d -> fmt d
         | Interval(lo, hi) -> sprintf "%s to %s" (fmt lo) (fmt hi)
@@ -275,6 +273,53 @@ module FactRendering =
         // An `Absent` fact is a queryable data gap — surfaced honestly
         // (GP 9: never fabricated into a number).
         | Absent reason -> sprintf "absent (%s)" reason
+
+    let private formatWith (displayFormat: string) (numbers: NumberFormatInfo) (d: decimal) : string =
+        if String.IsNullOrWhiteSpace displayFormat then
+            d.ToString numbers
+        else
+            d.ToString(displayFormat, numbers)
+
+    /// Renders `value` under `displayFormat` alone. A `C` format renders the
+    /// invariant culture's generic currency symbol `¤`, because a format
+    /// string names no currency.
+    let render (displayFormat: string) (value: FactValue) : string =
+        renderWith (formatWith displayFormat NumberFormatInfo.InvariantInfo) value
+
+    /// A standard currency format: `C` or `c`, with an optional precision.
+    /// A custom format (`"£#,##0"`) is not one, and renders as written.
+    let private isCurrencyFormat (displayFormat: string) : bool =
+        not (String.IsNullOrEmpty displayFormat)
+        && (displayFormat.[0] = 'C' || displayFormat.[0] = 'c')
+        && displayFormat |> Seq.skip 1 |> Seq.forall Char.IsDigit
+
+    /// Renders `value` as the metric declares it. A metric whose
+    /// dimensionality is `currency`, whose `Unit` is an ISO 4217 code and
+    /// whose display format is a `C` format renders with that currency's
+    /// symbol (`CurrencySymbols.prefix`): `£21,240` where `render` gives
+    /// `¤21,240`. Grouping, the decimal separator, the digits and the
+    /// negative form `(£21,240)` stay invariant. Every other metric renders
+    /// exactly as `render` does with its `DisplayFormat`, and no metric as
+    /// `render ""`.
+    let renderFor (metric: ToolUp.Platform.Grounding.MetricDefinition option) (value: FactValue) : string =
+        match metric with
+        | None -> render "" value
+        | Some m ->
+            let symbol =
+                if
+                    String.Equals(m.Dimensionality, "currency", StringComparison.OrdinalIgnoreCase)
+                    && isCurrencyFormat m.DisplayFormat
+                then
+                    CurrencySymbols.prefix m.Unit
+                else
+                    None
+
+            match symbol with
+            | None -> render m.DisplayFormat value
+            | Some symbol ->
+                let numbers = NumberFormatInfo.InvariantInfo.Clone() :?> NumberFormatInfo
+                numbers.CurrencySymbol <- symbol
+                renderWith (formatWith m.DisplayFormat numbers) value
 
 /// Content-addressing, lineage keys, and freshness — the decidable laws
 /// (L1–L4) the store is built on, factored out so both the store and its
