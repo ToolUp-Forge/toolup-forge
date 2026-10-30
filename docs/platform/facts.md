@@ -111,6 +111,52 @@ event to `IEventStore` under the reserved `_facts` source module
 pattern, queryable via `IEventStore.ReadBySource scope "_facts"`); an
 idempotent re-assertion changes no state and emits nothing.
 
+### What a write is: one plan, executed by every store (Phase 1091)
+
+What asserting drafts *means* is one pure function in `ToolUp.Facts.Core`, not a property each store
+re-implements. `FactWrite.prepare` pre-flights a request (a batch with a malformed draft is refused whole,
+naming each offender by position; a scalar `Assert` is never refused there, GP 11) and addresses each draft.
+`FactWrite.plan` then takes what the store read — which addresses are already stored, and the stored facts of
+the lineages the request writes into — and the store's clock, read once, and returns a `WritePlan`:
+
+| Field | What it is |
+|---|---|
+| `Facts` | the facts to store, in submission order, each with its id, `AsOf` and `Supersedes` derived |
+| `Supersessions` | every edge the write adds, as (superseding id, superseded id) |
+| `IndexDeltas` | one head move per lineage a new fact landed in: the head it retires, the head it leaves |
+| `Audit` | the audit rows: per fact for `Assert`, one summarised row carrying the receipt for `AssertBatch` |
+| `Unchanged` | the addresses already stored, by an earlier write or an earlier draft of the same request |
+| `Receipt` | the batch receipt over the full ordered disposition, with its digest |
+
+A store is an executor. `BlobFactStore` reads its census and the touched lineages' heads (through the
+point-read index when it is complete), plans, uploads the facts and their index leaves, writes `plan.Audit`
+through `FactAudit.write`, and folds the facts into the metric surface. `PostgresFactStore` does the same
+inside its transaction and its lost-race retry, clearing the heads `IndexDeltas` retires and marking the heads
+it leaves. A delegated store's minted rows are its inner store's plan, and a quote of a past run is the plan's
+own draft-to-fact step (`FactWrite.recordedAt`). So a fact asserted through any store supersedes, competes and
+audits identically by construction; the contract pack's write-plan law holds each store to it, and
+`FactWriteTests` states the plan's own laws (deterministic in its inputs; a batch settles exactly as the same
+drafts asserted one at a time; an unchanged draft is never a new fact).
+
+```fsharp skip=fragment
+match FactWrite.prepare WriteShape.BatchAssert drafts with
+| Error offenders -> Error(FactWrite.renderOffenders (List.length drafts) offenders)
+| Ok request ->
+    let plan = FactWrite.plan now isStored lineageFacts request
+    // persist plan.Facts, apply plan.IndexDeltas, write plan.Audit, return plan.Receipt
+```
+
+The competition indicator and canonical selection of a read are likewise one definition
+(`FactCompetition.competingMethods`, `FactCompetition.selectCanonical`), read by both stores.
+
+A blob store's surface maintenance after a write never fails the write (the surface is derived, and reads
+reconcile against the log), but each failed step is now counted on `BlobFactStore.SurfaceFaults` and logged.
+
+**The store's scope form is unchanged here.** `IFactStore` still has a `string` and a `ResolvedScope` form
+of every member, and reads still raise a storage fault rather than typing it. Removing the `string` forms
+needs a string-to-scope adapter that the `ResolvedScope` design deliberately does not offer; that decision
+is open and recorded in the migration note.
+
 ## Point reads vs population reads
 
 `IFactStore` has two shapes of read, and they answer different questions.
@@ -480,12 +526,11 @@ rule. Its verdicts and audit rows are the id form's in every configuration,
 because the gate's decision procedure reads of each fact exactly those three
 things; the contract pack holds that for the base and taint configurations and
 the disclosure suite for the viewer-aware one. **Under a taint configuration
-the row form still decides**: the taint stage walks the derivation graph,
-which the gate builds from the scope's whole listing in every form and reaches
-each fact by id, so it never needed the points' facts. A chart under taint
-therefore pays the graph load and no per-point read — less than after 1125, not
-the same. Phase 1093's write-maintained taint index is what would retire the
-graph load itself. The browse takes the row form from its held gate by
+the row form still decides**: the taint stage walks the scope's
+disclosure-taint index, which the gate reads in every form and walks to each
+fact by id, so it never needed the points' facts. A chart under taint pays one
+index read and no per-point read (since Phase 1093; before it, the graph load:
+the scope's whole listing). The browse takes the row form from its held gate by
 capability; a held gate that does not offer it is asked in its held form, over
 facts, so a decorator is never bypassed.
 
@@ -564,11 +609,16 @@ What a chart's gate check costs, per configuration:
 |---|---|
 | No taint config | none (the row form judges the rows it holds) |
 | Taint-inert config (`Plain` policies only, unscoped, no declassifier) | none, since Phase 1134 |
-| A `TaintPropagating` policy, a contributor scope, or a declassifier | the graph load: one download per fact in the scope, every check |
+| A `TaintPropagating` policy, a contributor scope, or a declassifier | the scope's taint index: one listing and one index download, every check (Phase 1093; before it, one download per fact in the scope) |
 
-The propagating cost is unchanged by 1134; Phase 1093's write-maintained taint
-index is what would retire it. A cold page's one rebuild still reads the scope
-once, which is the convergence's own cost and not the gate's.
+The propagating cost was unchanged by 1134; Phase 1093's write-maintained taint
+index retired it: the warm `TaintPropagating` rows above now download one blob,
+the index, at both sizes (pinned by the browse pack), in 47.5 ms at 2,000 facts
+and 188.2 ms at 20,000 on the same in-memory backend. That backend makes a
+download nearly free, so its times are the index's parse and the census rather
+than I/O; on object storage the saving is the 2,000 or 20,000 round trips. A cold page's one rebuild
+still reads the scope once, which is the convergence's own cost and not the
+gate's.
 
 ### A view reads once and refines locally: the view slice (Phase 1127)
 
@@ -717,7 +767,7 @@ metric's surface built:
 | Lineage | `QuerySupersessionChain`; the head lookup inside `Assert` / `AssertBatch` | the lineage's facts (one, to confirm, for a head lookup) |
 | Population | `QueryPopulation` | the top-k page it returns, plus the snapshot when the parse cache is cold |
 | Series | `Query` naming a metric and no subject, current heads | the metric's heads in the range under the query's `SubjectBranch` (all of them when it names none), plus the snapshot when the parse cache is cold |
-| Browse chart | `FactBrowseHandler.querySeries` (Phase 1126) | **one surface download** — the snapshot, only when the parse cache is cold — and no fact; under a taint configuration, plus the gate's graph load (below) |
+| Browse chart | `FactBrowseHandler.querySeries` (Phase 1126) | **one surface download** — the snapshot, only when the parse cache is cold — and no fact; under a taint configuration, plus the gate's taint-index read (below) |
 | Full history | `Query` with `IncludeSuperseded`, or with a historical `AsOf` | every fact in the scope |
 
 **What enumerates by definition**: a query naming neither a subject nor a
@@ -729,8 +779,8 @@ read model has dropped. **What enumerates once**: the first consulting read
 after the index went incomplete (it rewrites the missing leaves), and the
 first read of a metric whose surface does not exist (it builds it — no
 longer after a first upload, which builds it at assert; Phase 1124). The
-disclosure gate's own check under taint policies loads the scope separately
-and is not covered by this table.
+disclosure gate's own check under taint policies reads the scope's taint
+index (a listing and one blob) and is not covered by this table.
 
 ## The indexed store: `ToolUp.FactStores.Postgres` (Phase 888)
 
@@ -783,10 +833,11 @@ the answer is the blob store's by construction. Only the ranked top-k are
 read in full.
 
 **Held to the blob store.** Both `IFactStore` contract packs bind to it
-unmodified, and `IFactStoreContract.differentialTests` asserts one seeded
-fact base into both stores and compares every population shape of the
-Phase 702 matrix and every point-read shape of Phase 890's, value for
-value. At 300,000 subjects in one scope a subject-and-metric point read
+unmodified. Its writes execute the same `FactWrite.plan` the blob store
+does (the contract pack's write-plan law); `IFactStoreContract.differentialTests`
+asserts one seeded fact base into both stores and compares every population
+shape of the Phase 702 matrix and every point-read shape of Phase 890's,
+value for value, which is what still holds the two READ paths together. At 300,000 subjects in one scope a subject-and-metric point read
 touched 5 rows by its executed plan, with no sequential scan (Phase 888,
 the live test arm; the same read enumerates the scope on the blob store
 below its index threshold).
@@ -980,6 +1031,28 @@ ServerModule.create "trade"
 
 Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-descriptions.md).
 
+## Preflight names what is undescribed
+
+A description is optional, and an optional field nobody is told about stays empty. A deployment that declares twenty
+metrics with no `Context` gets discovery tools that report names and units only, and nothing says so. Composing the fact
+store (`FactsCompose.withFactStore`) therefore registers one preflight validator, `fact-declarations-described`
+(`FactDeclarationsValidator`), that names what is undescribed:
+
+- **Three kinds, one finding.** Each registered metric without `Context`, each declared fact table without a
+  description and each subject without a description, grouped by declaring module, with a count per kind and the one
+  registration call each needs (`ServerModule.declareMetrics`, `ServerModule.describeFactTables`,
+  `ServerModule.describeSubjects`). A blank text counts as none.
+- **Information, never a refusal.** The preflight result type has no informational severity, and a `Warning` would move
+  every deployment that has not described itself to `Warned` on its readiness report. So the finding is logged at Info
+  through the composed `ILogger`, and the validator answers `Ok`. It cannot stop a start.
+- **Nothing to say, nothing said.** A fully described deployment, or one that declares no metric, table or subject,
+  logs nothing. Nothing changes at runtime.
+- **Module names come from the registry.** The composed `IMetricRegistry` also implements the optional capability
+  `IAttributesDeclarations`, which `MetricRegistry.tryRegistrations` probes for. A registry that does not carry it is
+  still audited; its metrics and subjects are listed under one group, `(module not recorded)`.
+- **Order-independent.** The validator reads the registries and the logger from the service collection when preflight
+  runs, so it does not matter whether modules are added before or after the fact store is composed.
+
 ## Disclosure at birth
 
 Every fact carries a `Disclosure` from its first assertion (plan D14).
@@ -1006,6 +1079,52 @@ without its egress doors armed. Remaining doors (external write-back,
 certificates) extend the DU additively, the same way exports and webhooks
 did.
 
+### Four stages, one read, and an index the writes keep (Phase 1093)
+
+`FactDisclosureGate` decides each fact in four pure stages (`DisclosureStages`),
+each with its own tests:
+
+| Stage | Decides from | Answer |
+|---|---|---|
+| `viewer` | the fact's own classification at the surface, through the resolver; for the viewer when the team-output-visibility facet is composed | the base verdict; `unknown-fact` for an id the scope does not hold, `team-output-visibility-unreadable` for a viewer that cannot be read |
+| `purpose` | the declared purpose taxonomy and the ambient claim | a refusal every fact of the check takes, or none |
+| `taint` | the scope's disclosure-taint index (never the scope's facts) | the inherited deny, the walk's crossings and contributing parties |
+| `budget` | the ledger's answer to the crossings' reservation | the refusal ref of a routine that cannot afford the disclosure |
+
+`FactDisclosureGate.Read` composes them into one `GroundedRead` per fact —
+the verdict with what it was decided from (`Taint`, `ContributorScopes`,
+`Metric`) — and writes the audit rows in **one step after the composition**
+(`DisclosureStages.auditRows`): a `FactDisclosureDenied` row per denial; per
+disclosure a `FactDisclosureDeclassified` row per crossing and, when a
+contributing party's data left, one `FactDisclosureAccessed` row. `Check` is
+the read's verdict projection, so every existing door gets the same answers
+and rows it did.
+
+**The taint index.** The walk reads, of each fact, its `Restricted` policies,
+its `Computed` operation, its evidence inputs and the `Series` version it
+produced (`DisclosureTaintNode`); an edge runs from a fact to the producers of
+the versions it cites. `DisclosureTaintIndex` holds those nodes per scope,
+keyed by content address. Supersession adds no edge, so a write only adds
+nodes (`DisclosureTaintIndex.deltaOf` over the write plan: one node per fact it
+stores), and two nodes for one address JOIN (every policy kept, two operations
+declassify nothing), which makes applying deltas commutative, associative and
+idempotent. One fallback of the old graph is tightened, not kept: where two
+facts produced one version, every producer is upstream (the listing used to
+pick one, by listing order).
+
+How each store keeps it, read through `IDisclosureTaintIndexSource`:
+
+| Store | Kept as | A check reads | Rebuild |
+|---|---|---|---|
+| `BlobFactStore` | one blob per scope, `_disclosuretaint/index.json`, written under its ETag where the storage offers one | the `_facts/` listing and the index blob; a listed fact the index lacks is read and recorded, a node of a fact no longer listed dropped | a scope with no index blob: built from its facts once, written, counted (`TaintIndexRebuilds`) and logged |
+| `PostgresFactStore` | the `<table>_taint` table, one row per fact, inserted in the fact's own transaction | the facts with no node (an anti-join, empty once current), then the scope's nodes | stored facts with no node (every fact on the first read after the upgrade, or rows a bulk path wrote) recorded in one transaction, logged through `Trace` |
+
+A schema provisioned without `<table>_taint` (`VerifyOnly`) and any store that
+does not offer the index are listed per check, as before. The contract pack
+holds every store that offers it to one law: **after any write, the index it
+answers equals `DisclosureTaintIndex.ofFacts` over its whole listing**,
+superseded facts included.
+
 ### The gate judges facts the caller already holds (Phase 1125)
 
 `IFactDisclosureGate.Check` takes ids and resolves each through the store, so
@@ -1024,8 +1143,8 @@ facets, the same `FactDisclosureDenied` / `Declassified` / `Accessed` rows —
 with each id resolved from the held facts instead of the store. An id with no
 held fact is denied `unknown-fact`, exactly as the id form denies an id the
 scope does not hold, so a door whose read found nothing hands the id with
-nothing beside it. Under a taint configuration the derivation graph is
-loaded as the id form loads it; the held form saves the per-id reads and
+nothing beside it. Under a taint configuration the scope's taint index is
+read as the id form reads it; the held form saves the per-id reads and
 nothing else.
 
 **In-process only.** A remoting, peer or webhook path never takes it: there
@@ -1170,14 +1289,35 @@ never types a figure into the result, and the result's figures never reach the m
   restated in prose would carry no fact id, so the numeric-fidelity gate would treat it as
   unverified. The tool's description says so: present the result, retype nothing.
 
-**Not composed yet.** A result is meant to reach the user as a block part on the assistant
-turn (Phase 1131). That needs two things outside the fact tier. The first is the record
-form a tool answers, which lives with the AI composition, as the render tools' does. The
-second is a conversation panel that can re-run a pipeline block under the reader's own
-gate. Until both land, no composition registers `evaluate_pipeline`, and a deployment's
-tool list is unchanged. What ships is the executor, its types (`PipelineToolRequest`,
-`PipelineToolResult`, `PipelineRefusal` in `ToolUp.Facts.Core`) and the gate it reads
-through. Migration note: [`docs/migrations/1145-pipeline-tool.md`](../migrations/1145-pipeline-tool.md).
+**Composed in the answering form, beside the render tools.** `PresentationCompose.withPipelineTool`
+(in `ToolUp.Facts.Presentation.Server`) registers `evaluate_pipeline` through the record-form funnel
+the render tools use. It is opt-in, idempotent, and arms only with the fact store and the AI
+companion; a deployment that does not call it registers no pipeline tool and mounts no endpoint:
+
+```fsharp skip=fragment
+AIServerApp.createFrom factory providerProfile app
+|> PresentationCompose.withRenderTools
+|> PresentationCompose.withPipelineTool
+|> composeAI
+```
+
+The executor runs unchanged. The model reads its summary, and the assistant message carries one
+**pipeline block** part (`PipelineBlock.Kind`, `"pipeline"`). The part persists the request and never
+a row: its provenance carries the slice spec and the canonical pipeline in the tool's own argument
+shape, plus the pipeline's hash and the run stamp, the fact ids the lineage read and the withheld
+report. Its node is the grid's frame, the title and column names with no row. No cell value is
+persisted, and none reaches the model.
+
+**A reader's panel computes the block again.** The conversation panel sends the part's request to
+`IPipelineBlockApi.Evaluate` (`/api/_facts/pipeline-block/*`, mounted by the same compose call). The
+server runs the same executor over the same slice read for the signed-in reader, judged at
+`FactBrowse`, the door every other fact a reader is shown passes. The panel draws the result as a
+static grid. A withheld column's cells are empty and the column is named with its count by policy.
+Where the reader's result differs from the recorded one, the panel says how: a run committed since,
+more or less withheld, different facts read. A reader the policy denies every cell to gets a
+refusal, never an empty grid. Migration notes: [`docs/migrations/1145-pipeline-tool.md`](../migrations/1145-pipeline-tool.md)
+(the executor) and [`docs/migrations/1156-pipeline-tool-composed.md`](../migrations/1156-pipeline-tool-composed.md)
+(the composition).
 
 #### The question compiler (Phase 986)
 

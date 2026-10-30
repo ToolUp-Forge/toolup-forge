@@ -22,7 +22,7 @@ namespace ToolUp.Platform
 //
 // **Supported profiles are DERIVED, never declared here.** Phase 478
 // already gave a backend one authoritative way to say what it guarantees
-// about an isolated environment — `IIsolatedComputeBackend.IsolationPosture`
+// about an isolated environment — `BackendCapabilities.Isolated`
 // — and `ExecutionProfileGate` refuses a submission that contradicts it. A
 // second, hand-written `SupportedProfiles` field on the registration would
 // be a rival source of truth for the same claim, and the failure mode is
@@ -135,7 +135,7 @@ module ComputeBackendRegistration =
     }
 
     /// The isolation posture the backend declares (Phase 478). A
-    /// dispatcher that does not implement `IIsolatedComputeBackend`
+    /// dispatcher whose `Capabilities.Isolated` is `None`
     /// declares nothing, which reads as `IsolationPosture.standardOnly`.
     let posture (registration: ComputeBackendRegistration) : IsolationPosture =
         ExecutionProfileGate.postureOf registration.Dispatcher

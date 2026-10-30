@@ -101,22 +101,31 @@ let private planBlindProvider () : IModelFitProvider =
     let inner = ReferenceModelFitProvider.create ()
 
     { new IModelFitProvider with
+        member this.Capabilities = {
+            ModelFitProviderCapabilities.none with
+                Metrics = Some(this :?> IModelEvaluationMetrics)
+        }
+
         member _.Kind = "plan-blind"
         member _.ProviderVersion = "1.0.0"
         member _.DeclareGates() = []
         member _.Fit(request) = inner.Fit request
       interface IModelEvaluationMetrics with
           member _.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals) =
-              match inner with
-              | :? IModelEvaluationMetrics as metrics ->
-                  metrics.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals)
-              | _ -> async { return Error "unreachable — the reference provider implements the seam" }
+              match inner.Capabilities.Metrics with
+              | Some metrics -> metrics.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals)
+              | None -> async { return Error "unreachable — the reference provider declares its metrics" }
     }
 
 /// A provider that declares a plan kind and then refuses it — the typed
 /// refusal path, distinct from an undeclared kind.
 let private refusingProvider () : IModelFitProvider =
     { new IModelFitProvider with
+        member this.Capabilities = {
+            ModelFitProviderCapabilities.none with
+                PlanMetrics = Some(this :?> IModelEvaluationPlanMetrics)
+        }
+
         member _.Kind = "refusing"
         member _.ProviderVersion = "1.0.0"
         member _.DeclareGates() = []
@@ -129,6 +138,11 @@ let private refusingProvider () : IModelFitProvider =
 /// A provider that RAISES rather than returning a refusal.
 let private raisingProvider () : IModelFitProvider =
     { new IModelFitProvider with
+        member this.Capabilities = {
+            ModelFitProviderCapabilities.none with
+                PlanMetrics = Some(this :?> IModelEvaluationPlanMetrics)
+        }
+
         member _.Kind = "raising"
         member _.ProviderVersion = "1.0.0"
         member _.DeclareGates() = []
@@ -144,8 +158,8 @@ let contractFor (name: string) (provider: unit -> IModelFitProvider) =
     testList $"IModelEvaluationPlanMetrics contract — {name}" [
         testCase "SupportedPlanKinds is non-empty, stable, and drawn from the closed plan vocabulary"
         <| fun _ ->
-            match provider () with
-            | :? IModelEvaluationPlanMetrics as planned ->
+            match (provider ()).Capabilities.PlanMetrics with
+            | Some planned ->
                 let first = planned.SupportedPlanKinds()
                 Expect.isNonEmpty first "a plan-aware provider declares at least one plan kind"
 
@@ -155,16 +169,16 @@ let contractFor (name: string) (provider: unit -> IModelFitProvider) =
                     "every declared kind is a real plan kind — an unknown token can never be dispatched"
 
                 Expect.equal (planned.SupportedPlanKinds()) first "the declaration is stable across calls"
-            | other -> failtestf "%s must implement IModelEvaluationPlanMetrics; got %A" name (other.GetType())
+            | None -> failtestf "%s must declare Capabilities.PlanMetrics" name
 
         testCaseAsync "every declared plan kind evaluates, and the provider receives the WHOLE frames"
         <| async {
             let p = provider ()
 
             let declared =
-                match p with
-                | :? IModelEvaluationPlanMetrics as planned -> planned.SupportedPlanKinds()
-                | _ -> []
+                match p.Capabilities.PlanMetrics with
+                | Some planned -> planned.SupportedPlanKinds()
+                | None -> []
 
             if List.contains "RollingOrigin" declared then
                 match EvaluationPlan.folds rollingPlan 12 with
@@ -233,6 +247,7 @@ let tests =
             <| async {
                 let bare =
                     { new IModelFitProvider with
+                        member _.Capabilities = ModelFitProviderCapabilities.none
                         member _.Kind = "bare"
                         member _.ProviderVersion = "1.0.0"
                         member _.DeclareGates() = []

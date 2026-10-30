@@ -169,6 +169,7 @@ type private ScriptedDispatcher(outcomes: ExternalOutcome list, ?submitResult: R
     member _.Cancelled = cancelled |> Seq.toList
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "scripted"
 
         member _.Submit(scopeId, spec) = async {
@@ -1155,6 +1156,55 @@ let private failureMapTests =
                 "and the running observation still reached the progress sink on the poll path"
         }
 
+        testCaseAsync "a callback-capable backend behind the execution-profile gate is still handed its credential"
+        <| async {
+            let! datasets, version = seededDatasets "scope-fit"
+            let credentials = ConcurrentQueue<Guid>()
+
+            let scripted =
+                ScriptedDispatcher [ ExternalOutcome.Failed(ExternalComputeError.terminal "done") ]
+
+            let backend =
+                { new IExternalComputeDispatcher with
+                    member this.Capabilities = {
+                        BackendCapabilities.none with
+                            Callback = Some(this :?> IExternalCallbackCapableBackend)
+                    }
+
+                    member _.Backend = "scripted"
+
+                    member _.Submit(scopeId, spec) =
+                        (scripted :> IExternalComputeDispatcher).Submit(scopeId, spec)
+
+                    member _.Poll handle =
+                        (scripted :> IExternalComputeDispatcher).Poll handle
+
+                    member _.Cancel handle =
+                        (scripted :> IExternalComputeDispatcher).Cancel handle
+                  interface IExternalCallbackCapableBackend with
+                      member _.AcceptCallbackCredential(handle, _credential) = async {
+                          credentials.Enqueue handle.HandleId
+                      }
+                }
+
+            let provider =
+                ExternalModelFitProvider(
+                    ExecutionProfileGate.enforce backend,
+                    datasets,
+                    ExternalFitCompletionRegistry(),
+                    options,
+                    Some(InMemoryExternalHandleStore() :> IExternalHandleStore),
+                    None
+                )
+
+            let! _ = provider.FitExternally(requestFor "scope-fit" version.Version [])
+
+            Expect.equal
+                credentials.Count
+                1
+                "the gate is a decorator, not a backend: the callback capability the backend declared reaches it"
+        }
+
         testCaseAsync "a fit that outruns its budget is cancelled at the backend, not merely abandoned"
         <| async {
             let! datasets, version = seededDatasets "scope-fit"
@@ -1314,6 +1364,25 @@ let private compositionTests =
             // registration, so the dictionary cannot grow without bound.
             registry.Register(Guid.NewGuid())
             Expect.equal registry.Tracked 1 "only the live rendezvous remains"
+
+        testCase "retention is read on the injected clock"
+        <| fun _ ->
+            let mutable now = DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc)
+
+            let registry =
+                ExternalFitCompletionRegistry(TimeSpan.FromMinutes 15.0, fun () -> now)
+
+            let first = Guid.NewGuid()
+            registry.Register first
+            Expect.isTrue (registry.TryComplete(first, ExternalOutcome.Cancelled)) "completed at noon"
+
+            now <- now.AddMinutes 14.0
+            registry.Register(Guid.NewGuid())
+            Expect.equal registry.Tracked 2 "inside retention the completed entry still answers a replay"
+
+            now <- now.AddMinutes 2.0
+            registry.Register(Guid.NewGuid())
+            Expect.isFalse (registry.Knows first) "past retention, by the injected clock, it is swept"
     ]
 
 [<Tests>]

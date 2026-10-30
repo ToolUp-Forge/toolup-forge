@@ -45,7 +45,7 @@ open ToolUp.Platform.Metrics
 // is the difference between a routable handle and a lost job.
 //
 // **The router must NOT be wrapped in `ExecutionProfileGate.enforce`, and
-// it deliberately does not implement `IIsolatedComputeBackend`.** A single
+// it deliberately declares `BackendCapabilities.none`.** A single
 // posture for a fan-out router would be a false claim in one direction or
 // the other: declare `standardOnly` and the gate refuses every `Isolated`
 // spec even though an isolating backend is registered; declare the clauses
@@ -319,6 +319,7 @@ type RoutingComputeDispatcher(registry: ComputeBackendRegistry, telemetry: Compu
     member _.Telemetry = telemetry
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = RoutingComputeDispatcher.BackendName
 
         member _.Submit(scopeId: string, spec: ExternalWorkSpec) = async {

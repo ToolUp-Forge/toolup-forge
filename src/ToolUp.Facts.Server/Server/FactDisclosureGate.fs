@@ -31,13 +31,24 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // fact is audited (GP 6). An **empty** config (the default) skips the walk
 // entirely — the gate is byte-for-byte the Phase 525 gate (GP 11 / GP 13).
 //
+// **The four stages and the index.** Each fact is decided by four pure
+// stages (`DisclosureStages`): `viewer` (its own classification, for the
+// viewer when that facet is composed), `purpose`, `taint` (a walk of the
+// scope's disclosure-taint index, never the scope's facts) and `budget`.
+// `FactDisclosureGate.Read` composes them into one `GroundedRead` per fact,
+// `Check` is its verdict projection, and the audit rows are written in one
+// step after the composition. The writes maintain the index
+// (`DisclosureTaintIndex.deltaOf`); the gate reads it through
+// `IDisclosureTaintIndexSource`, and lists the scope only for a store that
+// does not offer one.
+//
 // **Phase 1134 — an inert config skips the walk too.** A config whose
 // policies are all `Plain`, declare no contributor scope, and that registers
 // no declassifier (`DisclosureTaintConfig.isTaintInert`) is composed for its
 // per-surface stance alone; its walk can seed no taint (only a
 // `TaintPropagating` source does), record no crossing (a routine records one
-// only when it clears taint) and name no contributor. So the check builds no
-// graph and decides as an empty walk would. **The audit shape is decided
+// only when it clears taint) and name no contributor. So the check reads no
+// index and decides as an empty walk would. **The audit shape is decided
 // field by field and does not move:** with a walked outcome the rows carried
 // `ContributorScopes` = the walked lineage's (empty: no scoped policy) and
 // `UnsatisfiedScopes` = [] and no `FactDisclosureDeclassified` row; without
@@ -331,8 +342,8 @@ module DisclosureFanOut =
 /// fact in `held` is denied `unknown-fact`, exactly as the id form denies an
 /// id the scope does not hold: a door whose read found nothing hands the id
 /// with nothing beside it. A held fact whose id is not in `factIds` is not
-/// judged. Under a taint configuration the derivation graph is loaded as the
-/// id form loads it.
+/// judged. Under a taint configuration the scope's disclosure-taint index is
+/// read as the id form reads it.
 ///
 /// Composed by `FactsCompose.withFactStore` as the held form of the composed
 /// `IFactDisclosureGate` (`FactDisclosureGate.held`); deliberately not a
@@ -347,7 +358,7 @@ type IHeldFactDisclosureGate =
 
 /// Phase 1126 — what the disclosure gate reads of a fact it judges: its id,
 /// its metric (for the audit row) and its classification. Every facet beyond
-/// that is decided at check level, or from the derivation graph by id.
+/// that is decided at check level, or from the disclosure-taint index by id.
 type HeldFactRow = {
     /// The fact's content-addressed id.
     FactId: string
@@ -385,13 +396,11 @@ module HeldFactRow =
 /// named is not judged.
 ///
 /// **Under a taint configuration the row form still decides.** The taint
-/// stage walks the derivation graph, which the gate builds from the scope's
-/// whole listing in every form, and reaches the judged fact by id; it never
-/// needs the fact the caller holds. So a row-form check under taint costs the
-/// graph load, as the held form does, and no read per row — and, since Phase
-/// 1134, nothing at all under a config that cannot taint
-/// (`DisclosureTaintConfig.isTaintInert`). (Phase 1093's write-maintained
-/// taint index is what would retire the graph load for a config that can.)
+/// stage walks the scope's disclosure-taint index, which the gate reads from
+/// the store in every form, and reaches the judged fact by id; it never needs
+/// the fact the caller holds. So a row-form check under taint costs one index
+/// read, as the held form does, and no read per row, and nothing at all under
+/// a config that cannot taint (`DisclosureTaintConfig.isTaintInert`).
 ///
 /// Composed as part of the platform gate (`FactDisclosureGate`); a door takes
 /// it from its held gate by capability, and a held gate that does not offer it
@@ -406,6 +415,215 @@ type IHeldFactRowDisclosureGate =
         factIds: string list *
         held: HeldFactRow list ->
             Async<Map<string, FactDisclosureVerdict>>
+
+/// What the disclosure gate decided about one fact, and what it decided it
+/// from: the value every door's verdict is a projection of. A number reaches
+/// an answer only through a read whose `Verdict` is `FactDisclosable`.
+type GroundedRead = {
+    /// The fact's content-addressed id, as the caller named it.
+    FactId: string
+    /// The fact's metric id, as the audit rows name it; empty for an id the
+    /// scope does not hold.
+    Metric: string
+    /// The verdict: the fact's own classification at the surface, then the
+    /// purpose, taint and budget stages in that order.
+    Verdict: FactDisclosureVerdict
+    /// The taint stage's walk of the fact's derivation, when one ran (a
+    /// config that can taint, a fact its own classification discloses, a
+    /// check its purpose did not refuse).
+    Taint: TaintOutcome option
+    /// The contributing parties whose data the fact carries: the walked
+    /// lineage's, or the fact's own registered policy's when no walk ran.
+    ContributorScopes: string list
+}
+
+/// Projections of the gate's reads.
+module GroundedRead =
+
+    /// The verdict per fact id: what `IFactDisclosureGate.Check` answers.
+    let verdicts (reads: GroundedRead list) : Map<string, FactDisclosureVerdict> =
+        reads |> List.map (fun r -> r.FactId, r.Verdict) |> Map.ofList
+
+/// What every audit row of one check shares.
+type DisclosureAuditContext = {
+    /// The egress surface the check judged for.
+    Surface: FactEgressSurface
+    /// The principal the check judged for.
+    Principal: string
+    /// The claimed purpose, or empty when no purpose taxonomy is declared.
+    Purpose: string
+    /// The purpose taxonomy's version, or empty.
+    TaxonomyVersion: string
+}
+
+/// One audit row the disclosure gate writes under the reserved `_facts`
+/// source module.
+[<RequireQualifiedAccess>]
+type DisclosureAuditRow =
+    /// A denied fact.
+    | Denied of FactDisclosureDeniedEvent
+    /// One declassification crossing on a disclosed fact's derivation.
+    | Declassified of FactDisclosureDeclassifiedEvent
+    /// A disclosed fact carrying a contributing party's data.
+    | Accessed of FactDisclosureAccessedEvent
+
+/// The disclosure gate's four stages, each a pure function of what it is
+/// given. `FactDisclosureGate` composes them per fact (viewer, purpose,
+/// taint, budget), and writes each read's `auditRows` in one step after the
+/// composition.
+[<RequireQualifiedAccess>]
+module DisclosureStages =
+
+    /// Whether the viewer stage needs the resolved viewer for `head`: only
+    /// with the viewer-aware facet composed, and only for a `Restricted`
+    /// fact.
+    let needsViewer (viewerAware: ViewerAwareDisclosurePolicyResolver option) (head: HeldFactRow option) : bool =
+        match viewerAware, head with
+        | Some _, Some h ->
+            match h.Disclosure with
+            | Restricted _ -> true
+            | Surfaceable
+            | Disclosure.Internal -> false
+        | _ -> false
+
+    /// The viewer stage: the verdict a fact's own classification earns at
+    /// `surface`. An id the scope does not hold is denied `unknown-fact`
+    /// (never fail open). With the viewer-aware facet composed a
+    /// `Restricted` fact is decided for `viewer`; a viewer that could not be
+    /// resolved, or was not, denies as unreadable.
+    let viewer
+        (resolve: DisclosurePolicyResolver)
+        (viewerAware: ViewerAwareDisclosurePolicyResolver option)
+        (surface: FactEgressSurface)
+        (viewer: Result<DisclosureViewer, string> option)
+        (head: HeldFactRow option)
+        : FactDisclosureVerdict =
+        match head with
+        | None -> FactNotDisclosable "unknown-fact"
+        | Some h ->
+            match viewerAware, h.Disclosure, viewer with
+            | Some aware, Restricted _, Some(Ok v) -> DisclosureEgress.evaluateForViewer aware surface v h.Disclosure
+            | Some _, Restricted _, _ -> FactNotDisclosable ViewerAwareDisclosure.UnreadableRef
+            | _ -> DisclosureEgress.evaluate resolve surface h.Disclosure
+
+    /// The purpose stage: the refusal every fact of a check takes when the
+    /// claimed purpose is not one `surface` serves, the allowed set
+    /// enumerated. No declared taxonomy refuses nothing.
+    let purpose
+        (config: DisclosurePurposeConfig option)
+        (claim: string option)
+        (surface: FactEgressSurface)
+        : string option =
+        match config with
+        | None -> None
+        | Some cfg ->
+            let allowed = DisclosurePurposeConfig.allowedFor cfg surface
+
+            let allowedText =
+                if List.isEmpty allowed then
+                    "none"
+                else
+                    String.concat ", " allowed
+
+            match claim with
+            | Some p when List.contains p allowed -> None
+            | Some p -> Some(sprintf "purpose-denied:%s (allowed: %s)" p allowedText)
+            | None -> Some(sprintf "purpose-unclaimed (allowed: %s)" allowedText)
+
+    /// The taint stage: a fact its own classification discloses is walked
+    /// (`walk`, over the scope's index) and denied when a restriction
+    /// survives its derivation, the ref naming the unsatisfied party when
+    /// one is scoped. A fact already denied is not walked; without a walk
+    /// (a config that cannot taint) the verdict stands.
+    let taint
+        (walk: (string -> TaintOutcome) option)
+        (factId: string)
+        (verdict: FactDisclosureVerdict)
+        : FactDisclosureVerdict * TaintOutcome option =
+        match verdict, walk with
+        | FactDisclosable, Some analyze ->
+            let outcome = analyze factId
+
+            match outcome.InheritedPolicyRef with
+            | Some inheritedRef ->
+                let denyRef =
+                    if List.isEmpty outcome.UnsatisfiedScopes then
+                        inheritedRef
+                    else
+                        DisclosureContributorScope.unsatisfiedRef outcome.UnsatisfiedScopes
+
+                FactNotDisclosable denyRef, Some outcome
+            | None -> FactDisclosable, Some outcome
+        | _ -> verdict, None
+
+    /// The crossings the budget stage must reserve before `verdict` stands:
+    /// those of a release whose derivation crossed a routine. A fact already
+    /// denied disclosed nothing and owes nothing.
+    let crossings (verdict: FactDisclosureVerdict) (taint: TaintOutcome option) : TaintCrossing list =
+        match verdict, taint with
+        | FactDisclosable, Some outcome -> outcome.Crossings
+        | _ -> []
+
+    /// The budget stage: the verdict once the ledger has answered the
+    /// reservation, if one was asked. A refused routine denies under its
+    /// own ref.
+    let budget
+        (verdict: FactDisclosureVerdict)
+        (reservation: DeclassificationBudgetOutcome option)
+        : FactDisclosureVerdict =
+        match reservation with
+        | Some(CrossingsRefused(policyRef, _)) -> FactNotDisclosable policyRef
+        | _ -> verdict
+
+    /// The audit rows one read writes: a denial row for a denied fact; for a
+    /// disclosed one, a row per declassification crossing on its derivation
+    /// and, when a contributing party's data left, one access row.
+    let auditRows (context: DisclosureAuditContext) (read: GroundedRead) : DisclosureAuditRow list =
+        let surface = FactEgressSurface.toString context.Surface
+
+        match read.Verdict with
+        | FactNotDisclosable policyRef -> [
+            DisclosureAuditRow.Denied {
+                Surface = surface
+                FactId = read.FactId
+                Metric = read.Metric
+                PolicyRef = policyRef
+                Principal = context.Principal
+                Purpose = context.Purpose
+                TaxonomyVersion = context.TaxonomyVersion
+                ContributorScopes = read.ContributorScopes
+                UnsatisfiedScopes = read.Taint |> Option.map _.UnsatisfiedScopes |> Option.defaultValue []
+            }
+          ]
+        | FactDisclosable -> [
+            match read.Taint with
+            | Some outcome ->
+                for crossing in outcome.Crossings do
+                    DisclosureAuditRow.Declassified {
+                        Surface = surface
+                        FactId = read.FactId
+                        DeclassifierFactId = crossing.DeclassifierFactId
+                        OperationId = crossing.OperationId
+                        Rationale = crossing.Rationale
+                        Principal = context.Principal
+                        Purpose = context.Purpose
+                        TaxonomyVersion = context.TaxonomyVersion
+                        ContributorScopes = outcome.ContributorScopes
+                        AcceptedScopes = crossing.AcceptedScopes
+                    }
+            | None -> ()
+
+            if not (List.isEmpty read.ContributorScopes) then
+                DisclosureAuditRow.Accessed {
+                    Surface = surface
+                    FactId = read.FactId
+                    Metric = read.Metric
+                    ContributorScopes = read.ContributorScopes
+                    Principal = context.Principal
+                    Purpose = context.Purpose
+                    TaxonomyVersion = context.TaxonomyVersion
+                }
+          ]
 
 /// The default `IFactDisclosureGate` over the composed fact store.
 /// Construct via `FactDisclosureGate.create`; registered in DI by
@@ -431,13 +649,13 @@ type FactDisclosureGate
 
     let taintConfig = defaultArg taint DisclosureTaintConfig.empty
 
-    // Phase 1134 — whether a check builds the derivation graph. Only when the
+    // Whether a check reads the taint index and walks it. Only when the
     // walk can change a verdict or an audit row (`isTaintInert`): a deployment
     // whose policies are all `Plain`, unscoped and undeclassified registers
     // them for their per-surface stance alone, and its walk would arrive where
     // an empty walk starts. `walkInert` is the pre-1134 rule (walk whenever the
     // config is non-empty), kept internal for the equality pins only.
-    let buildsGraph =
+    let walksTaint =
         if walkInert then
             not (DisclosureTaintConfig.isEmpty taintConfig)
         else
@@ -502,15 +720,15 @@ type FactDisclosureGate
     let writeDeclassified (scopeId: string) (payload: FactDisclosureDeclassifiedEvent) : Async<unit> =
         writeEvent scopeId DisclosureEvents.DeclassifiedType (JsonSerializer.Serialize(payload, jsonOptions))
 
-    // Phase 674.C — the per-party access facet. Written only for a fact
-    // that actually carries a contributing party's data, so a deployment
-    // declaring no contributor scope never emits this row (GP 11 / GP 13).
+    // The per-party access facet. Written only for a fact that actually
+    // carries a contributing party's data, so a deployment declaring no
+    // contributor scope never emits this row (GP 11 / GP 13).
     let writeAccessed (scopeId: string) (payload: FactDisclosureAccessedEvent) : Async<unit> =
         writeEvent scopeId DisclosureEvents.AccessedType (JsonSerializer.Serialize(payload, jsonOptions))
 
-    // Phase 674 — the contributing party of a fact's OWN registered policy.
-    // Resolved server-side from the composed vocabulary keyed by the ref the
-    // stored fact carries; nothing a caller supplies reaches this lookup.
+    // The contributing party of a fact's OWN registered policy. Resolved
+    // server-side from the composed vocabulary keyed by the ref the stored
+    // fact carries; nothing a caller supplies reaches this lookup.
     let ownContributorScopes (head: HeldFactRow option) : string list =
         match head with
         | Some h ->
@@ -519,32 +737,32 @@ type FactDisclosureGate
             | _ -> []
         | None -> []
 
-    // The Phase 525 base verdict over a fact's own disclosure classification,
-    // plus its metric for the audit payload.
-    let baseVerdict (surface: FactEgressSurface) (head: HeldFactRow option) : FactDisclosureVerdict * string =
-        match head with
-        | Some h -> DisclosureEgress.evaluate resolve surface h.Disclosure, h.Metric
-        // Unresolvable in this scope (unknown id, or a fact belonging to
-        // another tenant) ⇒ deny, conservatively — never fail open.
-        | None -> FactNotDisclosable "unknown-fact", ""
-
     // A store read, as the head the decision procedure judges.
     let headIn (read: Async<Fact option>) : Async<HeldFactRow option> = async {
         let! fact = read
         return fact |> Option.map HeldFactRow.ofFact
     }
 
-    // The request-path accessors, shared by the id and held forms: the
-    // whole scope for the taint graph, and the team a team-scoped shard
-    // belongs to (Phase 896's viewer lookup).
-    let queryAllIn (scope: ResolvedScope) () : Async<Fact list> =
-        store.Query(
-            scope,
-            {
-                FactQuery.all with
-                    IncludeSuperseded = true
-            }
-        )
+    // The scope's disclosure-taint index: read from a store that keeps one,
+    // otherwise rebuilt from the scope's listing (the cost of a store that
+    // does not offer the index).
+    let taintIndexIn (scopeId: string) (scope: ResolvedScope option) () : Async<DisclosureTaintIndex> =
+        let everything = {
+            FactQuery.all with
+                IncludeSuperseded = true
+        }
+
+        match store, scope with
+        | :? IDisclosureTaintIndexSource as source, Some s -> source.ReadTaintIndex s
+        | :? IDisclosureTaintIndexSource as source, None -> source.ReadTaintIndex scopeId
+        | _, Some s -> async {
+            let! all = store.Query(s, everything)
+            return DisclosureTaintIndex.ofFacts all
+          }
+        | _, None -> async {
+            let! all = store.Query(scopeId, everything)
+            return DisclosureTaintIndex.ofFacts all
+          }
 
     let scopeTeamOf (scope: ResolvedScope) : string option option =
         Some(
@@ -553,37 +771,45 @@ type FactDisclosureGate
             |> Option.map _.ScopeId
         )
 
-    // Phase 797 — one decision procedure, two ways of naming the shard.
-    // The body is written once over an accessor pair so the string form
-    // and the `ResolvedScope` form cannot drift: `getHead` / `queryAll`
-    // are the store's own members bound to the scope the caller holds,
-    // and `scopeId` is only ever the audit row's shard key. Phase 1126:
-    // the procedure reads of each judged fact only its id, metric and
-    // classification (`HeldFactRow`) — everything else it consults is the
-    // check-level facets and the derivation graph — so the id, held and row
-    // forms differ only in where that head comes from.
-    let check
+    // The one audit step, after the verdicts are composed: each read's rows
+    // (`DisclosureStages.auditRows`), written best-effort under the same
+    // fan-out bound as the reads.
+    let audit (scopeId: string) (context: DisclosureAuditContext) (reads: GroundedRead list) : Async<unit> =
+        reads
+        |> List.collect (DisclosureStages.auditRows context)
+        |> List.map (function
+            | DisclosureAuditRow.Denied row -> writeDenied scopeId row
+            | DisclosureAuditRow.Declassified row -> writeDeclassified scopeId row
+            | DisclosureAuditRow.Accessed row -> writeAccessed scopeId row)
+        |> fun writes -> Async.Parallel(writes, maxConcurrentReads)
+        |> Async.Ignore
+
+    // One decision procedure over every way of naming the shard and the
+    // heads: `getHead` is the store read or the caller's held row,
+    // `readTaintIndex` the scope's index, and `scopeId` only the audit row's
+    // shard key. The four stages decide each fact; the audit step follows
+    // the composition.
+    let read
         (getHead: string -> Async<HeldFactRow option>)
-        (queryAll: unit -> Async<Fact list>)
+        (readTaintIndex: unit -> Async<DisclosureTaintIndex>)
         (scopeId: string)
         (scopeTeam: string option option)
         (principal: string)
         (surface: FactEgressSurface)
         (factIds: string list)
-        : Async<Map<string, FactDisclosureVerdict>> =
+        : Async<GroundedRead list> =
         async {
             let ids = factIds |> List.distinct
 
-            // Phase 896 — the viewer, resolved at most once per check and
-            // only when a `Restricted` fact actually needs it. Started on
-            // first demand; the ambient request viewer flows into it.
+            // The viewer, resolved at most once per check and only when a
+            // `Restricted` fact actually needs it. Started on first demand;
+            // the ambient request viewer flows into it. A lookup that throws
+            // fails closed, exactly like an unreadable level.
             let viewer =
                 lazy
                     (match resolveForViewer with
                      | Some(facet, _) ->
                          async {
-                             // A lookup that throws fails closed, exactly
-                             // like an unreadable level.
                              try
                                  return!
                                      ViewerAwareDisclosure.resolveViewer
@@ -598,226 +824,100 @@ type FactDisclosureGate
                          |> Async.StartAsTask
                      | None -> Task.FromResult(Ok(DisclosureViewer.leastPrivileged TeamVisible)))
 
-            let verdictFor (head: HeldFactRow option) : Async<FactDisclosureVerdict * string> =
-                match resolveForViewer, head with
-                | Some(_, resolveViewerAware), Some h ->
-                    match h.Disclosure with
-                    | Restricted _ -> async {
-                        let! resolved = viewer.Force() |> Async.AwaitTask
+            let viewerAware = resolveForViewer |> Option.map snd
+            let claim = purposeConfig |> Option.bind (fun _ -> FactPurposeContext.current ())
+            let purposeRefusal = DisclosureStages.purpose purposeConfig claim surface
 
-                        match resolved with
-                        | Ok v ->
-                            return
-                                DisclosureEgress.evaluateForViewer resolveViewerAware surface v h.Disclosure, h.Metric
-                        | Error _ -> return FactNotDisclosable ViewerAwareDisclosure.UnreadableRef, h.Metric
-                      }
-                    | Surfaceable
-                    | Disclosure.Internal -> async.Return(baseVerdict surface head)
-                | _ -> async.Return(baseVerdict surface head)
-
-            // Phase 592 — the purpose facet, evaluated once per check
-            // (the claim and the surface's allowed set are check-level,
-            // not per-fact). With a declared taxonomy the claimed purpose
-            // must be in this surface's allowed set; out-of-set or
-            // missing claims refuse with the allowed set enumerated
-            // (default-deny-by-shape). No taxonomy ⇒ inert.
-            let claimedPurpose =
-                match purposeConfig with
-                | Some _ -> FactPurposeContext.current () |> Option.defaultValue ""
-                | None -> ""
-
-            let taxonomyVersion =
-                purposeConfig |> Option.map _.Taxonomy.Version |> Option.defaultValue ""
-
-            let purposeRefusal: string option =
-                match purposeConfig with
-                | None -> None
-                | Some cfg ->
-                    let allowed = DisclosurePurposeConfig.allowedFor cfg surface
-
-                    let allowedText =
-                        if List.isEmpty allowed then
-                            "none"
-                        else
-                            String.concat ", " allowed
-
-                    match FactPurposeContext.current () with
-                    | Some p when List.contains p allowed -> None
-                    | Some p -> Some(sprintf "purpose-denied:%s (allowed: %s)" p allowedText)
-                    | None -> Some(sprintf "purpose-unclaimed (allowed: %s)" allowedText)
-
-            // The derivation graph is built once per check, and only when the
-            // composed taint config can taint (`buildsGraph`, Phase 1134) — a
-            // deployment without taint policies, or whose policies cannot
-            // taint, never loads the fact listing (GP 13). A purpose-refused
-            // check never builds it either: every fact is already denied
-            // before any per-fact evaluation.
-            let! graph =
-                if not buildsGraph || Option.isSome purposeRefusal then
+            // The taint walk over the index, read once per check and only
+            // when the composed config can taint (`walksTaint`). A
+            // purpose-refused check never reads it: every fact is already
+            // denied.
+            let! walk =
+                if not walksTaint || Option.isSome purposeRefusal then
                     async.Return None
                 else
                     async {
-                        let! all = queryAll ()
-                        return Some(DisclosureTaint.buildGraph all)
+                        let! index = readTaintIndex ()
+                        let upstream = DisclosureTaintIndex.upstream index
+                        return Some(DisclosureTaint.analyzeIndex taintConfig index upstream)
                     }
 
-            let! verdicts =
+            let! reads =
                 ids
                 |> List.map (fun factId -> async {
                     let! head = getHead factId
-                    let! baseV, metric = verdictFor head
 
-                    // Phase 592 — a purpose refusal denies every fact in
-                    // the check before per-fact evaluation (the claim is
-                    // check-level); otherwise layer the taint verdict only
-                    // on a fact the Phase 525 predicate would disclose — a
-                    // directly-denied fact stays denied on its own policy
-                    // ref, and the taint walk is skipped.
-                    let verdict =
+                    let! resolvedViewer =
+                        if DisclosureStages.needsViewer viewerAware head then
+                            async {
+                                let! resolved = viewer.Force() |> Async.AwaitTask
+                                return Some resolved
+                            }
+                        else
+                            async.Return None
+
+                    let own = DisclosureStages.viewer resolve viewerAware surface resolvedViewer head
+
+                    let preBudget, taint =
                         match purposeRefusal with
                         | Some refusalRef -> FactNotDisclosable refusalRef, None
-                        | None ->
-                            match baseV, graph with
-                            | FactDisclosable, Some g ->
-                                let outcome = DisclosureTaint.analyze taintConfig g factId
+                        | None -> DisclosureStages.taint walk factId own
 
-                                // Phase 674 — the conjunction: the path must
-                                // satisfy EVERY contributing party's policy.
-                                // A surviving party-scoped restriction denies
-                                // and the ref names the unsatisfied party
-                                // (never the counterparty's data); an
-                                // unscoped survivor keeps the Phase 562 ref,
-                                // so single-party verdicts are unchanged.
-                                match outcome.InheritedPolicyRef with
-                                | Some inheritedRef ->
-                                    let denyRef =
-                                        if List.isEmpty outcome.UnsatisfiedScopes then
-                                            inheritedRef
-                                        else
-                                            DisclosureContributorScope.unsatisfiedRef outcome.UnsatisfiedScopes
-
-                                    FactNotDisclosable denyRef, Some outcome
-                                | None -> FactDisclosable, Some outcome
-                            | _ -> baseV, None
-
-                    let preBudgetVerdict, taintOutcome = verdict
-
-                    // ── Phase 675 — reserve BEFORE the verdict is final ──
-                    //
-                    // Only a disclosure that would otherwise be RELEASED
-                    // and whose derivation actually crossed a routine can
-                    // spend anything: a fact already denied on its own
-                    // policy, on the conjunction, or on purpose has
-                    // disclosed nothing and owes nothing, and charging it
-                    // would spend a party's allowance on a question the
-                    // gate never answered.
-                    //
-                    // The reservation is durable before the verdict
-                    // stands, so a crossing cannot reach a caller on
-                    // credit. `settle` below closes every hold once the
-                    // verdict is known — including on the refusal path,
-                    // where earlier crossings' holds are settled rather
-                    // than leaked.
-                    let! budgetHolds =
-                        match preBudgetVerdict, taintOutcome, budgetConfig with
-                        | FactDisclosable, Some outcome, Some config when not (List.isEmpty outcome.Crossings) -> async {
-                            let! reserved = DeclassificationBudgetGate.reserve config outcome.Crossings
+                    // The reservation is durable before the verdict stands,
+                    // so a crossing cannot reach a caller on credit.
+                    let! reservation =
+                        match budgetConfig, DisclosureStages.crossings preBudget taint with
+                        | Some config, (_ :: _ as crossings) -> async {
+                            let! reserved = DeclassificationBudgetGate.reserve config crossings
                             return Some(config, reserved)
                           }
                         | _ -> async.Return None
 
-                    let finalVerdict =
-                        match budgetHolds with
-                        | Some(_, CrossingsRefused(policyRef, _)) -> FactNotDisclosable policyRef
-                        | _ -> preBudgetVerdict
+                    let verdict = DisclosureStages.budget preBudget (reservation |> Option.map snd)
 
-                    // Phase 674.C — the contribution facet on every audit
-                    // row. With a taint outcome it is the whole walked
-                    // lineage; without one (a directly-denied fact, or a
-                    // deployment with no taint config) it is the fact's own
-                    // registered policy — empty when no party is declared.
-                    let contributorScopes =
-                        match taintOutcome with
-                        | Some outcome -> outcome.ContributorScopes
-                        | None -> ownContributorScopes head
-
-                    let unsatisfiedScopes =
-                        match taintOutcome with
-                        | Some outcome -> outcome.UnsatisfiedScopes
-                        | None -> []
-
-                    match finalVerdict with
-                    | FactNotDisclosable policyRef ->
-                        do!
-                            writeDenied scopeId {
-                                Surface = FactEgressSurface.toString surface
-                                FactId = factId
-                                Metric = metric
-                                PolicyRef = policyRef
-                                Principal = principal
-                                Purpose = claimedPurpose
-                                TaxonomyVersion = taxonomyVersion
-                                ContributorScopes = contributorScopes
-                                UnsatisfiedScopes = unsatisfiedScopes
-                            }
-                    | FactDisclosable ->
-                        // A disclosed fact whose derivation crossed a declared
-                        // declassification routine audits each crossing (GP 6).
-                        match taintOutcome with
-                        | Some outcome ->
-                            for crossing in outcome.Crossings do
-                                do!
-                                    writeDeclassified scopeId {
-                                        Surface = FactEgressSurface.toString surface
-                                        FactId = factId
-                                        DeclassifierFactId = crossing.DeclassifierFactId
-                                        OperationId = crossing.OperationId
-                                        Rationale = crossing.Rationale
-                                        Principal = principal
-                                        Purpose = claimedPurpose
-                                        TaxonomyVersion = taxonomyVersion
-                                        ContributorScopes = outcome.ContributorScopes
-                                        AcceptedScopes = crossing.AcceptedScopes
-                                    }
-                        | None -> ()
-
-                        // Phase 674.C — the per-party ACCESS row. Only when
-                        // a contributing party's data actually left, so a
-                        // party-free deployment emits nothing new (GP 11).
-                        if not (List.isEmpty contributorScopes) then
-                            do!
-                                writeAccessed scopeId {
-                                    Surface = FactEgressSurface.toString surface
-                                    FactId = factId
-                                    Metric = metric
-                                    ContributorScopes = contributorScopes
-                                    Principal = principal
-                                    Purpose = claimedPurpose
-                                    TaxonomyVersion = taxonomyVersion
-                                }
-
-                    // Phase 675 — settle AFTER the verdict. A released
-                    // disclosure commits its charges; a denied one is
-                    // settled per each routine's own declared
-                    // `WithholdCharge`, which is deployment policy and
-                    // not an SDK opinion.
-                    match budgetHolds with
+                    // Settle every hold once the verdict is known: a release
+                    // commits its charges, a denial settles per each
+                    // routine's own declared `WithholdCharge`.
+                    match reservation with
                     | Some(config, CrossingsHeld held)
                     | Some(config, CrossingsRefused(_, held)) when not (List.isEmpty held) ->
-                        let disclosed =
-                            match finalVerdict with
-                            | FactDisclosable -> true
-                            | FactNotDisclosable _ -> false
-
-                        do! DeclassificationBudgetGate.settle config disclosed held
+                        do! DeclassificationBudgetGate.settle config (verdict = FactDisclosable) held
                     | _ -> ()
 
-                    return factId, finalVerdict
+                    return {
+                        FactId = factId
+                        Metric = head |> Option.map _.Metric |> Option.defaultValue ""
+                        Verdict = verdict
+                        Taint = taint
+                        ContributorScopes =
+                            match taint with
+                            | Some outcome -> outcome.ContributorScopes
+                            | None -> ownContributorScopes head
+                    }
                 })
                 |> fun reads -> Async.Parallel(reads, maxConcurrentReads)
 
-            return Map.ofArray verdicts
+            let reads = List.ofArray reads
+
+            do!
+                audit
+                    scopeId
+                    {
+                        Surface = surface
+                        Principal = principal
+                        Purpose = claim |> Option.defaultValue ""
+                        TaxonomyVersion = purposeConfig |> Option.map _.Taxonomy.Version |> Option.defaultValue ""
+                    }
+                    reads
+
+            return reads
         }
+
+    // `check` is the read's verdict projection.
+    let check getHead readTaintIndex scopeId scopeTeam principal surface factIds = async {
+        let! reads = read getHead readTaintIndex scopeId scopeTeam principal surface factIds
+        return GroundedRead.verdicts reads
+    }
 
     // NOTE on the widened constructor (Phase 675). `?budgets` widens the
     // SINGLE generated `.ctor`, so the five-argument token disappears
@@ -862,6 +962,21 @@ type FactDisclosureGate
             false
         )
 
+    /// The grounded read of every id in `factIds` in `scope`: the verdict
+    /// `Check` answers for each, with what it was decided from, in the order
+    /// the ids were named (a repeated id once). Audited exactly as `Check`.
+    member _.Read
+        (scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list)
+        : Async<GroundedRead list> =
+        read
+            (fun factId -> headIn (store.Get(scope, factId)))
+            (taintIndexIn scope.ScopeId (Some scope))
+            scope.ScopeId
+            (scopeTeamOf scope)
+            principal
+            surface
+            factIds
+
     /// This gate with the Phase 896 viewer-aware facet armed: every other
     /// facet (resolver, taint, purpose, budgets, fan-out) is kept as it is,
     /// and a `Restricted` fact is decided for the viewer. Composed by
@@ -877,7 +992,7 @@ type FactDisclosureGate
         :> IFactDisclosureGate
 
     /// Phase 1134 — this gate under the pre-1134 rule: it builds the
-    /// derivation graph whenever any taint config is composed, inert or not.
+    /// taint index and walks it whenever any taint config is composed, inert or not.
     /// The oracle the equality pins compare the skip against; never composed.
     member internal _.WalkingInertConfigs() : FactDisclosureGate =
         FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, viewerAware, fanOut, true)
@@ -887,14 +1002,7 @@ type FactDisclosureGate
         member _.Check(scopeId: string, principal, surface, factIds) =
             check
                 (fun factId -> headIn (store.Get(scopeId, factId)))
-                (fun () ->
-                    store.Query(
-                        scopeId,
-                        {
-                            FactQuery.all with
-                                IncludeSuperseded = true
-                        }
-                    ))
+                (taintIndexIn scopeId None)
                 scopeId
                 None
                 principal
@@ -907,7 +1015,7 @@ type FactDisclosureGate
         member _.Check(scope: ResolvedScope, principal, surface, factIds) =
             check
                 (fun factId -> headIn (store.Get(scope, factId)))
-                (queryAllIn scope)
+                (taintIndexIn scope.ScopeId (Some scope))
                 scope.ScopeId
                 (scopeTeamOf scope)
                 principal
@@ -923,7 +1031,7 @@ type FactDisclosureGate
 
             check
                 (fun factId -> async.Return(Map.tryFind factId byId))
-                (queryAllIn scope)
+                (taintIndexIn scope.ScopeId (Some scope))
                 scope.ScopeId
                 (scopeTeamOf scope)
                 principal
@@ -940,7 +1048,7 @@ type FactDisclosureGate
 
             check
                 (fun factId -> async.Return(Map.tryFind factId byId))
-                (queryAllIn scope)
+                (taintIndexIn scope.ScopeId (Some scope))
                 scope.ScopeId
                 (scopeTeamOf scope)
                 principal

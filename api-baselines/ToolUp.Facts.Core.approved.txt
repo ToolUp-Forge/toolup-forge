@@ -3,6 +3,11 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Facts.AddressedDraft (class)
+ToolUp.Facts.AddressedDraft..ctor(ToolUp.Facts.FactDraft, System.String, System.String)
+ToolUp.Facts.AddressedDraft.Draft : ToolUp.Facts.FactDraft { get }
+ToolUp.Facts.AddressedDraft.FactId : System.String { get }
+ToolUp.Facts.AddressedDraft.Lineage : System.String { get }
 ToolUp.Facts.AggregatePlan (class)
 ToolUp.Facts.AggregatePlan..ctor(ToolUp.Facts.PopulationTriple, ToolUp.Facts.RankDirection, System.Int32, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RankedFactRef], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]], ToolUp.Facts.PopulationStats, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.AggregateRefresh], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.AggregatePlan.Direction : ToolUp.Facts.RankDirection { get }
@@ -31,6 +36,36 @@ ToolUp.Facts.AnswerPlan.Steps : Microsoft.FSharp.Collections.FSharpList`1[ToolUp
 ToolUp.Facts.AnswerPlanModule (class)
 ToolUp.Facts.AnswerPlanModule.citedFactIds(ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.AnswerPlanModule.refusals(ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PlanRefusalReason]
+ToolUp.Facts.BatchAssertOutcome (class)
+ToolUp.Facts.BatchAssertOutcome.BatchAsserted : ToolUp.Facts.BatchAssertOutcome { get }
+ToolUp.Facts.BatchAssertOutcome.BatchIdempotent : ToolUp.Facts.BatchAssertOutcome { get }
+ToolUp.Facts.BatchAssertOutcome.BatchSuperseding : ToolUp.Facts.BatchAssertOutcome { get }
+ToolUp.Facts.BatchAssertOutcome.IsBatchAsserted : System.Boolean { get }
+ToolUp.Facts.BatchAssertOutcome.IsBatchIdempotent : System.Boolean { get }
+ToolUp.Facts.BatchAssertOutcome.IsBatchSuperseding : System.Boolean { get }
+ToolUp.Facts.BatchAssertOutcome.Tag : System.Int32 { get }
+ToolUp.Facts.BatchAssertOutcome+Tags (class)
+ToolUp.Facts.BatchAssertOutcome+Tags.BatchAsserted : System.Int32 (literal)
+ToolUp.Facts.BatchAssertOutcome+Tags.BatchIdempotent : System.Int32 (literal)
+ToolUp.Facts.BatchAssertOutcome+Tags.BatchSuperseding : System.Int32 (literal)
+ToolUp.Facts.BatchAssertOutcomeModule (class)
+ToolUp.Facts.BatchAssertOutcomeModule.toString(ToolUp.Facts.BatchAssertOutcome) : System.String
+ToolUp.Facts.BatchAssertReceipt (class)
+ToolUp.Facts.BatchAssertReceipt..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, System.String)
+ToolUp.Facts.BatchAssertReceipt.AssertedCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.AssertedFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.BatchAssertReceipt.Digest : System.String { get }
+ToolUp.Facts.BatchAssertReceipt.DraftCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.IdempotentCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.IdempotentFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.BatchAssertReceipt.SupersedingCount : System.Int32 { get }
+ToolUp.Facts.BatchAssertReceipt.SupersedingFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.BatchAssertReceipt.Truncated : System.Boolean { get }
+ToolUp.Facts.BatchAssertReceiptModule (class)
+ToolUp.Facts.BatchAssertReceiptModule.IdListCap : System.Int32 (literal)
+ToolUp.Facts.BatchAssertReceiptModule.digest(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.BatchAssertOutcome, System.String]]) : System.String
+ToolUp.Facts.BatchAssertReceiptModule.empty : ToolUp.Facts.BatchAssertReceipt { get }
+ToolUp.Facts.BatchAssertReceiptModule.ofDispositions(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.BatchAssertOutcome, System.String]]) : ToolUp.Facts.BatchAssertReceipt
 ToolUp.Facts.CompiledQuestion (class)
 ToolUp.Facts.CompiledQuestion..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationTriple])
 ToolUp.Facts.CompiledQuestion.Populations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationTriple] { get }
@@ -222,6 +257,34 @@ ToolUp.Facts.DisclosureTaintConfigModule.resolver(ToolUp.Facts.DisclosureTaintCo
 ToolUp.Facts.DisclosureTaintConfigModule.routineClears(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, System.String) : System.Boolean
 ToolUp.Facts.DisclosureTaintConfigModule.scopeOf(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DisclosureTaintConfigModule.taintVocabulary(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.DisclosureTaintDelta (class)
+ToolUp.Facts.DisclosureTaintDelta..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]])
+ToolUp.Facts.DisclosureTaintDelta.Entries : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]] { get }
+ToolUp.Facts.DisclosureTaintIndex (class)
+ToolUp.Facts.DisclosureTaintIndex..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DisclosureTaintNode])
+ToolUp.Facts.DisclosureTaintIndex.Nodes : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DisclosureTaintNode] { get }
+ToolUp.Facts.DisclosureTaintIndexModule (class)
+ToolUp.Facts.DisclosureTaintIndexModule.apply(ToolUp.Facts.DisclosureTaintDelta, ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.deltaOf(ToolUp.Facts.WritePlan) : ToolUp.Facts.DisclosureTaintDelta
+ToolUp.Facts.DisclosureTaintIndexModule.deltaOfFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.DisclosureTaintDelta
+ToolUp.Facts.DisclosureTaintIndexModule.empty : ToolUp.Facts.DisclosureTaintIndex { get }
+ToolUp.Facts.DisclosureTaintIndexModule.factIds(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Facts.DisclosureTaintIndexModule.ofEntries(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]]) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.ofFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.restrictTo(Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.toEntries(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]]
+ToolUp.Facts.DisclosureTaintIndexModule.tryNode(System.String, ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintNode]
+ToolUp.Facts.DisclosureTaintIndexModule.union(ToolUp.Facts.DisclosureTaintIndex, ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.upstream(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Facts.DisclosureTaintNode (class)
+ToolUp.Facts.DisclosureTaintNode..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.DisclosureTaintNode.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNode.Operations : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNode.Policies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNode.Produces : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureTaintNodeModule (class)
+ToolUp.Facts.DisclosureTaintNodeModule.join(ToolUp.Facts.DisclosureTaintNode, ToolUp.Facts.DisclosureTaintNode) : ToolUp.Facts.DisclosureTaintNode
+ToolUp.Facts.DisclosureTaintNodeModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.DisclosureTaintNode
 ToolUp.Facts.DisclosureViewer (class)
 ToolUp.Facts.DisclosureViewer..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.TeamVisibilityLevel)
 ToolUp.Facts.DisclosureViewer.IsPlatformAdmin : System.Boolean { get }
@@ -247,6 +310,40 @@ ToolUp.Facts.Fact.Period : ToolUp.Facts.TemporalExtent { get }
 ToolUp.Facts.Fact.Subject : ToolUp.Facts.SubjectRef { get }
 ToolUp.Facts.Fact.Supersedes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.Fact.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.FactAssertedEvent (class)
+ToolUp.Facts.FactAssertedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTime)
+ToolUp.Facts.FactAssertedEvent.AsOf : System.DateTime { get }
+ToolUp.Facts.FactAssertedEvent.Disclosure : System.String { get }
+ToolUp.Facts.FactAssertedEvent.FactId : System.String { get }
+ToolUp.Facts.FactAssertedEvent.Method : System.String { get }
+ToolUp.Facts.FactAssertedEvent.Metric : System.String { get }
+ToolUp.Facts.FactAssertedEvent.Subject : System.String { get }
+ToolUp.Facts.FactAuditEvent (class)
+ToolUp.Facts.FactAuditEvent.IsAssertedRow : System.Boolean { get }
+ToolUp.Facts.FactAuditEvent.IsBatchAssertedRow : System.Boolean { get }
+ToolUp.Facts.FactAuditEvent.IsSupersededRow : System.Boolean { get }
+ToolUp.Facts.FactAuditEvent.Tag : System.Int32 { get }
+ToolUp.Facts.FactAuditEvent+AssertedRow (class)
+ToolUp.Facts.FactAuditEvent+AssertedRow.Item : ToolUp.Facts.FactAssertedEvent { get }
+ToolUp.Facts.FactAuditEvent+BatchAssertedRow (class)
+ToolUp.Facts.FactAuditEvent+BatchAssertedRow.Item : ToolUp.Facts.FactBatchAssertedEvent { get }
+ToolUp.Facts.FactAuditEvent+SupersededRow (class)
+ToolUp.Facts.FactAuditEvent+SupersededRow.Item : ToolUp.Facts.FactSupersededEvent { get }
+ToolUp.Facts.FactAuditEvent+Tags (class)
+ToolUp.Facts.FactAuditEvent+Tags.AssertedRow : System.Int32 (literal)
+ToolUp.Facts.FactAuditEvent+Tags.BatchAssertedRow : System.Int32 (literal)
+ToolUp.Facts.FactAuditEvent+Tags.SupersededRow : System.Int32 (literal)
+ToolUp.Facts.FactAuditEventModule (class)
+ToolUp.Facts.FactAuditEventModule.eventType(ToolUp.Facts.FactAuditEvent) : System.String
+ToolUp.Facts.FactAuditEventModule.occurredAt(ToolUp.Facts.FactAuditEvent) : System.DateTime
+ToolUp.Facts.FactBatchAssertedEvent (class)
+ToolUp.Facts.FactBatchAssertedEvent..ctor(ToolUp.Facts.BatchAssertReceipt, System.DateTime)
+ToolUp.Facts.FactBatchAssertedEvent.AsOf : System.DateTime { get }
+ToolUp.Facts.FactBatchAssertedEvent.Receipt : ToolUp.Facts.BatchAssertReceipt { get }
+ToolUp.Facts.FactCompetition (class)
+ToolUp.Facts.FactCompetition.competingMethods(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.Fact) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.FactCompetition.key(ToolUp.Facts.Fact) : System.Tuple`4[ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, System.DateTime, System.DateTime]
+ToolUp.Facts.FactCompetition.selectCanonical(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]
 ToolUp.Facts.FactDisclosureAccessedEvent (class)
 ToolUp.Facts.FactDisclosureAccessedEvent..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.String)
 ToolUp.Facts.FactDisclosureAccessedEvent.ContributorScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -279,6 +376,23 @@ ToolUp.Facts.FactDisclosureDeniedEvent.Purpose : System.String { get }
 ToolUp.Facts.FactDisclosureDeniedEvent.Surface : System.String { get }
 ToolUp.Facts.FactDisclosureDeniedEvent.TaxonomyVersion : System.String { get }
 ToolUp.Facts.FactDisclosureDeniedEvent.UnsatisfiedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactDraft (class)
+ToolUp.Facts.FactDraft..ctor(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.FactValue, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, ToolUp.Facts.Evidence, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence], ToolUp.Facts.Disclosure)
+ToolUp.Facts.FactDraft.Confidence : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence] { get }
+ToolUp.Facts.FactDraft.Disclosure : ToolUp.Facts.Disclosure { get }
+ToolUp.Facts.FactDraft.Evidence : ToolUp.Facts.Evidence { get }
+ToolUp.Facts.FactDraft.Method : ToolUp.Facts.MethodRef { get }
+ToolUp.Facts.FactDraft.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.FactDraft.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.FactDraft.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.FactDraft.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.FactDraftModule (class)
+ToolUp.Facts.FactDraftModule.defects(ToolUp.Facts.FactDraft) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.FactEvents (class)
+ToolUp.Facts.FactEvents.AssertedType : System.String (literal)
+ToolUp.Facts.FactEvents.BatchAssertedType : System.String (literal)
+ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
+ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
 ToolUp.Facts.FactFreshness (class)
 ToolUp.Facts.FactFreshness.Fresh : ToolUp.Facts.FactFreshness { get }
 ToolUp.Facts.FactFreshness.IsFresh : System.Boolean { get }
@@ -308,6 +422,18 @@ ToolUp.Facts.FactPublicationTargetModule.create(System.String, System.String) : 
 ToolUp.Facts.FactPublicationTargetModule.defects(ToolUp.Facts.FactPublicationTarget, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDefinition], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.FactRendering (class)
 ToolUp.Facts.FactRendering.render(System.String, ToolUp.Facts.FactValue) : System.String
+ToolUp.Facts.FactStoreError (class)
+ToolUp.Facts.FactStoreError.Tag : System.Int32 { get }
+ToolUp.Facts.FactStoreError.defects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactStoreError.draft : ToolUp.Facts.FactDraft { get }
+ToolUp.Facts.FactStoreError.position : System.Int32 { get }
+ToolUp.Facts.FactSupersededEvent (class)
+ToolUp.Facts.FactSupersededEvent..ctor(System.String, System.String, System.String, System.String, System.DateTime)
+ToolUp.Facts.FactSupersededEvent.AsOf : System.DateTime { get }
+ToolUp.Facts.FactSupersededEvent.Metric : System.String { get }
+ToolUp.Facts.FactSupersededEvent.NewFactId : System.String { get }
+ToolUp.Facts.FactSupersededEvent.Subject : System.String { get }
+ToolUp.Facts.FactSupersededEvent.SupersededFactId : System.String { get }
 ToolUp.Facts.FactValue (class)
 ToolUp.Facts.FactValue.IsAbsent : System.Boolean { get }
 ToolUp.Facts.FactValue.IsCategorical : System.Boolean { get }
@@ -336,6 +462,14 @@ ToolUp.Facts.FactValue+Tags.Distribution : System.Int32 (literal)
 ToolUp.Facts.FactValue+Tags.Interval : System.Int32 (literal)
 ToolUp.Facts.FactValue+Tags.Scalar : System.Int32 (literal)
 ToolUp.Facts.FactValue+Tags.Series : System.Int32 (literal)
+ToolUp.Facts.FactWrite (class)
+ToolUp.Facts.FactWrite.address(ToolUp.Facts.FactDraft) : ToolUp.Facts.AddressedDraft
+ToolUp.Facts.FactWrite.factOf(ToolUp.Facts.AddressedDraft, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Facts.Fact
+ToolUp.Facts.FactWrite.headOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]
+ToolUp.Facts.FactWrite.plan(System.DateTime, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.WriteRequest) : ToolUp.Facts.WritePlan
+ToolUp.Facts.FactWrite.prepare(ToolUp.Facts.WriteShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.WriteRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactStoreError]]
+ToolUp.Facts.FactWrite.recordedAt(ToolUp.Facts.FactDraft, System.DateTime) : ToolUp.Facts.Fact
+ToolUp.Facts.FactWrite.renderOffenders(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactStoreError]) : System.String
 ToolUp.Facts.Freshness (class)
 ToolUp.Facts.Freshness.derive(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
 ToolUp.Facts.Freshness.deriveAt(ToolUp.Platform.Grounding.StalenessPolicy, System.DateTime, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
@@ -343,6 +477,14 @@ ToolUp.Facts.FreshnessHistogram (class)
 ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
 ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
 ToolUp.Facts.FreshnessHistogram.StaleCount : System.Int32 { get }
+ToolUp.Facts.IDisclosureTaintIndexSource (interface)
+ToolUp.Facts.IDisclosureTaintIndexSource.ReadTaintIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DisclosureTaintIndex]
+ToolUp.Facts.IDisclosureTaintIndexSource.ReadTaintIndex(ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DisclosureTaintIndex]
+ToolUp.Facts.IndexDelta (class)
+ToolUp.Facts.IndexDelta..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Facts.IndexDelta.Head : System.String { get }
+ToolUp.Facts.IndexDelta.Lineage : System.String { get }
+ToolUp.Facts.IndexDelta.Retires : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.InputHash (class)
 ToolUp.Facts.InputHash.MinimumDigits : System.Int32 (literal)
 ToolUp.Facts.InputHash.isContentHash(System.String) : System.Boolean
@@ -876,3 +1018,24 @@ ToolUp.Facts.ValueThresholdModule.satisfiesMagnitude(ToolUp.Facts.ValueThreshold
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule (class)
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule.ofResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule.withTeamOutputVisibility(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
+ToolUp.Facts.WritePlan (class)
+ToolUp.Facts.WritePlan..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.IndexDelta], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.BatchAssertReceipt)
+ToolUp.Facts.WritePlan.Audit : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent] { get }
+ToolUp.Facts.WritePlan.Facts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact] { get }
+ToolUp.Facts.WritePlan.IndexDeltas : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.IndexDelta] { get }
+ToolUp.Facts.WritePlan.Receipt : ToolUp.Facts.BatchAssertReceipt { get }
+ToolUp.Facts.WritePlan.Supersessions : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Facts.WritePlan.Unchanged : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.WriteRequest (class)
+ToolUp.Facts.WriteRequest..ctor(ToolUp.Facts.WriteShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AddressedDraft])
+ToolUp.Facts.WriteRequest.Drafts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AddressedDraft] { get }
+ToolUp.Facts.WriteRequest.Shape : ToolUp.Facts.WriteShape { get }
+ToolUp.Facts.WriteShape (class)
+ToolUp.Facts.WriteShape.BatchAssert : ToolUp.Facts.WriteShape { get }
+ToolUp.Facts.WriteShape.IsBatchAssert : System.Boolean { get }
+ToolUp.Facts.WriteShape.IsScalarAssert : System.Boolean { get }
+ToolUp.Facts.WriteShape.ScalarAssert : ToolUp.Facts.WriteShape { get }
+ToolUp.Facts.WriteShape.Tag : System.Int32 { get }
+ToolUp.Facts.WriteShape+Tags (class)
+ToolUp.Facts.WriteShape+Tags.BatchAssert : System.Int32 (literal)
+ToolUp.Facts.WriteShape+Tags.ScalarAssert : System.Int32 (literal)

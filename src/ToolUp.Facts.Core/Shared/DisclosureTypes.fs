@@ -819,3 +819,176 @@ module DisclosurePurposeConfig =
             Taxonomy = taxonomy
             AllowedBySurface = Map.ofList allowed
         }
+
+// ─── The disclosure-taint index ──────────────────────────────────────
+//
+// What the taint walk reads of a scope, maintained by the writes that change
+// it, so a gated check reads the index instead of listing every fact in the
+// scope. A fact-to-fact derivation edge exists where a fact's evidence names
+// a data-object version another fact produced as its `Series` value;
+// supersession is not a derivation and adds no edge, so a write only ever
+// ADDS entries (a superseded fact stays a node: a downstream fact may still
+// cite what it produced).
+//
+// The index is a join-semilattice: entries are keyed by content address and
+// two entries for one address join field by field, so applying deltas is
+// commutative, associative and idempotent, and the order writes land in
+// cannot change it. Two writers of one address with different payloads (the
+// content address does not cover a fact's classification) leave the JOIN,
+// never the last writer's: every policy either named stays a taint source,
+// and an address claiming two operations is no declassifier. Fail-closed.
+
+/// One fact as the taint walk reads it: the four facets of a fact the walk
+/// consults, and nothing else.
+type DisclosureTaintNode = {
+    /// The `Restricted` policy refs the fact is classified under (one for a
+    /// stored fact; more only where two payloads of one address joined).
+    Policies: string list
+    /// The `Computed` operation ids the fact came from (at most one for a
+    /// stored fact). A node with exactly one may be a declassifier.
+    Operations: string list
+    /// The data-object versions the fact was derived from, in evidence order.
+    Inputs: string list
+    /// The data-object versions the fact produced as its `Series` value.
+    Produces: string list
+}
+
+/// Construction and the join of `DisclosureTaintNode`.
+module DisclosureTaintNode =
+
+    /// The node a fact is.
+    let ofFact (fact: Fact) : DisclosureTaintNode = {
+        Policies =
+            match fact.Disclosure with
+            | Restricted policyRef -> [ policyRef ]
+            | Surfaceable
+            | Internal -> []
+        Operations =
+            match fact.Method with
+            | Computed(operationId, _, _) -> [ operationId ]
+            | HumanAsserted _
+            | Imported _ -> []
+        Inputs = fact.Evidence.InputHashes
+        Produces =
+            match fact.Value with
+            | Series version -> [ version ]
+            | _ -> []
+    }
+
+    /// Two nodes for one address. Equal nodes join to themselves, so a
+    /// well-formed index keeps every field in the fact's own order; unequal
+    /// nodes join to the sorted union of every field.
+    let join (a: DisclosureTaintNode) (b: DisclosureTaintNode) : DisclosureTaintNode =
+        if a = b then
+            a
+        else
+            let union (x: string list) (y: string list) = x @ y |> List.distinct |> List.sort
+
+            {
+                Policies = union a.Policies b.Policies
+                Operations = union a.Operations b.Operations
+                Inputs = union a.Inputs b.Inputs
+                Produces = union a.Produces b.Produces
+            }
+
+/// The entries one write adds to the index: one per fact the write stored.
+type DisclosureTaintDelta = {
+    Entries: (string * DisclosureTaintNode) list
+}
+
+/// The disclosure-taint index of one scope: every stored fact's node, keyed by
+/// content address.
+type DisclosureTaintIndex = {
+    Nodes: Map<string, DisclosureTaintNode>
+}
+
+/// The disclosure-taint index's construction, its deltas and its reads.
+module DisclosureTaintIndex =
+
+    /// The index of a scope holding no fact.
+    let empty: DisclosureTaintIndex = { Nodes = Map.empty }
+
+    /// The delta of a fact listing, as if each fact had just been written.
+    let deltaOfFacts (facts: Fact list) : DisclosureTaintDelta = {
+        Entries = facts |> List.map (fun f -> f.FactId, DisclosureTaintNode.ofFact f)
+    }
+
+    /// The delta of a write: a node for every fact the plan stores, asserted
+    /// or superseding. A write that stores nothing adds nothing.
+    let deltaOf (plan: WritePlan) : DisclosureTaintDelta = deltaOfFacts plan.Facts
+
+    /// `index` with `delta` applied: each entry joined into the node already
+    /// held for its address, or added.
+    let apply (delta: DisclosureTaintDelta) (index: DisclosureTaintIndex) : DisclosureTaintIndex = {
+        Nodes =
+            delta.Entries
+            |> List.fold
+                (fun nodes (factId, node) ->
+                    match Map.tryFind factId nodes with
+                    | Some held -> Map.add factId (DisclosureTaintNode.join held node) nodes
+                    | None -> Map.add factId node nodes)
+                index.Nodes
+    }
+
+    /// The index rebuilt from a listing of every fact in a scope.
+    let ofFacts (facts: Fact list) : DisclosureTaintIndex = apply (deltaOfFacts facts) empty
+
+    /// The join of two indexes.
+    let union (a: DisclosureTaintIndex) (b: DisclosureTaintIndex) : DisclosureTaintIndex =
+        apply { Entries = Map.toList b.Nodes } a
+
+    /// The addresses the index holds a node for.
+    let factIds (index: DisclosureTaintIndex) : Set<string> =
+        index.Nodes |> Map.toSeq |> Seq.map fst |> Set.ofSeq
+
+    /// `index` without the nodes of addresses outside `factIds`: a store
+    /// reconciling its index with the facts it holds.
+    let restrictTo (factIds: Set<string>) (index: DisclosureTaintIndex) : DisclosureTaintIndex = {
+        Nodes = index.Nodes |> Map.filter (fun factId _ -> factIds.Contains factId)
+    }
+
+    /// The node held for an address.
+    let tryNode (factId: string) (index: DisclosureTaintIndex) : DisclosureTaintNode option = index.Nodes.TryFind factId
+
+    /// The immediate upstream of every fact: the addresses of the facts that
+    /// produced a version it was derived from, in its evidence order. Built
+    /// once per index, so a walk pays for the reverse map once.
+    let upstream (index: DisclosureTaintIndex) : string -> string list =
+        let producers =
+            index.Nodes
+            |> Map.toList
+            |> List.collect (fun (factId, node) -> node.Produces |> List.map (fun version -> version, factId))
+            |> List.groupBy fst
+            |> List.map (fun (version, pairs) -> version, pairs |> List.map snd)
+            |> Map.ofList
+
+        fun factId ->
+            match index.Nodes.TryFind factId with
+            | None -> []
+            | Some node ->
+                node.Inputs
+                |> List.collect (fun version -> producers.TryFind version |> Option.defaultValue [])
+                |> List.distinct
+
+    /// The index as a flat entry list in address order: the shape a store
+    /// persists.
+    let toEntries (index: DisclosureTaintIndex) : (string * DisclosureTaintNode) list = Map.toList index.Nodes
+
+    /// The index a persisted entry list describes; a repeated address joins.
+    let ofEntries (entries: (string * DisclosureTaintNode) list) : DisclosureTaintIndex =
+        apply { Entries = entries } empty
+
+/// A fact store that keeps each scope's disclosure-taint index. The
+/// disclosure gate reads a scope's index through this rather than listing
+/// the scope's facts; a store that does not offer it is listed per check.
+///
+/// The answer holds a node for every fact the scope held when the read
+/// started. A store whose index is missing rebuilds it once from its own
+/// listing, writes it and logs the rebuild; nodes of addresses the store no
+/// longer holds are dropped.
+type IDisclosureTaintIndexSource =
+    /// The disclosure-taint index of the scope named by `scopeId`.
+    abstract ReadTaintIndex: scopeId: string -> Async<DisclosureTaintIndex>
+
+    /// The disclosure-taint index of `scope`.
+    abstract ReadTaintIndex: scope: ToolUp.Platform.ResolvedScope -> Async<DisclosureTaintIndex>

@@ -6,7 +6,7 @@ namespace ToolUp.Facts.Presentation
 open ToolUp.Platform
 open ToolUp.AI.AICompose
 
-/// Composing the render tools (Phase 1132).
+/// Composing the render tools and the pipeline tool.
 [<RequireQualifiedAccess>]
 module PresentationCompose =
 
@@ -41,3 +41,39 @@ module PresentationCompose =
             with
             | [] -> app
             | missing -> AIServerApp.withAIAnsweringTools missing app
+
+    /// Compose `evaluate_pipeline` onto the AI composition in the answering
+    /// form, beside the render tools, and mount the re-run a reader's panel
+    /// draws its block from (`IPipelineBlockApi`, at
+    /// `/api/_facts/pipeline-block/*`). Only under `EnabledFactStore`; under
+    /// `NoFactStore` the app is returned unchanged.
+    ///
+    /// Idempotent: when the tool is already composed the app is returned
+    /// unchanged, so the endpoint is mounted once. A deployment that never
+    /// calls this registers no pipeline tool and mounts no endpoint. **Adds**
+    /// one answering tool and one handler.
+    ///
+    /// ```fsharp skip=fragment
+    /// AIServerApp.createFrom factory providerProfile app
+    /// |> PresentationCompose.withRenderTools
+    /// |> PresentationCompose.withPipelineTool
+    /// |> composeAI
+    /// ```
+    let withPipelineTool (app: AIServerApp) : AIServerApp =
+        match app.Base.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore when
+            app.AIAnsweringTools
+            |> List.exists (fun (definition, _) -> definition.Name = ToolUp.Facts.PipelineTool.Name)
+            ->
+            app
+        | EnabledFactStore ->
+            let mounted = {
+                app with
+                    Base = {
+                        app.Base with
+                            Extensions.Handlers = app.Base.Extensions.Handlers @ [ PipelineAnsweringTool.handler ]
+                    }
+            }
+
+            AIServerApp.withAIAnsweringTools [ PipelineAnsweringTool.tool ] mounted

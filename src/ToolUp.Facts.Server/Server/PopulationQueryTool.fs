@@ -4,10 +4,7 @@
 namespace ToolUp.Facts
 
 open System
-open System.Globalization
-open System.Text.Json
 open Microsoft.AspNetCore.Http
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -89,11 +86,6 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// Declared by `FactsCompose.withFactStore`; consumers normally never
 /// call this module directly.
 module PopulationQueryTool =
-
-    let private jsonOptions = FableConverters.create ()
-
-    let private serialize (value: obj) : string =
-        JsonSerializer.Serialize(value, jsonOptions)
 
     // ── Tool definition (703.A / 703.C) ───────────────────────────
 
@@ -225,81 +217,6 @@ module PopulationQueryTool =
         Methods: PopulationMethodSelection
     }
 
-    let private tryProperty (root: JsonElement) (name: string) : JsonElement option =
-        match root.TryGetProperty name with
-        | true, v when v.ValueKind <> JsonValueKind.Null -> Some v
-        | _ -> None
-
-    let private stringArg (root: JsonElement) (name: string) : Result<string option, string> =
-        match tryProperty root name with
-        | None -> Ok None
-        | Some v when v.ValueKind = JsonValueKind.String -> Ok(Some(v.GetString()))
-        | Some _ -> Error(sprintf "Argument '%s' must be a string." name)
-
-    let private numberArg (root: JsonElement) (name: string) : Result<decimal option, string> =
-        match tryProperty root name with
-        | None -> Ok None
-        | Some v when v.ValueKind = JsonValueKind.Number ->
-            match v.TryGetDecimal() with
-            | true, d -> Ok(Some d)
-            | _ -> Error(sprintf "Argument '%s' is not a representable number." name)
-        | Some _ -> Error(sprintf "Argument '%s' must be a number." name)
-
-    /// A whole-number argument. A fractional or out-of-range value is
-    /// refused rather than truncated: silently reading 2.7 as 2 answers a
-    /// question the caller did not ask.
-    let private intArg (root: JsonElement) (name: string) : Result<int option, string> =
-        match numberArg root name with
-        | Error e -> Error e
-        | Ok None -> Ok None
-        | Ok(Some d) when Decimal.Truncate d <> d -> Error(sprintf "Argument '%s' must be a whole number." name)
-        | Ok(Some d) when d < -1000000m || d > 1000000m ->
-            Error(sprintf "Argument '%s' is out of range (expected a whole number within ±1,000,000)." name)
-        | Ok(Some d) -> Ok(Some(int d))
-
-    let private instantArg (root: JsonElement) (name: string) : Result<DateTime option, string> =
-        match stringArg root name with
-        | Error e -> Error e
-        | Ok None -> Ok None
-        | Ok(Some s) when String.IsNullOrWhiteSpace s -> Ok None
-        | Ok(Some s) ->
-            match
-                DateTime.TryParse(
-                    s,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal ||| DateTimeStyles.AdjustToUniversal
-                )
-            with
-            | true, t -> Ok(Some t)
-            | false, _ -> Error(sprintf "Argument '%s' is not a parseable ISO-8601 instant: '%s'." name s)
-
-    /// A closed enum argument — an unrecognised value is refused with the
-    /// accepted set enumerated, never silently defaulted.
-    let private enumArg
-        (root: JsonElement)
-        (name: string)
-        (cases: (string * 'a) list)
-        (fallback: 'a)
-        : Result<'a, string> =
-        match stringArg root name with
-        | Error e -> Error e
-        | Ok None -> Ok fallback
-        | Ok(Some s) when String.IsNullOrWhiteSpace s -> Ok fallback
-        | Ok(Some s) ->
-            match
-                cases
-                |> List.tryFind (fun (caseId, _) -> String.Equals(caseId, s.Trim(), StringComparison.OrdinalIgnoreCase))
-            with
-            | Some(_, value) -> Ok value
-            | None ->
-                Error(
-                    sprintf
-                        "Argument '%s' must be one of: %s (got '%s')."
-                        name
-                        (cases |> List.map fst |> String.concat ", ")
-                        s
-                )
-
     let private pathSegments (raw: string) : string list =
         raw.Split('>')
         |> Array.map _.Trim()
@@ -307,29 +224,16 @@ module PopulationQueryTool =
         |> Array.toList
 
     let private parseArgs (argsJson: string) : Result<PopulationArgs, string> =
-        let parsed =
-            try
-                Ok((JsonDocument.Parse argsJson).RootElement.Clone())
-            with _ ->
-                Error "Arguments are not valid JSON."
-
-        match parsed with
+        match FactTool.parseObject argsJson with
         | Error e -> Error e
-        | Ok root when root.ValueKind <> JsonValueKind.Object -> Error "Arguments must be a JSON object."
         | Ok root ->
-            let required name =
-                match stringArg root name with
-                | Ok(Some s) when not (String.IsNullOrWhiteSpace s) -> Ok s
-                | Ok _ ->
-                    Error(
-                        sprintf
-                            "Required argument '%s' is missing. Metric and subject-hierarchy ids come from the deployment's grounding registry."
-                            name
-                    )
-                | Error e -> Error e
+            let required =
+                FactTool.requiredArg
+                    "Metric and subject-hierarchy ids come from the deployment's grounding registry."
+                    root
 
             let ordering =
-                enumArg
+                FactTool.enumArg
                     root
                     "ordering"
                     [
@@ -340,14 +244,14 @@ module PopulationQueryTool =
                     RegistryDirection
 
             let methods =
-                enumArg
+                FactTool.enumArg
                     root
                     "methods"
                     [ "canonical", CanonicalMethodOnly; "all_competing", AllCompetingMethods ]
                     CanonicalMethodOnly
 
             let period =
-                match instantArg root "period_from", instantArg root "period_to" with
+                match FactTool.instantArg root "period_from", FactTool.instantArg root "period_to" with
                 | Error e, _
                 | _, Error e -> Error e
                 | Ok None, Ok None -> Ok None
@@ -363,7 +267,7 @@ module PopulationQueryTool =
                     )
 
             let threshold =
-                match numberArg root "value_at_least", numberArg root "value_at_most" with
+                match FactTool.numberArg root "value_at_least", FactTool.numberArg root "value_at_most" with
                 | Error e, _
                 | _, Error e -> Error e
                 | Ok None, Ok None -> Ok None
@@ -374,7 +278,7 @@ module PopulationQueryTool =
                 | Ok None, Ok(Some high) -> Ok(Some(AtMost high))
 
             let level =
-                match intArg root "level" with
+                match FactTool.intArg root "level" with
                 | Error e -> Error e
                 | Ok(Some l) when l < 0 -> Error "Argument 'level' must be zero or greater (0 is the hierarchy root)."
                 | Ok l -> Ok l
@@ -392,7 +296,11 @@ module PopulationQueryTool =
                     | _, Error e, _
                     | _, _, Error e -> Error e
                     | Ok period, Ok threshold, Ok level ->
-                        match intArg root "top_k", instantArg root "as_of", stringArg root "path_prefix" with
+                        match
+                            FactTool.intArg root "top_k",
+                            FactTool.instantArg root "as_of",
+                            FactTool.stringArg root "path_prefix"
+                        with
                         | Error e, _, _
                         | _, Error e, _
                         | _, _, Error e -> Error e
@@ -431,7 +339,7 @@ module PopulationQueryTool =
         : Async<string> =
         async {
             match parseArgs argsJson with
-            | Error message -> return serialize {| error = message |}
+            | Error message -> return FactTool.serialize {| error = message |}
             | Ok args ->
                 let query: PopulationQuery = {
                     Metric = MetricRef args.Metric
@@ -452,7 +360,7 @@ module PopulationQueryTool =
                 // Phase 701's `Error` is a typed REFUSAL — an unregistered
                 // metric, or one declared `Neutral` — never a failure. It
                 // names its own remedy, so it reaches the model verbatim.
-                | Error refusal -> return serialize {| error = refusal |}
+                | Error refusal -> return FactTool.serialize {| error = refusal |}
                 | Ok result ->
                     // Disclosure at the door (703.B): one gate check over
                     // the ranked ids at the FactToolResult surface. The
@@ -554,7 +462,7 @@ module PopulationQueryTool =
                             None
 
                     return
-                        serialize {|
+                        FactTool.serialize {|
                             metric = args.Metric
                             // Phase 705 — the metric family's declared
                             // interpretation, carried beside the numbers
@@ -611,47 +519,13 @@ module PopulationQueryTool =
                         |}
         }
 
-    // ── HttpContext adapter (the registered executor) ─────────────
+    // ── HttpContext adapter ───────────────────────────────────────
 
-    // Phase 797 — the scope is not read from the request items here. The
-    // door asks `ScopeResolution.forRequest`, which returns the
-    // `ResolvedScope` the scope-resolution middleware minted for this
-    // request or the explicit anonymous scope, and nothing a caller can
-    // fabricate. There is no user-id rung and no literal fallback: an
-    // unresolved request reads the anonymous shard, which holds only what
-    // was asserted anonymously.
-
-    let private userIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
-    let private serviceOf<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
-        match ctx.RequestServices.GetService(typeof<'T>) with
-        | :? 'T as service -> Some service
-        | _ -> None
-
-    /// The registered `HttpContext` executor. Resolves the fact store,
-    /// the disclosure gate, and the optional metric registry from DI —
-    /// all registered by the same `FactsCompose.withFactStore` knob that
-    /// declares this tool, so a composed deployment always finds them.
+    /// The registered `HttpContext` executor.
     let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
-        match serviceOf<IFactStore> ctx, serviceOf<IFactDisclosureGate> ctx with
-        | Some store, Some gate ->
-            let registry = serviceOf<Grounding.IMetricRegistry> ctx
-
-            executeWith
-                store
-                gate
-                registry
-                (fun () -> DateTime.UtcNow)
-                (StorageScopeResolver.ScopeResolution.forRequest ctx)
-                (userIdOf ctx)
-                argsJson
-        | _ -> async {
-            return
-                serialize {|
-                    error =
-                        "The fact store is not composed in this deployment — `query_metric_population` is unavailable."
-                |}
-          }
+        FactTool.define
+            "query_metric_population"
+            (fun c argsJson ->
+                executeWith c.Store c.Gate c.Registry (fun () -> DateTime.UtcNow) c.Scope c.UserId argsJson)
+            ctx
+            argsJson

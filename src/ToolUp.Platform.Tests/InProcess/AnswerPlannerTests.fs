@@ -1005,6 +1005,76 @@ let populationDisclosureTests =
 let chainTests =
     testList "Phase 560 plan in the provenance chain" [
 
+        test "withPlans stitches each plan ahead of the chain, byte for byte the shape both chains carried" {
+            let chain: ProvenanceChain = {
+                Root = "msg-1"
+                Nodes = [
+                    {
+                        Id = "msg-1"
+                        Kind = ConversationMessage
+                        Disclosure = None
+                        Label = "message"
+                    }
+                ]
+                Edges = [
+                    {
+                        From = "msg-1"
+                        To = "f-0"
+                        Kind = CitesFact
+                    }
+                ]
+            }
+
+            let plan (id: string) = {
+                PlanId = id
+                Question = "q " + id
+                CompiledAt = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+                Steps = []
+                Refusal = None
+            }
+
+            let stitched = AnswerPlanProvenance.withPlans "msg-1" [ plan "p1"; plan "p2" ] chain
+
+            Expect.equal
+                stitched
+                {
+                    chain with
+                        Nodes =
+                            [
+                                {
+                                    Id = "p1"
+                                    Kind = AnswerPlanNode
+                                    Disclosure = None
+                                    Label = "answer plan: q p1"
+                                }
+                                {
+                                    Id = "p2"
+                                    Kind = AnswerPlanNode
+                                    Disclosure = None
+                                    Label = "answer plan: q p2"
+                                }
+                            ]
+                            @ chain.Nodes
+                        Edges =
+                            [
+                                {
+                                    From = "msg-1"
+                                    To = "p1"
+                                    Kind = PlannedBy
+                                }
+                                {
+                                    From = "msg-1"
+                                    To = "p2"
+                                    Kind = PlannedBy
+                                }
+                            ]
+                            @ chain.Edges
+                }
+                "plan nodes and their edges first, the chain's own after"
+
+            Expect.equal (AnswerPlanProvenance.withPlans "msg-1" [] chain) chain "no plan, the chain unchanged"
+        }
+
         testCaseAsync "a recorded plan round-trips through the Phase 524 chain walk as a typed plan node"
         <| async {
             let registry = Some(registryWith UntilSuperseded None)

@@ -447,4 +447,23 @@ let tests =
             | Error ModelRegistryError.NotFound -> ()
             | other -> failtestf "expected NotFound; got %A" other
         }
+
+        testCaseAsync "a declared novelty capability is honoured: one Created, then Replayed"
+        <| async {
+            let registry, _, _ = freshRegistry ()
+
+            match registry.Capabilities.Novelty with
+            | None -> failtest "the reference registry declares its novelty"
+            | Some novelty ->
+                let o = outcome "spec-n" "team-1/sales@v1" 7L
+                let! first = novelty.RegisterReporting("team-1", o, "alice", Map.empty, "")
+                let! second = novelty.RegisterReporting("team-1", o, "alice", Map.empty, "")
+                Expect.equal (okv first).Novelty ModelRegistrationNovelty.Created "the creating call reports Created"
+                Expect.equal (okv second).Novelty ModelRegistrationNovelty.Replayed "a replay reports Replayed"
+
+                Expect.equal
+                    (okv second).Artifact
+                    (okv first).Artifact
+                    "and the declared path is the same idempotent register"
+        }
     ]

@@ -1797,7 +1797,7 @@ let private branchCostTests =
 // per-surface stance: its walk can change no verdict, yet each warm chart
 // downloaded the scope (1,748 blobs at 1,742 facts). Pinned by counts at 2k
 // and 20k facts; the converse pins that a config whose walk CAN change a
-// verdict still loads the graph.
+// verdict walks, over the scope's disclosure-taint index rather than its facts.
 
 /// The consumer deployment's registration, exactly: one `Plain` policy
 /// permitting four surfaces, no contributor scope, no declassifier.
@@ -1962,7 +1962,11 @@ let private inertTaintTests =
                 Expect.equal together alone "each chart is the answer it gives alone"
             }
 
-            test (sprintf "a warm chart under a TaintPropagating config still loads the graph, %d facts" (4 * skus)) {
+            test (
+                sprintf
+                    "a warm chart under a TaintPropagating config reads the taint index, not the scope, %d facts"
+                    (4 * skus)
+            ) {
                 let factDownloads, _, points, ms =
                     oneBrandChartUnder (Some(snd liveTaints.Head)) skus true
 
@@ -1974,13 +1978,22 @@ let private inertTaintTests =
                     ms
 
                 Expect.equal points (2 * skus / 20) "the same chart"
-                Expect.isGreaterThanOrEqual factDownloads (4 * skus) "the walk can change a verdict, so the graph loads"
+
+                Expect.isLessThanOrEqual
+                    factDownloads
+                    1
+                    "the walk can change a verdict, and reads the scope's index: one blob"
             }
 
         for name, config in liveTaints do
-            test (sprintf "under %s the graph is loaded" name) {
+            test (sprintf "under %s the walk is live and reads the taint index" name) {
                 let factDownloads, _, _, _ = oneBrandChartUnder (Some config) 100 true
-                Expect.isGreaterThanOrEqual factDownloads 400 "the walk is live, so the gate reads the scope"
+                let untainted, _, _, _ = oneBrandChartUnder None 100 true
+
+                Expect.equal
+                    factDownloads
+                    (untainted + 1)
+                    "the walk is live, so the gate reads the scope's index, and nothing else"
             }
     ]
 
@@ -2098,7 +2111,7 @@ let private parityTests =
             Expect.allEqual (segment.Points |> List.map _.Withheld) true "every Internal point is withheld"
         }
 
-        test "under a taint configuration the row path's verdicts are the fact path's, at the graph load alone" {
+        test "under a taint configuration the row path's verdicts are the fact path's, at the taint index read alone" {
             let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
             let w, _ = mixedWorld counting
 
@@ -2131,28 +2144,22 @@ let private parityTests =
 
             counting.Reset()
 
-            w.Store.Query(
-                w.Scope,
-                {
-                    FactQuery.all with
-                        IncludeSuperseded = true
-                }
-            )
+            (w.Store :?> IDisclosureTaintIndexSource).ReadTaintIndex w.Scope
             |> Async.RunSynchronously
             |> ignore
 
             let graphLoad = counting.Downloads - counting.SurfaceDownloads
 
             printfn
-                "Phase 1126 chart under a taint config (%d points): row path %d fact downloads, fact path (after 1125) %d, the graph load alone %d"
+                "Phase 1126 chart under a taint config (%d points): row path %d fact downloads, fact path (after 1125) %d, the taint index read alone %d"
                 (List.length viaRows.Points)
                 rowReads
                 factReads
                 graphLoad
 
             Expect.equal viaRows viaFacts "the same series, verdicts included"
-            Expect.isGreaterThan graphLoad 0 "the probe sees the graph load"
-            Expect.equal rowReads graphLoad "the row path pays the graph load and reads no point"
+            Expect.isGreaterThan graphLoad 0 "the probe sees the index read"
+            Expect.equal rowReads graphLoad "the row path pays the taint index read and reads no point"
 
             Expect.equal
                 factReads

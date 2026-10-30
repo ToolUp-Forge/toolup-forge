@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.Facts.Presentation — from a gated fact series to a Fuaran-UI node. A presentation request (trend, breakdown, comparison or table; the whole of what a model may author for a block) and its JSON codec, and pure builders that draw a FactSeries as a validated Fuaran-UI node with the BlockProvenance that produced it. A withheld or absent point is never drawn as a number: it is left out of the rows and named with its reason. Compiled by both compilers, so a browser rebuilds exactly what a server built. Phase 1129.</Description>
+        <Description>ToolUp.Facts.Presentation — from a gated fact series to a Fuaran-UI node. A presentation request (trend, breakdown, comparison or table; the whole of what a model may author for a block) and its JSON codec, and pure builders that draw a FactSeries as a validated Fuaran-UI node with the BlockProvenance that produced it. A withheld or absent point is never drawn as a number: it is left out of the rows and named with its reason. And the pipeline block: the request an evaluate_pipeline block part persists, the re-run's wire result and remoting contract, and the grid a result is drawn as. Compiled by both compilers, so a browser rebuilds exactly what a server built.</Description>
         <PackageTags>fsharp;fable;sdk;facts;grounding;charts;fuaran-ui</PackageTags>
         <!-- Fable-touching project: nullable reference types stay disabled
              (forge CLAUDE.md "Nullable reference types — keep disabled on
@@ -38,5 +38,6 @@
         <Compile Include="Shared\PresentationRequest.fs" />
         <Compile Include="Shared\Provenance.fs" />
         <Compile Include="Shared\Builders.fs" />
+        <Compile Include="Shared\PipelineBlock.fs" />
     </ItemGroup>
 </Project>

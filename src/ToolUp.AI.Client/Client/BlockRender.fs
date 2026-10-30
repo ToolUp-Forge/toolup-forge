@@ -12,14 +12,14 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 
-// ─── Phase 1130 — a block part, drawn ────────────────────────────────
+// ─── A block part, drawn ─────────────────────────────────────────────
 //
-// A block part (Phase 1128) persists the presentation request a model
+// A block part persists the presentation request a model
 // wrote and the provenance of the read that answered it, never its rows.
 // So the panel never decodes the stored node and draws it: it re-runs the
 // request through the registered series resolver — the reader's own gated
 // fact read, at the moment of reading — rebuilds the node with the fact
-// presentation builders (Phase 1129, the same code a server builds with),
+// presentation builders (the same code a server builds with),
 // and draws that through the published Fuaran-UI renderer. Nothing is ever
 // drawn from the stored copy.
 //
@@ -35,6 +35,13 @@ open ToolUp.Facts.Presentation
 // its own, and the render runs under whatever chart style the host has
 // installed (`Fuaran.UI.Charts.installChartStyle*`) — the same style every
 // other Fuaran-UI chart on the page lowers under. This module installs none.
+//
+// A pipeline block (`PipelineBlock.Kind`) persists a slice spec and a
+// pipeline rather than a presentation request. Its re-run is the pipeline
+// evaluated again for the reader on the server (`IPipelineBlockApi.Evaluate`,
+// under the reader's gate at `FactBrowse`), drawn as a grid with the withheld
+// columns named, and with a note for each way the reader's result differs from
+// the one the part recorded.
 
 /// The series read a block re-runs its request through: one gated series
 /// per query, or the read's refusal verbatim. A fact client supplies it
@@ -52,6 +59,36 @@ let internal setResolver (r: BlockSeriesResolver option) : unit = resolver <- r
 
 /// The registered resolver, if a fact reader is composed.
 let current () : BlockSeriesResolver option = resolver
+
+/// The re-run a pipeline block is drawn from: its persisted request evaluated
+/// for the reader, or the evaluation's refusal verbatim.
+type BlockPipelineResolver = string -> Async<Result<PipelineBlockResult, string>>
+
+/// The pipeline re-run over the server's `IPipelineBlockApi`, which
+/// `PresentationCompose.withPipelineTool` mounts beside the tool — the only
+/// composition that writes a pipeline block. Header freshness is the
+/// CsrfClient request-guard's job (`UserSession.withRequestHeaders`).
+let remotePipelineResolver: BlockPipelineResolver =
+    let api =
+        lazy
+            (Api.makeProxy<IPipelineBlockApi> (
+                routeBuilder = PipelineBlock.routeBuilder,
+                customOptions = UserSession.withRequestHeaders
+            ))
+
+    fun requestJson -> api.Force().Evaluate requestJson
+
+// Sanctioned mutable global, as `resolver` above. The default is the server's
+// re-run; a test installs its own.
+let mutable private pipelineResolver: BlockPipelineResolver = remotePipelineResolver
+
+/// Install the pipeline re-run a pipeline block is drawn through. The default
+/// is `remotePipelineResolver`, so a client boot registers nothing; a test
+/// installs a fake and restores the default after.
+let registerPipelineResolver (r: BlockPipelineResolver) : unit = pipelineResolver <- r
+
+/// The installed pipeline re-run.
+let currentPipeline () : BlockPipelineResolver = pipelineResolver
 
 /// The fact ids a re-read answered with that differ from the ones the block
 /// was written with: a fact restated or superseded since.
@@ -75,6 +112,9 @@ type BlockOutcome =
     /// The node rebuilt from the re-read, and the drift from the stored
     /// provenance, if any.
     | Drawn of block: PresentationBlock<unit> * drift: BlockDrift option
+    /// A pipeline block computed again for the reader, and each way the
+    /// result differs from the one the part recorded (empty when it does not).
+    | Computed of block: PresentationBlock<unit> * differences: string list
 
 /// The drift between the fact ids a block was written with and the ones a
 /// re-read answered with, in each list's own order; `None` when they match.
@@ -147,6 +187,27 @@ let resolve (read: BlockSeriesResolver) (provenance: BlockProvenance) : Async<Bl
             | Ok block -> return BlockOutcome.Drawn(block, drift provenance.FactIds block.Provenance.FactIds)
       }
 
+/// Re-run a pipeline block's persisted request through `read` and draw the
+/// result. The stored node is never consulted: the request is sent as the part
+/// recorded it, and the part's fact ids, withheld report and run stamp are read
+/// only to say how the reader's result differs.
+let resolvePipeline (read: BlockPipelineResolver) (provenance: BlockProvenance) : Async<BlockOutcome> = async {
+    let! answered = async {
+        try
+            return! read provenance.Request
+        with ex ->
+            return Error ex.Message
+    }
+
+    match answered with
+    | Error why -> return BlockOutcome.Refused(sprintf "The pipeline could not be computed for you: %s" why)
+    | Ok result ->
+        match PipelineBlock.redraw<unit> provenance result with
+        | Error defect ->
+            return BlockOutcome.Refused(sprintf "The block could not be built: %s" (PresentationDefect.describe defect))
+        | Ok block -> return BlockOutcome.Computed(block, PipelineBlock.differences provenance result)
+}
+
 // ─── The furniture ───────────────────────────────────────────────────
 
 /// Whether the fact browse module is in the shell's published module list —
@@ -155,7 +216,7 @@ let isFactBrowseComposed () : bool =
     FactBrowseLinks.isComposed (RegisteredModules.snapshot () |> List.map _.ModuleId)
 
 /// Open one fact's row and provenance in the fact browse module: the
-/// citation opener the panel's fact sources use (Phase 895). The publish is
+/// citation opener the panel's fact sources use. The publish is
 /// a Cmd; it runs here, outside any update loop, with a message sink that
 /// is never called.
 let openFact (factId: string) : unit =
@@ -280,6 +341,14 @@ let private furniture (block: PresentationBlock<unit>) (blockDrift: BlockDrift o
         ]
     ]
 
+let private node (block: PresentationBlock<unit>) =
+    Html.div [
+        dataProp.custom "data-block-node" ""
+        prop.children [
+            Fuaran.UI.Renderer.Render.renderWithSources Fuaran.UI.Renderer.BindingResolver.empty ignore block.Node
+        ]
+    ]
+
 /// The block for `outcome`: the rebuilt node through the Fuaran-UI renderer
 /// with its furniture, or a placeholder naming why it is not drawn. The
 /// container carries no class or style: the block takes the page's theme.
@@ -292,17 +361,19 @@ let view (provenance: BlockProvenance) (outcome: BlockOutcome) : ReactElement =
                 placeholder "This block cannot be drawn: no fact reader is composed in this deployment."
             | BlockOutcome.Refused reason -> placeholder reason
             | BlockOutcome.Drawn(block, blockDrift) ->
-                Html.div [
-                    dataProp.custom "data-block-node" ""
-                    prop.children [
-                        Fuaran.UI.Renderer.Render.renderWithSources
-                            Fuaran.UI.Renderer.BindingResolver.empty
-                            ignore
-                            block.Node
-                    ]
-                ]
-
+                node block
                 furniture block blockDrift
+            | BlockOutcome.Computed(block, differences) ->
+                node block
+
+                for difference in differences do
+                    Html.p [
+                        dataProp.custom "data-block-recomputed" ""
+                        prop.role "note"
+                        prop.text difference
+                    ]
+
+                furniture block None
         ]
     ]
 
@@ -317,16 +388,21 @@ let Block (provenance: BlockProvenance) =
         (fun () ->
             let mutable live = true
 
-            match current () with
-            | None -> setOutcome (Some BlockOutcome.NoReader)
-            | Some read ->
+            let settle (outcome: Async<BlockOutcome>) =
                 async {
-                    let! result = resolve read provenance
+                    let! result = outcome
 
                     if live then
                         setOutcome (Some result)
                 }
                 |> Async.StartImmediate
+
+            if PipelineBlock.isPipeline provenance then
+                settle (resolvePipeline (currentPipeline ()) provenance)
+            else
+                match current () with
+                | None -> setOutcome (Some BlockOutcome.NoReader)
+                | Some read -> settle (resolve read provenance)
 
             { new IDisposable with
                 member _.Dispose() = live <- false

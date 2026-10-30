@@ -1367,6 +1367,19 @@ let private liveTests (conn: string) =
         IFactStoreContract.tests "PostgresFactStore" factory
         IFactStoreContract.populationRegistryTests "PostgresFactStore" registryFactory
 
+        // The disclosure-taint index pack, the one BlobFactStore binds.
+        IDisclosureTaintIndexSourceContract.tests "PostgresFactStore"
+        <| fun () ->
+            let target = store None (fun () -> DateTime.UtcNow)
+
+            {
+                IDisclosureTaintIndexSourceContract.Source = target
+                Store = target
+                ScopeA = newScope ()
+                ScopeB = newScope ()
+                Rebuilds = None
+            }
+
         // One seeded fact base, every query shape, value for value.
         IFactStoreContract.differentialTests "PostgresFactStore" blobReference candidate
 

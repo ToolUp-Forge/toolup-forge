@@ -44,31 +44,12 @@ type DatasetAssemblyExecutor
 
     // -- Source resolution --------------------------------------------------
 
-    /// Read every row of a dataset vintage, paging in fixed windows until
-    /// the filtered total is reached (mirrors the scorer's readAllRows).
-    let readAllDatasetRows (r: DatasetVersionRef) : Async<Result<DatasetSchema * DatasetRow list, AssemblyError>> =
-        let pageSize = 1000
-
-        let rec loop (offset: int64) (acc: DatasetRow list) = async {
-            let query: DatasetPageQuery = {
-                Offset = offset
-                Limit = pageSize
-                Filters = []
-            }
-
-            match! datasets.ReadPage(r.ScopeId, r.DatasetId, r.Version, query) with
-            | Error e -> return Error(AssemblyError.SourceUnavailable(DatasetError.describe e))
-            | Ok page ->
-                let acc = acc @ page.Rows
-                let read = offset + int64 (List.length page.Rows)
-
-                if List.isEmpty page.Rows || read >= page.TotalRows then
-                    return Ok(page.Schema, acc)
-                else
-                    return! loop read acc
-        }
-
-        loop 0L []
+    /// Read every row of a dataset vintage.
+    let readAllDatasetRows (r: DatasetVersionRef) : Async<Result<DatasetSchema * DatasetRow list, AssemblyError>> = async {
+        match! DatasetStore.readAll datasets r.ScopeId r.DatasetId r.Version with
+        | Error e -> return Error(AssemblyError.SourceUnavailable(DatasetError.describe e))
+        | Ok frame -> return Ok frame
+    }
 
     /// Materialise a time-series range into a long-format frame: a
     /// `PanelUnit` label column, a `PanelPeriod` timestamp column, and a

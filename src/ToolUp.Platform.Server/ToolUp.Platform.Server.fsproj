@@ -564,6 +564,7 @@
              before Compose/ComposeConfigValidators.fs, which registers the
              validator, and before ServerApp.fs, whose withModelExecution
              builder folds `register` into the DI graph. -->
+        <Compile Include="Server\Compose\ServiceComposition.fs" />
         <Compile Include="Server\ComposeModelExecution.fs" />
         <Compile Include="Server\ModelExecutionDepsValidator.fs" />
         <!-- Phase 452 — dataset assembly (transforms-as-data): the spec +

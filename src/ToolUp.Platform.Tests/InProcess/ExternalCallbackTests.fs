@@ -343,6 +343,11 @@ type private CallbackCapableDispatcher() =
     member _.SetOutcome(o: ExternalOutcome) = outcome <- o
 
     interface IExternalComputeDispatcher with
+        member this.Capabilities = {
+            BackendCapabilities.none with
+                Callback = Some(this :> IExternalCallbackCapableBackend)
+        }
+
         member _.Backend = "gpu-pool"
 
         member _.Submit(scopeId: string, _spec: ExternalWorkSpec) = async {
@@ -375,6 +380,7 @@ type private PlainDispatcher() =
     member _.SetOutcome(o: ExternalOutcome) = outcome <- o
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "plain-pool"
 
         member _.Submit(scopeId: string, _spec: ExternalWorkSpec) = async {
@@ -425,6 +431,7 @@ type private RendezvousDispatcher(outcome: ExternalOutcome) =
     member _.Release() = release.Set()
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "rendezvous-pool"
 
         member _.Submit(scopeId: string, _spec: ExternalWorkSpec) = async {

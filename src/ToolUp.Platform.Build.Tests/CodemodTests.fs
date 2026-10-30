@@ -127,6 +127,7 @@ let tests =
                             "src/Server/Assistant.fs"
                             "src/Server/Connectors.fs"
                             "src/Server/Jobs.fs"
+                            "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
@@ -167,6 +168,7 @@ let tests =
                             "src/Server/Connectors.fs"
                             "src/Server/Guarded.fs"
                             "src/Server/Jobs.fs"
+                            "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
@@ -243,7 +245,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 12 file(s) visited, 64 rewrite(s) in 10 file(s), 32 site(s) for review."
+                        "Codemod: 13 file(s) visited, 69 rewrite(s) in 11 file(s), 34 site(s) for review."
                         "summary")
         ]
 
@@ -284,6 +286,76 @@ let tests =
                     "one rewrite per implementer"
 
                 Expect.isEmpty (snd (rewriteSource rewritten)) "a second run adds nothing"
+        ]
+
+        testList "the model and compute Capabilities member" [
+            testCase
+                "each seam's implementer gains its own record, and an object expression reaches its other interfaces by downcast"
+            <| fun () ->
+                let source =
+                    String.concat "\n" [
+                        "type Scoring() ="
+                        "    interface IModelEvaluationMetrics with"
+                        "        member _.EvaluateMetrics(_, _, _, _) = async { return Ok Map.empty }"
+                        "    interface IModelFitProvider with"
+                        "        member _.Kind = \"scoring\""
+                        ""
+                        "let registry (inner: IModelRegistry) ="
+                        "    { new IModelRegistry with"
+                        "        member _.Get(s, k) = inner.Get(s, k)"
+                        "    }"
+                        ""
+                        "let pushing (inner: IExternalComputeDispatcher) ="
+                        "    { new IExternalComputeDispatcher with"
+                        "        member _.Backend = inner.Backend"
+                        "      interface IExternalCallbackCapableBackend with"
+                        "          member _.AcceptCallbackCredential(_, _) = async { return () }"
+                        "    }"
+                        ""
+                    ]
+
+                let rewritten, rewrites = rewriteSource source
+
+                Expect.stringContains
+                    rewritten
+                    "member this.Capabilities = { ModelFitProviderCapabilities.none with Metrics = Some(this :> IModelEvaluationMetrics) }"
+                    "a type upcasts to the capability interface it implements"
+
+                Expect.stringContains
+                    rewritten
+                    "    { new IModelRegistry with\n        member _.Capabilities = RegistryCapabilities.none\n"
+                    "a registry declaring nothing answers none"
+
+                Expect.stringContains
+                    rewritten
+                    "member this.Capabilities = { BackendCapabilities.none with Callback = Some(this :?> IExternalCallbackCapableBackend) }"
+                    "an object expression's `this` is the seam, so the capability is reached by downcast"
+
+                Expect.equal
+                    (rewrites |> List.map _.RuleId |> List.sort)
+                    [
+                        "1094-backend-capabilities-member"
+                        "1094-fit-provider-capabilities-member"
+                        "1094-registry-capabilities-member"
+                    ]
+                    "one rewrite per implementer, under its seam's rule"
+
+                Expect.isEmpty (snd (rewriteSource rewritten)) "a second run adds nothing"
+
+            testCase "a capability probe and an isolation-posture interface are reported, never rewritten"
+            <| fun () ->
+                let source =
+                    String.concat "\n" [
+                        "let evaluates (p: IModelFitProvider) = (box p :? IModelEvaluationMetrics)"
+                        "type Sandbox() ="
+                        "    interface IIsolatedComputeBackend with"
+                        "        member _.IsolationPosture = IsolationPosture.standardOnly"
+                    ]
+
+                Expect.equal
+                    (reviewSource source |> List.map (fun f -> f.RuleId, f.Line))
+                    [ "1094-capability-probe", 1; "1094-isolated-backend", 3 ]
+                    "both sites are listed for review"
         ]
 
         testList "idempotence" [

@@ -46,28 +46,9 @@ module DatasetProvenance =
                 // the same schema + metadata but no labels. `v.Metadata` is
                 // already label-free (the store strips the reserved sidecar on
                 // read), so the re-created version is unlabelled by construction.
-                let rec readAll (offset: int64) (acc: DatasetRow list) = async {
-                    let query: DatasetPageQuery = {
-                        Offset = offset
-                        Limit = 1000
-                        Filters = []
-                    }
-
-                    match! datasets.ReadPage(scopeId, datasetId, version, query) with
-                    | Error e -> return Error e
-                    | Ok page ->
-                        let acc = acc @ page.Rows
-                        let read = offset + int64 (List.length page.Rows)
-
-                        if List.isEmpty page.Rows || read >= page.TotalRows then
-                            return Ok acc
-                        else
-                            return! readAll read acc
-                }
-
-                match! readAll 0L [] with
+                match! DatasetStore.readAll datasets scopeId datasetId version with
                 | Error e -> return Error e
-                | Ok rows ->
+                | Ok(_, rows) ->
                     match! datasets.Create(scopeId, datasetId, v.Schema, rows, actor, v.Metadata, Versioned) with
                     | Error e -> return Error e
                     | Ok nv ->

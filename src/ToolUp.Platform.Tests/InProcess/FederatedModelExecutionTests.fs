@@ -2388,6 +2388,8 @@ type private MemoryModelRegistry(initial: (string * ModelArtifactStatus) list) =
     }
 
     interface IModelRegistry with
+        member _.Capabilities = RegistryCapabilities.none
+
         member _.Get(_scopeId, keyHash) = async {
             match artifacts.TryGetValue keyHash with
             | true, (status, version) -> return Ok(artifactOf keyHash status version)

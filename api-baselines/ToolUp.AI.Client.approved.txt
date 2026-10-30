@@ -317,12 +317,16 @@ ToolUp.AI.Client.BlockRender (class)
 ToolUp.AI.Client.BlockRender.Block(ToolUp.Platform.AI.BlockProvenance) : Fable.React.ReactElement
 ToolUp.AI.Client.BlockRender.MaxCitations : System.Int32 (literal)
 ToolUp.AI.Client.BlockRender.current() : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]]]
+ToolUp.AI.Client.BlockRender.currentPipeline() : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]]
 ToolUp.AI.Client.BlockRender.drift(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.BlockRender+BlockDrift]
 ToolUp.AI.Client.BlockRender.driftText(ToolUp.AI.Client.BlockRender+BlockDrift) : System.String
 ToolUp.AI.Client.BlockRender.isFactBrowseComposed() : System.Boolean
 ToolUp.AI.Client.BlockRender.openFact(System.String) : System.Void
 ToolUp.AI.Client.BlockRender.openTable(System.String) : System.Void
+ToolUp.AI.Client.BlockRender.registerPipelineResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]]) : System.Void
+ToolUp.AI.Client.BlockRender.remotePipelineResolver : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]] { get }
 ToolUp.AI.Client.BlockRender.resolve(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]], ToolUp.Platform.AI.BlockProvenance) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.Client.BlockRender+BlockOutcome]
+ToolUp.AI.Client.BlockRender.resolvePipeline(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]], ToolUp.Platform.AI.BlockProvenance) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.Client.BlockRender+BlockOutcome]
 ToolUp.AI.Client.BlockRender.view(ToolUp.Platform.AI.BlockProvenance, ToolUp.AI.Client.BlockRender+BlockOutcome) : Fable.React.ReactElement
 ToolUp.AI.Client.BlockRender.withheldText(ToolUp.Platform.AI.BlockWithheld) : System.String
 ToolUp.AI.Client.BlockRender+BlockDrift (class)
@@ -330,17 +334,22 @@ ToolUp.AI.Client.BlockRender+BlockDrift..ctor(Microsoft.FSharp.Collections.FShar
 ToolUp.AI.Client.BlockRender+BlockDrift.Introduced : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.AI.Client.BlockRender+BlockDrift.Superseded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome (class)
+ToolUp.AI.Client.BlockRender+BlockOutcome.IsComputed : System.Boolean { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome.IsDrawn : System.Boolean { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome.IsNoReader : System.Boolean { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome.IsRefused : System.Boolean { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome.NoReader : ToolUp.AI.Client.BlockRender+BlockOutcome { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome.Tag : System.Int32 { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome+Computed (class)
+ToolUp.AI.Client.BlockRender+BlockOutcome+Computed.block : ToolUp.Facts.Presentation.PresentationBlock`1[Microsoft.FSharp.Core.Unit] { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome+Computed.differences : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn (class)
 ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn.block : ToolUp.Facts.Presentation.PresentationBlock`1[Microsoft.FSharp.Core.Unit] { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn.drift : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.BlockRender+BlockDrift] { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome+Refused (class)
 ToolUp.AI.Client.BlockRender+BlockOutcome+Refused.reason : System.String { get }
 ToolUp.AI.Client.BlockRender+BlockOutcome+Tags (class)
+ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.Computed : System.Int32 (literal)
 ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.Drawn : System.Int32 (literal)
 ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.NoReader : System.Int32 (literal)
 ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.Refused : System.Int32 (literal)

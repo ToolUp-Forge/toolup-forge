@@ -29,7 +29,7 @@ type DropFolderSource() =
 /// A columnar connector that also emits its native bytes.
 let columnar (inner: IDataSource) =
     { new IDataSource with
-        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :> IEmitsNativePayload) }
+        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :?> IEmitsNativePayload) }
         member _.Kind = inner.Kind
         member _.Connect ctx = inner.Connect ctx
         member _.ListTables ctx = inner.ListTables ctx

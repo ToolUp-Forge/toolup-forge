@@ -254,6 +254,9 @@ module Sql =
         $"DROP INDEX IF EXISTS {table}_pop_idx"
         $"CREATE INDEX IF NOT EXISTS {table}_succ_idx ON {table} (scope, supersedes) WHERE supersedes IS NOT NULL"
         $"CREATE INDEX IF NOT EXISTS {table}_txtime_idx ON {table} (scope, as_of_ticks)"
+        // The disclosure-taint index: one node per stored fact, written in
+        // the transaction that writes the fact.
+        $"CREATE TABLE IF NOT EXISTS {table}_taint (scope text NOT NULL, fact_id text NOT NULL, node text NOT NULL, PRIMARY KEY (scope, fact_id))"
     ]
 
     /// `to_regclass` probe for `VerifyOnly`.
@@ -443,13 +446,34 @@ LIMIT @k"""
     let lockLineages =
         "SELECT pg_advisory_xact_lock(hashtextextended(@scope || '|' || l, 0)) FROM unnest(@lineages) AS l"
 
+    // ─── The disclosure-taint index ──────────────────────────────────
+
+    /// Insert nodes `@ids` / `@nodes` (parallel arrays); a node already
+    /// stored for an address stands.
+    let internal insertTaintNodes (table: string) =
+        $"INSERT INTO {table}_taint (scope, fact_id, node) SELECT @scope, t.f, t.n FROM unnest(@ids, @nodes) AS t(f, n) ON CONFLICT (scope, fact_id) DO NOTHING"
+
+    /// The stored facts of the scope with no node: none once the index is
+    /// current, every fact before its first read.
+    let internal factsWithoutTaintNode (table: string) =
+        $"SELECT f.payload FROM {table} f WHERE f.scope = @scope AND NOT EXISTS (SELECT 1 FROM {table}_taint t WHERE t.scope = @scope AND t.fact_id = f.fact_id)"
+
+    /// Every node of the scope.
+    let internal taintNodes (table: string) =
+        $"SELECT fact_id, node FROM {table}_taint WHERE scope = @scope"
+
+    /// Every fact of the scope, whatever its transaction time: the listing
+    /// a store without the index table reads per check.
+    let internal scopePayloads (table: string) =
+        $"SELECT payload FROM {table} WHERE scope = @scope"
+
     /// The binary COPY every write uses.
     let copyIn (table: string) =
         $"COPY {table} (scope, fact_id, hierarchy, path, metric, period_from_ticks, period_to_ticks, method_identity, lineage_hash, as_of_ticks, as_of, supersedes, is_head, magnitude, payload) FROM STDIN (FORMAT BINARY)"
 
     /// Every statement shape that reads or writes rows, for the scope-
-    /// binding check: each one names `@scope` (the COPY carries the scope
-    /// in every row it writes instead).
+    /// binding check: each one names `@scope` (the COPY, and the taint-node
+    /// insert, carry the scope in every row they write instead).
     let scopeBoundStatements (table: string) : string list = [
         visibleAt table (memberColumns "f") RowFilter.none
         historyAt table RowFilter.none
@@ -459,6 +483,9 @@ LIMIT @k"""
         headsOf table
         lineage table
         clearHeads table
+        factsWithoutTaintNode table
+        taintNodes table
+        scopePayloads table
     ]
 
 /// The one row projection every write uses — the store's own write core
@@ -512,13 +539,6 @@ module internal FactRow =
 
         importer.Write(payload, NpgsqlDbType.Text)
 
-/// What the store decided about one draft inside a write transaction.
-type internal Disposition = {
-    Outcome: BatchAssertOutcome
-    FactId: string
-    Written: Fact option
-}
-
 /// A lost race inside a write transaction — retried, never reported.
 exception internal LostWriteRace of string
 
@@ -535,8 +555,6 @@ type PostgresFactStore
         clock: unit -> DateTime,
         ownsDataSource: bool
     ) =
-
-    static let jsonOptions = FableConverters.create ()
 
     // A write touching at most this many lineages locks each one; a larger
     // batch locks the scope instead (advisory locks share one server-wide
@@ -694,20 +712,10 @@ type PostgresFactStore
 
     // ─── Point reads ──────────────────────────────────────────────────
 
-    // The competition key and canonical selection — `BlobFactStore`'s,
-    // over the same facts, through the same shared selection function.
-    let competitionKey (f: Fact) =
-        f.Subject, f.Metric, f.Period.From, f.Period.To
-
+    // The canonical selection is `FactCompetition`'s (Facts.Core) — the one
+    // definition `BlobFactStore` reads too.
     let selectCanonical (heads: Fact list) : Fact list =
-        match registry with
-        | None -> heads
-        | Some reg ->
-            PopulationSelection.canonicalHeads
-                competitionKey
-                (fun f -> Fact.methodIdentity f.Method)
-                (fun f -> reg.TryGetMetric f.Metric.Value |> Option.bind _.CanonicalMethod)
-                heads
+        FactCompetition.selectCanonical registry heads
 
     // A named subject is the narrowest subject clause, so it fills the
     // filter; a subject branch (Phase 1123) fills it only alone. A query
@@ -783,16 +791,6 @@ type PostgresFactStore
         match query.Subject with
         | Some subject when not (FactQuery.admitsSubject query subject) -> async.Return([], [])
         | _ -> runFiltered scopeId query
-
-    let competingMethods (heads: Fact list) (f: Fact) : string list =
-        let key = competitionKey f
-        let ownMethod = Fact.methodIdentity f.Method
-
-        heads
-        |> List.filter (fun g -> competitionKey g = key)
-        |> List.map (fun g -> Fact.methodIdentity g.Method)
-        |> List.filter (fun identity -> identity <> ownMethod)
-        |> List.distinct
 
     // ─── Population read ──────────────────────────────────────────────
 
@@ -1154,21 +1152,123 @@ type PostgresFactStore
                 || p.SqlState = PostgresErrorCodes.DeadlockDetected
             | _ -> false)
 
-    // One write attempt: one transaction. Derivation mirrors
-    // `BlobFactStore`'s write core exactly — content address, idempotency
-    // against the stored set and earlier drafts of the same batch, the
-    // lineage head from the table or from an earlier draft, and the
-    // strictly-increasing `AsOf` rule — so a batch settles as the same
-    // sequence of scalar asserts would.
-    let attemptWrite (scopeId: string) (drafts: FactDraft list) : Async<Disposition list> = async {
+    // ─── The disclosure-taint index ──────────────────────────────────
+    //
+    // One node per stored fact in `<table>_taint`, written in the fact's own
+    // transaction. A read first records a node for every stored fact that
+    // has none (every fact before the first read after an upgrade, or one a
+    // bulk path wrote without a node), then reads the scope's nodes. A
+    // schema provisioned without the table (`VerifyOnly`) is listed per
+    // check instead, as before the index.
+
+    static let taintJson = FableConverters.create ()
+
+    let taintIndexRebuilds: int64[] = Array.zeroCreate 1
+
+    let taintTableProbe =
+        lazy
+            (async {
+                use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+                use cmd = command Sql.tableRegclass conn null
+                addText cmd "table" (table + "_taint")
+                let! result = cmd.ExecuteScalarAsync() |> Async.AwaitTask
+                let present = not (isNull result || result = box DBNull.Value)
+
+                if not present then
+                    Diagnostics.Trace.TraceWarning(
+                        sprintf
+                            "[PostgresFactStore] Table '%s_taint' does not exist: the disclosure gate lists the scope per check. Provision it with the DDL in Sql.migration."
+                            table
+                    )
+
+                return present
+             }
+             |> Async.StartAsTask)
+
+    let hasTaintTable () : Async<bool> =
+        taintTableProbe.Force() |> Async.AwaitTask
+
+    let insertTaintNodes
+        (conn: NpgsqlConnection)
+        (tx: NpgsqlTransaction)
+        (scopeId: string)
+        (delta: DisclosureTaintDelta)
+        : Async<unit> =
+        async {
+            use cmd = command (Sql.insertTaintNodes table) conn tx
+            addText cmd "scope" scopeId
+            addTextArray cmd "ids" (delta.Entries |> List.map fst)
+
+            addTextArray
+                cmd
+                "nodes"
+                (delta.Entries
+                 |> List.map (fun (_, node) -> JsonSerializer.Serialize(node, taintJson)))
+
+            let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+            ()
+        }
+
+    let readTaintIndex (scopeId: string) : Async<DisclosureTaintIndex> = async {
+        let! indexed = hasTaintTable ()
+
+        if not indexed then
+            let! all = queryPayloads (Sql.scopePayloads table) (fun cmd -> addText cmd "scope" scopeId)
+            return DisclosureTaintIndex.ofFacts all
+        else
+            let! unindexed = queryPayloads (Sql.factsWithoutTaintNode table) (fun cmd -> addText cmd "scope" scopeId)
+
+            if not (List.isEmpty unindexed) then
+                use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+                use! tx = conn.BeginTransactionAsync().AsTask() |> Async.AwaitTask
+                do! insertTaintNodes conn tx scopeId (DisclosureTaintIndex.deltaOfFacts unindexed)
+                do! tx.CommitAsync() |> Async.AwaitTask
+                Threading.Interlocked.Increment(&taintIndexRebuilds[0]) |> ignore
+
+                Diagnostics.Trace.TraceInformation(
+                    sprintf
+                        "[PostgresFactStore] disclosure-taint index of scope %s: recorded %d stored facts that had no node"
+                        scopeId
+                        unindexed.Length
+                )
+
+            return!
+                withConnection (fun conn -> async {
+                    use cmd = command (Sql.taintNodes table) conn null
+                    addText cmd "scope" scopeId
+                    use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+                    let entries = ResizeArray<string * DisclosureTaintNode>()
+
+                    let rec loop () = async {
+                        let! more = reader.ReadAsync() |> Async.AwaitTask
+
+                        if more then
+                            let node =
+                                JsonSerializer.Deserialize<DisclosureTaintNode>(reader.GetString 1, taintJson)
+
+                            entries.Add((reader.GetString 0, node))
+
+                            return! loop ()
+                    }
+
+                    do! loop ()
+                    return DisclosureTaintIndex.ofEntries (List.ofSeq entries)
+                })
+    }
+
+    // One write attempt: one transaction, executing `FactWrite.plan` — the
+    // same plan `BlobFactStore` executes, over the stored ids
+    // and the current heads this transaction reads. It persists the plan's
+    // facts and applies its head moves (`IndexDeltas`); the derivation is
+    // the plan's alone, so a batch settles here exactly as there.
+    let attemptWrite (scopeId: string) (request: WriteRequest) : Async<WritePlan> = async {
         use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
         use! tx = conn.BeginTransactionAsync().AsTask() |> Async.AwaitTask
 
-        let addressed =
-            drafts
-            |> List.map (fun d ->
-                let inputHashes = Fact.effectiveInputHashes d.Method d.Evidence d.Value
-                d, Fact.compute d.Subject d.Metric d.Period d.Method inputHashes)
+        let addressed = request.Drafts
+
+        let lineageHashOfDraft (d: AddressedDraft) =
+            lineageHashOf d.Draft.Subject d.Draft.Metric d.Draft.Period d.Draft.Method
 
         // Writers of the same lineage serialise here rather than racing to
         // the constraint and retrying: a small write locks its lineages
@@ -1177,7 +1277,7 @@ type PostgresFactStore
         // common contended case wait instead of spin.
         let lineages =
             addressed
-            |> List.map (fun (d, _) -> lineageHashOf d.Subject d.Metric d.Period d.Method)
+            |> List.map lineageHashOfDraft
             |> List.distinct
             |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
 
@@ -1207,7 +1307,7 @@ type PostgresFactStore
         let! stored = async {
             use cmd = command (Sql.existing table) conn tx
             addText cmd "scope" scopeId
-            addTextArray cmd "ids" (addressed |> List.map snd |> List.distinct)
+            addTextArray cmd "ids" (addressed |> List.map _.FactId |> List.distinct)
             use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
             let ids = HashSet<string>(StringComparer.Ordinal)
 
@@ -1223,24 +1323,15 @@ type PostgresFactStore
             return ids
         }
 
-        if addressed |> List.forall (fun (_, factId) -> stored.Contains factId) then
+        if addressed |> List.forall (fun d -> stored.Contains d.FactId) then
             do! tx.CommitAsync() |> Async.AwaitTask
-
-            return
-                addressed
-                |> List.map (fun (_, factId) -> {
-                    Outcome = BatchIdempotent
-                    FactId = factId
-                    Written = None
-                })
+            return FactWrite.plan (clock().ToUniversalTime()) stored.Contains [] request
         else
             let touched =
                 addressed
-                |> List.filter (fun (_, factId) -> not (stored.Contains factId))
-                |> List.map (fun (d, _) -> lineageHashOf d.Subject d.Metric d.Period d.Method)
+                |> List.filter (fun d -> not (stored.Contains d.FactId))
+                |> List.map lineageHashOfDraft
                 |> List.distinct
-
-            let heads = Dictionary<string, Fact>(StringComparer.Ordinal)
 
             let! headFacts = async {
                 use cmd = command (Sql.headsOf table) conn tx
@@ -1249,71 +1340,12 @@ type PostgresFactStore
                 return! readPayloads cmd
             }
 
-            for f in headFacts do
-                heads[lineageKeyOf f] <- f
+            let plan =
+                FactWrite.plan (clock().ToUniversalTime()) stored.Contains headFacts request
 
-            let originalHeads = Dictionary<string, Fact>(heads, StringComparer.Ordinal)
-            let seen = HashSet<string>(stored, StringComparer.Ordinal)
-            let dispositions = ResizeArray<Disposition>()
-            let writtenFacts = ResizeArray<Fact>()
-
-            for draft, factId in addressed do
-                if seen.Contains factId then
-                    dispositions.Add {
-                        Outcome = BatchIdempotent
-                        FactId = factId
-                        Written = None
-                    }
-                else
-                    let key = Fact.lineageKey draft.Subject draft.Metric draft.Period draft.Method
-
-                    let currentHead =
-                        match heads.TryGetValue key with
-                        | true, head -> Some head
-                        | _ -> None
-
-                    let now = clock().ToUniversalTime()
-
-                    let asOf =
-                        match currentHead with
-                        | Some head when head.AsOf >= now -> head.AsOf.AddTicks 1L
-                        | _ -> now
-
-                    let fact = {
-                        FactId = factId
-                        Subject = draft.Subject
-                        Metric = draft.Metric
-                        Value = draft.Value
-                        Period = draft.Period
-                        AsOf = asOf
-                        Method = draft.Method
-                        Evidence = draft.Evidence
-                        Confidence = draft.Confidence
-                        Supersedes = currentHead |> Option.map _.FactId
-                        Disclosure = draft.Disclosure
-                    }
-
-                    seen.Add factId |> ignore
-                    heads[key] <- fact
-                    writtenFacts.Add fact
-
-                    dispositions.Add {
-                        Outcome =
-                            if currentHead.IsSome then
-                                BatchSuperseding
-                            else
-                                BatchAsserted
-                        FactId = factId
-                        Written = Some fact
-                    }
-
-            // The stored heads this transaction retires: every original
-            // head whose lineage now has a newer head.
-            let retired =
-                originalHeads
-                |> Seq.filter (fun kv -> heads[kv.Key].FactId <> kv.Value.FactId)
-                |> Seq.map _.Value.FactId
-                |> List.ofSeq
+            // The stored heads this transaction retires: every head a delta
+            // moves off.
+            let retired = plan.IndexDeltas |> List.choose _.Retires
 
             if not (List.isEmpty retired) then
                 use cmd = command (Sql.clearHeads table) conn tx
@@ -1331,33 +1363,40 @@ type PostgresFactStore
                         )
                     )
 
-            // The rows. A fact is the head of its lineage when it is the
-            // last fact this batch wrote in that lineage.
+            // The rows. A fact is the head of its lineage when a delta names
+            // it — the last fact this write landed in that lineage.
             let finalHeads =
-                HashSet<string>(heads.Values |> Seq.map _.FactId, StringComparer.Ordinal)
+                HashSet<string>(plan.IndexDeltas |> Seq.map _.Head, StringComparer.Ordinal)
 
             let! _ = async {
                 use importer = conn.BeginBinaryImport(Sql.copyIn table)
 
-                for f in writtenFacts do
+                for f in plan.Facts do
                     FactRow.write importer scopeId f (finalHeads.Contains f.FactId)
 
                 return importer.Complete()
             }
 
+            // The facts' disclosure-taint nodes, in the same transaction, so
+            // the index never lacks a fact this write stored.
+            let! indexed = hasTaintTable ()
+
+            if indexed && not (List.isEmpty plan.Facts) then
+                do! insertTaintNodes conn tx scopeId (DisclosureTaintIndex.deltaOf plan)
+
             do! tx.CommitAsync() |> Async.AwaitTask
-            return List.ofSeq dispositions
+            return plan
     }
 
     // The write core: one transaction, re-attempted when it loses a race
     // to a concurrent writer. A lost race rolls back whole — the batch is
-    // all-or-nothing — and the next attempt re-derives against the winner.
-    let writeDrafts (scopeId: string) (drafts: FactDraft list) : Async<Result<Disposition list, string>> =
+    // all-or-nothing — and the next attempt re-plans against the winner.
+    let writeDrafts (scopeId: string) (request: WriteRequest) : Async<Result<WritePlan, string>> =
         let rec attempt (n: int) = async {
-            let! outcome = attemptWrite scopeId drafts |> Async.Catch
+            let! outcome = attemptWrite scopeId request |> Async.Catch
 
             match outcome with
-            | Choice1Of2 dispositions -> return Ok dispositions
+            | Choice1Of2 plan -> return Ok plan
             | Choice2Of2 ex when isRaceLost ex && n < options.MaxWriteAttempts -> return! attempt (n + 1)
             | Choice2Of2 ex ->
                 let message =
@@ -1369,41 +1408,6 @@ type PostgresFactStore
         }
 
         attempt 1
-
-    let writeEvent (scopeId: string) (occurredAt: DateTime) (eventType: string) (payload: string) : Async<unit> =
-        events.Write {
-            Id = Guid.NewGuid()
-            OccurredAt = occurredAt
-            ScopeId = scopeId
-            SourceModule = FactEvents.SourceModule
-            EventType = eventType
-            Payload = payload
-        }
-
-    // `BlobFactStore`'s caller-facing refusal for a malformed batch, verbatim.
-    let renderOffenders (total: int) (offenders: (int * FactDraft * string list) list) : string =
-        let named =
-            offenders
-            |> List.truncate 10
-            |> List.map (fun (index, draft, defects) ->
-                sprintf
-                    "#%d %s / %s: %s"
-                    index
-                    (SubjectRef.toString draft.Subject)
-                    draft.Metric.Value
-                    (String.concat ", " defects))
-            |> String.concat "; "
-
-        let more =
-            let hidden = List.length offenders - 10
-            if hidden > 0 then sprintf " (and %d more)" hidden else ""
-
-        sprintf
-            "fact store batch rejected: %d of %d drafts are malformed and none were committed — %s%s"
-            (List.length offenders)
-            total
-            named
-            more
 
     let load (scopeId: string) (factId: string) : Async<Fact option> = async {
         let! facts =
@@ -1471,6 +1475,15 @@ type PostgresFactStore
             if ownsDataSource then
                 dataSource.Dispose()
 
+    /// How many reads found stored facts with no disclosure-taint node and
+    /// recorded them (each logged through `Trace`).
+    member internal _.TaintIndexRebuilds =
+        Threading.Interlocked.Read(&taintIndexRebuilds[0])
+
+    interface IDisclosureTaintIndexSource with
+        member _.ReadTaintIndex(scopeId: string) = readTaintIndex scopeId
+        member _.ReadTaintIndex(scope: ResolvedScope) = readTaintIndex scope.ScopeId
+
     interface IFactStore with
 
         // Phase 797 — the request-path form keys on the resolved scope's
@@ -1502,99 +1515,45 @@ type PostgresFactStore
 
         member _.Assert(scopeId: string, draft: FactDraft) : Async<Result<Fact, string>> = async {
             try
-                let! written = writeDrafts scopeId [ draft ]
+                match FactWrite.prepare WriteShape.ScalarAssert [ draft ] with
+                | Error offenders -> return Error(FactWrite.renderOffenders 1 offenders)
+                | Ok request ->
+                    match! writeDrafts scopeId request with
+                    | Error e -> return Error e
+                    | Ok plan ->
+                        do! FactAudit.write events scopeId plan.Audit
 
-                match written with
-                | Error e -> return Error e
-                | Ok [ { Written = Some fact } ] ->
-                    let assertedPayload: FactAssertedEvent = {
-                        FactId = fact.FactId
-                        Subject = SubjectRef.toString fact.Subject
-                        Metric = fact.Metric.Value
-                        Method = Fact.methodIdentity fact.Method
-                        Disclosure = Disclosure.toString fact.Disclosure
-                        AsOf = fact.AsOf
-                    }
-
-                    do!
-                        writeEvent
-                            scopeId
-                            fact.AsOf
-                            FactEvents.AssertedType
-                            (JsonSerializer.Serialize(assertedPayload, jsonOptions))
-
-                    match fact.Supersedes with
-                    | Some supersededId ->
-                        let supersededPayload: FactSupersededEvent = {
-                            NewFactId = fact.FactId
-                            SupersededFactId = supersededId
-                            Subject = SubjectRef.toString fact.Subject
-                            Metric = fact.Metric.Value
-                            AsOf = fact.AsOf
-                        }
-
-                        do!
-                            writeEvent
-                                scopeId
-                                fact.AsOf
-                                FactEvents.SupersededType
-                                (JsonSerializer.Serialize(supersededPayload, jsonOptions))
-                    | None -> ()
-
-                    return Ok fact
-                | Ok [ { FactId = factId; Written = None } ] ->
-                    // Idempotent (law L2): the identical tuple is stored —
-                    // return it unchanged, with no write and no audit.
-                    let! existing = load scopeId factId
-
-                    match existing with
-                    | Some fact -> return Ok fact
-                    | None -> return Error(sprintf "fact store read failed: %s is stored but unreadable" factId)
-                | Ok other ->
-                    return Error(sprintf "fact store assert failed: %d dispositions for one draft" other.Length)
+                        match plan.Facts, plan.Unchanged with
+                        | [ fact ], [] -> return Ok fact
+                        | [], [ factId ] ->
+                            // Idempotent (law L2): the identical tuple is
+                            // stored — return it unchanged, with no write and
+                            // no audit.
+                            match! load scopeId factId with
+                            | Some fact -> return Ok fact
+                            | None -> return Error(sprintf "fact store read failed: %s is stored but unreadable" factId)
+                        | facts, unchanged ->
+                            return
+                                Error(
+                                    sprintf
+                                        "fact store assert failed: %d dispositions for one draft"
+                                        (List.length facts + List.length unchanged)
+                                )
             with ex ->
                 return Error(sprintf "fact store assert failed: %s" ex.Message)
         }
 
         member _.AssertBatch(scopeId: string, drafts: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
             try
-                let offenders =
-                    drafts
-                    |> List.mapi (fun index draft -> index, draft, FactDraft.defects draft)
-                    |> List.filter (fun (_, _, defects) -> not (List.isEmpty defects))
-
-                if not (List.isEmpty offenders) then
-                    return Error(renderOffenders (List.length drafts) offenders)
-                elif List.isEmpty drafts then
-                    return Ok BatchAssertReceipt.empty
-                else
-                    let! written = writeDrafts scopeId drafts
-
-                    match written with
+                match FactWrite.prepare WriteShape.BatchAssert drafts with
+                | Error offenders -> return Error(FactWrite.renderOffenders (List.length drafts) offenders)
+                | Ok request when List.isEmpty request.Drafts -> return Ok BatchAssertReceipt.empty
+                | Ok request ->
+                    match! writeDrafts scopeId request with
                     | Error e -> return Error e
-                    | Ok dispositions ->
-                        let receipt =
-                            dispositions
-                            |> List.map (fun d -> d.Outcome, d.FactId)
-                            |> BatchAssertReceipt.ofDispositions
-
-                        let facts = dispositions |> List.choose _.Written
-
-                        let asOf =
-                            match facts with
-                            | [] -> clock().ToUniversalTime()
-                            | _ -> facts |> List.map _.AsOf |> List.max
-
-                        let payload: FactBatchAssertedEvent = { Receipt = receipt; AsOf = asOf }
-
-                        do!
-                            writeEvent
-                                scopeId
-                                asOf
-                                FactEvents.BatchAssertedType
-                                (JsonSerializer.Serialize(payload, jsonOptions))
-
-                        return Ok receipt
+                    | Ok plan ->
+                        do! FactAudit.write events scopeId plan.Audit
+                        return Ok plan.Receipt
             with ex ->
                 return Error(sprintf "fact store batch assert failed: %s" ex.Message)
         }
@@ -1613,7 +1572,7 @@ type PostgresFactStore
                 listing
                 |> List.map (fun f -> {
                     Fact = f
-                    CompetingMethods = competingMethods heads f
+                    CompetingMethods = FactCompetition.competingMethods heads f
                 })
         }
 

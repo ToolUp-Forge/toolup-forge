@@ -76,7 +76,7 @@ open ToolUp.Platform.ProviderExceptions
 //     callback ingress takes the scope from the platform's stored record
 //     and never from the request. Declared as
 //     `ValidatesHandleScope = false`.
-//   * It declares no `IIsolatedComputeBackend` posture, so an
+//   * It declares no `BackendCapabilities.Isolated` posture, so an
 //     `ExecutionProfile.Isolated` spec is refused by the Phase 478 gate
 //     rather than handed to a service that has made no isolation
 //     guarantee. A generic HTTP endpoint cannot honestly assert
@@ -586,6 +586,11 @@ type HttpComputeDispatcher
     }
 
     interface IExternalComputeDispatcher with
+        member this.Capabilities = {
+            BackendCapabilities.none with
+                Callback = Some(this :> IExternalCallbackCapableBackend)
+        }
+
         member this.Backend = config.Backend
         member this.Submit(scopeId, spec) = this.SubmitWork(scopeId, spec)
         member this.Poll handle = this.PollHandle handle

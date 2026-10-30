@@ -292,12 +292,7 @@ module FactsCompose =
     let private contribute (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp =
         ServerApp.addContribution (Contribution.service owner register) app
 
-    // ─── Phase 623 — shared optional-substrate lookups ────────────────
-
-    let private tryService<'T> (sp: IServiceProvider) : 'T option =
-        match sp.GetService(typeof<'T>) with
-        | :? 'T as service -> Some service
-        | _ -> None
+    let private tryService<'T> = ServiceComposition.tryService<'T>
 
     /// The composed lineage store, or an `IEventStore`-backed view over
     /// the same events when a deployment did not enable
@@ -421,25 +416,16 @@ module FactsCompose =
                     let store = sp.GetRequiredService<IFactStore>()
                     let events = sp.GetRequiredService<IEventStore>()
 
-                    let taint =
-                        match sp.GetService(typeof<DisclosureTaintConfig>) with
-                        | :? DisclosureTaintConfig as t -> Some t
-                        | _ -> None
+                    let taint = tryService<DisclosureTaintConfig> sp
 
-                    let purpose =
-                        match sp.GetService(typeof<DisclosurePurposeConfig>) with
-                        | :? DisclosurePurposeConfig as p -> Some p
-                        | _ -> None
+                    let purpose = tryService<DisclosurePurposeConfig> sp
 
                     // Phase 675 — declassification budgets arm the same
                     // way, off an optional `DeclassificationBudgetConfig`
                     // registration (the `withDeclassificationBudgets`
                     // compose below); unregistered ⇒ the facet is absent
                     // and the gate is byte-for-byte the pre-675 one.
-                    let budgets =
-                        match sp.GetService(typeof<DeclassificationBudgetConfig>) with
-                        | :? DeclassificationBudgetConfig as b -> Some b
-                        | _ -> None
+                    let budgets = tryService<DeclassificationBudgetConfig> sp
 
                     let gate =
                         FactDisclosureGate.createConfiguredWithBudgets taint purpose budgets store events
@@ -448,8 +434,8 @@ module FactsCompose =
                     // `DisclosureFanOut` registration (the
                     // `withDisclosureFanOut` compose below) replaces the
                     // gate's default bound.
-                    match sp.GetService(typeof<DisclosureFanOut>), gate with
-                    | :? DisclosureFanOut as bound, (:? FactDisclosureGate as concrete) -> concrete.WithFanOut bound
+                    match tryService<DisclosureFanOut> sp, gate with
+                    | Some bound, (:? FactDisclosureGate as concrete) -> concrete.WithFanOut bound
                     | _ -> gate)
             )
             // Phase 1125 — the held form of whichever gate is composed last
@@ -498,10 +484,7 @@ module FactsCompose =
             // guessing without the substrate).
             .AddSingleton<IAnswerPlanner>(
                 Func<IServiceProvider, IAnswerPlanner>(fun sp ->
-                    let registry =
-                        match sp.GetService(typeof<Grounding.IMetricRegistry>) with
-                        | :? Grounding.IMetricRegistry as r -> Some r
-                        | _ -> None
+                    let registry = tryService<Grounding.IMetricRegistry> sp
 
                     // Phase 706 — the question seam: one 67b call compiles
                     // point triples AND population triples, so superlative
@@ -605,10 +588,7 @@ module FactsCompose =
                     // it swapped in, which is what registering one is for.
                     let graph = sp.GetRequiredService<IProvenanceGraph>()
 
-                    let signer =
-                        match sp.GetService(typeof<ToolUp.ArtefactSigning.IArtefactSigner>) with
-                        | :? ToolUp.ArtefactSigning.IArtefactSigner as s -> Some s
-                        | _ -> None
+                    let signer = tryService<ToolUp.ArtefactSigning.IArtefactSigner> sp
 
                     let store = sp.GetRequiredService<IFactStore>()
                     let gate = sp.GetRequiredService<IFactDisclosureGate>()
@@ -707,15 +687,8 @@ module FactsCompose =
         //     singletons are registered, so the descriptor is present for
         //     any deployment that has a data-object store at all; one that
         //     somehow does not is left untouched rather than failing.
-        let innerDescriptor =
-            services
-            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<IDataObjectStore>)
-            |> Seq.tryLast
-
-        match innerDescriptor with
-        | Some descriptor when (descriptor.ImplementationInstance :? IDataObjectStore) ->
-            let inner = descriptor.ImplementationInstance :?> IDataObjectStore
-
+        match ServiceComposition.captureDescriptor<IDataObjectStore> services with
+        | Some captured when (captured.Descriptor.ImplementationInstance :? IDataObjectStore) ->
             services.AddSingleton<IDataObjectStore>(
                 Func<IServiceProvider, IDataObjectStore>(fun sp ->
                     let scheduler () = tryService<IJobScheduler> sp
@@ -744,7 +717,7 @@ module FactsCompose =
                                 narratives)
 
                     ReactiveDataChange.decorate
-                        inner
+                        (captured.Resolve sp)
                         (ReactiveDataChangeComposition.either
                             (ReactiveDataChange.gate registry scheduler)
                             (GroundedNarrativeTrigger.armed scheduler narratives))
@@ -831,6 +804,8 @@ module FactsCompose =
                 |> registerBlobScaleGuard app.Config.ReplicaCount
                 // Phase 986 — the dormant-push-door warning.
                 |> registerQuestionCompilerGuard
+                // The undescribed-declarations report (information only).
+                |> FactDeclarationsValidatorRegistration.register
 
             {
                 app with
@@ -1237,22 +1212,10 @@ module FactsCompose =
         // resolves to this decorator and the factory would recurse. Same
         // shape (and same reason) as the Phase 623.C data-object
         // decoration above.
-        let innerDescriptor =
-            services
-            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<IFactStore>)
-            |> Seq.tryLast
-
-        let inner: (IServiceProvider -> IFactStore) option =
-            match innerDescriptor with
-            | Some descriptor when not (isNull (box descriptor.ImplementationFactory)) ->
-                let factory = descriptor.ImplementationFactory
-                Some(fun sp -> factory.Invoke sp :?> IFactStore)
-            | Some descriptor when (descriptor.ImplementationInstance :? IFactStore) ->
-                let instance = descriptor.ImplementationInstance :?> IFactStore
-                Some(fun _ -> instance)
-            | _ -> None
-
-        match inner with
+        match
+            ServiceComposition.captureDescriptor<IFactStore> services
+            |> Option.map _.Resolve
+        with
         // No fact store descriptor at all. Left untouched rather than
         // registering a decorator with nothing to decorate — a deployment
         // in that state has a composition defect the fact tier's own
@@ -1313,20 +1276,15 @@ module FactsCompose =
     //   * an `IHealthCheck` that re-scans the configured scope on each
     //     probe and reports `Degraded` when any finding stands.
 
-    let private tryRegistry (sp: IServiceProvider) : Grounding.IMetricRegistry option =
-        match sp.GetService(typeof<Grounding.IMetricRegistry>) with
-        | :? Grounding.IMetricRegistry as r -> Some r
-        | _ -> None
-
     // Phase 889 — the store a coherence sweep reads. When delegate facts are
     // composed it is the delegated store itself, so the sweep takes the
     // delegated path (`CoherenceCheck.findings`) whatever decorates it above;
     // the sweep only reads, so bypassing an assertion-hook decorator costs
     // nothing. Otherwise it is the composed store, exactly as before.
     let private coherenceStore (sp: IServiceProvider) : IFactStore =
-        match sp.GetService(typeof<IDelegatedFactWalks>) with
-        | :? IDelegatedFactWalks as walks -> walks :> IFactStore
-        | _ -> sp.GetRequiredService<IFactStore>()
+        match tryService<IDelegatedFactWalks> sp with
+        | Some walks -> walks :> IFactStore
+        | None -> sp.GetRequiredService<IFactStore>()
 
     let private registerCoherenceChecks
         (config: CoherenceConfig)
@@ -1339,7 +1297,7 @@ module FactsCompose =
             // `config.HealthScope` — a fresh re-scan per call (GP 12 rule 4).
             .AddSingleton<HealthChecks.IHealthCheck>(
                 Func<IServiceProvider, HealthChecks.IHealthCheck>(fun sp ->
-                    CoherenceHealthCheck.create (coherenceStore sp) (tryRegistry sp) config)
+                    CoherenceHealthCheck.create (coherenceStore sp) (tryService<Grounding.IMetricRegistry> sp) config)
             )
             // Schedule the standing check on the opt-in cadence. The
             // scheduler + metric registry are only resolvable from the built
@@ -1362,12 +1320,12 @@ module FactsCompose =
                         member _.StartAsync(ct) =
                             let logger = sp.GetRequiredService<ILogger>()
 
-                            match sp.GetService(typeof<IJobScheduler>) with
-                            | :? IJobScheduler as scheduler ->
+                            match tryService<IJobScheduler> sp with
+                            | Some scheduler ->
                                 let handler =
                                     CoherenceJobHandler.create
                                         (coherenceStore sp)
-                                        (tryRegistry sp)
+                                        (tryService<Grounding.IMetricRegistry> sp)
                                         (sp.GetRequiredService<INotificationChannel>())
                                         (sp.GetRequiredService<IEventStore>())
                                         config
@@ -1409,7 +1367,7 @@ module FactsCompose =
                                 }
 
                                 Async.StartAsTask(scheduleAll, cancellationToken = ct) :> System.Threading.Tasks.Task
-                            | _ ->
+                            | None ->
                                 logger.Warn(
                                     "Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
                                 )
@@ -1618,32 +1576,19 @@ module FactsCompose =
     // always did. A composition that never calls this is byte-for-byte
     // unchanged (GP 11 / GP 13).
 
-    // The last registration of `'T` as a factory, captured from the
-    // collection before it is replaced — never resolved from the built
-    // provider, where `'T` is by then the decorator and would recurse (the
-    // Phase 707 coverage-narrative shape, for the same reason).
-    let private capturedFactory<'T> (services: IServiceCollection) : (IServiceProvider -> 'T) option =
-        match
-            services
-            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<'T>)
-            |> Seq.tryLast
-        with
-        | Some descriptor when not (isNull (box descriptor.ImplementationFactory)) ->
-            let factory = descriptor.ImplementationFactory
-            Some(fun sp -> factory.Invoke sp :?> 'T)
-        | Some descriptor when not (isNull descriptor.ImplementationInstance) ->
-            let instance = descriptor.ImplementationInstance :?> 'T
-            Some(fun _ -> instance)
-        | _ -> None
-
     let private registerDelegateFacts (tableIds: string list) (services: IServiceCollection) : IServiceCollection =
-        match capturedFactory<IFactStore> services with
+        match
+            ServiceComposition.captureDescriptor<IFactStore> services
+            |> Option.map _.Resolve
+        with
         // No fact store to decorate: left untouched, as the coverage
         // narrative does — the fact tier's own registrations surface that
         // composition defect far more clearly than a decorator would.
         | None -> services
         | Some resolveInner ->
-            let resolveWriter = capturedFactory<IFactTableWriter> services
+            let resolveWriter =
+                ServiceComposition.captureDescriptor<IFactTableWriter> services
+                |> Option.map _.Resolve
 
             // The delegate records, resolved once from the composed table and
             // metric registries. A table that cannot be delegated fails the
@@ -1656,7 +1601,10 @@ module FactsCompose =
 
                 match DelegateFacts.resolve tables (tryService<Grounding.IMetricRegistry> sp) tableIds with
                 | Ok delegates -> delegates
-                | Error reason -> invalidOp reason
+                | Error reason ->
+                    ServiceComposition.refuse (
+                        CompositionRefusal.InvalidDeclaration("FactsCompose.withDelegateFacts", reason)
+                    )
 
             services.AddSingleton<DelegatedFactStore>(
                 Func<IServiceProvider, DelegatedFactStore>(fun sp ->
@@ -1832,7 +1780,10 @@ module FactsCompose =
             let settings =
                 match TeamOutputVisibilitySettings.create defaultLevel allowed with
                 | Ok settings -> settings
-                | Error message -> failwith message
+                | Error message ->
+                    ServiceComposition.refuse (
+                        CompositionRefusal.InvalidDeclaration("FactsCompose.withTeamOutputVisibility", message)
+                    )
 
             let register (s: IServiceCollection) =
                 s.RemoveAll<TeamOutputVisibilitySettings>() |> ignore
@@ -1856,33 +1807,30 @@ module FactsCompose =
                 )
                 |> ignore
 
-                match
-                    s
-                    |> Seq.filter (fun d -> d.ServiceType = typeof<IFactDisclosureGate>)
-                    |> Seq.tryLast
-                with
+                match ServiceComposition.captureDescriptor<IFactDisclosureGate> s with
                 | None ->
-                    failwith
-                        "withTeamOutputVisibility: no IFactDisclosureGate is registered; compose FactsCompose.withFactStore first."
-                | Some descriptor ->
-                    let inner: IServiceProvider -> obj =
-                        if not (isNull descriptor.ImplementationFactory) then
-                            descriptor.ImplementationFactory.Invoke
-                        elif not (isNull descriptor.ImplementationInstance) then
-                            fun _ -> descriptor.ImplementationInstance
-                        else
-                            fun sp -> ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType)
-
-                    s.Remove descriptor |> ignore
+                    ServiceComposition.refuse (
+                        CompositionRefusal.MissingDependency(
+                            "FactsCompose.withTeamOutputVisibility",
+                            "IFactDisclosureGate",
+                            "compose FactsCompose.withFactStore first"
+                        )
+                    )
+                | Some inner ->
+                    s.Remove inner.Descriptor |> ignore
 
                     s.AddSingleton<IFactDisclosureGate>(
                         Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
-                            match inner sp with
+                            match inner.Resolve sp with
                             | :? FactDisclosureGate as gate -> gate.WithViewerAwareness(viewerAwareFacet settings sp)
                             | other ->
-                                failwithf
-                                    "withTeamOutputVisibility: the composed IFactDisclosureGate is %s, not the platform's FactDisclosureGate, so team output visibility cannot be applied to it."
-                                    (other.GetType().FullName))
+                                ServiceComposition.refuse (
+                                    CompositionRefusal.UnsupportedImplementation(
+                                        "FactsCompose.withTeamOutputVisibility",
+                                        "IFactDisclosureGate",
+                                        $"{other.GetType().FullName}, not the platform's FactDisclosureGate"
+                                    )
+                                ))
                     )
 
             let establishViewer (builder: Microsoft.AspNetCore.Builder.IApplicationBuilder) =

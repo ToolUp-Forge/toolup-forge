@@ -69,6 +69,7 @@ type private UnitStatingProvider() =
     static member Kind = "unit-stating"
 
     interface IModelFitProvider with
+        member _.Capabilities = ModelFitProviderCapabilities.none
         member _.Kind = UnitStatingProvider.Kind
         member _.ProviderVersion = inner.ProviderVersion
         member _.DeclareGates() = inner.DeclareGates()
@@ -741,6 +742,7 @@ let tests =
         <| async {
             let throwingRegistry =
                 { new IModelRegistry with
+                    member _.Capabilities = RegistryCapabilities.none
                     member _.Register(_, _, _, _, _) = failwith "boom"
                     member _.Get(_, _) = failwith "boom"
                     member _.QueryBySpecHash(_, _) = failwith "boom"

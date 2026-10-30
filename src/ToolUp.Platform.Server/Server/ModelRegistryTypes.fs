@@ -534,3 +534,69 @@ module ModelRegistryError =
         | ModelRegistryError.StorageFailure r -> $"model registry storage failure: {r}"
         | ModelRegistryError.InvalidQuery r -> $"invalid model registry query: {r}"
         | ModelRegistryError.AttachmentRefused r -> ProvenanceAttachmentRefusal.describe r
+
+// ─── Phase 651 — the "a new artifact exists" moment, as a seam ──────────
+//
+// `Register` is idempotent (above): registering a composite key the scope
+// already holds returns the existing artifact and appends nothing. That is
+// the right contract, and it is exactly what makes "an artifact arrived"
+// unobservable from the result alone — a `ModelArtifact` returned by a
+// create and one returned by a replay are the same value.
+//
+// So the novelty is reported by the REGISTRY, at the point it decides its
+// own idempotency, rather than reconstructed by a caller from a second
+// read. A caller-side "does it exist yet?" probe would be a fresh race
+// bolted onto the registry's existing one: two concurrent registrations of
+// one key would both observe "absent" and both read as new. Deciding it
+// where the idempotency is decided means at most one call can ever be the
+// creating call.
+
+/// Phase 651 — whether a `Register` call CREATED the artifact or returned
+/// one the scope already held.
+///
+/// Two values, closed. `Replayed` is not a failure — it is the ordinary
+/// result of the idempotent contract, and the whole reason the distinction
+/// has to be carried explicitly.
+[<RequireQualifiedAccess>]
+type ModelRegistrationNovelty =
+    /// This call minted the artifact record. Exactly one call per composite
+    /// key can report this.
+    | Created
+    /// The scope already held this composite key; nothing was appended.
+    | Replayed
+
+/// Phase 651 — one registration, carrying the novelty the registry decided
+/// alongside the artifact `Register` would have returned.
+type ModelRegistration = {
+    /// The stored artifact record — identical to what `Register` returns.
+    Artifact: ModelArtifact
+    /// Whether this call created it.
+    Novelty: ModelRegistrationNovelty
+}
+
+/// The capability a registry declares (`RegistryCapabilities.Novelty`) when
+/// it can report registration novelty exactly. A registry that declares it is
+/// observed exactly; a registry that does not is still observable, on the
+/// weaker terms `ModelRegistrationObservers` documents.
+type IModelRegistrationNovelty =
+    /// Register exactly as `IModelRegistry.Register` does — same effects,
+    /// same errors, same idempotency — additionally reporting whether this
+    /// call was the one that created the artifact.
+    abstract RegisterReporting:
+        scopeId: string * outcome: FitOutcome * registeredBy: string * annotations: Map<string, string> * notes: string ->
+            Async<Result<ModelRegistration, ModelRegistryError>>
+
+/// What a model registry can do beyond the `IModelRegistry` contract,
+/// declared once by the implementation as `IModelRegistry.Capabilities`. A
+/// capability is a field the composition reads, never a type test against the
+/// object it holds.
+type RegistryCapabilities = {
+    /// Exact registration novelty: the registry reports whether a
+    /// `Register` call created the artifact or replayed it.
+    Novelty: IModelRegistrationNovelty option
+}
+
+[<RequireQualifiedAccess>]
+module RegistryCapabilities =
+    /// A registry that declares nothing beyond the contract.
+    let none: RegistryCapabilities = { Novelty = None }

@@ -57,197 +57,17 @@ namespace ToolUp.Platform
 // `HttpContext`, no `CancellationToken`, no `Task`. The whole interface is
 // expressible from `ToolUp.Platform` value types alone.
 
-/// Brokers a unit of work to an external compute backend and reports its
-/// outcome. Implemented by a companion under `src/ExternalCompute/` (GP 1 —
-/// the backend SDK / transport never reaches `ToolUp.Platform.*`) and
-/// composed as an `IExternalComputeDispatcher` DI singleton. Selected by
-/// `ServerConfig.ExternalCompute`; the default `NoExternalCompute` registers
-/// `NoExternalComputeDispatcher` (GP 13).
-type IExternalComputeDispatcher =
-    /// Stable backend identifier stamped onto every `ExternalHandle.Backend`
-    /// this dispatcher mints (e.g. `"http-worker-pool"`). Diagnostics read
-    /// it; a poll uses it to confirm the handle belongs to this backend.
-    abstract Backend: string
-
-    /// Hand `spec` to the backend under `scopeId` and return a handle
-    /// **immediately** — this call MUST NOT wait for the work to finish.
-    ///
-    /// `Ok handle` means accepted, not completed: the caller persists the
-    /// handle and polls. `Error` is a refusal to accept (unknown `Kind`,
-    /// unhonourable resource hint, backend unreachable, no backend
-    /// configured) with retriability carried as data on the error.
-    ///
-    /// When `spec.Idempotency` is `Some key` and this scope has already
-    /// submitted that key, an implementation SHOULD return the existing
-    /// handle rather than start the work a second time.
-    abstract Submit: scopeId: string * spec: ExternalWorkSpec -> Async<Result<ExternalHandle, ExternalComputeError>>
-
-    /// Read the current outcome of `handle`. Non-destructive and
-    /// idempotent: polling a terminal handle returns the same terminal
-    /// outcome. A handle the backend no longer recognises is reported as
-    /// `ExternalOutcome.Failed` with a terminal error — never an exception,
-    /// and never an invented `Cancelled`.
-    abstract Poll: handle: ExternalHandle -> Async<ExternalOutcome>
-
-    /// Request teardown of `handle`. Best-effort and **idempotent** —
-    /// cancelling an already-terminal or already-cancelled handle is not an
-    /// error, and completes without throwing. Returns when the request has
-    /// been lodged, not when the backend has finished tearing down; the
-    /// caller confirms via `Poll`.
-    abstract Cancel: handle: ExternalHandle -> Async<unit>
-
-/// The default dispatcher for a deployment that composes no external-compute
-/// backend. Registered when `ServerConfig.ExternalCompute =
-/// NoExternalCompute` (the default), so `IExternalComputeDispatcher` always
-/// resolves and a handler's submit path is a typed refusal rather than a DI
-/// resolution failure.
-///
-/// Costs nothing (GP 13): no background service, no connection, no vendor
-/// dependency, no allocation beyond the returned `Async`. `Submit` returns
-/// `Error ExternalComputeError.notConfigured` — terminal, because no retry
-/// composes a backend. `Poll` reports the same refusal as
-/// `ExternalOutcome.Failed` (a handle cannot exist without a submit having
-/// succeeded, so this arm is reachable only for a handle minted elsewhere),
-/// and `Cancel` is a no-op, honouring the idempotent-cancel contract.
-type NoExternalComputeDispatcher() =
-    /// The backend label a not-configured deployment reports.
-    static member BackendName = "none"
-
-    interface IExternalComputeDispatcher with
-        member _.Backend = NoExternalComputeDispatcher.BackendName
-
-        member _.Submit(_scopeId: string, _spec: ExternalWorkSpec) = async {
-            return Error ExternalComputeError.notConfigured
-        }
-
-        member _.Poll(_handle: ExternalHandle) = async {
-            return ExternalOutcome.Failed ExternalComputeError.notConfigured
-        }
-
-        member _.Cancel(_handle: ExternalHandle) = async { return () }
-
-// ─── Phase 478 — declaring, and enforcing, the isolation posture ─────────
-//
-// `ExecutionProfile` (Core) is the requirement a spec carries. This is the
-// other half: how a backend DECLARES what it can honour, and where a
-// mismatch is refused.
-//
-// **Why a second interface rather than a member on
-// `IExternalComputeDispatcher`.** F# cannot author a default interface
-// member, so adding `abstract IsolationPosture` to the dispatcher seam
-// would break every implementation that exists — including any a consumer
-// has already shipped — for a property the overwhelming majority answer
-// `standardOnly` to. A separate interface a backend *also* implements
-// keeps the seam additive (GP 11) and keeps the declaration where it
-// belongs: on the backends that actually make the guarantee.
-//
-// It also gives the right default for free. An implementation that does
-// not implement `IIsolatedComputeBackend` is read as
-// `IsolationPosture.standardOnly` — claiming nothing — so forgetting to
-// declare is never mistaken for declaring.
-//
-// **Where the refusal sits, and why it is BEFORE `Submit`.** `Isolated`
-// exists so gated data is computed over by a worker that cannot leak it.
-// A check performed after the backend accepted the work is a check on
-// something that has already left: the payload is on the backend, and no
-// subsequent refusal recalls it. `ExecutionProfileGate.enforce` is
-// therefore a decorator whose `Submit` decides on the SPEC and never
-// touches the inner dispatcher when the answer is no.
-
-/// Phase 478 — a dispatcher whose backend declares what it guarantees
-/// about the environment `Isolated` work runs in.
-///
-/// A companion implements it **alongside** `IExternalComputeDispatcher`;
-/// one that does not is read as `IsolationPosture.standardOnly` and is
-/// refused `Isolated` submissions.
-type IIsolatedComputeBackend =
-    /// The posture this backend enforces. Constant for the life of the
-    /// composed dispatcher — it describes how the backend was configured,
-    /// not the state of any one job (GP 12 rule 4).
-    abstract IsolationPosture: IsolationPosture
-
-/// Phase 478 — the profile↔posture match, and the decorator that enforces
-/// it before a submission reaches a backend.
-[<RequireQualifiedAccess>]
-module ExecutionProfileGate =
-
-    /// The posture `dispatcher` declares. An implementation that does not
-    /// implement `IIsolatedComputeBackend` declares nothing, which reads
-    /// as `standardOnly` — see the header for why that direction and not
-    /// the other.
-    let postureOf (dispatcher: IExternalComputeDispatcher) : IsolationPosture =
-        match box dispatcher with
-        | :? IIsolatedComputeBackend as declared -> declared.IsolationPosture
-        | _ -> IsolationPosture.standardOnly
-
-    /// May `dispatcher` be handed `spec`?
-    ///
-    /// `Ok ()` for every `Standard` spec, whatever the backend — that arm
-    /// is Phase 318 exactly. `Error` names the missing clauses, and is
-    /// terminal: a backend does not become isolating by being asked twice.
-    let check (dispatcher: IExternalComputeDispatcher) (spec: ExternalWorkSpec) : Result<unit, ExternalComputeError> =
-        let posture = postureOf dispatcher
-
-        if IsolationPosture.honours spec.Profile posture then
-            Ok()
-        else
-            Error(IsolationPosture.refusal dispatcher.Backend posture)
-
-    /// Wrap `inner` so an `Isolated` spec it cannot honour is refused
-    /// **before** it is submitted.
-    ///
-    /// `Poll` and `Cancel` pass straight through: they operate on a handle
-    /// the backend already minted, so there is nothing left to refuse, and
-    /// intercepting them would only add a branch to the path a `Standard`
-    /// deployment takes (GP 13). `Backend` is the inner backend's own
-    /// label — the decorator is not a backend and must not present as one,
-    /// or a handle would poll against a name no dispatcher answers to.
-    ///
-    /// The decorator re-declares the inner posture through
-    /// `IIsolatedComputeBackend`, so stacking it (or resolving it through
-    /// another decorator) does not silently downgrade a genuinely
-    /// isolating backend to `standardOnly`. A wrapper that swallowed the
-    /// declaration would turn composing this gate into a reason `Isolated`
-    /// stops working, which is the shape of "security control nobody
-    /// leaves switched on".
-    let enforce (inner: IExternalComputeDispatcher) : IExternalComputeDispatcher =
-        let posture = postureOf inner
-
-        { new IExternalComputeDispatcher with
-            member _.Backend = inner.Backend
-
-            member _.Submit(scopeId: string, spec: ExternalWorkSpec) = async {
-                if IsolationPosture.honours spec.Profile posture then
-                    return! inner.Submit(scopeId, spec)
-                else
-                    // The inner dispatcher is not consulted at all. The
-                    // payload never leaves this process.
-                    return Error(IsolationPosture.refusal inner.Backend posture)
-            }
-
-            member _.Poll(handle: ExternalHandle) = inner.Poll handle
-
-            member _.Cancel(handle: ExternalHandle) = inner.Cancel handle
-
-          interface IIsolatedComputeBackend with
-              member _.IsolationPosture = posture
-        }
-
-// ─── Phase 320 — declaring that a backend can call back ──────────────
+// ─── Declaring that a backend can call back ─────────────────────────
 //
 // The push path needs one thing the poll path does not: the backend has
 // to be TOLD the per-handle secret, or it cannot authenticate its own
 // callback. This is the seam that tells it.
 //
-// **A second interface a backend also implements, not a member on
-// `IExternalComputeDispatcher`.** Identical reasoning to
-// `IIsolatedComputeBackend` above — F# cannot author a default
-// interface member, so a new abstract member on the dispatcher seam
-// would break every implementation that exists, including shipped
-// consumer ones, for a capability most backends do not have. A backend
-// that does not implement this interface is simply never handed a
-// credential and is reconciled by polling, which is the behaviour it
-// already had (GP 11).
+// **Declared through `BackendCapabilities.Callback`, never discovered by
+// a type test.** A backend that declares no callback is simply never handed
+// a credential and is reconciled by polling. A decorator answers with the
+// capabilities it chooses to forward, so wrapping a backend cannot silently
+// drop its callback the way a type test against the wrapper did.
 //
 // **Why the credential arrives AFTER acceptance rather than as a
 // `Submit` parameter.** The credential is keyed by
@@ -287,3 +107,184 @@ type IExternalCallbackCapableBackend =
     /// regression, never a lost job — so it must not be allowed to
     /// become one by failing the hand-off after the payload has left.
     abstract AcceptCallbackCredential: handle: ExternalHandle * credential: ExternalCallbackCredential -> Async<unit>
+
+/// What a backend can do beyond `Submit` / `Poll` / `Cancel`, declared once
+/// by the implementation as `IExternalComputeDispatcher.Capabilities`. A
+/// capability is a field the platform reads, never a type test against the
+/// object it holds, so a decorator states explicitly which of its inner
+/// backend's capabilities it carries.
+type BackendCapabilities = {
+    /// The isolation posture the backend enforces for `Isolated` work.
+    /// `None` declares nothing, which reads as `IsolationPosture.standardOnly`.
+    Isolated: IsolationPosture option
+    /// The completion-callback hand-off. `None`: the backend is reconciled by
+    /// polling and is never handed a credential.
+    Callback: IExternalCallbackCapableBackend option
+}
+
+[<RequireQualifiedAccess>]
+module BackendCapabilities =
+    /// A backend that declares nothing beyond the seam: standard-only, and
+    /// reconciled by polling.
+    let none: BackendCapabilities = { Isolated = None; Callback = None }
+
+/// Brokers a unit of work to an external compute backend and reports its
+/// outcome. Implemented by a companion under `src/ExternalCompute/` (GP 1 —
+/// the backend SDK / transport never reaches `ToolUp.Platform.*`) and
+/// composed as an `IExternalComputeDispatcher` DI singleton. Selected by
+/// `ServerConfig.ExternalCompute`; the default `NoExternalCompute` registers
+/// `NoExternalComputeDispatcher` (GP 13).
+type IExternalComputeDispatcher =
+    /// Stable backend identifier stamped onto every `ExternalHandle.Backend`
+    /// this dispatcher mints (e.g. `"http-worker-pool"`). Diagnostics read
+    /// it; a poll uses it to confirm the handle belongs to this backend.
+    abstract Backend: string
+
+    /// Hand `spec` to the backend under `scopeId` and return a handle
+    /// **immediately** — this call MUST NOT wait for the work to finish.
+    ///
+    /// `Ok handle` means accepted, not completed: the caller persists the
+    /// handle and polls. `Error` is a refusal to accept (unknown `Kind`,
+    /// unhonourable resource hint, backend unreachable, no backend
+    /// configured) with retriability carried as data on the error.
+    ///
+    /// When `spec.Idempotency` is `Some key` and this scope has already
+    /// submitted that key, an implementation SHOULD return the existing
+    /// handle rather than start the work a second time.
+    abstract Submit: scopeId: string * spec: ExternalWorkSpec -> Async<Result<ExternalHandle, ExternalComputeError>>
+
+    /// Read the current outcome of `handle`. Non-destructive and
+    /// idempotent: polling a terminal handle returns the same terminal
+    /// outcome. A handle the backend no longer recognises is reported as
+    /// `ExternalOutcome.Failed` with a terminal error — never an exception,
+    /// and never an invented `Cancelled`.
+    abstract Poll: handle: ExternalHandle -> Async<ExternalOutcome>
+
+    /// Request teardown of `handle`. Best-effort and **idempotent** —
+    /// cancelling an already-terminal or already-cancelled handle is not an
+    /// error, and completes without throwing. Returns when the request has
+    /// been lodged, not when the backend has finished tearing down; the
+    /// caller confirms via `Poll`.
+    abstract Cancel: handle: ExternalHandle -> Async<unit>
+
+    /// What this backend can do beyond the three members above, declared
+    /// once. A backend that declares nothing answers `BackendCapabilities.none`.
+    abstract Capabilities: BackendCapabilities
+
+/// The default dispatcher for a deployment that composes no external-compute
+/// backend. Registered when `ServerConfig.ExternalCompute =
+/// NoExternalCompute` (the default), so `IExternalComputeDispatcher` always
+/// resolves and a handler's submit path is a typed refusal rather than a DI
+/// resolution failure.
+///
+/// Costs nothing (GP 13): no background service, no connection, no vendor
+/// dependency, no allocation beyond the returned `Async`. `Submit` returns
+/// `Error ExternalComputeError.notConfigured` — terminal, because no retry
+/// composes a backend. `Poll` reports the same refusal as
+/// `ExternalOutcome.Failed` (a handle cannot exist without a submit having
+/// succeeded, so this arm is reachable only for a handle minted elsewhere),
+/// and `Cancel` is a no-op, honouring the idempotent-cancel contract.
+type NoExternalComputeDispatcher() =
+    /// The backend label a not-configured deployment reports.
+    static member BackendName = "none"
+
+    interface IExternalComputeDispatcher with
+        member _.Backend = NoExternalComputeDispatcher.BackendName
+
+        member _.Submit(_scopeId: string, _spec: ExternalWorkSpec) = async {
+            return Error ExternalComputeError.notConfigured
+        }
+
+        member _.Poll(_handle: ExternalHandle) = async {
+            return ExternalOutcome.Failed ExternalComputeError.notConfigured
+        }
+
+        member _.Cancel(_handle: ExternalHandle) = async { return () }
+
+        member _.Capabilities = BackendCapabilities.none
+
+// ─── Phase 478 — declaring, and enforcing, the isolation posture ─────────
+//
+// `ExecutionProfile` (Core) is the requirement a spec carries. This is the
+// other half: how a backend DECLARES what it can honour, and where a
+// mismatch is refused.
+//
+// A backend declares its posture as `BackendCapabilities.Isolated`. One
+// that declares `None` is read as `IsolationPosture.standardOnly` —
+// claiming nothing — so forgetting to declare is never mistaken for
+// declaring.
+//
+// **Where the refusal sits, and why it is BEFORE `Submit`.** `Isolated`
+// exists so gated data is computed over by a worker that cannot leak it.
+// A check performed after the backend accepted the work is a check on
+// something that has already left: the payload is on the backend, and no
+// subsequent refusal recalls it. `ExecutionProfileGate.enforce` is
+// therefore a decorator whose `Submit` decides on the SPEC and never
+// touches the inner dispatcher when the answer is no.
+
+/// Phase 478 — the profile↔posture match, and the decorator that enforces
+/// it before a submission reaches a backend.
+[<RequireQualifiedAccess>]
+module ExecutionProfileGate =
+
+    /// The posture `dispatcher` declares. A backend that declares none
+    /// reads as `standardOnly` — see the header for why that direction and
+    /// not the other.
+    let postureOf (dispatcher: IExternalComputeDispatcher) : IsolationPosture =
+        dispatcher.Capabilities.Isolated
+        |> Option.defaultValue IsolationPosture.standardOnly
+
+    /// May `dispatcher` be handed `spec`?
+    ///
+    /// `Ok ()` for every `Standard` spec, whatever the backend — that arm
+    /// is Phase 318 exactly. `Error` names the missing clauses, and is
+    /// terminal: a backend does not become isolating by being asked twice.
+    let check (dispatcher: IExternalComputeDispatcher) (spec: ExternalWorkSpec) : Result<unit, ExternalComputeError> =
+        let posture = postureOf dispatcher
+
+        if IsolationPosture.honours spec.Profile posture then
+            Ok()
+        else
+            Error(IsolationPosture.refusal dispatcher.Backend posture)
+
+    /// Wrap `inner` so an `Isolated` spec it cannot honour is refused
+    /// **before** it is submitted.
+    ///
+    /// `Poll` and `Cancel` pass straight through: they operate on a handle
+    /// the backend already minted, so there is nothing left to refuse, and
+    /// intercepting them would only add a branch to the path a `Standard`
+    /// deployment takes (GP 13). `Backend` is the inner backend's own
+    /// label — the decorator is not a backend and must not present as one,
+    /// or a handle would poll against a name no dispatcher answers to.
+    ///
+    /// The decorator re-declares the inner posture and carries the inner
+    /// backend's callback hand-off, so stacking it (or resolving it through
+    /// another decorator) neither downgrades a genuinely isolating backend to
+    /// `standardOnly` nor turns a callback-capable backend into a poll-only
+    /// one. A wrapper that swallowed either declaration would turn composing
+    /// this gate into a reason the capability stops working, which is the
+    /// shape of "security control nobody leaves switched on".
+    let enforce (inner: IExternalComputeDispatcher) : IExternalComputeDispatcher =
+        let posture = postureOf inner
+
+        { new IExternalComputeDispatcher with
+            member _.Backend = inner.Backend
+
+            member _.Submit(scopeId: string, spec: ExternalWorkSpec) = async {
+                if IsolationPosture.honours spec.Profile posture then
+                    return! inner.Submit(scopeId, spec)
+                else
+                    // The inner dispatcher is not consulted at all. The
+                    // payload never leaves this process.
+                    return Error(IsolationPosture.refusal inner.Backend posture)
+            }
+
+            member _.Poll(handle: ExternalHandle) = inner.Poll handle
+
+            member _.Cancel(handle: ExternalHandle) = inner.Cancel handle
+
+            member _.Capabilities = {
+                Isolated = Some posture
+                Callback = inner.Capabilities.Callback
+            }
+        }

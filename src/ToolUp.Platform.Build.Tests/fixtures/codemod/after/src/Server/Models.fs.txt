@@ -1,0 +1,65 @@
+module MyApp.Server.Models
+
+open ToolUp.Platform
+
+/// A fit provider that only fits.
+type GlmProvider() =
+    interface IModelFitProvider with
+        member _.Capabilities = ModelFitProviderCapabilities.none
+        member _.Kind = "glm"
+        member _.ProviderVersion = "1.0.0"
+        member _.DeclareGates() = []
+        member _.Fit request = async { return failwith "fit" }
+
+/// A fit provider that also computes its own holdout metrics.
+type ScoringProvider() =
+    interface IModelEvaluationMetrics with
+        member _.EvaluateMetrics(_, _, _, _) = async { return Ok Map.empty }
+
+    interface IModelFitProvider with
+        member this.Capabilities = { ModelFitProviderCapabilities.none with Metrics = Some(this :> IModelEvaluationMetrics) }
+        member _.Kind = "scoring"
+        member _.ProviderVersion = "1.0.0"
+        member _.DeclareGates() = []
+        member _.Fit request = async { return failwith "fit" }
+
+/// A registry that reports registration novelty.
+type LedgerRegistry(inner: IModelRegistry) =
+    interface IModelRegistrationNovelty with
+        member _.RegisterReporting(s, o, b, a, n) = async { return failwith "ledger" }
+
+    interface IModelRegistry with
+        member this.Capabilities = { RegistryCapabilities.none with Novelty = Some(this :> IModelRegistrationNovelty) }
+        member _.Register(s, o, b, a, n) = inner.Register(s, o, b, a, n)
+        member _.Get(s, k) = inner.Get(s, k)
+        member _.AttachmentLimits = inner.AttachmentLimits
+
+/// A backend decorator that can call back.
+let pushing (inner: IExternalComputeDispatcher) (accept: ExternalHandle -> Async<unit>) =
+    { new IExternalComputeDispatcher with
+        member this.Capabilities = { BackendCapabilities.none with Callback = Some(this :?> IExternalCallbackCapableBackend) }
+        member _.Backend = inner.Backend
+        member _.Submit(s, spec) = inner.Submit(s, spec)
+        member _.Poll h = inner.Poll h
+        member _.Cancel h = inner.Cancel h
+      interface IExternalCallbackCapableBackend with
+          member _.AcceptCallbackCredential(h, _) = accept h
+    }
+
+/// An isolating backend: the posture moves into its record by hand.
+type SandboxBackend() =
+    interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
+        member _.Backend = "sandbox"
+        member _.Submit(s, spec) = async { return failwith "submit" }
+        member _.Poll h = async { return ExternalOutcome.Pending }
+        member _.Cancel h = async { return () }
+
+    interface IIsolatedComputeBackend with
+        member _.IsolationPosture = IsolationPosture.clauses "sandbox"
+
+/// A probe the record replaces: reported, never rewritten.
+let evaluates (provider: IModelFitProvider) =
+    match box provider with
+    | :? IModelEvaluationMetrics -> true
+    | _ -> false

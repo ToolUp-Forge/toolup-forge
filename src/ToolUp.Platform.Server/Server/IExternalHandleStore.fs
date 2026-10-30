@@ -201,8 +201,7 @@ type ExternalResolution =
 /// through, implemented by the in-process job scheduler.
 ///
 /// **Why a separate interface rather than a member on `IJobScheduler`.**
-/// The same F#-cannot-author-a-default-interface-member constraint that
-/// shaped `IIsolatedComputeBackend`: `IJobScheduler` has in-tree and
+/// F# cannot author a default interface member, and `IJobScheduler` has in-tree and
 /// consumer implementations, and a new abstract member breaks every one
 /// of them for a capability only the external-compute path uses. The
 /// ingress resolves this interface from DI and returns

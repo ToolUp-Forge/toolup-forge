@@ -351,9 +351,16 @@ type BlobModelRegistry
                         }
         }
 
-    interface IModelRegistrationNovelty with
-        member _.RegisterReporting(scopeId, outcome, registeredBy, annotations, notes) =
-            register scopeId outcome registeredBy annotations notes
+    /// Novelty is decided where the idempotency is, so this registry declares
+    /// it exactly.
+    let capabilities: RegistryCapabilities = {
+        Novelty =
+            Some
+                { new IModelRegistrationNovelty with
+                    member _.RegisterReporting(scopeId, outcome, registeredBy, annotations, notes) =
+                        register scopeId outcome registeredBy annotations notes
+                }
+    }
 
     interface IModelRegistry with
         member _.Register(scopeId, outcome, registeredBy, annotations, notes) = async {
@@ -494,6 +501,8 @@ type BlobModelRegistry
         }
 
         member _.AttachmentLimits = limits
+
+        member _.Capabilities = capabilities
 
         member _.AttachProvenance(scopeId, keyHash, attachments, signature) = async {
             match! dataObjects.Get(scopeId, keyHash) with
