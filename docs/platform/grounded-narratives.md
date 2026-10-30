@@ -264,6 +264,21 @@ it was told.
 | Standing report | the scope the deployment's resolver resolves the subscription's declared principal to, at startup |
 | Data arrival | the scope of the request whose write invalidated the facts |
 
+**What a run records as its trigger.** Every run's audit row and last-run view carry the
+`GroundedNarrativeRequest.Trigger` that started it, named for what enqueued the work:
+
+| Recorded trigger | Enqueued by |
+|---|---|
+| `report-subscription` | a scheduled or standing report (`GroundedNarrativeProducer.TriggerName`) |
+| `data-arrival` | a change that invalidated the run's facts (`GroundedNarrativeTrigger.TriggerName`) |
+| `cadence` | a cron job on the grounded-run handler (`GroundedNarrativeTrigger.HandlerName`) that a deployment registers |
+| `admin-regenerate` | an administrator's regeneration (`NarrativePromptHandler`) |
+
+The grounded-run handler reads the name from the job it runs: a job on a cron trigger records
+`cadence` however the attempt was fired (a tick, a retry, an operator's run-now from the jobs admin),
+and every other job records `data-arrival`, as it always has (Phase 1045; until then a cron job's runs
+also recorded `data-arrival`).
+
 **Scheduled report.** Register a producer over the run; the narrative fills a template placeholder
 as a `NarrativeValue`, so the render goes through the ordinary pipeline and its export door. A
 refused narrative is the producer's `Error`, recorded on the subscription's last-run outcome.

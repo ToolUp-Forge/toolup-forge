@@ -3149,6 +3149,168 @@ let jobResultTests =
             }
     ]
 
+// ── J. The trigger a run records (Phase 1045) ───────────────────────
+//
+// A grounded run's job records the trigger that enqueued it. A deployment
+// that runs a narrative on a cadence registers the same handler on a cron
+// trigger, and every such run used to record `data-arrival`. The handler
+// now names a cron job's runs `cadence`, whoever fired the attempt, and
+// every other job keeps the data-arrival name.
+
+/// The trigger the handler hands the run for one job context.
+let private recordedTrigger (job: Trigger) (source: TriggerSource) (attempt: int) : string =
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let store = BlobFactStore.create (InMemoryBlobStorage()) events
+    let registry = GroundedNarrativeRegistry()
+    registry.Register summaryRun |> ignore
+    let seen = ConcurrentQueue<GroundedNarrativeRequest>()
+    let teamId = "team-" + Guid.NewGuid().ToString "N"
+
+    let handler =
+        GroundedNarrativeTrigger.GroundedNarrativeJobHandler(
+            store,
+            None,
+            registry,
+            stubRun (GroundedNarrativePublished(Guid.NewGuid(), documentFor "x", [], None, Error "-")) seen
+        )
+        :> IJobHandler
+
+    let result =
+        handler.Execute {
+            JobId = Guid.NewGuid()
+            ScopeId = teamId
+            AccessContext = AccessContext.unrestricted (AuthenticatedUser "_platform")
+            Attempt = attempt
+            Trigger = job
+            Scope = ScopeResolution.ofStorageScope (storageFor teamId)
+            TriggerSource = source
+            ScheduledAt = DateTime.UtcNow
+            RunningAt = DateTime.UtcNow
+            Payload = GroundedNarrativeTrigger.payloadFor summaryRun.Key Set.empty
+            DeadLetterDestination = None
+        }
+        |> Async.RunSynchronously
+
+    Expect.equal result Success "the run was started"
+    (seen |> Seq.exactlyOne).Trigger
+
+let triggerNameTests =
+    testList "Phase 1045 J — a run records the trigger that enqueued it" [
+
+        test "a data-arrival job (Manual) records data-arrival, as it always did" {
+            Expect.equal
+                (recordedTrigger Trigger.Manual (ScheduledManually GroundedNarrativeTrigger.Actor) 1)
+                GroundedNarrativeTrigger.TriggerName
+                "the data-arrival name is unchanged"
+
+            Expect.equal GroundedNarrativeTrigger.TriggerName "data-arrival" "and its value is unchanged"
+        }
+
+        test "a cron job's tick records cadence" {
+            Expect.equal (recordedTrigger (CronTrigger "0 6 * * *") ScheduledByCron 1) "cadence" "a tick"
+        }
+
+        test "a cron job's retry, or an operator's run-now, still records cadence" {
+            Expect.equal (recordedTrigger (CronTrigger "0 6 * * *") ScheduledByCron 3) "cadence" "a retry"
+
+            Expect.equal
+                (recordedTrigger (CronTrigger "0 6 * * *") (ScheduledManually "operator") 1)
+                "cadence"
+                "a run-now from the jobs admin is still the cadence's job"
+        }
+
+        // Both paths through the in-process scheduler: the context the
+        // scheduler synthesises carries the job's trigger, and the handler
+        // reads it.
+        testCaseAsync "on the in-process scheduler, a cadence job records cadence and a data-arrival job data-arrival"
+        <| async {
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+            let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
+            let teamId = "team-" + Guid.NewGuid().ToString "N"
+            let scope = ScopeResolution.ofStorageScope (storageFor teamId)
+
+            let computed = {
+                assertedDraft "revenue" 1250m Surfaceable with
+                    Method = Computed("rollup", "1", "p0")
+                    Evidence = {
+                        ResultRef = None
+                        InputHashes = [ "sales.rollup" ]
+                        TriggerRef = None
+                    }
+            }
+
+            assertOk store teamId computed |> ignore
+            let registry = GroundedNarrativeRegistry()
+            registry.Register summaryRun |> ignore
+            let seen = ConcurrentQueue<GroundedNarrativeRequest>()
+            let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
+
+            use scheduler =
+                new JobScheduler.InProcessJobScheduler(
+                    jobStore,
+                    events,
+                    { new INotificationChannel with
+                        member _.Publish(_, _) = async { return () }
+                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                        member _.Unsubscribe(_) = async { return () }
+                    },
+                    ServerConfig.defaults,
+                    silentLogger,
+                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
+                )
+
+            let jobs = scheduler :> IJobScheduler
+
+            jobs.RegisterHandler(
+                GroundedNarrativeTrigger.HandlerName,
+                GroundedNarrativeTrigger.GroundedNarrativeJobHandler(
+                    store,
+                    None,
+                    registry,
+                    stubRun (GroundedNarrativePublished(Guid.NewGuid(), documentFor "x", [], None, Error "-")) seen
+                )
+            )
+
+            let runs count = async {
+                let deadline = DateTime.UtcNow.AddSeconds 30.0
+
+                while seen.Count < count && DateTime.UtcNow < deadline do
+                    do! Async.Sleep 50
+
+                return seen |> Seq.map _.Trigger |> List.ofSeq
+            }
+
+            // The cadence: a cron job a deployment registers for the run,
+            // fired now rather than waited for.
+            let cadence = {
+                GroundedNarrativeTrigger.registrationFor teamId summaryRun.Key Set.empty with
+                    Trigger = CronTrigger "0 6 * * *"
+                    Idempotency = None
+                    Tags = Map.ofList [ "run", summaryRun.Key ]
+            }
+
+            match! jobs.Schedule(scope, cadence) with
+            | Ok(Scheduled jobId) ->
+                match! jobs.TriggerOnce(teamId, jobId, "operator") with
+                | Ok() -> ()
+                | Error e -> failtestf "the cadence job was not fired: %s" (TriggerError.message e)
+            | other -> failtestf "the cadence job was not scheduled: %A" other
+
+            let! afterCadence = runs 1
+            Expect.equal afterCadence [ "cadence" ] "the cadence's run records cadence"
+
+            let! enqueued =
+                GroundedNarrativeTrigger.enqueueFor lineage store jobs registry (DataChangeScope.Resolved scope) [
+                    "sales.rollup"
+                ]
+
+            Expect.equal enqueued [ summaryRun.Key ] "the change enqueued the run"
+            let! afterChange = runs 2
+            Expect.equal afterChange [ "cadence"; "data-arrival" ] "and the data-arrival run records data-arrival"
+        }
+    ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -3161,4 +3323,5 @@ let tests =
         doubleRunTests
         projectionTests
         jobResultTests
+        triggerNameTests
     ]
