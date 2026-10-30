@@ -197,9 +197,9 @@ let private draftOf
     }
 
 let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) : Fact =
-    match store.Assert(scope, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// One restricted contribution plus a declassifying aggregate over it —
 /// the single-party shape whose budget is accounted under `_unscoped`.
@@ -605,7 +605,7 @@ let loweringTests =
             let agg = seed store scope
 
             for _ in 1..4 do
-                let! _ = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+                let! _ = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
                 ()
 
             let lower = amendment aggregateTemplate unscoped 4m -2m
@@ -658,7 +658,7 @@ let loweringTests =
             let agg = seed store scope
 
             // One crossing spent of four.
-            let! _ = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+            let! _ = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
             let lower = amendment aggregateTemplate unscoped 4m -2m
             do! countersign registry lower
@@ -705,14 +705,14 @@ let arcTests =
             // not, and the amendment sitting un-countersigned in the
             // config changes nothing.
             for i in 1..2 do
-                let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+                let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
                 Expect.equal
                     (verdicts.TryFind agg.FactId)
                     (Some FactDisclosable)
                     (sprintf "crossing %d is within the declared ceiling of 2" i)
 
-            let! exhausted = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+            let! exhausted = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
             Expect.equal
                 (exhausted.TryFind agg.FactId)
@@ -724,7 +724,7 @@ let arcTests =
 
             // ── Resumption.
             for i in 3..4 do
-                let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+                let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
                 Expect.equal
                     (verdicts.TryFind agg.FactId)
@@ -734,7 +734,7 @@ let arcTests =
             // ── And the amended ceiling binds in its turn. Without this
             // the case would pass against a mechanism that removed the
             // ceiling rather than raising it.
-            let! exhaustedAgain = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+            let! exhaustedAgain = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
             Expect.equal
                 (exhaustedAgain.TryFind agg.FactId)
@@ -811,7 +811,7 @@ let costTests =
                 let mutable verdicts = []
 
                 for _ in 1..5 do
-                    let! result = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+                    let! result = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
                     verdicts <- (result.TryFind agg.FactId) :: verdicts
 
                 let! rows = events.ReadBySource(scope, FactEvents.SourceModule)

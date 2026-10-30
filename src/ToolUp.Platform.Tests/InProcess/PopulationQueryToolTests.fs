@@ -70,9 +70,9 @@ let private scalarDraft (sku: string) (value: decimal) : FactDraft =
     draftFor [ sku ] (Scalar value) Surfaceable
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A real (Phase 519) registry carrying one declared metric with the
 /// given direction-of-better.
@@ -145,13 +145,6 @@ let private contextFor (sp: IServiceProvider) (scopeId: string) (userId: string)
 
 /// Phase 797 — a `ResolvedScope` for a test-minted scope id, through the
 /// same internal mint the scope-resolution middleware uses.
-let private resolved (scopeId: string) : ResolvedScope =
-    ScopeResolution.ofStorageScope {
-        ScopeId = scopeId
-        Container = "container-" + scopeId
-        Persist = true
-    }
-
 let private executeRaw (sp: IServiceProvider) (scopeId: string) (argsJson: string) : string =
     PopulationQueryTool.execute (contextFor sp scopeId "user-1") argsJson
     |> Async.RunSynchronously
@@ -565,43 +558,20 @@ type private LeakyPopulationStore(leaked: Fact list) =
             }
     }
 
-    // Both forms leak (Phase 797): the door now asks through the typed
-    // member, and the double must misbehave on the path the door takes.
     interface IFactStore with
-        member _.Assert(_: string, _: FactDraft) : Async<Result<Fact, string>> = async {
-            return Error "read-only double"
+        member _.Assert(_: ResolvedScope, _: FactDraft) = async {
+            return Error(FactStoreError.Refused "read-only double")
         }
 
-        member _.Assert(_: ResolvedScope, _: FactDraft) : Async<Result<Fact, string>> = async {
-            return Error "read-only double"
+        member _.AssertBatch(_: ResolvedScope, _: FactDraft list) = async {
+            return Error(FactStoreError.Refused "read-only double")
         }
 
-        member _.AssertBatch(_: string, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
-            return Error "read-only double"
-        }
-
-        member _.AssertBatch(_: ResolvedScope, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
-            return Error "read-only double"
-        }
-
-        member _.Get(_: string, _: string) : Async<Fact option> = async { return None }
-        member _.Get(_: ResolvedScope, _: string) : Async<Fact option> = async { return None }
-        member _.Query(_: string, _: FactQuery) : Async<Fact list> = async { return [] }
-        member _.Query(_: ResolvedScope, _: FactQuery) : Async<Fact list> = async { return [] }
-
-        member _.QueryWithCompetition(_: string, _: FactQuery) : Async<FactWithCompetition list> = async { return [] }
-
-        member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) : Async<FactWithCompetition list> = async {
-            return []
-        }
-
-        member _.QuerySupersessionChain(_: string, _: string) : Async<Fact list> = async { return [] }
-        member _.QuerySupersessionChain(_: ResolvedScope, _: string) : Async<Fact list> = async { return [] }
-
-        member _.QueryPopulation(_: string, _: PopulationQuery) : Async<Result<PopulationResult, string>> = ranked ()
-
-        member _.QueryPopulation(_: ResolvedScope, _: PopulationQuery) : Async<Result<PopulationResult, string>> =
-            ranked ()
+        member _.Get(_: ResolvedScope, _: string) = async { return Ok None }
+        member _.Query(_: ResolvedScope, _: FactQuery) = async { return Ok [] }
+        member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) = async { return Ok [] }
+        member _.QuerySupersessionChain(_: ResolvedScope, _: string) = async { return Ok [] }
+        member _.QueryPopulation(_: ResolvedScope, _: PopulationQuery) = ranked ()
 
 let disclosureTests =
     testList "Phase 703 query_metric_population disclosure" [
@@ -733,7 +703,7 @@ let disclosureTests =
                     gate
                     None
                     (fun () -> DateTime.UtcNow)
-                    (resolved scopeB)
+                    (TestScope.resolved scopeB)
                     "user-1"
                     baseArgs
 
@@ -1453,7 +1423,7 @@ let private executeRecorded
             (sp.GetRequiredService<IFactDisclosureGate>())
             registry
             (fun () -> DateTime.UtcNow)
-            (resolved scope)
+            (TestScope.resolved scope)
             "user-1"
             argsJson
         |> Async.RunSynchronously

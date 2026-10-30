@@ -237,12 +237,12 @@ let private writeThroughTable (sp: IServiceProvider) (teamId: string) (value: de
     let writer = sp.GetRequiredService<IFactTableWriter>()
 
     let run =
-        writer.OpenRun(teamId, brandSales.Id)
+        writer.OpenRun(TestScope.resolved teamId, brandSales.Id)
         |> Async.RunSynchronously
         |> Result.defaultWith (fun e -> failtestf "open: %s" (FactTableWriteError.describe e))
 
     writer.WriteRows(
-        teamId,
+        TestScope.resolved teamId,
         run.RunId,
         [
             {
@@ -256,7 +256,7 @@ let private writeThroughTable (sp: IServiceProvider) (teamId: string) (value: de
     |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
     |> ignore
 
-    writer.Commit(teamId, run.RunId)
+    writer.Commit(TestScope.resolved teamId, run.RunId)
     |> Async.RunSynchronously
     |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
     |> ignore

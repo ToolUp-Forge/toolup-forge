@@ -230,9 +230,9 @@ module RenderFixtures =
                     }
         ]
 
-        let opened = ok "open" (writer.OpenRun(scope.ScopeId, table.Id))
-        ok "write" (writer.WriteRows(scope.ScopeId, opened.RunId, rows)) |> ignore
-        ok "commit" (writer.Commit(scope.ScopeId, opened.RunId)) |> ignore
+        let opened = ok "open" (writer.OpenRun(scope, table.Id))
+        ok "write" (writer.WriteRows(scope, opened.RunId, rows)) |> ignore
+        ok "commit" (writer.Commit(scope, opened.RunId)) |> ignore
 
     /// A fresh world with both tables written.
     let world () : World =

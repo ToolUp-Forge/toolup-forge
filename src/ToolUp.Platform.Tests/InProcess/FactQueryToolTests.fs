@@ -60,9 +60,9 @@ let private draft (metric: string) (period: TemporalExtent) (inputHashes: string
 }
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A real (Phase 519) registry carrying one declared metric.
 let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : IMetricRegistry =
@@ -137,13 +137,6 @@ let private contextFor (sp: IServiceProvider) (scopeId: string) (userId: string)
 
 /// Phase 797 — a `ResolvedScope` for a test-minted scope id, through the
 /// same internal mint the scope-resolution middleware uses.
-let private resolved (scopeId: string) : ResolvedScope =
-    ScopeResolution.ofStorageScope {
-        ScopeId = scopeId
-        Container = "container-" + scopeId
-        Persist = true
-    }
-
 let private executeVia (sp: IServiceProvider) (scopeId: string) (argsJson: string) : JsonElement =
     let result =
         FactQueryTool.execute (contextFor sp scopeId "user-1") argsJson
@@ -392,44 +385,24 @@ let egressTests =
 /// hostile store implementation. The disclosure gate must still hold
 /// the door: it re-resolves ids through the REAL scope-filtered store.
 type private LeakyStore(leaked: Fact list) =
-    let competing () = async { return leaked |> List.map (fun f -> { Fact = f; CompetingMethods = [] }) }
+    let competing () = async { return Ok(leaked |> List.map (fun f -> { Fact = f; CompetingMethods = [] })) }
 
-    // Both forms leak (Phase 797): the door now asks through the typed
-    // member, and the double must misbehave on the path the door takes.
     interface IFactStore with
-        member _.Assert(_: string, _: FactDraft) : Async<Result<Fact, string>> = async {
-            return Error "read-only double"
+        member _.Assert(_: ResolvedScope, _: FactDraft) = async {
+            return Error(FactStoreError.Refused "read-only double")
         }
 
-        member _.Assert(_: ResolvedScope, _: FactDraft) : Async<Result<Fact, string>> = async {
-            return Error "read-only double"
+        member _.AssertBatch(_: ResolvedScope, _: FactDraft list) = async {
+            return Error(FactStoreError.Refused "read-only double")
         }
 
-        member _.AssertBatch(_: string, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
-            return Error "read-only double"
-        }
+        member _.Get(_: ResolvedScope, _: string) = async { return Ok None }
+        member _.Query(_: ResolvedScope, _: FactQuery) = async { return Ok leaked }
+        member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) = competing ()
+        member _.QuerySupersessionChain(_: ResolvedScope, _: string) = async { return Ok [] }
 
-        member _.AssertBatch(_: ResolvedScope, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
-            return Error "read-only double"
-        }
-
-        member _.Get(_: string, _: string) : Async<Fact option> = async { return None }
-        member _.Get(_: ResolvedScope, _: string) : Async<Fact option> = async { return None }
-        member _.Query(_: string, _: FactQuery) : Async<Fact list> = async { return leaked }
-        member _.Query(_: ResolvedScope, _: FactQuery) : Async<Fact list> = async { return leaked }
-
-        member _.QueryWithCompetition(_: string, _: FactQuery) : Async<FactWithCompetition list> = competing ()
-        member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) : Async<FactWithCompetition list> = competing ()
-
-        member _.QuerySupersessionChain(_: string, _: string) : Async<Fact list> = async { return [] }
-        member _.QuerySupersessionChain(_: ResolvedScope, _: string) : Async<Fact list> = async { return [] }
-
-        member _.QueryPopulation(_: string, _: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
-            return Error "read-only double: no population read"
-        }
-
-        member _.QueryPopulation(_: ResolvedScope, _: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
-            return Error "read-only double: no population read"
+        member _.QueryPopulation(_: ResolvedScope, _: PopulationQuery) = async {
+            return Error(FactStoreError.Refused "read-only double: no population read")
         }
 
 let auditAndScopeTests =
@@ -499,7 +472,7 @@ let auditAndScopeTests =
                     gate
                     None
                     (fun () -> DateTime.UtcNow)
-                    (resolved scopeB)
+                    (TestScope.resolved scopeB)
                     "user-1"
                     queryArgs
 
@@ -545,7 +518,7 @@ let temporalTests =
             Expect.equal successor.Supersedes (Some original.FactId) "harness sanity: one lineage"
 
             let run (args: string) =
-                FactQueryTool.executeWith store gate None (fun () -> nowRef) (resolved scope) "user-1" args
+                FactQueryTool.executeWith store gate None (fun () -> nowRef) (TestScope.resolved scope) "user-1" args
 
             // The default view: only the current head, fresh.
             let! headOnly = run queryArgs

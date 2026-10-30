@@ -713,9 +713,9 @@ let private deploy () : Deployment =
     }
 
 let private assertOk (store: IFactStore) (scopeId: string) (draft: FactDraft) : Fact =
-    match store.Assert(scopeId, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scopeId, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// The fact ids a `query_facts` result returned.
 let private factIdsIn (result: string) : string list =

@@ -182,10 +182,12 @@ let private atRest (f: FactTableOrphanSweepFixture) : Set<string> =
 /// Open an imported run of `tableId` (so it keeps a provenance) and stage
 /// `batches`.
 let private openStagedOn (f: FactTableOrphanSweepFixture) (tableId: string) (batches: int list) : FactTableRunRecord =
-    let run = ok "open" (f.Writer.OpenRun(f.Scope, tableId, ImportedRun [ origin ]))
+    let run =
+        ok "open" (f.Writer.OpenRun(TestScope.resolved f.Scope, tableId, ImportedRun [ origin ]))
 
     for n in batches do
-        ok "write" (f.Writer.WriteRows(f.Scope, run.RunId, rows n)) |> ignore
+        ok "write" (f.Writer.WriteRows(TestScope.resolved f.Scope, run.RunId, rows n))
+        |> ignore
 
     run
 
@@ -194,7 +196,7 @@ let private openStaged (f: FactTableOrphanSweepFixture) (batches: int list) : Fa
     openStagedOn f f.TableId batches
 
 let private sweep (f: FactTableOrphanSweepFixture) : FactTableOrphanSweepReport =
-    ok "sweep" (FactTableOrphanSweep.sweep f.Writer f.Scope)
+    ok "sweep" (FactTableOrphanSweep.sweep f.Writer (TestScope.resolved f.Scope))
 
 /// An ended run whose two staged batches and provenance survived refused
 /// deletes; returns the run and the leftovers it left (the blobs that
@@ -204,7 +206,10 @@ let private refusedLeftovers (f: FactTableOrphanSweepFixture) : FactTableRunReco
     let run = openStaged f [ 3; 3 ]
     let staged = atRest f
     f.Storage.Refusing <- true
-    ok "abandon" (f.Writer.Abandon(f.Scope, run.RunId, "ended")) |> ignore
+
+    ok "abandon" (f.Writer.Abandon(TestScope.resolved f.Scope, run.RunId, "ended"))
+    |> ignore
+
     f.Storage.Refusing <- false
     // What the run added while open, less its record and its table's claim,
     // is what an ended run must not keep. The record is the one blob still
@@ -266,7 +271,7 @@ let tests (name: string) (factory: FactTableOrphanSweepFactory) =
             Expect.equal report.RunsSwept 1 "only the ended run is swept"
             Expect.isTrue (Set.isSubset liveBlobs (atRest f)) "every blob of the open run is still at rest"
 
-            let commit = ok "commit" (f.Writer.Commit(f.Scope, live.RunId))
+            let commit = ok "commit" (f.Writer.Commit(TestScope.resolved f.Scope, live.RunId))
             Expect.equal commit.RowCount 3 "and the open run still commits every row it staged"
         }
 
@@ -287,7 +292,7 @@ let tests (name: string) (factory: FactTableOrphanSweepFactory) =
             let f = factory ()
             let run = openStaged f [ 3 ]
             f.Storage.Refusing <- true
-            ok "commit" (f.Writer.Commit(f.Scope, run.RunId)) |> ignore
+            ok "commit" (f.Writer.Commit(TestScope.resolved f.Scope, run.RunId)) |> ignore
             f.Storage.Refusing <- false
 
             let report = sweep f

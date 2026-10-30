@@ -31,6 +31,7 @@
     </ItemGroup>
     <!-- Test source files (contract packs + in-process bindings + runner). -->
     <ItemGroup>
+        <Compile Include="Support\TestScope.fs" />
         <Compile Include="Contracts\IBlobStorageContract.fs" />
         <Compile Include="Contracts\IProviderProfileContract.fs" />
         <Compile Include="Contracts\ITeamProviderResolverContract.fs" />

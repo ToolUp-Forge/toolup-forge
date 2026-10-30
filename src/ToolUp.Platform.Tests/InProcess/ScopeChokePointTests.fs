@@ -100,7 +100,7 @@ let private freshTier () =
 let private assertUnder (store: IFactStore) (scope: ResolvedScope) (d: FactDraft) : Fact =
     match store.Assert(scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 let private factsOf (raw: string) : JsonElement list =
     (JsonDocument.Parse raw).RootElement.GetProperty("facts").EnumerateArray()
@@ -299,24 +299,7 @@ let private requestPathTests =
                 "and it is the anonymous shard's own fact"
         }
 
-        test "the typed and string store forms key one shard — the typed form is the string form over ScopeId" {
-            let store, _ = freshTier ()
-            let scopeId = newScopeId ()
-            let minted = ScopeResolution.ofStorageScope (storage scopeId)
-            let viaTyped = assertUnder store minted (draft 5m)
-
-            let viaString = store.Get(scopeId, viaTyped.FactId) |> Async.RunSynchronously
-
-            Expect.equal viaString (Some viaTyped) "read back through the string key"
-
-            let viaTypedAgain = store.Get(minted, viaTyped.FactId) |> Async.RunSynchronously
-
-            Expect.equal viaTypedAgain (Some viaTyped) "and through the typed one"
-
-            Expect.isNone
-                (store.Get(ResolvedScope.anonymous, viaTyped.FactId) |> Async.RunSynchronously)
-                "and not through a different scope"
-        }
+    // Phase 1157 retired the string scope form; the typed/string store equivalence is gone.
     ]
 
 // ── C. The source says so ─────────────────────────────────────────
@@ -724,7 +707,10 @@ let private saveInput (objects: IDataObjectStore) (scopeId: string) (body: strin
     | Error err -> failtestf "data-object save failed: %A" err
 
 let private headValues (store: IFactStore) (scope: ResolvedScope) : FactValue list =
-    store.Query(scope, FactQuery.all) |> Async.RunSynchronously |> List.map _.Value
+    store.Query(scope, FactQuery.all)
+    |> TestScope.ok
+    |> Async.RunSynchronously
+    |> List.map _.Value
 
 /// The reactive path and the job-admin API, by path under `src/`.
 let private reactivePath = [
@@ -740,9 +726,10 @@ let private rederivations (source: string) : (string * string) list = mints sour
 let private reactivePathTests =
     testList "E — the reactive path carries the write's scope (Phase 930)" [
 
-        test "a resolved write rides the change as the resolver's own value; any other write rides carried" {
+        test
+            "a resolved write rides the change as the resolver's own value; a write into another shard reacts with nothing" {
             let resolved = ScopeResolution.ofStorageScope (storage (newScopeId ()))
-            let seen = ConcurrentQueue<DataChangeScope>()
+            let seen = ConcurrentQueue<ResolvedScope>()
 
             let objects =
                 ReactiveDataChange.decorate
@@ -757,17 +744,16 @@ let private reactivePathTests =
             saveInput objects otherShard "v1" |> ignore
 
             match List.ofSeq seen with
-            | [ DataChangeScope.Resolved carried; DataChangeScope.Carried scopeId ] ->
+            | [ carried ] ->
                 Expect.isTrue
                     (obj.ReferenceEquals(carried, resolved))
                     "the write in the resolved shard carries the resolver's value itself, not a copy built from its id"
-
-                Expect.equal scopeId otherShard "a write into another shard rides carried, with its own string"
-            | other -> failtestf "expected one resolved then one carried change, got %A" other
+            | other ->
+                failtestf "expected the one resolved change, and nothing for the write into %s; got %A" otherShard other
         }
 
-        test "a write with no resolved scope rides carried — nothing is built from its string" {
-            let seen = ConcurrentQueue<DataChangeScope>()
+        test "a write with no resolved scope reacts with nothing — nothing is built from its string" {
+            let seen = ConcurrentQueue<ResolvedScope>()
 
             let objects =
                 ReactiveDataChange.decorate
@@ -780,7 +766,7 @@ let private reactivePathTests =
             let scopeId = newScopeId ()
             saveInput objects scopeId "v1" |> ignore
 
-            Expect.equal (List.ofSeq seen) [ DataChangeScope.Carried scopeId ] "carried, with the write's string"
+            Expect.isEmpty (List.ofSeq seen) "no change rides a write whose shard nobody resolved"
         }
 
         test "requestScope reads the scope the middleware recorded, and nothing off the request path" {
@@ -838,17 +824,20 @@ let private reactivePathTests =
                 "the anonymous shard was never read or written"
         }
 
-        testCaseAsync "a recompute never reads the anonymous shard, whichever form its scope came back in"
+        testCaseAsync
+            "a write or job carrying no resolved scope recomputes nothing, and never reads the anonymous shard"
         <| async {
-            // (a) a carried write, (b) a resolved write on a scheduler that
-            // cannot re-mint: both come back anonymous on JobContext.Scope
-            // with the real shard on ScopeId. Each must recompute the real
-            // shard's fact and leave the anonymous shard's decoy alone.
+            // (a) a write with no resolved scope reacts with nothing: no job
+            // is scheduled at all. (b) a resolved write on a scheduler that
+            // cannot re-mint comes back anonymous on JobContext.Scope with the
+            // real shard on ScopeId, and the job refuses it by name. Neither
+            // recomputes the shard's fact, and neither touches the anonymous
+            // shard's decoy.
             let resolved = ScopeResolution.ofStorageScope (storage (newScopeId ()))
 
             for label, currentScope, remints in
                 [
-                    "a carried write", (fun () -> None), true
+                    "a write with no resolved scope", (fun () -> None), true
                     "a scheduler that cannot re-mint", (fun () -> Some resolved), false
                 ] do
                 let store, scheduler, objects = reactiveTier currentScope remints
@@ -862,12 +851,23 @@ let private reactivePathTests =
 
                 saveInput objects resolved.ScopeId "v2" |> ignore
 
-                Expect.equal scheduler.Results [ JobResult.Success ] (sprintf "%s: the job ran" label)
+                if remints then
+                    Expect.isEmpty scheduler.Typed (sprintf "%s: no recompute was scheduled" label)
+                    Expect.isEmpty scheduler.Untyped (sprintf "%s: not through the string overload either" label)
+                    Expect.isEmpty scheduler.Results (sprintf "%s: and no job ran" label)
+                else
+                    match scheduler.Results with
+                    | [ JobResult.PermanentFailure reason ] ->
+                        Expect.stringContains
+                            reason
+                            "carries no resolver-minted scope"
+                            (sprintf "%s: the job was refused by name" label)
+                    | other -> failtestf "%s: expected the job's refusal by name, got %A" label other
 
                 Expect.equal
                     (headValues store shard)
-                    [ Scalar 120m ]
-                    (sprintf "%s: the job's own shard was recomputed" label)
+                    [ Scalar 100m ]
+                    (sprintf "%s: the shard's fact was not recomputed under a scope nobody resolved" label)
 
                 Expect.equal
                     (headValues store ResolvedScope.anonymous)

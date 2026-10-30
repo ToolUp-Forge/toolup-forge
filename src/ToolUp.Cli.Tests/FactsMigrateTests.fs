@@ -254,6 +254,18 @@ let private composed (conn: string) =
     services.AddSingleton<IFactStore>(target :> IFactStore) |> ignore
     services.BuildServiceProvider(), storage, events, root
 
+/// The resolved scope of the shard `scopeId`, as the platform's scope
+/// resolution mints it (container = shard id) — the pack stands in for the
+/// middleware through the resolver's internal mint, as the platform pack does.
+let private resolvedShard (scopeId: string) : ResolvedScope =
+    let storage: StorageScope = {
+        ScopeId = scopeId
+        Container = scopeId
+        Persist = true
+    }
+
+    StorageScopeResolver.ScopeResolution.ofStorageScope storage
+
 let private seed (storage: IBlobStorage) (events: IEventStore) (scope: string) = async {
     let source = BlobFactStore(storage, events, None, (fun () -> DateTime.UtcNow))
 
@@ -262,9 +274,9 @@ let private seed (storage: IBlobStorage) (events: IEventStore) (scope: string) =
             for i in 1..12 -> draft (sprintf "m%02d" i) (sprintf "r%02d-%d" i round) (decimal (i * round))
         ]
 
-        match! (source :> IFactStore).AssertBatch(scope, drafts) with
+        match! (source :> IFactStore).AssertBatch(resolvedShard scope, drafts) with
         | Ok _ -> ()
-        | Error e -> failtestf "seed refused: %s" e
+        | Error e -> failtestf "seed refused: %s" (FactStoreError.describe e)
 
     return source
 }

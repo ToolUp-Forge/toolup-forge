@@ -44,6 +44,16 @@ open ToolUp.Reporting.Tests.Fakes
 
 let private scopeId = "team-alpha"
 
+/// The resolved scope of the shard `scopeId`, as the platform's scope
+/// resolution mints it (container = shard id) — the pack stands in for the
+/// middleware through the resolver's internal mint, as the platform pack does.
+let private resolvedShard (scopeId: string) : ToolUp.Platform.ResolvedScope =
+    ToolUp.Platform.StorageScopeResolver.ScopeResolution.ofStorageScope {
+        ScopeId = scopeId
+        Container = scopeId
+        Persist = true
+    }
+
 /// A narrative with structures a markdown flattening cannot reproduce
 /// in a `.docx`: a real heading, a real table, real list items.
 let private structuredNarrative: NarrativeDocument = {
@@ -104,7 +114,7 @@ type private DenyingGate(denied: (string * string) list) =
     member _.Consulted = List.rev surfaces
 
     interface IFactDisclosureGate with
-        member _.Check(_: string, _: string, surface: FactEgressSurface, factIds: string list) = async {
+        member _.Check(_: ToolUp.Platform.ResolvedScope, _: string, surface: FactEgressSurface, factIds: string list) = async {
             surfaces <- (surface, factIds) :: surfaces
 
             return
@@ -115,12 +125,6 @@ type private DenyingGate(denied: (string * string) list) =
                     | None -> id, FactDisclosable)
                 |> Map.ofList
         }
-
-        // Phase 797 — the typed form delegates to the string form above.
-        member this.Check
-            (scope: ToolUp.Platform.ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list)
-            =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 /// A renderer that records the values it was handed and emits nothing
 /// interesting. The control for case 4: it claims `Docx` and declares
@@ -170,7 +174,7 @@ let private apiOver (renderer: IReportRenderer) (gate: IFactDisclosureGate optio
             storeBlob
             audit
             ReportApiConfig.defaults
-            scopeId
+            (resolvedShard scopeId)
     | None -> ReportApiHandler.create "operator" templates registry storeBlob audit ReportApiConfig.defaults scopeId
 
 let private renderThroughApi (api: IReportApi) (values: Map<string, PlaceholderValue>) =

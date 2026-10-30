@@ -27,13 +27,17 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// scope only, so the scope-isolation arm means something.
 type private FakeFactEvidence(scope: string, facts: Map<string, FactEvidence>) =
     interface IFactEvidenceSource with
-        member _.GetFact(scopeId, factId) = async {
-            return (if scopeId = scope then Map.tryFind factId facts else None)
+        member _.GetFact(resolved: ResolvedScope, factId) = async {
+            return
+                (if resolved.ScopeId = scope then
+                     Map.tryFind factId facts
+                 else
+                     None)
         }
 
-        member _.FactsForResult(scopeId, resultId) = async {
+        member _.FactsForResult(resolved: ResolvedScope, resultId) = async {
             return
-                if scopeId = scope then
+                if resolved.ScopeId = scope then
                     facts
                     |> Map.toList
                     |> List.map snd
@@ -52,8 +56,8 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     member _.LastCall = lastCall
 
     interface IFactDisclosureGate with
-        member _.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
-            lastCall <- Some(scopeId, principal, surface, factIds)
+        member _.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) = async {
+            lastCall <- Some(scope.ScopeId, principal, surface, factIds)
 
             return
                 factIds
@@ -62,10 +66,6 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     id, (verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact")))
                 |> Map.ofList
         }
-
-        // Phase 797 — the typed form delegates to the string form above.
-        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 // ── Seed ─────────────────────────────────────────────────────────────
 
@@ -124,14 +124,14 @@ let private caps = WireProvenanceCaps.defaults
 
 /// The contract with no disclosure gate — a deployment with no fact tier.
 let private ungatedApi () =
-    ProvenanceApiHandler.create (seededGraph ()) caps scopeA
+    ProvenanceApiHandler.create (seededGraph ()) caps (TestScope.resolved scopeA)
 
 /// The contract with a gate that permits `fact-2` and refuses `fact-1`.
 let private gatedApi () =
     let gate =
         PresetGate(Map.ofList [ fact2, FactDisclosable; fact1, FactNotDisclosable "Internal" ])
 
-    gate, ProvenanceApiHandler.createWithDisclosureGate gate principal (seededGraph ()) caps scopeA
+    gate, ProvenanceApiHandler.createWithDisclosureGate gate principal (seededGraph ()) caps (TestScope.resolved scopeA)
 
 let private upstreamFrom root depth : WireProvenanceChainRequest = {
     Root = root
@@ -278,9 +278,9 @@ let tests =
         testCaseAsync "a chain round-trips through the contract unchanged"
         <| async {
             let graph = seededGraph ()
-            let api = ProvenanceApiHandler.create graph caps scopeA
+            let api = ProvenanceApiHandler.create graph caps (TestScope.resolved scopeA)
 
-            let! serverChain = graph.GetChain(scopeA, FactRef fact2, Upstream, 5)
+            let! serverChain = graph.GetChain(TestScope.resolved scopeA, FactRef fact2, Upstream, 5)
             let! answer = api.GetChain(upstreamFrom (WireProvenanceRef.FactRef fact2) 5)
 
             match answer with
@@ -326,7 +326,9 @@ let tests =
 
         testCaseAsync "a chain never crosses a team scope (GP 4)"
         <| async {
-            let api = ProvenanceApiHandler.create (seededGraph ()) caps "team-B"
+            let api =
+                ProvenanceApiHandler.create (seededGraph ()) caps (TestScope.resolved "team-B")
+
             let! answer = api.GetChain(upstreamFrom (WireProvenanceRef.ResultRef res1) 5)
 
             match answer with
@@ -434,7 +436,9 @@ let tests =
             testCaseAsync "a chain above the node cap is refused whole, never truncated"
             <| async {
                 let narrow = { caps with MaxNodes = 1 }
-                let api = ProvenanceApiHandler.create (seededGraph ()) narrow scopeA
+
+                let api =
+                    ProvenanceApiHandler.create (seededGraph ()) narrow (TestScope.resolved scopeA)
 
                 let! answer = api.GetChain(upstreamFrom (WireProvenanceRef.FactRef fact2) 5)
 
@@ -448,7 +452,10 @@ let tests =
                 // EVERY node — so the refusal above was a refusal, not a
                 // truncation dressed up as one.
                 let roomy = { caps with MaxNodes = 100 }
-                let generous = ProvenanceApiHandler.create (seededGraph ()) roomy scopeA
+
+                let generous =
+                    ProvenanceApiHandler.create (seededGraph ()) roomy (TestScope.resolved scopeA)
+
                 let! full = generous.GetChain(upstreamFrom (WireProvenanceRef.FactRef fact2) 5)
 
                 match full with

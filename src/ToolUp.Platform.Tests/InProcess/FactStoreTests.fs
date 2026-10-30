@@ -280,7 +280,7 @@ let populationScaleTests =
             for i in 0 .. seedSize - 1 do
                 let! r =
                     store.Assert(
-                        scope,
+                        TestScope.resolved scope,
                         {
                             Subject = {
                                 Hierarchy = "geography"
@@ -298,7 +298,7 @@ let populationScaleTests =
 
                 match r with
                 | Ok _ -> ()
-                | Error e -> failtestf "seed %d failed: %s" i e
+                | Error e -> failtestf "seed %d failed: %s" i (FactStoreError.describe e)
 
             seeding.Stop()
 
@@ -311,13 +311,13 @@ let populationScaleTests =
 
             // Warm, then measure — the first read pays the deserialisation
             // of every blob for the first time.
-            let! _ = store.QueryPopulation(scope, query)
+            let! _ = store.QueryPopulation(TestScope.resolved scope, query)
             let reading = Diagnostics.Stopwatch.StartNew()
-            let! r = store.QueryPopulation(scope, query)
+            let! r = store.QueryPopulation(TestScope.resolved scope, query)
             reading.Stop()
 
             match r with
-            | Error e -> failtestf "population read refused: %s" e
+            | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
             | Ok population ->
                 printfn
                     "Phase 701 blob read: %d heads — seed %dms, read %dms (%.3f ms/head; ~%.1fs extrapolated to 300,000)"
@@ -406,11 +406,11 @@ let batchAssertTests =
             ]
 
             let firstRun = Diagnostics.Stopwatch.StartNew()
-            let! r1 = store.AssertBatch(scope, drafts)
+            let! r1 = store.AssertBatch(TestScope.resolved scope, drafts)
             firstRun.Stop()
 
             let secondRun = Diagnostics.Stopwatch.StartNew()
-            let! r2 = store.AssertBatch(scope, drafts)
+            let! r2 = store.AssertBatch(TestScope.resolved scope, drafts)
             secondRun.Stop()
 
             printfn
@@ -428,7 +428,7 @@ let batchAssertTests =
                 Expect.equal second.AssertedCount 0 "no fact was written the second time"
                 Expect.equal second.SupersedingCount 0 "and nothing superseded"
 
-                let! stored = store.Query(scope, FactQuery.all)
+                let! stored = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
                 Expect.equal stored.Length AcceptanceBatchSize "the store holds one fact per draft, not two"
 
                 let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
@@ -438,7 +438,7 @@ let batchAssertTests =
                     (factRows rows)
                     "and not 10,000 per-fact rows — that is the audit cost this member removes"
             | Error e, _
-            | _, Error e -> failtestf "expected Ok from both batches, got %s" e
+            | _, Error e -> failtestf "expected Ok from both batches, got %s" (FactStoreError.describe e)
         }
 
 
@@ -447,10 +447,10 @@ let batchAssertTests =
             let store, events = newStore ()
             let scope = newScope ()
 
-            let! r = store.AssertBatch(scope, batchDrafts 20)
+            let! r = store.AssertBatch(TestScope.resolved scope, batchDrafts 20)
 
             match r with
-            | Error e -> failtestf "expected Ok, got %s" e
+            | Error e -> failtestf "expected Ok, got %s" (FactStoreError.describe e)
             | Ok receipt ->
                 let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
 
@@ -481,8 +481,8 @@ let batchAssertTests =
             let store, events = newStore ()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, scalarDraft "hashA" 100m)
-            let! _ = store.Assert(scope, scalarDraft "hashB" 110m)
+            let! _ = store.Assert(TestScope.resolved scope, scalarDraft "hashA" 100m)
+            let! _ = store.Assert(TestScope.resolved scope, scalarDraft "hashB" 110m)
             let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
 
             Expect.equal (List.length (factRows rows)) 3 "two FactAsserted plus the one FactSuperseded"
@@ -495,7 +495,7 @@ let batchAssertTests =
             let scope = newScope ()
 
             let first = batchDrafts 5
-            let! _ = store.AssertBatch(scope, first)
+            let! _ = store.AssertBatch(TestScope.resolved scope, first)
 
             // Same subjects, changed inputs — every draft supersedes.
             let second =
@@ -508,10 +508,10 @@ let batchAssertTests =
                         }
                 })
 
-            let! r = store.AssertBatch(scope, second)
+            let! r = store.AssertBatch(TestScope.resolved scope, second)
 
             match r with
-            | Error e -> failtestf "expected Ok, got %s" e
+            | Error e -> failtestf "expected Ok, got %s" (FactStoreError.describe e)
             | Ok receipt ->
                 Expect.equal receipt.SupersedingCount 5 "every draft superseded its predecessor"
                 Expect.equal receipt.AssertedCount 0 "none of them was new to its lineage"
@@ -531,11 +531,11 @@ let batchAssertTests =
             let scope = newScope ()
 
             let drafts = batchDrafts 4
-            let! _ = store.AssertBatch(scope, drafts)
-            let! r = store.AssertBatch(scope, drafts)
+            let! _ = store.AssertBatch(TestScope.resolved scope, drafts)
+            let! r = store.AssertBatch(TestScope.resolved scope, drafts)
 
             match r with
-            | Error e -> failtestf "expected Ok, got %s" e
+            | Error e -> failtestf "expected Ok, got %s" (FactStoreError.describe e)
             | Ok receipt ->
                 Expect.equal receipt.IdempotentCount 4 "nothing was written"
 
@@ -558,7 +558,7 @@ let auditAndFreshnessTests =
             let store, events = newStore ()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, scalarDraft "hashA" 100m)
+            let! _ = store.Assert(TestScope.resolved scope, scalarDraft "hashA" 100m)
             let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
 
             Expect.isTrue (rows |> List.exists (fun e -> e.EventType = FactEvents.AssertedType)) "FactAsserted emitted"
@@ -573,9 +573,9 @@ let auditAndFreshnessTests =
             let store, events = newStore ()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, scalarDraft "hashA" 100m)
+            let! _ = store.Assert(TestScope.resolved scope, scalarDraft "hashA" 100m)
             let! afterFirst = events.ReadBySource(scope, FactEvents.SourceModule)
-            let! _ = store.Assert(scope, scalarDraft "hashA" 100m)
+            let! _ = store.Assert(TestScope.resolved scope, scalarDraft "hashA" 100m)
             let! afterSecond = events.ReadBySource(scope, FactEvents.SourceModule)
 
             Expect.equal afterSecond.Length afterFirst.Length "no new audit rows for an idempotent re-assert"
@@ -586,8 +586,8 @@ let auditAndFreshnessTests =
             let store, events = newStore ()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, scalarDraft "hashA" 100m)
-            let! _ = store.Assert(scope, scalarDraft "hashB" 110m)
+            let! _ = store.Assert(TestScope.resolved scope, scalarDraft "hashA" 100m)
+            let! _ = store.Assert(TestScope.resolved scope, scalarDraft "hashB" 110m)
             let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
 
             Expect.isTrue
@@ -611,8 +611,8 @@ let auditAndFreshnessTests =
                     }
             }
 
-            let! f1 = store.Assert(scope, haDraft 100m)
-            let! f2 = store.Assert(scope, haDraft 200m)
+            let! f1 = store.Assert(TestScope.resolved scope, haDraft 100m)
+            let! f2 = store.Assert(TestScope.resolved scope, haDraft 200m)
 
             match f1, f2 with
             | Ok a, Ok b ->
@@ -850,11 +850,11 @@ let private rollup = Computed("rollup", "1", "p0")
 let private elasticity = MetricRef "elasticity"
 
 let private assertSeed (store: IFactStore) (scope: string) (d: FactDraft) = async {
-    let! r = store.Assert(scope, d)
+    let! r = store.Assert(TestScope.resolved scope, d)
 
     match r with
     | Ok _ -> ()
-    | Error e -> failtestf "seed failed: %s" e
+    | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 }
 
 let private storeOver (storage: IBlobStorage) (clock: unit -> DateTime) (options: FactSurfaceOptions) : IFactStore =
@@ -1010,8 +1010,8 @@ let private queryMatrix: (string * PopulationQuery) list =
 
 let private expectSameAnswers (label: string) (enumerating: IFactStore) (surfaced: IFactStore) (scope: string) = async {
     for name, query in queryMatrix do
-        let! viaLog = enumerating.QueryPopulation(scope, query)
-        let! viaSurface = surfaced.QueryPopulation(scope, query)
+        let! viaLog = enumerating.QueryPopulation(TestScope.resolved scope, query)
+        let! viaSurface = surfaced.QueryPopulation(TestScope.resolved scope, query)
 
         Expect.equal
             viaSurface
@@ -1214,14 +1214,14 @@ let metricSurfaceTests =
             // Verify the probe, not just the verdict: were the hand-written
             // blob not in the store's own format, the reconcile would have
             // nothing to find and this test would pass vacuously.
-            let! readBack = enumerating.Get(scope, smuggled.FactId)
+            let! readBack = enumerating.Get(TestScope.resolved scope, smuggled.FactId) |> TestScope.ok
             Expect.equal readBack (Some smuggled) "the out-of-band blob is readable as a fact by the store"
 
             do! expectSameAnswers "after an out-of-band write" enumerating surfaced scope
 
             let! r =
                 surfaced.QueryPopulation(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         PopulationQuery.create elasticity "geography" with
                             Level = Some 2
@@ -1229,7 +1229,7 @@ let metricSurfaceTests =
                 )
 
             match r with
-            | Error e -> failtestf "population read refused: %s" e
+            | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
             | Ok population ->
                 Expect.isTrue
                     (population.Ranked |> List.exists (fun f -> f.FactId = smuggled.FactId))
@@ -1275,14 +1275,14 @@ let metricSurfaceTests =
             | Error e -> failtestf "could not write the future-dated fact: %s" e
             | Ok _ -> ()
 
-            let! readBack = enumerating.Get(scope, ahead.FactId)
+            let! readBack = enumerating.Get(TestScope.resolved scope, ahead.FactId) |> TestScope.ok
             Expect.equal readBack (Some ahead) "the future-dated blob is readable as a fact by the store"
 
             do! expectSameAnswers "with a future-dated head in the log" enumerating surfaced scope
 
             let! r =
                 surfaced.QueryPopulation(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         PopulationQuery.create elasticity "geography" with
                             Level = Some 2
@@ -1290,7 +1290,7 @@ let metricSurfaceTests =
                 )
 
             match r with
-            | Error e -> failtestf "population read refused: %s" e
+            | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
             | Ok population ->
                 Expect.isFalse
                     (population.Ranked |> List.exists (fun f -> f.FactId = ahead.FactId))
@@ -1327,12 +1327,16 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            let! first = surfaced.Assert(scope, draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (Scalar 5m) "v1")
+            let! first =
+                surfaced.Assert(
+                    TestScope.resolved scope,
+                    draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (Scalar 5m) "v1"
+                )
 
             let firstFact =
                 match first with
                 | Ok f -> f
-                | Error e -> failtestf "seed failed: %s" e
+                | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
             do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (Scalar 6m) "v2")
 
@@ -1346,12 +1350,12 @@ let metricSurfaceTests =
                     AsOf = Some(firstFact.AsOf.AddMilliseconds 1.0)
             }
 
-            let! viaLog = enumerating.QueryPopulation(scope, historical)
-            let! viaSurface = surfaced.QueryPopulation(scope, historical)
+            let! viaLog = enumerating.QueryPopulation(TestScope.resolved scope, historical)
+            let! viaSurface = surfaced.QueryPopulation(TestScope.resolved scope, historical)
             Expect.equal viaSurface viaLog "an AsOf read is the same replay through either store"
 
             match viaSurface with
-            | Error e -> failtestf "replay refused: %s" e
+            | Error e -> failtestf "replay refused: %s" (FactStoreError.describe e)
             | Ok population ->
                 Expect.equal
                     (population.Ranked |> List.map _.Value)
@@ -1394,14 +1398,14 @@ let metricSurfaceTests =
 
             // Warm the surface (the cold read is one enumeration plus a
             // write — the price of building it, paid once).
-            let! _ = surfaced.QueryPopulation(scope, query)
+            let! _ = surfaced.QueryPopulation(TestScope.resolved scope, query)
 
             counting.Reset()
-            let! viaSurface = surfaced.QueryPopulation(scope, query)
+            let! viaSurface = surfaced.QueryPopulation(TestScope.resolved scope, query)
             let surfaceReads = counting.Downloads
 
             counting.Reset()
-            let! viaLog = enumerating.QueryPopulation(scope, query)
+            let! viaLog = enumerating.QueryPopulation(TestScope.resolved scope, query)
             let logReads = counting.Downloads
 
             printfn
@@ -1606,16 +1610,16 @@ let metricSurfaceTests =
             do! seed702 enumerating scope
 
             // Built cold (a rebuild), then asked again.
-            let! first = surfaced.QueryPopulation(scope, levelTwo)
+            let! first = surfaced.QueryPopulation(TestScope.resolved scope, levelTwo)
             counting.Reset()
-            let! second = surfaced.QueryPopulation(scope, levelTwo)
+            let! second = surfaced.QueryPopulation(TestScope.resolved scope, levelTwo)
             let snapshotReads = counting.SurfaceDownloads
 
             // Verify the probe: the same question through a fresh store —
             // a cold cache over the same blob — DOES download the snapshot.
             let fresh = storeOver storage clock FactSurfaceOptions.always
             counting.Reset()
-            let! third = fresh.QueryPopulation(scope, levelTwo)
+            let! third = fresh.QueryPopulation(TestScope.resolved scope, levelTwo)
             let coldReads = counting.SurfaceDownloads
 
             Expect.equal second first "the cached answer is the same answer"
@@ -1656,14 +1660,14 @@ let metricSurfaceTests =
             do! writeRaw storage scope smuggled
 
             counting.Reset()
-            let! viaA = replicaA.QueryPopulation(scope, levelTwo)
-            let! viaLog = enumerating.QueryPopulation(scope, levelTwo)
+            let! viaA = replicaA.QueryPopulation(TestScope.resolved scope, levelTwo)
+            let! viaLog = enumerating.QueryPopulation(TestScope.resolved scope, levelTwo)
 
             Expect.equal viaA viaLog "replica A answers what the log says, not what its cache held"
             Expect.isGreaterThanOrEqual counting.SurfaceDownloads 1 "the moved census sent replica A to the blob"
 
             match viaA with
-            | Error e -> failtestf "population read refused: %s" e
+            | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
             | Ok population ->
                 let values = population.Ranked |> List.map _.Value
 
@@ -1687,12 +1691,15 @@ let metricSurfaceTests =
             do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (Scalar 401m) "e40-v1")
 
             let! latest =
-                surfaced.Assert(scope, draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (Scalar 402m) "e40-v2")
+                surfaced.Assert(
+                    TestScope.resolved scope,
+                    draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (Scalar 402m) "e40-v2"
+                )
 
             let erased =
                 match latest with
                 | Ok f -> f
-                | Error e -> failtestf "seed failed: %s" e
+                | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
             do! expectSameAnswers "before the erasure" enumerating surfaced scope
 
@@ -1712,15 +1719,15 @@ let metricSurfaceTests =
 
             // Verify the probe: the erased head is gone from the log, so the
             // enumeration ranks its predecessor again.
-            let! gone = enumerating.Get(scope, erased.FactId)
+            let! gone = enumerating.Get(TestScope.resolved scope, erased.FactId) |> TestScope.ok
             Expect.isNone gone "the erased fact is no longer readable"
 
             do! expectSameAnswers "after an erasure, without a drop" enumerating surfaced scope
 
-            let! afterErasure = surfaced.QueryPopulation(scope, levelTwo)
+            let! afterErasure = surfaced.QueryPopulation(TestScope.resolved scope, levelTwo)
 
             match afterErasure with
-            | Error e -> failtestf "population read refused: %s" e
+            | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
             | Ok population ->
                 Expect.isFalse
                     (population.Ranked |> List.exists (fun f -> f.FactId = erased.FactId))
@@ -1881,7 +1888,7 @@ let metricSurfaceScaleTests =
 
             // Verify the probe before trusting any verdict it produces.
             let probe = scaleFact 7
-            let! readBack = enumerating.Get(scope, probe.FactId)
+            let! readBack = enumerating.Get(TestScope.resolved scope, probe.FactId) |> TestScope.ok
             Expect.equal readBack (Some probe) "the seeded blobs are in the store's own format"
 
             let query = {
@@ -1893,17 +1900,17 @@ let metricSurfaceScaleTests =
 
             counting.Reset()
             let enumerated = Diagnostics.Stopwatch.StartNew()
-            let! viaLog = enumerating.QueryPopulation(scope, query)
+            let! viaLog = enumerating.QueryPopulation(TestScope.resolved scope, query)
             enumerated.Stop()
             let logReads = counting.Downloads
 
             let cold = Diagnostics.Stopwatch.StartNew()
-            let! viaSurfaceCold = surfaced.QueryPopulation(scope, query)
+            let! viaSurfaceCold = surfaced.QueryPopulation(TestScope.resolved scope, query)
             cold.Stop()
 
             counting.Reset()
             let warm = Diagnostics.Stopwatch.StartNew()
-            let! viaSurfaceWarm = surfaced.QueryPopulation(scope, query)
+            let! viaSurfaceWarm = surfaced.QueryPopulation(TestScope.resolved scope, query)
             warm.Stop()
             let warmReads = counting.Downloads
 
@@ -1935,7 +1942,7 @@ let metricSurfaceScaleTests =
                 "and the surface reads one snapshot plus the page it returns — at a HUNDRED THOUSAND subjects"
 
             match viaLog with
-            | Error e -> failtestf "population read refused: %s" e
+            | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
             | Ok population ->
                 Expect.equal population.Stats.FactCount SurfaceScaleSize "the whole seeded population was summarised"
                 Expect.equal population.Stats.SubjectCount SurfaceScaleSize "one head per subject"
@@ -1972,7 +1979,7 @@ let metricSurfaceScaleTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.defaults
 
             let probe = scaleFact 7
-            let! readBack = enumerating.Get(scope, probe.FactId)
+            let! readBack = enumerating.Get(TestScope.resolved scope, probe.FactId) |> TestScope.ok
             Expect.equal readBack (Some probe) "the seeded blobs are in the store's own format"
 
             let query = {
@@ -1982,21 +1989,24 @@ let metricSurfaceScaleTests =
                     TopK = 10
             }
 
-            let! viaLog = enumerating.QueryPopulation(scope, query)
-            let! cold = surfaced.QueryPopulation(scope, query)
+            let! viaLog = enumerating.QueryPopulation(TestScope.resolved scope, query)
+            let! cold = surfaced.QueryPopulation(TestScope.resolved scope, query)
             let! census = storage.List(scope, "_facts/")
             let! sizeAlone = surfaceBlobSize storage scope
 
             counting.Reset()
             let warmClock = Diagnostics.Stopwatch.StartNew()
-            let! warm = surfaced.QueryPopulation(scope, query)
+            let! warm = surfaced.QueryPopulation(TestScope.resolved scope, query)
             warmClock.Stop()
             let warmSnapshotReads = counting.SurfaceDownloads
 
             // The same read with no cache — a fresh store over the same
             // converged blob — is the pre-891 read path: download and parse.
             let uncachedClock = Diagnostics.Stopwatch.StartNew()
-            let! uncached = (storeOver storage clock FactSurfaceOptions.defaults).QueryPopulation(scope, query)
+
+            let! uncached =
+                (storeOver storage clock FactSurfaceOptions.defaults).QueryPopulation(TestScope.resolved scope, query)
+
             uncachedClock.Stop()
 
             // What the census check costs a read: one key per listed id.
@@ -2014,8 +2024,8 @@ let metricSurfaceScaleTests =
                             Metric = MetricRef "revenue"
                     }
 
-            let! viaLogAfter = enumerating.QueryPopulation(scope, query)
-            let! afterNeighbour = surfaced.QueryPopulation(scope, query)
+            let! viaLogAfter = enumerating.QueryPopulation(TestScope.resolved scope, query)
+            let! afterNeighbour = surfaced.QueryPopulation(TestScope.resolved scope, query)
             let! censusAfter = storage.List(scope, "_facts/")
             let! sizeWithNeighbour = surfaceBlobSize storage scope
 
@@ -2188,7 +2198,7 @@ let private measurePointReads (size: int) = async {
 
     // Verify the probe before trusting any count it produces.
     let target = pointFact 423
-    let! readBack = enumerating.Get(scope, target.FactId)
+    let! readBack = enumerating.Get(TestScope.resolved scope, target.FactId) |> TestScope.ok
     Expect.equal readBack (Some target) "the seeded blobs are in the store's own format"
 
     let query = {
@@ -2197,29 +2207,33 @@ let private measurePointReads (size: int) = async {
     }
 
     counting.Reset()
-    let! viaLog = enumerating.Query(scope, query)
+    let! viaLog = enumerating.Query(TestScope.resolved scope, query) |> TestScope.ok
     let enumerated = counting.Downloads
 
     // Cold: the first consulting read finds no leaves, so it enumerates
     // (the truth) and writes every missing leaf from the facts it read.
     counting.Reset()
-    let! cold = indexed.Query(scope, query)
+    let! cold = indexed.Query(TestScope.resolved scope, query) |> TestScope.ok
     let coldReads = counting.Downloads
 
     counting.Reset()
-    let! warm = indexed.Query(scope, query)
+    let! warm = indexed.Query(TestScope.resolved scope, query) |> TestScope.ok
     let warmReads = counting.Downloads
     let warmLists = counting.Lists
 
     counting.Reset()
-    let! chain = indexed.QuerySupersessionChain(scope, target.FactId)
+
+    let! chain =
+        indexed.QuerySupersessionChain(TestScope.resolved scope, target.FactId)
+        |> TestScope.ok
+
     let chainReads = counting.Downloads
 
     counting.Reset()
 
     let! superseding =
         indexed.Assert(
-            scope,
+            TestScope.resolved scope,
             {
                 draftAt target.Subject.Path "revenue" syntheticMethod (Scalar 1m) "new-input" with
                     Period = target.Period
@@ -2232,7 +2246,7 @@ let private measurePointReads (size: int) = async {
 
     let! fresh =
         indexed.Assert(
-            scope,
+            TestScope.resolved scope,
             {
                 draftAt [ "eu"; "sku-new" ] "revenue" syntheticMethod (Scalar 2m) "fresh" with
                     Period = target.Period
@@ -2378,11 +2392,11 @@ let private seed890 (store: IFactStore) (scope: string) = async {
     let written = ResizeArray<Fact>()
 
     for d in drafts do
-        let! r = store.Assert(scope, d)
+        let! r = store.Assert(TestScope.resolved scope, d)
 
         match r with
         | Ok f -> written.Add f
-        | Error e -> failtestf "seed failed: %s" e
+        | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
     return List.ofSeq written
 }
@@ -2412,16 +2426,26 @@ let private expectSameReads (enumerating: IFactStore) (indexed: IFactStore) (sco
     let midway = facts[0].AsOf
 
     for query in queries890 midway do
-        let! a = enumerating.Query(scope, query)
-        let! b = indexed.Query(scope, query)
+        let! a = enumerating.Query(TestScope.resolved scope, query) |> TestScope.ok
+        let! b = indexed.Query(TestScope.resolved scope, query) |> TestScope.ok
         Expect.equal b a (sprintf "Query agrees for %A" query)
-        let! ca = enumerating.QueryWithCompetition(scope, query)
-        let! cb = indexed.QueryWithCompetition(scope, query)
+
+        let! ca =
+            enumerating.QueryWithCompetition(TestScope.resolved scope, query)
+            |> TestScope.ok
+
+        let! cb = indexed.QueryWithCompetition(TestScope.resolved scope, query) |> TestScope.ok
         Expect.equal cb ca (sprintf "QueryWithCompetition agrees for %A" query)
 
     for f in facts do
-        let! a = enumerating.QuerySupersessionChain(scope, f.FactId)
-        let! b = indexed.QuerySupersessionChain(scope, f.FactId)
+        let! a =
+            enumerating.QuerySupersessionChain(TestScope.resolved scope, f.FactId)
+            |> TestScope.ok
+
+        let! b =
+            indexed.QuerySupersessionChain(TestScope.resolved scope, f.FactId)
+            |> TestScope.ok
+
         Expect.equal b a (sprintf "the chain of %s agrees" f.FactId)
 }
 
@@ -2468,23 +2492,19 @@ type private OneBlobOutage(inner: IBlobStorage) =
         member _.Erase(container, prefix, policy, dryRun) =
             inner.Erase(container, prefix, policy, dryRun)
 
-let private mapAsync (f: 'a -> 'b) (read: Async<'a>) : Async<'b> = async {
-    let! value = read
-    return f value
-}
-
 let private factBlob (factId: string) = sprintf "_facts/%s.json" factId
 
-/// The read either fails or answers over every fact; an answer over fewer
-/// is the defect.
-let private neverShorter (label: string) (expected: int) (read: Async<int>) = async {
-    match! Async.Catch read with
-    | Choice1Of2 answered ->
+/// The read either answers `StorageFault` or answers over every fact; an
+/// answer over fewer is the defect.
+let private neverShorter (label: string) (expected: int) (count: 'T -> int) (read: Async<Result<'T, FactStoreError>>) = async {
+    match! read with
+    | Ok answered ->
         Expect.equal
-            answered
+            (count answered)
             expected
             (sprintf "%s: a read over a faulted blob must fail, never answer over fewer facts" label)
-    | Choice2Of2 _ -> ()
+    | Error(FactStoreError.StorageFault _) -> ()
+    | Error other -> failtestf "%s: a faulted read is a StorageFault, got %s" label (FactStoreError.describe other)
 }
 
 /// Three subjects of one metric, one fact each.
@@ -2492,17 +2512,22 @@ let private seedThree (store: IFactStore) (scope: string) = async {
     let facts = ResizeArray<Fact>()
 
     for name in [ "a"; "b"; "c" ] do
-        match! store.Assert(scope, draftAt [ "eu"; name ] "elasticity" rollup (Scalar 10m) ("h-" + name)) with
+        match!
+            store.Assert(
+                TestScope.resolved scope,
+                draftAt [ "eu"; name ] "elasticity" rollup (Scalar 10m) ("h-" + name)
+            )
+        with
         | Ok f -> facts.Add f
-        | Error e -> failtestf "seed failed: %s" e
+        | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
     return List.ofSeq facts
 }
 
-let private rankedCount (r: Result<PopulationResult, string>) =
+let private rankedCount (r: Result<PopulationResult, FactStoreError>) =
     match r with
     | Ok population -> population.Ranked.Length
-    | Error e -> failtestf "population read refused: %s" e
+    | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
 
 let private readFaultTests =
     testList "BlobFactStore read faults" [
@@ -2516,9 +2541,9 @@ let private readFaultTests =
             let! seeded = seedThree store scope
 
             // A three-fact chain on one more subject.
-            let! d1 = store.Assert(scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 1m) "d1")
-            let! d2 = store.Assert(scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 2m) "d2")
-            let! d3 = store.Assert(scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 3m) "d3")
+            let! d1 = store.Assert(TestScope.resolved scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 1m) "d1")
+            let! d2 = store.Assert(TestScope.resolved scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 2m) "d2")
+            let! d3 = store.Assert(TestScope.resolved scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 3m) "d3")
 
             let middle, head =
                 match d1, d2, d3 with
@@ -2528,21 +2553,18 @@ let private readFaultTests =
             outage.Failing <- Some(factBlob seeded.Head.FactId)
 
             do!
-                store.Query(scope, FactQuery.all)
-                |> mapAsync List.length
-                |> neverShorter "Query" 4
+                store.Query(TestScope.resolved scope, FactQuery.all)
+                |> neverShorter "Query" 4 List.length
 
             do!
-                store.QueryPopulation(scope, levelTwo)
-                |> mapAsync rankedCount
-                |> neverShorter "QueryPopulation" 4
+                store.QueryPopulation(TestScope.resolved scope, levelTwo)
+                |> neverShorter "QueryPopulation" 4 _.Ranked.Length
 
             outage.Failing <- Some(factBlob middle.FactId)
 
             do!
-                store.QuerySupersessionChain(scope, head.FactId)
-                |> mapAsync List.length
-                |> neverShorter "QuerySupersessionChain" 3
+                store.QuerySupersessionChain(TestScope.resolved scope, head.FactId)
+                |> neverShorter "QuerySupersessionChain" 3 List.length
         }
 
         testCaseAsync "a blob that does not parse fails the read instead of dropping out of it"
@@ -2556,9 +2578,8 @@ let private readFaultTests =
             Expect.isOk corrupted "the corruption was written"
 
             do!
-                store.Query(scope, FactQuery.all)
-                |> mapAsync List.length
-                |> neverShorter "Query over a corrupt blob" 3
+                store.Query(TestScope.resolved scope, FactQuery.all)
+                |> neverShorter "Query over a corrupt blob" 3 List.length
         }
 
         testCaseAsync "the surface never folds its census over a faulted load"
@@ -2567,7 +2588,7 @@ let private readFaultTests =
             let store = storeOver outage (steppingClock baseAsOf) FactSurfaceOptions.always
             let scope = newScope ()
             let! _ = seedThree store scope
-            let! first = store.QueryPopulation(scope, levelTwo)
+            let! first = store.QueryPopulation(TestScope.resolved scope, levelTwo)
             Expect.equal (rankedCount first) 3 "the surface answers the seed"
 
             // A fact reaches the log behind the surface, so the next read
@@ -2577,14 +2598,13 @@ let private readFaultTests =
             outage.Failing <- Some(factBlob late.FactId)
 
             do!
-                store.QueryPopulation(scope, levelTwo)
-                |> mapAsync rankedCount
-                |> neverShorter "the reconciling read" 4
+                store.QueryPopulation(TestScope.resolved scope, levelTwo)
+                |> neverShorter "the reconciling read" 4 _.Ranked.Length
 
             // The outage clears: the late fact must still be found, so the
             // faulted reconcile cannot have absorbed it.
             outage.Failing <- None
-            let! after = store.QueryPopulation(scope, levelTwo)
+            let! after = store.QueryPopulation(TestScope.resolved scope, levelTwo)
             Expect.equal (rankedCount after) 4 "the late fact ranks once it can be read"
         }
 
@@ -2600,19 +2620,19 @@ let private readFaultTests =
             let scope = newScope ()
             let! seeded = seedThree store scope
 
-            let! unknown = store.Get(scope, "no-such-fact")
+            let! unknown = store.Get(TestScope.resolved scope, "no-such-fact") |> TestScope.ok
             Expect.isNone unknown "an id with no blob reads as absent"
             Expect.equal blob.ReadFaults 0L "an absence is not a fault"
 
             let target = factBlob seeded.Head.FactId
             outage.Failing <- Some target
 
-            match! Async.Catch(store.Get(scope, seeded.Head.FactId)) with
-            | Choice1Of2 read -> failtestf "a faulted point read answered %A" read
-            | Choice2Of2(FactReadFailed(FactDownloadFailed(name, reason))) ->
-                Expect.equal name target "the fault names the blob"
+            match! store.Get(TestScope.resolved scope, seeded.Head.FactId) with
+            | Ok read -> failtestf "a faulted point read answered %A" read
+            | Error(FactStoreError.StorageFault(_, reason)) ->
+                Expect.stringContains reason $"'{target}'" "the fault names the blob"
                 Expect.stringContains reason "injected" "and carries the storage's reason"
-            | Choice2Of2 other -> failtestf "the fault was untyped: %O" other
+            | Error other -> failtestf "the fault was not a storage fault: %s" (FactStoreError.describe other)
 
             Expect.equal blob.ReadFaults 1L "the fault was counted"
         }
@@ -2754,11 +2774,11 @@ let private measureSeriesRead (size: int) = async {
 
     // Verify the probe before trusting any count it produces.
     let probe = seriesFact 24
-    let! readBack = enumerating.Get(scope, probe.FactId)
+    let! readBack = enumerating.Get(TestScope.resolved scope, probe.FactId) |> TestScope.ok
     Expect.equal readBack (Some probe) "the seeded blobs are in the store's own format"
 
     counting.Reset()
-    let! viaLog, beforeMs = timed (enumerating.Query(scope, seriesQuery))
+    let! viaLog, beforeMs = timed (enumerating.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok)
     let before = counting.Downloads
 
     Expect.isNonEmpty viaLog "the chart has points"
@@ -2766,11 +2786,11 @@ let private measureSeriesRead (size: int) = async {
     Expect.exists viaLog (fun f -> f.Supersedes.IsSome) "and the revisions are among them, as heads"
 
     counting.Reset()
-    let! cold = surfaced.Query(scope, seriesQuery)
+    let! cold = surfaced.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
     let coldReads = counting.Downloads
 
     counting.Reset()
-    let! warm, warmMs = timed (surfaced.Query(scope, seriesQuery))
+    let! warm, warmMs = timed (surfaced.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok)
     let warmReads = counting.Downloads
     let warmLists = counting.Lists
 
@@ -2779,7 +2799,7 @@ let private measureSeriesRead (size: int) = async {
         storeWithPolicies storage fixedClock FactSurfaceOptions.defaults FactIndexOptions.defaults
 
     counting.Reset()
-    let! fromReplica = replica.Query(scope, seriesQuery)
+    let! fromReplica = replica.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
     let replicaReads = counting.Downloads
 
     Expect.equal cold viaLog "the cold surfaced read answers what the log does"
@@ -2793,7 +2813,7 @@ let private measureSeriesRead (size: int) = async {
 
     let! revision =
         surfaced.AssertBatch(
-            scope,
+            TestScope.resolved scope,
             [
                 for path in revisedSubjects ->
                     {
@@ -2807,12 +2827,12 @@ let private measureSeriesRead (size: int) = async {
     match revision with
     | Ok receipt ->
         Expect.equal receipt.SupersedingCount (List.length revisedSubjects) "each draft revised its period's head"
-    | Error e -> failtestf "the slice-scoped run failed: %s" e
+    | Error e -> failtestf "the slice-scoped run failed: %s" (FactStoreError.describe e)
 
     counting.Reset()
-    let! afterRevision = surfaced.Query(scope, seriesQuery)
+    let! afterRevision = surfaced.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
     let afterRevisionReads = counting.Downloads
-    let! afterRevisionLog = enumerating.Query(scope, seriesQuery)
+    let! afterRevisionLog = enumerating.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
     Expect.equal afterRevision afterRevisionLog "after the revision the surfaced read still answers what the log does"
 
     return {
@@ -2877,7 +2897,7 @@ let private seriesReadTests =
                     draftAt [ "eu"; sprintf "sku-%05d" i ] "revenue" rollup (Scalar(decimal i)) (sprintf "b%d" i)
             ]
 
-            let! written = store.AssertBatch(scope, drafts)
+            let! written = store.AssertBatch(TestScope.resolved scope, drafts)
             Expect.isOk written "the batch is stored"
 
             // The target's content address, computed rather than looked up:
@@ -2893,8 +2913,8 @@ let private seriesReadTests =
                     (Fact.effectiveInputHashes d.Method d.Evidence d.Value)
 
             counting.Reset()
-            let! got = store.Get(scope, targetId)
-            let! chain = store.QuerySupersessionChain(scope, targetId)
+            let! got = store.Get(TestScope.resolved scope, targetId) |> TestScope.ok
+            let! chain = store.QuerySupersessionChain(TestScope.resolved scope, targetId) |> TestScope.ok
             let reads = counting.Downloads
 
             Expect.equal (got |> Option.map _.FactId) (Some targetId) "the point read finds the fact"
@@ -2982,17 +3002,17 @@ let private measureFirstUpload (size: int) = async {
         storeWithPolicies storage fixedClock FactSurfaceOptions.defaults FactIndexOptions.defaults
 
     let drafts = [ for i in 0 .. size - 1 -> firstUploadDraft i (decimal i) (sprintf "u%d" i) ]
-    let! written = writer.AssertBatch(scope, drafts)
+    let! written = writer.AssertBatch(TestScope.resolved scope, drafts)
     Expect.isOk written "the first upload is stored"
 
     let population (store: IFactStore) (metric: string) = async {
-        match! store.QueryPopulation(scope, populationOf metric) with
+        match! store.QueryPopulation(TestScope.resolved scope, populationOf metric) with
         | Ok r -> return r
-        | Error e -> return failtestf "population read over %s failed: %s" metric e
+        | Error e -> return failtestf "population read over %s failed: %s" metric (FactStoreError.describe e)
     }
 
     counting.Reset()
-    let! chart = writer.Query(scope, seriesQuery)
+    let! chart = writer.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
     let seriesReads = counting.Downloads
 
     counting.Reset()
@@ -3000,7 +3020,7 @@ let private measureFirstUpload (size: int) = async {
     let populationReads = counting.Downloads
 
     counting.Reset()
-    let! replicaChart = replica().Query(scope, seriesQuery)
+    let! replicaChart = replica().Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
     let replicaSeriesReads = counting.Downloads
 
     counting.Reset()
@@ -3019,7 +3039,7 @@ let private measureFirstUpload (size: int) = async {
     do! FactSurface.drop storage scope
 
     counting.Reset()
-    let! rebuiltChart = replica().Query(scope, seriesQuery)
+    let! rebuiltChart = replica().Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
     let beforeSeries = counting.Downloads
 
     counting.Reset()
@@ -3098,7 +3118,10 @@ let private firstUploadSurfaceTests =
 
             // Below both thresholds: no snapshot, no index.
             let! first =
-                writer.AssertBatch(scope, [ for i in 0..299 -> firstUploadDraft i (decimal i) (sprintf "a%d" i) ])
+                writer.AssertBatch(
+                    TestScope.resolved scope,
+                    [ for i in 0..299 -> firstUploadDraft i (decimal i) (sprintf "a%d" i) ]
+                )
 
             Expect.isOk first "the first batch is stored"
             let! early = snapshotBytes storage scope "revenue"
@@ -3108,7 +3131,7 @@ let private firstUploadSurfaceTests =
             // first batch's heads — the build must retire what they replace.
             let! second =
                 writer.AssertBatch(
-                    scope,
+                    TestScope.resolved scope,
                     [
                         for i in 300..799 -> firstUploadDraft i (decimal i) (sprintf "a%d" i)
                         for i in 0..39 -> firstUploadDraft i (decimal (i + 1000)) (sprintf "rev%d" i)
@@ -3117,7 +3140,7 @@ let private firstUploadSurfaceTests =
 
             match second with
             | Ok receipt -> Expect.equal receipt.SupersedingCount 40 "each revision superseded its lineage's head"
-            | Error e -> failtestf "the crossing batch failed: %s" e
+            | Error e -> failtestf "the crossing batch failed: %s" (FactStoreError.describe e)
 
             let! revenueAtAssert = snapshotBytes storage scope "revenue"
             let! unitsAtAssert = snapshotBytes storage scope "units"
@@ -3128,15 +3151,15 @@ let private firstUploadSurfaceTests =
             let reader =
                 storeWithPolicies storage fixedClock FactSurfaceOptions.defaults FactIndexOptions.defaults
 
-            let! viaSurface = reader.Query(scope, seriesQuery)
-            let! _ = reader.QueryPopulation(scope, populationOf "units")
+            let! viaSurface = reader.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
+            let! _ = reader.QueryPopulation(TestScope.resolved scope, populationOf "units")
             let! revenueAtRead = snapshotBytes storage scope "revenue"
             let! unitsAtRead = snapshotBytes storage scope "units"
 
             Expect.equal revenueAtAssert revenueAtRead "the assert-built snapshot equals the read-built one"
             Expect.equal unitsAtAssert unitsAtRead "for every metric the batch touched"
 
-            let! viaLog = enumerating.Query(scope, seriesQuery)
+            let! viaLog = enumerating.Query(TestScope.resolved scope, seriesQuery) |> TestScope.ok
             Expect.equal viaSurface viaLog "and the surfaced read answers what the log does"
         }
     ]
@@ -3200,7 +3223,9 @@ let private seriesRowTests =
             let writer =
                 storeWithPolicies storage (steppingClock baseAsOf) FactSurfaceOptions.always FactIndexOptions.defaults
 
-            let! first = writer.AssertBatch(scope, [ for i in 0..239 -> mixedDraft i (sprintf "m%d" i) ])
+            let! first =
+                writer.AssertBatch(TestScope.resolved scope, [ for i in 0..239 -> mixedDraft i (sprintf "m%d" i) ])
+
             Expect.isOk first "the upload is stored"
 
             // The first upload BUILDS the snapshot (Phase 1124); a read over a
@@ -3211,7 +3236,7 @@ let private seriesRowTests =
             let reader =
                 storeWithPolicies storage fixedClock FactSurfaceOptions.always FactIndexOptions.defaults
 
-            let! _ = reader.QueryPopulation(scope, populationOf "revenue")
+            let! _ = reader.QueryPopulation(TestScope.resolved scope, populationOf "revenue")
             let! atRead = snapshotBytes storage scope "revenue"
 
             Expect.isSome atAssert "the batch built the surface"
@@ -3219,22 +3244,27 @@ let private seriesRowTests =
 
             // Revisions over a slice of the heads, folded into the snapshot at
             // assert: the maintained rows carry the revisions' labels and values.
-            let! second = writer.AssertBatch(scope, [ for i in 0..23 -> mixedDraft (i * 10) (sprintf "rev%d" i) ])
+            let! second =
+                writer.AssertBatch(
+                    TestScope.resolved scope,
+                    [ for i in 0..23 -> mixedDraft (i * 10) (sprintf "rev%d" i) ]
+                )
 
             match second with
             | Ok receipt -> Expect.equal receipt.SupersedingCount 24 "each revision superseded its lineage's head"
-            | Error e -> failtestf "the revision batch failed: %s" e
+            | Error e -> failtestf "the revision batch failed: %s" (FactStoreError.describe e)
 
             let! rowsAtAssert = decodedRows storage scope
 
             let! heads =
                 reader.Query(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         FactQuery.all with
                             Metric = Some(MetricRef "revenue")
                     }
                 )
+                |> TestScope.ok
 
             let fromFacts =
                 heads
@@ -3282,7 +3312,9 @@ let private seriesRowTests =
             let store =
                 storeWithPolicies storage (steppingClock baseAsOf) FactSurfaceOptions.always FactIndexOptions.defaults
 
-            let! written = store.AssertBatch(scope, [ for i in 0..59 -> mixedDraft i (sprintf "v%d" i) ])
+            let! written =
+                store.AssertBatch(TestScope.resolved scope, [ for i in 0..59 -> mixedDraft i (sprintf "v%d" i) ])
+
             Expect.isOk written "the upload is stored"
             let! current = snapshotBytes storage scope "revenue"
 
@@ -3310,7 +3342,7 @@ let private seriesRowTests =
             let reader =
                 storeWithPolicies storage fixedClock FactSurfaceOptions.always FactIndexOptions.defaults
 
-            let! _ = reader.QueryPopulation(scope, populationOf "revenue")
+            let! _ = reader.QueryPopulation(TestScope.resolved scope, populationOf "revenue")
             let! rebuilt = snapshotBytes storage scope "revenue"
 
             Expect.equal rebuilt current "the read rebuilt it, through the census path, into the current shape"
@@ -3399,8 +3431,8 @@ let pointReadIndexTests =
                     }
                     (MetricRef "revenue")
 
-            let! viaLog = enumerating.Query(scope, query)
-            let! viaIndex = indexed.Query(scope, query)
+            let! viaLog = enumerating.Query(TestScope.resolved scope, query) |> TestScope.ok
+            let! viaIndex = indexed.Query(TestScope.resolved scope, query) |> TestScope.ok
             Expect.equal viaIndex viaLog "the re-query answers what the log does"
 
             let! rebuilt = leavesIn storage scope
@@ -3437,7 +3469,7 @@ let pointReadIndexTests =
 
             let! _ =
                 indexed.Query(
-                    scope,
+                    TestScope.resolved scope,
                     FactQuery.forSubjectMetric
                         {
                             Hierarchy = "geography"
@@ -3445,6 +3477,7 @@ let pointReadIndexTests =
                         }
                         (MetricRef "revenue")
                 )
+                |> TestScope.ok
 
             let! repaired = leavesIn storage scope
             Expect.equal repaired.Length facts.Length "one read repaired every missing leaf"
@@ -3491,7 +3524,7 @@ let pointReadIndexTests =
                     PeriodOverlaps = Some q2
             }
 
-            let! viaIndex = indexed.Query(scope, query)
+            let! viaIndex = indexed.Query(TestScope.resolved scope, query) |> TestScope.ok
             Expect.contains viaIndex outOfBand "the unindexed fact is in the answer"
 
             let! leaves = leavesIn storage scope
@@ -3533,7 +3566,9 @@ let pointReadIndexTests =
 
             Expect.equal (orphaned |> List.map (fun e -> e.OrphanedIndexEntries)) [ 1 ] "the orphaned leaf is reported"
 
-            let! fr = indexed.Query(scope, FactQuery.forSubjectMetric erased.Subject erased.Metric)
+            let! fr =
+                indexed.Query(TestScope.resolved scope, FactQuery.forSubjectMetric erased.Subject erased.Metric)
+                |> TestScope.ok
 
             Expect.isEmpty fr "and never read"
         }
@@ -3562,8 +3597,8 @@ let pointReadIndexTests =
                     }
                     (MetricRef "revenue")
 
-            let! a = enumerating.Query(scope, query)
-            let! b = belowThreshold.Query(scope, query)
+            let! a = enumerating.Query(TestScope.resolved scope, query) |> TestScope.ok
+            let! b = belowThreshold.Query(TestScope.resolved scope, query) |> TestScope.ok
             Expect.equal b a "the same answer"
 
             let! namesA = plain.List(scope, "")
@@ -3586,7 +3621,7 @@ let pointReadIndexTests =
             probe.DelayDownloads <- true
 
             let store = storeWithIndex storage fixedClock FactIndexOptions.disabled
-            let! everything = store.Query(scope, FactQuery.all)
+            let! everything = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.equal everything.Length 2_000 "the whole-store walk read every fact"
 
             // The probe first: a delay that produced no concurrency would

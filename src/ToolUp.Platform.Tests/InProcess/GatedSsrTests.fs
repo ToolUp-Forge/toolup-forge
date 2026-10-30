@@ -1301,10 +1301,6 @@ let private disclosureDenying
         |> Map.ofList
 
     { new VectorKnowledgeTypes.IFactDisclosureGate with
-        member _.Check(scopeId: string, _principal: string, surface, ids) = async {
-            return verdicts scopeId surface ids
-        }
-
         member _.Check(scope: ResolvedScope, _principal: string, surface, ids) = async {
             return verdicts scope.ScopeId surface ids
         }
@@ -1590,7 +1586,9 @@ let private publicationUnitTests =
                     "run:board"
                     access
 
-            match! read (Some(disclosureDenying Set.empty checks)) publicationReader with
+            match!
+                read (Some(disclosureDenying Set.empty checks, Some(TestScope.resolved "team-a"))) publicationReader
+            with
             | PublicationNarrative.Served(_, doc) ->
                 Expect.equal doc.Title "Board report team-a" "the publishing scope's"
             | other -> failtestf "expected Served, got %A" other
@@ -1600,7 +1598,11 @@ let private publicationUnitTests =
                 [ "team-a", VectorKnowledgeTypes.FactNarrativePublication ]
                 "disclosure re-checked at the publication surface, in the publishing scope"
 
-            match! read (Some(disclosureDenying (Set [ "fact-rev" ]) checks)) publicationReader with
+            match!
+                read
+                    (Some(disclosureDenying (Set [ "fact-rev" ]) checks, Some(TestScope.resolved "team-a")))
+                    publicationReader
+            with
             | PublicationNarrative.Withheld denied ->
                 Expect.equal denied [ "fact-rev", "Restricted:board-only" ] "names the fact and the policy"
             | other -> failtestf "expected Withheld, got %A" other

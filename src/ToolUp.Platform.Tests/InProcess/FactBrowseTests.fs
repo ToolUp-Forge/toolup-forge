@@ -53,13 +53,6 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 let private t0 = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
 
-let private resolved (scopeId: string) : ResolvedScope =
-    ScopeResolution.ofStorageScope {
-        ScopeId = scopeId
-        Container = "container-" + scopeId
-        Persist = true
-    }
-
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 let private metric (id: string) : MetricDefinition = {
@@ -228,7 +221,7 @@ let private worldOver
         Writer = writer
         Store = store
         Events = events
-        Scope = resolved (newScope ())
+        Scope = TestScope.resolved (newScope ())
     },
     gate
 
@@ -255,37 +248,31 @@ let private world () =
 let private runWith (w: World) (options: FactTableRunOptions) (rows: FactTableRow list) : string * FactTableCommit =
     let opened =
         match
-            w.Writer.OpenRun(w.Scope.ScopeId, skuTable.Id, options = options)
+            w.Writer.OpenRun(w.Scope, skuTable.Id, options = options)
             |> Async.RunSynchronously
         with
         | Ok r -> r
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
-    match
-        w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)
-        |> Async.RunSynchronously
-    with
+    match w.Writer.WriteRows(w.Scope, opened.RunId, rows) |> Async.RunSynchronously with
     | Ok _ -> ()
     | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
 
-    match w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously with
+    match w.Writer.Commit(w.Scope, opened.RunId) |> Async.RunSynchronously with
     | Ok commit -> opened.RunId, commit
     | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
 
 let private run (w: World) (rows: FactTableRow list) : string * FactTableCommit =
     let opened =
-        match w.Writer.OpenRun(w.Scope.ScopeId, skuTable.Id) |> Async.RunSynchronously with
+        match w.Writer.OpenRun(w.Scope, skuTable.Id) |> Async.RunSynchronously with
         | Ok r -> r
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
-    match
-        w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)
-        |> Async.RunSynchronously
-    with
+    match w.Writer.WriteRows(w.Scope, opened.RunId, rows) |> Async.RunSynchronously with
     | Ok _ -> ()
     | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
 
-    match w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously with
+    match w.Writer.Commit(w.Scope, opened.RunId) |> Async.RunSynchronously with
     | Ok commit -> opened.RunId, commit
     | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
 
@@ -329,6 +316,7 @@ let private revenueFacts (w: World) : Fact list =
                 Metric = Some(MetricRef "revenue")
         }
     )
+    |> TestScope.ok
     |> Async.RunSynchronously
 
 // ─── A 100,000-subject population ────────────────────────────────────
@@ -363,7 +351,7 @@ let private syntheticPopulation =
 /// the way the contract says every store must: clamp `TopK`, report the
 /// truncation, summarise the whole matched population.
 let private largeStore () : IFactStore =
-    let population (query: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
+    let population (query: PopulationQuery) : Async<Result<PopulationResult, FactStoreError>> = async {
         let all = syntheticPopulation.Force()
         let topK = PopulationQuery.effectiveTopK query
 
@@ -395,26 +383,12 @@ let private largeStore () : IFactStore =
     let notHere () : Async<'T> = async { return failtest "not read in this test" }
 
     { new IFactStore with
-        member _.Assert(_: string, _: FactDraft) : Async<Result<Fact, string>> = notHere ()
-        member _.Assert(_: ResolvedScope, _: FactDraft) : Async<Result<Fact, string>> = notHere ()
-
-        member _.AssertBatch(_: string, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = notHere ()
-
-        member _.AssertBatch(_: ResolvedScope, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> =
-            notHere ()
-
-        member _.Get(_: string, _: string) : Async<Fact option> = notHere ()
-        member _.Get(_: ResolvedScope, _: string) : Async<Fact option> = notHere ()
-        member _.Query(_: string, _: FactQuery) : Async<Fact list> = notHere ()
-        member _.Query(_: ResolvedScope, _: FactQuery) : Async<Fact list> = notHere ()
-
-        member _.QueryWithCompetition(_: string, _: FactQuery) : Async<FactWithCompetition list> = notHere ()
-
-        member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) : Async<FactWithCompetition list> = notHere ()
-
-        member _.QuerySupersessionChain(_: string, _: string) : Async<Fact list> = notHere ()
-        member _.QuerySupersessionChain(_: ResolvedScope, _: string) : Async<Fact list> = notHere ()
-        member _.QueryPopulation(_: string, q: PopulationQuery) = population q
+        member _.Assert(_: ResolvedScope, _: FactDraft) = notHere ()
+        member _.AssertBatch(_: ResolvedScope, _: FactDraft list) = notHere ()
+        member _.Get(_: ResolvedScope, _: string) = notHere ()
+        member _.Query(_: ResolvedScope, _: FactQuery) = notHere ()
+        member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) = notHere ()
+        member _.QuerySupersessionChain(_: ResolvedScope, _: string) = notHere ()
         member _.QueryPopulation(_: ResolvedScope, q: PopulationQuery) = population q
     }
 
@@ -432,7 +406,6 @@ type private DenySetGate(denied: Set<string>) =
         |> async.Return
 
     interface IFactDisclosureGate with
-        member _.Check(_: string, _: string, _: FactEgressSurface, factIds: string list) = verdicts factIds
         member _.Check(_: ResolvedScope, _: string, _: FactEgressSurface, factIds: string list) = verdicts factIds
 
 let private largeDeps (gate: IFactDisclosureGate) : FactBrowseHandler.FactBrowseDeps = {
@@ -448,7 +421,7 @@ let private boundedTests =
     testList "bounded pages over a 100,000-subject table" [
         test "no page carries more rows than the ceiling, and each page reports it" {
             let deps = largeDeps (DenySetGate Set.empty)
-            let scope = resolved (newScope ())
+            let scope = TestScope.resolved (newScope ())
 
             let page =
                 ok "page" (FactBrowseHandler.queryRows deps scope "u" (query "revenue" TopOfRanking 0 1_000_000))
@@ -467,7 +440,7 @@ let private boundedTests =
 
         test "a later page is a window onto the same ranking" {
             let deps = largeDeps (DenySetGate Set.empty)
-            let scope = resolved (newScope ())
+            let scope = TestScope.resolved (newScope ())
 
             let page =
                 ok "page 3" (FactBrowseHandler.queryRows deps scope "u" (query "revenue" TopOfRanking 3 50))
@@ -478,7 +451,7 @@ let private boundedTests =
 
         test "the deepest page stops at the rank ceiling and says so" {
             let deps = largeDeps (DenySetGate Set.empty)
-            let scope = resolved (newScope ())
+            let scope = TestScope.resolved (newScope ())
 
             let last =
                 ok "last" (FactBrowseHandler.queryRows deps scope "u" (query "revenue" TopOfRanking 19 50))
@@ -522,7 +495,7 @@ let private disclosureTests =
             let deniedId = sprintf "f%06d" (populationSize - 1)
             let gate = DenySetGate(Set.ofList [ deniedId ])
             let deps = largeDeps gate
-            let scope = resolved (newScope ())
+            let scope = TestScope.resolved (newScope ())
 
             let page =
                 ok "page" (FactBrowseHandler.queryRows deps scope "u" (query "revenue" TopOfRanking 0 5))
@@ -575,6 +548,7 @@ let private disclosureTests =
                             Metric = Some(MetricRef "segment")
                     }
                 )
+                |> TestScope.ok
                 |> Async.RunSynchronously
                 |> List.head
 
@@ -740,7 +714,7 @@ let private tableTests =
             let opened =
                 match
                     w.Writer.OpenRun(
-                        w.Scope.ScopeId,
+                        w.Scope,
                         skuTable.Id,
                         options = (FactTableRunOptions.none |> FactTableRunOptions.withInputs [ input ])
                     )
@@ -750,13 +724,13 @@ let private tableTests =
                 | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
             match
-                w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, [ row "acme" "a1" 10m ])
+                w.Writer.WriteRows(w.Scope, opened.RunId, [ row "acme" "a1" 10m ])
                 |> Async.RunSynchronously
             with
             | Ok _ -> ()
             | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
 
-            match w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously with
+            match w.Writer.Commit(w.Scope, opened.RunId) |> Async.RunSynchronously with
             | Ok _ -> ()
             | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
 
@@ -826,7 +800,7 @@ let private notificationTests =
             let writer = FactBrowseHandler.notifyingWriter channel w.Writer
 
             let opened =
-                match writer.OpenRun(w.Scope.ScopeId, skuTable.Id) |> Async.RunSynchronously with
+                match writer.OpenRun(w.Scope, skuTable.Id) |> Async.RunSynchronously with
                 | Ok r -> r
                 | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
@@ -836,11 +810,11 @@ let private notificationTests =
                     Subject = [ "acme" ]
             }
 
-            writer.WriteRows(w.Scope.ScopeId, opened.RunId, [ bad ])
+            writer.WriteRows(w.Scope, opened.RunId, [ bad ])
             |> Async.RunSynchronously
             |> ignore
 
-            match writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously with
+            match writer.Commit(w.Scope, opened.RunId) |> Async.RunSynchronously with
             | Ok _ -> failtest "a malformed run must be rejected"
             | Error _ -> ()
 
@@ -1010,7 +984,7 @@ let private composeDemo () : DemoApp =
         Writer = built.GetRequiredService<IFactTableWriter>()
         Events = built.GetRequiredService<IEventStore>()
         ScopeId = scopeId
-        Scope = resolved scopeId
+        Scope = TestScope.resolved scopeId
     }
 
 /// The request context the mounted surfaces take their scope and principal
@@ -1033,16 +1007,25 @@ let private demoContext (d: DemoApp) : HttpContext =
 /// Open, stage and commit ONE run over the whole population.
 let private refresh (d: DemoApp) (rows: FactTableRow list) : string * FactTableCommit =
     let opened =
-        match d.Writer.OpenRun(d.ScopeId, skuTable.Id) |> Async.RunSynchronously with
+        match
+            d.Writer.OpenRun(TestScope.resolved d.ScopeId, skuTable.Id)
+            |> Async.RunSynchronously
+        with
         | Ok r -> r
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
     for batch in rows |> List.chunkBySize 10_000 do
-        match d.Writer.WriteRows(d.ScopeId, opened.RunId, batch) |> Async.RunSynchronously with
+        match
+            d.Writer.WriteRows(TestScope.resolved d.ScopeId, opened.RunId, batch)
+            |> Async.RunSynchronously
+        with
         | Ok _ -> ()
         | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
 
-    match d.Writer.Commit(d.ScopeId, opened.RunId) |> Async.RunSynchronously with
+    match
+        d.Writer.Commit(TestScope.resolved d.ScopeId, opened.RunId)
+        |> Async.RunSynchronously
+    with
     | Ok commit -> opened.RunId, commit
     | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
 
@@ -1249,6 +1232,7 @@ let private composedDemoTests =
             for factId, rendering in quoted do
                 let stored =
                     d.Store.Get(d.Scope, factId)
+                    |> TestScope.ok
                     |> Async.RunSynchronously
                     |> Option.defaultWith (fun () -> failtestf "the quoted fact %s is minted and stored" factId)
 
@@ -1338,6 +1322,7 @@ let private composedDemoTests =
 
             let topStored =
                 d.Store.Get(d.Scope, topFactId)
+                |> TestScope.ok
                 |> Async.RunSynchronously
                 |> Option.defaultWith (fun () -> failtest "the leading quoted fact is stored")
 
@@ -1399,7 +1384,7 @@ let private seriesTests =
 
             for p in s.Points do
                 Expect.isSome
-                    (w.Store.Get(w.Scope, p.FactId) |> Async.RunSynchronously)
+                    (w.Store.Get(w.Scope, p.FactId) |> TestScope.ok |> Async.RunSynchronously)
                     "every point's fact id opens the fact it was drawn from"
 
             // The range is a window: September alone leaves October out.
@@ -1581,7 +1566,7 @@ let private seriesTests =
             let w = world ()
             run w [ rowIn september "acme" "a1" 10m ] |> ignore
 
-            let other = resolved (newScope ())
+            let other = TestScope.resolved (newScope ())
 
             let s =
                 ok
@@ -2222,9 +2207,6 @@ let private heldTests =
                             let platform = FactDisclosureGate.create w.Store w.Events
 
                             { new IFactDisclosureGate with
-                                member _.Check(scopeId: string, principal, surface, factIds) =
-                                    platform.Check(scopeId, principal, surface, factIds)
-
                                 member _.Check(scope: ResolvedScope, principal, surface, factIds) =
                                     platform.Check(scope, principal, surface, factIds)
                             }
@@ -2466,38 +2448,13 @@ let private sliceTests =
 
             let store =
                 { new IFactStore with
-                    member _.Assert(_: string, _: FactDraft) : Async<Result<Fact, string>> = notHere ()
-                    member _.Assert(_: ResolvedScope, _: FactDraft) : Async<Result<Fact, string>> = notHere ()
-
-                    member _.AssertBatch(_: string, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> =
-                        notHere ()
-
-                    member _.AssertBatch
-                        (_: ResolvedScope, _: FactDraft list)
-                        : Async<Result<BatchAssertReceipt, string>> =
-                        notHere ()
-
-                    member _.Get(_: string, _: string) : Async<Fact option> = notHere ()
-                    member _.Get(_: ResolvedScope, _: string) : Async<Fact option> = notHere ()
-                    member _.Query(_: string, _: FactQuery) : Async<Fact list> = notHere ()
-                    member _.Query(_: ResolvedScope, _: FactQuery) : Async<Fact list> = async.Return facts
-
-                    member _.QueryWithCompetition(_: string, _: FactQuery) : Async<FactWithCompetition list> =
-                        notHere ()
-
-                    member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) : Async<FactWithCompetition list> =
-                        notHere ()
-
-                    member _.QuerySupersessionChain(_: string, _: string) : Async<Fact list> = notHere ()
-                    member _.QuerySupersessionChain(_: ResolvedScope, _: string) : Async<Fact list> = notHere ()
-
-                    member _.QueryPopulation(_: string, _: PopulationQuery) : Async<Result<PopulationResult, string>> =
-                        notHere ()
-
-                    member _.QueryPopulation
-                        (_: ResolvedScope, _: PopulationQuery)
-                        : Async<Result<PopulationResult, string>> =
-                        notHere ()
+                    member _.Assert(_: ResolvedScope, _: FactDraft) = notHere ()
+                    member _.AssertBatch(_: ResolvedScope, _: FactDraft list) = notHere ()
+                    member _.Get(_: ResolvedScope, _: string) = notHere ()
+                    member _.Query(_: ResolvedScope, _: FactQuery) = async.Return(Ok facts)
+                    member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) = notHere ()
+                    member _.QuerySupersessionChain(_: ResolvedScope, _: string) = notHere ()
+                    member _.QueryPopulation(_: ResolvedScope, _: PopulationQuery) = notHere ()
                 }
 
             let gate =
@@ -2512,7 +2469,7 @@ let private sliceTests =
             }
 
             match
-                FactBrowseHandler.querySlice deps (resolved (newScope ())) "u" (allPeriods [ "revenue" ])
+                FactBrowseHandler.querySlice deps (TestScope.resolved (newScope ())) "u" (allPeriods [ "revenue" ])
                 |> Async.RunSynchronously
             with
             | Ok _ -> failtest "a 100,000-cell slice must be refused"

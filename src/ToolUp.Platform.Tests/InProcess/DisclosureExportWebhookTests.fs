@@ -41,8 +41,8 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     member _.LastCall = lastCall
 
     interface IFactDisclosureGate with
-        member _.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
-            lastCall <- Some(scopeId, principal, surface, factIds)
+        member _.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) = async {
+            lastCall <- Some(scope.ScopeId, principal, surface, factIds)
 
             return
                 factIds
@@ -51,10 +51,6 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     id, (verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact")))
                 |> Map.ofList
         }
-
-        // Phase 797 — the typed form delegates to the string form above.
-        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 type private FixedTemplateStore(templates: ReportTemplate list) =
     interface IReportTemplateStore with
@@ -137,7 +133,7 @@ let private gatedApi (gate: IFactDisclosureGate) : IReportApi =
         storeBlobOk
         noAudit
         ReportApiConfig.defaults
-        "team-a"
+        (TestScope.resolved "team-a")
 
 let private renderInline (api: IReportApi) (templateId: TemplateId) (values: Map<string, PlaceholderValue>) = async {
     let! outcome = api.Render(templateId, values)
@@ -283,9 +279,9 @@ let exportDoorTests =
             }
 
             let fact =
-                match store.Assert(scope, draft) |> Async.RunSynchronously with
+                match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
                 | Ok fact -> fact
-                | Error e -> failtestf "assert failed: %s" e
+                | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
             let doc = docOf [ Paragraph [ Metric("margin", "12%", Some fact.FactId) ] ]
 
@@ -373,7 +369,12 @@ let webhookContractTests =
                     ]
                 )
 
-            let! permitted = FactWebhookEgress.permittedFactIds gate "team-a" "user-1" [ "fact-a"; "fact-b"; "fact-c" ]
+            let! permitted =
+                FactWebhookEgress.permittedFactIds gate (TestScope.resolved "team-a") "user-1" [
+                    "fact-a"
+                    "fact-b"
+                    "fact-c"
+                ]
 
             Expect.equal permitted [ "fact-a"; "fact-c" ] "the denied id is simply absent, order preserved"
 
@@ -389,7 +390,12 @@ let webhookContractTests =
         testCaseAsync "fail-closed: an id without an affirmative verdict is suppressed"
         <| async {
             let gate = PresetGate(Map.ofList [ "fact-a", FactDisclosable ])
-            let! permitted = FactWebhookEgress.permittedFactIds gate "team-a" "user-1" [ "fact-a"; "no-such-fact" ]
+
+            let! permitted =
+                FactWebhookEgress.permittedFactIds gate (TestScope.resolved "team-a") "user-1" [
+                    "fact-a"
+                    "no-such-fact"
+                ]
 
             Expect.equal permitted [ "fact-a" ] "an unknown id never fails open"
         }
@@ -397,7 +403,7 @@ let webhookContractTests =
         testCaseAsync "an empty payload never consults the gate"
         <| async {
             let gate = PresetGate Map.empty
-            let! permitted = FactWebhookEgress.permittedFactIds gate "team-a" "user-1" []
+            let! permitted = FactWebhookEgress.permittedFactIds gate (TestScope.resolved "team-a") "user-1" []
 
             Expect.equal permitted [] "empty in, empty out"
             Expect.isNone gate.LastCall "no fact ids ⇒ no gate call"
@@ -410,7 +416,9 @@ let webhookContractTests =
             let gate = FactDisclosureGate.create store events
             let scope = "team-a"
 
-            let! permitted = FactWebhookEgress.permittedFactIds gate scope "user-1" [ "no-such-fact" ]
+            let! permitted =
+                FactWebhookEgress.permittedFactIds gate (TestScope.resolved scope) "user-1" [ "no-such-fact" ]
+
             Expect.equal permitted [] "an unresolvable id is suppressed"
 
             let! rows = events.ReadBySource(scope, FactEvents.SourceModule)

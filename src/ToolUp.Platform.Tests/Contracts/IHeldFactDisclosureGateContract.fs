@@ -64,9 +64,9 @@ let private draftWith (metric: string) (disclosure: Disclosure) : FactDraft = {
 }
 
 let private assertFact (h: HeldGateHarness) (draft: FactDraft) : Async<Fact> = async {
-    match! h.Store.Assert(h.ScopeId, draft) with
+    match! h.Store.Assert(TestScope.resolved h.ScopeId, draft) with
     | Ok fact -> return fact
-    | Error e -> return failtestf "assert failed: %s" e
+    | Error e -> return failtestf "assert failed: %s" (FactStoreError.describe e)
 }
 
 /// The id form's verdicts and audit rows, then the held form's over the
@@ -79,7 +79,11 @@ let private bothForms (h: HeldGateHarness) (scope: ResolvedScope) (ids: string l
     let! byId = h.IdForm.Check(scope, "user-1", FactRetrieval, ids)
     let! afterId = h.Events.ReadBySource(scope.ScopeId, FactEvents.SourceModule)
 
-    let! read = ids |> List.map (fun factId -> h.Store.Get(scope, factId)) |> Async.Sequential
+    let! read =
+        ids
+        |> List.map (fun factId -> h.Store.Get(scope, factId) |> TestScope.ok)
+        |> Async.Sequential
+
     let held = read |> Array.choose id |> List.ofArray
 
     let! byHeld = h.Held.CheckHeld(scope, "user-1", FactRetrieval, ids, held)

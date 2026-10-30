@@ -53,13 +53,6 @@ let private t0 = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
-let private resolved (scopeId: string) : ResolvedScope =
-    ScopeResolution.ofStorageScope {
-        ScopeId = scopeId
-        Container = "container-" + scopeId
-        Persist = true
-    }
-
 let private metric (id: string) (rollUp: RollUp option) : MetricDefinition = {
     Id = id
     Name = id
@@ -186,7 +179,7 @@ let private plainWorldOver (storage: IBlobStorage) (history: FactTableHistoryMod
         Delegated = None
         Events = events
         Storage = storage
-        Scope = resolved (newScope ())
+        Scope = TestScope.resolved (newScope ())
     }
 
 let private plainWorld (history: FactTableHistoryMode) : World =
@@ -227,7 +220,7 @@ let private delegatedWorldOver (storage: IBlobStorage) (history: FactTableHistor
         Delegated = Some delegated
         Events = events
         Storage = storage
-        Scope = resolved (newScope ())
+        Scope = TestScope.resolved (newScope ())
     }
 
 let private delegatedWorldWith (history: FactTableHistoryMode) (refresh: bool) : World =
@@ -238,19 +231,16 @@ let private delegatedWorld (history: FactTableHistoryMode) = delegatedWorldWith 
 /// Open, stage (in batches) and commit.
 let private commit (w: World) (rows: FactTableRow list) : string * FactTableCommit =
     let opened =
-        match w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales") |> Async.RunSynchronously with
+        match w.Writer.OpenRun(w.Scope, "sku-sales") |> Async.RunSynchronously with
         | Ok r -> r
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
     for batch in rows |> List.chunkBySize 10_000 do
-        match
-            w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, batch)
-            |> Async.RunSynchronously
-        with
+        match w.Writer.WriteRows(w.Scope, opened.RunId, batch) |> Async.RunSynchronously with
         | Ok _ -> ()
         | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
 
-    match w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously with
+    match w.Writer.Commit(w.Scope, opened.RunId) |> Async.RunSynchronously with
     | Ok c -> opened.RunId, c
     | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
 
@@ -265,10 +255,11 @@ let private top (w: World) (k: int) (configure: PopulationQuery -> PopulationQue
 
     match w.Store.QueryPopulation(w.Scope, q) |> Async.RunSynchronously with
     | Ok r -> r
-    | Error e -> failtestf "population: %s" e
+    | Error e -> failtestf "population: %s" (FactStoreError.describe e)
 
 let private point (w: World) (metricId: string) (path: string list) : Fact list =
     w.Store.Query(w.Scope, FactQuery.forSubjectMetric { Hierarchy = "products"; Path = path } (MetricRef metricId))
+    |> TestScope.ok
     |> Async.RunSynchronously
 
 /// Every fact the fact tier holds for a metric at the sku level (history
@@ -282,6 +273,7 @@ let private held (w: World) (metricId: string) : Fact list =
                 IncludeSuperseded = true
         }
     )
+    |> TestScope.ok
     |> Async.RunSynchronously
     |> List.filter (fun f -> f.Subject.Path.Length = 2)
 
@@ -409,8 +401,8 @@ let private equivalenceTests =
                 match delegated.Store.QueryPopulation(delegated.Scope, q) |> Async.RunSynchronously with
                 | Ok r -> failtestf "%s: expected a refusal, got %d ranked" filter (List.length r.Ranked)
                 | Error refusal ->
-                    Expect.stringContains refusal filter "the refusal names the filter"
-                    Expect.stringContains refusal "sku-sales" "and the table"
+                    Expect.stringContains (FactStoreError.describe refusal) filter "the refusal names the filter"
+                    Expect.stringContains (FactStoreError.describe refusal) "sku-sales" "and the table"
         }
 
         test "a point read quotes the value the plain store holds, under the same id" {
@@ -457,7 +449,7 @@ let private equivalenceTests =
             let asserted =
                 match w.Store.Assert(w.Scope, draft) |> Async.RunSynchronously with
                 | Ok f -> f
-                | Error e -> failtestf "assert: %s" e
+                | Error e -> failtestf "assert: %s" (FactStoreError.describe e)
 
             Expect.equal
                 (point w "revenue" [ "brand-01" ] |> List.map _.FactId)
@@ -512,6 +504,7 @@ let private quotedOnlyTests =
                         }
                         (MetricRef "revenue")
                 )
+                |> TestScope.ok
                 |> Async.RunSynchronously
 
             Expect.isEmpty asked "a subject never quoted has no fact"
@@ -538,6 +531,7 @@ let private quotedOnlyTests =
                     w.Scope,
                     FactQuery.forSubjectMetric { Hierarchy = "products"; Path = [] } (MetricRef "revenue")
                 )
+                |> TestScope.ok
                 |> Async.RunSynchronously
 
             Expect.equal
@@ -588,6 +582,7 @@ let private quotingTests =
             // The provenance chain reaches the run that produced the row.
             let stored =
                 w.Store.Get(w.Scope, best.FactId)
+                |> TestScope.ok
                 |> Async.RunSynchronously
                 |> Option.defaultWith (fun () -> failtest "the quoted fact is stored")
 
@@ -641,6 +636,7 @@ let private historyTests =
                         (MetricRef "revenue")
                     |> FactQuery.asOf between
                 )
+                |> TestScope.ok
                 |> Async.RunSynchronously
 
             Expect.equal (asOf |> List.map valueOf) [ 10m ] "the first run's value"
@@ -648,6 +644,7 @@ let private historyTests =
 
             Expect.equal
                 (w.Store.Get(w.Scope, asOf.Head.FactId)
+                 |> TestScope.ok
                  |> Async.RunSynchronously
                  |> Option.map _.FactId)
                 (Some asOf.Head.FactId)
@@ -676,8 +673,12 @@ let private historyTests =
             match w.Store.QueryPopulation(w.Scope, q) |> Async.RunSynchronously with
             | Ok r -> failtestf "expected a refusal, got %d ranked" r.Ranked.Length
             | Error reason ->
-                Expect.stringContains reason "Approximate" "the population door names the history"
-                Expect.stringContains reason "sku-sales" "and the table"
+                Expect.stringContains
+                    (FactStoreError.describe reason)
+                    "Approximate"
+                    "the population door names the history"
+
+                Expect.stringContains (FactStoreError.describe reason) "sku-sales" "and the table"
 
             let pointed =
                 w.Store.Query(
@@ -690,6 +691,7 @@ let private historyTests =
                         (MetricRef "revenue")
                     |> FactQuery.asOf t
                 )
+                |> TestScope.ok
                 |> Async.RunSynchronously
 
             match pointed |> List.map (fun f -> f, f.Value) with
@@ -697,7 +699,7 @@ let private historyTests =
                 Expect.stringContains reason "Approximate" "the point door says why"
 
                 Expect.isSome
-                    (w.Store.Get(w.Scope, refused.FactId) |> Async.RunSynchronously)
+                    (w.Store.Get(w.Scope, refused.FactId) |> TestScope.ok |> Async.RunSynchronously)
                     "and the refusal is resolvable by id"
             | other -> failtestf "expected one Absent refusal, got %A" (other |> List.map snd)
 
@@ -727,6 +729,7 @@ let private refreshTests =
                     w.Scope,
                     FactQuery.forSubjectMetric { Hierarchy = "products"; Path = path } (MetricRef "revenue")
                 )
+                |> TestScope.ok
                 |> Async.RunSynchronously
                 |> List.exactlyOne
 
@@ -744,6 +747,7 @@ let private refreshTests =
 
             let chain =
                 w.Store.QuerySupersessionChain(w.Scope, quotedA1.FactId)
+                |> TestScope.ok
                 |> Async.RunSynchronously
                 |> List.map _.FactId
 
@@ -771,7 +775,8 @@ let private refreshTests =
                 |> List.find (fun d -> d.Metric = MetricRef "revenue")
 
             let stale =
-                FactInvalidation.staleDelegatedHeads w.Inner w.Scope.ScopeId d (DelegateFact.token second.Watermark)
+                FactInvalidation.staleDelegatedHeads w.Inner w.Scope d (DelegateFact.token second.Watermark)
+                |> TestScope.ok
                 |> Async.RunSynchronously
 
             Expect.equal (stale |> List.map _.FactId) [ quoted.FactId ] "the one stale quote"
@@ -815,7 +820,7 @@ let private brandFact (w: World) (brand: string) (value: decimal) =
 
     match w.Store.Assert(w.Scope, draft) |> Async.RunSynchronously with
     | Ok _ -> ()
-    | Error e -> failtestf "assert: %s" e
+    | Error e -> failtestf "assert: %s" (FactStoreError.describe e)
 
 let private walkTests =
     testList "whole-store walks take the delegated path" [
@@ -831,7 +836,7 @@ let private walkTests =
             point w "revenue" [ "acme"; "a1" ] |> ignore
 
             let findings =
-                CoherenceCheck.findings w.Store (Some registry) CoherenceConfig.defaults w.Scope.ScopeId
+                CoherenceCheck.findings w.Store (Some registry) CoherenceConfig.defaults w.Scope
                 |> Async.RunSynchronously
 
             Expect.equal
@@ -854,7 +859,7 @@ let private walkTests =
                     (t0.AddDays 1.0)
                     w.Store
                     gate
-                    w.Scope.ScopeId
+                    w.Scope
                     "reader"
                     (registry.TryGetMetric "revenue").Value
                     [ products ]
@@ -882,7 +887,7 @@ let private walkTests =
                     (t0.AddDays 1.0)
                     w.Store
                     gate
-                    w.Scope.ScopeId
+                    w.Scope
                     "reader"
                     (registry.TryGetMetric "segment").Value
                     [ products ]
@@ -954,7 +959,7 @@ let private compositionTests =
                 Delegated = Some(sp.GetRequiredService<DelegatedFactStore>())
                 Events = events
                 Storage = storage
-                Scope = resolved (newScope ())
+                Scope = TestScope.resolved (newScope ())
             }
 
             let _, c = commit w (population 200)
@@ -1049,21 +1054,18 @@ let private importedTests =
                 ]
 
             let openImported () =
-                match
-                    w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", imported)
-                    |> Async.RunSynchronously
-                with
+                match w.Writer.OpenRun(w.Scope, "sku-sales", imported) |> Async.RunSynchronously with
                 | Ok run -> run
                 | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
             let committed = openImported ()
 
-            w.Writer.WriteRows(w.Scope.ScopeId, committed.RunId, population 20)
+            w.Writer.WriteRows(w.Scope, committed.RunId, population 20)
             |> Async.RunSynchronously
             |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
             |> ignore
 
-            w.Writer.Commit(w.Scope.ScopeId, committed.RunId)
+            w.Writer.Commit(w.Scope, committed.RunId)
             |> Async.RunSynchronously
             |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
             |> ignore
@@ -1083,7 +1085,7 @@ let private importedTests =
             let abandoned = openImported ()
             Expect.hasLength (kept w "provenance/") 2 "kept while open"
 
-            w.Writer.Abandon(w.Scope.ScopeId, abandoned.RunId, "changed my mind")
+            w.Writer.Abandon(w.Scope, abandoned.RunId, "changed my mind")
             |> Async.RunSynchronously
             |> Result.defaultWith (fun e -> failtestf "abandon: %s" (FactTableWriteError.describe e))
             |> ignore
@@ -1098,18 +1100,18 @@ let private importedTests =
 let private commitImported (w: World) (origins: FactTableImportOrigin list) (rows: FactTableRow list) =
     let opened =
         match
-            w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", ImportedRun origins)
+            w.Writer.OpenRun(w.Scope, "sku-sales", ImportedRun origins)
             |> Async.RunSynchronously
         with
         | Ok run -> run
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
-    w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)
+    w.Writer.WriteRows(w.Scope, opened.RunId, rows)
     |> Async.RunSynchronously
     |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
     |> ignore
 
-    w.Writer.Commit(w.Scope.ScopeId, opened.RunId)
+    w.Writer.Commit(w.Scope, opened.RunId)
     |> Async.RunSynchronously
     |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
     |> ignore
@@ -1130,6 +1132,7 @@ let private pointBy (w: World) (path: string list) (method: MethodRef) : Fact li
                 Method = Some method
         }
     )
+    |> TestScope.ok
     |> Async.RunSynchronously
 
 let private importedMethodTests =
@@ -1227,8 +1230,8 @@ let private importedMethodTests =
 
             match w.Store.QueryPopulation(w.Scope, q) |> Async.RunSynchronously with
             | Error reason ->
-                Expect.stringContains reason "cert:shared" "names the certificate"
-                Expect.stringContains reason "brand-01, brand-02" "and the roots it spans"
+                Expect.stringContains (FactStoreError.describe reason) "cert:shared" "names the certificate"
+                Expect.stringContains (FactStoreError.describe reason) "brand-01, brand-02" "and the roots it spans"
             | Ok r -> failtestf "expected a named refusal, got %d ranked facts" r.Ranked.Length
         }
     ]
@@ -1281,14 +1284,14 @@ let private sweptOrigin: FactTableImportOrigin = {
 let private openStaged (w: World) (batches: FactTableRow list list) : FactTableRunRecord =
     let run =
         match
-            w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", ImportedRun [ sweptOrigin ])
+            w.Writer.OpenRun(w.Scope, "sku-sales", ImportedRun [ sweptOrigin ])
             |> Async.RunSynchronously
         with
         | Ok run -> run
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
     for batch in batches do
-        w.Writer.WriteRows(w.Scope.ScopeId, run.RunId, batch)
+        w.Writer.WriteRows(w.Scope, run.RunId, batch)
         |> Async.RunSynchronously
         |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
         |> ignore
@@ -1296,18 +1299,18 @@ let private openStaged (w: World) (batches: FactTableRow list list) : FactTableR
     run
 
 let private abandon (w: World) (runId: string) =
-    w.Writer.Abandon(w.Scope.ScopeId, runId, "ended")
+    w.Writer.Abandon(w.Scope, runId, "ended")
     |> Async.RunSynchronously
     |> Result.defaultWith (fun e -> failtestf "abandon: %s" (FactTableWriteError.describe e))
     |> ignore
 
 let private commitRun (w: World) (runId: string) =
-    w.Writer.Commit(w.Scope.ScopeId, runId)
+    w.Writer.Commit(w.Scope, runId)
     |> Async.RunSynchronously
     |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
 
 let private sweepOf (w: World) : FactTableOrphanSweepReport =
-    match FactTableOrphanSweep.sweep w.Writer w.Scope.ScopeId |> Async.RunSynchronously with
+    match FactTableOrphanSweep.sweep w.Writer w.Scope |> Async.RunSynchronously with
     | Ok report -> report
     | Error e -> failtestf "sweep: %s" (FactTableWriteError.describe e)
 
@@ -1331,7 +1334,7 @@ let private orphanSweepTests =
                 // The red pin: the run is recorded ended, so nothing the
                 // writer reports reads its blobs again — yet they are at rest.
                 let runs =
-                    w.Writer.Runs(w.Scope.ScopeId, "sku-sales")
+                    w.Writer.Runs(w.Scope, "sku-sales")
                     |> Async.RunSynchronously
                     |> Result.defaultWith (fun e -> failtestf "runs: %s" (FactTableWriteError.describe e))
 
@@ -1455,7 +1458,7 @@ let private orphanSweepTests =
                     (ToolUp.Platform.NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel)
                     w.Writer
 
-            match FactTableOrphanSweep.sweep decorated w.Scope.ScopeId |> Async.RunSynchronously with
+            match FactTableOrphanSweep.sweep decorated w.Scope |> Async.RunSynchronously with
             | Ok report -> Expect.equal report.RunsSwept 1 "the decorated writer's sweep reached the default writer"
             | Error e -> failtestf "sweep: %s" (FactTableWriteError.describe e)
         }
@@ -1557,17 +1560,14 @@ let private inputOf (c: char) = "sha256:" + String(c, 64)
 /// Open with options, stage and commit.
 let private commitWith (w: World) (options: FactTableRunOptions) (rows: FactTableRow list) =
     match
-        w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", options = options)
+        w.Writer.OpenRun(w.Scope, "sku-sales", options = options)
         |> Async.RunSynchronously
     with
     | Error e -> Error e
     | Ok opened ->
-        match
-            w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)
-            |> Async.RunSynchronously
-        with
+        match w.Writer.WriteRows(w.Scope, opened.RunId, rows) |> Async.RunSynchronously with
         | Error e -> Error e
-        | Ok _ -> w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously
+        | Ok _ -> w.Writer.Commit(w.Scope, opened.RunId) |> Async.RunSynchronously
 
 let private runOptionsTests =
     testList "run options ride the run record (Phase 1092)" [
@@ -1617,7 +1617,7 @@ let private runOptionsTests =
             let sliced = FactTableRunOptions.none |> FactTableRunOptions.forSlice september
 
             match
-                w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", options = sliced)
+                w.Writer.OpenRun(w.Scope, "sku-sales", options = sliced)
                 |> Async.RunSynchronously
             with
             | Error(FactTableRunOptionsRefused(tableId, reason)) ->
@@ -1625,7 +1625,7 @@ let private runOptionsTests =
                 Expect.stringContains reason "period slice" "and says what it does not take"
             | other -> failtestf "expected FactTableRunOptionsRefused, got %A" other
 
-            match w.Writer.Runs(w.Scope.ScopeId, "sku-sales") |> Async.RunSynchronously with
+            match w.Writer.Runs(w.Scope, "sku-sales") |> Async.RunSynchronously with
             | Ok runs -> Expect.isEmpty runs "no run was opened"
             | Error e -> failtestf "runs: %s" (FactTableWriteError.describe e)
         }
@@ -1679,7 +1679,7 @@ let private runOptionsTests =
             |> Async.RunSynchronously
             |> ignore
 
-            match w.Writer.Runs(scope, "sku-sales") |> Async.RunSynchronously with
+            match w.Writer.Runs(w.Scope, "sku-sales") |> Async.RunSynchronously with
             | Ok [ legacy ] ->
                 Expect.equal legacy.Options RunOptions.empty "the old record reads with no options"
                 Expect.equal legacy.RecordVersion 0 "and says it predates them"
@@ -1738,6 +1738,7 @@ let private taintIndexTests =
                             IncludeSuperseded = true
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal index (DisclosureTaintIndex.ofFacts all) "the index is the store's own"
             Expect.isSome (DisclosureTaintIndex.tryNode minted.FactId index) "and holds the minted fact"

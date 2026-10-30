@@ -1077,8 +1077,8 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>, claimed
     member val Calls = ResizeArray<string * FactEgressSurface * string list * string>() with get
 
     interface IFactDisclosureGate with
-        member this.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
-            this.Calls.Add(scopeId, surface, factIds, claimed.Value)
+        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) = async {
+            this.Calls.Add(scope.ScopeId, surface, factIds, claimed.Value)
             ignore principal
 
             return
@@ -1087,10 +1087,6 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>, claimed
                     id, verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact"))
                 |> Map.ofList
         }
-
-        // Phase 797 — the typed form delegates to the string form above.
-        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 let private authorityLevelTests =
     testList "the levels are ordered and read fail-closed" [
@@ -1363,6 +1359,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -1415,6 +1412,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -1467,6 +1465,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -1497,6 +1496,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -2256,6 +2256,7 @@ let private viewAuditTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -2312,6 +2313,7 @@ let private viewAuditTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose

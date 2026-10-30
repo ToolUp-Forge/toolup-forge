@@ -83,11 +83,11 @@ let private newStore (registry: IMetricRegistry option) : IFactStore =
         registry
 
 let private assertOk label (store: IFactStore) (scope: string) d = async {
-    let! r = store.Assert(scope, d)
+    let! r = store.Assert(TestScope.resolved scope, d)
 
     match r with
     | Ok f -> return f
-    | Error e -> return failtestf "%s: expected Ok, got %s" label e
+    | Error e -> return failtestf "%s: expected Ok, got %s" label (FactStoreError.describe e)
 }
 
 /// Seed one contested metric: two methods assert `revenue` over the same
@@ -143,7 +143,7 @@ let tests =
         testCaseAsync "a registry-less store surfaces every competing head (pre-566 behaviour)"
         <| async {
             let! store, scope, _, _ = seedContested None
-            let! heads = store.Query(scope, methodlessRevenue)
+            let! heads = store.Query(TestScope.resolved scope, methodlessRevenue) |> TestScope.ok
             Expect.equal heads.Length 2 "both competing heads without a registry"
         }
 
@@ -156,12 +156,13 @@ let tests =
 
             let! heads =
                 store.Query(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         FactQuery.all with
                             Metric = Some(MetricRef "margin")
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal heads.Length 2 "no declaration → both competing heads (undeclared parity)"
         }
@@ -171,7 +172,7 @@ let tests =
         testCaseAsync "a method-less query returns the canonical lineage's head"
         <| async {
             let! store, scope, fRollup, _ = seedContested (Some registry)
-            let! heads = store.Query(scope, methodlessRevenue)
+            let! heads = store.Query(TestScope.resolved scope, methodlessRevenue) |> TestScope.ok
             Expect.equal (heads |> List.map _.FactId) [ fRollup.FactId ] "the declared canonical head only"
         }
 
@@ -181,7 +182,7 @@ let tests =
             // Supersede the canonical lineage: same method, changed input.
             let! fRollup2 = assertOk "rollup v2" store scope (draft "revenue" rollup "hashC" 110m)
 
-            let! heads = store.Query(scope, methodlessRevenue)
+            let! heads = store.Query(TestScope.resolved scope, methodlessRevenue) |> TestScope.ok
             Expect.equal (heads |> List.map _.FactId) [ fRollup2.FactId ] "the superseding canonical head"
         }
 
@@ -191,12 +192,13 @@ let tests =
 
             let! heads =
                 store.Query(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         methodlessRevenue with
                             Method = Some estimator
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal (heads |> List.map _.FactId) [ fEstimator.FactId ] "naming the competitor selects its lineage"
         }
@@ -210,12 +212,13 @@ let tests =
 
             let! history =
                 store.Query(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         methodlessRevenue with
                             IncludeSuperseded = true
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal
                 (history |> List.map _.FactId |> List.sort)
@@ -234,7 +237,7 @@ let tests =
                 ] []
 
             let! store, scope, _, _ = seedContested (Some missingCanonical)
-            let! heads = store.Query(scope, methodlessRevenue)
+            let! heads = store.Query(TestScope.resolved scope, methodlessRevenue) |> TestScope.ok
 
             Expect.equal
                 heads.Length
@@ -247,7 +250,10 @@ let tests =
         testCaseAsync "the canonical head carries the competing method identities"
         <| async {
             let! store, scope, fRollup, _ = seedContested (Some registry)
-            let! annotated = store.QueryWithCompetition(scope, methodlessRevenue)
+
+            let! annotated =
+                store.QueryWithCompetition(TestScope.resolved scope, methodlessRevenue)
+                |> TestScope.ok
 
             Expect.equal (annotated |> List.map _.Fact.FactId) [ fRollup.FactId ] "same selection as Query"
 
@@ -263,7 +269,10 @@ let tests =
             let scope = newScope ()
             let! _ = assertOk "rollup" store scope (draft "revenue" rollup "hashA" 100m)
 
-            let! annotated = store.QueryWithCompetition(scope, methodlessRevenue)
+            let! annotated =
+                store.QueryWithCompetition(TestScope.resolved scope, methodlessRevenue)
+                |> TestScope.ok
+
             Expect.equal annotated.Length 1 "one head"
             Expect.isEmpty (List.head annotated).CompetingMethods "no competing method exists"
         }
@@ -274,12 +283,13 @@ let tests =
 
             let! annotated =
                 store.QueryWithCompetition(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         methodlessRevenue with
                             Method = Some estimator
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal (annotated |> List.map _.Fact.FactId) [ fEstimator.FactId ] "the named lineage's head"
 

@@ -380,9 +380,9 @@ let private assertedDraft (metricId: string) (value: decimal) (disclosure: Discl
 }
 
 let private assertOk (store: IFactStore) (scopeId: string) (draft: FactDraft) : Fact =
-    match store.Assert(scopeId, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scopeId, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A declared reference kind for dated calendar events.
 let private calendarKind =
@@ -427,7 +427,7 @@ let private gateFixture () : GateFixture =
     }
 
 let private gateCheck (fixture: GateFixture) (scopeId: string) (elements: NarrativeElement list) =
-    fixture.Gate.Check(scopeId, "reader", FactNarrativePublication, docOf elements)
+    fixture.Gate.Check(TestScope.resolved scopeId, "reader", FactNarrativePublication, docOf elements)
     |> Async.RunSynchronously
 
 let factGateTests =
@@ -496,7 +496,7 @@ let factGateTests =
             let narrativeId = Guid.NewGuid().ToString()
 
             match
-                fixture.Gate.Certify(scope, "reader", narrativeId, [ fact.FactId ])
+                fixture.Gate.Certify(TestScope.resolved scope, "reader", narrativeId, [ fact.FactId ])
                 |> Async.RunSynchronously
             with
             | Error reason -> failtestf "certificate must issue: %s" reason
@@ -1256,7 +1256,7 @@ let triggerTests =
             Expect.equal (published deployment).Length 1 "and the narrative was published"
         }
 
-        test "on data arrival: a carried write, or a change no run depends on, enqueues nothing" {
+        test "on data arrival: a resolved change enqueues the run; a change no run depends on enqueues nothing" {
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = BlobFactStore.create (InMemoryBlobStorage()) events
             let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
@@ -1295,20 +1295,16 @@ let triggerTests =
                 |> Async.RunSynchronously
 
             Expect.equal
-                (enqueue
-                    (registryOf summaryRun)
-                    (DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))))
+                (enqueue (registryOf summaryRun) (ScopeResolution.ofStorageScope (storageFor teamId)))
                 [ summaryRun.Key ]
                 "a resolved change to a depended-on metric enqueues the run"
 
-            Expect.isEmpty
-                (enqueue (registryOf summaryRun) (DataChangeScope.Carried teamId))
-                "a carried change has no resolved scope to give the run, so enqueues nothing"
+            // Phase 1157 retired the string scope form; a carried (DataChangeScope.Carried) change is gone.
 
             Expect.isEmpty
                 (enqueue
                     (registryOf (summaryRun |> GroundedNarrativeDefinition.dependingOn [ "cost" ]))
-                    (DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))))
+                    (ScopeResolution.ofStorageScope (storageFor teamId)))
                 "a run that does not depend on the changed metric is not enqueued"
         }
 
@@ -2538,8 +2534,7 @@ let doubleRunTests =
             let registry = GroundedNarrativeRegistry()
             registry.Register summaryRun |> ignore
 
-            let scope =
-                DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))
+            let scope = ScopeResolution.ofStorageScope (storageFor teamId)
 
             for _ in 1..2 do
                 let! _ = GroundedNarrativeTrigger.enqueueFor lineage store scheduler registry scope [ "sales.rollup" ]
@@ -2596,8 +2591,7 @@ let doubleRunTests =
             let registry = GroundedNarrativeRegistry()
             registry.Register summaryRun |> ignore
 
-            let scope =
-                DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))
+            let scope = ScopeResolution.ofStorageScope (storageFor teamId)
 
             let! enqueued =
                 GroundedNarrativeTrigger.enqueueFor lineage store (refusing ()) registry scope [ "sales.rollup" ]
@@ -2678,7 +2672,7 @@ let doubleRunTests =
             )
 
             let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
-            let change = DataChangeScope.Resolved deployment.Scope
+            let change = deployment.Scope
 
             let enqueue changedIds =
                 GroundedNarrativeTrigger.enqueueFor lineage deployment.Store jobs registry change changedIds
@@ -2777,18 +2771,18 @@ let private withBrandSales (deployment: Deployment) : Deployment =
     }
 
     let opened =
-        match writer.OpenRun(deployment.TeamId, brandSales.Id) |> Async.RunSynchronously with
+        match writer.OpenRun(deployment.Scope, brandSales.Id) |> Async.RunSynchronously with
         | Ok r -> r
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
     match
-        writer.WriteRows(deployment.TeamId, opened.RunId, [ row "zenith" 900m 400m; row "acme" 1250m 700m ])
+        writer.WriteRows(deployment.Scope, opened.RunId, [ row "zenith" 900m 400m; row "acme" 1250m 700m ])
         |> Async.RunSynchronously
     with
     | Ok _ -> ()
     | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
 
-    match writer.Commit(deployment.TeamId, opened.RunId) |> Async.RunSynchronously with
+    match writer.Commit(deployment.Scope, opened.RunId) |> Async.RunSynchronously with
     | Ok _ -> deployment
     | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
 
@@ -2858,6 +2852,7 @@ let private brandFacts (deployment: Deployment) (metric: string) : Map<string, F
                 Metric = Some(MetricRef metric)
         }
     )
+    |> TestScope.ok
     |> Async.RunSynchronously
     |> List.filter (fun f -> f.Period.From = tradingDay)
     |> List.map (fun f -> List.last f.Subject.Path, f)
@@ -3300,10 +3295,7 @@ let triggerNameTests =
             let! afterCadence = runs 1
             Expect.equal afterCadence [ "cadence" ] "the cadence's run records cadence"
 
-            let! enqueued =
-                GroundedNarrativeTrigger.enqueueFor lineage store jobs registry (DataChangeScope.Resolved scope) [
-                    "sales.rollup"
-                ]
+            let! enqueued = GroundedNarrativeTrigger.enqueueFor lineage store jobs registry (scope) [ "sales.rollup" ]
 
             Expect.equal enqueued [ summaryRun.Key ] "the change enqueued the run"
             let! afterChange = runs 2

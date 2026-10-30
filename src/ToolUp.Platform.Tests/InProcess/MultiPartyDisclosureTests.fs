@@ -265,9 +265,9 @@ let private newStore () =
     store, events
 
 let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) : Fact =
-    match store.Assert(scope, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 let private draftOf
     (metric: string)
@@ -320,7 +320,7 @@ let gateTests =
             let gate = FactDisclosureGate.createWithTaint (twoPartyCfg []) store events
             let joint = seedJoint store scope
 
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ joint.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ joint.FactId ])
 
             Expect.equal
                 (verdicts.TryFind joint.FactId)
@@ -342,7 +342,7 @@ let gateTests =
             let gate = FactDisclosureGate.createWithTaint (twoPartyCfg [ partyA ]) store events
             let joint = seedJoint store scope
 
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ joint.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ joint.FactId ])
 
             Expect.equal
                 (verdicts.TryFind joint.FactId)
@@ -363,7 +363,7 @@ let gateTests =
 
             let joint = seedJoint store scope
 
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ joint.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ joint.FactId ])
 
             Expect.equal
                 (verdicts.TryFind joint.FactId)
@@ -400,7 +400,7 @@ let gateTests =
                     (draftOf "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted policyA) [])
 
             // policyA permits FactRetrieval and nothing else.
-            let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ ra.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ ra.FactId ])
 
             Expect.equal
                 (verdicts.TryFind ra.FactId)
@@ -431,7 +431,7 @@ let gateTests =
 
             let unscopedGate = FactDisclosureGate.createWithTaint unscopedCfg store events
 
-            let! verdicts = unscopedGate.Check(scope, "user-1", FactExport, [ derived.FactId ])
+            let! verdicts = unscopedGate.Check(TestScope.resolved scope, "user-1", FactExport, [ derived.FactId ])
 
             Expect.equal
                 (verdicts.TryFind derived.FactId)
@@ -448,7 +448,7 @@ let gateTests =
             let emptyGate =
                 FactDisclosureGate.createWithTaint DisclosureTaintConfig.empty store events
 
-            let! viaEmpty = emptyGate.Check(scope, "user-1", FactExport, [ derived.FactId ])
+            let! viaEmpty = emptyGate.Check(TestScope.resolved scope, "user-1", FactExport, [ derived.FactId ])
             Expect.equal viaEmpty verdicts "an empty taint config remains the Phase 525 gate"
         }
     ]

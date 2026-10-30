@@ -911,41 +911,24 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
 
             let store =
                 { new ToolUp.Facts.IFactStore with
-                    member _.Assert(scopeId: string, draft) =
-                        calls.Enqueue "Assert(string)"
-                        inner.Assert(scopeId, draft)
-
                     member _.Assert(scope: ResolvedScope, draft) =
                         calls.Enqueue "Assert(typed)"
                         inner.Assert(scope, draft)
 
-                    member _.AssertBatch(scopeId: string, drafts) = inner.AssertBatch(scopeId, drafts)
                     member _.AssertBatch(scope: ResolvedScope, drafts) = inner.AssertBatch(scope, drafts)
-
-                    member _.Get(scopeId: string, factId: string) =
-                        calls.Enqueue "Get(string)"
-                        inner.Get(scopeId, factId)
 
                     member _.Get(scope: ResolvedScope, factId: string) =
                         calls.Enqueue "Get(typed)"
                         inner.Get(scope, factId)
 
-                    member _.Query(scopeId: string, query) = inner.Query(scopeId, query)
                     member _.Query(scope: ResolvedScope, query) = inner.Query(scope, query)
-
-                    member _.QueryWithCompetition(scopeId: string, query) =
-                        inner.QueryWithCompetition(scopeId, query)
 
                     member _.QueryWithCompetition(scope: ResolvedScope, query) =
                         inner.QueryWithCompetition(scope, query)
 
-                    member _.QuerySupersessionChain(scopeId: string, factId: string) =
-                        inner.QuerySupersessionChain(scopeId, factId)
-
                     member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) =
                         inner.QuerySupersessionChain(scope, factId)
 
-                    member _.QueryPopulation(scopeId: string, query) = inner.QueryPopulation(scopeId, query)
                     member _.QueryPopulation(scope: ResolvedScope, query) = inner.QueryPopulation(scope, query)
                 }
 
@@ -974,7 +957,7 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
             let original =
                 match inner.Assert(scope, draftWith "v1") |> Async.RunSynchronously with
                 | Ok fact -> fact
-                | Error e -> failtestf "seed assert: %s" e
+                | Error e -> failtestf "seed assert: %s" (ToolUp.Facts.FactStoreError.describe e)
 
             let recomputer =
                 { new ToolUp.Facts.IFactRecomputer with
@@ -1022,7 +1005,7 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
                 [ "Get(typed)"; "Assert(typed)" ]
                 "the fact was read and re-asserted through the ResolvedScope members, and nothing else"
 
-            let! heads = inner.Query(scope, ToolUp.Facts.FactQuery.all)
+            let! heads = inner.Query(scope, ToolUp.Facts.FactQuery.all) |> TestScope.ok
 
             Expect.isTrue
                 (heads

@@ -155,9 +155,9 @@ let private deployment (keyId: string) =
     deploymentWith keyId (fun store events -> FactDisclosureGate.create store events)
 
 let private seed (d: Deployment) (scopeId: string) metric value disclosure = async {
-    match! d.Store.Assert(scopeId, draft metric value disclosure) with
+    match! d.Store.Assert(TestScope.resolved scopeId, draft metric value disclosure) with
     | Ok fact -> return fact
-    | Error e -> return failtestf "seeding the fact store failed: %s" e
+    | Error e -> return failtestf "seeding the fact store failed: %s" (FactStoreError.describe e)
 }
 
 /// Issue a certificate over `factId` and export it as the signed statement
@@ -211,12 +211,13 @@ let private doorFor (d: Deployment) (anchors: PeerTrustAnchor list) (audit: Reco
 let private expectStoreEmpty (d: Deployment) = async {
     let! facts =
         d.Store.Query(
-            scopeB,
+            TestScope.resolved scopeB,
             {
                 FactQuery.all with
                     IncludeSuperseded = true
             }
         )
+        |> TestScope.ok
 
     Expect.isEmpty facts "a refused import must leave the store untouched"
 }
@@ -378,11 +379,11 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! certificate, json = certificateJsonFor a scopeA original.FactId
+            let! certificate, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
             | Error refusal -> failtestf "a sound import must succeed: %s" (FactImportRefusal.describe refusal)
             | Ok imported ->
                 // The identity tuple survived the crossing intact — which
@@ -421,7 +422,7 @@ let tests =
                 // Re-certify on B. The chain the new certificate seals must
                 // name the imported certificate — the join back to the
                 // deployment the number actually came from.
-                match! b.Issuer.Issue(scopeB, "auditor", FactCertificate imported.FactId, 5) with
+                match! b.Issuer.Issue(TestScope.resolved scopeB, "auditor", FactCertificate imported.FactId, 5) with
                 | Error e -> failtestf "the re-issue must succeed: %s" (CertificateError.describe e)
                 | Ok reissued ->
                     Expect.equal reissued.Body.Root imported.FactId "rooted at the imported fact"
@@ -468,14 +469,15 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             let anchor =
                 PeerTrustAnchor.create "deployment-a" a.PublicKey
                 |> PeerTrustAnchor.withCeiling (Restricted "policy:third-party")
 
             match!
-                (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                (doorFor b [ anchor ] audit)
+                    .Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
             with
             | Error refusal -> failtestf "the import must succeed: %s" (FactImportRefusal.describe refusal)
             | Ok imported ->
@@ -506,11 +508,11 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "margin" 42m (Restricted restrictedPolicy)
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             match!
                 (doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit)
-                    .Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                    .Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
             with
             | Error refusal -> failtestf "the import must succeed: %s" (FactImportRefusal.describe refusal)
             | Ok imported ->
@@ -523,7 +525,7 @@ let tests =
                 // denies it — the conservative resolution, unchanged.
                 let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
                 let gate = FactDisclosureGate.create b.Store events
-                let! verdicts = gate.Check(scopeB, "reader", FactExport, [ imported.FactId ])
+                let! verdicts = gate.Check(TestScope.resolved scopeB, "reader", FactExport, [ imported.FactId ])
 
                 match verdicts.TryFind imported.FactId with
                 | Some(FactNotDisclosable policyRef) ->
@@ -540,14 +542,16 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             // The anchor exists, under a different name. A door that
             // searched its anchors for one that happened to verify would
             // pass here — and would have no answer to "whose fact is this".
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-unknown", ImportedFactOffer.ofFact original, json) with
+            match!
+                door.Import(TestScope.resolved scopeB, "deployment-unknown", ImportedFactOffer.ofFact original, json)
+            with
             | Error(ImportUntrustedPeer peerId) -> Expect.equal peerId "deployment-unknown" "the refusal names the peer"
             | Error other -> failtestf "expected an untrusted-peer refusal; got %s" (FactImportRefusal.describe other)
             | Ok _ -> failtest "a peer with no composed key material must never import"
@@ -564,13 +568,13 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             // B holds C's key under the name it knows C by; A's document is
             // offered as C's.
             let door = doorFor b [ PeerTrustAnchor.create "deployment-c" c.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-c", ImportedFactOffer.ofFact original, json) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-c", ImportedFactOffer.ofFact original, json) with
             | Error(ImportUnverifiable(EnvelopeUnsignedForKey keyId)) ->
                 Expect.equal keyId c.KeyId "the refusal names the key that was expected and absent"
             | Error other -> failtestf "expected an unverifiable refusal; got %s" (FactImportRefusal.describe other)
@@ -587,7 +591,7 @@ let tests =
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! other = seed a scopeA "cost" 900m Surfaceable
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             // Editing the root inside the signed statement is the obvious
             // forgery. It must present as tampering, because that is what
@@ -596,7 +600,7 @@ let tests =
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact other, tampered) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact other, tampered) with
             | Error(ImportUnverifiable EnvelopeSignatureInvalid) -> ()
             | Error other' -> failtestf "expected a signature failure; got %s" (FactImportRefusal.describe other')
             | Ok _ -> failtest "an edited certificate must never import"
@@ -612,14 +616,16 @@ let tests =
 
             let! certified = seed a scopeA "revenue" 1250m Surfaceable
             let! uncertified = seed a scopeA "cost" 900m Surfaceable
-            let! _, json = certificateJsonFor a scopeA certified.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) certified.FactId
 
             // Perfectly signed, and about something else. A holder told
             // this does not verify would go hunting for tampering that
             // never happened.
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact uncertified, json) with
+            match!
+                door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact uncertified, json)
+            with
             | Error(ImportContentIdMismatch(root, derived)) ->
                 Expect.equal root certified.FactId "the verdict names the fact the certificate covers"
                 Expect.equal derived uncertified.FactId "and the one that was offered"
@@ -639,7 +645,7 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
             let honest = ImportedFactOffer.ofFact original
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
@@ -676,7 +682,7 @@ let tests =
             ]
 
             for label, mutated in mutations do
-                match! door.Import(scopeB, "deployment-a", mutated, json) with
+                match! door.Import(TestScope.resolved scopeB, "deployment-a", mutated, json) with
                 | Error(ImportContentIdMismatch(root, derived)) ->
                     Expect.equal root original.FactId $"altering {label} leaves the certificate's root alone"
                     Expect.notEqual derived original.FactId $"but re-derives to a different id"
@@ -703,7 +709,7 @@ let tests =
             // policy ref survive, the method does not. Importing it would
             // be the widest widening available.
             let! original = seed a scopeA "headcount" 37m Internal
-            let! certificate, json = certificateJsonFor a scopeA original.FactId
+            let! certificate, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             let rootNode =
                 certificate.Body.Nodes |> List.tryFind (fun n -> n.Id = original.FactId)
@@ -714,7 +720,7 @@ let tests =
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
             | Error(ImportWithheldByPeer stance) ->
                 Expect.equal stance "Internal" "the refusal names the stance the peer sealed"
             | Error other -> failtestf "expected a withheld refusal; got %s" (FactImportRefusal.describe other)
@@ -755,7 +761,7 @@ let tests =
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", offer, json) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", offer, json) with
             | Error(ImportRootNotAFact kind) ->
                 Expect.equal kind "AnswerPlan" "the refusal names what was certified instead"
             | Error other -> failtestf "expected a root-not-a-fact refusal; got %s" (FactImportRefusal.describe other)
@@ -767,7 +773,7 @@ let tests =
             // reached the other way.
             let! headless = sealBody a (bodyWith a.KeyId root [])
 
-            match! door.Import(scopeB, "deployment-a", offer, headless) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", offer, headless) with
             | Error(ImportRootNotAFact "absent") -> ()
             | Error other -> failtestf "a rootless chain must be refused; got %s" (FactImportRefusal.describe other)
             | Ok _ -> failtest "a certificate carrying no node for its root must never import"
@@ -807,7 +813,7 @@ let tests =
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", offer, json) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", offer, json) with
             | Error(ImportStanceUnreadable stance) ->
                 Expect.equal stance "PartnerVisible" "the refusal quotes what it could not read"
             | Error other ->
@@ -833,7 +839,9 @@ let tests =
                     "not JSON", "{ this is not json"
                     "an unrelated object", """{"hello":1}"""
                 ] do
-                match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, document) with
+                match!
+                    door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, document)
+                with
                 | Error(ImportUnverifiable(EnvelopeMalformed _)) -> ()
                 | Error other ->
                     failtestf
@@ -865,9 +873,12 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
-            match! (doorFor b [] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
+            match!
+                (doorFor b [] audit)
+                    .Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+            with
             | Error(ImportUntrustedPeer _) -> ()
             | Error other -> failtestf "expected an untrusted-peer refusal; got %s" (FactImportRefusal.describe other)
             | Ok _ -> failtest "an anchorless door must import nothing"
@@ -896,11 +907,13 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! certificate, json = attestedCertificateJsonFor a scopeA original.FactId IsolatedSigner
+
+            let! certificate, json =
+                attestedCertificateJsonFor a (TestScope.resolved scopeA) original.FactId IsolatedSigner
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
             | Error refusal -> failtestf "an attested import must succeed: %s" (FactImportRefusal.describe refusal)
             | Ok imported ->
                 Expect.equal imported.Value original.Value "the value crossed unchanged"
@@ -946,7 +959,7 @@ let tests =
             let audit = RecordingAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! _, json = certificateJsonFor a scopeA original.FactId
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
 
             // And the strictest level policy available does not touch it:
             // a level nobody claimed cannot be measured against one.
@@ -955,7 +968,8 @@ let tests =
                 |> PeerTrustAnchor.withAdmissibleLevels [ IsolatedSigner ]
 
             match!
-                (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                (doorFor b [ anchor ] audit)
+                    .Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
             with
             | Error refusal ->
                 failtestf "the direct path must be unchanged by a level policy: %s" (FactImportRefusal.describe refusal)
@@ -983,14 +997,15 @@ let tests =
                 // statement about this arm alone.
                 let! b = deployment "deployment-b-v1"
                 let audit = RecordingAuditLog()
-                let! _, json = attestedCertificateJsonFor a scopeA original.FactId level
+                let! _, json = attestedCertificateJsonFor a (TestScope.resolved scopeA) original.FactId level
 
                 let anchor =
                     PeerTrustAnchor.create "deployment-a" a.PublicKey
                     |> PeerTrustAnchor.withAdmissibleLevels policy
 
                 match!
-                    (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                    (doorFor b [ anchor ] audit)
+                        .Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
                 with
                 | Error refusal ->
                     failtestf
@@ -1015,14 +1030,15 @@ let tests =
                 ] do
                 let! b = deployment "deployment-b-v1"
                 let audit = RecordingAuditLog()
-                let! _, json = attestedCertificateJsonFor a scopeA original.FactId level
+                let! _, json = attestedCertificateJsonFor a (TestScope.resolved scopeA) original.FactId level
 
                 let anchor =
                     PeerTrustAnchor.create "deployment-a" a.PublicKey
                     |> PeerTrustAnchor.withAdmissibleLevels policy
 
                 match!
-                    (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                    (doorFor b [ anchor ] audit)
+                        .Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
                 with
                 | Error(ImportLevelNotAdmitted(offered, admitted)) ->
                     // Not `ImportUnverifiable`: the document verified, and
@@ -1064,7 +1080,7 @@ let tests =
             let reserved = Reserved "hardware-quote"
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
-            let! _, json = attestedCertificateJsonFor a scopeA original.FactId reserved
+            let! _, json = attestedCertificateJsonFor a (TestScope.resolved scopeA) original.FactId reserved
 
             for policy in
                 [
@@ -1081,7 +1097,8 @@ let tests =
                     |> PeerTrustAnchor.withAdmissibleLevels policy
 
                 match!
-                    (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
+                    (doorFor b [ anchor ] audit)
+                        .Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json)
                 with
                 | Error(ImportLevelNotAdmitted(offered, _)) ->
                     Expect.equal offered "reserved:hardware-quote" "the refusal quotes the label verbatim"
@@ -1121,7 +1138,7 @@ let tests =
 
             let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
 
-            match! door.Import(scopeB, "deployment-a", offer, json) with
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", offer, json) with
             | Error(ImportUnknownProjection predicateType) ->
                 Expect.equal predicateType foreignType "the refusal quotes the type the document declared"
             | Error other ->
@@ -1148,7 +1165,7 @@ let tests =
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let offer = ImportedFactOffer.ofFact original
             let root = ImportedFactOffer.derivedFactId offer
-            let! certificate, _ = attestedCertificateJsonFor a scopeA original.FactId Attribution
+            let! certificate, _ = attestedCertificateJsonFor a (TestScope.resolved scopeA) original.FactId Attribution
 
             let predicate =
                 JsonNode.Parse(CertificateEnvelope.attestedPredicateJson certificate)
@@ -1179,7 +1196,7 @@ let tests =
                 PeerTrustAnchor.create "deployment-a" a.PublicKey
                 |> PeerTrustAnchor.withAdmissibleLevels [ Attribution ]
 
-            match! (doorFor b [ anchor ] audit).Import(scopeB, "deployment-a", offer, doctored) with
+            match! (doorFor b [ anchor ] audit).Import(TestScope.resolved scopeB, "deployment-a", offer, doctored) with
             | Error(ImportUnverifiable(EnvelopeMalformed reason)) ->
                 Expect.stringContains
                     reason
@@ -1215,8 +1232,8 @@ let tests =
             let! certified = seed a scopeA "revenue" 1250m Surfaceable
             let! other = seed a scopeA "cost" 900m Surfaceable
 
-            let! _, directJson = certificateJsonFor a scopeA certified.FactId
-            let! _, attestedJson = attestedCertificateJsonFor a scopeA certified.FactId Attribution
+            let! _, directJson = certificateJsonFor a (TestScope.resolved scopeA) certified.FactId
+            let! _, attestedJson = attestedCertificateJsonFor a (TestScope.resolved scopeA) certified.FactId Attribution
 
             // An anchor that admits nothing, so a level check running early
             // would be visible as a different verdict.
@@ -1233,7 +1250,9 @@ let tests =
                 // reached it.
                 let tampered = tamperStatement certified.FactId other.FactId json
 
-                match! door.Import(scopeB, "deployment-a", ImportedFactOffer.ofFact other, tampered) with
+                match!
+                    door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact other, tampered)
+                with
                 | Error(ImportUnverifiable EnvelopeSignatureInvalid) -> ()
                 | Error refusal ->
                     failtestf

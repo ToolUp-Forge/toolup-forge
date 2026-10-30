@@ -152,12 +152,13 @@ let private refused label (r: Async<Result<'T, FactTableWriteError>>) : FactTabl
 
 /// Open, stage the rows (in the given batches) and commit.
 let private runOf (writer: IFactTableWriter) (scope: string) (tableId: string) (batches: FactTableRow list list) =
-    let run = ok "open" (writer.OpenRun(scope, tableId))
+    let run = ok "open" (writer.OpenRun(TestScope.resolved scope, tableId))
 
     for batch in batches do
-        ok "write" (writer.WriteRows(scope, run.RunId, batch)) |> ignore
+        ok "write" (writer.WriteRows(TestScope.resolved scope, run.RunId, batch))
+        |> ignore
 
-    run, writer.Commit(scope, run.RunId) |> Async.RunSynchronously
+    run, writer.Commit(TestScope.resolved scope, run.RunId) |> Async.RunSynchronously
 
 let private committed label (_, result: Result<FactTableCommit, FactTableWriteError>) : FactTableCommit =
     match result with
@@ -166,12 +167,13 @@ let private committed label (_, result: Result<FactTableCommit, FactTableWriteEr
 
 let private tableFacts (facts: IFactStore) (scope: string) (metricId: string) : Fact list =
     facts.Query(
-        scope,
+        TestScope.resolved scope,
         {
             FactQuery.all with
                 Metric = Some(MetricRef metricId)
         }
     )
+    |> TestScope.ok
     |> Async.RunSynchronously
 
 let private valueAt (facts: IFactStore) (scope: string) (metricId: string) (path: string list) : FactValue option =
@@ -218,7 +220,7 @@ let tests (name: string) (factory: FactTableWriterFactory) =
             for fact in tableFacts f.Facts f.ScopeA "segment" do
                 Expect.equal fact.Disclosure Disclosure.Internal "the column's own disclosure wins"
 
-            let status = ok "status" (f.Writer.Status(f.ScopeA, table.Id))
+            let status = ok "status" (f.Writer.Status(TestScope.resolved f.ScopeA, table.Id))
             Expect.equal status.LastCommit (Some commit) "status reports the last commit"
             Expect.equal status.Freshness (FactTableFreshness.Fresh commit.Watermark.CommittedAt) "fresh"
             Expect.equal status.LatestRunOutcome (Some FactTableRunOutcome.Succeeded) "the latest run succeeded"
@@ -248,18 +250,22 @@ let tests (name: string) (factory: FactTableWriterFactory) =
 
             Expect.isEmpty (tableFacts f.Facts f.ScopeA "revenue") "nothing was written"
 
-            let runs = ok "runs" (f.Writer.Runs(f.ScopeA, table.Id))
+            let runs = ok "runs" (f.Writer.Runs(TestScope.resolved f.ScopeA, table.Id))
 
             match runs |> List.map _.Status with
             | [ FactTableRunStatus.Rejected reason ] ->
                 Expect.stringContains reason "row 1" "the record keeps the reason"
             | other -> failtestf "expected one rejected run, got %A" other
 
-            match refused "write after reject" (f.Writer.WriteRows(f.ScopeA, run.RunId, [ row "a" "b" 1m "c" ])) with
+            match
+                refused
+                    "write after reject"
+                    (f.Writer.WriteRows(TestScope.resolved f.ScopeA, run.RunId, [ row "a" "b" 1m "c" ]))
+            with
             | FactTableRunClosed _ -> ()
             | other -> failtestf "expected FactTableRunClosed, got %A" other
 
-            let status = ok "status" (f.Writer.Status(f.ScopeA, table.Id))
+            let status = ok "status" (f.Writer.Status(TestScope.resolved f.ScopeA, table.Id))
             Expect.equal status.Freshness FactTableFreshness.NeverRefreshed "a rejected run refreshes nothing"
 
             match status.LatestRunOutcome with
@@ -402,9 +408,13 @@ let tests (name: string) (factory: FactTableWriterFactory) =
 
             let now = ref t0
             let f = fixtureWith (fun () -> now.Value) [ table ]
-            let early = ok "open early" (f.Writer.OpenRun(f.ScopeA, table.Id))
 
-            ok "stage early" (f.Writer.WriteRows(f.ScopeA, early.RunId, [ row "acme" "a1" 1m "core" ]))
+            let early =
+                ok "open early" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
+
+            ok
+                "stage early"
+                (f.Writer.WriteRows(TestScope.resolved f.ScopeA, early.RunId, [ row "acme" "a1" 1m "core" ]))
             |> ignore
 
             // Past the cadence the early run no longer holds the table (Phase
@@ -415,7 +425,7 @@ let tests (name: string) (factory: FactTableWriterFactory) =
             |> committed "the other run"
             |> ignore
 
-            match refused "stale commit" (f.Writer.Commit(f.ScopeA, early.RunId)) with
+            match refused "stale commit" (f.Writer.Commit(TestScope.resolved f.ScopeA, early.RunId)) with
             | FactTableCommitConflict(_, openedAgainst, current) ->
                 Expect.equal (openedAgainst, current) (0L, 1L) "the conflict names both sequences"
             | other -> failtestf "expected FactTableCommitConflict, got %A" other
@@ -436,17 +446,21 @@ let tests (name: string) (factory: FactTableWriterFactory) =
             let f = fixture [ required; optional ]
 
             for table in [ required; optional ] do
-                let run = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+                let run = ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
 
-                ok "abandon" (f.Writer.Abandon(f.ScopeA, run.RunId, "upstream data missing"))
+                ok "abandon" (f.Writer.Abandon(TestScope.resolved f.ScopeA, run.RunId, "upstream data missing"))
                 |> ignore
 
-            match (ok "required status" (f.Writer.Status(f.ScopeA, required.Id))).LatestRunOutcome with
+            match
+                (ok "required status" (f.Writer.Status(TestScope.resolved f.ScopeA, required.Id))).LatestRunOutcome
+            with
             | Some(FactTableRunOutcome.Failed reason) ->
                 Expect.stringContains reason "upstream data missing" "reason kept"
             | other -> failtestf "expected Failed, got %A" other
 
-            match (ok "optional status" (f.Writer.Status(f.ScopeA, optional.Id))).LatestRunOutcome with
+            match
+                (ok "optional status" (f.Writer.Status(TestScope.resolved f.ScopeA, optional.Id))).LatestRunOutcome
+            with
             | Some(FactTableRunOutcome.Discarded _) -> ()
             | other -> failtestf "expected Discarded, got %A" other
         }
@@ -462,15 +476,16 @@ let tests (name: string) (factory: FactTableWriterFactory) =
                 runOf f.Writer f.ScopeA table.Id [ [ row "acme" "a1" 1m "core" ] ]
                 |> committed "first"
 
-            ok "open a second" (f.Writer.OpenRun(f.ScopeA, table.Id)) |> ignore
+            ok "open a second" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
+            |> ignore
 
             now.Value <- t0.AddHours 12.0
-            let halfway = ok "halfway" (f.Writer.Status(f.ScopeA, table.Id))
+            let halfway = ok "halfway" (f.Writer.Status(TestScope.resolved f.ScopeA, table.Id))
             Expect.equal halfway.LatestRunOutcome (Some FactTableRunOutcome.InProgress) "within the cadence"
             Expect.equal halfway.Freshness (FactTableFreshness.Fresh commit.Watermark.CommittedAt) "still fresh"
 
             now.Value <- t0.AddDays 3.0
-            let late = ok "late" (f.Writer.Status(f.ScopeA, table.Id))
+            let late = ok "late" (f.Writer.Status(TestScope.resolved f.ScopeA, table.Id))
 
             match late.LatestRunOutcome with
             | Some(FactTableRunOutcome.Failed reason) -> Expect.stringContains reason "refresh cadence" "overdue"
@@ -489,11 +504,11 @@ let tests (name: string) (factory: FactTableWriterFactory) =
                     skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Optional
                 ]
 
-            match refused "open" (f.Writer.OpenRun(f.ScopeA, "ghost")) with
+            match refused "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, "ghost")) with
             | FactTableUndeclared "ghost" -> ()
             | other -> failtestf "expected FactTableUndeclared, got %A" other
 
-            match refused "commit unknown" (f.Writer.Commit(f.ScopeA, "no-such-run")) with
+            match refused "commit unknown" (f.Writer.Commit(TestScope.resolved f.ScopeA, "no-such-run")) with
             | FactTableRunUnknown "no-such-run" -> ()
             | other -> failtestf "expected FactTableRunUnknown, got %A" other
         }
@@ -509,9 +524,9 @@ let tests (name: string) (factory: FactTableWriterFactory) =
             |> ignore
 
             Expect.isEmpty (tableFacts f.Facts f.ScopeB "revenue") "no facts leak"
-            Expect.isEmpty (ok "runs B" (f.Writer.Runs(f.ScopeB, table.Id))) "no runs leak"
+            Expect.isEmpty (ok "runs B" (f.Writer.Runs(TestScope.resolved f.ScopeB, table.Id))) "no runs leak"
 
-            let status = ok "status B" (f.Writer.Status(f.ScopeB, table.Id))
+            let status = ok "status B" (f.Writer.Status(TestScope.resolved f.ScopeB, table.Id))
             Expect.equal status.Freshness FactTableFreshness.NeverRefreshed "scope B never refreshed"
 
             let firstB =
@@ -656,8 +671,10 @@ let defaultWriterObligationTests =
             ]
             |> ignore
 
-            let open' = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
-            ok "abandon" (f.Writer.Abandon(f.ScopeA, open'.RunId, "cancelled")) |> ignore
+            let open' = ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
+
+            ok "abandon" (f.Writer.Abandon(TestScope.resolved f.ScopeA, open'.RunId, "cancelled"))
+            |> ignore
 
             let types = runEvents world.Events f.ScopeA |> List.map _.EventType |> List.sort
 
@@ -674,7 +691,7 @@ let defaultWriterObligationTests =
             let world =
                 defaultWorld (fun () -> t0) [ table ] registry [ BindFactTable(table.Id, "warehouse") ]
 
-            match refused "open" (world.Fixture.Writer.OpenRun(world.Fixture.ScopeA, table.Id)) with
+            match refused "open" (world.Fixture.Writer.OpenRun(TestScope.resolved world.Fixture.ScopeA, table.Id)) with
             | FactTableNotBoundHere(id, Some "warehouse", writer) ->
                 Expect.equal (id, writer) (table.Id, DefaultFactTableWriter.Destination) "names table and writer"
             | other -> failtestf "expected FactTableNotBoundHere, got %A" other
@@ -693,17 +710,18 @@ let defaultWriterObligationTests =
             |> committed "unmarked"
             |> ignore
 
-            let run = ok "open" (f.Writer.OpenRun(f.ScopeB, table.Id, ComputedRun))
+            let run =
+                ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeB, table.Id, ComputedRun))
 
             Expect.isEmpty
                 (world.Storage.List(f.ScopeB, "_fact-tables/provenance/")
                  |> Async.RunSynchronously)
                 "a computed run keeps no provenance, even while open"
 
-            ok "write" (f.Writer.WriteRows(f.ScopeB, run.RunId, [ row "acme" "a1" 10m "core" ]))
+            ok "write" (f.Writer.WriteRows(TestScope.resolved f.ScopeB, run.RunId, [ row "acme" "a1" 10m "core" ]))
             |> ignore
 
-            ok "commit" (f.Writer.Commit(f.ScopeB, run.RunId)) |> ignore
+            ok "commit" (f.Writer.Commit(TestScope.resolved f.ScopeB, run.RunId)) |> ignore
 
             for scope in [ f.ScopeA; f.ScopeB ] do
                 Expect.isEmpty
@@ -723,29 +741,38 @@ let defaultWriterObligationTests =
                 world.Storage.List(f.ScopeA, "_fact-tables/provenance/")
                 |> Async.RunSynchronously
 
-            let committedRun = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id, imported))
+            let committedRun =
+                ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, imported))
+
             Expect.hasLength (kept ()) 1 "kept beside the open run (the probes below are not vacuous)"
 
-            ok "write" (f.Writer.WriteRows(f.ScopeA, committedRun.RunId, [ row "acme" "a1" 10m "core" ]))
+            ok
+                "write"
+                (f.Writer.WriteRows(TestScope.resolved f.ScopeA, committedRun.RunId, [ row "acme" "a1" 10m "core" ]))
             |> ignore
 
-            ok "commit" (f.Writer.Commit(f.ScopeA, committedRun.RunId)) |> ignore
+            ok "commit" (f.Writer.Commit(TestScope.resolved f.ScopeA, committedRun.RunId))
+            |> ignore
+
             Expect.isEmpty (kept ()) "a committed run's provenance goes with its staging"
 
-            let abandoned = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id, imported))
+            let abandoned =
+                ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, imported))
+
             Expect.hasLength (kept ()) 1 "kept again"
 
-            ok "abandon" (f.Writer.Abandon(f.ScopeA, abandoned.RunId, "changed my mind"))
+            ok "abandon" (f.Writer.Abandon(TestScope.resolved f.ScopeA, abandoned.RunId, "changed my mind"))
             |> ignore
 
             Expect.isEmpty (kept ()) "an abandoned run's provenance goes with it"
 
-            let rejected = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id, imported))
+            let rejected =
+                ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, imported))
 
             ok
                 "write"
                 (f.Writer.WriteRows(
-                    f.ScopeA,
+                    TestScope.resolved f.ScopeA,
                     rejected.RunId,
                     [
                         {
@@ -756,7 +783,9 @@ let defaultWriterObligationTests =
                 ))
             |> ignore
 
-            refused "reject" (f.Writer.Commit(f.ScopeA, rejected.RunId)) |> ignore
+            refused "reject" (f.Writer.Commit(TestScope.resolved f.ScopeA, rejected.RunId))
+            |> ignore
+
             Expect.isEmpty (kept ()) "and so does a rejected run's"
         }
 
@@ -787,7 +816,7 @@ let defaultWriterObligationTests =
 
             let population =
                 f.Facts.QueryPopulation(
-                    f.ScopeA,
+                    TestScope.resolved f.ScopeA,
                     {
                         (PopulationQuery.create (MetricRef "revenue") "products") with
                             Level = Some 2
@@ -805,7 +834,7 @@ let defaultWriterObligationTests =
                     (result.Ranked |> List.map _.Value)
                     [ Scalar 10_000m; Scalar 9_999m; Scalar 9_998m ]
                     "ranked"
-            | Error e -> failtestf "population read refused: %s" e
+            | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
 
             let runRecords =
                 runEvents world.Events f.ScopeA
@@ -820,7 +849,11 @@ let defaultWriterObligationTests =
 /// The current facts of one cell, asked by a point read — the read every
 /// implementer answers, whether it wrote facts or holds rows.
 let private cellFacts (facts: IFactStore) (scope: string) (metricId: string) (path: string list) : Fact list =
-    facts.Query(scope, FactQuery.forSubjectMetric { Hierarchy = "products"; Path = path } (MetricRef metricId))
+    facts.Query(
+        TestScope.resolved scope,
+        FactQuery.forSubjectMetric { Hierarchy = "products"; Path = path } (MetricRef metricId)
+    )
+    |> TestScope.ok
     |> Async.RunSynchronously
 
 let private importedCell (brand: string) (sku: string) (metricId: string) (d: Disclosure) : FactTableImportedCell = {
@@ -851,13 +884,16 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
         (provenance: FactTableRunProvenance option)
         =
         match provenance with
-        | None -> ok "open" (f.Writer.OpenRun(scope, tableId))
-        | Some p -> ok "open" (f.Writer.OpenRun(scope, tableId, p))
+        | None -> ok "open" (f.Writer.OpenRun(TestScope.resolved scope, tableId))
+        | Some p -> ok "open" (f.Writer.OpenRun(TestScope.resolved scope, tableId, p))
 
     let commitWith f scope tableId provenance (rows: FactTableRow list) =
         let run = openWith f scope tableId provenance
-        ok "write" (f.Writer.WriteRows(scope, run.RunId, rows)) |> ignore
-        ok "commit" (f.Writer.Commit(scope, run.RunId))
+
+        ok "write" (f.Writer.WriteRows(TestScope.resolved scope, run.RunId, rows))
+        |> ignore
+
+        ok "commit" (f.Writer.Commit(TestScope.resolved scope, run.RunId))
 
     let commitWithMethod (f: FactTableWriterFixture) scope tableId (method: DeclaredMethod) (rows: FactTableRow list) =
         let options = FactTableRunOptions.none |> FactTableRunOptions.withMethod method
@@ -1006,7 +1042,10 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
             let derive = DeclaredMethod.create "sales.derive" "v1"
 
             let first =
-                commitWithMethod f f.ScopeA table.Id derive [ row "acme" "a1" 10m "core"; row "zeta" "z1" 5m "edge" ]
+                commitWithMethod f (TestScope.resolved f.ScopeA) table.Id derive [
+                    row "acme" "a1" 10m "core"
+                    row "zeta" "z1" 5m "edge"
+                ]
 
             Expect.equal first.RowCount 2 "the run committed both rows"
 
@@ -1021,7 +1060,7 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
                         "and stays in the table's own lineage"
 
             // zeta is dropped: its withdrawal is written by the run too.
-            commitWithMethod f f.ScopeA table.Id derive [ row "acme" "a1" 10m "core" ]
+            commitWithMethod f (TestScope.resolved f.ScopeA) table.Id derive [ row "acme" "a1" 10m "core" ]
             |> ignore
 
             let z1 = oneCurrent f f.ScopeA "revenue" [ "zeta"; "z1" ]
@@ -1044,10 +1083,13 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
             commitWith f f.ScopeA table.Id None rows |> ignore
 
             let opened =
-                ok "open" (f.Writer.OpenRun(f.ScopeB, table.Id, options = FactTableRunOptions.none))
+                ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeB, table.Id, options = FactTableRunOptions.none))
 
-            ok "write" (f.Writer.WriteRows(f.ScopeB, opened.RunId, rows)) |> ignore
-            ok "commit" (f.Writer.Commit(f.ScopeB, opened.RunId)) |> ignore
+            ok "write" (f.Writer.WriteRows(TestScope.resolved f.ScopeB, opened.RunId, rows))
+            |> ignore
+
+            ok "commit" (f.Writer.Commit(TestScope.resolved f.ScopeB, opened.RunId))
+            |> ignore
 
             let written (scope: string) = [
                 for metricId in [ "revenue"; "segment" ] do
@@ -1079,7 +1121,10 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
             let m1 = DeclaredMethod.create "sales.derive" "v1"
             let m2 = DeclaredMethod.create "sales.rederive" "v2"
 
-            commitWithMethod f f.ScopeA table.Id m1 [ row "acme" "a1" 10m "core"; row "zeta" "z1" 5m "edge" ]
+            commitWithMethod f (TestScope.resolved f.ScopeA) table.Id m1 [
+                row "acme" "a1" 10m "core"
+                row "zeta" "z1" 5m "edge"
+            ]
             |> ignore
 
             let before = oneCurrent f f.ScopeA "revenue" [ "acme"; "a1" ]
@@ -1087,7 +1132,10 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
             Expect.equal (DeclaredMethod.ofEvidence before.Evidence) (Some m1) "M1 wrote the first run"
 
             // M2 re-derives the same subject and period: a1 unchanged, z1 changed.
-            commitWithMethod f f.ScopeA table.Id m2 [ row "acme" "a1" 10m "core"; row "zeta" "z1" 6m "edge" ]
+            commitWithMethod f (TestScope.resolved f.ScopeA) table.Id m2 [
+                row "acme" "a1" 10m "core"
+                row "zeta" "z1" 6m "edge"
+            ]
             |> ignore
 
             let after = oneCurrent f f.ScopeA "revenue" [ "acme"; "a1" ]
@@ -1104,7 +1152,10 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
             Expect.equal zetaAfter.Supersedes (Some zetaBefore.FactId) "and supersedes M1's"
 
             // And exactly as a same-method run: M2 again, z1 changed again.
-            commitWithMethod f f.ScopeA table.Id m2 [ row "acme" "a1" 10m "core"; row "zeta" "z1" 7m "edge" ]
+            commitWithMethod f (TestScope.resolved f.ScopeA) table.Id m2 [
+                row "acme" "a1" 10m "core"
+                row "zeta" "z1" 7m "edge"
+            ]
             |> ignore
 
             let zetaAgain = oneCurrent f f.ScopeA "revenue" [ "zeta"; "z1" ]
@@ -1125,11 +1176,12 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
                 ] do
                 let options = FactTableRunOptions.none |> FactTableRunOptions.withMethod bad
 
-                match refused "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = options)) with
+                match refused "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = options)) with
                 | FactTableRunOptionsRefused(tableId, _) -> Expect.equal tableId table.Id "names the table"
                 | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
 
-            ok "the table is not held" (f.Writer.OpenRun(f.ScopeA, table.Id)) |> ignore
+            ok "the table is not held" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
+            |> ignore
         }
     ]
 
@@ -1183,17 +1235,23 @@ let exclusivityTests (name: string) (factory: FactTableWriterFactory) =
 
             let f = fixtureWith (fun () -> t0) [ table; other ]
 
-            let first = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            let first = ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
 
-            match refused "second open" (f.Writer.OpenRun(f.ScopeA, table.Id)) with
+            match refused "second open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id)) with
             | FactTableRunInProgress(tableId, openRunId) ->
                 Expect.equal (tableId, openRunId) (table.Id, first.RunId) "names the table and the open run"
             | e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
 
-            ok "another table is not held" (f.Writer.OpenRun(f.ScopeA, other.Id)) |> ignore
-            ok "another scope is not held" (f.Writer.OpenRun(f.ScopeB, table.Id)) |> ignore
+            ok "another table is not held" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, other.Id))
+            |> ignore
 
-            Expect.hasLength (ok "runs" (f.Writer.Runs(f.ScopeA, table.Id))) 1 "the refused open left no run behind"
+            ok "another scope is not held" (f.Writer.OpenRun(TestScope.resolved f.ScopeB, table.Id))
+            |> ignore
+
+            Expect.hasLength
+                (ok "runs" (f.Writer.Runs(TestScope.resolved f.ScopeA, table.Id)))
+                1
+                "the refused open left no run behind"
         }
 
         test "a run that ends — committed, abandoned or rejected — releases the table" {
@@ -1206,17 +1264,19 @@ let exclusivityTests (name: string) (factory: FactTableWriterFactory) =
             |> committed "committed"
             |> ignore
 
-            let abandoned = ok "open after a commit" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            let abandoned =
+                ok "open after a commit" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
 
-            ok "abandon" (f.Writer.Abandon(f.ScopeA, abandoned.RunId, "cancelled"))
+            ok "abandon" (f.Writer.Abandon(TestScope.resolved f.ScopeA, abandoned.RunId, "cancelled"))
             |> ignore
 
-            let rejected = ok "open after an abandon" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            let rejected =
+                ok "open after an abandon" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
 
             ok
                 "stage a bad row"
                 (f.Writer.WriteRows(
-                    f.ScopeA,
+                    TestScope.resolved f.ScopeA,
                     rejected.RunId,
                     [
                         {
@@ -1227,8 +1287,11 @@ let exclusivityTests (name: string) (factory: FactTableWriterFactory) =
                 ))
             |> ignore
 
-            refused "reject" (f.Writer.Commit(f.ScopeA, rejected.RunId)) |> ignore
-            ok "open after a rejection" (f.Writer.OpenRun(f.ScopeA, table.Id)) |> ignore
+            refused "reject" (f.Writer.Commit(TestScope.resolved f.ScopeA, rejected.RunId))
+            |> ignore
+
+            ok "open after a rejection" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
+            |> ignore
         }
 
         test "a run open past the table's cadence no longer holds it" {
@@ -1238,17 +1301,21 @@ let exclusivityTests (name: string) (factory: FactTableWriterFactory) =
             let now = ref t0
             let f = fixtureWith (fun () -> now.Value) [ table ]
 
-            let stale = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            let stale = ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
 
             now.Value <- t0.AddHours 23.0
 
-            refused "within the cadence" (f.Writer.OpenRun(f.ScopeA, table.Id)) |> ignore
+            refused "within the cadence" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
+            |> ignore
 
             now.Value <- t0.AddDays 2.0
-            let fresh = ok "past the cadence" (f.Writer.OpenRun(f.ScopeA, table.Id))
+
+            let fresh =
+                ok "past the cadence" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
+
             Expect.notEqual fresh.RunId stale.RunId "a new run holds the table"
 
-            match refused "and holds it" (f.Writer.OpenRun(f.ScopeA, table.Id)) with
+            match refused "and holds it" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id)) with
             | FactTableRunInProgress(_, holder) -> Expect.equal holder fresh.RunId "the new run, not the stale one"
             | e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
         }
@@ -1260,7 +1327,7 @@ let exclusivityTests (name: string) (factory: FactTableWriterFactory) =
             let f = fixtureWith (fun () -> t0) [ table ]
 
             let outcomes =
-                List.init 8 (fun _ -> f.Writer.OpenRun(f.ScopeA, table.Id))
+                List.init 8 (fun _ -> f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
                 |> Async.Parallel
                 |> Async.RunSynchronously
                 |> List.ofArray
@@ -1280,7 +1347,7 @@ let exclusivityTests (name: string) (factory: FactTableWriterFactory) =
                     Expect.equal holder opened.Head.RunId "every refusal names the run that won"
                 | Error e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
 
-            Expect.hasLength (ok "runs" (f.Writer.Runs(f.ScopeA, table.Id))) 1 "and one run recorded"
+            Expect.hasLength (ok "runs" (f.Writer.Runs(TestScope.resolved f.ScopeA, table.Id))) 1 "and one run recorded"
         }
     ]
 
@@ -1291,12 +1358,15 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
     let fixture (tables: FactTableDefinition list) = factory (fun () -> t0) tables registry
 
     let openWith (f: FactTableWriterFixture) (scope: string) (tableId: string) (options: FactTableRunOptions) =
-        ok "open" (f.Writer.OpenRun(scope, tableId, options = options))
+        ok "open" (f.Writer.OpenRun(TestScope.resolved scope, tableId, options = options))
 
     let publish (f: FactTableWriterFixture) (scope: string) (tableId: string) options (rows: FactTableRow list) =
         let run = openWith f scope tableId options
-        ok "write" (f.Writer.WriteRows(scope, run.RunId, rows)) |> ignore
-        ok "commit" (f.Writer.Commit(scope, run.RunId))
+
+        ok "write" (f.Writer.WriteRows(TestScope.resolved scope, run.RunId, rows))
+        |> ignore
+
+        ok "commit" (f.Writer.Commit(TestScope.resolved scope, run.RunId))
 
     let daily (n: int) (input: char) =
         FactTableRunOptions.none
@@ -1349,7 +1419,11 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
             // A concurrent second run of the table is refused, never interleaved.
             let fourth = openWith f f.ScopeA table.Id (daily 4 'd')
 
-            match refused "a concurrent run" (f.Writer.OpenRun(f.ScopeA, table.Id, options = daily 4 'e')) with
+            match
+                refused
+                    "a concurrent run"
+                    (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = daily 4 'e'))
+            with
             | FactTableRunInProgress(_, holder) -> Expect.equal holder fourth.RunId "names the open run"
             | e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
         }
@@ -1421,10 +1495,16 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
 
             let run = openWith f f.ScopeA table.Id (daily 1 'a')
 
-            ok "write" (f.Writer.WriteRows(f.ScopeA, run.RunId, [ dayRow 1 "acme" "a1" 1m; dayRow 2 "acme" "a1" 2m ]))
+            ok
+                "write"
+                (f.Writer.WriteRows(
+                    TestScope.resolved f.ScopeA,
+                    run.RunId,
+                    [ dayRow 1 "acme" "a1" 1m; dayRow 2 "acme" "a1" 2m ]
+                ))
             |> ignore
 
-            match refused "commit" (f.Writer.Commit(f.ScopeA, run.RunId)) with
+            match refused "commit" (f.Writer.Commit(TestScope.resolved f.ScopeA, run.RunId)) with
             | FactTableRowsRejected(_, [ defect ]) ->
                 Expect.equal defect.Position 1 "the second row"
                 Expect.stringContains defect.Problem "outside the run's slice" "says why"
@@ -1446,10 +1526,10 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
             let run =
                 openWith f f.ScopeA table.Id (FactTableRunOptions.none |> FactTableRunOptions.forSlice (day 3))
 
-            ok "write" (f.Writer.WriteRows(f.ScopeA, run.RunId, [ dayRow 3 "acme" "a1" 1m ]))
+            ok "write" (f.Writer.WriteRows(TestScope.resolved f.ScopeA, run.RunId, [ dayRow 3 "acme" "a1" 1m ]))
             |> ignore
 
-            match refused "commit" (f.Writer.Commit(f.ScopeA, run.RunId)) with
+            match refused "commit" (f.Writer.Commit(TestScope.resolved f.ScopeA, run.RunId)) with
             | FactTableRunOptionsRefused(tableId, reason) ->
                 Expect.equal tableId table.Id "names the table"
                 Expect.stringContains reason "splits 1 committed row" "says why"
@@ -1460,7 +1540,7 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
                 (Some(Scalar 10m))
                 "the committed row stands"
 
-            ok "the refused run released the table" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            ok "the refused run released the table" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
             |> ignore
         }
 
@@ -1469,7 +1549,7 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
             let f = fixture [ table ]
 
             let refusedWith (options: FactTableRunOptions) (expected: string) =
-                match refused "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = options)) with
+                match refused "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = options)) with
                 | FactTableRunOptionsRefused(tableId, reason) ->
                     Expect.equal tableId table.Id "names the table"
                     Expect.stringContains reason expected "says why"
@@ -1488,9 +1568,9 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
                  |> FactTableRunOptions.forSlice { day 2 with To = (day 2).From })
                 "not a half-open extent"
 
-            Expect.isEmpty (ok "runs" (f.Writer.Runs(f.ScopeA, table.Id))) "no run was opened"
+            Expect.isEmpty (ok "runs" (f.Writer.Runs(TestScope.resolved f.ScopeA, table.Id))) "no run was opened"
 
-            ok "the table is free" (f.Writer.OpenRun(f.ScopeA, table.Id, options = daily 1 'a'))
+            ok "the table is free" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = daily 1 'a'))
             |> ignore
         }
     ]
@@ -1524,21 +1604,27 @@ let runRecordTests (name: string) (factory: FactTableWriterFactory) =
             let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
             let f = factory (fun () -> t0) [ table ] registry
 
-            let opened = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = declared))
+            let opened =
+                ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = declared))
+
             Expect.equal opened.Options kept "OpenRun returns the record with its options"
             Expect.equal opened.RecordVersion FactTableRunRecord.CurrentVersion "in the current record format"
 
             let open' =
-                ok "runs while open" (f.Writer.Runs(f.ScopeA, table.Id)) |> List.exactlyOne
+                ok "runs while open" (f.Writer.Runs(TestScope.resolved f.ScopeA, table.Id))
+                |> List.exactlyOne
 
             Expect.equal open'.Options kept "the open run's record carries them"
 
-            ok "write" (f.Writer.WriteRows(f.ScopeA, opened.RunId, [ dayRow 1 "acme" "a1" 10m ]))
+            ok "write" (f.Writer.WriteRows(TestScope.resolved f.ScopeA, opened.RunId, [ dayRow 1 "acme" "a1" 10m ]))
             |> ignore
 
-            ok "commit" (f.Writer.Commit(f.ScopeA, opened.RunId)) |> ignore
+            ok "commit" (f.Writer.Commit(TestScope.resolved f.ScopeA, opened.RunId))
+            |> ignore
 
-            let committedRun = ok "runs" (f.Writer.Runs(f.ScopeA, table.Id)) |> List.exactlyOne
+            let committedRun =
+                ok "runs" (f.Writer.Runs(TestScope.resolved f.ScopeA, table.Id))
+                |> List.exactlyOne
 
             match committedRun.Status with
             | FactTableRunStatus.Committed _ -> ()
@@ -1546,7 +1632,7 @@ let runRecordTests (name: string) (factory: FactTableWriterFactory) =
 
             Expect.equal committedRun.Options kept "a commit observer reads the options from the record"
 
-            let status = ok "status" (f.Writer.Status(f.ScopeA, table.Id))
+            let status = ok "status" (f.Writer.Status(TestScope.resolved f.ScopeA, table.Id))
 
             Expect.equal
                 (status.LatestRun |> Option.map _.Options)
@@ -1558,10 +1644,13 @@ let runRecordTests (name: string) (factory: FactTableWriterFactory) =
             let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
             let f = factory (fun () -> t0) [ table ] registry
 
-            let opened = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            let opened = ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
             Expect.equal opened.Options RunOptions.empty "no options"
 
-            let recorded = ok "runs" (f.Writer.Runs(f.ScopeA, table.Id)) |> List.exactlyOne
+            let recorded =
+                ok "runs" (f.Writer.Runs(TestScope.resolved f.ScopeA, table.Id))
+                |> List.exactlyOne
+
             Expect.equal recorded.Options RunOptions.empty "and the record says so"
         }
 
@@ -1569,16 +1658,18 @@ let runRecordTests (name: string) (factory: FactTableWriterFactory) =
             let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
             let f = factory (fun () -> t0) [ table ] registry
 
-            let opened = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = declared))
+            let opened =
+                ok "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = declared))
 
-            ok "write" (f.Writer.WriteRows(f.ScopeA, opened.RunId, [ dayRow 1 "acme" "a1" 10m ]))
+            ok "write" (f.Writer.WriteRows(TestScope.resolved f.ScopeA, opened.RunId, [ dayRow 1 "acme" "a1" 10m ]))
             |> ignore
 
-            ok "commit" (f.Writer.Commit(f.ScopeA, opened.RunId)) |> ignore
+            ok "commit" (f.Writer.Commit(TestScope.resolved f.ScopeA, opened.RunId))
+            |> ignore
 
             let fact =
                 f.Facts.Query(
-                    f.ScopeA,
+                    TestScope.resolved f.ScopeA,
                     {
                         FactQuery.all with
                             Metric = Some(MetricRef "revenue")
@@ -1589,6 +1680,7 @@ let runRecordTests (name: string) (factory: FactTableWriterFactory) =
                                 }
                     }
                 )
+                |> TestScope.ok
                 |> Async.RunSynchronously
                 |> List.exactlyOne
 
@@ -1616,11 +1708,13 @@ let runOptionsRefusedTests (name: string) (factory: FactTableWriterFactory) =
                 |> FactTableRunOptions.withInputs [ inputHash 'a' ]
                 |> FactTableRunOptions.forSlice (day 1)
 
-            match refused "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = options)) with
+            match refused "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = options)) with
             | FactTableRunOptionsRefused(tableId, _) -> Expect.equal tableId table.Id "names the table"
             | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
 
-            ok "none is not an option set" (f.Writer.OpenRun(f.ScopeA, table.Id, options = FactTableRunOptions.none))
+            ok
+                "none is not an option set"
+                (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = FactTableRunOptions.none))
             |> ignore
         }
     ]
@@ -1670,9 +1764,14 @@ let decoratorTests (name: string) (decorate: IFactTableWriter -> IFactTableWrite
                     ]
                 ]
 
-            ok "unmarked" (writer.OpenRun("scope", "sku-sales")) |> ignore
-            ok "computed" (writer.OpenRun("scope", "sku-sales", ComputedRun)) |> ignore
-            ok "imported" (writer.OpenRun("scope", "sku-sales", imported)) |> ignore
+            ok "unmarked" (writer.OpenRun(TestScope.resolved "scope", "sku-sales"))
+            |> ignore
+
+            ok "computed" (writer.OpenRun(TestScope.resolved "scope", "sku-sales", ComputedRun))
+            |> ignore
+
+            ok "imported" (writer.OpenRun(TestScope.resolved "scope", "sku-sales", imported))
+            |> ignore
 
             Expect.equal
                 recorder.Seen
@@ -1690,12 +1789,13 @@ let decoratorTests (name: string) (decorate: IFactTableWriter -> IFactTableWrite
                 |> FactTableRunOptions.forSlice (day 1)
                 |> FactTableRunOptions.withMethod (DeclaredMethod.create "sales.derive" "v1")
 
-            ok "unmarked" (writer.OpenRun("scope", "sku-sales")) |> ignore
-
-            ok "none" (writer.OpenRun("scope", "sku-sales", options = FactTableRunOptions.none))
+            ok "unmarked" (writer.OpenRun(TestScope.resolved "scope", "sku-sales"))
             |> ignore
 
-            ok "declared" (writer.OpenRun("scope", "sku-sales", ComputedRun, options))
+            ok "none" (writer.OpenRun(TestScope.resolved "scope", "sku-sales", options = FactTableRunOptions.none))
+            |> ignore
+
+            ok "declared" (writer.OpenRun(TestScope.resolved "scope", "sku-sales", ComputedRun, options))
             |> ignore
 
             Expect.equal

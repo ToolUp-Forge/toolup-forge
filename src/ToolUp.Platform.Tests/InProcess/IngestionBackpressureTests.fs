@@ -246,7 +246,6 @@ type private SlowGate(delay: TimeSpan) =
     }
 
     interface IFactDisclosureGate with
-        member _.Check(_: string, _: string, _: FactEgressSurface, ids: string list) = check ids
         member _.Check(_: ResolvedScope, _: string, _: FactEgressSurface, ids: string list) = check ids
 
 let private resolvedFact (id: string) : ResolvedFact = {

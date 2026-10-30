@@ -278,9 +278,9 @@ let tests =
 
             match FactWrite.prepare WriteShape.BatchAssert [ draft [ "fr" ] "ok" 1m; bad ] with
             | Ok _ -> failtest "expected a refusal"
-            | Error errors ->
+            | Error error ->
                 Expect.equal
-                    (FactWrite.renderOffenders 2 errors)
+                    (FactStoreError.describe error)
                     "fact store batch rejected: 1 of 2 drafts are malformed and none were committed — #1 geography/uk / : metric id is empty"
                     "the caller-facing refusal"
 
@@ -309,8 +309,8 @@ let tests =
 
             match FactWrite.prepare WriteShape.BatchAssert bad with
             | Ok _ -> failtest "expected a refusal"
-            | Error errors ->
-                let text = FactWrite.renderOffenders 12 errors
+            | Error error ->
+                let text = FactStoreError.describe error
                 Expect.stringContains text "12 of 12 drafts" "the count"
                 Expect.stringEnds text " (and 2 more)" "the overflow"
 

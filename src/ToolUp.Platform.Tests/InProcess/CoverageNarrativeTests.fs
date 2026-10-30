@@ -65,7 +65,7 @@ let private noopNotifications =
 /// what was committed. `refuse` makes the door answer the way the real
 /// one answers a disclosure refusal.
 type private RecordingIngestor(refuse: string option) =
-    let commits = ResizeArray<StorageScope * string * NarrativeDocument>()
+    let commits = ResizeArray<ResolvedScope * string * NarrativeDocument>()
 
     member _.Commits = commits |> List.ofSeq
 
@@ -89,7 +89,7 @@ type private RecordingIngestor(refuse: string option) =
 /// `unknown-fact` — the conservative contract the real gate honours.
 type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     interface IFactDisclosureGate with
-        member _.Check(_scopeId: string, _principal: string, _surface: FactEgressSurface, factIds: string list) = async {
+        member _.Check(_: ResolvedScope, _principal: string, _surface: FactEgressSurface, factIds: string list) = async {
             return
                 factIds
                 |> List.map (fun id ->
@@ -99,10 +99,6 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     |> Option.defaultValue (FactNotDisclosable "unknown-fact"))
                 |> Map.ofList
         }
-
-        // Phase 797 — the typed form delegates to the string form above.
-        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 // ── Registry + coverage fixtures ──────────────────────────────────
 
@@ -664,20 +660,21 @@ let disclosureTests =
                 Disclosure = Surfaceable
             }
 
-            let! a = store.Assert(scope, draft "sku-1" 10m)
-            let! b = store.Assert(scope, draft "sku-2" 20m)
+            let! a = store.Assert(TestScope.resolved scope, draft "sku-1" 10m)
+            let! b = store.Assert(TestScope.resolved scope, draft "sku-2" 20m)
 
             let idOf r =
                 match r with
                 | Ok(f: Fact) -> f.FactId
-                | Error e -> failtestf "assert failed: %s" e
+                | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
             let hierarchy = subjectDef "brand" [ "brand"; "sku" ]
 
             // Every head denied ⇒ the wholly-restricted arm.
             let denied = PresetGate(Map.empty) :> IFactDisclosureGate
 
-            let! whollyRestricted = CoverageNarrative.readHierarchy store denied scope "user-1" "revenue" hierarchy
+            let! whollyRestricted =
+                CoverageNarrative.readHierarchy store denied (TestScope.resolved scope) "user-1" "revenue" hierarchy
 
             match whollyRestricted with
             | Some coverage ->
@@ -697,7 +694,8 @@ let disclosureTests =
             let partial =
                 PresetGate(Map.ofList [ idOf a, FactDisclosable ]) :> IFactDisclosureGate
 
-            let! described = CoverageNarrative.readHierarchy store partial scope "user-1" "revenue" hierarchy
+            let! described =
+                CoverageNarrative.readHierarchy store partial (TestScope.resolved scope) "user-1" "revenue" hierarchy
 
             match described with
             | Some coverage ->
@@ -738,7 +736,7 @@ let disclosureTests =
                 CoverageNarrative.readHierarchy
                     store
                     gate
-                    ("scope-" + Guid.NewGuid().ToString("N"))
+                    (TestScope.resolved ("scope-" + Guid.NewGuid().ToString("N")))
                     "user-1"
                     "revenue"
                     (subjectDef "brand" [ "brand" ])
@@ -798,7 +796,7 @@ let private composed
 let private triggerScope = "fact-scope"
 
 let private options =
-    CoverageNarrative.CoverageNarrativeOptions.sameContainer "coverage-reader"
+    CoverageNarrative.CoverageNarrativeOptions.everyScope "coverage-reader"
 
 let private skuDraft (sku: string) : FactDraft = {
     Subject = { Hierarchy = "brand"; Path = [ sku ] }
@@ -830,7 +828,7 @@ let triggerTests =
             let store = sp.GetRequiredService<IFactStore>()
 
             for i in 1..8 do
-                let! _ = store.Assert(triggerScope, skuDraft (sprintf "sku-%d" i))
+                let! _ = store.Assert(TestScope.resolved triggerScope, skuDraft (sprintf "sku-%d" i))
                 ()
 
             do! waitIdle store
@@ -862,14 +860,14 @@ let triggerTests =
             let store = sp.GetRequiredService<IFactStore>()
 
             for i in 1..8 do
-                let! _ = store.Assert(triggerScope, skuDraft (sprintf "sku-%d" i))
+                let! _ = store.Assert(TestScope.resolved triggerScope, skuDraft (sprintf "sku-%d" i))
                 ()
 
             do! waitIdle store
             let afterFirstBand = List.length ingestor.Commits
 
             // Still band 1 (under ten subjects): nothing new.
-            let! _ = store.Assert(triggerScope, skuDraft "sku-9")
+            let! _ = store.Assert(TestScope.resolved triggerScope, skuDraft "sku-9")
             do! waitIdle store
 
             Expect.equal
@@ -879,7 +877,7 @@ let triggerTests =
 
             // Tenth subject crosses into "between 10 and 99".
             for i in 10..14 do
-                let! _ = store.Assert(triggerScope, skuDraft (sprintf "sku-%d" i))
+                let! _ = store.Assert(TestScope.resolved triggerScope, skuDraft (sprintf "sku-%d" i))
                 ()
 
             do! waitIdle store
@@ -901,7 +899,8 @@ let triggerTests =
             let sp = composed true (Some(ingestor :> INarrativeIngestor)) options
             let store = sp.GetRequiredService<IFactStore>()
 
-            let! receipt = store.AssertBatch(triggerScope, [ for i in 1..6 -> skuDraft (sprintf "sku-%d" i) ])
+            let! receipt =
+                store.AssertBatch(TestScope.resolved triggerScope, [ for i in 1..6 -> skuDraft (sprintf "sku-%d" i) ])
 
             Expect.isOk receipt "the batch asserted"
             do! waitIdle store
@@ -922,9 +921,9 @@ let triggerTests =
             let sp = composed true (Some(refusing :> INarrativeIngestor)) options
             let store = sp.GetRequiredService<IFactStore>()
 
-            let! _ = store.Assert(triggerScope, skuDraft "sku-1")
+            let! _ = store.Assert(TestScope.resolved triggerScope, skuDraft "sku-1")
             do! waitIdle store
-            let! _ = store.Assert(triggerScope, skuDraft "sku-2")
+            let! _ = store.Assert(TestScope.resolved triggerScope, skuDraft "sku-2")
             do! waitIdle store
 
             Expect.equal
@@ -938,12 +937,12 @@ let triggerTests =
             let sp = composed true None options
             let store = sp.GetRequiredService<IFactStore>()
 
-            let! outcome = store.Assert(triggerScope, skuDraft "sku-1")
+            let! outcome = store.Assert(TestScope.resolved triggerScope, skuDraft "sku-1")
             Expect.isOk outcome "the assertion is unaffected — derived state cannot fail an assert"
 
             do! waitIdle store
 
-            let! facts = store.Query(triggerScope, FactQuery.all)
+            let! facts = store.Query(TestScope.resolved triggerScope, FactQuery.all) |> TestScope.ok
             Expect.equal (List.length facts) 1 "and the store behaves exactly as it did before the knob was armed"
         }
 
@@ -952,31 +951,27 @@ let triggerTests =
             let ingestor = RecordingIngestor None
 
             let scoped =
-                CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [
-                    {
-                        ScopeId = "declared-scope"
-                        Container = "declared-scope"
-                        Persist = true
-                    }
-                ]
+                CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [ "declared-scope" ]
 
             let sp = composed true (Some(ingestor :> INarrativeIngestor)) scoped
             let store = sp.GetRequiredService<IFactStore>()
 
-            let! _ = store.Assert("some-other-scope", skuDraft "sku-1")
+            let! _ = store.Assert(TestScope.resolved "some-other-scope", skuDraft "sku-1")
             do! waitIdle store
             Expect.isEmpty ingestor.Commits "a scope the deployment did not name gets nothing"
 
-            let! _ = store.Assert("declared-scope", skuDraft "sku-1")
+            let! _ = store.Assert(TestScope.resolved "declared-scope", skuDraft "sku-1")
             do! waitIdle store
             Expect.equal (List.length ingestor.Commits) 1 "and a scope it did name gets its coverage"
 
             let scope, _, _ = ingestor.Commits |> List.head
 
+            Expect.equal scope.ScopeId "declared-scope" "committed under the resolved scope the assertion was made in"
+
             Expect.equal
-                scope.Container
-                "declared-scope"
-                "committed into the container the deployment declared, never one derived from the fact scope id"
+                (scope.Storage |> Option.map _.Container)
+                (Some "declared-scope")
+                "into that resolved scope's own container, never one derived from a string"
         }
 
         testCaseAsync "an unregistered metric is skipped — there is no family to describe"
@@ -987,7 +982,7 @@ let triggerTests =
 
             let! _ =
                 store.Assert(
-                    triggerScope,
+                    TestScope.resolved triggerScope,
                     {
                         skuDraft "sku-1" with
                             Metric = MetricRef "not_registered"
@@ -1023,7 +1018,9 @@ let triggerTests =
             let sp = composed false (Some(ingestor :> INarrativeIngestor)) options
             let store = sp.GetRequiredService<IFactStore>()
 
-            let! outcome = store.AssertBatch(triggerScope, [ for i in 1..4 -> skuDraft (sprintf "sku-%d" i) ])
+            let! outcome =
+                store.AssertBatch(TestScope.resolved triggerScope, [ for i in 1..4 -> skuDraft (sprintf "sku-%d" i) ])
+
             Expect.isOk outcome "the assertions land"
             Expect.isEmpty ingestor.Commits "and nothing is published — an ingestor sitting in DI is not a trigger"
         }
@@ -1046,11 +1043,7 @@ let ingestorDoorTests =
 
             let ingestor = KnowledgeBase.ServerApiNarrativeIngestor.create sp
 
-            let scope: StorageScope = {
-                ScopeId = "team-a"
-                Container = "team-a"
-                Persist = true
-            }
+            let scope = TestScope.resolved "team-a"
 
             let commit (stats: PopulationStats) =
                 ingestor.Ingest(
@@ -1072,7 +1065,7 @@ let ingestorDoorTests =
                 (idOf first)
                 "the second commit REPLACED the first in place — same provenance key, same document id"
 
-            let! index = KnowledgeBase.ServerIndexStorage.loadIndex storage scope.Container
+            let! index = KnowledgeBase.ServerIndexStorage.loadIndex storage "team-a"
 
             Expect.equal
                 (List.length index)
@@ -1103,11 +1096,7 @@ let ingestorDoorTests =
 
             let! outcome =
                 ingestor.Ingest(
-                    {
-                        ScopeId = "team-b"
-                        Container = "team-b"
-                        Persist = true
-                    },
+                    TestScope.resolved "team-b",
                     "coverage-reader",
                     CoverageNarrative.generate
                         generatedAt
@@ -1140,16 +1129,7 @@ let ingestorDoorTests =
                     Provenance = None
             }
 
-            let! outcome =
-                ingestor.Ingest(
-                    {
-                        ScopeId = "team-c"
-                        Container = "team-c"
-                        Persist = true
-                    },
-                    "coverage-reader",
-                    document
-                )
+            let! outcome = ingestor.Ingest(TestScope.resolved "team-c", "coverage-reader", document)
 
             match outcome with
             | NarrativeIngestRefused reason ->
@@ -1167,11 +1147,7 @@ let ingestorDoorTests =
 
             let! outcome =
                 ingestor.Ingest(
-                    {
-                        ScopeId = "team-d"
-                        Container = "team-d"
-                        Persist = true
-                    },
+                    TestScope.resolved "team-d",
                     "coverage-reader",
                     CoverageNarrative.generate
                         generatedAt

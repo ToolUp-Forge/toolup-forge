@@ -56,8 +56,8 @@ type private RecordingResolver(facts: ResolvedFact list) =
     member _.LastScope = lastScope
 
     interface IFactResolver with
-        member _.Resolve(scopeId, _clause) = async {
-            lastScope <- Some scopeId
+        member _.Resolve(scope: ResolvedScope, _clause) = async {
+            lastScope <- Some scope.ScopeId
             return facts
         }
 

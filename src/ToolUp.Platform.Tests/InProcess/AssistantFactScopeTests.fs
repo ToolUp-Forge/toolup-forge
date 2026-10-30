@@ -63,9 +63,9 @@ let private revenue (value: decimal) : FactDraft = {
 }
 
 let private assertOk (store: IFactStore) (scopeId: string) (draft: FactDraft) : Fact =
-    match store.Assert(scopeId, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scopeId, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// The model: one `query_facts` call, then an answer. It records the
 /// result the tool returned, which is what the test reads.

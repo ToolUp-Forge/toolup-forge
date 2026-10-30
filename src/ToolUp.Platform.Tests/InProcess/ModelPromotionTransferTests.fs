@@ -607,7 +607,7 @@ let tests =
             let graph =
                 ProvenanceGraph.createWithArtifacts stack.Lineage (ModelArtifactProvenance.source stack.Registry)
 
-            let! chain = graph.GetChain(scope, ModelArtifactRef promotedKey.Hash, Upstream, 4)
+            let! chain = graph.GetChain(TestScope.resolved scope, ModelArtifactRef promotedKey.Hash, Upstream, 4)
 
             Expect.equal chain.Root promotedKey.Hash "the chain is rooted at the promoted artifact"
 

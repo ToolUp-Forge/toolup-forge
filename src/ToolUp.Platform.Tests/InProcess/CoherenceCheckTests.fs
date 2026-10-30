@@ -155,27 +155,40 @@ let private draftWith (inputHash: string) (path: string list) (value: FactValue)
 
 let private draft (path: string list) (value: FactValue) : FactDraft = draftWith "h" path value
 
-let private assertOk (a: Async<Result<'a, string>>) : Async<'a> = async {
+let private assertOk (a: Async<Result<'a, FactStoreError>>) : Async<'a> = async {
     let! r = a
 
     return
         match r with
         | Ok v -> v
-        | Error e -> failtestf "expected Ok, got Error: %s" e
+        | Error e -> failtestf "expected Ok, got Error: %s" (FactStoreError.describe e)
 }
 
-let private jobCtx (scopeId: string) : JobContext = {
+/// A job under `scopeId` carrying `scope` — the scope the runner re-minted
+/// for it, or the anonymous scope when it carries none.
+let private jobCtxCarrying (scopeId: string) (scope: ResolvedScope) : JobContext = {
     JobId = Guid.NewGuid()
     ScopeId = scopeId
     AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
     Attempt = 1
     Trigger = Trigger.Manual
-    Scope = ToolUp.Platform.ResolvedScope.anonymous
+    Scope = scope
     TriggerSource = ScheduledManually "system"
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = ""
     DeadLetterDestination = None
+}
+
+/// A job under `scopeId` carrying the scope the runner re-minted for it.
+let private jobCtx (scopeId: string) : JobContext =
+    jobCtxCarrying scopeId (TestScope.resolved scopeId)
+
+/// The declared principal a coherence sweep is composed for.
+let private sweepPrincipal: DeclaredPrincipal = {
+    Name = "coherence"
+    UserId = "svc-coherence"
+    DisplayName = "coherence sweep principal"
 }
 
 let tests =
@@ -435,9 +448,17 @@ let tests =
             let channel = RecordingChannel()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draft [ "acme" ] (Scalar 130m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-x" ] (Scalar 60m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-y" ] (Scalar 40m)) |> assertOk
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                |> assertOk
 
             let! findings =
                 CoherenceCheck.run
@@ -447,7 +468,7 @@ let tests =
                     (channel :> INotificationChannel)
                     cfg
                     (fun () -> t0)
-                    scope
+                    (TestScope.resolved scope)
 
             Expect.hasLength findings 1 "one finding surfaced"
 
@@ -474,9 +495,17 @@ let tests =
             let channel = RecordingChannel()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draft [ "acme" ] (Scalar 100m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-x" ] (Scalar 60m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-y" ] (Scalar 40m)) |> assertOk
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 100m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                |> assertOk
 
             let! findings =
                 CoherenceCheck.run
@@ -486,7 +515,7 @@ let tests =
                     (channel :> INotificationChannel)
                     cfg
                     (fun () -> t0)
-                    scope
+                    (TestScope.resolved scope)
 
             Expect.isEmpty findings "no findings on a coherent base"
 
@@ -509,11 +538,19 @@ let tests =
             let channel = RecordingChannel()
             let scope = newScope ()
 
-            let! parent = store.Assert(scope, draft [ "acme" ] (Scalar 130m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-x" ] (Scalar 60m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-y" ] (Scalar 40m)) |> assertOk
+            let! parent =
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                |> assertOk
 
-            let! before = store.Query(scope, FactQuery.all)
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                |> assertOk
+
+            let! before = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
 
             let! _ =
                 CoherenceCheck.run
@@ -523,13 +560,13 @@ let tests =
                     (channel :> INotificationChannel)
                     cfg
                     (fun () -> t0)
-                    scope
+                    (TestScope.resolved scope)
 
-            let! after = store.Query(scope, FactQuery.all)
+            let! after = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.equal (List.length after) (List.length before) "no fact added or removed"
             Expect.sequenceEqual after before "the current heads are byte-identical after the check"
 
-            let! reloaded = store.Get(scope, parent.FactId)
+            let! reloaded = store.Get(TestScope.resolved scope, parent.FactId) |> TestScope.ok
             Expect.equal reloaded (Some parent) "the incoherent parent stands unchanged — correction is a human act"
         }
 
@@ -543,9 +580,17 @@ let tests =
             let channel = RecordingChannel()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draft [ "acme" ] (Scalar 130m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-x" ] (Scalar 60m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-y" ] (Scalar 40m)) |> assertOk
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                |> assertOk
 
             let handler =
                 CoherenceJobHandler.create
@@ -562,6 +607,41 @@ let tests =
             Expect.hasLength channel.Published 1 "the handler published the coherence alert"
         }
 
+        testCaseAsync "the job handler refuses by name a job that carries no resolver-minted scope"
+        <| async {
+            let blob = InMemoryBlobStorage.InMemoryBlobStorage()
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create blob events
+            let channel = RecordingChannel()
+            let scope = newScope ()
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                |> assertOk
+
+            let handler =
+                CoherenceJobHandler.create
+                    store
+                    (Some registry)
+                    (channel :> INotificationChannel)
+                    events
+                    cfg
+                    (fun () -> t0)
+                    noopLogger
+
+            match! handler.Execute(jobCtxCarrying scope ResolvedScope.anonymous) with
+            | JobResult.PermanentFailure reason ->
+                Expect.stringContains reason "carries no resolver-minted scope" "the refusal names why"
+                Expect.stringContains reason scope "and the shard the job is registered under"
+            | other -> failtestf "expected a refusal by name, got %A" other
+
+            Expect.isEmpty channel.Published "a refused sweep reads nothing and alerts nothing"
+        }
+
         // ─── 563.C — IHealthCheck ─────────────────────────────────────
 
         testCaseAsync "health check: Healthy on a coherent base, Degraded on an inconsistency"
@@ -572,11 +652,20 @@ let tests =
             let scope = newScope ()
 
             let probe =
-                CoherenceHealthCheck.create store (Some registry) { cfg with HealthScope = scope }
+                CoherenceHealthCheck.create store (Some registry) cfg (fun () ->
+                    async.Return(Ok(TestScope.resolved scope)))
 
-            let! _ = store.Assert(scope, draft [ "acme" ] (Scalar 100m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-x" ] (Scalar 60m)) |> assertOk
-            let! _ = store.Assert(scope, draft [ "acme"; "widget-y" ] (Scalar 40m)) |> assertOk
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 100m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                |> assertOk
+
+            let! _ =
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                |> assertOk
 
             let! healthy = probe.Check()
             Expect.equal healthy Healthy "coherent base ⇒ Healthy"
@@ -585,7 +674,9 @@ let tests =
             // with a wrong roll-up over a *new* input (a changed input hash
             // is what supersedes — re-asserting the same content address is
             // an idempotent no-op).
-            let! _ = store.Assert(scope, draftWith "h2" [ "acme" ] (Scalar 130m)) |> assertOk
+            let! _ =
+                store.Assert(TestScope.resolved scope, draftWith "h2" [ "acme" ] (Scalar 130m))
+                |> assertOk
 
             let! degraded = probe.Check()
 
@@ -605,7 +696,8 @@ let tests =
                     }
             }
 
-            let after = FactsCompose.withCoherenceChecks (Trigger.CronTrigger "0 3 * * *") app
+            let after =
+                FactsCompose.withCoherenceChecks (Trigger.CronTrigger "0 3 * * *") sweepPrincipal app
 
             Expect.isTrue
                 (Object.ReferenceEquals(after, app))

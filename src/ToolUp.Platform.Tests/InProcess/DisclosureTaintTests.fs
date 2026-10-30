@@ -244,9 +244,9 @@ let private newStore () =
     store, events
 
 let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) : Fact =
-    match store.Assert(scope, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 let private draftOf
     (metric: string)
@@ -297,7 +297,7 @@ let gateTests =
                     (draftOf "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ])
 
             ignore r
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ d.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ d.FactId ])
 
             Expect.equal
                 (verdicts.TryFind d.FactId)
@@ -340,7 +340,7 @@ let gateTests =
                     (draftOf "index" (Computed("aggregate-over-k", "1", "p")) (Scalar 7m) Surfaceable [ "dov-raw" ])
 
             ignore r
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ a.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ a.FactId ])
 
             Expect.equal (verdicts.TryFind a.FactId) (Some FactDisclosable) "the declassified fact discloses"
 
@@ -374,8 +374,8 @@ let gateTests =
                     (draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") [])
 
             // licensed permits FactRetrieval, denies FactExport.
-            let! atRetrieval = gate.Check(scope, "user-1", FactRetrieval, [ r.FactId ])
-            let! atExport = gate.Check(scope, "user-1", FactExport, [ r.FactId ])
+            let! atRetrieval = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ r.FactId ])
+            let! atExport = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ r.FactId ])
 
             Expect.equal
                 (atRetrieval.TryFind r.FactId)
@@ -413,8 +413,8 @@ let gateTests =
             let emptyTaintGate =
                 FactDisclosureGate.createWithTaint DisclosureTaintConfig.empty store events
 
-            let! viaPlain = plainGate.Check(scope, "user-1", FactExport, [ d.FactId ])
-            let! viaEmpty = emptyTaintGate.Check(scope, "user-1", FactExport, [ d.FactId ])
+            let! viaPlain = plainGate.Check(TestScope.resolved scope, "user-1", FactExport, [ d.FactId ])
+            let! viaEmpty = emptyTaintGate.Check(TestScope.resolved scope, "user-1", FactExport, [ d.FactId ])
 
             Expect.equal
                 (viaPlain.TryFind d.FactId)
@@ -731,7 +731,7 @@ let fanOutTests =
             probe.Reset()
 
             let gate = FactDisclosureGate.create store events
-            let! verdicts = gate.Check(scope, "user-1", FactRetrieval, ids)
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, ids)
             Expect.equal verdicts.Count 64 "every fact was decided"
 
             Expect.isGreaterThan probe.MaxInFlight 1 "the reads did overlap"
@@ -753,7 +753,7 @@ let fanOutTests =
 
             let gate = (FactDisclosureGate(store, events)).WithFanOut { MaxConcurrentReads = 3 }
 
-            let! verdicts = gate.Check(scope, "user-1", FactRetrieval, ids)
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, ids)
             Expect.equal verdicts.Count 32 "every fact was decided"
             Expect.isGreaterThan probe.MaxInFlight 1 "the reads did overlap"
             Expect.isLessThanOrEqual probe.MaxInFlight 3 "never more than the composed bound at once"
@@ -867,13 +867,13 @@ let private judged
                 Persist = true
             }
 
-        let! held = store.Query(scope, FactQuery.all)
+        let! held = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
         let rows = held |> List.map HeldFactRow.ofFact
         counting.Reset()
         let verdicts = ResizeArray()
 
         for surface in everySurface do
-            let! byId = (gate :> IFactDisclosureGate).Check(scope, "user-1", surface, ids)
+            let! byId = (gate :> IFactDisclosureGate).Check(TestScope.resolved scope, "user-1", surface, ids)
             let! byRows = (gate :> IHeldFactRowDisclosureGate).CheckHeldRows(resolved, "user-1", surface, ids, rows)
             verdicts.Add(surface, byId, byRows)
 
@@ -1365,41 +1365,24 @@ type private QueryCountingStore(inner: IFactStore) =
     // A decorator that hides its inner store's index makes the gate list the
     // scope, so this one forwards it, as a production decorator should.
     interface IDisclosureTaintIndexSource with
-        member _.ReadTaintIndex(scopeId: string) =
-            (inner :?> IDisclosureTaintIndexSource).ReadTaintIndex scopeId
-
         member _.ReadTaintIndex(scope: ResolvedScope) =
             (inner :?> IDisclosureTaintIndexSource).ReadTaintIndex scope
 
     interface IFactStore with
-        member _.Assert(scopeId: string, draft) = inner.Assert(scopeId, draft)
         member _.Assert(scope: ResolvedScope, draft) = inner.Assert(scope, draft)
-        member _.AssertBatch(scopeId: string, drafts) = inner.AssertBatch(scopeId, drafts)
         member _.AssertBatch(scope: ResolvedScope, drafts) = inner.AssertBatch(scope, drafts)
-        member _.Get(scopeId: string, factId) = inner.Get(scopeId, factId)
         member _.Get(scope: ResolvedScope, factId) = inner.Get(scope, factId)
-
-        member _.Query(scopeId: string, query) =
-            count query
-            inner.Query(scopeId, query)
 
         member _.Query(scope: ResolvedScope, query) =
             count query
             inner.Query(scope, query)
 
-        member _.QueryWithCompetition(scopeId: string, query) =
-            inner.QueryWithCompetition(scopeId, query)
-
         member _.QueryWithCompetition(scope: ResolvedScope, query) =
             inner.QueryWithCompetition(scope, query)
-
-        member _.QuerySupersessionChain(scopeId: string, factId) =
-            inner.QuerySupersessionChain(scopeId, factId)
 
         member _.QuerySupersessionChain(scope: ResolvedScope, factId) =
             inner.QuerySupersessionChain(scope, factId)
 
-        member _.QueryPopulation(scopeId: string, query) = inner.QueryPopulation(scopeId, query)
         member _.QueryPopulation(scope: ResolvedScope, query) = inner.QueryPopulation(scope, query)
 
 /// A tainted lineage (R restricted `licensed`, D derived from it) in a fresh
@@ -1433,7 +1416,7 @@ let private scopeLoadTests =
         <| async {
             let _, counted, events, scope, d = taintedScope ()
             let gate = FactDisclosureGate.createWithTaint taintCfg counted events
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ d.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ d.FactId ])
 
             Expect.equal (verdicts.TryFind d.FactId) (Some(FactNotDisclosable "licensed")) "the inherited deny stands"
             Expect.equal counted.WholeScopeQueries 0 "the check did not list the scope through the store"
@@ -1443,9 +1426,9 @@ let private scopeLoadTests =
         <| async {
             let blobs, counted, events, scope, d = taintedScope ()
             let gate = FactDisclosureGate.createWithTaint taintCfg counted events
-            let! _ = gate.Check(scope, "user-1", FactExport, [ d.FactId ])
+            let! _ = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ d.FactId ])
             blobs.Reset()
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ d.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ d.FactId ])
 
             Expect.equal (verdicts.TryFind d.FactId) (Some(FactNotDisclosable "licensed")) "the inherited deny stands"
             Expect.equal counted.WholeScopeQueries 0 "neither check listed the scope through the store"
@@ -1564,7 +1547,7 @@ let derivedFactTests =
                 let! verdicts =
                     everySurface
                     |> List.map (fun surface -> async {
-                        let! v = gate.Check(scope, "user-1", surface, [ factId ])
+                        let! v = gate.Check(TestScope.resolved scope, "user-1", surface, [ factId ])
                         return surface, v.TryFind factId
                     })
                     |> Async.Sequential

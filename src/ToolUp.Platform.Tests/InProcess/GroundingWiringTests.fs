@@ -109,16 +109,16 @@ let tests =
                     (InMemoryEventStore.InMemoryEventStore())
 
             let scope = newScope ()
-            let! asserted = store.Assert(scope, draftWith (Some "res-1") [ "obj-1" ] 100m)
+            let! asserted = store.Assert(TestScope.resolved scope, draftWith (Some "res-1") [ "obj-1" ] 100m)
 
             let fact =
                 match asserted with
                 | Ok f -> f
-                | Error e -> failtestf "assert: %s" e
+                | Error e -> failtestf "assert: %s" (FactStoreError.describe e)
 
             let src = FactStoreEvidenceSource.create store
 
-            let! ev = src.GetFact(scope, fact.FactId)
+            let! ev = src.GetFact(TestScope.resolved scope, fact.FactId)
 
             match ev with
             | Some e ->
@@ -129,10 +129,10 @@ let tests =
                 Expect.equal e.Subject "geography/uk" "subject rendered"
             | None -> failtest "expected evidence for the stored fact"
 
-            let! forResult = src.FactsForResult(scope, "res-1")
+            let! forResult = src.FactsForResult(TestScope.resolved scope, "res-1")
             Expect.equal (forResult |> List.map _.FactId) [ fact.FactId ] "fact found by its result ref"
 
-            let! none = src.FactsForResult(scope, "res-other")
+            let! none = src.FactsForResult(TestScope.resolved scope, "res-other")
             Expect.isEmpty none "no facts for an unrelated result"
         }
 

@@ -100,9 +100,9 @@ let private draftWith (metric: string) (disclosure: Disclosure) (value: decimal)
 }
 
 let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) =
-    match store.Assert(scope, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// Stub team facts, counting role lookups so a test can prove the default
 /// path never makes one.
@@ -156,17 +156,17 @@ let private asViewer (viewer: RequestViewer option) (body: Async<'T>) : Async<'T
     return! body
 }
 
-let private verdictOf (gate: IFactDisclosureGate) (viewer: RequestViewer option) surface (factId: string) =
-    asViewer viewer (gate.Check(team, "principal-ignored", surface, [ factId ]))
-    |> Async.RunSynchronously
-    |> Map.tryFind factId
-
 let private teamScope (teamId: string) : ResolvedScope =
     ScopeResolution.ofStorageScope {
         ScopeId = teamId
         Container = $"team-{teamId}"
         Persist = true
     }
+
+let private verdictOf (gate: IFactDisclosureGate) (viewer: RequestViewer option) surface (factId: string) =
+    asViewer viewer (gate.Check(teamScope team, "principal-ignored", surface, [ factId ]))
+    |> Async.RunSynchronously
+    |> Map.tryFind factId
 
 // ─── The rule ────────────────────────────────────────────────────────
 
@@ -395,10 +395,12 @@ let private gateTests =
             for surface in allSurfaces do
                 for viewer in [ None; Some member'; Some admin ] do
                     let armed =
-                        asViewer viewer (h.Armed.Check(team, "p", surface, ids))
+                        asViewer viewer (h.Armed.Check(teamScope team, "p", surface, ids))
                         |> Async.RunSynchronously
 
-                    let plain = h.Plain.Check(team, "p", surface, ids) |> Async.RunSynchronously
+                    let plain =
+                        h.Plain.Check(teamScope team, "p", surface, ids) |> Async.RunSynchronously
+
                     Expect.equal armed plain $"identical at {FactEgressSurface.toString surface}"
 
             Expect.equal h.Sources.RoleLookups 0 "whole team needs no role")
@@ -449,7 +451,7 @@ let private gateTests =
                 assertFact h.Store team (draftWith "margin" (Restricted "sales") 4242m)
 
             let verdicts =
-                asViewer (Some member') (h.Armed.Check(team, "ada", FactRetrieval, [ restricted.FactId ]))
+                asViewer (Some member') (h.Armed.Check(teamScope team, "ada", FactRetrieval, [ restricted.FactId ]))
                 |> Async.RunSynchronously
 
             Expect.equal
@@ -479,7 +481,7 @@ let private gateTests =
             let verdicts =
                 asViewer
                     (Some admin)
-                    (h.Armed.Check(team, "p", FactRetrieval, [ restricted.FactId; surfaceable.FactId ]))
+                    (h.Armed.Check(teamScope team, "p", FactRetrieval, [ restricted.FactId; surfaceable.FactId ]))
                 |> Async.RunSynchronously
 
             Expect.equal
@@ -617,7 +619,7 @@ let private viewerTests =
                 let next =
                     Func<Task>(fun () -> task {
                         let! v =
-                            h.Armed.Check(team, "mia", FactRetrieval, [ restricted.FactId ])
+                            h.Armed.Check(teamScope team, "mia", FactRetrieval, [ restricted.FactId ])
                             |> Async.StartAsTask
 
                         verdicts <- v
@@ -1023,7 +1025,7 @@ let private composeTests =
             // No source composed: every team sits at the declared default,
             // so a member (whose role no team store can confirm) is refused.
             let verdicts =
-                asViewer (Some member') (gate.Check(team, "p", FactRetrieval, [ restricted.FactId ]))
+                asViewer (Some member') (gate.Check(teamScope team, "p", FactRetrieval, [ restricted.FactId ]))
                 |> Async.RunSynchronously
 
             Expect.equal verdicts[restricted.FactId] (FactNotDisclosable "sales") "armed"

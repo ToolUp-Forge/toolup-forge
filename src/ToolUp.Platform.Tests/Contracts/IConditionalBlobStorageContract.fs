@@ -253,7 +253,11 @@ let private kbDeps (storage: IBlobStorage) (container: string) =
         Persist = true
     }
 
-    KnowledgeBase.ServerApiDeps.KnowledgeApiDeps.resolveFrom services (Some scope) "user-1"
+    KnowledgeBase.ServerApiDeps.KnowledgeApiDeps.resolveFrom
+        services
+        (TestScope.resolved container)
+        (Some scope)
+        "user-1"
 
 /// A forwarding decorator that exposes ONLY `IBlobStorage` — the same
 /// backend with its conditional seam hidden, as a store without conditional

@@ -91,12 +91,12 @@ let private issuerWith (signer: IArtefactSigner option) : Async<IGroundingCertif
     let graph =
         ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
 
-    let! disclosable = store.Assert(scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
+    let! disclosable = store.Assert(TestScope.resolved scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
 
     let factId =
         match disclosable with
         | Ok(f: Fact) -> f.FactId
-        | Error e -> failtestf "seed assert failed: %s" e
+        | Error e -> failtestf "seed assert failed: %s" (FactStoreError.describe e)
 
     return GroundingCertificate.createIssuer graph store gate events signer, factId
 }
@@ -123,14 +123,14 @@ let tests =
 
             let issuer = GroundingCertificate.createIssuer graph store gate events (Some signer)
 
-            let! seeded = store.Assert(scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
+            let! seeded = store.Assert(TestScope.resolved scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
 
             let factId =
                 match seeded with
                 | Ok f -> f.FactId
-                | Error e -> failtestf "seed failed: %s" e
+                | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
             | Ok cert ->
                 Expect.equal cert.Body.Format GroundingCertificate.Format "carries the versioned format discriminator"
@@ -160,14 +160,14 @@ let tests =
 
             let issuer = GroundingCertificate.createIssuer graph store gate events (Some signer)
 
-            let! seeded = store.Assert(scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
+            let! seeded = store.Assert(TestScope.resolved scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
 
             let factId =
                 match seeded with
                 | Ok f -> f.FactId
-                | Error e -> failtestf "seed failed: %s" e
+                | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
             | Ok cert ->
                 // Tamper: swap the certified root to a different id. The
@@ -200,19 +200,26 @@ let tests =
 
             let issuer = GroundingCertificate.createIssuer graph store gate events (Some signer)
 
-            let! disclosable = store.Assert(scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
-            let! withheld = store.Assert(scope, draft "cost" Disclosure.Internal "h2" withheldValue)
+            let! disclosable = store.Assert(TestScope.resolved scope, draft "revenue" Disclosure.Surfaceable "h1" 100m)
+            let! withheld = store.Assert(TestScope.resolved scope, draft "cost" Disclosure.Internal "h2" withheldValue)
 
             let idOf =
                 function
                 | Ok(f: Fact) -> f.FactId
-                | Error e -> failtestf "seed failed: %s" e
+                | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
             let disclosableId = idOf disclosable
             let withheldId = idOf withheld
             let messageId = "msg-answer"
 
-            match! issuer.Issue(scope, "auditor", AnswerCertificate(messageId, [ disclosableId; withheldId ]), 5) with
+            match!
+                issuer.Issue(
+                    TestScope.resolved scope,
+                    "auditor",
+                    AnswerCertificate(messageId, [ disclosableId; withheldId ]),
+                    5
+                )
+            with
             | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
             | Ok cert ->
                 let nodeFor id =
@@ -277,11 +284,11 @@ let tests =
 
             let planner = AnswerPlanner.create store gate None events AnswerPlanner.noCompiler
 
-            do! planner.Record(scope, messageId, plan)
+            do! planner.Record(TestScope.resolved scope, messageId, plan)
 
-            let! chain = AnswerPlanProvenance.chainForMessage graph events scope messageId 5
+            let! chain = AnswerPlanProvenance.chainForMessage graph events (TestScope.resolved scope) messageId 5
 
-            match! issuer.Issue(scope, "auditor", AnswerCertificate(messageId, []), 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", AnswerCertificate(messageId, []), 5) with
             | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
             | Ok cert ->
                 Expect.equal
@@ -301,7 +308,7 @@ let tests =
         <| async {
             let! issuer, factId = issuerWith None
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error SigningUnavailable -> ()
             | Error other -> failtestf "expected SigningUnavailable, got %A" other
             | Ok _ -> failtest "must not issue a certificate without a composed signer"

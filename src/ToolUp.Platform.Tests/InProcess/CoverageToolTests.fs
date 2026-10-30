@@ -88,9 +88,9 @@ let private scalarIn (hierarchy: string) (member': string) (metric: string) (val
     draft hierarchy [ member' ] metric (Scalar value) q2 rollup Surfaceable
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 let private metricDef
     (id: string)

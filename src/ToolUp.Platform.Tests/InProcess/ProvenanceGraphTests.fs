@@ -15,13 +15,17 @@ open ToolUp.Platform
 /// its own scope so the scope-isolation test is meaningful.
 type FakeFactEvidence(scope: string, facts: Map<string, FactEvidence>) =
     interface IFactEvidenceSource with
-        member _.GetFact(scopeId, factId) = async {
-            return (if scopeId = scope then Map.tryFind factId facts else None)
+        member _.GetFact(resolved: ResolvedScope, factId) = async {
+            return
+                (if resolved.ScopeId = scope then
+                     Map.tryFind factId facts
+                 else
+                     None)
         }
 
-        member _.FactsForResult(scopeId, resultId) = async {
+        member _.FactsForResult(resolved: ResolvedScope, resultId) = async {
             return
-                if scopeId = scope then
+                if resolved.ScopeId = scope then
                     facts
                     |> Map.toList
                     |> List.map snd
@@ -92,7 +96,7 @@ let tests =
         testCaseAsync "upstream from a fact reaches its result, input data object, and predecessor"
         <| async {
             let graph, _ = seededGraph ()
-            let! chain = graph.GetChain(scopeA, FactRef fact2, Upstream, 5)
+            let! chain = graph.GetChain(TestScope.resolved scopeA, FactRef fact2, Upstream, 5)
 
             Expect.isTrue (hasNode chain fact2) "fact node present"
             Expect.isTrue (hasNode chain res1) "result node reached"
@@ -109,7 +113,7 @@ let tests =
         testCaseAsync "the fact node carries its disclosure class (524.D)"
         <| async {
             let graph, _ = seededGraph ()
-            let! chain = graph.GetChain(scopeA, FactRef fact2, Upstream, 5)
+            let! chain = graph.GetChain(TestScope.resolved scopeA, FactRef fact2, Upstream, 5)
 
             let factNode = chain.Nodes |> List.tryFind (fun n -> n.Id = fact2)
 
@@ -122,7 +126,7 @@ let tests =
         testCaseAsync "GetChainForMessage reaches the originating data-object version (acceptance)"
         <| async {
             let graph, _ = seededGraph ()
-            let! chain = graph.GetChainForMessage(scopeA, msg1, [ fact2 ], 5)
+            let! chain = graph.GetChainForMessage(TestScope.resolved scopeA, msg1, [ fact2 ], 5)
 
             Expect.equal chain.Root msg1 "rooted at the message"
             Expect.isTrue (hasEdge chain msg1 fact2 CitesFact) "message --CitesFact--> fact"
@@ -139,7 +143,7 @@ let tests =
             // contract therefore reports `Absent` for a MessageRef, which
             // means "ask with the cited facts", not "no such message".
             let graph, _ = seededGraph ()
-            let! chain = graph.GetChain(scopeA, MessageRef msg1, Upstream, 5)
+            let! chain = graph.GetChain(TestScope.resolved scopeA, MessageRef msg1, Upstream, 5)
 
             // The seed node is minted for every root before the walk
             // starts, so the answer is the bare message and nothing else:
@@ -160,7 +164,7 @@ let tests =
             // The falsifier: the SAME message, asked the supported way,
             // does answer — so the emptiness above is about the ROUTE, not
             // about this fixture having no provenance to find.
-            let! viaCitedFacts = graph.GetChainForMessage(scopeA, msg1, [ fact2 ], 5)
+            let! viaCitedFacts = graph.GetChainForMessage(TestScope.resolved scopeA, msg1, [ fact2 ], 5)
 
             Expect.isGreaterThan
                 (List.length viaCitedFacts.Nodes)
@@ -173,7 +177,7 @@ let tests =
         testCaseAsync "downstream from the data object reaches the result and the facts (the inverse)"
         <| async {
             let graph, _ = seededGraph ()
-            let! chain = graph.GetChain(scopeA, DataObjectRef obj1, Downstream, 5)
+            let! chain = graph.GetChain(TestScope.resolved scopeA, DataObjectRef obj1, Downstream, 5)
 
             Expect.isTrue (hasNode chain res1) "result reached downstream"
             Expect.isTrue (hasEdge chain res1 obj1 DerivedFrom) "result --DerivedFrom--> data object"
@@ -187,7 +191,7 @@ let tests =
             // Same graph, queried under a different scope: the lineage store
             // and the fact source are both scope-bounded, so nothing from
             // scopeA leaks.
-            let! chain = graph.GetChain("team-B", ResultRef res1, Upstream, 5)
+            let! chain = graph.GetChain(TestScope.resolved "team-B", ResultRef res1, Upstream, 5)
 
             Expect.isFalse (hasNode chain obj1) "no scopeA data object visible from scopeB"
             Expect.isFalse (hasNode chain fact2) "no scopeA fact visible from scopeB"
@@ -213,7 +217,7 @@ let tests =
             |> ignore
 
             let graph = ProvenanceGraph.create lineage
-            let! chain = graph.GetChain(scopeA, ResultRef res1, Upstream, 5)
+            let! chain = graph.GetChain(TestScope.resolved scopeA, ResultRef res1, Upstream, 5)
 
             Expect.isTrue (hasNode chain obj1) "lineage still walks without a fact source"
             Expect.isFalse (hasNode chain fact2) "fact nodes absent when no source is composed"

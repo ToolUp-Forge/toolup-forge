@@ -72,9 +72,9 @@ let private draft (metric: string) (period: TemporalExtent) (inputHashes: string
 }
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A real (Phase 519) registry carrying one declared metric.
 let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : IMetricRegistry =
@@ -124,7 +124,7 @@ let resolverTests =
             let resolver =
                 FactStoreFactResolver.create store (Some(registryWith UntilSuperseded "N0"))
 
-            let! resolved = resolver.Resolve(scope, clauseFor "revenue")
+            let! resolved = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             match resolved with
             | [ r ] ->
@@ -151,7 +151,7 @@ let resolverTests =
             // Reconstruct "what we knew" at the original's transaction time.
             let! resolved =
                 resolver.Resolve(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         clauseFor "revenue" with
                             AsOf = Some original.AsOf
@@ -172,7 +172,7 @@ let resolverTests =
             | other -> failtestf "expected the superseded head, got %A" other
 
             // The same clause with no AsOf resolves the current head, fresh.
-            let! current = resolver.Resolve(scope, clauseFor "revenue")
+            let! current = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             Expect.equal
                 (current |> List.map (fun r -> r.FactId, r.Freshness))
@@ -197,14 +197,14 @@ let resolverTests =
             let insideWindow =
                 FactStoreFactResolver.createWithClock store registry (fun () -> assertedAt.AddMinutes 30.0)
 
-            let! fresh = insideWindow.Resolve(scope, clauseFor "revenue")
+            let! fresh = insideWindow.Resolve(TestScope.resolved scope, clauseFor "revenue")
             Expect.equal (fresh |> List.map _.Freshness) [ FactFresh ] "fresh inside the window"
 
             // Past the window: stale since AsOf + window, with no successor.
             let pastWindow =
                 FactStoreFactResolver.createWithClock store registry (fun () -> assertedAt.AddHours 2.0)
 
-            let! stale = pastWindow.Resolve(scope, clauseFor "revenue")
+            let! stale = pastWindow.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             match stale with
             | [ r ] ->
@@ -225,7 +225,7 @@ let resolverTests =
 
             // No registry composed at all — the grounding-free deployment.
             let resolver = FactStoreFactResolver.create store None
-            let! resolved = resolver.Resolve(scope, clauseFor "margin")
+            let! resolved = resolver.Resolve(TestScope.resolved scope, clauseFor "margin")
 
             Expect.equal
                 (resolved |> List.map (fun r -> r.Rendering, r.Freshness))
@@ -251,7 +251,7 @@ let resolverTests =
 
             let! resolved =
                 resolver.Resolve(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         clauseFor "revenue" with
                             PeriodFrom = Some q1.From
@@ -271,10 +271,10 @@ let resolverTests =
 
             let resolver = FactStoreFactResolver.create store None
 
-            let! own = resolver.Resolve(scopeA, clauseFor "revenue")
+            let! own = resolver.Resolve(TestScope.resolved scopeA, clauseFor "revenue")
             Expect.equal (List.length own) 1 "resolvable in its own scope"
 
-            let! foreign = resolver.Resolve(scopeB, clauseFor "revenue")
+            let! foreign = resolver.Resolve(TestScope.resolved scopeB, clauseFor "revenue")
             Expect.isEmpty foreign "structurally unreachable from another scope"
         }
     ]

@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IFactStoreContract
 open System
 open Expecto
 open ToolUp.Facts
+open ToolUp.Platform
 open ToolUp.Platform.Grounding
 
 // ─── IFactStore contract pack (Phase 520) ────────────────────────────
@@ -39,19 +40,19 @@ let private draft subjectMember metricId inputHash value : FactDraft = {
 }
 
 let private assertOk label (store: IFactStore) (scope: string) d = async {
-    let! r = store.Assert(scope, d)
+    let! r = store.Assert(TestScope.resolved scope, d)
 
     match r with
     | Ok f -> return f
-    | Error e -> return failtestf "%s: expected Ok, got %s" label e
+    | Error e -> return failtestf "%s: expected Ok, got %s" label (FactStoreError.describe e)
 }
 
 let private assertBatchOk label (store: IFactStore) (scope: string) drafts = async {
-    let! r = store.AssertBatch(scope, drafts)
+    let! r = store.AssertBatch(TestScope.resolved scope, drafts)
 
     match r with
     | Ok receipt -> return receipt
-    | Error e -> return failtestf "%s: expected Ok, got %s" label e
+    | Error e -> return failtestf "%s: expected Ok, got %s" label (FactStoreError.describe e)
 }
 
 /// The whole of a scope's fact base, current heads and superseded alike —
@@ -59,12 +60,13 @@ let private assertBatchOk label (store: IFactStore) (scope: string) drafts = asy
 let private wholeStore (store: IFactStore) (scope: string) = async {
     let! facts =
         store.Query(
-            scope,
+            TestScope.resolved scope,
             {
                 FactQuery.all with
                     IncludeSuperseded = true
             }
         )
+        |> TestScope.ok
 
     return facts
 }
@@ -149,14 +151,15 @@ let private level2Descending: PopulationQuery = {
         TopK = 20
 }
 
-let private okResult label (r: Result<PopulationResult, string>) =
+let private okResult label (r: Result<PopulationResult, FactStoreError>) =
     match r with
     | Ok p -> p
-    | Error e -> failtestf "%s: expected Ok, got refusal %s" label e
+    | Error e -> failtestf "%s: expected Ok, got %s" label (FactStoreError.describe e)
 
-let private refusal label (r: Result<PopulationResult, string>) =
+let private refusal label (r: Result<PopulationResult, FactStoreError>) =
     match r with
-    | Error e -> e
+    | Error(FactStoreError.Refused reason) -> reason
+    | Error e -> failtestf "%s: expected a typed refusal, got %s" label (FactStoreError.describe e)
     | Ok p -> failtestf "%s: expected a typed refusal, got %d ranked" label (List.length p.Ranked)
 
 let private scalars (facts: Fact list) =
@@ -256,9 +259,9 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             Expect.equal r.Rekeyed 3 "every legacy id would move"
             Expect.isSome r.FirstDivergent "the first divergent id is named"
 
-            let! stillLegacy = h.Store.Get(h.Scope, v2.FactId)
+            let! stillLegacy = h.Store.Get(TestScope.resolved h.Scope, v2.FactId) |> TestScope.ok
             Expect.isSome stillLegacy "nothing was written: the legacy id still resolves"
-            let! notYet = h.Store.Get(h.Scope, Fact.computeFor v2)
+            let! notYet = h.Store.Get(TestScope.resolved h.Scope, Fact.computeFor v2) |> TestScope.ok
             Expect.isNone notYet "and the new id does not yet"
         }
 
@@ -269,23 +272,40 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             do! h.SeedRaw [ v1; v2; fr ]
 
             let byContent (f: Fact) = f.Subject, f.Metric, f.Value, f.AsOf
-            let! headBefore = h.Store.Query(h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
+
+            let! headBefore =
+                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
+                |> TestScope.ok
 
             let! asOfBefore =
-                h.Store.Query(h.Scope, FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1)
+                h.Store.Query(
+                    TestScope.resolved h.Scope,
+                    FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1
+                )
+                |> TestScope.ok
 
-            let! frBefore = h.Store.Query(h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
+            let! frBefore =
+                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
+                |> TestScope.ok
 
             let! report = h.Migrate false
             let r = migrated report
             Expect.equal r.Rekeyed 3 "every legacy id moved"
 
-            let! headAfter = h.Store.Query(h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
+            let! headAfter =
+                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
+                |> TestScope.ok
 
             let! asOfAfter =
-                h.Store.Query(h.Scope, FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1)
+                h.Store.Query(
+                    TestScope.resolved h.Scope,
+                    FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1
+                )
+                |> TestScope.ok
 
-            let! frAfter = h.Store.Query(h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
+            let! frAfter =
+                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
+                |> TestScope.ok
 
             Expect.equal (headAfter |> List.map byContent) (headBefore |> List.map byContent) "the current head"
             Expect.equal (asOfAfter |> List.map byContent) (asOfBefore |> List.map byContent) "the AsOf read"
@@ -296,7 +316,11 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
 
             let newV1 = Fact.computeFor v1
             let newV2 = Fact.computeFor v2
-            let! chain = h.Store.QuerySupersessionChain(h.Scope, newV2)
+
+            let! chain =
+                h.Store.QuerySupersessionChain(TestScope.resolved h.Scope, newV2)
+                |> TestScope.ok
+
             Expect.equal (chain |> List.map _.FactId |> Set.ofList) (Set.ofList [ newV1; newV2 ]) "the chain, re-keyed"
 
             Expect.equal
@@ -304,7 +328,7 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
                 (Some newV1)
                 "the supersession link names the predecessor's new id"
 
-            let! legacy = h.Store.Get(h.Scope, v2.FactId)
+            let! legacy = h.Store.Get(TestScope.resolved h.Scope, v2.FactId) |> TestScope.ok
             Expect.isNone legacy "the legacy id is gone — moved, not dual-read"
         }
 
@@ -432,7 +456,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                 ]
 
             Expect.equal f.FactId expected "Fact.compute is a pure function of the frame fields"
-            let! back = store.Get(scopeA, expected)
+            let! back = store.Get(TestScope.resolved scopeA, expected) |> TestScope.ok
             Expect.equal (back |> Option.map _.FactId) (Some expected) "and the store returns it under that id"
         }
 
@@ -448,7 +472,10 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             Expect.equal f2.FactId f1.FactId "same content-addressed id"
             Expect.equal f2.AsOf f1.AsOf "idempotent re-assert does not advance AsOf"
 
-            let! current = store.Query(scopeA, FactQuery.forSubjectMetric d.Subject d.Metric)
+            let! current =
+                store.Query(TestScope.resolved scopeA, FactQuery.forSubjectMetric d.Subject d.Metric)
+                |> TestScope.ok
+
             Expect.equal current.Length 1 "one current fact, not two"
         }
 
@@ -464,7 +491,10 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             Expect.equal f2.Supersedes (Some f1.FactId) "derived supersession edge"
             Expect.isTrue (f2.AsOf > f1.AsOf) "superseder AsOf strictly greater (L3)"
 
-            let! current = store.Query(scopeA, FactQuery.forSubjectMetric f1.Subject f1.Metric)
+            let! current =
+                store.Query(TestScope.resolved scopeA, FactQuery.forSubjectMetric f1.Subject f1.Metric)
+                |> TestScope.ok
+
             Expect.equal (current |> List.map _.FactId) [ f2.FactId ] "only the head is current now"
         }
 
@@ -477,11 +507,23 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! f2 = assertOk "v2" store scopeA (draft "uk" "revenue" "hashB" 110m)
 
             // As of f1's transaction time, f2 does not yet exist.
-            let! atF1 = store.Query(scopeA, FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f1.AsOf)
+            let! atF1 =
+                store.Query(
+                    TestScope.resolved scopeA,
+                    FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f1.AsOf
+                )
+                |> TestScope.ok
+
             Expect.equal (atF1 |> List.map _.FactId) [ f1.FactId ] "as-of f1.AsOf sees f1"
 
             // As of f2's transaction time, f2 is the current head.
-            let! atF2 = store.Query(scopeA, FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f2.AsOf)
+            let! atF2 =
+                store.Query(
+                    TestScope.resolved scopeA,
+                    FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f2.AsOf
+                )
+                |> TestScope.ok
+
             Expect.equal (atF2 |> List.map _.FactId) [ f2.FactId ] "as-of f2.AsOf sees f2"
         }
 
@@ -493,12 +535,13 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! history =
                 store.Query(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.forSubjectMetric f1.Subject f1.Metric with
                             IncludeSuperseded = true
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal
                 (history |> List.map _.FactId |> List.sort)
@@ -524,18 +567,22 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             Expect.isNone fB.Supersedes "a different method is a competing fact, not a supersession"
 
-            let! current = store.Query(scopeA, FactQuery.forSubjectMetric dA.Subject dA.Metric)
+            let! current =
+                store.Query(TestScope.resolved scopeA, FactQuery.forSubjectMetric dA.Subject dA.Metric)
+                |> TestScope.ok
+
             Expect.equal current.Length 2 "both competing facts are current"
 
             // Naming the method disambiguates.
             let! onlyA =
                 store.Query(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.forSubjectMetric dA.Subject dA.Metric with
                             Method = Some dA.Method
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal (onlyA |> List.map _.FactId) [ fA.FactId ] "method filter selects one lineage"
         }
@@ -549,7 +596,10 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! _ = assertOk "v2" store scopeA (draft "uk" "revenue" "hashB" 110m)
             let! f3 = assertOk "v3" store scopeA (draft "uk" "revenue" "hashC" 120m)
 
-            let! chain = store.QuerySupersessionChain(scopeA, f3.FactId)
+            let! chain =
+                store.QuerySupersessionChain(TestScope.resolved scopeA, f3.FactId)
+                |> TestScope.ok
+
             Expect.equal chain.Length 3 "three facts in the lineage"
             let asOfs = chain |> List.map _.AsOf
             Expect.equal asOfs (List.sort asOfs) "ordered by AsOf ascending"
@@ -590,16 +640,19 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! q1 =
                 store.Query(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.forSubjectMetric facts[1].Subject facts[1].Metric with
                             PeriodOverlaps = Some(quarter 1)
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal (q1 |> List.map _.FactId) [ facts[1].FactId ] "adjacent quarters do not overlap"
 
-            let! all = store.Query(scopeA, FactQuery.forSubjectMetric facts[1].Subject facts[1].Metric)
+            let! all =
+                store.Query(TestScope.resolved scopeA, FactQuery.forSubjectMetric facts[1].Subject facts[1].Metric)
+                |> TestScope.ok
 
             Expect.equal
                 (all |> List.map _.FactId)
@@ -629,7 +682,10 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                         }
                 }
 
-            let! chain = store.QuerySupersessionChain(scopeA, f2.FactId)
+            let! chain =
+                store.QuerySupersessionChain(TestScope.resolved scopeA, f2.FactId)
+                |> TestScope.ok
+
             Expect.equal (chain |> List.map _.FactId) [ f1.FactId; f2.FactId ] "the lineage, and only the lineage"
         }
 
@@ -659,16 +715,20 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! current =
                 store.Query(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.forSubjectMetric f1.Subject f1.Metric with
                             PeriodOverlaps = Some unmarked
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal (current |> List.map _.FactId) [ f2.FactId ] "the head is current"
 
-            let! chain = store.QuerySupersessionChain(scopeA, f1.FactId)
+            let! chain =
+                store.QuerySupersessionChain(TestScope.resolved scopeA, f1.FactId)
+                |> TestScope.ok
+
             Expect.equal (chain |> List.map _.FactId) [ f1.FactId; f2.FactId ] "and the chain walks it"
         }
 
@@ -726,7 +786,9 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                 mixed.DraftCount
                 "the three counts partition the batch"
 
-            let! heads = store.Query(scopeA, FactQuery.forSubjectMetric bPrime.Subject bPrime.Metric)
+            let! heads =
+                store.Query(TestScope.resolved scopeA, FactQuery.forSubjectMetric bPrime.Subject bPrime.Metric)
+                |> TestScope.ok
 
             match heads with
             | [ head ] ->
@@ -766,8 +828,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             Expect.equal (identity batched) (identity scalar) "same facts, same derived supersession edges"
 
-            let! batchedHeads = store.Query(scopeA, FactQuery.all)
-            let! scalarHeads = store.Query(scopeB, FactQuery.all)
+            let! batchedHeads = store.Query(TestScope.resolved scopeA, FactQuery.all) |> TestScope.ok
+            let! scalarHeads = store.Query(TestScope.resolved scopeB, FactQuery.all) |> TestScope.ok
 
             Expect.equal
                 (batchedHeads |> List.map _.FactId |> List.sort)
@@ -776,7 +838,10 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             // Stated directly as well as by equivalence: the in-batch
             // supersession left one head at the later value.
-            let! uk = store.Query(scopeA, FactQuery.forSubjectMetric drafts[1].Subject drafts[1].Metric)
+            let! uk =
+                store.Query(TestScope.resolved scopeA, FactQuery.forSubjectMetric drafts[1].Subject drafts[1].Metric)
+                |> TestScope.ok
+
             Expect.equal (uk |> List.map _.Value) [ Scalar 30m ] "the batch's later draft is the current head"
         }
 
@@ -814,14 +879,16 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                     Period = { q2 with To = q2.From }
             }
 
-            let! r = store.AssertBatch(scopeA, [ good1; malformed; good2 ])
+            let! r = store.AssertBatch(TestScope.resolved scopeA, [ good1; malformed; good2 ])
 
             match r with
             | Ok receipt -> failtestf "expected a refusal, got a receipt over %d drafts" receipt.DraftCount
-            | Error message ->
+            | Error(FactStoreError.MalformedDrafts _ as error) ->
+                let message = FactStoreError.describe error
                 Expect.stringContains message "#1" "the refusal names the offender by position"
                 Expect.stringContains message "geography/eu>de" "and by subject"
                 Expect.stringContains message "half-open" "and says what is wrong with it"
+            | Error other -> failtestf "expected a malformed-batch refusal, got %s" (FactStoreError.describe other)
 
             let! stored = wholeStore store scopeA
             Expect.isEmpty stored "a rejected batch writes nothing at all — not even its well-formed drafts"
@@ -841,7 +908,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             // read model has actually built one — otherwise the batch
             // below would be maintaining nothing and this case would pass
             // without touching the path it exists for.
-            let! before = store.QueryPopulation(scopeA, level2Descending)
+            let! before = store.QueryPopulation(TestScope.resolved scopeA, level2Descending)
             Expect.equal (scalars (okResult "before" before).Ranked) [ 60m; 20m ] "the seeded population"
 
             // One supersession of a member already in the model, one
@@ -852,7 +919,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                     popDraft [ "na"; "ca" ] "h-ca" (Scalar 5m)
                 ]
 
-            let! after = store.QueryPopulation(scopeA, level2Descending)
+            let! after = store.QueryPopulation(TestScope.resolved scopeA, level2Descending)
 
             Expect.equal
                 (scalars (okResult "after" after).Ranked)
@@ -916,7 +983,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             }
 
             let! f = assertOk "assert" store scopeA d
-            let! got = store.Get(scopeA, f.FactId)
+            let! got = store.Get(TestScope.resolved scopeA, f.FactId) |> TestScope.ok
             Expect.equal (got |> Option.map _.Disclosure) (Some Disclosure.Internal) "Internal survives the round-trip"
         }
 
@@ -930,7 +997,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             }
 
             let! f = assertOk "assert" store scopeA d
-            let! got = store.Get(scopeA, f.FactId)
+            let! got = store.Get(TestScope.resolved scopeA, f.FactId) |> TestScope.ok
 
             match got |> Option.map _.Value with
             | Some(Absent reason) -> Expect.stringContains reason "no data" "absence reason preserved"
@@ -944,7 +1011,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let store, scopeA, scopeB = factory ()
             let! _ = assertOk "assert" store scopeA (draft "uk" "revenue" "hashA" 100m)
 
-            let! fromB = store.Query(scopeB, FactQuery.all)
+            let! fromB = store.Query(TestScope.resolved scopeB, FactQuery.all) |> TestScope.ok
             Expect.isEmpty fromB "scopeB sees none of scopeA's facts"
         }
 
@@ -964,7 +1031,9 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! fA = assertOk "A" store scopeA dA
             let! fB = assertOk "B" store scopeA dB
 
-            let! annotated = store.QueryWithCompetition(scopeA, FactQuery.forSubjectMetric dA.Subject dA.Metric)
+            let! annotated =
+                store.QueryWithCompetition(TestScope.resolved scopeA, FactQuery.forSubjectMetric dA.Subject dA.Metric)
+                |> TestScope.ok
 
             let indicatorOf factId =
                 annotated
@@ -988,7 +1057,10 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let d = draft "uk" "revenue" "hashA" 100m
             let! _ = assertOk "assert" store scopeA d
 
-            let! annotated = store.QueryWithCompetition(scopeA, FactQuery.forSubjectMetric d.Subject d.Metric)
+            let! annotated =
+                store.QueryWithCompetition(TestScope.resolved scopeA, FactQuery.forSubjectMetric d.Subject d.Metric)
+                |> TestScope.ok
+
             Expect.equal annotated.Length 1 "one head"
             Expect.isEmpty (List.head annotated).CompetingMethods "uncontested → empty indicator"
         }
@@ -1002,8 +1074,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let q =
                 FactQuery.forSubjectMetric (draft "uk" "revenue" "hashA" 100m).Subject (MetricRef "revenue")
 
-            let! plain = store.Query(scopeA, q)
-            let! annotated = store.QueryWithCompetition(scopeA, q)
+            let! plain = store.Query(TestScope.resolved scopeA, q) |> TestScope.ok
+            let! annotated = store.QueryWithCompetition(TestScope.resolved scopeA, q) |> TestScope.ok
 
             Expect.equal
                 (annotated |> List.map _.Fact.FactId)
@@ -1023,7 +1095,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let store, scopeA, _ = factory ()
             let! seeded = seedPopulation store scopeA
 
-            let! r = store.QueryPopulation(scopeA, level2Descending)
+            let! r = store.QueryPopulation(TestScope.resolved scopeA, level2Descending)
             let population = okResult "level-2 descending" r
 
             Expect.equal
@@ -1049,7 +1121,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! r =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             Ordering = Ascending
@@ -1069,7 +1141,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! r =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         PopulationQuery.create (MetricRef "no-such-metric-701") "geography" with
                             Ordering = RegistryDirection
@@ -1088,7 +1160,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! greedy =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             TopK = PopulationQuery.MaxTopK + 5_000
@@ -1104,7 +1176,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             Expect.isFalse capped.Truncated "the seeded population is well under the ceiling"
 
-            let! narrow = store.QueryPopulation(scopeA, { level2Descending with TopK = 2 })
+            let! narrow = store.QueryPopulation(TestScope.resolved scopeA, { level2Descending with TopK = 2 })
             let top2 = okResult "k = 2" narrow
 
             Expect.equal (scalars top2.Ranked) [ 99m; 60m ] "the ranking is bounded by the requested k"
@@ -1124,7 +1196,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! r =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             Threshold = Some(AtLeast 30m)
@@ -1143,7 +1215,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! between =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             Threshold = Some(Between(20m, 60m))
@@ -1161,7 +1233,11 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let store, scopeA, _ = factory ()
             let! seeded = seedPopulation store scopeA
 
-            let! r = store.QueryPopulation(scopeA, level2Descending |> PopulationQuery.asOf seeded.UkFirst.AsOf)
+            let! r =
+                store.QueryPopulation(
+                    TestScope.resolved scopeA,
+                    level2Descending |> PopulationQuery.asOf seeded.UkFirst.AsOf
+                )
 
             let population = okResult "as-of replay" r
 
@@ -1190,15 +1266,15 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                     TopK = 20
             }
 
-            let! atLevel1 = store.QueryPopulation(scopeA, { baseQuery with Level = Some 1 })
+            let! atLevel1 = store.QueryPopulation(TestScope.resolved scopeA, { baseQuery with Level = Some 1 })
             Expect.equal (scalars (okResult "level 1" atLevel1).Ranked) [ 40m; 10m ] "level 1 only"
 
-            let! atRoot = store.QueryPopulation(scopeA, { baseQuery with Level = Some 0 })
+            let! atRoot = store.QueryPopulation(TestScope.resolved scopeA, { baseQuery with Level = Some 0 })
             Expect.equal (scalars (okResult "level 0" atRoot).Ranked) [ 50m ] "level 0 is the hierarchy root"
 
             let! underEu =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         baseQuery with
                             PathPrefix = Some [ "eu" ]
@@ -1212,7 +1288,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! euLeaves =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         baseQuery with
                             PathPrefix = Some [ "eu" ]
@@ -1224,7 +1300,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! unknownHierarchy =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         PopulationQuery.create (MetricRef "elasticity") "org-chart" with
                             Ordering = Descending
@@ -1249,7 +1325,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! r =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             PathAnyOf = Some [ [ "eu"; "uk" ]; [ "na"; "us" ] ]
@@ -1266,7 +1342,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! underNa =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             PathPrefix = Some [ "na" ]
@@ -1281,7 +1357,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! noPrefix =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             PathAnyOf = Some []
@@ -1300,7 +1376,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! r =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             PathExclude = Some [ [ "eu"; "fr" ] ]
@@ -1318,7 +1394,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! nothingNamed =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             PathExclude = Some [ [ "apac" ] ]
@@ -1344,7 +1420,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! underEu =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         everyDepth with
                             PathPrefix = Some [ "eu" ]
@@ -1359,7 +1435,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! anyOfLessOne =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             PathAnyOf = Some [ [ "eu" ]; [ "na" ] ]
@@ -1380,7 +1456,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             for exclusion in [ [ [ "eu" ]; [ "na" ] ]; [ [] ] ] do
                 let! r =
                     store.QueryPopulation(
-                        scopeA,
+                        TestScope.resolved scopeA,
                         {
                             level2Descending with
                                 PathExclude = Some exclusion
@@ -1400,7 +1476,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! r =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         level2Descending with
                             TopK = 1
@@ -1420,7 +1496,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let store, scopeA, _ = factory ()
             let! _ = seedPopulation store scopeA
 
-            let! r = store.QueryPopulation(scopeA, level2Descending)
+            let! r = store.QueryPopulation(TestScope.resolved scopeA, level2Descending)
             let stats = (okResult "stats" r).Stats
 
             Expect.equal stats.FactCount 6 "four scalars, one categorical, one absent"
@@ -1444,7 +1520,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let store, scopeA, scopeB = factory ()
             let! _ = seedPopulation store scopeA
 
-            let! r = store.QueryPopulation(scopeB, level2Descending)
+            let! r = store.QueryPopulation(TestScope.resolved scopeB, level2Descending)
             let fromB = okResult "other scope" r
 
             Expect.isEmpty fromB.Ranked "scopeB sees none of scopeA's population"
@@ -1463,13 +1539,14 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let read branch =
                 store.Query(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.all with
                             Metric = Some(MetricRef "elasticity")
                             SubjectBranch = Some branch
                     }
                 )
+                |> TestScope.ok
 
             let paths (facts: Fact list) =
                 facts |> List.map _.Subject.Path |> List.sort
@@ -1528,7 +1605,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let read prefix =
                 store.Query(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.forSubjectMetric seeded.UkHead.Subject (MetricRef "elasticity") with
                             SubjectBranch =
@@ -1538,6 +1615,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                                 }
                     }
                 )
+                |> TestScope.ok
 
             let! inside = read [ "eu" ]
             Expect.equal inside [ seeded.UkHead ] "the subject lies in the branch"
@@ -1559,13 +1637,14 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! history =
                 store.Query(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.all with
                             SubjectBranch = branch [ "eu"; "uk" ]
                             IncludeSuperseded = true
                     }
                 )
+                |> TestScope.ok
 
             Expect.equal
                 (history |> List.map _.FactId |> List.sort)
@@ -1574,13 +1653,14 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! annotated =
                 store.QueryWithCompetition(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         FactQuery.all with
                             Metric = Some(MetricRef "elasticity")
                             SubjectBranch = branch [ "eu"; "fr" ]
                     }
                 )
+                |> TestScope.ok
 
             Expect.hasLength annotated 2 "both competing fr heads"
 
@@ -1632,7 +1712,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
             let store, scopeA, _ = registryFactory (registryOf HigherIsBetter None)
             let! _ = seedPopulation store scopeA
 
-            let! r = store.QueryPopulation(scopeA, registryDirected)
+            let! r = store.QueryPopulation(TestScope.resolved scopeA, registryDirected)
             let population = okResult "higher is better" r
 
             Expect.equal population.Direction HighestFirst "best-first is largest-first"
@@ -1644,7 +1724,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
             let store, scopeA, _ = registryFactory (registryOf LowerIsBetter None)
             let! _ = seedPopulation store scopeA
 
-            let! r = store.QueryPopulation(scopeA, registryDirected)
+            let! r = store.QueryPopulation(TestScope.resolved scopeA, registryDirected)
             let population = okResult "lower is better" r
 
             Expect.equal population.Direction LowestFirst "best-first is smallest-first"
@@ -1660,7 +1740,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
             let store, scopeA, _ = registryFactory (registryOf Neutral None)
             let! _ = seedPopulation store scopeA
 
-            let! r = store.QueryPopulation(scopeA, registryDirected)
+            let! r = store.QueryPopulation(TestScope.resolved scopeA, registryDirected)
             let message = refusal "neutral" r
 
             Expect.stringContains message "elasticity" "the refusal names the metric"
@@ -1668,7 +1748,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
 
             // The population is still perfectly readable — the caller
             // simply has to say which way is up.
-            let! explicit = store.QueryPopulation(scopeA, level2Descending)
+            let! explicit = store.QueryPopulation(TestScope.resolved scopeA, level2Descending)
             Expect.equal (scalars (okResult "explicit" explicit).Ranked) [ 99m; 60m; 30m; 20m ] "explicit works"
         }
 
@@ -1679,7 +1759,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
 
             let! seeded = seedPopulation store scopeA
 
-            let! canonical = store.QueryPopulation(scopeA, registryDirected)
+            let! canonical = store.QueryPopulation(TestScope.resolved scopeA, registryDirected)
             let byCanonical = okResult "canonical" canonical
 
             Expect.equal
@@ -1691,7 +1771,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
 
             let! all =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         registryDirected with
                             Methods = AllCompetingMethods
@@ -1707,7 +1787,7 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
 
             let! named =
                 store.QueryPopulation(
-                    scopeA,
+                    TestScope.resolved scopeA,
                     {
                         registryDirected with
                             Methods = OneMethod(Computed("estimator", "1", "p0"))
@@ -2208,8 +2288,8 @@ let differentialTests
                |> List.map (fun (label, q) -> label + " (as of the seed's midpoint)", PopulationQuery.asOf midpoint q))
 
         for label, query in queries do
-            let! expected = reference.QueryPopulation(referenceScope, query)
-            let! actual = candidate.QueryPopulation(candidateScope, query)
+            let! expected = reference.QueryPopulation(TestScope.resolved referenceScope, query)
+            let! actual = candidate.QueryPopulation(TestScope.resolved candidateScope, query)
             Expect.equal actual expected (sprintf "%s — population '%s' answers identically" name label)
     }
 
@@ -2223,8 +2303,8 @@ let differentialTests
             |> List.map (fun x -> x.Fact, List.sort x.CompetingMethods)
 
         for query in pointMatrix instants do
-            let! expected = reference.Query(referenceScope, query)
-            let! actual = candidate.Query(candidateScope, query)
+            let! expected = reference.Query(TestScope.resolved referenceScope, query) |> TestScope.ok
+            let! actual = candidate.Query(TestScope.resolved candidateScope, query) |> TestScope.ok
             expectContractOrder (sprintf "%s — Query listing order for %A" name query) actual
 
             Expect.equal
@@ -2232,8 +2312,13 @@ let differentialTests
                 (List.sortWith byListingThenId expected)
                 (sprintf "%s — Query agrees for %A" name query)
 
-            let! expectedC = reference.QueryWithCompetition(referenceScope, query)
-            let! actualC = candidate.QueryWithCompetition(candidateScope, query)
+            let! expectedC =
+                reference.QueryWithCompetition(TestScope.resolved referenceScope, query)
+                |> TestScope.ok
+
+            let! actualC =
+                candidate.QueryWithCompetition(TestScope.resolved candidateScope, query)
+                |> TestScope.ok
 
             Expect.equal
                 (renderCompetition actualC)
@@ -2242,24 +2327,34 @@ let differentialTests
 
         let! everything =
             reference.Query(
-                referenceScope,
+                TestScope.resolved referenceScope,
                 {
                     FactQuery.all with
                         IncludeSuperseded = true
                 }
             )
+            |> TestScope.ok
 
         Expect.isGreaterThan (List.length everything) 30 "the whole-history read saw the whole seed"
 
         for f in everything do
-            let! expectedChain = reference.QuerySupersessionChain(referenceScope, f.FactId)
-            let! actualChain = candidate.QuerySupersessionChain(candidateScope, f.FactId)
+            let! expectedChain =
+                reference.QuerySupersessionChain(TestScope.resolved referenceScope, f.FactId)
+                |> TestScope.ok
+
+            let! actualChain =
+                candidate.QuerySupersessionChain(TestScope.resolved candidateScope, f.FactId)
+                |> TestScope.ok
+
             Expect.equal actualChain expectedChain (sprintf "%s — the chain of %s agrees" name f.FactId)
 
-            let! got = candidate.Get(candidateScope, f.FactId)
+            let! got = candidate.Get(TestScope.resolved candidateScope, f.FactId) |> TestScope.ok
             Expect.equal got (Some f) (sprintf "%s — Get %s agrees" name f.FactId)
 
-        let! unknown = candidate.QuerySupersessionChain(candidateScope, "no-such-fact")
+        let! unknown =
+            candidate.QuerySupersessionChain(TestScope.resolved candidateScope, "no-such-fact")
+            |> TestScope.ok
+
         Expect.isEmpty unknown "an unknown id has no chain"
     }
 

@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.Contracts.IDisclosureTaintIndexSourceContract
 open System
 open Expecto
 open ToolUp.Facts
+open ToolUp.Platform
 
 // ─── IDisclosureTaintIndexSource — the conformance pack ──────────────
 //
@@ -78,23 +79,24 @@ let private producerV2 = {
         }
 }
 
-let private ok (label: string) (r: Result<'T, string>) : 'T =
+let private ok (label: string) (r: Result<'T, FactStoreError>) : 'T =
     match r with
     | Ok v -> v
-    | Error e -> failtestf "%s: expected Ok, got %s" label e
+    | Error e -> failtestf "%s: expected Ok, got %s" label (FactStoreError.describe e)
 
 let private wholeStore (store: IFactStore) (scope: string) =
     store.Query(
-        scope,
+        TestScope.resolved scope,
         {
             FactQuery.all with
                 IncludeSuperseded = true
         }
     )
+    |> TestScope.ok
 
 /// The index `source` answers for `scope`, asserted equal to the rebuild.
 let private agrees (h: TaintIndexHarness) (label: string) (scope: string) = async {
-    let! index = h.Source.ReadTaintIndex scope
+    let! index = h.Source.ReadTaintIndex(TestScope.resolved scope)
     let! all = wholeStore h.Store scope
     Expect.equal index (DisclosureTaintIndex.ofFacts all) label
     return index
@@ -109,15 +111,15 @@ let tests (name: string) (harness: unit -> TaintIndexHarness) =
             let! empty = agrees h "an empty scope" h.ScopeA
             Expect.isEmpty empty.Nodes "an empty scope holds no node"
 
-            let! p = h.Store.Assert(h.ScopeA, producer)
+            let! p = h.Store.Assert(TestScope.resolved h.ScopeA, producer)
             let p = ok "producer" p
             let! _ = agrees h "after a scalar assert" h.ScopeA
 
-            let! batch = h.Store.AssertBatch(h.ScopeA, [ derived; unrelated ])
+            let! batch = h.Store.AssertBatch(TestScope.resolved h.ScopeA, [ derived; unrelated ])
             ok "batch" batch |> ignore
             let! _ = agrees h "after a batch" h.ScopeA
 
-            let! v2 = h.Store.Assert(h.ScopeA, producerV2)
+            let! v2 = h.Store.Assert(TestScope.resolved h.ScopeA, producerV2)
             ok "v2" v2 |> ignore
             let! afterSupersession = agrees h "after a supersession" h.ScopeA
 
@@ -125,7 +127,7 @@ let tests (name: string) (harness: unit -> TaintIndexHarness) =
                 (DisclosureTaintIndex.tryNode p.FactId afterSupersession)
                 "the superseded producer is still a node: a derived fact may cite what it produced"
 
-            let! again = h.Store.Assert(h.ScopeA, producer)
+            let! again = h.Store.Assert(TestScope.resolved h.ScopeA, producer)
             ok "again" again |> ignore
             let! afterIdempotent = agrees h "after an idempotent assert" h.ScopeA
             Expect.equal afterIdempotent afterSupersession "an idempotent write moves no node"
@@ -140,11 +142,11 @@ let tests (name: string) (harness: unit -> TaintIndexHarness) =
             let writes = [ producer; derived; unrelated; producerV2 ]
 
             for d in writes do
-                let! r = h.Store.Assert(h.ScopeA, d)
+                let! r = h.Store.Assert(TestScope.resolved h.ScopeA, d)
                 ok "forward" r |> ignore
 
             for d in List.rev writes do
-                let! r = h.Store.Assert(h.ScopeB, d)
+                let! r = h.Store.Assert(TestScope.resolved h.ScopeB, d)
                 ok "reverse" r |> ignore
 
             let! forward = agrees h "written forward" h.ScopeA
@@ -161,7 +163,7 @@ let tests (name: string) (harness: unit -> TaintIndexHarness) =
             let rebuilds () =
                 h.Rebuilds |> Option.map (fun read -> read ()) |> Option.defaultValue 0L
 
-            let! batch = h.Store.AssertBatch(h.ScopeA, [ producer; derived ])
+            let! batch = h.Store.AssertBatch(TestScope.resolved h.ScopeA, [ producer; derived ])
             ok "seed" batch |> ignore
 
             let before = rebuilds ()
@@ -172,7 +174,7 @@ let tests (name: string) (harness: unit -> TaintIndexHarness) =
             let! second = agrees h "a second read" h.ScopeA
             Expect.equal second first "a second read answers the same index"
 
-            let! r = h.Store.Assert(h.ScopeA, unrelated)
+            let! r = h.Store.Assert(TestScope.resolved h.ScopeA, unrelated)
             ok "a later write" r |> ignore
             let! _ = agrees h "a read after a later write" h.ScopeA
 

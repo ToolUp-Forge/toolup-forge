@@ -149,9 +149,9 @@ let private substrate () =
     graph, store, gate, events
 
 let private seed (store: IFactStore) (scopeId: string) metric inputHash value = async {
-    match! store.Assert(scopeId, draft metric inputHash value) with
+    match! store.Assert(TestScope.resolved scopeId, draft metric inputHash value) with
     | Ok(f: Fact) -> return f.FactId
-    | Error e -> return failtestf "seeding the fact store failed: %s" e
+    | Error e -> return failtestf "seeding the fact store failed: %s" (FactStoreError.describe e)
 }
 
 let private signerOver (secrets: ISecretStore) =
@@ -274,7 +274,7 @@ let tests =
                     frozen
 
             let! factId = seed store scopeA "revenue" "h1" 100m
-            let! result = issuer.Issue(scopeA, "auditor", FactCertificate factId, 5)
+            let! result = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5)
             let certificate = issued result
 
             let rows =
@@ -323,7 +323,7 @@ let tests =
                 GroundingCertificate.createIssuerAudited graph store gate events (Some signer) audit
 
             let! factId = seed store scopeA "revenue" "h1" 100m
-            let! result = issuer.Issue(scopeA, "auditor", FactCertificate factId, 5)
+            let! result = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5)
             let certificate = issued result
 
             let log = GroundingCertificate.auditTrailLog audit
@@ -369,7 +369,7 @@ let tests =
                     | None -> GroundingCertificate.createIssuerWithClock graph store gate events (Some signer) frozen
 
                 let! factId = seed store scopeA "revenue" "h1" 100m
-                let! result = issuer.Issue(scopeA, "auditor", FactCertificate factId, 5)
+                let! result = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5)
                 return issued result
             }
 
@@ -409,9 +409,9 @@ let tests =
             let! a2 = seed store scopeA "margin" "h2" 42m
             let! b1 = seed store scopeB "revenue" "h3" 7m
 
-            let! _ = issuer.Issue(scopeA, "auditor", FactCertificate a1, 5)
-            let! _ = issuer.Issue(scopeA, "auditor", FactCertificate a2, 5)
-            let! _ = issuer.Issue(scopeB, "auditor", FactCertificate b1, 5)
+            let! _ = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate a1, 5)
+            let! _ = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate a2, 5)
+            let! _ = issuer.Issue(TestScope.resolved scopeB, "auditor", FactCertificate b1, 5)
 
             let log = GroundingCertificate.auditTrailLog audit
 
@@ -449,7 +449,7 @@ let tests =
                 GroundingCertificate.createIssuerAudited graph store gate events (Some signer) audit
 
             let! factId = seed store scopeA "revenue" "h1" 100m
-            let! result = issuer.Issue(scopeA, "auditor", FactCertificate factId, 5)
+            let! result = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5)
             let certificate = issued result
 
             // Precondition — the SAME digest against the SAME rows is
@@ -498,9 +498,9 @@ let tests =
             let! droppedId = seed store scopeA "margin" "h2" 42m
             let! laterId = seed store scopeA "volume" "h3" 7m
 
-            let! keptResult = issuer.Issue(scopeA, "auditor", FactCertificate keptId, 5)
-            let! droppedResult = issuer.Issue(scopeA, "auditor", FactCertificate droppedId, 5)
-            let! _ = issuer.Issue(scopeA, "auditor", FactCertificate laterId, 5)
+            let! keptResult = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate keptId, 5)
+            let! droppedResult = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate droppedId, 5)
+            let! _ = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate laterId, 5)
             let kept = issued keptResult
             let dropped = issued droppedResult
 
@@ -603,7 +603,7 @@ let tests =
 
             let! factId = seed store scopeA "revenue" "h1" 100m
 
-            match! issuer.Issue(scopeA, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5) with
             | Error e -> failtestf "attested issue must succeed: %s" (CertificateError.describe e)
             | Ok certificate ->
                 let log = GroundingCertificate.auditTrailLog audit
@@ -634,7 +634,7 @@ let tests =
 
             let! factId = seed store scopeA "revenue" "h1" 100m
 
-            match! issuer.Issue(scopeA, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5) with
             | Ok _ -> failtest "issuance must refuse with no signer"
             | Error SigningUnavailable -> ()
             | Error e -> failtestf "unexpected refusal: %s" (CertificateError.describe e)

@@ -113,9 +113,9 @@ let private draftOf
     }
 
 let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) : Fact =
-    match store.Assert(scope, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// One restricted contribution plus a declassifying aggregate over it.
 let private seedSingleParty (store: IFactStore) (scope: string) : Fact =
@@ -287,7 +287,7 @@ let private accumulationCase (name: string, mkLedger: unit -> IPrivacyBudgetLedg
 
             // Three crossings are affordable.
             for i in 1..3 do
-                let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+                let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
                 Expect.equal
                     (verdicts.TryFind agg.FactId)
@@ -297,7 +297,7 @@ let private accumulationCase (name: string, mkLedger: unit -> IPrivacyBudgetLedg
             // The fourth is not. If the binding charged nothing, this
             // case fails here; if it charged too eagerly, the loop
             // above already failed.
-            let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
             Expect.equal
                 (verdicts.TryFind agg.FactId)
@@ -316,8 +316,8 @@ let private accumulationCase (name: string, mkLedger: unit -> IPrivacyBudgetLedg
             let gate = gateWith unscopedCfg (Some budgets) store events
             let agg = seedSingleParty store scope
 
-            let! _ = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
-            let! _ = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+            let! _ = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
+            let! _ = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
             let! denies = rowsOf events scope DisclosureEvents.DeniedType
             Expect.equal denies.Length 1 "exactly the exhausted check wrote a deny row (GP 6)"
@@ -359,7 +359,7 @@ let bindingTests =
 
             // Two joint crossings: each charges party A AND party B once.
             for _ in 1..2 do
-                let! verdicts = gate.Check(scope, "user-1", FactExport, [ joint.FactId ])
+                let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ joint.FactId ])
                 Expect.equal (verdicts.TryFind joint.FactId) (Some FactDisclosable) "within both parties' ceilings"
 
             // Read both parties' ledgers directly: each spent two, not
@@ -401,7 +401,7 @@ let bindingTests =
             let gate = gateWith unacceptedCfg (Some budgets) store events
             let joint = seedJoint store scope
 
-            let! verdicts = gate.Check(scope, "user-1", FactExport, [ joint.FactId ])
+            let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ joint.FactId ])
 
             Expect.equal
                 (verdicts.TryFind joint.FactId)
@@ -432,7 +432,7 @@ let bindingTests =
             let agg = seedSingleParty store scope
 
             for _ in 1..5 do
-                let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+                let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
 
                 Expect.equal
                     (verdicts.TryFind agg.FactId)
@@ -512,7 +512,7 @@ let inertTests =
                 let gate = gateWith twoPartyCfg budgets store events
                 let joint = seedJoint store scope
 
-                let! verdicts = gate.Check(scope, "user-1", FactExport, [ joint.FactId ])
+                let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ joint.FactId ])
                 let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
 
                 return
@@ -561,7 +561,7 @@ let inertTests =
             let agg = seedSingleParty store scope
 
             let verdictOf (gate: IFactDisclosureGate) =
-                gate.Check(scope, "user-1", FactRetrieval, [ agg.FactId ])
+                gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ agg.FactId ])
                 |> Async.RunSynchronously
                 |> Map.tryFind agg.FactId
 

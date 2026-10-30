@@ -148,19 +148,25 @@ let private recomputerReturning (f: Fact -> Result<FactDraft option, string>) : 
         member _.Recompute(_scopeId, fact) = async { return f fact }
     }
 
-let private jobCtx (scopeId: string) (payload: string) : JobContext = {
+/// A recompute job under `scopeId` carrying `scope` — the scope the runner
+/// re-minted for it, or the anonymous scope when it carries none.
+let private jobCtxCarrying (scopeId: string) (scope: ResolvedScope) (payload: string) : JobContext = {
     JobId = Guid.NewGuid()
     ScopeId = scopeId
     AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
     Attempt = 1
     Trigger = Trigger.Manual
-    Scope = ToolUp.Platform.ResolvedScope.anonymous
+    Scope = scope
     TriggerSource = ScheduledManually "system"
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = payload
     DeadLetterDestination = None
 }
+
+/// A recompute job under `scopeId`, carrying the scope the runner re-minted.
+let private jobCtx (scopeId: string) (payload: string) : JobContext =
+    jobCtxCarrying scopeId (TestScope.resolved scopeId) payload
 
 let tests =
     testList "Phase 561 — reactive fact recomputation" [
@@ -178,9 +184,13 @@ let tests =
             let store = newStore ()
             let scope = newScope ()
 
-            let! eager = store.Assert(scope, draftFor "eager_metric" "v1" 100m) |> assertOk
+            let! eager =
+                store.Assert(TestScope.resolved scope, draftFor "eager_metric" "v1" 100m)
+                |> TestScope.ok
 
-            let! manual = store.Assert(scope, draftFor "undeclared_metric" "v1" 100m) |> assertOk
+            let! manual =
+                store.Assert(TestScope.resolved scope, draftFor "undeclared_metric" "v1" 100m)
+                |> TestScope.ok
 
             let registry =
                 registryWith [
@@ -201,11 +211,14 @@ let tests =
             let lineage = newLineage ()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draftFor "revenue" "v1" 100m)
-            let! _ = store.Assert(scope, draftFor "cost" "other" 50m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 100m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "cost" "other" 50m)
 
             let! set = FactInvalidation.invalidationSet lineage scope [ "v1" ]
-            let! invalidated = FactInvalidation.invalidatedHeads store scope set
+
+            let! invalidated =
+                FactInvalidation.invalidatedHeads store (TestScope.resolved scope) set
+                |> TestScope.ok
 
             Expect.hasLength invalidated 1 "only the fact citing v1 is invalidated"
             Expect.equal invalidated.[0].Metric.Value "revenue" "the v1-citing revenue fact"
@@ -220,12 +233,15 @@ let tests =
             // v2 was derived from v1 in lineage; a fact cites v2.
             do! lineage.Record(scope, lineageLink "v1" "v2") |> assertOk
 
-            let! _ = store.Assert(scope, draftFor "revenue" "v2" 100m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "revenue" "v2" 100m)
 
             let! set = FactInvalidation.invalidationSet lineage scope [ "v1" ]
             Expect.isTrue (Set.contains "v2" set) "v2 (descendant of changed v1) is in the invalidation set"
 
-            let! invalidated = FactInvalidation.invalidatedHeads store scope set
+            let! invalidated =
+                FactInvalidation.invalidatedHeads store (TestScope.resolved scope) set
+                |> TestScope.ok
+
             Expect.hasLength invalidated 1 "the v2-citing fact is invalidated via lineage"
         }
 
@@ -235,12 +251,17 @@ let tests =
             let lineage = newLineage ()
             let scope = newScope ()
 
-            let! asserted = store.Assert(scope, draftFor "revenue" "v1" 100m) |> assertOk
+            let! asserted =
+                store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 100m)
+                |> TestScope.ok
 
             let! set = FactInvalidation.invalidationSet lineage scope [ "v1" ]
-            let! _ = FactInvalidation.invalidatedHeads store scope set
 
-            let! reloaded = store.Get(scope, asserted.FactId)
+            let! _ =
+                FactInvalidation.invalidatedHeads store (TestScope.resolved scope) set
+                |> TestScope.ok
+
+            let! reloaded = store.Get(TestScope.resolved scope, asserted.FactId) |> TestScope.ok
             Expect.equal reloaded (Some asserted) "the fact is byte-identical after invalidation — nothing was written"
         }
 
@@ -300,9 +321,9 @@ let tests =
             let scheduler = RecordingScheduler()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draftFor "eager_m" "v1" 1m)
-            let! _ = store.Assert(scope, draftFor "onquery_m" "v1" 2m)
-            let! _ = store.Assert(scope, draftFor "manual_m" "v1" 3m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "eager_m" "v1" 1m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "onquery_m" "v1" 2m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "manual_m" "v1" 3m)
 
             let registry =
                 registryWith [
@@ -312,9 +333,13 @@ let tests =
                 ]
 
             let! outcomes =
-                RecomputeJobHandler.reactToDataChange lineage store (scheduler :> IJobScheduler) (Some registry) scope [
-                    "v1"
-                ]
+                RecomputeJobHandler.reactToDataChange
+                    lineage
+                    store
+                    (scheduler :> IJobScheduler)
+                    (Some registry)
+                    (TestScope.resolved scope)
+                    [ "v1" ]
 
             let enqueued =
                 outcomes
@@ -354,13 +379,17 @@ let tests =
             let scheduler = RecordingScheduler(TriggerError.SchedulerStopping)
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draftFor "eager_m" "v1" 1m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "eager_m" "v1" 1m)
             let registry = registryWith [ metricDef "eager_m" UntilUpstreamChange (Some Eager) ]
 
             let! outcomes =
-                RecomputeJobHandler.reactToDataChange lineage store (scheduler :> IJobScheduler) (Some registry) scope [
-                    "v1"
-                ]
+                RecomputeJobHandler.reactToDataChange
+                    lineage
+                    store
+                    (scheduler :> IJobScheduler)
+                    (Some registry)
+                    (TestScope.resolved scope)
+                    [ "v1" ]
 
             match outcomes with
             | [ ScheduleFailed(_, error) ] ->
@@ -378,14 +407,14 @@ let tests =
             let scheduler = RecordingScheduler(TriggerError.SchedulerStopping) :> IJobScheduler
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draftFor "eager_m" "v1" 1m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "eager_m" "v1" 1m)
             let registry = registryWith [ metricDef "eager_m" UntilUpstreamChange (Some Eager) ]
 
             let react =
                 ReactiveDataChange.reaction (fun () -> store) (fun () -> lineage) (fun () -> Some scheduler) (fun () ->
                     Some registry)
 
-            let! outcome = react (DataChangeScope.Carried scope) [ "v1" ] |> Async.Catch
+            let! outcome = react (TestScope.resolved scope) [ "v1" ] |> Async.Catch
 
             match outcome with
             | Choice2Of2 ex ->
@@ -400,11 +429,17 @@ let tests =
             let scheduler = RecordingScheduler()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draftFor "revenue" "v1" 1m)
-            let! _ = store.Assert(scope, draftFor "cost" "v1" 2m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 1m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "cost" "v1" 2m)
 
             let! outcomes =
-                RecomputeJobHandler.reactToDataChange lineage store (scheduler :> IJobScheduler) None scope [ "v1" ]
+                RecomputeJobHandler.reactToDataChange
+                    lineage
+                    store
+                    (scheduler :> IJobScheduler)
+                    None
+                    (TestScope.resolved scope)
+                    [ "v1" ]
 
             Expect.hasLength outcomes 2 "both invalidated facts classified"
 
@@ -425,15 +460,19 @@ let tests =
             let scheduler = RecordingScheduler()
             let scope = newScope ()
 
-            let! _ = store.Assert(scope, draftFor "revenue" "v1" 1m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 1m)
 
             let registry = registryWith [ metricDef "revenue" UntilUpstreamChange (Some Eager) ]
 
             // A change to an unrelated object invalidates nothing.
             let! outcomes =
-                RecomputeJobHandler.reactToDataChange lineage store (scheduler :> IJobScheduler) (Some registry) scope [
-                    "unrelated"
-                ]
+                RecomputeJobHandler.reactToDataChange
+                    lineage
+                    store
+                    (scheduler :> IJobScheduler)
+                    (Some registry)
+                    (TestScope.resolved scope)
+                    [ "unrelated" ]
 
             Expect.isEmpty outcomes "no fact cited the unrelated input"
             Expect.isEmpty scheduler.Scheduled "nothing scheduled"
@@ -446,7 +485,9 @@ let tests =
             let store = newStore ()
             let scope = newScope ()
 
-            let! stale = store.Assert(scope, draftFor "revenue" "v1" 100m) |> assertOk
+            let! stale =
+                store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 100m)
+                |> TestScope.ok
 
             // Recompute yields the same lineage (subject/metric/period/method)
             // over a NEW input version v2 with a new value → supersedes.
@@ -458,7 +499,7 @@ let tests =
             let! result = handler.Execute(jobCtx scope (RecomputeJobHandler.payloadFor stale.FactId))
             Expect.equal result JobResult.Success "recompute succeeds"
 
-            let! heads = store.Query(scope, FactQuery.all)
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.hasLength heads 1 "one current head after recompute"
             Expect.equal heads.[0].Value (Scalar 120m) "the head is the recomputed value"
             Expect.equal heads.[0].Supersedes (Some stale.FactId) "the new head supersedes the stale one (derived edge)"
@@ -469,7 +510,9 @@ let tests =
             let store = newStore ()
             let scope = newScope ()
 
-            let! original = store.Assert(scope, draftFor "revenue" "v1" 100m) |> assertOk
+            let! original =
+                store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 100m)
+                |> TestScope.ok
 
             // Recompute produces the identical tuple → Assert is a no-op.
             let recomputer =
@@ -480,7 +523,7 @@ let tests =
             let! result = handler.Execute(jobCtx scope (RecomputeJobHandler.payloadFor original.FactId))
             Expect.equal result JobResult.Success "recompute succeeds"
 
-            let! heads = store.Query(scope, FactQuery.all)
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.hasLength heads 1 "still exactly one head — no churn"
             Expect.equal heads.[0].FactId original.FactId "same content-addressed id; no supersession written"
             Expect.equal heads.[0].Supersedes None "no supersession edge for an unchanged re-assert"
@@ -491,7 +534,9 @@ let tests =
             let store = newStore ()
             let scope = newScope ()
 
-            let! original = store.Assert(scope, draftFor "revenue" "v1" 100m) |> assertOk
+            let! original =
+                store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 100m)
+                |> TestScope.ok
 
             // The default recomputer (no engine) — Ok None for every fact.
             let handler = RecomputeJobHandler.create store (NoFactRecomputer()) noopLogger
@@ -499,7 +544,7 @@ let tests =
             let! result = handler.Execute(jobCtx scope (RecomputeJobHandler.payloadFor original.FactId))
             Expect.equal result JobResult.Success "no recompute path is a success no-op, not a failure"
 
-            let! heads = store.Query(scope, FactQuery.all)
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.hasLength heads 1 "the stale fact stands; nothing recomputed"
         }
 
@@ -508,7 +553,9 @@ let tests =
             let store = newStore ()
             let scope = newScope ()
 
-            let! original = store.Assert(scope, draftFor "revenue" "v1" 100m) |> assertOk
+            let! original =
+                store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 100m)
+                |> TestScope.ok
 
             let recomputer = recomputerReturning (fun _ -> Error "engine busy")
             let handler = RecomputeJobHandler.create store recomputer noopLogger
@@ -518,6 +565,34 @@ let tests =
             match result with
             | JobResult.TransientFailure _ -> ()
             | other -> failtestf "expected TransientFailure, got %A" other
+        }
+
+        testCaseAsync "handler refuses by name a job that carries no resolver-minted scope"
+        <| async {
+            let store = newStore ()
+            let scope = newScope ()
+
+            let! original =
+                store.Assert(TestScope.resolved scope, draftFor "revenue" "v1" 100m)
+                |> TestScope.ok
+
+            let recomputer =
+                recomputerReturning (fun _ -> Ok(Some(draftFor "revenue" "v2" 120m)))
+
+            let handler = RecomputeJobHandler.create store recomputer noopLogger
+
+            let! result =
+                handler.Execute(
+                    jobCtxCarrying scope ResolvedScope.anonymous (RecomputeJobHandler.payloadFor original.FactId)
+                )
+
+            match result with
+            | JobResult.PermanentFailure reason ->
+                Expect.stringContains reason "carries no resolver-minted scope" "the refusal names why"
+            | other -> failtestf "expected a refusal by name, got %A" other
+
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
+            Expect.equal (heads |> List.map _.FactId) [ original.FactId ] "nothing was recomputed under a string scope"
         }
 
         testCaseAsync "handler no-ops (success) when the target fact is gone"

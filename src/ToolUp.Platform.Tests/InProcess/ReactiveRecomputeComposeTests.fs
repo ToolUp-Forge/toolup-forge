@@ -140,11 +140,13 @@ let private recomputerCitingLatest (objects: unit -> IDataObjectStore) (objectId
 /// scheduler implementation so the assertion stays deterministic; what it
 /// deliberately does NOT do is know any handler the compose root did not
 /// register — which is what makes the end-to-end cases falsify the
-/// registration rather than assume it.
+/// registration rather than assume it. Like the in-process scheduler, a job
+/// scheduled under a resolved scope runs under it; one scheduled through
+/// the string overload runs under the anonymous scope.
 type private DispatchingScheduler() =
     let handlers = ConcurrentDictionary<string, IJobHandler>()
     let scheduled = ConcurrentQueue<JobRegistration>()
-    let jobs = ConcurrentDictionary<JobId, JobRegistration>()
+    let jobs = ConcurrentDictionary<JobId, JobRegistration * ResolvedScope>()
     let executed = ConcurrentQueue<JobResult>()
 
     member _.RegisteredHandlers = handlers.Keys |> List.ofSeq
@@ -155,16 +157,22 @@ type private DispatchingScheduler() =
         member _.RegisterHandler(name, handler) = handlers[name] <- handler
         member _.RegisterHandlerAsync(name, handler) = async { return Ok(handlers[name] <- handler) }
 
-        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
-            (this :> IJobScheduler).Schedule {
+        member _.Schedule(scope: ResolvedScope, registration: JobRegistration) = async {
+            let registration = {
                 registration with
                     ScopeId = scope.ScopeId
             }
 
+            let id = Guid.NewGuid()
+            scheduled.Enqueue registration
+            jobs[id] <- (registration, scope)
+            return Ok(Scheduled id)
+        }
+
         member _.Schedule(registration: JobRegistration) = async {
             let id = Guid.NewGuid()
             scheduled.Enqueue registration
-            jobs[id] <- registration
+            jobs[id] <- (registration, ResolvedScope.anonymous)
             return Ok(Scheduled id)
         }
 
@@ -178,7 +186,7 @@ type private DispatchingScheduler() =
         member _.TriggerOnce(scopeId, jobId, byUserId) = async {
             match jobs.TryGetValue jobId with
             | false, _ -> return Error(TriggerError.DispatchRefused "unknown job")
-            | true, registration ->
+            | true, (registration, scope) ->
                 match handlers.TryGetValue registration.Handler with
                 | false, _ ->
                     // The handler was never registered — exactly what a
@@ -192,7 +200,7 @@ type private DispatchingScheduler() =
                         AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
                         Attempt = 1
                         Trigger = registration.Trigger
-                        Scope = ToolUp.Platform.ResolvedScope.anonymous
+                        Scope = scope
                         TriggerSource = ScheduledManually byUserId
                         ScheduledAt = DateTime.UtcNow
                         RunningAt = DateTime.UtcNow
@@ -207,6 +215,17 @@ type private DispatchingScheduler() =
 
         member _.NotifyEventWritten(_, _, _) = async { return () }
 
+/// The request a composed deployment is serving, as the composed reactive
+/// decorator reads it through `IHttpContextAccessor`: none until a test
+/// says which resolved scope a write is made under.
+type private ServingRequest() =
+    member val Context: Microsoft.AspNetCore.Http.HttpContext = null with get, set
+
+    interface Microsoft.AspNetCore.Http.IHttpContextAccessor with
+        member this.HttpContext
+            with get () = this.Context
+            and set value = this.Context <- value
+
 /// The compose root under test: `FactsCompose.withFactStore` over a
 /// substrate-seeded collection, exactly as `ServerApp.run` applies it —
 /// then the container is built and its hosted services started, which is
@@ -219,7 +238,16 @@ type private Composed = {
     /// The exact plain-store instance registered before compose ran, for
     /// the reference-equality "nothing was wrapped" assertion.
     PlainDataObjects: IDataObjectStore
+    /// The request the deployment is serving (none until `serving`).
+    Request: ServingRequest
 }
+
+/// Make the composed deployment serve a request the platform resolved to
+/// the shard `scopeId`, so a write made now carries that resolved scope.
+let private serving (composed: Composed) (scopeId: string) =
+    let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+    StorageScopeResolver.ScopeResolution.carry ctx (TestScope.resolved scopeId)
+    composed.Request.Context <- ctx
 
 let private compose
     (knob: FactStoreMode)
@@ -250,6 +278,10 @@ let private compose
 
     services.AddSingleton<ILogger>(silentLogger) |> ignore
     services.AddSingleton<IDataObjectStore>(plainObjects) |> ignore
+    let request = ServingRequest()
+
+    services.AddSingleton<Microsoft.AspNetCore.Http.IHttpContextAccessor>(request)
+    |> ignore
 
     registry
     |> Option.iter (fun r -> services.AddSingleton<IMetricRegistry>(r) |> ignore)
@@ -277,6 +309,7 @@ let private compose
         Provider = provider
         DataObjects = provider.GetRequiredService<IDataObjectStore>()
         PlainDataObjects = plainObjects
+        Request = request
     }
 
 let private saveVersion (objects: IDataObjectStore) (scopeId: string) (body: string) : Async<DataObject> = async {
@@ -298,12 +331,12 @@ let private saveVersion (objects: IDataObjectStore) (scopeId: string) (body: str
 }
 
 let private assertFact (store: IFactStore) (scopeId: string) (d: FactDraft) : Async<Fact> = async {
-    let! result = store.Assert(scopeId, d)
+    let! result = store.Assert(TestScope.resolved scopeId, d)
 
     return
         match result with
         | Ok fact -> fact
-        | Error err -> failtestf "fact assert failed: %s" err
+        | Error err -> failtestf "fact assert failed: %s" (FactStoreError.describe err)
 }
 
 /// `DateTime.UtcNow` on Windows advances in ~15ms steps, and the whole
@@ -438,7 +471,7 @@ let readPathTests =
             let! _v1 = saveVersion composed.DataObjects scope "the original rollup"
             let! _fact = assertFact store scope (draftFor "revenue" InputObject 100m)
 
-            let! beforeChange = resolver.Resolve(scope, clauseFor "revenue")
+            let! beforeChange = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             Expect.equal
                 (beforeChange |> List.map _.Freshness)
@@ -448,7 +481,7 @@ let readPathTests =
             do! afterAClockTick ()
             let! _v2 = saveVersion composed.DataObjects scope "the corrected rollup"
 
-            let! afterChange = resolver.Resolve(scope, clauseFor "revenue")
+            let! afterChange = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             match afterChange with
             | [ resolved ] ->
@@ -481,7 +514,7 @@ let readPathTests =
             do! afterAClockTick ()
             let! _v2 = saveVersion composed.DataObjects scope "v2"
 
-            let! resolved = resolver.Resolve(scope, clauseFor "revenue")
+            let! resolved = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             Expect.equal
                 (resolved |> List.map _.Freshness)
@@ -514,7 +547,7 @@ let readPathTests =
             do! afterAClockTick ()
             let! _v2 = saveVersion composed.DataObjects scope "v2"
 
-            let! resolved = resolver.Resolve(scope, clauseFor "revenue")
+            let! resolved = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             match resolved with
             | [ fresh ] ->
@@ -525,7 +558,7 @@ let readPathTests =
 
             // The recompute went through the ordinary Assert path, so the
             // supersession edge is derived, not written by the read.
-            let! heads = store.Query(scope, FactQuery.all)
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.hasLength heads 1 "one current head"
             Expect.equal heads.Head.Supersedes (Some stale.FactId) "the recomputed head supersedes the stale one"
         }
@@ -546,7 +579,7 @@ let readPathTests =
             do! afterAClockTick ()
             let! _v2 = saveVersion composed.DataObjects scope "v2"
 
-            let! resolved = resolver.Resolve(scope, clauseFor "revenue")
+            let! resolved = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             match resolved with
             | [ r ] ->
@@ -584,12 +617,13 @@ let endToEndTests =
 
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let scope = newScope ()
+            serving composed scope
 
             let! v1 = saveVersion composed.DataObjects scope "v1"
             let! stale = assertFact store scope (draftFor "revenue" v1.ContentHash 100m)
 
             // Nothing has changed yet — the fact base is quiet.
-            let! before = store.Query(scope, FactQuery.all)
+            let! before = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.equal (before |> List.map _.Value) [ Scalar 100m ] "the original value stands before the change"
 
             // The one line the whole phase exists for: a data-object
@@ -614,7 +648,7 @@ let endToEndTests =
                 [ JobResult.Success ]
                 "and it was dispatched to the handler the compose root registered"
 
-            let! heads = store.Query(scope, FactQuery.all)
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.hasLength heads 1 "one current head after the recompute"
             Expect.equal heads.Head.Value (Scalar 120m) "the head is the recomputed value"
 
@@ -622,6 +656,39 @@ let endToEndTests =
                 heads.Head.Supersedes
                 (Some stale.FactId)
                 "supersession stays derived through the ordinary Assert"
+        }
+
+        testCaseAsync "a version landing with no resolved scope for its shard recomputes nothing"
+        <| async {
+            let registry = registryWith [ metricDef "revenue" UntilUpstreamChange (Some Eager) ]
+            let scheduler = DispatchingScheduler()
+            let objects = ref Unchecked.defaultof<IDataObjectStore>
+
+            let composed =
+                compose
+                    EnabledFactStore
+                    (Some registry)
+                    (Some(recomputerCitingLatest (fun () -> objects.Value) InputObject 120m))
+                    (Some(scheduler :> IJobScheduler))
+
+            objects.Value <- composed.DataObjects
+
+            let store = composed.Provider.GetRequiredService<IFactStore>()
+            let scope = newScope ()
+
+            // No request is being served: the write carries no resolved scope.
+            let! v1 = saveVersion composed.DataObjects scope "v1"
+            let! _ = assertFact store scope (draftFor "revenue" v1.ContentHash 100m)
+            do! afterAClockTick ()
+            let! _v2 = saveVersion composed.DataObjects scope "v2"
+
+            Expect.isEmpty
+                (scheduler.Scheduled
+                 |> List.filter (fun r -> r.Tags.TryFind "origin" = Some "fact-invalidation"))
+                "no recompute is scheduled under a scope nobody resolved"
+
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
+            Expect.equal (heads |> List.map _.Value) [ Scalar 100m ] "the fact stands unrecomputed"
         }
 
         testCaseAsync "an unrelated object landing invalidates nothing (the walk is not a blanket sweep)"
@@ -638,6 +705,7 @@ let endToEndTests =
 
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let scope = newScope ()
+            serving composed scope
 
             let! _fact = assertFact store scope (draftFor "revenue" InputObject 100m)
 
@@ -657,7 +725,7 @@ let endToEndTests =
                  |> List.filter (fun r -> r.Tags.TryFind "origin" = Some "fact-invalidation"))
                 "no fact cited the object that landed"
 
-            let! heads = store.Query(scope, FactQuery.all)
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.equal (heads |> List.map _.Value) [ Scalar 100m ] "the fact base is untouched"
         }
 
@@ -677,6 +745,7 @@ let endToEndTests =
 
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let scope = newScope ()
+            serving composed scope
 
             let! _v1 = saveVersion composed.DataObjects scope "v1"
             let! original = assertFact store scope (draftFor "revenue" InputObject 100m)
@@ -688,7 +757,7 @@ let endToEndTests =
                  |> List.filter (fun r -> r.Tags.TryFind "origin" = Some "fact-invalidation"))
                 "nothing scheduled — the gate short-circuits before any store read"
 
-            let! heads = store.Query(scope, FactQuery.all)
+            let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.equal (heads |> List.map _.FactId) [ original.FactId ] "the fact base is byte-identical"
         }
 
@@ -887,16 +956,18 @@ let doubleRunTests =
             let scheduler = CoalescingScheduler()
             let scope = newScope ()
             let registry = registryWith [ metricDef "eager_m" UntilUpstreamChange (Some Eager) ]
-            let! _ = store.Assert(scope, draftFor "eager_m" InputObject 1m)
+            let! _ = store.Assert(TestScope.resolved scope, draftFor "eager_m" InputObject 1m)
 
             // Two arrivals of the input with different content: the second
             // version's identity joins the changed ids, as the decorator's
             // seed does when a new version lands.
             let! first =
-                RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) scope [ InputObject ]
+                RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) (TestScope.resolved scope) [
+                    InputObject
+                ]
 
             let! second =
-                RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) scope [
+                RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) (TestScope.resolved scope) [
                     InputObject
                     InputObject + "@v2"
                 ]
