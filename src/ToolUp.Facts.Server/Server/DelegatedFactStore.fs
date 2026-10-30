@@ -91,6 +91,13 @@ type internal DelegateRunMinting = {
     Method: DeclaredMethod option
 }
 
+/// What a delegate mints a draft for.
+type internal DelegateMintSource =
+    /// A row of the run.
+    | MintedRow of DelegateTableRow
+    /// A quoted fact whose row the run no longer carries.
+    | RemovedQuote of Fact
+
 /// Minting — how a table row becomes an ordinary fact. Shared by the
 /// decorator, the ranking tiebreak and the refresh walk, so the id a row
 /// is ranked by is the id it is minted under.
@@ -109,11 +116,12 @@ module DelegateMint =
     let triggerRef (tableId: string) (runId: string) : string =
         sprintf "fact-table-run:%s/%s" tableId runId
 
-    /// The draft a row mints: the delegate's metric, method and class; the
-    /// row's subject, period and value; the run's watermark as the result
+    /// The draft a row mints before its run's provenance and declared method
+    /// are applied: the delegate's metric, method and class; the row's
+    /// subject, period and value; the run's watermark as the result
     /// reference and among the input hashes. For an append-by-run table this
     /// is exactly the fact the default writer would have written.
-    let draftOf (delegateFact: DelegateFact) (run: DelegateRun) (row: DelegateTableRow) : FactDraft =
+    let private rowDraft (delegateFact: DelegateFact) (run: DelegateRun) (row: DelegateTableRow) : FactDraft =
         let token = DelegateFact.token run.Watermark
 
         {
@@ -134,61 +142,6 @@ module DelegateMint =
             Disclosure = delegateFact.Disclosure
         }
 
-    /// The content-addressed id a row mints under.
-    let factIdOf (delegateFact: DelegateFact) (run: DelegateRun) (row: DelegateTableRow) : string =
-        let draft = draftOf delegateFact run row
-        Fact.compute draft.Subject draft.Metric draft.Period draft.Method draft.Evidence.InputHashes
-
-    /// The draft that supersedes a quoted fact whose row the current run no
-    /// longer carries — an `Absent` in the fact's own lineage.
-    let removedDraft (delegateFact: DelegateFact) (run: DelegateRun) (fact: Fact) : FactDraft =
-        draftOf delegateFact run {
-            Subject = fact.Subject.Path
-            Period = fact.Period
-            Value = Absent(sprintf "removed by fact-table run %s" (DelegateFact.token run.Watermark))
-        }
-
-    /// The draft a row of a run opened with `provenance` mints (Phase 938):
-    /// `draftOf`, rewritten as the provenance says — identical to it for a
-    /// computed run.
-    let draftUnder
-        (provenance: FactTableRunProvenance)
-        (delegateFact: DelegateFact)
-        (run: DelegateRun)
-        (row: DelegateTableRow)
-        : FactDraft =
-        draftOf delegateFact run row |> FactTableRunProvenance.rewrite provenance
-
-    /// The content-addressed id a row of a run opened with `provenance`
-    /// mints under.
-    let factIdUnder
-        (provenance: FactTableRunProvenance)
-        (delegateFact: DelegateFact)
-        (run: DelegateRun)
-        (row: DelegateTableRow)
-        : string =
-        let draft = draftUnder provenance delegateFact run row
-        Fact.compute draft.Subject draft.Metric draft.Period draft.Method draft.Evidence.InputHashes
-
-    /// The absence that supersedes a quoted fact whose row a run opened with
-    /// `provenance` no longer carries: `removedDraft`, naming an origin's
-    /// withdrawal where the provenance records one, and always in the QUOTED
-    /// fact's own lineage — so it supersedes that fact whichever lineage the
-    /// run would have minted the row into.
-    let removedDraftUnder
-        (provenance: FactTableRunProvenance)
-        (delegateFact: DelegateFact)
-        (run: DelegateRun)
-        (fact: Fact)
-        : FactDraft =
-        let draft =
-            removedDraft delegateFact run fact |> FactTableRunProvenance.rewrite provenance
-
-        if Fact.methodIdentity draft.Method = Fact.methodIdentity fact.Method then
-            draft
-        else
-            { draft with Method = fact.Method }
-
     /// The method stamp a run's declared method implies — the default
     /// writer's own rewrite, so a row reads the same through either writer.
     /// Identity when the run declared none.
@@ -198,25 +151,36 @@ module DelegateMint =
                 Method = method
         }
 
-    /// The draft a row of a run mints (Phases 938 and 1040): `draftUnder`
-    /// its provenance, stamped with its declared method.
-    let internal draftMinted
+    /// The one draft a delegate mints, for a row its run carries or for the
+    /// absence that supersedes a quoted fact whose row the run no longer
+    /// carries. Rewritten as the run's provenance says (identical for a
+    /// computed run) and stamped with its declared method. A removal is
+    /// always in the QUOTED fact's own lineage, naming an origin's withdrawal
+    /// where the provenance records one, so it supersedes that fact whichever
+    /// lineage the run would have minted the row into.
+    let internal draft
         (minting: DelegateRunMinting)
         (delegateFact: DelegateFact)
         (run: DelegateRun)
-        (row: DelegateTableRow)
+        (source: DelegateMintSource)
         : FactDraft =
-        draftUnder minting.Provenance delegateFact run row |> stamp minting.Method
+        let rewrite = FactTableRunProvenance.rewrite minting.Provenance
 
-    /// The absence a run mints for a quoted fact whose row it no longer
-    /// carries: `removedDraftUnder` its provenance, stamped with its method.
-    let internal removedDraftMinted
-        (minting: DelegateRunMinting)
-        (delegateFact: DelegateFact)
-        (run: DelegateRun)
-        (fact: Fact)
-        : FactDraft =
-        removedDraftUnder minting.Provenance delegateFact run fact
+        match source with
+        | MintedRow row -> rowDraft delegateFact run row |> rewrite
+        | RemovedQuote fact ->
+            let removal =
+                rowDraft delegateFact run {
+                    Subject = fact.Subject.Path
+                    Period = fact.Period
+                    Value = Absent(sprintf "removed by fact-table run %s" (DelegateFact.token run.Watermark))
+                }
+                |> rewrite
+
+            if Fact.methodIdentity removal.Method = Fact.methodIdentity fact.Method then
+                removal
+            else
+                { removal with Method = fact.Method }
         |> stamp minting.Method
 
     /// The delegate's record: one fact per delegate, at the hierarchy root,
@@ -244,20 +208,10 @@ module DelegateMint =
         }
 
     /// A draft as the fact it would be, recorded at `asOf` — how a quote
-    /// from a run that is no longer current is reconstructed.
-    let reconstruct (draft: FactDraft) (asOf: DateTime) : Fact = {
-        FactId = Fact.compute draft.Subject draft.Metric draft.Period draft.Method draft.Evidence.InputHashes
-        Subject = draft.Subject
-        Metric = draft.Metric
-        Value = draft.Value
-        Period = draft.Period
-        AsOf = asOf
-        Method = draft.Method
-        Evidence = draft.Evidence
-        Confidence = draft.Confidence
-        Supersedes = None
-        Disclosure = draft.Disclosure
-    }
+    /// from a run that is no longer current is reconstructed. The write
+    /// plan's own draft-to-fact step (`FactWrite.recordedAt`),
+    /// so a quote is addressed exactly as a write of the same draft is.
+    let reconstruct (draft: FactDraft) (asOf: DateTime) : Fact = FactWrite.recordedAt draft asOf
 
 /// Resolution of the composition's delegated tables into delegate records.
 module DelegateFacts =
@@ -570,7 +524,7 @@ type internal DelegateTableStore(storage: IBlobStorage) =
 
                     let memberOf (row: DelegateTableRow) : PopulationMember * DelegateTableRow =
                         // The id and lineage the row is minted under.
-                        let draft = DelegateMint.draftMinted minting delegateFact run row
+                        let draft = DelegateMint.draft minting delegateFact run (MintedRow row)
 
                         {
                             FactId =
@@ -880,7 +834,7 @@ type DelegatedFactStore
                 match remaining with
                 | [] -> return Ok(List.rev acc)
                 | row :: rest ->
-                    match! ops.Assert(DelegateMint.draftMinted minting d run row) with
+                    match! ops.Assert(DelegateMint.draft minting d run (MintedRow row)) with
                     | Ok fact -> return! go rest (fact :: acc)
                     | Error e -> return Error e
             }
@@ -900,7 +854,7 @@ type DelegatedFactStore
                 match remaining with
                 | [] -> return Ok(List.rev acc)
                 | row :: rest ->
-                    let draft = DelegateMint.draftMinted minting d run row
+                    let draft = DelegateMint.draft minting d run (MintedRow row)
                     let rebuilt = DelegateMint.reconstruct draft run.Watermark.CommittedAt
 
                     match! ops.Get rebuilt.FactId with
@@ -958,13 +912,22 @@ type DelegatedFactStore
 
             // A run whose provenance cannot be read retires nothing now
             // rather than minting an absence that names the wrong origin;
-            // the next read retries, as a failed assertion is retried.
+            // the next read retries. An absence that fails to assert fails
+            // the read: the stale head it was to retire would
+            // otherwise be served as current.
             match minting with
-            | Error _ -> ()
+            | Error _ -> return Ok()
             | Ok minting ->
-                for _, fact in removed do
-                    let! _ = ops.Assert(DelegateMint.removedDraftMinted minting d run fact)
-                    ()
+                let rec retire (remaining: (MethodRef * Fact) list) = async {
+                    match remaining with
+                    | [] -> return Ok()
+                    | (_, fact) :: rest ->
+                        match! ops.Assert(DelegateMint.draft minting d run (RemovedQuote fact)) with
+                        | Ok _ -> return! retire rest
+                        | Error e -> return Error e
+                }
+
+                return! retire removed
         }
 
     // The point door's refusal: a typed `Absent` fact whose reason is the
@@ -1029,11 +992,14 @@ type DelegatedFactStore
                         match! mint ops d commit.Run rows with
                         | Error e -> return Error(refusal d e)
                         | Ok _ ->
-                            do! retireRemoved ops d commit.Run subject rows
-                            // The minted facts are ordinary heads now, so the
-                            // inner store answers with its own selection,
-                            // history and competition rules intact.
-                            return Ok None
+                            match! retireRemoved ops d commit.Run subject rows with
+                            | Error e -> return Error(refusal d e)
+                            | Ok() ->
+                                // The minted facts are ordinary heads now, so
+                                // the inner store answers with its own
+                                // selection, history and competition rules
+                                // intact.
+                                return Ok None
                 | Some t, _ ->
                     match d.History with
                     | SnapshotFidelity.Approximate ->
@@ -1365,9 +1331,9 @@ module internal DelegateRefresh =
                         rows
                         |> List.tryFind (fun r -> r.Period.From = fact.Period.From && r.Period.To = fact.Period.To)
                     with
-                    | Some row -> return Ok(DelegateMint.draftMinted minting delegateFact commit.Run row)
-                    | None -> return Ok(DelegateMint.removedDraftMinted minting delegateFact commit.Run fact)
-                | Ok _ -> return Ok(DelegateMint.removedDraftMinted minting delegateFact commit.Run fact)
+                    | Some row -> return Ok(DelegateMint.draft minting delegateFact commit.Run (MintedRow row))
+                    | None -> return Ok(DelegateMint.draft minting delegateFact commit.Run (RemovedQuote fact))
+                | Ok _ -> return Ok(DelegateMint.draft minting delegateFact commit.Run (RemovedQuote fact))
         }
 
     /// Refresh the delegates of one table after a commit: assert each

@@ -327,6 +327,92 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
     testList $"{name} — IFactStore contract" [
 
+        // ─── The write plan law ───────────────────────────────────────
+        //
+        // Every store executes `FactWrite.plan`: over the facts it held
+        // before the write, it stores exactly the facts the plan derives and
+        // answers with the plan's receipt. `AsOf` is the store's clock, so
+        // it is the one field compared by its law (strictly after the
+        // predecessor) rather than by value.
+
+        testCaseAsync "a batch stores exactly the facts FactWrite.plan derives, and returns its receipt"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let estimator = Computed("estimator", "1", "p0")
+
+            let! _ = assertOk "seed v1" store scopeA (draft "uk" "revenue" "plan-v1" 1m)
+
+            let! _ =
+                assertOk "seed estimator" store scopeA {
+                    draft "uk" "revenue" "plan-est" 3m with
+                        Method = estimator
+                }
+
+            let! before = wholeStore store scopeA
+
+            let batch = [
+                draft "uk" "revenue" "plan-v2" 2m
+                draft "uk" "revenue" "plan-v3" 4m
+                draft "uk" "revenue" "plan-v1" 1m
+                draft "fr" "revenue" "plan-f1" 5m
+                draft "fr" "revenue" "plan-f1" 5m
+                {
+                    draft "fr" "revenue" "plan-est" 6m with
+                        Method = estimator
+                }
+            ]
+
+            let request =
+                match FactWrite.prepare WriteShape.BatchAssert batch with
+                | Ok request -> request
+                | Error errors -> failtestf "the batch is well-formed: %A" errors
+
+            let storedIds = before |> List.map _.FactId |> Set.ofList
+            let expected = FactWrite.plan DateTime.UtcNow storedIds.Contains before request
+
+            let! receipt = assertBatchOk "plan batch" store scopeA batch
+            Expect.equal receipt expected.Receipt "the receipt is the plan's"
+
+            let! after = wholeStore store scopeA
+            let written = after |> List.filter (fun f -> not (storedIds.Contains f.FactId))
+            let timeless (f: Fact) = { f with AsOf = DateTime.MinValue }
+
+            let byId (facts: Fact list) =
+                facts |> List.map timeless |> List.sortBy _.FactId
+
+            Expect.equal (byId written) (byId expected.Facts) "the stored facts are the plan's, field for field"
+
+            let asOf = after |> List.map (fun f -> f.FactId, f.AsOf) |> Map.ofList
+
+            for f in written do
+                match f.Supersedes with
+                | Some predecessor ->
+                    Expect.isGreaterThan asOf[f.FactId] asOf[predecessor] "AsOf strictly after the predecessor"
+                | None -> ()
+        }
+
+        testCaseAsync "a scalar assert stores the fact the plan derives"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! _ = assertOk "seed" store scopeA (draft "uk" "revenue" "plan-s1" 1m)
+            let! before = wholeStore store scopeA
+            let next = draft "uk" "revenue" "plan-s2" 2m
+
+            let request =
+                match FactWrite.prepare WriteShape.ScalarAssert [ next ] with
+                | Ok request -> request
+                | Error errors -> failtestf "a scalar write is never refused: %A" errors
+
+            let storedIds = before |> List.map _.FactId |> Set.ofList
+            let expected = FactWrite.plan DateTime.UtcNow storedIds.Contains before request
+            let! f = assertOk "scalar" store scopeA next
+
+            Expect.equal
+                [ { f with AsOf = DateTime.MinValue } ]
+                (expected.Facts |> List.map (fun e -> { e with AsOf = DateTime.MinValue }))
+                "the asserted fact is the plan's"
+        }
+
         // ─── Phase 1089 — the id law ──────────────────────────────────
 
         testCaseAsync "the stored id is the canonical frame's digest of the documented fields, unaltered"
@@ -1474,6 +1560,12 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
 // in the contract's order. A competition indicator is a set rendered as a
 // list, so it is compared sorted. Nothing else is normalised: population
 // results, chains and facts compare exactly.
+//
+// What it no longer has to establish is that the two stores WRITE alike:
+// both execute `FactWrite.plan`, and the plan law at the head of `tests`
+// holds each store to it. It stays for the reads — the population matrix,
+// the point-read matrix and the chains — which no write plan governs, and
+// for which SQL and an in-memory pipeline remain two implementations.
 
 /// A deterministic, strictly-increasing clock — identical sequences give
 /// both stores identical transaction times.

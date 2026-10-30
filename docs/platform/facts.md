@@ -111,6 +111,52 @@ event to `IEventStore` under the reserved `_facts` source module
 pattern, queryable via `IEventStore.ReadBySource scope "_facts"`); an
 idempotent re-assertion changes no state and emits nothing.
 
+### What a write is: one plan, executed by every store (Phase 1091)
+
+What asserting drafts *means* is one pure function in `ToolUp.Facts.Core`, not a property each store
+re-implements. `FactWrite.prepare` pre-flights a request (a batch with a malformed draft is refused whole,
+naming each offender by position; a scalar `Assert` is never refused there, GP 11) and addresses each draft.
+`FactWrite.plan` then takes what the store read — which addresses are already stored, and the stored facts of
+the lineages the request writes into — and the store's clock, read once, and returns a `WritePlan`:
+
+| Field | What it is |
+|---|---|
+| `Facts` | the facts to store, in submission order, each with its id, `AsOf` and `Supersedes` derived |
+| `Supersessions` | every edge the write adds, as (superseding id, superseded id) |
+| `IndexDeltas` | one head move per lineage a new fact landed in: the head it retires, the head it leaves |
+| `Audit` | the audit rows: per fact for `Assert`, one summarised row carrying the receipt for `AssertBatch` |
+| `Unchanged` | the addresses already stored, by an earlier write or an earlier draft of the same request |
+| `Receipt` | the batch receipt over the full ordered disposition, with its digest |
+
+A store is an executor. `BlobFactStore` reads its census and the touched lineages' heads (through the
+point-read index when it is complete), plans, uploads the facts and their index leaves, writes `plan.Audit`
+through `FactAudit.write`, and folds the facts into the metric surface. `PostgresFactStore` does the same
+inside its transaction and its lost-race retry, clearing the heads `IndexDeltas` retires and marking the heads
+it leaves. A delegated store's minted rows are its inner store's plan, and a quote of a past run is the plan's
+own draft-to-fact step (`FactWrite.recordedAt`). So a fact asserted through any store supersedes, competes and
+audits identically by construction; the contract pack's write-plan law holds each store to it, and
+`FactWriteTests` states the plan's own laws (deterministic in its inputs; a batch settles exactly as the same
+drafts asserted one at a time; an unchanged draft is never a new fact).
+
+```fsharp skip=fragment
+match FactWrite.prepare WriteShape.BatchAssert drafts with
+| Error offenders -> Error(FactWrite.renderOffenders (List.length drafts) offenders)
+| Ok request ->
+    let plan = FactWrite.plan now isStored lineageFacts request
+    // persist plan.Facts, apply plan.IndexDeltas, write plan.Audit, return plan.Receipt
+```
+
+The competition indicator and canonical selection of a read are likewise one definition
+(`FactCompetition.competingMethods`, `FactCompetition.selectCanonical`), read by both stores.
+
+A blob store's surface maintenance after a write never fails the write (the surface is derived, and reads
+reconcile against the log), but each failed step is now counted on `BlobFactStore.SurfaceFaults` and logged.
+
+**The store's scope form is unchanged here.** `IFactStore` still has a `string` and a `ResolvedScope` form
+of every member, and reads still raise a storage fault rather than typing it. Removing the `string` forms
+needs a string-to-scope adapter that the `ResolvedScope` design deliberately does not offer; that decision
+is open and recorded in the migration note.
+
 ## Point reads vs population reads
 
 `IFactStore` has two shapes of read, and they answer different questions.
@@ -783,10 +829,11 @@ the answer is the blob store's by construction. Only the ranked top-k are
 read in full.
 
 **Held to the blob store.** Both `IFactStore` contract packs bind to it
-unmodified, and `IFactStoreContract.differentialTests` asserts one seeded
-fact base into both stores and compares every population shape of the
-Phase 702 matrix and every point-read shape of Phase 890's, value for
-value. At 300,000 subjects in one scope a subject-and-metric point read
+unmodified. Its writes execute the same `FactWrite.plan` the blob store
+does (the contract pack's write-plan law); `IFactStoreContract.differentialTests`
+asserts one seeded fact base into both stores and compares every population
+shape of the Phase 702 matrix and every point-read shape of Phase 890's,
+value for value, which is what still holds the two READ paths together. At 300,000 subjects in one scope a subject-and-metric point read
 touched 5 rows by its executed plan, with no sequential scan (Phase 888,
 the live test arm; the same read enumerates the scope on the blob store
 below its index threshold).

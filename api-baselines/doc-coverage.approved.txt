@@ -92,10 +92,10 @@ ToolUp.Experiments.Server 5/10
 ToolUp.ExternalCompute.Http 100/144
 ToolUp.FactStores.Postgres 135/225
 ToolUp.Facts.Client 51/118
-ToolUp.Facts.Core 495/873
+ToolUp.Facts.Core 564/1005
 ToolUp.Facts.Presentation 107/169
 ToolUp.Facts.Presentation.Server 25/31
-ToolUp.Facts.Server 883/1355
+ToolUp.Facts.Server 845/1287
 ToolUp.Facts.Shared 270/302
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
