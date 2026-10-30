@@ -548,6 +548,129 @@ let private benchView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactEl
         ]
     ]
 
+// ─── Phase 1160 — the same table as a Fuaran-UI tree ─────────────────────
+//
+// A lever beside `viewPerDispatchUs`, not a sample of it. Building a Feliz view
+// allocates elements; `Render.render` may defer work into components React runs
+// at commit, so a build-only figure could flatter the tree. Each side is
+// therefore timed twice: building the element, and building it plus
+// `renderToStaticMarkup`, which forces every component on both sides. The
+// second pair is the honest comparison, and a tree that deferred its work would
+// show it as a gap between its own two figures.
+
+[<Import("renderToStaticMarkup", "react-dom/server")>]
+let private renderToStaticMarkup (element: ReactElement) : string = jsNative
+
+let private benchTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
+    TreeLowering.column "bench" [
+        TreeLowering.heading "tick" 2 (sprintf "Tick %d" model.Tick)
+        for i in 0 .. model.Rows.Length - 1 do
+            let row = model.Rows[i]
+            let id = "r" + string row.Id
+
+            TreeLowering.row id [
+                TreeLowering.text (id + "-label") row.Label
+                TreeLowering.text (id + "-value") (string row.Value)
+                TreeLowering.button (id + "-bump") Fuaran.UI.Types.ButtonVariant.Secondary "+" false (Bump i)
+            ]
+    ]
+
+let private benchTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
+    TreeLowering.lower ToolUp.Platform.HostBindingSources.empty dispatch (benchTree model)
+
+/// The same rows with no markdown: `Fact` carries the label and value.
+let private benchPlainTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
+    TreeLowering.column "bench" [
+        TreeLowering.heading "tick" 2 (sprintf "Tick %d" model.Tick)
+        for i in 0 .. model.Rows.Length - 1 do
+            let row = model.Rows[i]
+            let id = "r" + string row.Id
+
+            TreeLowering.row id [
+                Fuaran.UI.Fuaran.fact (id + "-fact") row.Label (string row.Value)
+                TreeLowering.button (id + "-bump") Fuaran.UI.Types.ButtonVariant.Secondary "+" false (Bump i)
+            ]
+    ]
+
+let private benchPlainTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
+    TreeLowering.lower ToolUp.Platform.HostBindingSources.empty dispatch (benchPlainTree model)
+
+/// The vocabulary's own table. Static rows carry no per-row control, so this is
+/// the cheapest tree shape for the data and does NOT carry the button.
+let private benchTableView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
+    let tree: Fuaran.UI.Types.Node<BenchMsg> =
+        Fuaran.UI.Fuaran.table "bench-table" {
+            Fuaran.UI.Defaults.table with
+                Headers = [ TreeLowering.literal "Label"; TreeLowering.literal "Value" ]
+                Rows =
+                    model.Rows
+                    |> Array.toList
+                    |> List.map (fun row -> [ TreeLowering.literal row.Label; TreeLowering.literal (string row.Value) ])
+        }
+
+    TreeLowering.lower ToolUp.Platform.HostBindingSources.empty dispatch tree
+
+/// Microseconds per pass, the minimum over `rounds` rounds of 200 passes.
+let private perPassUs (rounds: int) (pass: int -> unit) : float =
+    [
+        for _ in 1..rounds do
+            let start = now ()
+
+            for i in 1..200 do
+                pass i
+
+            (now () - start) * 1000.0 / 200.0
+    ]
+    |> List.min
+
+let private measureTreeView (say: string -> unit) (rows: Row[]) (rounds: int) =
+    let modelAt (i: int) = { Rows = rows; Tick = i }
+    let dispatch (_: BenchMsg) = ()
+
+    let figure (label: string) (view: BenchModel -> (BenchMsg -> unit) -> ReactElement) =
+        let build = perPassUs rounds (fun i -> sink <- box (view (modelAt i) dispatch))
+
+        let markup =
+            perPassUs (max 1 (rounds / 3)) (fun i -> sink <- box (renderToStaticMarkup (view (modelAt i) dispatch)))
+
+        let sample = renderToStaticMarkup (view (modelAt 1) dispatch)
+
+        say (
+            sprintf
+                "%s: build %s us · build + static markup %s us · sample %d chars, %d buttons"
+                label
+                (fmt build)
+                (fmt markup)
+                sample.Length
+                (sample.Split("<button").Length - 1)
+        )
+
+    figure "200-row table per pass, Feliz" benchView
+    figure "200-row table per pass, Fuaran tree" benchTreeView
+    figure "200-row table per pass, Fuaran rows without the markdown text carrier" benchPlainTreeView
+    figure "200-row table per pass, Fuaran first-party table" benchTableView
+
+    // Where the tree's time goes, for sizing any render-scale work.
+    let tree = benchTree (modelAt 1)
+    let nodeUs = perPassUs rounds (fun i -> sink <- box (benchTree (modelAt i)))
+
+    let contextUs =
+        perPassUs rounds (fun _ ->
+            sink <-
+                box (
+                    Fuaran.UI.Renderer.Render.RenderContext.create
+                        Fuaran.UI.Renderer.BindingResolver.empty
+                        dispatch
+                        tree
+                ))
+
+    say (
+        sprintf
+            "tree stages per pass: build the Node value %s us · RenderContext.create %s us"
+            (fmt nodeUs)
+            (fmt contextUs)
+    )
+
 type private LoopProbe() =
     member val RenderCalls = 0 with get, set
     member val ViewMs = 0.0 with get, set
@@ -913,6 +1036,15 @@ let private runAsync (argv: string[]) : Async<int> = async {
             BenchRows
             (List.distinct hookCounts)
     )
+
+    measureTreeView
+        say
+        (Array.init BenchRows (fun i -> {
+            Id = i
+            Label = sprintf "row-%04d" i
+            Value = i
+        }))
+        options.Rounds
 
     probe.RenderCalls <- 0
     dispatch (Burst DrainBurst)

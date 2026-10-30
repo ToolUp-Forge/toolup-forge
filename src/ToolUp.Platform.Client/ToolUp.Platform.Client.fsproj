@@ -308,6 +308,10 @@
              ClientHostBridge (it extends withElementView's shape) and the
              Core HostBindingSources type. -->
         <Compile Include="Client\HostStateProjection.fs" />
+        <!-- Phase 1160 - the internal lowering of a Fuaran-UI tree to the
+             ReactElement the view contract still returns. After
+             HostStateProjection, whose seams it wires. -->
+        <Compile Include="Client\UI\TreeLowering.fs" />
         <!-- Phase 275 — hosted-tree i18n resolution seam: IHostI18nResolver
              resolves key + placeholder + locale against the Phase 179 i18n
              substrate (Translations / PseudoLocale / ApiError.applyPlaceholders,
@@ -554,5 +558,6 @@
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Fable.SimpleHttp" />
     <PackageReference Include="Feliz" />
+    <PackageReference Include="Fuaran.UI.Renderer" />
   </ItemGroup>
 </Project>
