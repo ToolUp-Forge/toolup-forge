@@ -4,7 +4,7 @@ open System
 open Expecto
 open ToolUp.Remoting.Server
 
-// ─── Phase 69e — typed validation on input records ────────────────────
+// ─── Typed validation on input records ────────────────────
 //
 // Contract tests for the validation engine residuals:
 //   * per-attribute predicate evaluation + multi-attribute collect-then-
@@ -14,7 +14,7 @@ open ToolUp.Remoting.Server
 //     top-level-only;
 //   * family-agnostic recognition — the tier-shared `ToolUp.Platform.*`
 //     mirrors that Fable API records carry are honoured identically to
-//     the server-tier family (pre-69e residual: the mirrors were dead —
+//     the server-tier family (a residual: the mirrors were dead —
 //     validation on a Core API record silently never fired);
 //   * the `[<Custom>]` IFieldValidator escape hatch + IValidationContext
 //     plumbing (subject id reaches the validator);
@@ -240,7 +240,7 @@ let tests =
             Expect.isNone (UriAttribute().Validate(box "https://example.com/x")) "an absolute URL passes"
         }
 
-        // ── Phase 69e.C — IValidationMessages localisation seam ──────────
+        // ── IValidationMessages localisation seam ──────────
 
         test "no resolver composed: violations carry the built-in English message (default wire shape)" {
             let input = {

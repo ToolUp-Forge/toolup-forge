@@ -17,7 +17,7 @@ module TypeInfo =
             yield typeDef
     |]
 
-/// Phase 783 — the decode-refusal record, re-exported here so
+/// The decode-refusal record, re-exported here so
 /// `open ToolUp.Remoting.Server` is enough to name it.
 ///
 /// It is DEFINED in `ToolUp.Platform.Core`
@@ -49,7 +49,7 @@ type CustomErrorResult<'a> = {
     handled: bool
 }
 
-/// Phase 69b.E — error categorisation.
+/// Error categorisation.
 ///
 /// Classifies a propagated error so the client can branch on it without
 /// parsing message text. Wire format adds a `category` field to the
@@ -73,11 +73,11 @@ type ErrorCategory =
     /// Input failed declared validation.
     | Validation
 
-/// Phase 69b.E — categorised error envelope shipped to the client.
+/// Categorised error envelope shipped to the client.
 /// Additive on top of `CustomErrorResult<'a>`; the dispatcher emits
 /// this when the error handler returns `PropagateCategorised`.
 ///
-/// Phase 69j extension: gains a `__schema_version` field reflecting
+/// Gains a `__schema_version` field reflecting
 /// `RemotingOptions.SchemaVersion`. Default is `1` — the fork-point
 /// shape with categorised errors. Future versions branch the dispatcher
 /// to emit additional / different fields; clients negotiate by sending
@@ -93,7 +93,7 @@ type CategorisedErrorResult<'a> = {
 }
 
 /// The ErrorResult lets you choose whether you want to propagate a custom error back to the client or to ignore it. Either case, an exception is thrown on the call-site from the client.
-/// Phase 69b.E adds `PropagateCategorised` so a handler can attach an `ErrorCategory` for client-side branching.
+/// `PropagateCategorised` lets a handler can attach an `ErrorCategory` for client-side branching.
 type ErrorResult =
     | Ignore
     | Propagate of obj
@@ -103,7 +103,7 @@ type ErrorHandler<'context> = System.Exception -> RouteInfo<'context> -> ErrorRe
 
 /// A protocol implementation can be a static value provided, generated
 /// synchronously from the Http context on every request, or generated
-/// asynchronously per request (Phase 69b.B).
+/// asynchronously per request.
 ///
 /// Async resolution is the recommended pattern for any value that's
 /// populated lazily after composition root construction — auth principal
@@ -155,14 +155,14 @@ type internal ShapeFSharpAsyncOrTask<'T>() =
 ///     this carried a `Newtonsoft.Json.Linq.JToken`, which prevented STJ-only
 ///     consumers from dropping the Newtonsoft transitive dep.
 type internal InvocationPropsInt = {
-    /// Phase 69m — second arm is now `JsonElement` (was `string`). The
+    /// Second arm is now `JsonElement` (was `string`). The
     /// outer arguments array parses once into a JsonDocument; each
     /// element is `Clone`d so it survives the document's disposal and
     /// can be deserialised without re-parsing. Previously the second
     /// arm was raw JSON text and the per-argument deserialise re-parsed
     /// each slice into its own JsonDocument — N+1 parses per call.
     Arguments: Choice<byte[], JsonElement> list
-    /// Phase 856.B — the FIRST JSON argument, already decoded by the
+    /// The FIRST JSON argument, already decoded by the
     /// adapter's validation stage through this proxy's own argument
     /// decode (`ApiProxy.ParseFirst`). When present, the first
     /// `Choice2Of2` element is taken from here instead of being
@@ -174,7 +174,7 @@ type internal InvocationPropsInt = {
 
 type InvocationProps<'impl> = {
     Input: Stream
-    /// Phase 69m — when the adapter's body cache has already
+    /// When the adapter's body cache has already
     /// materialised the request bytes (via validation / audit /
     /// idempotency-hash pre-flight stages forcing the lazy cache),
     /// the adapter populates this so the proxy parses directly from
@@ -204,11 +204,11 @@ type InvocationResult =
     | EndpointNotFound
     | InvalidHttpVerb
     | Exception of exn * functionName: string * requestBodyText: string option
-    /// Phase 783 — the request did not DECODE. Distinct from `Exception`
+    /// The request did not DECODE. Distinct from `Exception`
     /// because it is a caller-side mistake, not a server fault: the
     /// handler never ran, nothing partial was committed, and retrying the
     /// identical bytes will fail identically. Adapters route it to the
-    /// Phase 69e `ErrorCategory.Validation` envelope + HTTP 400, never to
+    /// `ErrorCategory.Validation` envelope + HTTP 400, never to
     /// `Errors.unhandled` + 500.
     ///
     /// Carrying it as its own case rather than as a typed exception
@@ -233,12 +233,12 @@ type RouteDocs = {
 /// Contains documented routes for an API
 type Documentation = Documentation of string * RouteDocs list
 
-/// Phase 69d — per-request auth context provided to the dispatcher
+/// Per-request auth context provided to the dispatcher
 /// for evaluation against per-method authorisation attributes
 /// (`[<RequiresRole>]`, `[<RequiresClaim>]`, `[<TenantScoped>]`, etc.).
 ///
 /// Consumers implement `IAuthContext` over their auth model (forge wires
-/// Phase 66's `Subject` over it) and provide an async resolver via
+/// `Subject` over it) and provide an async resolver via
 /// `Remoting.withAuthContext`. Without a resolver registered, methods
 /// classified `[<PublicEndpoint>]` / `[<AllowAnonymous>]` still work;
 /// methods requiring auth deny on every call (fail-closed posture).
@@ -255,7 +255,7 @@ type IAuthContext =
     /// distinguish a deliberate anonymous request from a missing
     /// auth-context resolver — they have different security postures.
     abstract IsAnonymous: unit -> bool
-    /// Phase 69g — stable identifier for this caller, used as the
+    /// Stable identifier for this caller, used as the
     /// per-subject rate-limit key. Consumer-defined shape; conventions
     /// include `"anonymous"`, `"user:alice"`, `"tenant:T1:user:alice"`,
     /// `"share-token:abc"`. The dispatcher composes per-method rate-limit
@@ -263,7 +263,7 @@ type IAuthContext =
     /// starve other subjects' budgets.
     abstract SubjectId: string
 
-/// Phase 69g — outcome of a rate-limit acquisition attempt against an
+/// Outcome of a rate-limit acquisition attempt against an
 /// `IRateLimitStore`. `Denied` carries the wall-clock time the caller
 /// should wait before retrying (mapped to the HTTP `Retry-After` header
 /// + the categorised envelope's `retryAfterSeconds` payload).
@@ -271,7 +271,7 @@ type RateLimitDecision =
     | RateLimitAllowed
     | RateLimitDenied of retryAfter: System.TimeSpan
 
-/// Phase 69g — rate-limit substrate. Per-method `[<RateLimit>]`
+/// Rate-limit substrate. Per-method `[<RateLimit>]`
 /// attributes resolve to budget triples (key, count, window); the store
 /// tracks consumption across calls and returns a decision per
 /// acquisition.
@@ -288,7 +288,7 @@ type RateLimitDecision =
 type IRateLimitStore =
     abstract TryAcquire: key: string * count: int * window: System.TimeSpan -> Async<RateLimitDecision>
 
-/// Phase 69h — well-known audit-event kinds. Open via `Custom` for
+/// Well-known audit-event kinds. Open via `Custom` for
 /// consumer-domain kinds the standard set doesn't anticipate.
 [<RequireQualifiedAccess>]
 type AuditKind =
@@ -300,13 +300,13 @@ type AuditKind =
     | PermissionRevoked
     | TenantCreated
     | TenantDeleted
-    /// Phase 69g.tail — emitted when a `[<RateLimit>]`-attributed method
+    /// Emitted when a `[<RateLimit>]`-attributed method
     /// denies a call because a budget is exhausted. Unlike the other
     /// kinds (which ride an `[<Audit>]` annotation on success), this one
     /// is emitted by the dispatcher's rate-limit pre-flight on denial,
     /// regardless of whether the method also carries `[<Audit>]`.
     | RateLimitExceeded
-    /// Phase 69f.E — emitted by the dispatcher's idempotency pre-flight
+    /// Emitted by the dispatcher's idempotency pre-flight
     /// when an `[<Idempotent>]` method's call is served from the cache
     /// (a replay). The original call's audit row is the system of record;
     /// this event marks that a replay occurred and cites the original via
@@ -317,7 +317,7 @@ type AuditKind =
     | IdempotencyReplay
     | Custom of string
 
-/// Phase 69h — audit event emitted on every successful invocation of
+/// Audit event emitted on every successful invocation of
 /// an `[<Audit>]`-attributed method. PII fields are redacted unless
 /// the field carries `[<PiiSafe>]`.
 type AuditEvent = {
@@ -327,7 +327,7 @@ type AuditEvent = {
     MethodName: string
     /// Subject id from the resolved auth context, or `"anonymous"`.
     SubjectId: string
-    /// Request correlation id (Phase 69b.D) for end-to-end joining.
+    /// Request correlation id for end-to-end joining.
     CorrelationId: string option
     /// Wall-clock timestamp of emission.
     Timestamp: System.DateTimeOffset
@@ -339,7 +339,7 @@ type AuditEvent = {
     Payload: Map<string, string>
 }
 
-/// Phase 69h — audit-event emission hook. Async-shaped: emission can
+/// Audit-event emission hook. Async-shaped: emission can
 /// route to a remote audit log without blocking the dispatcher's
 /// response path (the dispatcher does `do!` on this so backpressure is
 /// honoured if the sink genuinely needs to wait).
@@ -361,7 +361,7 @@ type IAuditEmitter =
 type MultipartCapExceededException(message: string) =
     inherit System.Exception(message)
 
-/// Phase 461 — typed exception raised when a dispatcher request-body read
+/// Typed exception raised when a dispatcher request-body read
 /// finds `ctx.Request.Body` ALREADY DISPOSED.
 ///
 /// The dispatcher only ever BORROWS the buffered request body: it calls
@@ -401,7 +401,7 @@ type RequestBodyDisposedException(methodName: string, responseHadStarted: bool, 
     /// failed read — the client saw a reset rather than a 500.
     member _.ResponseHadStarted: bool = responseHadStarted
 
-/// Phase 69f — captured response shape stored against an idempotency
+/// Captured response shape stored against an idempotency
 /// key + replayed on subsequent calls with the same key. Body is the
 /// already-serialised bytes the original call produced; status + content
 /// type are replayed verbatim so the client sees a byte-identical
@@ -421,7 +421,7 @@ type MemoisedResponse = {
     RequestBodyHash: string
 }
 
-/// Phase 69f — idempotency substrate. Captures the first call's
+/// Idempotency substrate. Captures the first call's
 /// response under a `(subjectScope, methodName, idempotencyKey)` triple
 /// and replays it on subsequent calls within the configured TTL.
 /// Keys are subject-scoped so the same UUID submitted by two different
@@ -439,7 +439,7 @@ type IIdempotencyStore =
     abstract TryGet: key: string * scope: string -> Async<MemoisedResponse option>
     abstract Store: key: string * scope: string * response: MemoisedResponse * ttl: System.TimeSpan -> Async<unit>
 
-/// Phase 69e.C — structured information about a single field validation
+/// Structured information about a single field validation
 /// violation, handed to an `IValidationMessages` resolver so it can
 /// produce a localised (or otherwise customised) message. `Code` is the
 /// stable violation code (`MinLength`, `Range`, `Custom`, …); `Path` is
@@ -458,7 +458,7 @@ type ValidationMessageRequest = {
     DefaultMessage: string
 }
 
-/// Phase 69e.C — localisation / message-customisation seam. Composed via
+/// Localisation / message-customisation seam. Composed via
 /// `Remoting.withValidationMessages`; default is unset, in which case the
 /// engine emits each attribute's built-in English message and pays
 /// nothing (GP 13 — zero cost when the seam isn't used). `Resolve`
@@ -469,7 +469,7 @@ type ValidationMessageRequest = {
 type IValidationMessages =
     abstract Resolve: request: ValidationMessageRequest -> string option
 
-/// Phase 69i — typed handle to a long-running operation. The phantom
+/// Typed handle to a long-running operation. The phantom
 /// type parameter `'T` carries the eventual result type through to the
 /// `JobStatus<'T>.Succeeded` arm at the call site, so a client polling
 /// `GetStatus` against a `JobHandle<ReportFile>` is guaranteed a
@@ -479,7 +479,7 @@ type IValidationMessages =
 /// phantom `'T` is server-side typing only.
 type JobHandle<'T> = JobHandle of jobId: string
 
-/// Phase 69i — status of a long-running operation. Returned by
+/// Status of a long-running operation. Returned by
 /// `IJobDispatcher.GetStatus<'T>`. `Succeeded` carries the eventual
 /// typed result; `Failed` carries a server-side message (the
 /// categorised `ErrorCategory.Validation` / `.System` envelope is a
@@ -492,11 +492,11 @@ type JobStatus<'T> =
     | Failed of message: string
     | Cancelled
 
-/// Phase 69i — substrate for long-running operations. `Enqueue` starts
+/// Substrate for long-running operations. `Enqueue` starts
 /// the supplied async work in the background and returns a typed
 /// handle the caller can use to poll for status. `GetStatus`
 /// resolves the handle to the latest status; the v0 default impl is
-/// in-process + lifetime-bound to the host (Phase 9b's IJobScheduler
+/// in-process + lifetime-bound to the host (`IJobScheduler`
 /// wires the distributed shape).
 ///
 /// Default: not composed. Methods returning `Async<JobHandle<'T>>`
@@ -507,7 +507,7 @@ type JobStatus<'T> =
 type IJobDispatcher =
     abstract Enqueue<'T> : work: Async<'T> -> Async<JobHandle<'T>>
     abstract GetStatus<'T> : handle: JobHandle<'T> -> Async<JobStatus<'T>>
-    /// Phase 69i.G — request cancellation of a job. A live job transitions
+    /// Request cancellation of a job. A live job transitions
     /// to `JobStatus.Cancelled` (the running work observes a cancellation
     /// token; cooperative, as every `Async<_>` cancellation is); a job
     /// already terminal is left as it is; an unknown handle is a no-op.
@@ -517,7 +517,7 @@ type IJobDispatcher =
     /// unknown handle (no disclosure).
     abstract Cancel<'T> : handle: JobHandle<'T> -> Async<unit>
 
-/// Phase 69b.C — telemetry hook.
+/// Telemetry hook.
 ///
 /// Per-method outcome emitted by the dispatcher after each invocation.
 /// `Failed` carries the exception that was thrown; in a later phase the
@@ -532,7 +532,7 @@ type IJobDispatcher =
 type MethodOutcome =
     | Succeeded
     | Failed of exn
-    /// Phase 69g.tail — the dispatcher denied the call at the rate-limit
+    /// The dispatcher denied the call at the rate-limit
     /// pre-flight stage (a `[<RateLimit>]` budget was exhausted). The
     /// handler never ran; `retryAfter` is the budget's recovery window
     /// (the same value sent on the `Retry-After` header). A telemetry
@@ -541,7 +541,7 @@ type MethodOutcome =
     /// handler errors on dashboards.
     | RateLimited of retryAfter: System.TimeSpan
 
-/// Phase 69b.C — telemetry record emitted on each method completion.
+/// Telemetry record emitted on each method completion.
 ///
 /// `ElapsedMs` is the wall-clock time between the dispatcher receiving
 /// the request and the handler returning (success) or throwing (error).
@@ -549,12 +549,12 @@ type MethodOutcome =
 /// serialisation are all included; per-stage breakdown is a future
 /// enhancement.
 ///
-/// Phase 69b.D — `CorrelationId` rides on every telemetry event so
+/// `CorrelationId` rides on every telemetry event so
 /// the sink can correlate across calls + propagate to logs / metrics
 /// / audit rows. Value is what the dispatcher established for the
 /// request (header value if present, generated GUID otherwise).
 ///
-/// Phase 69c.C — `ChunkCount` is the streaming dimension: `Some n` on a
+/// `ChunkCount` is the streaming dimension: `Some n` on a
 /// streaming method (`'arg -> IAsyncEnumerable<'T>`), where `n` is the
 /// number of `event: chunk` frames written before the terminal frame
 /// (`complete` or `error`), and `None` on every request/response method.
@@ -570,7 +570,7 @@ type MethodTelemetry = {
     ChunkCount: int option
 }
 
-/// Phase 69b.C — telemetry hook contract.
+/// Telemetry hook contract.
 ///
 /// Implementations are invoked **per call** (per HTTP request) after the
 /// handler completes. The implementation must be fast and non-throwing;
@@ -600,7 +600,7 @@ type IRemotingTelemetry =
 /// promoted to POST so the dispatcher's POST-shaped invocation path
 /// applies.
 ///
-/// Default: `Enabled`. Pre Phase 69b consumers ran a separate
+/// Default: `Enabled`. Consumers once ran a separate
 /// `RemotingBodyNormalizationMiddleware` upstream of the Remoting
 /// HttpHandler to apply this fix; that middleware retires as the
 /// dispatcher takes ownership. Idempotent: a request that's already
@@ -622,7 +622,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     RmsManager: Microsoft.IO.RecyclableMemoryStreamManager option
     BodyNormalisation: BodyNormalisation
     Telemetry: IRemotingTelemetry option
-    /// Phase 69l — telemetry seam zero-cost gate. When `Some`, the
+    /// Telemetry seam zero-cost gate. When `Some`, the
     /// dispatcher invokes this function before allocating the
     /// per-request `Stopwatch` + `MethodTelemetry` record. A `false`
     /// return short-circuits the entire telemetry-allocation path
@@ -632,7 +632,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// request on the canonical `NoMetricsEndpoint` deployment shape.
     ///
     /// Default `None` — the dispatcher emits whenever `Telemetry =
-    /// Some _` (the pre-69l behaviour). Consumer-supplied sinks pass
+    /// Some _` (the original behaviour). Consumer-supplied sinks pass
     /// through the gate by never composing one.
     ///
     /// Compose via `Remoting.withTelemetryGate`.
@@ -640,7 +640,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     AuthContextResolver: ('context -> Async<IAuthContext>) option
     RateLimitStore: IRateLimitStore option
     AuditEmitter: IAuditEmitter option
-    /// Phase 69h.tail — admin-must-be-audited startup gate. When `true`,
+    /// Admin-must-be-audited startup gate. When `true`,
     /// the dispatcher refuses to start if any method classified with a
     /// `[<RequiresRole>]` requirement does NOT also carry an `[<Audit>]`
     /// annotation — role-gated methods are admin-shaped, and
@@ -651,15 +651,15 @@ type RemotingOptions<'context, 'serverImpl> = {
     RequireAuditOnRoleGated: bool
     IdempotencyStore: IIdempotencyStore option
     IdempotencyTtl: System.TimeSpan
-    /// Phase 69e.C — optional validation-message resolver. When `Some`,
+    /// Optional validation-message resolver. When `Some`,
     /// the dispatcher hands each typed-validation violation through it to
     /// localise / override the built-in English message before building
     /// the `ErrorCategory.Validation` envelope. Default `None` — the
     /// built-in messages ship on the wire and the seam pays nothing per
     /// request (GP 13). Compose via `Remoting.withValidationMessages`.
     ValidationMessages: IValidationMessages option
-    /// Phase 69j — `__schema_version` field stamped on every
-    /// dispatcher-emitted envelope. Default `1` matches the post-69b.E
+    /// `__schema_version` field stamped on every
+    /// dispatcher-emitted envelope. Default `1` matches the
     /// shape (categorised errors). Future wire-format evolutions
     /// increment this and consult an `X-Remoting-Schema` request header
     /// to optionally route to a per-version handler shape.
@@ -688,7 +688,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// rate-limit bucket per proxy IP — defeating the 0.1.14
     /// per-IP partition.
     RemoteIpResolver: ('context -> string option) option
-    /// Phase 69i.B — the `IJobDispatcher` behind every method returning
+    /// The `IJobDispatcher` behind every method returning
     /// `Async<JobHandle<'T>>` on this API record. When `Some`, the
     /// dispatcher classifies those methods as long-running at startup and
     /// serves three companion routes per method — `<method>/status`,
@@ -699,7 +699,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// consumer hand-wires a poll method) and no companion route exists
     /// (GP 11 / GP 13). Compose via `Remoting.withJobDispatcher`.
     JobDispatcher: IJobDispatcher option
-    /// Phase 69i.G — the role that may read / cancel ANY job through the
+    /// The role that may read / cancel ANY job through the
     /// companion routes; every other caller is bound to the jobs its own
     /// subject submitted. Default `"Admin"`. Compose via
     /// `Remoting.withJobAdminRole`.

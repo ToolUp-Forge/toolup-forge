@@ -573,7 +573,7 @@ let private admitted: Admitted list = [
     }
     {
         File = "Remoting/Jobs.fs"
-        Anchor = "69i.G — the work runs under the job's own token"
+        Anchor = "The work runs under the job's own token"
         Reason = "the job runner's work runs under try/with recording Failed / Cancelled"
     }
     {

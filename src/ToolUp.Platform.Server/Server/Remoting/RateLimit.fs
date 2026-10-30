@@ -4,7 +4,7 @@ open System
 open System.Collections.Concurrent
 
 // =============================================================================
-// Phase 69g — per-method rate-limit attribution
+// Per-method rate-limit attribution
 // =============================================================================
 //
 // API record fields can carry one or more `[<RateLimit>]` attributes; the
@@ -17,7 +17,7 @@ open System.Collections.Concurrent
 // must pass BOTH budgets — short bursts and sustained traffic are
 // independently capped.
 
-/// Phase 69g — per-method rate-limit budget. `count` requests are
+/// Per-method rate-limit budget. `count` requests are
 /// allowed per `windowSeconds` window per subject (per the IAuthContext's
 /// `SubjectId`); when no auth context resolver is composed, the per-IP
 /// remote address is used as the subject key fallback.
@@ -33,7 +33,7 @@ type RateLimitAttribute(count: int, windowSeconds: int) =
     /// `TimeSpan` view of the window for use in `IRateLimitStore.TryAcquire`.
     member this.Window = TimeSpan.FromSeconds(float windowSeconds)
 
-/// Phase 69g — named window-size constants for the
+/// Named window-size constants for the
 /// `[<RateLimit(count, window)>]` attribute. Use as
 /// `[<RateLimit(30, RateLimitWindow.perMinute)>]`.
 module RateLimitWindow =
@@ -51,7 +51,7 @@ module RateLimitWindow =
 
 // -----------------------------------------------------------------------------
 
-/// Phase 69g — default in-memory implementation of `IRateLimitStore`.
+/// Default in-memory implementation of `IRateLimitStore`.
 /// Sliding-window counter via a per-key timestamp queue. Suitable for
 /// single-instance deployments; distributed deployments wire Redis or
 /// equivalent against the `IRateLimitStore` contract.
@@ -150,16 +150,16 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
 
 module internal RateLimit =
 
-    // Phase 69d.tail parity — reflect over both public AND non-public
+    // Reflect over both public AND non-public
     // record types so internal / private API records arm the rate-limit
     // classifier exactly like public ones. A bare `FSharpType.IsRecord`
     // reports false for a non-public record and would silently skip
-    // budget enforcement (the same fail-open hole 69d closed for auth).
+    // budget enforcement (the same fail-open hole the auth classifier closes).
     let private reflectionFlags =
         System.Reflection.BindingFlags.Public
         ||| System.Reflection.BindingFlags.NonPublic
 
-    // ── Phase 727 severity assessment — the rate-limit family ─────────
+    // ── Severity assessment — the rate-limit family ─────────
     //
     // What a forgery buys, in each direction:
     //
@@ -190,8 +190,8 @@ module internal RateLimit =
     /// `ToolUp.Remoting.Server.RateLimitAttribute` or the tier-shared
     /// `ToolUp.Platform.RateLimitAttribute` mirror (which Fable-compiled
     /// Core API records carry) — into the server-tier budget shape the
-    /// evaluator consumes. Family membership is CLR TYPE IDENTITY (Phase
-    /// 727); the reflective `Count` / `WindowSeconds` read decodes the
+    /// evaluator consumes. Family membership is CLR TYPE IDENTITY;
+    /// the reflective `Count` / `WindowSeconds` read decodes the
     /// mirror only after identity has established that it IS the mirror.
     let private tryBudget (a: obj) : RateLimitAttribute option =
         let t = a.GetType()
@@ -210,7 +210,7 @@ module internal RateLimit =
                     | (:? int as c), (:? int as w) -> Some(RateLimitAttribute(c, w))
                     | _ -> None
 
-    /// Phase 727 — marker-name collisions on the API record, for the
+    /// Marker-name collisions on the API record, for the
     /// dispatcher's startup refusal.
     let foreignMarkers (apiType: Type) : (string * string * string) list =
         markers.Collisions(apiType, reflectionFlags)

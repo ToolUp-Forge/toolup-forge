@@ -8,7 +8,7 @@ open ToolUp.Remoting.Server
 open ToolUp.Remoting.Server.Proxy
 open System.Threading.Tasks
 
-/// Phase 855 — the routes a batch envelope may not name, recorded by every
+/// The routes a batch envelope may not name, recorded by every
 /// dispatcher table as it is built (streaming methods; long-running
 /// methods and their `/status`, `/progress`, `/cancel` companions), and
 /// the `HttpContext.Items` key that marks a request as a batch element.
@@ -39,7 +39,7 @@ module internal RemotingBatchRoutes =
         || prefixes.Keys
            |> Seq.exists (fun prefix -> route.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
 
-// Phase 256 — assembly-private: the adapter's own build/dispatch plumbing, reached by consumers
+// Assembly-private: the adapter's own build/dispatch plumbing, reached by consumers
 // only through `Remoting.buildHttpHandler`. Tests see it through InternalsVisibleTo.
 module internal GiraffeUtil =
     let setJsonBody (backend: JsonSerializerBackend) (response: obj) (logger: Option<string -> unit>) : HttpHandler =
@@ -88,7 +88,7 @@ module internal GiraffeUtil =
                 | Ignore -> setJsonBody backend (Errors.ignored routeInfo.methodName) logger next ctx
                 | Propagate error -> setJsonBody backend (Errors.propagated error) logger next ctx
                 | PropagateCategorised(category, error) ->
-                    // Phase 69b.E — emit the additive categorised envelope.
+                    // Emit the additive categorised envelope.
                     // Wire shape grows a `category` field; clients reading
                     // only `error` see the original body unchanged.
                     setJsonBody
@@ -122,7 +122,7 @@ module internal GiraffeUtil =
             text serializedSchema next ctx
         | _ -> Task.FromResult halt
 
-    /// Phase 69b.A — body normalisation built-in.
+    /// Body normalisation built-in.
     ///
     /// The Fable.SimpleJson client may emit an empty / `null` / `""` body
     /// for `unit -> Async<'T>` methods depending on which network primitive
@@ -161,7 +161,7 @@ module internal GiraffeUtil =
         }
         :> System.Threading.Tasks.Task
 
-    /// Phase 69n — build the dispatcher table ONCE for a given `options`
+    /// Build the dispatcher table ONCE for a given `options`
     /// record. All substrate construction (proxy + classifier maps +
     /// `rmsManager`) and compose-time guards (record-shape check +
     /// unclassified-method refusal + streaming-attribute refusal) happen
@@ -169,13 +169,13 @@ module internal GiraffeUtil =
     /// `implBuilder` and yields the `HttpHandler` that dispatches a single
     /// request against that builder.
     let buildDispatcherTable<'impl> (options: RemotingOptions<HttpContext, 'impl>) =
-        // Phase 856.B — the proxy with its argument parse exposed, so the
+        // The proxy with its argument parse exposed, so the
         // validation pre-flight decodes the first argument through the
         // dispatch path's own decode and hands the result on (see
         // `Proxy.ApiProxy`): one parse, one decode, and validation sees the
         // value the handler receives.
         //
-        // Phase 906 — for a record whose generated table is registered
+        // For a record whose generated table is registered
         // (`GeneratedInvocation.register`), the proxy serves each covered
         // method through its GENERATED invocation, and the rest through the
         // reflective proxy (built lazily, on the first request that needs
@@ -216,18 +216,18 @@ module internal GiraffeUtil =
                     typeof<'impl>.Name
             )
 
-        // Phase 69d — startup classification.
+        // Startup classification.
         //
         // Opt-in semantics: when an `AuthContextResolver` is composed,
         // every API record field must carry one of the authorisation
         // attributes (refuse to start on unclassified). When NO resolver
         // is composed, the auth system is dormant — unclassified methods
-        // are treated as `Public`, matching pre-69d behaviour for
+        // are treated as `Public`, matching the unguarded behaviour for
         // consumers who haven't opted in.
         let classifications = AuthClassifier.classify typeof<'impl>
 
         if options.AuthContextResolver.IsSome then
-            // Phase 335 — name-collision refusal, BEFORE the unclassified
+            // Name-collision refusal, BEFORE the unclassified
             // check so the specific diagnostic wins. A foreign attribute
             // whose simple name matches a marker no longer classifies
             // anything (identity matching in `AuthClassifier`); refusing
@@ -248,7 +248,7 @@ module internal GiraffeUtil =
             if not (List.isEmpty unclassified) then
                 raise (AuthClassifier.unclassifiedException typeof<'impl>.Name unclassified)
 
-            // Phase 132 — round-trip assertion (safety net for the
+            // Round-trip assertion (safety net for the
             // deny-on-miss default below). The per-request auth key is the
             // trailing path segment of the built route; the classification
             // map is keyed by field name. If a custom `RouteBuilder` /
@@ -264,23 +264,23 @@ module internal GiraffeUtil =
             if not (List.isEmpty divergences) then
                 raise (AuthClassifier.roundTripException typeof<'impl>.Name divergences)
 
-        // Phase 69g — cache rate-limit attributes per method at startup.
+        // Cache rate-limit attributes per method at startup.
         // The map is empty for API records that carry no [<RateLimit>]
         // attributes; per-call evaluation skips quickly in that case.
         let rateLimits = RateLimit.classify typeof<'impl>
 
-        // Phase 69h — cache audit attributes per method at startup.
+        // Cache audit attributes per method at startup.
         // Empty for non-audited methods; emission on each successful
         // invocation looks up the kind here.
         let audits = Audit.classify typeof<'impl>
 
-        // Phase 69h.tail — cache the first-argument record type per
+        // Cache the first-argument record type per
         // audited method so payload extraction works even when the input
         // type carries no ValidationAttribute (the validation classifier
         // only caches input types for validated methods).
         let auditInputTypes = Audit.inputTypes typeof<'impl>
 
-        // Phase 69h.tail — admin-must-be-audited startup gate. Role-gated
+        // Admin-must-be-audited startup gate. Role-gated
         // methods are admin-shaped; when the gate is composed
         // (TOOLUP_AUDIT_ADMIN_REQUIRED=true via forge's Api.make, or
         // Remoting.withAuditRequiredOnRoleGated directly), every method
@@ -311,13 +311,13 @@ module internal GiraffeUtil =
                         (String.concat "; " roleGatedUnaudited)
                 )
 
-        // Phase 69f — cache idempotency classifications per method at
+        // Cache idempotency classifications per method at
         // startup. Empty set means no methods are idempotent; per-call
         // evaluation skips quickly when the lookup misses.
         let idempotentMethods = Idempotency.classify typeof<'impl>
 
-        // Phase 727 — the collision refusal Phase 335 gave the auth
-        // markers, extended to the three OTHER families whose recognition
+        // The collision refusal the auth
+        // markers have, extended to the three OTHER families whose recognition
         // this dispatch path drives: audit emission, PII-safe payload
         // inclusion, rate limiting and idempotency. Each family now
         // matches by CLR type identity (see the per-family severity
@@ -346,18 +346,18 @@ module internal GiraffeUtil =
         if not (List.isEmpty preflightMarkerCollisions) then
             raise (MarkerCollision.refusal typeof<'impl>.Name preflightMarkerCollisions)
 
-        // Phase 69e — cache per-method input types when their record
+        // Cache per-method input types when their record
         // shape carries at least one ValidationAttribute. Empty map
         // means no methods need pre-flight validation; per-call lookup
         // is a fast miss.
         let validationInputTypes = Validation.classify typeof<'impl>
 
-        // Phase 69c — cache per-method (argType, elementType) for
+        // Cache per-method (argType, elementType) for
         // streaming methods returning IAsyncEnumerable<'T>. Empty map
         // means no streaming methods; per-request lookup is a fast miss.
         let streamingShapes = Streaming.classify typeof<'impl>
 
-        // Phase 69i.B — cache per-method result type for long-running
+        // Cache per-method result type for long-running
         // methods (function shape finally returning `Async<JobHandle<'T>>`).
         // Empty map means no long-running methods; the companion lookup
         // below is then a fast miss. The map is consulted ONLY when an
@@ -366,7 +366,7 @@ module internal GiraffeUtil =
         // exactly as before (GP 11).
         let longRunningShapes = LongRunning.classify typeof<'impl>
 
-        // Phase 855 — neither shape may travel inside a batch envelope:
+        // Neither shape may travel inside a batch envelope:
         // the batch route refuses an envelope naming one of these routes
         // before any element runs.
         for KeyValue(methodName, _) in streamingShapes do
@@ -401,7 +401,7 @@ module internal GiraffeUtil =
                     System.Environment.NewLine
             )
 
-        // Phase 69j — cache the per-method wire-schema table at startup.
+        // Cache the per-method wire-schema table at startup.
         // Empty for every API record that has not opted into versioning,
         // which is all of them today, so the per-request lookup is a fast
         // `Map.tryFind` miss (GP 13). `classify` is also where the
@@ -410,17 +410,17 @@ module internal GiraffeUtil =
         // a malformed annotation fails here rather than at the first call.
         let schemaVersions = SchemaVersion.classify typeof<'impl>
 
-        // Phase 69j — this API record's own addressable method names. The
+        // This API record's own addressable method names. The
         // membership test is what keeps the refusal below safe in a
         // multi-API `choose` composition: a request for ANOTHER API's
         // method reaches this handler first and must fall through
         // untouched, whatever `X-Remoting-Schema` says. Failing closed on a
-        // miss is the Phase 69d defect this dispatcher already records on
+        // miss is the defect this dispatcher already records on
         // the auth pre-flight — it let whichever API was composed first
         // deny every other API's methods.
         let schemaAddressable = SchemaVersion.addressableMethods typeof<'impl>
 
-        // Phase 69j — the same refusal the streaming guard above makes, for
+        // The same refusal the streaming guard above makes, for
         // the same reason. Version routing rewrites the dispatched route's
         // trailing segment and then runs the non-streaming pre-flight chain
         // against the rewritten name; the SSE short-circuit resolves its
@@ -447,7 +447,7 @@ module internal GiraffeUtil =
                     (String.concat "; " versionedStreamingMethods)
             )
 
-        // Phase 69n — returned closure-of-closures: `dispatch implBuilder`
+        // Returned closure-of-closures: `dispatch implBuilder`
         // produces an `HttpHandler` that dispatches one request. The outer
         // `buildDispatcherTable` evaluation above (proxy + classifiers +
         // guards) is one-time per `options` value; only the innermost
@@ -480,7 +480,7 @@ module internal GiraffeUtil =
 
                 ctx.Response.Headers["x-correlation-id"] <- Microsoft.Extensions.Primitives.StringValues correlationId
 
-                // Phase 69c — streaming-method short-circuit.
+                // Streaming-method short-circuit.
                 //
                 // Methods returning IAsyncEnumerable<'T> bypass the proxy entirely
                 // and emit SSE frames. The pre-flight chain (auth / validation /
@@ -501,7 +501,7 @@ module internal GiraffeUtil =
 
                 let streamingShape = streamingShapes |> Map.tryFind streamingPath
 
-                // Phase 69j — wire-schema negotiation.
+                // Wire-schema negotiation.
                 //
                 // The trailing path segment IS the addressed method name;
                 // `streamingPath` above computes exactly that, so it is
@@ -532,7 +532,7 @@ module internal GiraffeUtil =
                     | SchemaRouting.Refused(requested, supported) -> Some(requested, supported)
                     | _ -> None
 
-                // Phase 69i — companion-route resolution. `<method>/status`,
+                // Companion-route resolution. `<method>/status`,
                 // `<method>/progress` and `<method>/cancel` for a classified
                 // long-running method, served off the composed dispatcher.
                 // Resolved from the last TWO path segments, so an ordinary
@@ -545,7 +545,7 @@ module internal GiraffeUtil =
                         |> Option.map (fun resolved -> dispatcher, resolved)
                     | _ -> None
 
-                // Phase 69i.E / 69i.G — the companion caller. Resolved through
+                // The companion caller. Resolved through
                 // the composed `AuthContextResolver` (when there is one) so
                 // ownership is evaluated for THIS caller: the submitting
                 // subject sees its job, a caller holding `JobAdminRole` sees
@@ -571,9 +571,9 @@ module internal GiraffeUtil =
                     | SystemTextJson opts -> opts
 
                 // The SSE branch below serves two producers through one loop:
-                // a streaming method's `IAsyncEnumerable<'T>` (Phase 69c) and
+                // a streaming method's `IAsyncEnumerable<'T>` and
                 // the progress companion's `IAsyncEnumerable<JobStatus<'T>>`
-                // (Phase 69i.D). Each is (label, element type, body -> enumerable);
+                // . Each is (label, element type, body -> enumerable);
                 // the label names the call in telemetry and diagnostics.
                 let sseSource: (string * System.Type * (string -> obj)) option =
                     match streamingShape with
@@ -615,7 +615,7 @@ module internal GiraffeUtil =
                         || companion.IsSome
                         || longRunningShapes.ContainsKey addressedMethod)
                 then
-                    // Phase 855 — a streaming or long-running call reached
+                    // A streaming or long-running call reached
                     // through a batch envelope. The batch route refuses such
                     // an envelope before running anything; this is the
                     // backstop for a route it could not see, and it refuses
@@ -635,7 +635,7 @@ module internal GiraffeUtil =
 
                     return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                 elif schemaRefusal.IsSome then
-                    // Phase 69j — the caller pinned a wire schema this
+                    // The caller pinned a wire schema this
                     // method does not serve. Refused BEFORE the streaming
                     // split and before the pre-flight chain: serving the
                     // wrong shape to a client that said which shape it
@@ -664,7 +664,7 @@ module internal GiraffeUtil =
                     // back into the per-method-completion contract of
                     // `IRemotingTelemetry`.
                     //
-                    // Phase 69l — gated symmetrically with the non-streaming
+                    // Gated symmetrically with the non-streaming
                     // branch: `Api.make` + `NoMetricsEndpoint` deployments
                     // skip the Stopwatch + MethodTelemetry alloc entirely.
                     let streamingTelemetryActive =
@@ -679,7 +679,7 @@ module internal GiraffeUtil =
                         else
                             Unchecked.defaultof<_>
 
-                    // Phase 69c.C — the chunk-count dimension. Counted at
+                    // The chunk-count dimension. Counted at
                     // the single write site below whether or not telemetry
                     // is active (an `int` increment is cheaper than a second
                     // gate), and reported as `ChunkCount = Some n` on the
@@ -719,7 +719,7 @@ module internal GiraffeUtil =
 
                         let! bodyText = reader.ReadToEndAsync()
 
-                        // Phase 69i — the producer parses the body and yields the
+                        // The producer parses the body and yields the
                         // enumerable (a streaming method's, or the progress
                         // companion's subscription).
                         let asyncEnumerable = produce bodyText
@@ -797,7 +797,7 @@ module internal GiraffeUtil =
                                         let json =
                                             System.Text.Json.JsonSerializer.Serialize(element, elementType, stjOptions)
 
-                                        // Phase 69c.C — every chunk frame carries
+                                        // Every chunk frame carries
                                         // `id: <correlation-id>-<chunk-index>`, so a
                                         // chunk is attributable to its call from the
                                         // wire alone (the same token the telemetry
@@ -871,7 +871,7 @@ module internal GiraffeUtil =
 
                     return! next ctx
                 elif companion.IsSome then
-                    // Phase 69i.C / 69i.G — the poll and cancel companions.
+                    // The poll and cancel companions.
                     //
                     // JSON request / JSON response, exactly the shape a
                     // hand-wired `JobHandle<'T> -> Async<JobStatus<'T>>` (or
@@ -984,7 +984,7 @@ module internal GiraffeUtil =
                     // The non-streaming branch continues with body buffering
                     // + the pre-flight chain.
 
-                    // Phase 461 — THE single pre-dispatch buffering stage.
+                    // THE single pre-dispatch buffering stage.
                     // This one call is what makes the request body
                     // rewindable for everything that follows: the
                     // pre-flight reads, the proxy's argument read, and any
@@ -1022,11 +1022,11 @@ module internal GiraffeUtil =
                     if isProxyHeaderPresent && options.BodyNormalisation = Enabled then
                         do! normaliseRemotingBody ctx
 
-                    // The method name is the trailing path segment (Phase
-                    // 69b.C path). Computed once, up here, because the body
-                    // cache below names it on a fault (Phase 461.D) and
+                    // The method name is the trailing path segment.
+                    // Computed once, up here, because the body
+                    // cache below names it on a fault and
                     // every pre-flight stage after it keys on it.
-                    // Phase 69j — the negotiated version's handler, when it
+                    // The negotiated version's handler, when it
                     // differs from the addressed name. `applyRouting`
                     // rewrites ONLY the trailing segment, so everything
                     // downstream — the proxy's endpoint map, the auth /
@@ -1041,7 +1041,7 @@ module internal GiraffeUtil =
                     let endpointName =
                         SubRouting.getNextPartOfPath ctx |> SchemaVersion.applyRouting schemaRouting
 
-                    // Phase 69j — one line per call when the served version
+                    // One line per call when the served version
                     // is scheduled for retirement. After the route rewrite
                     // so the message names the version, not the handler.
                     match schemaRouting with
@@ -1064,13 +1064,13 @@ module internal GiraffeUtil =
                     // read the body unconditionally for every non-streaming
                     // request even when no downstream stage needed it,
                     // costing ~32 MiB peak on the recommended multipart
-                    // upload composition — which is why Phase 461 did NOT
+                    // upload composition — which is why this does NOT
                     // make this eager: the body stays lazy, and the stream
                     // it reads stays alive (see the buffering stage above).
                     let cachedBodyBytesCell: byte[] option ref = ref None
                     let cachedBodyHashCell: string option ref = ref None
 
-                    // Phase 461.D — a timestamp for the cold-path telemetry
+                    // A timestamp for the cold-path telemetry
                     // event below; taken only when a sink is composed so the
                     // hot path pays nothing (GP 13).
                     let bodyCacheClock =
@@ -1082,7 +1082,7 @@ module internal GiraffeUtil =
                     // Safe to call from ANY stage, before or after dispatch:
                     // the stream it reads is the buffered body the stage
                     // above installed, which nothing in the dispatcher
-                    // disposes (Phase 461). A post-dispatch first read is a
+                    // disposes. A post-dispatch first read is a
                     // seek-to-0 copy of the buffer, not a fault.
                     let readCachedBodyBytes () = task {
                         match cachedBodyBytesCell.Value with
@@ -1098,7 +1098,7 @@ module internal GiraffeUtil =
                                 cachedBodyBytesCell.Value <- Some bytes
                                 return bytes
                             with :? System.ObjectDisposedException as disposed ->
-                                // Phase 461.D — the body was disposed by
+                                // The body was disposed by
                                 // something composed AROUND the handler (the
                                 // dispatcher never disposes it). Translate the
                                 // bare "Cannot access a disposed object" into a
@@ -1160,7 +1160,7 @@ module internal GiraffeUtil =
                         ImplementationBuilder = fun _ -> implBuilder ctx
                         EndpointName = endpointName
                         Input = ctx.Request.Body
-                        // Phase 69m — populated just before `proxy props` is
+                        // Populated just before `proxy props` is
                         // invoked (below, after the pre-flight chain). When an
                         // upstream pre-flight stage forced the body cache,
                         // the proxy parses from the cached bytes — no second
@@ -1177,20 +1177,20 @@ module internal GiraffeUtil =
                         Output = output
                     }
 
-                    // Phase 69d — auth pre-flight. Lookup the method's classification,
+                    // Auth pre-flight. Lookup the method's classification,
                     // optionally resolve the auth context, evaluate, deny if needed.
                     //
-                    // `methodNameForAuth` is the trailing path segment (Phase 69b.C
+                    // `methodNameForAuth` is the trailing path segment (the
                     // path), computed above the body cache. For the deny path we emit
-                    // a categorised envelope via the 69b.E path; no telemetry is
+                    // a categorised envelope; no telemetry is
                     // emitted on auth deny (the contract is per-method-completion —
                     // auth denial precedes method invocation).
                     //
                     // Auth pre-flight runs only when an AuthContextResolver is
                     // composed. Without one, every method is allowed (matches
-                    // pre-69d behaviour for consumers who haven't opted in).
+                    // the unguarded behaviour for consumers who haven't opted in).
                     // The resolved auth context (when computed) is reused by
-                    // Phase 69g's rate-limit pre-flight below — avoids a double
+                    // the rate-limit pre-flight below — avoids a double
                     // resolver invocation per request.
                     //
                     // 0.1.15 — awaited via `let!` instead of sync-over-async
@@ -1230,7 +1230,7 @@ module internal GiraffeUtil =
                     // to THIS handler's API. In a multi-API `choose` the dispatch
                     // handlers are tried in order and a non-matching request must
                     // fall through to the next handler (the proxy's
-                    // `EndpointNotFound -> next` path does this). The Phase 69d
+                    // `EndpointNotFound -> next` path does this). The
                     // auth pre-flight must therefore NOT fail-closed on a miss —
                     // doing so lets whichever API is composed first deny every
                     // other API's methods (and even raw non-remoting routes like
@@ -1251,7 +1251,7 @@ module internal GiraffeUtil =
                             return Some authCtx
                     }
 
-                    // Phase 69i.E — the resolved subject rides the call context
+                    // The resolved subject rides the call context
                     // for the rest of this request, so a handler's
                     // `IJobDispatcher.Enqueue` stamps the job with its
                     // submitting caller (and the job body sees that caller
@@ -1271,7 +1271,7 @@ module internal GiraffeUtil =
                             | Allow -> None
 
                     if denyReason.IsSome then
-                        // Phase 69d — deny path. Emit categorised Auth envelope
+                        // Deny path. Emit categorised Auth envelope
                         // *directly* without consulting the consumer's error
                         // handler — the auth contract is unconditional: classified
                         // methods that fail evaluation always categorise as `Auth`,
@@ -1300,7 +1300,7 @@ module internal GiraffeUtil =
 
                         return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                     else
-                        // Phase 69e — typed validation pre-flight.
+                        // Typed validation pre-flight.
                         //
                         // Only runs when (a) the method's input type carries
                         // ValidationAttributes (cached at startup) AND (b) the
@@ -1308,20 +1308,20 @@ module internal GiraffeUtil =
                         // STJ to parse the first argument; the Newtonsoft path
                         // is a follow-up for the legacy opt-in branch).
                         //
-                        // Body-read pattern mirrors 69b.A: EnableBuffering once,
+                        // Body-read pattern: EnableBuffering once,
                         // read, restore position so the proxy reads fresh. The
                         // pre-read is non-destructive — the proxy sees the same
                         // bytes.
                         let validationInputType = validationInputTypes |> Map.tryFind methodNameForAuth
 
-                        // Phase 69m — cache the first-arg value validation
+                        // Cache the first-arg value validation
                         // parses so the audit emission below can reuse it
                         // (when audit AND validation are armed for the same
                         // method). Saves a second `parseFirstArgFromBody`
                         // call per request on dual-armed methods.
                         let validationParsedFirstArg: obj option ref = ref None
 
-                        // Phase 856.B — the arguments validation parsed, handed
+                        // The arguments validation parsed, handed
                         // to the proxy at dispatch so the body is parsed and
                         // the first argument decoded ONCE per request.
                         let validationParsedArguments: ParsedArguments voption ref = ref ValueNone
@@ -1334,7 +1334,7 @@ module internal GiraffeUtil =
                             | Some inputT, SystemTextJson _ ->
                                 let! bodyBytes = readCachedBodyBytes ()
 
-                                // Phase 856.B — the dispatch path's own parse and
+                                // The dispatch path's own parse and
                                 // first-argument decode, run here. `ValueNone`
                                 // (unparseable, or refused by the decode) skips
                                 // validation and leaves the refusal to the
@@ -1346,9 +1346,9 @@ module internal GiraffeUtil =
                                     validationParsedArguments.Value <- ValueSome parsed
                                     validationParsedFirstArg.Value <- Some inputValue
 
-                                    // Phase 69e — hand the per-request context to
+                                    // Hand the per-request context to
                                     // any `[<Custom>]` IFieldValidator (subject id +
-                                    // correlation id from the Phase 69b context).
+                                    // correlation id from the request context).
                                     let validationContext =
                                         { new IValidationContext with
                                             member _.SubjectId =
@@ -1384,7 +1384,7 @@ module internal GiraffeUtil =
                             return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                         else
 
-                            // Phase 69f — idempotency pre-flight.
+                            // Idempotency pre-flight.
                             //
                             // Runs BEFORE rate-limit so cache hits don't decrement
                             // the budget (the original call already paid). When the
@@ -1433,13 +1433,13 @@ module internal GiraffeUtil =
                                 else
                                     None
 
-                            // Phase 69f — nested early-returns via if/elif/else so every
+                            // Nested early-returns via if/elif/else so every
                             // task arm produces a `Task<HttpContext option>`. The two
                             // early-return shapes (missing header → 400; cache hit → replay)
                             // both fully handle the response before yielding to `next`.
                             let idempotencyArmed = isMethodIdempotent && options.IdempotencyStore.IsSome
 
-                            // Phase 461 — ONE prefetch, and it is an
+                            // ONE prefetch, and it is an
                             // OPTIMISATION, not a correctness guard. When a
                             // post-dispatch consumer is known to need the
                             // body bytes — the idempotency store path (the
@@ -1447,7 +1447,7 @@ module internal GiraffeUtil =
                             // payload on an audited method that validation
                             // will not already have read — materialise them
                             // once HERE so the proxy parses from the same
-                            // bytes (the Phase 69m `InputBytes` fastpath)
+                            // bytes (the `InputBytes` fastpath)
                             // instead of the body crossing the stream
                             // boundary twice. Deleting this line changes
                             // cost, never correctness: the buffered stream
@@ -1456,7 +1456,7 @@ module internal GiraffeUtil =
                             // was NOT prefetched is a seek-to-0 copy, not a
                             // disposed-stream fault. Until 461 the two
                             // halves of this condition were two guards
-                            // (0.1.16 idempotency; Phase 69h audit), each
+                            // (idempotency; audit), each
                             // load-bearing for correctness because the
                             // proxy disposed the stream, and each a rule the
                             // next consumer's author had to know about.
@@ -1550,7 +1550,7 @@ module internal GiraffeUtil =
                                 ctx.Response.Headers["x-idempotency-replay"] <-
                                     Microsoft.Extensions.Primitives.StringValues "true"
 
-                                // Phase 69f.E — positive replay audit. Distinct from the
+                                // Positive replay audit. Distinct from the
                                 // method's own `[<Audit>]` event (suppressed above): this
                                 // marks that a replay occurred and cites the original via
                                 // the shared idempotency key. Dispatcher-emitted like
@@ -1579,7 +1579,7 @@ module internal GiraffeUtil =
                                 do! ctx.Response.Body.WriteAsync(response.Body, 0, response.Body.Length)
                                 return! next ctx
                             else
-                                // Phase 69g — rate-limit pre-flight.
+                                // Rate-limit pre-flight.
                                 //
                                 // Only runs when (a) an `IRateLimitStore` is composed AND
                                 // (b) the method carries at least one [<RateLimit>] attribute.
@@ -1612,7 +1612,7 @@ module internal GiraffeUtil =
                                     ctx.Response.Headers["Retry-After"] <-
                                         Microsoft.Extensions.Primitives.StringValues(string secondsRounded)
 
-                                    // Phase 69g.tail — denial telemetry. A bridged
+                                    // Denial telemetry. A bridged
                                     // `IMetricsSink` records `RateLimited` distinctly from
                                     // handler errors so saturation is separable from 5xx on
                                     // dashboards. `ElapsedMs = 0` — the handler never ran;
@@ -1632,7 +1632,7 @@ module internal GiraffeUtil =
                                         }
                                     | _ -> ()
 
-                                    // Phase 69g.tail — denial audit. Emitted regardless of
+                                    // Denial audit. Emitted regardless of
                                     // whether the method also carries `[<Audit>]`, so
                                     // rate-limit denial patterns surface in the audit trail.
                                     // `SubjectId` is the rate-limit bucket identity (the
@@ -1669,7 +1669,7 @@ module internal GiraffeUtil =
 
 
 
-                                    // Phase 69b.C — wall-clock measurement for the telemetry hook.
+                                    // Wall-clock measurement for the telemetry hook.
                                     // Started just before proxy dispatch; stopped at every terminal
                                     // branch (success / handler exception). Endpoint-not-found and
                                     // invalid-http-verb don't emit because they aren't valid method
@@ -1685,7 +1685,7 @@ module internal GiraffeUtil =
                                         let lastSlash = p.LastIndexOf '/'
                                         if lastSlash >= 0 then p.Substring(lastSlash + 1) else p
 
-                                    // Phase 69l — telemetry-allocation gate. Skips the
+                                    // Telemetry-allocation gate. Skips the
                                     // Stopwatch + MethodTelemetry alloc + Map.ofList tags
                                     // entirely when the gate returns false (the canonical
                                     // `Api.make` + `NoMetricsEndpoint` shape — `IMetricsSink`
@@ -1719,7 +1719,7 @@ module internal GiraffeUtil =
                                                 }
                                             | None -> ()
 
-                                    // Phase 69m — hand cached bytes to the proxy
+                                    // Hand cached bytes to the proxy
                                     // when an upstream pre-flight stage forced
                                     // the cache. The proxy then parses from
                                     // bytes directly; no second stream read +
@@ -1729,7 +1729,7 @@ module internal GiraffeUtil =
                                             InputBytes = cachedBodyBytesCell.Value
                                     }
 
-                                    // Phase 905 — an AUDITED method's argument is
+                                    // An AUDITED method's argument is
                                     // decoded once, by the dispatch path, and the
                                     // audit payload below reads that value. Until
                                     // 905 a method audited without validators was
@@ -1737,7 +1737,7 @@ module internal GiraffeUtil =
                                     // decoded AGAIN after it, with plain STJ, to
                                     // build the payload. Validated methods already
                                     // arrive with `validationParsedArguments` set
-                                    // (Phase 856.B), so this runs only when the
+                                    // , so this runs only when the
                                     // validation stage did not parse. The bytes
                                     // were prefetched by `postDispatchBodyConsumerArmed`.
                                     // A multipart body is not an argument array;
@@ -1781,7 +1781,7 @@ module internal GiraffeUtil =
                                         else
                                             ctx.Response.ContentType <- "application/vnd.msgpack"
 
-                                        // Phase 69f — capture response bytes before flushing
+                                        // Capture response bytes before flushing
                                         // when the method is idempotent and a store is composed.
                                         // RecyclableMemoryStream.ToArray() is position-independent
                                         // so the subsequent CopyToAsync still drains correctly.
@@ -1798,7 +1798,7 @@ module internal GiraffeUtil =
                                         do! output.CopyToAsync ctx.Response.Body
                                         emitTelemetry MethodOutcome.Succeeded
 
-                                        // Phase 69f — store the captured response so the
+                                        // Store the captured response so the
                                         // next call with the same key replays it. Fire-and-
                                         // wait so the test gate observes deterministic state.
                                         if not (isNull capturedBody) then
@@ -1837,7 +1837,7 @@ module internal GiraffeUtil =
                                                 |> Async.Catch
                                                 |> Async.StartAsTask
 
-                                            // Phase 863 — a store that could not
+                                            // A store that could not
                                             // write RAISES, and the call is then NOT
                                             // memoised: a retry with this key runs the
                                             // handler again. The answer has already
@@ -1858,7 +1858,7 @@ module internal GiraffeUtil =
                                                 eprintfn "%s" line
                                                 options.DiagnosticsLogger |> Option.iter (fun log -> log line)
 
-                                        // Phase 69h — audit emission after successful invocation.
+                                        // Audit emission after successful invocation.
                                         // Looks up the method's audit kind (if any) and emits an
                                         // AuditEvent. Payload is the PII-redacted input-record
                                         // snapshot (fields without [<PiiSafe>] are redacted to
@@ -1872,20 +1872,20 @@ module internal GiraffeUtil =
                                                 | Some authCtx -> authCtx.SubjectId
                                                 | None -> "anonymous"
 
-                                            // Phase 69m — when validation
+                                            // When validation
                                             // parsed the first-arg value
                                             // earlier in the same request,
                                             // reuse the cached value instead
                                             // of re-running `parseFirstArgFromBody`
                                             // a second time.
-                                            // Phase 69h.tail — input type comes from the
+                                            // Input type comes from the
                                             // validation classifier when the method is
                                             // validated (reusing its parsed-arg cache), or
                                             // from the audit classifier's own input-type map
                                             // otherwise — audited methods without validators
                                             // used to emit empty payloads.
                                             //
-                                            // Phase 905 — and when validation did
+                                            // And when validation did
                                             // not parse it, the dispatch stage did,
                                             // just before `Invoke` (see there). No
                                             // second STJ parse remains on this path:
@@ -1993,9 +1993,9 @@ module internal GiraffeUtil =
                                             emitTelemetry (MethodOutcome.Failed e)
                                             return! fail e routeInfo options next ctx
                                     | DecodeRefused(error, functionName) ->
-                                        // Phase 783 — the request did not
+                                        // The request did not
                                         // decode. A named refusal, not a
-                                        // fault: 400 + the Phase 69e
+                                        // fault: 400 + the
                                         // `validation` envelope, so a
                                         // client that already branches on
                                         // `category` needs no new code to
@@ -2003,7 +2003,7 @@ module internal GiraffeUtil =
                                         // from "the server fell over".
                                         // The handler never ran.
                                         //
-                                        // The payload mirrors the 69e
+                                        // The payload mirrors the
                                         // violation envelope's shape
                                         // (`methodName` + structured
                                         // detail) so both arrive under one
@@ -2075,7 +2075,7 @@ module Remoting =
         | StaticValue impl -> GiraffeUtil.buildDispatcherTable options (fun _ -> impl)
         | FromContext createImplementationFrom -> GiraffeUtil.buildDispatcherTable options createImplementationFrom
         | FromContextAsync createImplementationFromAsync ->
-            // Phase 69b.B — await the async resolver per request, then dispatch
+            // Await the async resolver per request, then dispatch
             // through the sync path with the resolved impl. The resolver is
             // invoked on every request, not snapshotted at composition time.
             //
@@ -2089,7 +2089,7 @@ module Remoting =
                 return! dispatch (fun _ -> impl) next ctx
             }
 
-/// Phase 855 — the options of the remoting batch route (`RemotingBatch`).
+/// The options of the remoting batch route (`RemotingBatch`).
 type RemotingBatchOptions = {
     /// The path the envelope is POSTed to. Default `/api/_batch`.
     Route: string
@@ -2105,7 +2105,7 @@ type RemotingBatchOptions = {
     ElementPipeline: RequestDelegate -> RequestDelegate
 }
 
-/// Phase 855 — same-tick calls travel as one request: the server half.
+/// Same-tick calls travel as one request: the server half.
 ///
 /// An ASP.NET Core middleware serving `POST <Route>`. The body is a JSON
 /// array of `{ "route": "/api/Api/Method", "body": "<the call's JSON body>"
@@ -2269,7 +2269,7 @@ module RemotingBatch =
     /// callbacks the pipeline registers and runs them as a server would, so
     /// middleware that stamps headers or defers work at response time
     /// behaves as it does for a call that arrived alone. Internal rather
-    /// than private because the Phase 771 hardening-baseline probe drives a
+    /// than private because the hardening-baseline probe drives a
     /// request through the composed pipeline the same way and reads the
     /// same callbacks (`HostingBaseline.probe`).
     type internal ElementResponseFeature() =

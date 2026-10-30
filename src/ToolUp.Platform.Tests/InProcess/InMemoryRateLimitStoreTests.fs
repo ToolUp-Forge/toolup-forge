@@ -23,10 +23,10 @@ let private remotingStore (cap: int) =
     let store = ToolUp.Remoting.Server.InMemoryRateLimitStore(maxBuckets = cap)
     store, (store :> ToolUp.Remoting.Server.IRateLimitStore)
 
-/// Smoke tests for `InMemoryRateLimitStore` — the Phase 56
+/// Smoke tests for `InMemoryRateLimitStore` — the
 /// single-instance default. Covers the atomic-increment-and-check
 /// contract, key isolation, and the `GetRecentDecisions` operator
-/// surface used by the Phase 61 PlatformAdmin rate-limit event log.
+/// surface used by the PlatformAdmin rate-limit event log.
 let tests =
     testList "InMemoryRateLimitStore" [
         testCaseAsync "remoting store: at cap with an empty order queue it keeps every bucket it holds"
@@ -241,7 +241,7 @@ let tests =
         }
     ]
 
-/// Phase 56 — bind `IRateLimitStoreContract` against the in-memory
+/// Bind `IRateLimitStoreContract` against the in-memory
 /// default. External-store companions (`ToolUp.RateLimit.Redis`,
 /// `ToolUp.RateLimit.AzureTableStorage`, future Cosmos / DynamoDB)
 /// bind to the same pack from their own InProcess test files so

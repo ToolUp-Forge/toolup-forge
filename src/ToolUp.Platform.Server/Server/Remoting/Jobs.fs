@@ -5,7 +5,7 @@ open System.Collections.Concurrent
 open System.Threading
 
 // =============================================================================
-// Phase 69i — long-running operation typed handles
+// Long-running operation typed handles
 // =============================================================================
 //
 // `IJobDispatcher` substrate + a v0 in-memory implementation. Handlers use
@@ -19,21 +19,21 @@ open System.Threading
 //         return! jobs.Enqueue work
 //     }
 //
-// 69i.B — with the same instance composed via `Remoting.withJobDispatcher`,
+// With the same instance composed via `Remoting.withJobDispatcher`,
 // the dispatcher classifies every method returning `Async<JobHandle<'T>>` as
 // long-running at startup and serves the poll / progress / cancel companions
 // for it (`LongRunning.fs`), so the consumer no longer hand-wires a poll
 // method. Without the composition the v0 shape above still works unchanged.
 //
-// `IJobScheduler` (Phase 9b) is a COMPOSITION choice behind this seam, not
+// `IJobScheduler` is a COMPOSITION choice behind this seam, not
 // something the dispatcher routes into: the work the v0 shape enqueues is a
 // closure, and `JobResult` carries no payload, so a scheduler-backed
 // `IJobDispatcher` needs a result store beside the scheduler — the shape
-// Phases 630/631 built for the aggregate peer surface (`IPeerJobResultStore`)
+// built for the aggregate peer surface (`IPeerJobResultStore`)
 // — and that is a store-backed implementation of THIS interface, not a
 // change to the dispatcher. See `docs/migrations/69i-long-running-handle.md`.
 
-/// Phase 69i — default in-memory `IJobDispatcher`. Background work runs
+/// Default in-memory `IJobDispatcher`. Background work runs
 /// via `Async.Start`; status is held in a `ConcurrentDictionary` keyed
 /// on the job id. Stateless between calls per the six portability
 /// rules (every status read re-evaluates against the dictionary);
@@ -43,7 +43,7 @@ open System.Threading
 /// **Note: in-process only.** Restarts wipe state — appropriate for
 /// dev/test; production wires a distributed impl.
 ///
-/// 69i.E — every job is stamped at `Enqueue` with the submitting subject
+/// Every job is stamped at `Enqueue` with the submitting subject
 /// (`CallContext.subjectId ()`) and the request's correlation id, and both
 /// are re-established inside the job body so sub-operations see the
 /// original caller. `GetStatus` / `Cancel` from a different subject answer
@@ -117,7 +117,7 @@ type InMemoryJobDispatcher(?maxJobs: int) =
             }
         )
 
-    /// 69i.E — may the current caller see / act on `jobId`? The owner, a
+    /// May the current caller see / act on `jobId`? The owner, a
     /// job-admin caller, and any caller of an ownerless job. Unknown ids
     /// are `false` so callers fall through to the not-found arm.
     let callerMayAccess (jobId: string) =
@@ -168,10 +168,10 @@ type InMemoryJobDispatcher(?maxJobs: int) =
             // — v0 doesn't track progress; consumers wanting
             // progress wire their own dispatcher.
             //
-            // 69i.E — the submitting subject and the request's
+            // The submitting subject and the request's
             // correlation id are re-established inside the job so the
             // work sees its original caller whatever thread it lands on.
-            // 69i.G — the work runs under the job's own token; `Cancel`
+            // The work runs under the job's own token; `Cancel`
             // trips it, and the runner records `Cancelled` only if the
             // work had not already reached a terminal status.
             Async.Start(

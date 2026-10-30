@@ -5,7 +5,7 @@ open System.Collections.Concurrent
 open Microsoft.FSharp.Reflection
 
 // =============================================================================
-// Phase 69f — per-method idempotency keys
+// Per-method idempotency keys
 // =============================================================================
 //
 // API record fields can carry `[<Idempotent>]` to opt into client-key-driven
@@ -18,12 +18,12 @@ open Microsoft.FSharp.Reflection
 // security boundary, not a sharing one.
 //
 // Order in the dispatcher pre-flight chain:
-//   auth (69d) → idempotency (69f) → rate-limit (69g) → handler
+//   auth → idempotency → rate-limit → handler
 // Rationale: an idempotency cache hit means we're replaying a response
 // that was already counted against rate-limit on its first call;
 // re-counting it would double-charge the budget.
 
-/// Phase 69f — opts a method into client-key-driven idempotency. Calls
+/// Opts a method into client-key-driven idempotency. Calls
 /// against an `[<Idempotent>]` method MUST carry an `X-Idempotency-Key`
 /// header; the dispatcher denies with `RemotingError.User` envelope
 /// when the header is missing AND a store is composed. When no store is
@@ -129,7 +129,7 @@ type InMemoryIdempotencyStore(?maxEntries: int, ?logger: ToolUp.Platform.ILogger
 
 // -----------------------------------------------------------------------------
 
-/// Phase 164 — shared layout for the blob-backed idempotency store, so the
+/// Shared layout for the blob-backed idempotency store, so the
 /// TTL sweep job (`IdempotencySweepJob`, compiled after the job substrate)
 /// enumerates + parses the same blobs `BlobIdempotencyStore` writes without
 /// duplicating the container / prefix / envelope-shape knowledge.
@@ -155,7 +155,7 @@ module BlobIdempotencyLayout =
 
 // -----------------------------------------------------------------------------
 
-/// Phase 863 — raised by `BlobIdempotencyStore.Store` when the memoised
+/// Raised by `BlobIdempotencyStore.Store` when the memoised
 /// envelope was not written. `IIdempotencyStore.Store` returns
 /// `Async<unit>`, so an exception is the one channel a failed write has.
 /// Internal: the dispatcher handles any exception from `Store` the same
@@ -168,7 +168,7 @@ type internal IdempotencyStoreWriteException(container: string, blobName: string
 
     member _.StorageError = storageError
 
-/// Phase 69f.C — distributed `IIdempotencyStore` over `IBlobStorage`.
+/// Distributed `IIdempotencyStore` over `IBlobStorage`.
 /// Memoised entries are JSON blobs under the `_platform` container (the
 /// reserved SDK-level scope), named by a SHA-256 of `{scope}|{key}` so
 /// arbitrary subject ids / method names / client keys produce a safe,
@@ -248,7 +248,7 @@ type BlobIdempotencyStore(blobStorage: ToolUp.Platform.BlobStorage.IBlobStorage,
             let expiryTicks = (DateTimeOffset.UtcNow + ttl).UtcTicks
             let name = blobName scope key
 
-            // Phase 863 — a failed write RAISES: `Store` returning normally
+            // A failed write RAISES: `Store` returning normally
             // is the claim "this call is memoised", and a retry that finds
             // nothing re-executes the handler — the one thing this store
             // exists to prevent. The dispatcher catches it and answers the
@@ -266,14 +266,14 @@ module internal Idempotency =
     // server-tier `IdempotentAttribute` and the tier-shared
     // `ToolUp.Platform.IdempotentAttribute` mirror (which Fable-compiled
     // Core API records carry) — same family-agnostic + fail-open fix as
-    // the 69d/69h/69g/69e classifiers. Without it a Core API record's
+    // the auth, audit, rate-limit and validation classifiers. Without it a Core API record's
     // `[<Idempotent>]` is invisible (idempotency never engages), and a
     // non-public record silently skips classification.
     let private reflectionFlags =
         System.Reflection.BindingFlags.Public
         ||| System.Reflection.BindingFlags.NonPublic
 
-    // ── Phase 727 severity assessment — the idempotency family ────────
+    // ── Severity assessment — the idempotency family ────────
     //
     // What a forgery buys:
     //
@@ -303,7 +303,7 @@ module internal Idempotency =
 
     let private isIdempotentAttr (a: obj) : bool = markers.IsSanctioned(a.GetType())
 
-    /// Phase 727 — marker-name collisions on the API record, for the
+    /// Marker-name collisions on the API record, for the
     /// dispatcher's startup refusal.
     let foreignMarkers (apiType: Type) : (string * string * string) list =
         markers.Collisions(apiType, reflectionFlags)

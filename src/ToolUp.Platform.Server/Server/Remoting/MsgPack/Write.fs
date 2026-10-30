@@ -115,7 +115,7 @@ let inline writeNil (out: Stream) = out.WriteByte Format.Nil
 let inline writeBool b (out: Stream) =
     out.WriteByte(if b then Format.True else Format.False)
 
-// Phase 802 — every integer arm below picks its format by the rule in
+// Every integer arm below picks its format by the rule in
 // `Format.fs`'s header: a non-negative value rides the narrowest
 // UNSIGNED format whose top bit stays clear, a negative one the narrowest
 // SIGNED format other than `Int16`. So no emitted integer reads as a different value at any
@@ -150,7 +150,7 @@ let inline writeInt64 (n: int64) (out: Stream) =
     elif n >= -128L then
         out.WriteByte Format.Int8
         out.WriteByte(byte n)
-    // No `Int16`: a Fable reader before Phase 802 does not sign-extend
+    // No `Int16`: an older Fable reader does not sign-extend
     // it (`d1 80 00` read as 32768), so a browser client still running
     // that reader would decode a negative int16 as a positive number.
     // `Int32` is read correctly by every reader generation.
@@ -262,7 +262,7 @@ let writeDecimal (n: decimal) (out: Stream) =
 
     out.WriteByte(Format.fixarr 4)
 
-    // Phase 802 — each word is an int32, and travels as one: a negative
+    // Each word is an int32, and travels as one: a negative
     // word (the sign flag, or a magnitude word with its top bit set) in a
     // signed format, never as the uint32 of the same bits.
     for b in bits do

@@ -7,7 +7,7 @@ open System.Reflection
 open Expecto
 open ToolUp.Remoting.Server
 
-// ─── Phase 328 — bounded idempotency-store eviction + observability ──────
+// ─── Bounded idempotency-store eviction + observability ──────
 //
 // `InMemoryIdempotencyStore.evictOldestIfFull` used to call `entries.Clear()`
 // on a recovery branch: under a count/queue race at the `maxEntries` cap

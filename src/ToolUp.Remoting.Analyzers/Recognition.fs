@@ -1,7 +1,7 @@
 namespace ToolUp.Remoting.Analyzers
 
 // =============================================================================
-// Phase 195 — compile-time analyzer recognition core
+// Compile-time analyzer recognition core
 // =============================================================================
 //
 // PURE, dependency-free (FSharp.Core only) recognition logic for the classes the
@@ -46,7 +46,7 @@ module Recognition =
     }
 
     /// An API method paired with the audit-relevant facts about its input
-    /// record (Phase 69h / TUR0002). `InputRecordHasPiiSafeField` is true when
+    /// record (TUR0002). `InputRecordHasPiiSafeField` is true when
     /// the method's first-argument record carries at least one `[<PiiSafe>]`
     /// field — the signal that PII flows through the method.
     type ApiMethod = {
@@ -91,7 +91,7 @@ module Recognition =
         else
             trimmed
 
-    /// The five Phase 69d classifications — the exact set `AuthClassifier`
+    /// The five classifications — the exact set `AuthClassifier`
     /// recognises (RequiresRole / RequiresClaim → requirements; TenantScoped →
     /// TenantRequired; AllowAnonymous → Anonymous; PublicEndpoint → Public). A
     /// field carrying any one of these is classified; carrying none is the
