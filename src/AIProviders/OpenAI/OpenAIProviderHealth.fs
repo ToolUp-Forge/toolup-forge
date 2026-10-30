@@ -1,6 +1,7 @@
 module OpenAIProviderHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -19,7 +20,7 @@ type OpenAIProviderHealthCheck(secretStore: ISecretStore) =
 
         member _.Check() = async {
             try
-                let! secret = secretStore.GetSecret("_platform", "OPENAI_API_KEY")
+                let! secret = secretStore.GetSecret(ScopeKey.PlatformContainer, "OPENAI_API_KEY")
 
                 match secret with
                 | Some value when not (String.IsNullOrWhiteSpace value) -> return Healthy

@@ -88,7 +88,10 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
     /// Construct reading the API key from the secret store on every
     /// request. Reads `OPENAI_API_KEY` from the `_platform` scope.
     new(secretStore: ISecretStore, ?model: string) =
-        OpenAIProvider((fun () -> secretStore.GetSecret("_platform", "OPENAI_API_KEY")), defaultArg model DefaultModel)
+        OpenAIProvider(
+            (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, "OPENAI_API_KEY")),
+            defaultArg model DefaultModel
+        )
 
     interface IAIProvider with
         member _.Capabilities = {
