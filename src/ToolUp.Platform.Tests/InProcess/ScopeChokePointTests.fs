@@ -328,6 +328,10 @@ let private doors = [
     "ToolUp.Facts.Server/Server/CoverageTool.fs"
 ]
 
+/// The shell the doors share: a door that registers through
+/// `FactTool.define` takes its scope from the resolver there.
+let private toolShell = "ToolUp.Facts.Server/Server/FactTool.fs"
+
 /// The spellings the doors must not carry. Assembled at runtime so this
 /// file, which is itself inside `src/`, does not trip its own guard if the
 /// scan is ever widened.
@@ -375,10 +379,10 @@ let private sourceGuardTests =
                 Expect.isTrue (File.Exists path) (sprintf "%s exists" door)
                 let source = File.ReadAllText path
 
-                Expect.stringContains
-                    source
-                    "ScopeResolution.forRequest ctx"
-                    (sprintf "%s takes its scope from the resolver" door)
+                Expect.isTrue
+                    (source.Contains "ScopeResolution.forRequest ctx"
+                     || source.Contains "FactTool.define")
+                    (sprintf "%s takes its scope from the resolver, directly or through the shared tool shell" door)
 
                 Expect.stringContains
                     source
@@ -392,6 +396,15 @@ let private sourceGuardTests =
                         "%s carries pre-797 scope spellings:\n%s"
                         door
                         (found |> List.map (fun (_, why) -> "  - " + why) |> String.concat "\n")
+
+            let shell = File.ReadAllText(Path.Combine(src, toolShell))
+
+            Expect.stringContains
+                shell
+                "ScopeResolution.forRequest ctx"
+                "the shared tool shell takes its scope from the resolver"
+
+            Expect.isEmpty (offences shell) "and carries none of the old spellings"
         }
     ]
 
