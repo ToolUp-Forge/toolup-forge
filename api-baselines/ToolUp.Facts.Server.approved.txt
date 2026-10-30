@@ -506,14 +506,8 @@ ToolUp.Facts.DelegateFacts (class)
 ToolUp.Facts.DelegateFacts.resolve(ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateFact], System.String]
 ToolUp.Facts.DelegateMint (class)
 ToolUp.Facts.DelegateMint.RecordPeriod : ToolUp.Facts.TemporalExtent { get }
-ToolUp.Facts.DelegateMint.draftOf(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : ToolUp.Facts.FactDraft
-ToolUp.Facts.DelegateMint.draftUnder(ToolUp.Facts.FactTableRunProvenance, ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : ToolUp.Facts.FactDraft
-ToolUp.Facts.DelegateMint.factIdOf(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : System.String
-ToolUp.Facts.DelegateMint.factIdUnder(ToolUp.Facts.FactTableRunProvenance, ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : System.String
 ToolUp.Facts.DelegateMint.reconstruct(ToolUp.Facts.FactDraft, System.DateTime) : ToolUp.Facts.Fact
 ToolUp.Facts.DelegateMint.recordDraft(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun) : ToolUp.Facts.FactDraft
-ToolUp.Facts.DelegateMint.removedDraft(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.Fact) : ToolUp.Facts.FactDraft
-ToolUp.Facts.DelegateMint.removedDraftUnder(ToolUp.Facts.FactTableRunProvenance, ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.Fact) : ToolUp.Facts.FactDraft
 ToolUp.Facts.DelegateMint.triggerRef(System.String, System.String) : System.String
 ToolUp.Facts.DelegateTableCommit (class)
 ToolUp.Facts.DelegateTableCommit..ctor(ToolUp.Facts.DelegateRun, ToolUp.Platform.Grounding.FactTableCommit)

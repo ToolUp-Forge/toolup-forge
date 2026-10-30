@@ -1,8 +1,8 @@
 # The write of a fact is one plan, executed by every store
 
 **Ships in:** ToolUp.Facts.Core, ToolUp.Facts.Server and ToolUp.FactStores.Postgres 0.38.0, the next minor after
-the tagged 0.37.0. Breaking-class at the BINARY level only: the types a write is described in moved assembly.
-Source that opens `ToolUp.Facts` recompiles unchanged, and nothing persisted changes shape.
+the tagged 0.37.0. Breaking-class: the types a write is described in moved assembly (source that opens `ToolUp.Facts`
+recompiles unchanged), and six public `DelegateMint` constructors are removed. Nothing persisted changes shape.
 
 **Affected:** a consumer that compiled against `ToolUp.Facts.Server` and is loaded against the new packages without
 recompiling (rebuild it), and a consumer implementing `IFactStore` itself (none is known beyond the Postgres
@@ -23,7 +23,17 @@ companion), which can now execute the shared plan instead of restating the write
 3. **Added:** `FactWrite`, `WritePlan`, `WriteRequest`, `WriteShape`, `AddressedDraft`, `IndexDelta`,
    `FactStoreError`, `FactAuditEvent`, `FactCompetition` (Facts.Core); `FactAudit.write` / `FactAudit.payload`
    and `BlobFactStore.SurfaceFaults` (Facts.Server).
-4. **Behaviour that changes:**
+4. **Removed: six public `DelegateMint` constructors.** A delegate now mints every draft through one internal
+   `DelegateMint.draft`, for a row of its run or for the absence that retires a quoted fact. Nothing outside the
+   delegated store called them, and two (`factIdOf`, `factIdUnder`) had no caller at all.
+
+   | Removed | Use |
+   |---|---|
+   | `DelegateMint.draftOf` / `draftUnder` / `removedDraft` / `removedDraftUnder` | nothing: the delegated store mints its own drafts; a consumer that needs a row's fact asserts a `FactDraft` it builds |
+   | `DelegateMint.factIdOf` / `factIdUnder` | `(FactWrite.address draft).FactId` |
+
+   `DelegateMint.RecordPeriod`, `triggerRef`, `recordDraft` and `reconstruct` stay.
+5. **Behaviour that changes:**
    - A blob store's failed surface-maintenance step after a write is counted on `BlobFactStore.SurfaceFaults`
      and logged (warning) through the store's logger. It still never fails the write.
    - A delegated point read whose retirement of a removed row fails now fails the read (a source-unavailable
