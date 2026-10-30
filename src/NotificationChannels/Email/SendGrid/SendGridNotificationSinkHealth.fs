@@ -1,6 +1,7 @@
 module ToolUp.Platform.NotificationChannels.Email.SendGridHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -12,7 +13,7 @@ open ToolUp.Platform.Secrets
 // poll, only the configuration-presence check.
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKey = "SENDGRID_API_KEY"
