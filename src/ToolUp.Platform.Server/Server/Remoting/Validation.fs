@@ -465,33 +465,90 @@ module internal Validation =
                     | Some nested -> recordHasValidations visited nested
                     | None -> false))
 
+    /// Build an `IFieldValidator` by type (parameterless ctor), or say why it
+    /// cannot be built.
+    let private instantiateValidator (validatorType: Type) : Result<IFieldValidator, string> =
+        try
+            match Activator.CreateInstance validatorType with
+            | :? IFieldValidator as v -> Ok v
+            | _ -> Error "it does not implement IFieldValidator"
+        with ex ->
+            Error(ex.GetBaseException().Message)
+
+    /// Every `[<Custom>]` declaration reachable from `recordType` whose
+    /// validator cannot be built, as (field path, validator type, reason).
+    /// `visited` guards against cyclic types.
+    let rec private unbuildableValidators
+        (visited: HashSet<Type>)
+        (prefix: string)
+        (recordType: Type)
+        : (string * Type * string) list =
+        if
+            not (FSharpType.IsRecord(recordType, reflectionFlags))
+            || not (visited.Add recordType)
+        then
+            []
+        else
+            [
+                for pi in FSharpType.GetRecordFields(recordType, reflectionFlags) do
+                    let path = if prefix = "" then pi.Name else prefix + "." + pi.Name
+
+                    for a in pi.GetCustomAttributes(true) do
+                        match tryNormalise a with
+                        | Some(:? CustomAttribute as c) ->
+                            match instantiateValidator c.ValidatorType with
+                            | Ok _ -> ()
+                            | Error reason -> yield path, c.ValidatorType, reason
+                        | _ -> ()
+
+                    match nestedRecordType pi.PropertyType with
+                    | Some nested -> yield! unbuildableValidators visited path nested
+                    | None -> ()
+            ]
+
+    /// The one rendering of a validator the engine cannot build. A declared
+    /// validator that never runs is a guard failing open, so the table build
+    /// refuses it rather than skipping it per request.
+    let private refuseUnbuildableValidators (apiType: Type) (inputs: (string * Type) list) =
+        let refusals = [
+            for methodName, inputType in inputs do
+                for path, validatorType, reason in unbuildableValidators (HashSet<Type>()) "" inputType do
+                    sprintf
+                        "%s %s: [<Custom>] validator %s cannot be built (%s)"
+                        methodName
+                        path
+                        validatorType.FullName
+                        reason
+        ]
+
+        if not (List.isEmpty refusals) then
+            invalidOp (
+                sprintf
+                    "ToolUp.Remoting refused to start: API record %s declares validators that cannot run: %s"
+                    apiType.Name
+                    (String.concat "; " refusals)
+            )
+
     /// Cache per-method: input type ONLY when the method's input record
     /// (or a record nested within it) carries at least one validation
     /// attribute. Methods with non-record inputs (or records without
     /// validators anywhere in the tree) are absent from the map, so
-    /// per-request lookup is a fast `Map.tryFind` miss.
+    /// per-request lookup is a fast `Map.tryFind` miss. Refuses, by name, a
+    /// `[<Custom>]` validator that cannot be built.
     let classify (apiType: Type) : Map<string, Type> =
         if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             Map.empty
         else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun apiField ->
-                match firstInputType apiField with
-                | Some inputT when recordHasValidations (HashSet<Type>()) inputT -> Some(apiField.Name, inputT)
-                | _ -> None)
-            |> Map.ofArray
+            let inputs =
+                FSharpType.GetRecordFields(apiType, reflectionFlags)
+                |> Array.choose (fun apiField ->
+                    match firstInputType apiField with
+                    | Some inputT when recordHasValidations (HashSet<Type>()) inputT -> Some(apiField.Name, inputT)
+                    | _ -> None)
+                |> List.ofArray
 
-    /// Instantiate an `IFieldValidator` by type (parameterless ctor).
-    /// Returns `None` if the type doesn't implement the interface or
-    /// can't be constructed — a misconfigured custom validator must not
-    /// crash the request path (it just doesn't run).
-    let private instantiateValidator (validatorType: Type) : IFieldValidator option =
-        try
-            match Activator.CreateInstance validatorType with
-            | :? IFieldValidator as v -> Some v
-            | _ -> None
-        with _ ->
-            None
+            refuseUnbuildableValidators apiType inputs
+            Map.ofList inputs
 
     /// Unwrap an F# `option` value reflectively — `Some inner` → `Some
     /// inner`, `None` → `None`.
@@ -590,7 +647,7 @@ module internal Validation =
                         match tryNormalise a with
                         | Some(:? CustomAttribute as c) ->
                             match instantiateValidator c.ValidatorType with
-                            | Some v ->
+                            | Ok v ->
                                 match v.Validate(value, context) with
                                 | Some message ->
                                     violations.Add {
@@ -599,7 +656,14 @@ module internal Validation =
                                         Message = resolveMessage messages "Custom" path Map.empty message
                                     }
                                 | None -> ()
-                            | None -> ()
+                            | Error reason ->
+                                invalidOp (
+                                    sprintf
+                                        "[<Custom>] validator %s on %s cannot be built (%s)"
+                                        c.ValidatorType.FullName
+                                        path
+                                        reason
+                                )
                         | Some attr ->
                             match attr.Validate value with
                             | Some message ->

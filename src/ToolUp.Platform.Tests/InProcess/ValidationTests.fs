@@ -79,9 +79,51 @@ type private MirrorInput = {
 let private paths (violations: FieldViolation list) =
     violations |> List.map _.Path |> List.sort
 
+/// A declared validator the engine cannot build: it has no parameterless
+/// constructor.
+type private NoDefaultConstructorValidator(minimum: int) =
+    interface IFieldValidator with
+        member _.Validate(_, _) =
+            Some(sprintf "always refuses (%d)" minimum)
+
+type private UnbuildableLeaf = {
+    [<Custom(typeof<NoDefaultConstructorValidator>)>]
+    Code: string
+}
+
+type private UnbuildableInput = { Leaf: UnbuildableLeaf }
+
+type private UnbuildableApi = {
+    Send: UnbuildableInput -> Async<unit>
+}
+
+/// Declares a validator type that is not an `IFieldValidator` at all.
+type private NotAValidatorInput = {
+    [<Custom(typeof<string>)>]
+    Code: string
+}
+
+type private NotAValidatorApi = {
+    Send: NotAValidatorInput -> Async<unit>
+}
+
 [<Tests>]
 let tests =
     testList "Phase 69e — typed validation" [
+
+        test "a [<Custom>] validator that cannot be constructed refuses the table build by name" {
+            Expect.throwsC (fun () -> Validation.classify typeof<UnbuildableApi> |> ignore) (fun ex ->
+                Expect.stringContains ex.Message "refused to start" "it is a compose-time refusal"
+                Expect.stringContains ex.Message "Send" "it names the method"
+                Expect.stringContains ex.Message "Leaf.Code" "it names the field path"
+                Expect.stringContains ex.Message "NoDefaultConstructorValidator" "it names the validator")
+        }
+
+        test "a [<Custom>] type that is not an IFieldValidator refuses the table build by name" {
+            Expect.throwsC (fun () -> Validation.classify typeof<NotAValidatorApi> |> ignore) (fun ex ->
+                Expect.stringContains ex.Message "Code" "it names the field"
+                Expect.stringContains ex.Message "String" "it names the type")
+        }
 
         test "a single bad field reports one violation with its path and code" {
             let input = {
