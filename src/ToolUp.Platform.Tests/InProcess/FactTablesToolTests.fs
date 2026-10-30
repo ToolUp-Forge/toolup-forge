@@ -15,6 +15,8 @@ module ToolUp.Platform.Tests.InProcess.FactTablesToolTests
 //   3. Disclosure: the sample is judged at `FactToolResult`; a table whose
 //      sampled facts are all withheld is its id and policy only; a partly
 //      withheld table is described, naming the policy. No value appears.
+//   3b. A level with at most the declared cap of members lists their names;
+//      above the cap, or off, none; a withheld member is counted, never named.
 //   4. Composition: one knob with the other fact tools, and the narrative's
 //      tool set is the same list.
 //   5. A scripted turn asked for a metric at a level no table holds answers
@@ -242,10 +244,12 @@ let private listingTests =
                     {
                         Level = "region"
                         Description = Some "A group of neighbouring sites."
+                        Members = None
                     }
                     {
                         Level = "site"
                         Description = Some "A single trading outlet."
+                        Members = None
                     }
                 ]
                 "root to the table's level, in declaration order, each described"
@@ -341,7 +345,17 @@ let private listingTests =
 
             Expect.isNone s.Description "no table description"
             Expect.isNone s.HierarchyName "no registered hierarchy"
-            Expect.equal s.Path [ { Level = "site"; Description = None } ] "the level alone"
+
+            Expect.equal
+                s.Path
+                [
+                    {
+                        Level = "site"
+                        Description = None
+                        Members = None
+                    }
+                ]
+                "the level alone"
 
             Expect.equal
                 (s.Columns |> List.map (fun c -> c.Metric, c.Name, c.Context))
@@ -450,6 +464,163 @@ let private disclosureTests =
 
                 for figure in figures do
                     Expect.isFalse (text.Contains figure) (sprintf "%s: '%s' is in no result" args figure)
+        }
+    ]
+
+// ─── 3b. Members of a small level ────────────────────────────────────
+
+let private levelMembers (s: FactTableShown) : FactLevelMembers option = (List.last s.Path).Members
+
+let private projectCapped (cap: int) (w: World) (table: string) : FactTableShown =
+    match
+        FactTablesTool.projectWith cap w.Deps w.Scope "u" (Some table)
+        |> Async.RunSynchronously
+    with
+    | Ok views -> views |> List.exactlyOne |> shownOf
+    | Error e -> failtestf "expected a projection, got %s" e
+
+let private answerWith (options: FactTablesOptions) (w: World) (args: string) : JsonElement =
+    (JsonDocument.Parse(
+        FactTablesTool.executeWithOptions options w.Deps w.Scope "u" args
+        |> Async.RunSynchronously
+    ))
+        .RootElement.Clone()
+
+let private lastLevel (row: JsonElement) : JsonElement =
+    row.GetProperty("path").EnumerateArray() |> Seq.last
+
+let private strings (el: JsonElement) : string list =
+    el.EnumerateArray() |> Seq.map _.GetString() |> List.ofSeq
+
+let private memberTests =
+    testList "the members of a small level" [
+        test "a two-site table lists both site names on its level, and no other level" {
+            let w = world ()
+            let s = projectCapped FactTablesOptions.DefaultMemberCap w trade.Id
+
+            Expect.equal
+                (levelMembers s)
+                (Some(
+                    FactLevelMembers.Listed {
+                        Names = [ "s1"; "s2" ]
+                        Unlisted = 0
+                        RestrictedUnderPolicies = []
+                    }
+                ))
+                "the site names, ordinal-sorted, none unlisted"
+
+            Expect.isNone (List.head s.Path).Members "the region level above it names nothing"
+        }
+
+        test "the tool lists the names under the default cap" {
+            let w = world ()
+            let row = tableRow (answerJson w "{}") trade.Id
+            let members = (lastLevel row).GetProperty("members")
+
+            Expect.isTrue (members.GetProperty("listed").GetBoolean()) "listed"
+            Expect.equal (strings (members.GetProperty "names")) [ "s1"; "s2" ] "the site names"
+            Expect.equal (members.GetProperty("count").GetInt32()) 2 "two members"
+            Expect.equal (members.GetProperty("unlisted").GetInt32()) 0 "none withheld"
+
+            Expect.isFalse
+                ((row.GetProperty("path").EnumerateArray() |> Seq.head).TryGetProperty("members")
+                 |> fst)
+                "the region level carries none"
+        }
+
+        test "the default cap is twenty, and the plain projection names no member" {
+            Expect.equal FactTablesOptions.defaults.MemberCap 20 "twenty"
+            Expect.equal FactTablesOptions.membersOff.MemberCap 0 "off"
+
+            let w = world ()
+            let s = project w (Some trade.Id) |> List.exactlyOne |> shownOf
+            Expect.isNone (levelMembers s) "project asks for no members"
+        }
+
+        test "the cap is honoured: at the cap the names are listed, above it only the count" {
+            let w = world ()
+
+            Expect.isSome
+                (match levelMembers (projectCapped 2 w trade.Id) with
+                 | Some(FactLevelMembers.Listed l) -> Some l
+                 | _ -> None)
+                "two members under a cap of two are listed"
+
+            match levelMembers (projectCapped 1 w trade.Id) with
+            | Some(FactLevelMembers.CountOnly c) ->
+                Expect.equal
+                    c
+                    {
+                        Count = 2
+                        Cap = 1
+                        Reason = FactTablesTool.OverCapReason
+                    }
+                    "the count, the cap and why"
+            | other -> failtestf "expected a count only above the cap, got %A" other
+
+            let members =
+                (lastLevel (tableRow (answerWith { MemberCap = 1 } w "{}") trade.Id)).GetProperty("members")
+
+            Expect.isFalse (members.GetProperty("listed").GetBoolean()) "not listed"
+            Expect.equal (propertyNames members |> List.sort) [ "cap"; "count"; "listed"; "reason" ] "no names property"
+            Expect.isFalse ((string members).Contains "s1") "no member name crosses"
+        }
+
+        test "a cap of zero (or less) lists none" {
+            let w = world ()
+
+            for cap in [ 0; -3 ] do
+                Expect.isNone (levelMembers (projectCapped cap w trade.Id)) (sprintf "cap %d: no members" cap)
+
+                let row = tableRow (answerWith { MemberCap = cap } w "{}") trade.Id
+
+                for level in row.GetProperty("path").EnumerateArray() do
+                    Expect.isFalse
+                        (level.TryGetProperty("members") |> fst)
+                        (sprintf "cap %d: no level carries members" cap)
+        }
+
+        test "a table with no committed row names no member" {
+            let w = world ()
+
+            let elsewhere = {
+                w with
+                    Scope =
+                        ScopeResolution.ofStorageScope {
+                            ScopeId = "team-empty-" + Guid.NewGuid().ToString "N"
+                            Container = "container-empty"
+                            Persist = true
+                        }
+            }
+
+            Expect.isNone (levelMembers (projectCapped 20 elsewhere trade.Id)) "nothing to name"
+        }
+
+        test "a partly visible level lists what is visible and counts the rest" {
+            let w = world ()
+
+            w.Gate.Deny [
+                for offset in 0..2 do
+                    revenueFactId w "s2" offset
+            ]
+
+            match levelMembers (projectCapped 20 w trade.Id) with
+            | Some(FactLevelMembers.Listed l) ->
+                Expect.equal l.Names [ "s1" ] "only the visible site is named"
+                Expect.equal l.Unlisted 1 "the other is counted"
+                Expect.equal l.RestrictedUnderPolicies [ "trade-figures" ] "and the policy named"
+            | other -> failtestf "expected a listed level, got %A" other
+
+            let text =
+                answerWith FactTablesOptions.defaults w """{"table":"daily-trade"}""" |> string
+
+            Expect.isFalse (text.Contains "\"s2\"") "the withheld site's name crosses nowhere"
+        }
+
+        test "the member read is judged at the tool-result door" {
+            let w = world ()
+            projectCapped 20 w trade.Id |> ignore
+            Expect.all w.Gate.Surfaces (fun s -> s = FactToolResult) "at FactToolResult, never FactBrowse"
         }
     ]
 
@@ -714,6 +885,7 @@ let tests =
         listingTests
         byIdTests
         disclosureTests
+        memberTests
         compositionTests
         turnTests
     ]
