@@ -1216,9 +1216,7 @@ module FactBrowseHandler =
     // ── HttpContext adapter ──────────────────────────────────────
 
     let private serviceOf<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
-        match ctx.RequestServices.GetService(typeof<'T>) with
-        | :? 'T as service -> Some service
-        | _ -> None
+        ServiceComposition.tryService<'T> ctx.RequestServices
 
     let private userIdOf (ctx: HttpContext) : string =
         match ctx.Items.TryGetValue "ToolUp.UserId" with
@@ -1339,31 +1337,19 @@ module FactBrowseHandler =
         // collection, never from the built provider — by then
         // `IFactTableWriter` resolves to this decorator and the factory
         // would recurse (the coverage-narrative decoration's shape).
-        let innerDescriptor =
-            services
-            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<IFactTableWriter>)
-            |> Seq.tryLast
-
-        let inner: (IServiceProvider -> IFactTableWriter) option =
-            match innerDescriptor with
-            | Some descriptor when not (isNull (box descriptor.ImplementationFactory)) ->
-                let factory = descriptor.ImplementationFactory
-                Some(fun sp -> factory.Invoke sp :?> IFactTableWriter)
-            | Some descriptor when (descriptor.ImplementationInstance :? IFactTableWriter) ->
-                let instance = descriptor.ImplementationInstance :?> IFactTableWriter
-                Some(fun _ -> instance)
-            | _ -> None
-
-        match inner with
+        match
+            ServiceComposition.captureDescriptor<IFactTableWriter> services
+            |> Option.map _.Resolve
+        with
         | None -> services
         | Some resolveInner ->
             services.AddSingleton<IFactTableWriter>(
                 Func<IServiceProvider, IFactTableWriter>(fun sp ->
                     let writer = resolveInner sp
 
-                    match sp.GetService(typeof<INotificationChannel>) with
-                    | :? INotificationChannel as channel -> notifyingWriter channel writer
-                    | _ -> writer)
+                    match ServiceComposition.tryService<INotificationChannel> sp with
+                    | Some channel -> notifyingWriter channel writer
+                    | None -> writer)
             )
 
     /// The mounted route handler.

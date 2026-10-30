@@ -918,14 +918,11 @@ let refusalTests =
                     Some ex
 
             match raised with
-            | None -> failtest "composing without the gate must refuse"
-            | Some ex ->
-                Expect.notEqual
-                    (ex.GetType())
-                    typeof<Exception>
-                    "a refusal is typed data a caller can match, not a raw failwith string"
-
-                Expect.stringContains ex.Message "IFactDisclosureGate" "and it names the missing dependency"
+            | Some(CompositionRefused(CompositionRefusal.MissingDependency(builder, service, _)) as ex) ->
+                Expect.equal builder "FactsCompose.withTeamOutputVisibility" "the refusal names the builder"
+                Expect.equal service "IFactDisclosureGate" "and the missing dependency"
+                Expect.stringContains ex.Message "FactsCompose.withFactStore" "and the step that registers it"
+            | other -> failtestf "a refusal is typed data a caller can match, not a raw failwith string; got %A" other
         }
     ]
 
