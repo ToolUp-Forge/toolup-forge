@@ -1,4 +1,4 @@
-Codemod: 28 site(s) in 8 file(s) need human review (not rewritten):
+Codemod: 32 site(s) in 9 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -33,6 +33,15 @@ Codemod: 28 site(s) in 8 file(s) need human review (not rewritten):
   src/Server/Guarded.fs
     L12 [815-remoting-permission-guarded-api] let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory
       -> Phase 815: `RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md
+  src/Server/Jobs.fs
+    L8 [1066-schedule-call] match! scheduler.Schedule registration with
+      -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once
+    L10 [1066-trigger-once-call] let! _ = scheduler.TriggerOnce(registration.ScopeId, jobId, "nightly")
+      -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
+    L18 [1066-scheduler-implementer] member _.TriggerOnce(scopeId, jobId, byUserId) = async {
+      -> Phase 1066: an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy
+    L23 [1066-trigger-once-call] | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
+      -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
   src/Server/Program.fs
     L7 [73-remoting-unknown-namespace] open Fable.Remoting.AspNetCore
       -> Phase 73: a `Fable.Remoting` namespace the ToolUp fork does not carry (only Server / Client / Json / Giraffe / MsgPack moved) — check the `ToolUp.Remoting.*` surface for the equivalent, or keep the upstream package
@@ -64,6 +73,7 @@ Codemod: 28 site(s) in 8 file(s) need human review (not rewritten):
     L41 [73-fable-json-converter] let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
       -> Phase 73: the Newtonsoft-backed `FableJsonConverter` was retired in the STJ migration — use `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()` and `System.Text.Json.JsonSerializer` (see the Phase 73 doc's Remoting note)
   Read:
+    Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md

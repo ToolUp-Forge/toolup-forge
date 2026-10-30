@@ -1,0 +1,24 @@
+module MyApp.Server.Jobs
+
+open ToolUp.Platform
+
+/// Schedules the nightly rollup and fires it once now.
+let scheduleRollup (scheduler: IJobScheduler) (registration: JobRegistration) : Async<Result<ScheduleOutcome, ScheduleError>> =
+    async {
+        match! scheduler.Schedule registration with
+        | Ok jobId ->
+            let! _ = scheduler.TriggerOnce(registration.ScopeId, jobId, "nightly")
+            return Ok jobId
+        | Error e -> return Error e
+    }
+
+/// A scheduler decorator that re-typed the platform's trigger policy.
+type AuditingScheduler(inner: IJobScheduler) =
+    interface IJobScheduler with
+        member _.TriggerOnce(scopeId, jobId, byUserId) = async {
+            match! inner.Get(scopeId, jobId) with
+            | None -> return Error(TriggerError.JobNotFound(scopeId, jobId))
+            | Some job when job.Status = Cancelled -> return Error TriggerError.JobCancelled
+            | Some job when job.Status = Disabled -> return Error TriggerError.JobDisabled
+            | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
+        }

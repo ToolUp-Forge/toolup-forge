@@ -148,6 +148,20 @@
 -    { new IDataSource with
 +    { new IDataSource with
 +        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :> IEmitsNativePayload) }
+--- a/src/Server/Jobs.fs
++++ b/src/Server/Jobs.fs
+@@ L6 [1066-schedule-result-type]
+-let scheduleRollup (scheduler: IJobScheduler) (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> =
++let scheduleRollup (scheduler: IJobScheduler) (registration: JobRegistration) : Async<Result<ScheduleOutcome, ScheduleError>> =
+@@ L20 [1066-trigger-error-not-found]
+-            | None -> return Error $"Job %A{jobId} not found in scope %s{scopeId}"
++            | None -> return Error(TriggerError.JobNotFound(scopeId, jobId))
+@@ L21 [1066-trigger-error-cancelled]
+-            | Some job when job.Status = Cancelled -> return Error "Cannot trigger a cancelled job"
++            | Some job when job.Status = Cancelled -> return Error TriggerError.JobCancelled
+@@ L22 [1066-trigger-error-disabled]
+-            | Some job when job.Status = Disabled -> return Error "Cannot trigger a disabled job; enable it first"
++            | Some job when job.Status = Disabled -> return Error TriggerError.JobDisabled
 --- a/src/Server/Program.fs
 +++ b/src/Server/Program.fs
 @@ L5 [73-remoting-namespace]
@@ -199,4 +213,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 60 rewrite(s) across 9 file(s) pending.
+Codemod: 64 rewrite(s) across 10 file(s) pending.
