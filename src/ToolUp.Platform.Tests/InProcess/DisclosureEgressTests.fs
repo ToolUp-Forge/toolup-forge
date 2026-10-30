@@ -1502,6 +1502,71 @@ let renderToolTests =
         }
     ]
 
+// ── Phase 1145 — the tool-result door for a pipeline result ───────
+//
+// `evaluate_pipeline` reads its slice at the `FactToolResult` surface (the
+// pipeline tool pack pins the surface); here, what crosses it. A withheld cell
+// is a count in the withheld report, and its value is in neither the result
+// table nor the summary nor the request the record persists; a principal the
+// policy denies every cell gets a refusal, never an empty table.
+
+let pipelineToolTests =
+    testList "Phase 1145 the tool-result door for a pipeline result" [
+        test "a withheld value appears in neither the result table nor the summary, and is counted" {
+            let w = FactRenderToolTests.RenderFixtures.world ()
+            w.Gate.Deny [ FactRenderToolTests.RenderFixtures.revenueFactId w "s2" 1 ]
+
+            for pipeline in
+                [
+                    []
+                    PipelineToolTests.PipelineFixtures.perSubject
+                    PipelineToolTests.PipelineFixtures.ranked
+                ] do
+                let result =
+                    PipelineToolTests.PipelineFixtures.answered
+                        w
+                        (PipelineToolTests.PipelineFixtures.revenueArgs pipeline)
+
+                Expect.isNonEmpty result.Withheld "the withheld cell withholds what reads it"
+
+                for column in result.Withheld do
+                    Expect.equal
+                        column.Withheld
+                        [
+                            {
+                                PipelineWithheldCount.PolicyRef = "trade-figures"
+                                Count = 1
+                            }
+                        ]
+                        (sprintf "'%s' counts the one withheld cell" column.Column)
+
+                for text in [ result.Table; PipelineTool.summary result; result.Request.Pipeline ] do
+                    Expect.isFalse
+                        (text.Contains FactRenderToolTests.RenderFixtures.DistinctiveDigits)
+                        "the withheld value appears nowhere the tool answers"
+        }
+
+        test "a principal the policy denies every cell gets a refusal naming the count, not an empty table" {
+            let w = FactRenderToolTests.RenderFixtures.world ()
+
+            match
+                PipelineToolTests.PipelineFixtures.answer
+                    w
+                    (PipelineToolTests.PipelineFixtures.argsFor
+                        FactRenderToolTests.RenderFixtures.margins.Id
+                        "margin"
+                        3
+                        PipelineToolTests.PipelineFixtures.perSubject)
+            with
+            | Ok result -> failtestf "expected a refusal, got %d row(s)" result.Rows
+            | Error refusal ->
+                Expect.equal
+                    (PipelineTool.refusalText refusal)
+                    "evaluate_pipeline refused the request: no cell of the slice carries a value you may be shown: 6 cell(s) read, 6 withheld under trade-figures."
+                    "the refusal counts what was withheld"
+        }
+    ]
+
 let tests =
     testList "Phase 525 disclosure egress" [
         predicateTests
@@ -1513,4 +1578,5 @@ let tests =
         derivedRetrievalTests
         heldFormTests
         renderToolTests
+        pipelineToolTests
     ]

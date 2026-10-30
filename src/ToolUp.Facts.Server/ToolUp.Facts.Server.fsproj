@@ -132,6 +132,10 @@
         <!-- Phase 895 — the fact browse read surface (IFactBrowseApi) and its
              per-run notification decoration of the table writer. -->
         <Compile Include="Server\FactBrowseHandler.fs" />
+        <!-- Phase 1145 — evaluate_pipeline: a Fuaran.Compute pipeline the
+             model writes, evaluated over the fact browse's gated view slice.
+             After the browse handler, whose slice read it calls. -->
+        <Compile Include="Server\PipelineTool.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
          FSharp.Core is implicit via the .NET SDK. -->
