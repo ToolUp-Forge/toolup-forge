@@ -28,7 +28,7 @@ open ToolUp.Platform.NotificationChannels.WhatsApp.Twilio
 // of rotation for a vendor outage it cannot fix.
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKey = "TWILIO_AUTH_TOKEN"

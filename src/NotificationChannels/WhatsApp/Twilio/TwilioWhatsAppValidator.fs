@@ -6,6 +6,7 @@ module ToolUp.Platform.NotificationChannels.WhatsApp.TwilioValidator
 
 open System
 open System.Text.RegularExpressions
+open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.NotificationChannels.WhatsApp.Twilio
@@ -20,7 +21,7 @@ open ToolUp.Platform.NotificationChannels.WhatsApp.Twilio
 // preflight's — a vendor outage at deploy time must not abort a boot.
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKey = "TWILIO_AUTH_TOKEN"
