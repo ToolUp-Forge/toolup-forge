@@ -59,13 +59,30 @@ let private detail (tableId: string) : FactTableDetail = {
             Metric = "elasticity"
             Shape = "Scalar"
             Disclosure = "Surfaceable"
+            Description = None
         }
     ]
     ProducingOperation = "price-model"
     SchemaVersion = 1
     RefreshCadenceSeconds = 86_400L
     Requirement = "Optional"
+    Description = None
 }
+
+/// The same table, described: a table description and one column hint.
+let private describedDetail (tableId: string) : FactTableDetail =
+    let plain = detail tableId
+
+    {
+        plain with
+            Description = Some "Monthly price response by SKU, from the price-test extract."
+            Columns =
+                plain.Columns
+                |> List.map (fun c -> {
+                    c with
+                        Description = Some "Own-price elasticity of unit volume."
+                })
+    }
 
 let private noRuns (tableId: string) : FactRunPage = {
     TableId = tableId
@@ -226,6 +243,42 @@ let private pageTests =
             let markup = ViewMount.mount (FactBrowseView.TablePage model noop)
             Expect.isTrue (markup.Contains "not been refreshed yet") "the run history's empty state"
             Expect.isTrue (markup.Contains "elasticity") "the declared columns render"
+
+        testCase "the table page shows a declared description under the title, and each column's as its hint"
+        <| fun _ ->
+            let model = {
+                empty with
+                    SelectedTable = Some "prices"
+                    Detail = Loaded(describedDetail "prices")
+                    Runs = Loaded(noRuns "prices")
+                    Rows = NotAsked
+            }
+
+            let markup = ViewMount.mount (FactBrowseView.TablePage model noop)
+
+            Expect.isTrue
+                (markup.Contains "Monthly price response by SKU, from the price-test extract.")
+                "the table's description renders"
+
+            Expect.isTrue (markup.Contains "Own-price elasticity of unit volume.") "the column's description renders"
+
+            Expect.isTrue
+                (markup.Contains "title=\"Own-price elasticity of unit volume.\"")
+                "the column's description is its hint"
+
+        testCase "an undescribed table renders no description and no hint"
+        <| fun _ ->
+            let model = {
+                empty with
+                    SelectedTable = Some "prices"
+                    Detail = Loaded(detail "prices")
+                    Runs = Loaded(noRuns "prices")
+                    Rows = NotAsked
+            }
+
+            let markup = ViewMount.mount (FactBrowseView.TablePage model noop)
+            Expect.isFalse (markup.Contains "Own-price elasticity") "no column hint"
+            Expect.isFalse (markup.Contains "price-test extract") "no table description"
 
         testCase "the table page with nothing chosen points at the tables page"
         <| fun _ ->

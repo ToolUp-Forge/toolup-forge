@@ -832,6 +832,40 @@ whitespace or a control character, or whose id contains `@`, is refused at open 
 `FactTableRunOptionsRefused`. The laws are in `IFactTableWriterContract.provenanceTests`, bound to
 every implementer. Migration: [`1040-fact-table-run-method.md`](../migrations/1040-fact-table-run-method.md).
 
+## What a declared table is for: its description
+
+A declaration says what a table holds: its level, columns, grain, cadence and disclosure. It does not say what the
+table is *for*. The module knows that, and `ServerModule.describeFactTables` lets it declare it beside the declaration:
+
+```fsharp skip=fragment
+ServerModule.create "trade"
+|> ServerModule.declareFactTables [ countryTable ]
+|> ServerModule.describeFactTables [
+    {
+        TableId = "trade.country"
+        Description = "Daily trade by market and country, from the order header extract, excluding cancelled orders."
+        Columns = [ "orders", "Orders placed, counted once per order header." ]
+    }
+]
+```
+
+- **Its own record, keyed by table id.** `FactTableDescription` is a separate record, not a field on
+  `FactTableDefinition`. So every existing full-literal declaration, including a generated `FactTables.fs`, compiles
+  and behaves exactly as before. A column left out of `Columns` is undescribed.
+- **Prose, never a figure.** The rule is the one `MetricDefinition.Context` carries. A number belongs in a fact,
+  where it is bitemporal, superseded and disclosure-classified. A description is read by anything that resolves the
+  registry, and the disclosure gate never sees it.
+- **Refused at compose, by name.** A description naming a table no module declares, or a column its table does not
+  carry, stops the composition. So does a table or a column described twice. The message names the module, the
+  table and the column (`ServerApp.factTableRegistry`, the registry `run` registers).
+- **One read path.** The composed `IFactTableRegistry` also implements the optional capability
+  `IDescribesFactTables`. `FactTableRegistry.tryDescription` probes for it, so a registry without it simply has no
+  descriptions. The browse's `GetTable` and the model's fact tools resolve the same registry
+  (`FactBrowseHandler.factBrowseDeps`). `FactTableDetail.Description` and each `FactTableColumnView.Description` carry
+  the text, and the table page shows it under the title, with each column's description as its hint.
+
+Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-descriptions.md).
+
 ## Disclosure at birth
 
 Every fact carries a `Disclosure` from its first assertion (plan D14).

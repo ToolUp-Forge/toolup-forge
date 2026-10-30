@@ -93,6 +93,9 @@ type FactTableColumnView = {
     /// The column's effective disclosure classification — the policy a
     /// row's value is judged against, never a value.
     Disclosure: string
+    /// What the column holds, as its table's description declares it.
+    /// `None` when the column is undescribed.
+    Description: string option
 }
 
 /// One table's declaration, beside its listing row.
@@ -109,6 +112,9 @@ type FactTableDetail = {
     RefreshCadenceSeconds: int64
     /// `Required` or `Optional`.
     Requirement: string
+    /// What the table is for and how its rows are derived, as the declaring
+    /// composition describes it. `None` when the table is undescribed.
+    Description: string option
 }
 
 /// A run's change counts against the run before it. Counts are

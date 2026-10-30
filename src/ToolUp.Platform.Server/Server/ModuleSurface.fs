@@ -310,6 +310,9 @@ module ModuleSurface =
             // output it states it produces, on the `Metrics` / `Subjects`
             // precedent.
             c (nameof m.FactTables) ProvidesFacet
+            // What the module's declared tables are for — declared prose
+            // beside the declarations, implying no substrate.
+            c (nameof m.FactTableDescriptions) ProvidesFacet
             // Phase 1042 — the work the module runs once a delivery has
             // completed. `Provides` on the `JobHandlers` precedent: code the
             // module contributes for the platform to call.
