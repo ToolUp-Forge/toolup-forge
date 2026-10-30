@@ -86,7 +86,16 @@ CREATE INDEX IF NOT EXISTS toolup_facts_population_idx ON toolup_facts (scope, m
 DROP INDEX IF EXISTS toolup_facts_pop_idx;
 CREATE INDEX IF NOT EXISTS toolup_facts_succ_idx ON toolup_facts (scope, supersedes) WHERE supersedes IS NOT NULL;
 CREATE INDEX IF NOT EXISTS toolup_facts_txtime_idx ON toolup_facts (scope, as_of_ticks);
+CREATE TABLE IF NOT EXISTS toolup_facts_taint (scope text NOT NULL, fact_id text NOT NULL, node text NOT NULL, PRIMARY KEY (scope, fact_id));
 ```
+
+**The disclosure-taint index (Phase 1093).** `toolup_facts_taint` holds one row
+per stored fact, inserted in the fact's own transaction: what the disclosure
+gate's taint walk reads of it. The gate reads a scope's rows instead of every
+fact in the scope; the first read after an upgrade records a row for every
+stored fact that has none. A `VerifyOnly` deployment provisions the table out of
+band; until it does, the store reports it through `Trace` and the gate lists
+the scope per check, as before.
 
 **The population index (Phase 962).** `toolup_facts_population_idx` covers the
 population read: the current heads of one metric, keyed by the period's END so

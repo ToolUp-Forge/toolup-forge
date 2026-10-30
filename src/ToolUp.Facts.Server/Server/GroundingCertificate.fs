@@ -502,38 +502,7 @@ module GroundingCertificate =
                 let planCited = plans |> List.collect AnswerPlan.citedFactIds
                 let allCited = (citedFactIds @ planCited) |> List.distinct
                 let! baseChain = graph.GetChainForMessage(scopeId, messageId, allCited, depth)
-
-                let planNodes: ProvenanceNode list =
-                    plans
-                    |> List.map (fun plan -> {
-                        Id = plan.PlanId
-                        Kind = AnswerPlanNode
-                        Disclosure = None
-                        Label = sprintf "answer plan: %s" plan.Question
-                    })
-
-                let planEdges: ProvenanceEdge list =
-                    plans
-                    |> List.collect (fun plan ->
-                        {
-                            From = messageId
-                            To = plan.PlanId
-                            Kind = PlannedBy
-                        }
-                        :: (AnswerPlan.citedFactIds plan
-                            |> List.map (fun factId -> {
-                                From = plan.PlanId
-                                To = factId
-                                Kind = CitesFact
-                            })))
-
-                let chain = {
-                    baseChain with
-                        Nodes = planNodes @ baseChain.Nodes
-                        Edges = planEdges @ baseChain.Edges
-                }
-
-                return messageId, chain
+                return messageId, AnswerPlanProvenance.withPlans messageId plans baseChain
             | NarrativeCertificate(narrativeId, citedFactIds) ->
                 // The answer-side walk, re-rooted: the provenance graph roots
                 // `GetChainForMessage` at a message node, and the narrative is

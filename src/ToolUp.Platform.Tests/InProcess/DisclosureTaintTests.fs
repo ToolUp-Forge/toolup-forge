@@ -933,7 +933,6 @@ let private inertEqualityTests =
                     let store = BlobFactStore.create counting factEvents
                     let scope = "team-" + Guid.NewGuid().ToString("N")
                     let ids = equalityCorpus store scope
-                    let factCount = List.length ids - 1
 
                     // A budget on the routine the corpus's aggregates name (675):
                     // with nothing tainted there is no crossing, so nothing charges.
@@ -979,15 +978,489 @@ let private inertEqualityTests =
 
                     Expect.isGreaterThanOrEqual
                         walkedReads
-                        (2 * List.length everySurface * factCount)
-                        "the walked gate loaded the scope at every check"
+                        (baseReads + 2 * List.length everySurface)
+                        "the walked gate read the scope's taint index at every check"
 
                     Expect.equal skippedReads baseReads "the skip reads what the taint-free gate reads: no graph"
                 }
     ]
 
+// ── The disclosure-taint index (pure) ─────────────────────────────
+
+/// A corpus exercising every edge the walk follows: a tainted producer, a
+/// derived fact, a declassifier and a fact derived after it, a Plain hold,
+/// an Internal fact, a human assertion, and a producer superseded in its
+/// lineage (still a node).
+let private indexCorpus: Fact list = [
+    mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+    mkFact "D" "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
+    mkFact "A" "index" (Computed("aggregate-over-k", "1", "p")) (Series "dov-agg") Surfaceable [ "dov-raw" ]
+    mkFact "E" "export" (Computed("passthrough", "1", "p")) (Scalar 1m) Surfaceable [ "dov-agg" ]
+    mkFact "M" "mixed" (Computed("join", "1", "p")) (Scalar 2m) Surfaceable [ "dov-agg"; "dov-raw" ]
+    mkFact "P" "plain" (Computed("load", "1", "p")) (Series "dov-plain") (Restricted "plain-hold") []
+    mkFact "Q" "fromplain" (Computed("passthrough", "1", "p")) (Scalar 3m) Surfaceable [ "dov-plain" ]
+    mkFact "I" "internal" (HumanAsserted "cfo") (Scalar 4m) Disclosure.Internal []
+    mkFact "R2" "raw" (Computed("load", "2", "p")) (Series "dov-raw-2") (Restricted "licensed") []
+]
+
+let private indexLawTests =
+    testList "the disclosure-taint index" [
+
+        test "the walk over the index is the walk over the facts, for every fact" {
+            let graph = DisclosureTaint.buildGraph indexCorpus
+            let index = DisclosureTaintIndex.ofFacts indexCorpus
+            let upstream = DisclosureTaintIndex.upstream index
+
+            for f in indexCorpus do
+                Expect.equal
+                    (DisclosureTaint.analyzeIndex taintCfg index upstream f.FactId)
+                    (DisclosureTaint.analyze taintCfg graph f.FactId)
+                    (sprintf "the outcome for %s" f.FactId)
+
+            // Not vacuous: the corpus taints, clears and records a crossing.
+            let outcomes =
+                indexCorpus
+                |> List.map (fun f -> DisclosureTaint.analyzeIndex taintCfg index upstream f.FactId)
+
+            Expect.exists outcomes (fun o -> o.InheritedPolicyRef = Some "licensed") "something inherits"
+            Expect.exists outcomes (fun o -> not (List.isEmpty o.Crossings)) "something is declassified"
+        }
+
+        test "apply is idempotent, commutative and associative, so the order writes land in cannot matter" {
+            let deltas =
+                indexCorpus |> List.map (fun f -> DisclosureTaintIndex.deltaOfFacts [ f ])
+
+            let applyAll ds =
+                ds
+                |> List.fold (fun index d -> DisclosureTaintIndex.apply d index) DisclosureTaintIndex.empty
+
+            let forward = applyAll deltas
+            Expect.equal forward (DisclosureTaintIndex.ofFacts indexCorpus) "one write per fact is the rebuild"
+            Expect.equal (applyAll (List.rev deltas)) forward "reversed order"
+            Expect.equal (applyAll (deltas @ deltas)) forward "every delta twice"
+
+            let a = applyAll (List.take 3 deltas)
+            let b = applyAll (deltas |> List.skip 3 |> List.take 3)
+            let c = applyAll (List.skip 6 deltas)
+
+            Expect.equal
+                (DisclosureTaintIndex.union (DisclosureTaintIndex.union a b) c)
+                (DisclosureTaintIndex.union a (DisclosureTaintIndex.union b c))
+                "union is associative"
+
+            Expect.equal (DisclosureTaintIndex.union a b) (DisclosureTaintIndex.union b a) "union is commutative"
+            Expect.equal (DisclosureTaintIndex.union a a) a "union is idempotent"
+        }
+
+        test "two payloads of one address join fail-closed: both policies taint, and two operations declassify nothing" {
+            let clean =
+                mkFact "X" "x" (Computed("aggregate-over-k", "1", "p")) (Series "dov-x") Surfaceable [ "dov-raw" ]
+
+            let other = {
+                clean with
+                    Method = Computed("load", "1", "p")
+                    Disclosure = Restricted "licensed"
+            }
+
+            let joined =
+                DisclosureTaintIndex.ofFacts [
+                    indexCorpus.Head // R, the tainted producer of dov-raw
+                    clean
+                    other
+                    mkFact "Y" "y" (Computed("passthrough", "1", "p")) (Scalar 1m) Surfaceable [ "dov-x" ]
+                ]
+
+            let node = DisclosureTaintIndex.tryNode "X" joined |> Option.get
+            Expect.equal node.Policies [ "licensed" ] "the restricted payload's policy is kept"
+            Expect.equal node.Operations [ "aggregate-over-k"; "load" ] "both operations are kept"
+
+            let outcome =
+                DisclosureTaint.analyzeIndex taintCfg joined (DisclosureTaintIndex.upstream joined) "Y"
+
+            Expect.equal outcome.InheritedPolicyRef (Some "licensed") "an ambiguous declassifier clears nothing"
+            Expect.isEmpty outcome.Crossings "and records no crossing"
+        }
+
+        test "a write plan's delta is a node for every fact it stores, asserted or superseding" {
+            let drafts = [
+                draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+                draftOf "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
+            ]
+
+            let request =
+                match FactWrite.prepare WriteShape.BatchAssert drafts with
+                | Ok request -> request
+                | Error _ -> failtest "the drafts are well-formed"
+
+            let now = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+            let first = FactWrite.plan now (fun _ -> false) [] request
+
+            let delta = DisclosureTaintIndex.deltaOf first
+            Expect.equal (delta.Entries |> List.map fst) (first.Facts |> List.map _.FactId) "one entry per stored fact"
+
+            // A superseding write: the new version is a node, and the old one
+            // is not removed.
+            let v2 = [
+                {
+                    drafts.Head with
+                        Evidence = {
+                            drafts.Head.Evidence with
+                                InputHashes = [ "dov-in-2" ]
+                        }
+                }
+            ]
+
+            let request2 =
+                match FactWrite.prepare WriteShape.BatchAssert v2 with
+                | Ok request -> request
+                | Error _ -> failtest "the draft is well-formed"
+
+            let stored = first.Facts |> List.map _.FactId |> Set.ofList
+
+            let second =
+                FactWrite.plan (now.AddMinutes 1.0) stored.Contains first.Facts request2
+
+            Expect.isNonEmpty second.Supersessions "the second write supersedes"
+
+            let index =
+                DisclosureTaintIndex.empty
+                |> DisclosureTaintIndex.apply delta
+                |> DisclosureTaintIndex.apply (DisclosureTaintIndex.deltaOf second)
+
+            Expect.equal index (DisclosureTaintIndex.ofFacts (first.Facts @ second.Facts)) "the rebuild of both writes"
+
+            // An idempotent write stores nothing and adds nothing.
+            let all = Set.union stored (second.Facts |> List.map _.FactId |> Set.ofList)
+            let idempotent = FactWrite.plan (now.AddMinutes 2.0) all.Contains [] request
+            Expect.isEmpty (DisclosureTaintIndex.deltaOf idempotent).Entries "an idempotent write adds no entry"
+        }
+
+        test "restrictTo drops the nodes of addresses a store no longer holds" {
+            let index = DisclosureTaintIndex.ofFacts indexCorpus
+            let kept = DisclosureTaintIndex.restrictTo (Set.ofList [ "R"; "D" ]) index
+            Expect.equal (DisclosureTaintIndex.factIds kept) (Set.ofList [ "R"; "D" ]) "only the held addresses"
+
+            Expect.equal
+                (DisclosureTaintIndex.ofEntries (DisclosureTaintIndex.toEntries index))
+                index
+                "the persisted entry list round-trips"
+        }
+    ]
+
+// ── The four stages (pure) ────────────────────────────────────────
+
+let private row (disclosure: Disclosure) : HeldFactRow option =
+    Some {
+        FactId = "F"
+        Metric = "m"
+        Disclosure = disclosure
+    }
+
+let private outcomeOf (refs: string list) (crossings: TaintCrossing list) (scopes: string list) : TaintOutcome = {
+    InheritedPolicyRef = List.tryHead refs
+    InheritedPolicyRefs = refs
+    UnsatisfiedScopes = []
+    ContributorScopes = scopes
+    Crossings = crossings
+    InheritedLabel = TaintLabel.ofPolicyRefs refs
+    Findings = []
+}
+
+let private crossing: TaintCrossing = {
+    DeclassifierFactId = "A"
+    OperationId = "aggregate-over-k"
+    Rationale = "r"
+    AcceptedScopes = []
+}
+
+let private stageTests =
+    testList "the disclosure gate's four stages" [
+
+        test "viewer: an id the scope does not hold is denied, never disclosed" {
+            Expect.equal
+                (DisclosureStages.viewer DisclosurePolicyResolver.denyUnknown None FactExport None None)
+                (FactNotDisclosable "unknown-fact")
+                "unknown-fact"
+        }
+
+        test "viewer: a fact's own classification decides, through the resolver" {
+            let resolve = DisclosureTaintConfig.resolver taintCfg
+
+            Expect.equal
+                (DisclosureStages.viewer resolve None FactExport None (row Surfaceable))
+                FactDisclosable
+                "Surfaceable discloses"
+
+            Expect.equal
+                (DisclosureStages.viewer resolve None FactExport None (row (Restricted "licensed")))
+                (FactNotDisclosable "licensed")
+                "licensed is not permitted at export"
+
+            Expect.equal
+                (DisclosureStages.viewer resolve None FactRetrieval None (row (Restricted "licensed")))
+                FactDisclosable
+                "licensed is permitted at retrieval"
+        }
+
+        test "viewer: with the viewer-aware facet a Restricted fact with no readable viewer denies as unreadable" {
+            let aware: ViewerAwareDisclosurePolicyResolver = fun _ _ _ -> Some true
+            let restricted = row (Restricted "team-only")
+
+            Expect.isTrue (DisclosureStages.needsViewer (Some aware) restricted) "a Restricted fact needs the viewer"
+            Expect.isFalse (DisclosureStages.needsViewer (Some aware) (row Surfaceable)) "a Surfaceable one does not"
+            Expect.isFalse (DisclosureStages.needsViewer None restricted) "nor does any fact without the facet"
+
+            for unread in [ None; Some(Error "level unreadable") ] do
+                Expect.equal
+                    (DisclosureStages.viewer
+                        DisclosurePolicyResolver.denyUnknown
+                        (Some aware)
+                        FactExport
+                        unread
+                        restricted)
+                    (FactNotDisclosable ViewerAwareDisclosure.UnreadableRef)
+                    "fail closed"
+
+            Expect.equal
+                (DisclosureStages.viewer
+                    DisclosurePolicyResolver.denyUnknown
+                    (Some aware)
+                    FactExport
+                    (Some(Ok(DisclosureViewer.leastPrivileged TeamVisible)))
+                    restricted)
+                FactDisclosable
+                "a resolved viewer is decided for"
+        }
+
+        test "purpose: no taxonomy refuses nothing; an unclaimed or out-of-set claim refuses with the allowed set" {
+            let config =
+                DisclosurePurposeConfig.ofLists
+                    {
+                        Version = "v1"
+                        Purposes = [
+                            {
+                                PurposeId = "audit"
+                                Description = "d"
+                            }
+                        ]
+                    }
+                    [ FactExport, [ "audit" ] ]
+
+            Expect.isNone (DisclosureStages.purpose None None FactExport) "no taxonomy"
+            Expect.isNone (DisclosureStages.purpose (Some config) (Some "audit") FactExport) "an allowed claim"
+
+            Expect.equal
+                (DisclosureStages.purpose (Some config) (Some "sales") FactExport)
+                (Some "purpose-denied:sales (allowed: audit)")
+                "out of set"
+
+            Expect.equal
+                (DisclosureStages.purpose (Some config) None FactRetrieval)
+                (Some "purpose-unclaimed (allowed: none)")
+                "unclaimed, at a surface serving none"
+        }
+
+        test "taint: only a disclosed fact is walked, and a surviving restriction denies" {
+            let walked = ref 0
+
+            let walk (refs: string list) =
+                Some(fun (_: string) ->
+                    walked.Value <- walked.Value + 1
+                    outcomeOf refs [] [])
+
+            Expect.equal (DisclosureStages.taint None "F" FactDisclosable) (FactDisclosable, None) "no walk composed"
+
+            let denied, none =
+                DisclosureStages.taint (walk [ "licensed" ]) "F" (FactNotDisclosable "own")
+
+            Expect.equal (denied, none, walked.Value) (FactNotDisclosable "own", None, 0) "a denied fact is not walked"
+
+            let verdict, outcome =
+                DisclosureStages.taint (walk [ "licensed" ]) "F" FactDisclosable
+
+            Expect.equal verdict (FactNotDisclosable "licensed") "the inherited ref denies"
+            Expect.isSome outcome "the walk is kept for the audit"
+
+            let clean, _ = DisclosureStages.taint (walk []) "F" FactDisclosable
+            Expect.equal clean FactDisclosable "a clean derivation discloses"
+        }
+
+        test "budget: only a released, declassified fact owes a reservation; a refusal denies under its ref" {
+            let crossed = Some(outcomeOf [] [ crossing ] [])
+            Expect.equal (DisclosureStages.crossings FactDisclosable crossed) [ crossing ] "a release that crossed"
+            Expect.isEmpty (DisclosureStages.crossings (FactNotDisclosable "x") crossed) "a denial owes nothing"
+            Expect.isEmpty (DisclosureStages.crossings FactDisclosable None) "no walk, no crossing"
+
+            Expect.equal (DisclosureStages.budget FactDisclosable None) FactDisclosable "nothing asked"
+
+            Expect.equal
+                (DisclosureStages.budget FactDisclosable (Some(CrossingsHeld [])))
+                FactDisclosable
+                "an affordable crossing"
+
+            Expect.equal
+                (DisclosureStages.budget FactDisclosable (Some(CrossingsRefused("budget-exhausted:k", []))))
+                (FactNotDisclosable "budget-exhausted:k")
+                "a refused routine"
+        }
+
+        test "audit rows: a denial is one row; a disclosure is a row per crossing and an access row per party" {
+            let context = {
+                Surface = FactExport
+                Principal = "u"
+                Purpose = ""
+                TaxonomyVersion = ""
+            }
+
+            let read = {
+                FactId = "F"
+                Metric = "m"
+                Verdict = FactNotDisclosable "licensed"
+                Taint = None
+                ContributorScopes = []
+            }
+
+            match DisclosureStages.auditRows context read with
+            | [ DisclosureAuditRow.Denied denied ] ->
+                Expect.equal
+                    (denied.PolicyRef, denied.Surface)
+                    ("licensed", "Export")
+                    "the denial names ref and surface"
+            | other -> failtestf "one denial row, got %A" other
+
+            let disclosed = {
+                read with
+                    Verdict = FactDisclosable
+                    Taint = Some(outcomeOf [] [ crossing ] [ "party-a" ])
+                    ContributorScopes = [ "party-a" ]
+            }
+
+            match DisclosureStages.auditRows context disclosed with
+            | [ DisclosureAuditRow.Declassified d; DisclosureAuditRow.Accessed a ] ->
+                Expect.equal d.DeclassifierFactId "A" "the crossing row"
+                Expect.equal a.ContributorScopes [ "party-a" ] "the access row"
+            | other -> failtestf "a crossing row and an access row, got %A" other
+
+            Expect.isEmpty
+                (DisclosureStages.auditRows context { read with Verdict = FactDisclosable })
+                "a party-free, uncrossed disclosure writes nothing"
+        }
+    ]
+
+// ── The check no longer loads the scope ───────────────────────────
+
+/// An `IFactStore` decorator that counts the whole-scope listings reaching
+/// the store: a `Query` with `IncludeSuperseded`, which is what the taint
+/// stage loaded per check before the index.
+type private QueryCountingStore(inner: IFactStore) =
+    let gate = obj ()
+    let mutable wholeScope = 0
+
+    let count (query: FactQuery) =
+        if query.IncludeSuperseded then
+            lock gate (fun () -> wholeScope <- wholeScope + 1)
+
+    member _.WholeScopeQueries = lock gate (fun () -> wholeScope)
+
+    // A decorator that hides its inner store's index makes the gate list the
+    // scope, so this one forwards it, as a production decorator should.
+    interface IDisclosureTaintIndexSource with
+        member _.ReadTaintIndex(scopeId: string) =
+            (inner :?> IDisclosureTaintIndexSource).ReadTaintIndex scopeId
+
+        member _.ReadTaintIndex(scope: ResolvedScope) =
+            (inner :?> IDisclosureTaintIndexSource).ReadTaintIndex scope
+
+    interface IFactStore with
+        member _.Assert(scopeId: string, draft) = inner.Assert(scopeId, draft)
+        member _.Assert(scope: ResolvedScope, draft) = inner.Assert(scope, draft)
+        member _.AssertBatch(scopeId: string, drafts) = inner.AssertBatch(scopeId, drafts)
+        member _.AssertBatch(scope: ResolvedScope, drafts) = inner.AssertBatch(scope, drafts)
+        member _.Get(scopeId: string, factId) = inner.Get(scopeId, factId)
+        member _.Get(scope: ResolvedScope, factId) = inner.Get(scope, factId)
+
+        member _.Query(scopeId: string, query) =
+            count query
+            inner.Query(scopeId, query)
+
+        member _.Query(scope: ResolvedScope, query) =
+            count query
+            inner.Query(scope, query)
+
+        member _.QueryWithCompetition(scopeId: string, query) =
+            inner.QueryWithCompetition(scopeId, query)
+
+        member _.QueryWithCompetition(scope: ResolvedScope, query) =
+            inner.QueryWithCompetition(scope, query)
+
+        member _.QuerySupersessionChain(scopeId: string, factId) =
+            inner.QuerySupersessionChain(scopeId, factId)
+
+        member _.QuerySupersessionChain(scope: ResolvedScope, factId) =
+            inner.QuerySupersessionChain(scope, factId)
+
+        member _.QueryPopulation(scopeId: string, query) = inner.QueryPopulation(scopeId, query)
+        member _.QueryPopulation(scope: ResolvedScope, query) = inner.QueryPopulation(scope, query)
+
+/// A tainted lineage (R restricted `licensed`, D derived from it) in a fresh
+/// scope over a counting blob store, with the gate over a counting fact store.
+let private taintedScope () =
+    let blobs = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let inner = BlobFactStore.create blobs events
+    let scope = "team-" + Guid.NewGuid().ToString("N")
+
+    assertFact inner scope (draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") [])
+    |> ignore
+
+    let d =
+        assertFact
+            inner
+            scope
+            (draftOf "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ])
+
+    for i in 1..5 do
+        assertFact inner scope (draftOf (sprintf "other-%d" i) (HumanAsserted "a") (Scalar(decimal i)) Surfaceable [])
+        |> ignore
+
+    let counted = QueryCountingStore(inner)
+    blobs, counted, events, scope, d
+
+let private scopeLoadTests =
+    testList "the taint stage reads an index, not the scope" [
+
+        testCaseAsync "one check with taint composed performs no whole-scope query"
+        <| async {
+            let _, counted, events, scope, d = taintedScope ()
+            let gate = FactDisclosureGate.createWithTaint taintCfg counted events
+            let! verdicts = gate.Check(scope, "user-1", FactExport, [ d.FactId ])
+
+            Expect.equal (verdicts.TryFind d.FactId) (Some(FactNotDisclosable "licensed")) "the inherited deny stands"
+            Expect.equal counted.WholeScopeQueries 0 "the check did not list the scope through the store"
+        }
+
+        testCaseAsync "two consecutive checks load the scope zero times, and the second reads no fact at all"
+        <| async {
+            let blobs, counted, events, scope, d = taintedScope ()
+            let gate = FactDisclosureGate.createWithTaint taintCfg counted events
+            let! _ = gate.Check(scope, "user-1", FactExport, [ d.FactId ])
+            blobs.Reset()
+            let! verdicts = gate.Check(scope, "user-1", FactExport, [ d.FactId ])
+
+            Expect.equal (verdicts.TryFind d.FactId) (Some(FactNotDisclosable "licensed")) "the inherited deny stands"
+            Expect.equal counted.WholeScopeQueries 0 "neither check listed the scope through the store"
+
+            // The judged fact's own read, and the index: never the seven
+            // facts of the scope.
+            Expect.isLessThanOrEqual blobs.Downloads 2 "the second check read the judged fact and the index"
+        }
+    ]
+
 let tests =
     testList "Phase 562 taint-propagating disclosure" [
+        indexLawTests
+        stageTests
+        scopeLoadTests
         pureWalkTests
         resolverVocabularyTests
         gateTests

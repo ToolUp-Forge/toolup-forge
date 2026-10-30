@@ -129,6 +129,9 @@
              the table writer it writes consolidation runs through and before
              the compose knob that registers it. -->
         <Compile Include="Server\FactPublication.fs" />
+        <!-- The preflight report of what a deployment left undescribed;
+             compiled before the root that registers it. -->
+        <Compile Include="Server\FactDeclarationsValidator.fs" />
         <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 895 — the fact browse read surface (IFactBrowseApi) and its
              per-run notification decoration of the table writer. -->

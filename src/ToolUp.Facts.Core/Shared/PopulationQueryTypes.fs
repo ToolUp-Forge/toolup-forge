@@ -544,6 +544,19 @@ module PopulationRanking =
         rankBy direction _.Magnitude _.FactId members
 
 /// Derivation of the population summary.
+/// The running state of the population fold: one value per summary field
+/// the fold derives in its single traversal.
+type internal StatsAccumulator = {
+    FactCount: int
+    ComparableCount: int
+    FreshCount: int
+    PeriodFrom: DateTime
+    PeriodTo: DateTime
+    Minimum: decimal
+    Maximum: decimal
+    Total: decimal
+}
+
 module PopulationStats =
 
     /// The summary of an empty population.
@@ -581,45 +594,55 @@ module PopulationStats =
         match members with
         | [] -> empty
         | (firstMember, _) :: _ ->
-            let mutable factCount = 0
-            let mutable comparableCount = 0
-            let mutable freshCount = 0
-            let mutable periodFrom = firstMember.PeriodFrom
-            let mutable periodTo = firstMember.PeriodTo
-            let mutable minimum = 0m
-            let mutable maximum = 0m
-            let mutable total = 0m
+            let start = {
+                FactCount = 0
+                ComparableCount = 0
+                FreshCount = 0
+                PeriodFrom = firstMember.PeriodFrom
+                PeriodTo = firstMember.PeriodTo
+                Minimum = 0m
+                Maximum = 0m
+                Total = 0m
+            }
 
-            for m, freshness in members do
-                factCount <- factCount + 1
-
-                if m.PeriodFrom < periodFrom then
-                    periodFrom <- m.PeriodFrom
-
-                if m.PeriodTo > periodTo then
-                    periodTo <- m.PeriodTo
-
-                match freshness with
-                | Fresh -> freshCount <- freshCount + 1
-                | Stale _ -> ()
-
-                match m.Magnitude with
-                | None -> ()
-                | Some d ->
-                    if comparableCount = 0 then
-                        minimum <- d
-                        maximum <- d
-                        total <- d
+            let step (acc: StatsAccumulator) (m: PopulationMember, freshness: FactFreshness) = {
+                FactCount = acc.FactCount + 1
+                ComparableCount =
+                    acc.ComparableCount
+                    + (match m.Magnitude with
+                       | Some _ -> 1
+                       | None -> 0)
+                FreshCount =
+                    acc.FreshCount
+                    + (match freshness with
+                       | Fresh -> 1
+                       | Stale _ -> 0)
+                PeriodFrom =
+                    if m.PeriodFrom < acc.PeriodFrom then
+                        m.PeriodFrom
                     else
-                        if d < minimum then
-                            minimum <- d
+                        acc.PeriodFrom
+                PeriodTo =
+                    if m.PeriodTo > acc.PeriodTo then
+                        m.PeriodTo
+                    else
+                        acc.PeriodTo
+                Minimum =
+                    match m.Magnitude with
+                    | Some d when acc.ComparableCount = 0 || d < acc.Minimum -> d
+                    | _ -> acc.Minimum
+                Maximum =
+                    match m.Magnitude with
+                    | Some d when acc.ComparableCount = 0 || d > acc.Maximum -> d
+                    | _ -> acc.Maximum
+                Total =
+                    match m.Magnitude with
+                    | Some d when acc.ComparableCount = 0 -> d
+                    | Some d -> acc.Total + d
+                    | None -> acc.Total
+            }
 
-                        if d > maximum then
-                            maximum <- d
-
-                        total <- total + d
-
-                    comparableCount <- comparableCount + 1
+            let acc = members |> List.fold step start
 
             {
                 // The two derivations left as their own passes:
@@ -628,21 +651,21 @@ module PopulationStats =
                 // would mean reaching for a BCL collection this Fable-safe
                 // module deliberately does without.
                 SubjectCount = members |> List.map (fun (m, _) -> m.Subject) |> List.distinct |> List.length
-                FactCount = factCount
-                ComparableCount = comparableCount
-                NonComparableCount = factCount - comparableCount
-                PeriodFrom = Some periodFrom
-                PeriodTo = Some periodTo
-                Minimum = if comparableCount = 0 then None else Some minimum
-                Maximum = if comparableCount = 0 then None else Some maximum
+                FactCount = acc.FactCount
+                ComparableCount = acc.ComparableCount
+                NonComparableCount = acc.FactCount - acc.ComparableCount
+                PeriodFrom = Some acc.PeriodFrom
+                PeriodTo = Some acc.PeriodTo
+                Minimum = if acc.ComparableCount = 0 then None else Some acc.Minimum
+                Maximum = if acc.ComparableCount = 0 then None else Some acc.Maximum
                 Mean =
-                    if comparableCount = 0 then
+                    if acc.ComparableCount = 0 then
                         None
                     else
-                        Some(total / decimal comparableCount)
+                        Some(acc.Total / decimal acc.ComparableCount)
                 Freshness = {
-                    FreshCount = freshCount
-                    StaleCount = factCount - freshCount
+                    FreshCount = acc.FreshCount
+                    StaleCount = acc.FactCount - acc.FreshCount
                 }
                 MethodMix =
                     members

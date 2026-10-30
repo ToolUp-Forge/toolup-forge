@@ -254,6 +254,9 @@ module Sql =
         $"DROP INDEX IF EXISTS {table}_pop_idx"
         $"CREATE INDEX IF NOT EXISTS {table}_succ_idx ON {table} (scope, supersedes) WHERE supersedes IS NOT NULL"
         $"CREATE INDEX IF NOT EXISTS {table}_txtime_idx ON {table} (scope, as_of_ticks)"
+        // The disclosure-taint index: one node per stored fact, written in
+        // the transaction that writes the fact.
+        $"CREATE TABLE IF NOT EXISTS {table}_taint (scope text NOT NULL, fact_id text NOT NULL, node text NOT NULL, PRIMARY KEY (scope, fact_id))"
     ]
 
     /// `to_regclass` probe for `VerifyOnly`.
@@ -443,13 +446,34 @@ LIMIT @k"""
     let lockLineages =
         "SELECT pg_advisory_xact_lock(hashtextextended(@scope || '|' || l, 0)) FROM unnest(@lineages) AS l"
 
+    // ─── The disclosure-taint index ──────────────────────────────────
+
+    /// Insert nodes `@ids` / `@nodes` (parallel arrays); a node already
+    /// stored for an address stands.
+    let internal insertTaintNodes (table: string) =
+        $"INSERT INTO {table}_taint (scope, fact_id, node) SELECT @scope, t.f, t.n FROM unnest(@ids, @nodes) AS t(f, n) ON CONFLICT (scope, fact_id) DO NOTHING"
+
+    /// The stored facts of the scope with no node: none once the index is
+    /// current, every fact before its first read.
+    let internal factsWithoutTaintNode (table: string) =
+        $"SELECT f.payload FROM {table} f WHERE f.scope = @scope AND NOT EXISTS (SELECT 1 FROM {table}_taint t WHERE t.scope = @scope AND t.fact_id = f.fact_id)"
+
+    /// Every node of the scope.
+    let internal taintNodes (table: string) =
+        $"SELECT fact_id, node FROM {table}_taint WHERE scope = @scope"
+
+    /// Every fact of the scope, whatever its transaction time: the listing
+    /// a store without the index table reads per check.
+    let internal scopePayloads (table: string) =
+        $"SELECT payload FROM {table} WHERE scope = @scope"
+
     /// The binary COPY every write uses.
     let copyIn (table: string) =
         $"COPY {table} (scope, fact_id, hierarchy, path, metric, period_from_ticks, period_to_ticks, method_identity, lineage_hash, as_of_ticks, as_of, supersedes, is_head, magnitude, payload) FROM STDIN (FORMAT BINARY)"
 
     /// Every statement shape that reads or writes rows, for the scope-
-    /// binding check: each one names `@scope` (the COPY carries the scope
-    /// in every row it writes instead).
+    /// binding check: each one names `@scope` (the COPY, and the taint-node
+    /// insert, carry the scope in every row they write instead).
     let scopeBoundStatements (table: string) : string list = [
         visibleAt table (memberColumns "f") RowFilter.none
         historyAt table RowFilter.none
@@ -459,6 +483,9 @@ LIMIT @k"""
         headsOf table
         lineage table
         clearHeads table
+        factsWithoutTaintNode table
+        taintNodes table
+        scopePayloads table
     ]
 
 /// The one row projection every write uses — the store's own write core
@@ -1125,6 +1152,110 @@ type PostgresFactStore
                 || p.SqlState = PostgresErrorCodes.DeadlockDetected
             | _ -> false)
 
+    // ─── The disclosure-taint index ──────────────────────────────────
+    //
+    // One node per stored fact in `<table>_taint`, written in the fact's own
+    // transaction. A read first records a node for every stored fact that
+    // has none (every fact before the first read after an upgrade, or one a
+    // bulk path wrote without a node), then reads the scope's nodes. A
+    // schema provisioned without the table (`VerifyOnly`) is listed per
+    // check instead, as before the index.
+
+    static let taintJson = FableConverters.create ()
+
+    let taintIndexRebuilds: int64[] = Array.zeroCreate 1
+
+    let taintTableProbe =
+        lazy
+            (async {
+                use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+                use cmd = command Sql.tableRegclass conn null
+                addText cmd "table" (table + "_taint")
+                let! result = cmd.ExecuteScalarAsync() |> Async.AwaitTask
+                let present = not (isNull result || result = box DBNull.Value)
+
+                if not present then
+                    Diagnostics.Trace.TraceWarning(
+                        sprintf
+                            "[PostgresFactStore] Table '%s_taint' does not exist: the disclosure gate lists the scope per check. Provision it with the DDL in Sql.migration."
+                            table
+                    )
+
+                return present
+             }
+             |> Async.StartAsTask)
+
+    let hasTaintTable () : Async<bool> =
+        taintTableProbe.Force() |> Async.AwaitTask
+
+    let insertTaintNodes
+        (conn: NpgsqlConnection)
+        (tx: NpgsqlTransaction)
+        (scopeId: string)
+        (delta: DisclosureTaintDelta)
+        : Async<unit> =
+        async {
+            use cmd = command (Sql.insertTaintNodes table) conn tx
+            addText cmd "scope" scopeId
+            addTextArray cmd "ids" (delta.Entries |> List.map fst)
+
+            addTextArray
+                cmd
+                "nodes"
+                (delta.Entries
+                 |> List.map (fun (_, node) -> JsonSerializer.Serialize(node, taintJson)))
+
+            let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+            ()
+        }
+
+    let readTaintIndex (scopeId: string) : Async<DisclosureTaintIndex> = async {
+        let! indexed = hasTaintTable ()
+
+        if not indexed then
+            let! all = queryPayloads (Sql.scopePayloads table) (fun cmd -> addText cmd "scope" scopeId)
+            return DisclosureTaintIndex.ofFacts all
+        else
+            let! unindexed = queryPayloads (Sql.factsWithoutTaintNode table) (fun cmd -> addText cmd "scope" scopeId)
+
+            if not (List.isEmpty unindexed) then
+                use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+                use! tx = conn.BeginTransactionAsync().AsTask() |> Async.AwaitTask
+                do! insertTaintNodes conn tx scopeId (DisclosureTaintIndex.deltaOfFacts unindexed)
+                do! tx.CommitAsync() |> Async.AwaitTask
+                Threading.Interlocked.Increment(&taintIndexRebuilds[0]) |> ignore
+
+                Diagnostics.Trace.TraceInformation(
+                    sprintf
+                        "[PostgresFactStore] disclosure-taint index of scope %s: recorded %d stored facts that had no node"
+                        scopeId
+                        unindexed.Length
+                )
+
+            return!
+                withConnection (fun conn -> async {
+                    use cmd = command (Sql.taintNodes table) conn null
+                    addText cmd "scope" scopeId
+                    use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+                    let entries = ResizeArray<string * DisclosureTaintNode>()
+
+                    let rec loop () = async {
+                        let! more = reader.ReadAsync() |> Async.AwaitTask
+
+                        if more then
+                            let node =
+                                JsonSerializer.Deserialize<DisclosureTaintNode>(reader.GetString 1, taintJson)
+
+                            entries.Add((reader.GetString 0, node))
+
+                            return! loop ()
+                    }
+
+                    do! loop ()
+                    return DisclosureTaintIndex.ofEntries (List.ofSeq entries)
+                })
+    }
+
     // One write attempt: one transaction, executing `FactWrite.plan` — the
     // same plan `BlobFactStore` executes, over the stored ids
     // and the current heads this transaction reads. It persists the plan's
@@ -1246,6 +1377,13 @@ type PostgresFactStore
                 return importer.Complete()
             }
 
+            // The facts' disclosure-taint nodes, in the same transaction, so
+            // the index never lacks a fact this write stored.
+            let! indexed = hasTaintTable ()
+
+            if indexed && not (List.isEmpty plan.Facts) then
+                do! insertTaintNodes conn tx scopeId (DisclosureTaintIndex.deltaOf plan)
+
             do! tx.CommitAsync() |> Async.AwaitTask
             return plan
     }
@@ -1336,6 +1474,15 @@ type PostgresFactStore
         member _.Dispose() =
             if ownsDataSource then
                 dataSource.Dispose()
+
+    /// How many reads found stored facts with no disclosure-taint node and
+    /// recorded them (each logged through `Trace`).
+    member internal _.TaintIndexRebuilds =
+        Threading.Interlocked.Read(&taintIndexRebuilds[0])
+
+    interface IDisclosureTaintIndexSource with
+        member _.ReadTaintIndex(scopeId: string) = readTaintIndex scopeId
+        member _.ReadTaintIndex(scope: ResolvedScope) = readTaintIndex scope.ScopeId
 
     interface IFactStore with
 

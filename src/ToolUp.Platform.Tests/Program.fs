@@ -126,6 +126,7 @@ let private registeredTests =
         FactStoreTests.indexTests
         FactStoreTests.indexPopulationRegistryTests
         FactStoreTests.pointReadIndexTests
+        FactStoreTests.taintIndexSourceTests
         CanonicalMethodTests.tests
         FactInvalidationTests.tests
         CoherenceCheckTests.tests
@@ -1013,6 +1014,7 @@ let private registeredTests =
         ConversationListingTests.tests
         ConversationVisibilityTests.tests
         FactBrowseTests.tests
+        FactDeclarationsValidatorTests.tests
         DelegateFactTests.tests
         TeamOutputVisibilityTests.tests
         FactPublicationTests.tests

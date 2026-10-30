@@ -1149,8 +1149,8 @@ let derivedRetrievalTests =
 // gate and over a decorating gate (whose held form is its id form), plus
 // the platform gate's own configurations: viewer-aware and taint verdicts
 // and audit rows equal the id form's, and under a taint configuration the
-// graph load is the id form's — the held form saves the per-id reads and
-// nothing else.
+// taint index read is the id form's — the held form saves the per-id reads
+// and nothing else.
 
 let private resolvedAt (scopeId: string) (container: string) : ResolvedScope =
     StorageScopeResolver.ScopeResolution.ofStorageScope {
@@ -1356,7 +1356,7 @@ let heldFormTests =
                     "the oracle decides for the viewer: the admin sees it, the member does not"
         }
 
-        testCaseAsync "taint: an inherited deny and a clean fact - same verdicts, same audit, the same graph load"
+        testCaseAsync "taint: an inherited deny and a clean fact - same verdicts, same audit, the same taint index read"
         <| async {
             let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
@@ -1386,30 +1386,21 @@ let heldFormTests =
                 (Some(FactNotDisclosable "licensed"))
                 "the oracle denies the derived fact on the inherited policy"
 
-            // The graph load is the id form's: a held check downloads exactly
-            // what the scope listing costs, and nothing per id.
+            // The taint read is the id form's: a held check downloads exactly
+            // what reading the scope's taint index costs, and nothing per id.
             let! read = ids |> List.map (fun factId -> store.Get(scope, factId)) |> Async.Sequential
             let heldFacts = read |> Array.choose id |> List.ofArray
 
             counting.Reset()
-
-            let! _ =
-                store.Query(
-                    scope,
-                    {
-                        FactQuery.all with
-                            IncludeSuperseded = true
-                    }
-                )
-
+            let! _ = (store :?> IDisclosureTaintIndexSource).ReadTaintIndex scope
             let graphLoad = counting.Downloads
             counting.Reset()
             let! _ = (FactDisclosureGate.held gate).CheckHeld(scope, "user-1", FactExport, ids, heldFacts)
-            Expect.isGreaterThan graphLoad 0 "the probe sees the graph load"
-            Expect.equal counting.Downloads graphLoad "the held form loads the graph and reads no id"
+            Expect.isGreaterThan graphLoad 0 "the probe sees the index read"
+            Expect.equal counting.Downloads graphLoad "the held form reads the taint index and no id"
 
-            // Phase 1126 — the row form decides under taint too, at the same
-            // graph load: the taint walk reaches each fact by id.
+            // The row form decides under taint too, at the same index read:
+            // the taint walk reaches each fact by id.
             counting.Reset()
 
             let! _ =

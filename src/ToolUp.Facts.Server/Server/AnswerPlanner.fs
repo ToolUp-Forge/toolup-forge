@@ -1181,12 +1181,47 @@ module AnswerPlanProvenance =
                     None)
     }
 
-    /// The Phase 524 answer chain with the recorded plan(s) stitched in:
-    /// `GetChainForMessage` walks the cited facts' upstream as usual;
-    /// each recorded plan joins as an `AnswerPlanNode` with a
-    /// message --PlannedBy--> plan edge and plan --CitesFact--> fact
-    /// edges for the facts its steps cite. With no recorded plan the
-    /// result is exactly the graph's own chain (GP 11).
+    /// `chain` with the recorded plans stitched in, each as an
+    /// `AnswerPlanNode` with a message --PlannedBy--> plan edge and a plan
+    /// --CitesFact--> fact edge per fact its steps cite, ahead of the chain's
+    /// own nodes and edges. The one stitching: the answer chain and the
+    /// grounding certificate's answer chain both call it, so the two cannot
+    /// disagree about a plan's place in the chain.
+    let withPlans (messageId: string) (plans: AnswerPlan list) (chain: ProvenanceChain) : ProvenanceChain =
+        let planNodes =
+            plans
+            |> List.map (fun plan -> {
+                Id = plan.PlanId
+                Kind = AnswerPlanNode
+                Disclosure = None
+                Label = sprintf "answer plan: %s" plan.Question
+            })
+
+        let planEdges =
+            plans
+            |> List.collect (fun plan ->
+                {
+                    From = messageId
+                    To = plan.PlanId
+                    Kind = PlannedBy
+                }
+                :: (AnswerPlan.citedFactIds plan
+                    |> List.map (fun factId -> {
+                        From = plan.PlanId
+                        To = factId
+                        Kind = CitesFact
+                    })))
+
+        {
+            chain with
+                Nodes = planNodes @ chain.Nodes
+                Edges = planEdges @ chain.Edges
+        }
+
+    /// The Phase 524 answer chain with the recorded plan(s) stitched in
+    /// (`withPlans`): `GetChainForMessage` walks the cited facts' upstream
+    /// as usual. With no recorded plan the result is exactly the graph's own
+    /// chain (GP 11).
     let chainForMessage
         (graph: IProvenanceGraph)
         (events: IEventStore)
@@ -1196,38 +1231,7 @@ module AnswerPlanProvenance =
         : Async<ProvenanceChain> =
         async {
             let! plans = recordedFor events scopeId messageId
-
             let citedIds = plans |> List.collect AnswerPlan.citedFactIds |> List.distinct
-
             let! chain = graph.GetChainForMessage(scopeId, messageId, citedIds, depth)
-
-            let planNodes =
-                plans
-                |> List.map (fun plan -> {
-                    Id = plan.PlanId
-                    Kind = AnswerPlanNode
-                    Disclosure = None
-                    Label = sprintf "answer plan: %s" plan.Question
-                })
-
-            let planEdges =
-                plans
-                |> List.collect (fun plan ->
-                    {
-                        From = messageId
-                        To = plan.PlanId
-                        Kind = PlannedBy
-                    }
-                    :: (AnswerPlan.citedFactIds plan
-                        |> List.map (fun factId -> {
-                            From = plan.PlanId
-                            To = factId
-                            Kind = CitesFact
-                        })))
-
-            return {
-                chain with
-                    Nodes = planNodes @ chain.Nodes
-                    Edges = planEdges @ chain.Edges
-            }
+            return withPlans messageId plans chain
         }

@@ -558,6 +558,152 @@ type BlobFactStore
         | Error fault -> return faulted scopeId fault
     }
 
+    // The disclosure-taint index: one blob per scope holding every fact's
+    // node. A read reconciles it with the census (the `_facts/` listing), so
+    // a node a write failed to record is read from its fact rather than
+    // missed, and a node of a fact no longer stored is dropped; a write keeps
+    // it current where this store has seen it, so a read seldom reads a fact.
+    let taintIndexBlob = "_disclosuretaint/index.json"
+    let conditional = storage |> tryUnbox<IConditionalBlobStorage>
+    let taintIndexRebuilds: int64[] = Array.zeroCreate 1
+
+    // The scopes this store has read or written an index in. A write
+    // maintains the index only there, so a deployment whose gate never reads
+    // one pays nothing for it on the write path.
+    let taintIndexed =
+        System.Collections.Concurrent.ConcurrentDictionary<string, unit>(StringComparer.Ordinal)
+
+    let serialiseTaintIndex (index: DisclosureTaintIndex) : byte[] =
+        JsonSerializer.SerializeToUtf8Bytes(DisclosureTaintIndex.toEntries index, jsonOptions)
+
+    // The stored index and the token to write it back under: `None` when
+    // there is no index blob to read, and an empty index when the blob does
+    // not parse (it is rebuilt and overwritten).
+    let readTaintBlob (scopeId: string) : Async<(DisclosureTaintIndex * string option) option> = async {
+        let! read =
+            match conditional with
+            | Some cas -> async {
+                match! cas.DownloadWithETag(scopeId, taintIndexBlob) with
+                | Ok(bytes, etag) -> return Some(bytes, Some etag)
+                | Error _ -> return None
+              }
+            | None -> async {
+                match! storage.Download(scopeId, taintIndexBlob) with
+                | Ok bytes -> return Some(bytes, None)
+                | Error _ -> return None
+              }
+
+        return
+            read
+            |> Option.map (fun (bytes, etag) ->
+                let index =
+                    try
+                        JsonSerializer.Deserialize<(string * DisclosureTaintNode) list>(bytes, jsonOptions)
+                        |> DisclosureTaintIndex.ofEntries
+                    with _ ->
+                        DisclosureTaintIndex.empty
+
+                index, etag)
+    }
+
+    // Write the index back: under its token where the storage offers one,
+    // so a concurrent writer's nodes are never overwritten by an older view
+    // (losing that race only costs the next read the facts it lacks).
+    let writeTaintBlob (scopeId: string) (index: DisclosureTaintIndex) (etag: string option) = async {
+        let bytes = serialiseTaintIndex index
+
+        let! written =
+            match conditional with
+            | Some cas -> async {
+                let condition =
+                    match etag with
+                    | Some token -> IfMatch token
+                    | None -> IfAbsent
+
+                match! cas.UploadWithETag(scopeId, taintIndexBlob, bytes, condition) with
+                | Ok _ -> return true
+                | Error _ -> return false
+              }
+            | None -> async {
+                match! storage.Upload(scopeId, taintIndexBlob, bytes) with
+                | Ok _ -> return true
+                | Error _ -> return false
+              }
+
+        return written
+    }
+
+    let readTaintIndex (scopeId: string) : Async<DisclosureTaintIndex> = async {
+        // The census first: the answer must hold every fact stored when the
+        // read starts, and a fact listed here is read below if the index
+        // lacks it.
+        let! names = storage.List(scopeId, factsPrefix)
+        let census = names |> List.map factIdOfBlob |> Set.ofList
+        let! held = readTaintBlob scopeId
+
+        let stored, etag =
+            match held with
+            | Some(index, etag) -> index, etag
+            | None -> DisclosureTaintIndex.empty, None
+
+        let kept = DisclosureTaintIndex.restrictTo census stored
+        let missing = Set.difference census (DisclosureTaintIndex.factIds kept)
+        taintIndexed[scopeId] <- ()
+
+        if held.IsSome && Set.isEmpty missing && kept.Nodes.Count = stored.Nodes.Count then
+            return kept
+        else
+            let! facts = missing |> Set.toList |> List.map blobName |> loadNames scopeId
+
+            let healed =
+                DisclosureTaintIndex.apply (DisclosureTaintIndex.deltaOfFacts facts) kept
+
+            if held.IsNone then
+                Interlocked.Increment(&taintIndexRebuilds[0]) |> ignore
+
+                logger
+                |> Option.iter (fun l ->
+                    l.Info(
+                        sprintf "disclosure-taint index rebuilt for scope %s from %d stored facts" scopeId facts.Length
+                    ))
+
+            let! written = writeTaintBlob scopeId healed etag
+
+            if not written then
+                logger
+                |> Option.iter (fun l ->
+                    l.Info(
+                        sprintf
+                            "disclosure-taint index of scope %s not written back (a concurrent write landed first); the next read reconciles it"
+                            scopeId
+                    ))
+
+            return healed
+    }
+
+    // Record a write's nodes in a scope's index, where this store has seen
+    // one: read under the token, join, write under the token, a few times
+    // over a concurrent writer. A write that cannot record its nodes leaves
+    // them to the next read's reconciliation; it never fails the write.
+    let maintainTaintIndex (scopeId: string) (plan: WritePlan) : Async<unit> = async {
+        match conditional with
+        | Some _ when not (List.isEmpty plan.Facts) && taintIndexed.ContainsKey scopeId ->
+            let delta = DisclosureTaintIndex.deltaOf plan
+
+            let rec attempt (n: int) = async {
+                match! readTaintBlob scopeId with
+                | Some(index, (Some _ as etag)) ->
+                    let! written = writeTaintBlob scopeId (DisclosureTaintIndex.apply delta index) etag
+
+                    if not written && n < 3 then
+                        return! attempt (n + 1)
+                | _ -> ()
+            }
+
+            do! attempt 1
+        | _ -> ()
+    }
+
     let lineageKeyOf (f: Fact) : string =
         Fact.lineageKey f.Subject f.Metric f.Period f.Method
 
@@ -1731,6 +1877,8 @@ type BlobFactStore
 
             match failures with
             | [||] ->
+                do! maintainTaintIndex scopeId plan
+
                 return
                     Ok {
                         Plan = plan
@@ -1807,6 +1955,10 @@ type BlobFactStore
     /// store was built — a fold, a stale mark, or a build of an
     /// absent snapshot. None failed the write that met it; each was logged.
     member _.SurfaceFaults = Interlocked.Read(&surfaceFaults[0])
+
+    /// How many disclosure-taint indexes this store has rebuilt from a
+    /// scope's facts because none was stored. Each was logged.
+    member _.TaintIndexRebuilds = Interlocked.Read(&taintIndexRebuilds[0])
 
     /// Rebuild the point-read index (Phase 890) from the scope's facts —
     /// the Phase 9f `Rebuild` shape. Idempotent, safe to run concurrently
@@ -2027,6 +2179,10 @@ type BlobFactStore
     /// Registry-less construction — the pre-566 shape, byte-for-byte.
     new(storage: IBlobStorage, events: IEventStore, clock: unit -> DateTime) =
         BlobFactStore(storage, events, None, clock)
+
+    interface IDisclosureTaintIndexSource with
+        member _.ReadTaintIndex(scopeId: string) = readTaintIndex scopeId
+        member _.ReadTaintIndex(scope: ResolvedScope) = readTaintIndex scope.ScopeId
 
     interface IFactSeriesRowRead with
         member _.QuerySeriesRows(scope: ResolvedScope, query: FactQuery) = surfaceSeriesRows scope.ScopeId query

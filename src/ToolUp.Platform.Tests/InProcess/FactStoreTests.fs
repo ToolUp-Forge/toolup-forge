@@ -762,6 +762,32 @@ type internal CountingBlobStorage(inner: IBlobStorage) =
         member _.Erase(container, prefix, policy, dryRun) =
             inner.Erase(container, prefix, policy, dryRun)
 
+/// The disclosure-taint index pack bound to BlobFactStore twice: over a
+/// storage offering conditional writes (the index is maintained by the
+/// writes under its ETag) and over one that does not (the index is
+/// reconciled on read).
+let taintIndexSourceTests =
+    let harness (storage: unit -> IBlobStorage) () : IDisclosureTaintIndexSourceContract.TaintIndexHarness =
+        let store =
+            BlobFactStore(storage (), InMemoryEventStore.InMemoryEventStore(), (fun () -> DateTime.UtcNow))
+
+        {
+            Source = store
+            Store = store
+            ScopeA = newScope ()
+            ScopeB = newScope ()
+            Rebuilds = Some(fun () -> store.TaintIndexRebuilds)
+        }
+
+    testList "BlobFactStore — the disclosure-taint index" [
+        IDisclosureTaintIndexSourceContract.tests
+            "BlobFactStore (conditional storage)"
+            (harness (fun () -> InMemoryBlobStorage.InMemoryBlobStorage()))
+        IDisclosureTaintIndexSourceContract.tests
+            "BlobFactStore (unconditional storage)"
+            (harness (fun () -> CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())))
+    ]
+
 /// A deterministic, strictly-increasing clock. Transaction times that
 /// cannot collide keep the supersession edges — and therefore both read
 /// paths' view of which head is current — free of any dependence on how

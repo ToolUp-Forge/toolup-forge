@@ -145,6 +145,7 @@
         <Compile Include="Contracts\IExternalComputeDispatcherContract.fs" />
         <Compile Include="Contracts\IExternalHandleStoreContract.fs" />
         <Compile Include="Contracts\IFactStoreContract.fs" />
+        <Compile Include="Contracts\IDisclosureTaintIndexSourceContract.fs" />
         <Compile Include="Contracts\IHeldFactDisclosureGateContract.fs" />
         <Compile Include="Contracts\IHeldFactRowDisclosureGateContract.fs" />
         <Compile Include="Contracts\IFactTableWriterContract.fs" />
@@ -864,6 +865,7 @@
         <Compile Include="InProcess\ConversationListingTests.fs" />
         <Compile Include="InProcess\ConversationVisibilityTests.fs" />
         <Compile Include="InProcess\FactBrowseTests.fs" />
+        <Compile Include="InProcess\FactDeclarationsValidatorTests.fs" />
         <Compile Include="InProcess\DelegateFactTests.fs" />
         <Compile Include="InProcess\TeamOutputVisibilityTests.fs" />
         <Compile Include="InProcess\FactPublicationTests.fs" />
