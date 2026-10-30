@@ -883,6 +883,41 @@ let validationTests =
             """{"metric":"revenue","subject_hierarchy":"brand","path_exclude":["acme"," > "]}"""
             "path_exclude"
             "a path_exclude entry naming no member is refused, never read as the whole hierarchy"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","with_metrics":"shoppers"}"""
+            "with_metrics"
+            "a with_metrics that is not an array is refused by name"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","with_metrics":[]}"""
+            "with_metrics"
+            "an empty with_metrics is refused by name rather than read as no companion"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","with_metrics":["shoppers",7]}"""
+            "entry 1"
+            "a non-string with_metrics entry is refused by its position"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","with_metrics":["a","b","c","d","e","f"]}"""
+            "at most 5"
+            "more companions than the declared maximum are refused, never silently truncated"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","with_metrics":["shoppers","shoppers"]}"""
+            "more than once"
+            "a companion named twice is refused"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","with_metrics":["revenue"]}"""
+            "ranked metric"
+            "the ranked metric as its own companion is refused"
+
+        expectError
+            """{"metric":"revenue","subject_hierarchy":"brand","top_k":101,"with_metrics":["shoppers"]}"""
+            "at most 100"
+            "a top_k above the companion ceiling is refused when companions are asked for"
     ]
 
 // ── Subject-set filters (703.A) ───────────────────────────────────
@@ -1329,6 +1364,216 @@ let demoTests =
                     "and the refusal names the policy rather than the value"
     ]
 
+// ── Companion metrics ─────────────────────────────────────────────
+
+/// A registry declaring revenue (higher is better) and shoppers, both N0.
+let private companionRegistry: IMetricRegistry =
+    let declared (id: string) (unit: string) : MetricRegistration = {
+        Module = "TestModule"
+        Definition = {
+            Id = id
+            Name = id
+            Unit = unit
+            Dimensionality = "count"
+            Direction = HigherIsBetter
+            DisplayFormat = "N0"
+            Staleness = UntilSuperseded
+            ProducingOperation = None
+            CanonicalMethod = None
+            RecomputePolicy = None
+            RollUp = None
+            Context = None
+        }
+    }
+
+    MetricRegistry.build [ declared "revenue" "GBP"; declared "shoppers" "shoppers" ] []
+
+/// The whole of 2026: it overlaps Q2 and is not Q2.
+let private fy2026: TemporalExtent = {
+    From = DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+    To = DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+    Label = Some "FY-2026"
+}
+
+/// `metric` = `value` for `brand/<sku>` over `period`, surfaceable.
+let private companionDraft (sku: string) (metric: string) (value: decimal) (period: TemporalExtent) : FactDraft = {
+    draftFor [ sku ] (Scalar value) Surfaceable with
+        Metric = MetricRef metric
+        Period = period
+        Evidence = {
+            ResultRef = None
+            InputHashes = [ sku + "/" + metric ]
+            TriggerRef = None
+        }
+}
+
+/// Three brands ranked by revenue: sku-a and sku-b have Q2 shoppers, sku-c
+/// has shoppers only for the whole year, so its Q2 companion is absent. Returns the
+/// composed services, the scope, the store and the shoppers facts of sku-a,
+/// sku-b and sku-c's year.
+let private companionWorld () =
+    let _, sp = composedUnder EnabledFactStore (Some companionRegistry)
+    let scope = newScope ()
+    let store = sp.GetRequiredService<IFactStore>()
+
+    for sku, revenue in [ "sku-a", 3000m; "sku-b", 2000m; "sku-c", 1000m ] do
+        assertFact store scope (companionDraft sku "revenue" revenue q2) |> ignore
+
+    let shoppersA = assertFact store scope (companionDraft "sku-a" "shoppers" 1200m q2)
+    let shoppersB = assertFact store scope (companionDraft "sku-b" "shoppers" 800m q2)
+
+    let shoppersCYear =
+        assertFact store scope (companionDraft "sku-c" "shoppers" 550m fy2026)
+
+    sp, scope, store, shoppersA, shoppersB, shoppersCYear
+
+let private companionArgs =
+    """{"metric":"revenue","subject_hierarchy":"brand","top_k":3,"with_metrics":["shoppers"]}"""
+
+/// Every member of `el` except those named in `except`, as raw JSON.
+let private propertiesExcept (except: string list) (el: JsonElement) : (string * string) list =
+    el.EnumerateObject()
+    |> Seq.filter (fun p -> not (List.contains p.Name except))
+    |> Seq.map (fun p -> p.Name, p.Value.GetRawText())
+    |> List.ofSeq
+
+/// The tool over a recording view of `store`, with `registry`.
+let private executeRecorded
+    (sp: IServiceProvider)
+    (store: IFactStore)
+    (registry: IMetricRegistry option)
+    (scope: string)
+    (argsJson: string)
+    : DisclosureEgressTests.RecordingFactStore * string =
+    let recording = DisclosureEgressTests.RecordingFactStore store
+
+    let raw =
+        PopulationQueryTool.executeWith
+            recording
+            (sp.GetRequiredService<IFactDisclosureGate>())
+            registry
+            (fun () -> DateTime.UtcNow)
+            (resolved scope)
+            "user-1"
+            argsJson
+        |> Async.RunSynchronously
+
+    recording, raw
+
+let companionTests =
+    testList "Phase 1143 query_metric_population companion metrics" [
+
+        testCase "ranked by revenue with shoppers alongside, in one call"
+        <| fun () ->
+            let sp, scope, store, shoppersA, shoppersB, _ = companionWorld ()
+
+            let recording, raw =
+                executeRecorded sp store (Some companionRegistry) scope companionArgs
+
+            let el = (JsonDocument.Parse raw).RootElement
+            Expect.equal recording.PopulationReads 1 "one ranking"
+
+            Expect.equal
+                (items el "withMetrics" |> List.map _.GetString())
+                [ "shoppers" ]
+                "the answer names the companions read"
+
+            let rows = items el "ranked"
+
+            Expect.equal
+                (rows |> List.map (fun r -> str r "subject", str r "rendering"))
+                [ "brand/sku-a", "3,000"; "brand/sku-b", "2,000"; "brand/sku-c", "1,000" ]
+                "the ranking is revenue's"
+
+            for row, (fact: Fact), rendering in [ rows[0], shoppersA, "1,200"; rows[1], shoppersB, "800" ] do
+                let cell = items row "companions" |> List.exactlyOne
+                Expect.equal (str cell "metric") "shoppers" "the companion metric"
+                Expect.isFalse (flag cell "absent") "present"
+                let shown = items cell "facts" |> List.exactlyOne
+                Expect.equal (str shown "factId") fact.FactId "the companion's own fact id"
+                Expect.equal (str shown "rendering") rendering "rendered under the companion's declared format"
+                Expect.equal (str shown "metric") "shoppers" "named by its metric"
+                Expect.isEmpty (items cell "withheld") "nothing withheld"
+
+            Expect.equal
+                (recording.Queries
+                 |> List.map (fun q -> q.Subject |> Option.map SubjectRef.toString, q.Metric))
+                [
+                    Some "brand/sku-a", Some(MetricRef "shoppers")
+                    Some "brand/sku-b", Some(MetricRef "shoppers")
+                    Some "brand/sku-c", Some(MetricRef "shoppers")
+                ]
+                "one point read per ranked member and companion"
+
+            let quoted =
+                AnswerVerifier.toolResultFacts raw |> List.map (fun f -> f.FactId, f.Rendering)
+
+            Expect.contains quoted (shoppersA.FactId, "1,200") "the verifier's scope sees a companion figure"
+            Expect.contains quoted (shoppersB.FactId, "800") "every one of them"
+
+        testCase "a companion with no fact for the subject and period is reported absent, never zero"
+        <| fun () ->
+            let sp, scope, _, _, _, shoppersCYear = companionWorld ()
+            let raw = executeRaw sp scope companionArgs
+            let el = (JsonDocument.Parse raw).RootElement
+            let last = items el "ranked" |> List.last
+            Expect.equal (str last "subject") "brand/sku-c" "the third member"
+            let cell = items last "companions" |> List.exactlyOne
+            Expect.isTrue (flag cell "absent") "absent"
+            Expect.isEmpty (items cell "facts") "with no value"
+            Expect.isEmpty (items cell "withheld") "and nothing withheld"
+
+            Expect.isFalse
+                (raw.Contains shoppersCYear.FactId)
+                "an overlapping period's fact is not this period's companion"
+
+            Expect.isFalse (raw.Contains "\"rendering\":\"0\"") "and no zero is invented"
+
+        testCase "the ranking and its statistics are identical with and without companions"
+        <| fun () ->
+            let sp, scope, _, _, _, _ = companionWorld ()
+
+            let without =
+                executeVia sp scope """{"metric":"revenue","subject_hierarchy":"brand","top_k":3}"""
+
+            let withCompanions = executeVia sp scope companionArgs
+
+            Expect.isFalse (without.TryGetProperty("withMetrics") |> fst) "no companion field without companions"
+
+            for row in items without "ranked" do
+                Expect.isFalse (row.TryGetProperty("companions") |> fst) "the entries are unchanged"
+
+            Expect.equal
+                (propertiesExcept [ "ranked"; "withMetrics" ] withCompanions)
+                (propertiesExcept [ "ranked" ] without)
+                "the statistics, the filters and the counts are byte-identical"
+
+            Expect.equal
+                (items withCompanions "ranked" |> List.map (propertiesExcept [ "companions" ]))
+                (items without "ranked" |> List.map (propertiesExcept []))
+                "each ranked entry is byte-identical apart from its companions"
+
+        testCase "an unregistered companion is refused by name before anything is read"
+        <| fun () ->
+            let sp, scope, store, _, _, _ = companionWorld ()
+
+            // With no registry composed, no companion is registered.
+            for registry in [ Some companionRegistry; None ] do
+                let recording, raw =
+                    executeRecorded
+                        sp
+                        store
+                        registry
+                        scope
+                        """{"metric":"revenue","subject_hierarchy":"brand","ordering":"descending","with_metrics":["shoppers","footfall"]}"""
+
+                let error = str (JsonDocument.Parse raw).RootElement "error"
+                Expect.stringContains error "footfall" "the unknown id is named"
+                Expect.stringContains error "does not register" "as unregistered"
+                Expect.equal recording.PopulationReads 0 "no ranking was read"
+                Expect.isEmpty recording.Queries "and no companion"
+    ]
+
 let tests =
     testList "Phase 703 query_metric_population AI tool" [
         registrationTests
@@ -1339,4 +1584,5 @@ let tests =
         validationTests
         subjectSetTests
         demoTests
+        companionTests
     ]

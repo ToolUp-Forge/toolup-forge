@@ -306,6 +306,49 @@ as `path_any_of` and `path_exclude` (arrays of `>`-separated paths), refuses a
 malformed value by name, and echoes the filters it applied under `filters`.
 Migration: [`docs/migrations/1142-population-path-filters.md`](../migrations/1142-population-path-filters.md).
 
+### Companion metrics on a ranking: `with_metrics`
+
+A population is one metric across many subjects, but the question is often
+wider: "the top countries by revenue, with their shoppers". Without help that
+is a ranking call and then a `query_facts` call per ranked subject, each a
+provider round trip. `query_metric_population` takes `with_metrics`, a list of
+up to `PopulationQueryTool.MaxCompanionMetrics` (5) registered metric ids, and
+answers the table in one call:
+
+```json
+{ "metric": "revenue", "subject_hierarchy": "geography", "level": 1,
+  "top_k": 10, "with_metrics": ["shoppers"] }
+```
+
+- **The ranking is unchanged.** One metric, ordered and filtered by the store,
+  with its statistics over that metric alone. Every field of the answer and of
+  each ranked entry is byte-identical with or without companions; the answer
+  only gains `withMetrics` (the ids read) and each entry `companions`.
+- **Companions are point reads after the gate.** For each ranked member that
+  crossed the disclosure door, the tool reads each companion for the member's
+  subject and its ranked fact's period exactly (a fact over an overlapping but
+  different period is not that period's companion), at the request's `as_of`,
+  under the metric's canonical method where one is declared. The fact store
+  offers no read of many named subjects, and a branch-wide read would cost the
+  population the ranking exists to avoid, so it is one point read per member
+  and companion; on the indexed blob store each is one download. That is why a
+  call naming companions may ask for at most `PopulationQueryTool.MaxCompanionTopK`
+  (100) members.
+- **Each cell is a fact, a marker or an absence.** A cell carries the metric,
+  `absent`, `facts` (each with its `factId`, `metric`, `method` and canonical
+  `rendering`, so the answer verifier's tool-result scope sees every quoted
+  figure) and `withheld`.
+- **Disclosure.** Every companion fact passes the gate at `FactToolResult` on
+  its own. A withheld companion is the point read's typed marker (`factId`,
+  `policyRef`, the canonical refusal `status`), never its value. A member
+  withheld from the ranking gets no companion read at all: its existence is
+  disclosed once, in the policy-grouped count.
+- **Refusals.** An unregistered companion is refused by name before anything is
+  read (with no metric registry composed, none is registered), as are a
+  non-array or empty list, more than five ids, a repeated id, the ranked
+  metric itself, and a `top_k` above 100 with companions. A companion with no
+  fact for that subject and period is `absent: true`, never a zero.
+
 ### How the blob store serves a point read (Phase 890)
 
 Below a threshold, `BlobFactStore` answers a point read the way it always

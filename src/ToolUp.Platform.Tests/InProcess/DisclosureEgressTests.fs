@@ -1790,6 +1790,265 @@ let pipelineBlockTests =
         }
     ]
 
+// ── The tool-result door for a ranking's companions ──────────────
+//
+// `query_metric_population` with `with_metrics` reads each companion of a
+// ranked member that crossed the door and gates it at `FactToolResult` on
+// its own. A withheld companion is the point read's marker in its cell; a
+// member withheld from the ranking gets no companion read at all; a principal
+// the policy denies every fact is refused with the count and reads nothing
+// further.
+
+/// A fact store that delegates to `inner` and records every `Query` it was
+/// asked and how many population reads it served.
+type RecordingFactStore(inner: IFactStore) =
+    let queries = ResizeArray<FactQuery>()
+    let mutable populationReads = 0
+
+    let recorded (q: FactQuery) =
+        lock queries (fun () -> queries.Add q)
+        q
+
+    /// The `Query` calls, in order.
+    member _.Queries = lock queries (fun () -> List.ofSeq queries)
+
+    /// How many `QueryPopulation` calls were served.
+    member _.PopulationReads = populationReads
+
+    interface IFactStore with
+        member _.Assert(scopeId: string, draft: FactDraft) = inner.Assert(scopeId, draft)
+        member _.Assert(scope: ResolvedScope, draft: FactDraft) = inner.Assert(scope, draft)
+        member _.AssertBatch(scopeId: string, drafts: FactDraft list) = inner.AssertBatch(scopeId, drafts)
+        member _.AssertBatch(scope: ResolvedScope, drafts: FactDraft list) = inner.AssertBatch(scope, drafts)
+        member _.Get(scopeId: string, factId: string) = inner.Get(scopeId, factId)
+        member _.Get(scope: ResolvedScope, factId: string) = inner.Get(scope, factId)
+        member _.Query(scopeId: string, query: FactQuery) = inner.Query(scopeId, recorded query)
+        member _.Query(scope: ResolvedScope, query: FactQuery) = inner.Query(scope, recorded query)
+
+        member _.QueryWithCompetition(scopeId: string, query: FactQuery) =
+            inner.QueryWithCompetition(scopeId, query)
+
+        member _.QueryWithCompetition(scope: ResolvedScope, query: FactQuery) =
+            inner.QueryWithCompetition(scope, query)
+
+        member _.QuerySupersessionChain(scopeId: string, factId: string) =
+            inner.QuerySupersessionChain(scopeId, factId)
+
+        member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) =
+            inner.QuerySupersessionChain(scope, factId)
+
+        member _.QueryPopulation(scopeId: string, query: PopulationQuery) =
+            populationReads <- populationReads + 1
+            inner.QueryPopulation(scopeId, query)
+
+        member _.QueryPopulation(scope: ResolvedScope, query: PopulationQuery) =
+            populationReads <- populationReads + 1
+            inner.QueryPopulation(scope, query)
+
+/// A gate that answers as `inner` does, except that it denies every fact to
+/// the principal `outsider` under `outsider-policy`.
+type private PrincipalGate(inner: IFactDisclosureGate, outsider: string) =
+    let judged (principal: string) (verdicts: Async<Map<string, FactDisclosureVerdict>>) = async {
+        let! verdicts = verdicts
+
+        return
+            if principal = outsider then
+                verdicts |> Map.map (fun _ _ -> FactNotDisclosable "outsider-policy")
+            else
+                verdicts
+    }
+
+    interface IFactDisclosureGate with
+        member _.Check(scopeId: string, principal, surface, factIds) =
+            judged principal (inner.Check(scopeId, principal, surface, factIds))
+
+        member _.Check(scope: ResolvedScope, principal, surface, factIds) =
+            judged principal (inner.Check(scope, principal, surface, factIds))
+
+module private CompanionWorld =
+
+    let metric (id: string) : Grounding.MetricDefinition = {
+        Id = id
+        Name = id
+        Unit = "units"
+        Dimensionality = "count"
+        Direction = Grounding.HigherIsBetter
+        DisplayFormat = ""
+        Staleness = Grounding.UntilSuperseded
+        ProducingOperation = None
+        CanonicalMethod = None
+        RecomputePolicy = None
+        RollUp = None
+        Context = None
+    }
+
+    let registry: Grounding.IMetricRegistry =
+        Grounding.MetricRegistry.build [
+            {
+                Grounding.MetricRegistration.Module = "trade"
+                Definition = metric "revenue"
+            }
+            {
+                Grounding.MetricRegistration.Module = "trade"
+                Definition = metric "shoppers"
+            }
+        ] []
+
+    let period: TemporalExtent = {
+        From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
+        To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+        Label = Some "Q2-2026"
+    }
+
+    type World = {
+        Store: RecordingFactStore
+        Gate: IFactDisclosureGate
+        Scope: ResolvedScope
+    }
+
+    let world () : World =
+        let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+        let inner = BlobFactStore.create (InMemoryBlobStorage()) events
+        let scopeId = "team-" + Guid.NewGuid().ToString "N"
+
+        {
+            Store = RecordingFactStore inner
+            Gate = PrincipalGate(FactDisclosureGate.create inner events, "outsider")
+            Scope =
+                StorageScopeResolver.ScopeResolution.ofStorageScope {
+                    ScopeId = scopeId
+                    Container = "container-" + scopeId
+                    Persist = true
+                }
+        }
+
+    /// Assert `metric` = `value` for subject `brand/<sku>` in the period.
+    let assertFact (w: World) (sku: string) (metric: string) (value: decimal) (disclosure: Disclosure) : Fact =
+        let draft: FactDraft = {
+            Subject = { Hierarchy = "brand"; Path = [ sku ] }
+            Metric = MetricRef metric
+            Value = Scalar value
+            Period = period
+            Method = Computed("rollup", "1", "p0")
+            Evidence = {
+                ResultRef = None
+                InputHashes = [ sku + "/" + metric ]
+                TriggerRef = None
+            }
+            Confidence = None
+            Disclosure = disclosure
+        }
+
+        match (w.Store :> IFactStore).Assert(w.Scope, draft) |> Async.RunSynchronously with
+        | Ok fact -> fact
+        | Error e -> failtestf "assert failed: %s" e
+
+    let args =
+        """{"metric":"revenue","subject_hierarchy":"brand","ordering":"descending","with_metrics":["shoppers"]}"""
+
+    /// The answer as text and parsed, for `principal`.
+    let answer (w: World) (principal: string) : string * Text.Json.JsonElement =
+        let raw =
+            PopulationQueryTool.executeWith
+                w.Store
+                w.Gate
+                (Some registry)
+                (fun () -> DateTime.UtcNow)
+                w.Scope
+                principal
+                args
+            |> Async.RunSynchronously
+
+        raw, (Text.Json.JsonDocument.Parse raw).RootElement.Clone()
+
+    /// The ranked entries' subjects and their companion cells.
+    let cells (answer: Text.Json.JsonElement) : (string * Text.Json.JsonElement) list = [
+        for entry in answer.GetProperty("ranked").EnumerateArray() do
+            for cell in entry.GetProperty("companions").EnumerateArray() do
+                entry.GetProperty("subject").GetString(), cell.Clone()
+    ]
+
+let companionTests =
+    testList "the tool-result door for a ranking's companions" [
+        test "a withheld companion is the point read's marker in its cell, never its value" {
+            let w = CompanionWorld.world ()
+            CompanionWorld.assertFact w "sku-a" "revenue" 500.5m Surfaceable |> ignore
+            CompanionWorld.assertFact w "sku-b" "revenue" 400.5m Surfaceable |> ignore
+
+            let restricted =
+                CompanionWorld.assertFact w "sku-a" "shoppers" 1234.5m (Restricted "licence-x")
+
+            let visible = CompanionWorld.assertFact w "sku-b" "shoppers" 777.5m Surfaceable
+            let raw, answer = CompanionWorld.answer w "user-1"
+
+            match CompanionWorld.cells answer with
+            | [ "brand/sku-a", a; "brand/sku-b", b ] ->
+                Expect.isFalse (a.GetProperty("absent").GetBoolean()) "a withheld companion is not absent"
+                Expect.equal (a.GetProperty("facts").GetArrayLength()) 0 "and carries no value"
+                let marker = a.GetProperty("withheld").EnumerateArray() |> Seq.exactlyOne
+                Expect.equal (marker.GetProperty("factId").GetString()) restricted.FactId "the marker names the fact"
+                Expect.equal (marker.GetProperty("policyRef").GetString()) "licence-x" "and the policy"
+
+                Expect.equal
+                    (marker.GetProperty("status").GetString())
+                    (FactDisclosureVerdict.refusalText "licence-x")
+                    "in the canonical refusal wording"
+
+                Expect.isFalse (marker.TryGetProperty("rendering") |> fst) "a marker has no rendering"
+
+                let shown = b.GetProperty("facts").EnumerateArray() |> Seq.exactlyOne
+                Expect.equal (shown.GetProperty("factId").GetString()) visible.FactId "the visible companion is shown"
+            | other -> failtestf "expected two ranked entries with one cell each, got %A" (List.map fst other)
+
+            Expect.isFalse (raw.Contains "1234.5") "the withheld value crosses nowhere"
+            Expect.isFalse (raw.Contains "1,234") "in any rendering"
+        }
+
+        test "a member withheld from the ranking gets no companion read" {
+            let w = CompanionWorld.world ()
+            CompanionWorld.assertFact w "sku-hidden" "revenue" 900.5m Internal |> ignore
+            CompanionWorld.assertFact w "sku-b" "revenue" 400.5m Surfaceable |> ignore
+
+            CompanionWorld.assertFact w "sku-hidden" "shoppers" 3141.5m Surfaceable
+            |> ignore
+
+            CompanionWorld.assertFact w "sku-b" "shoppers" 777.5m Surfaceable |> ignore
+            let raw, answer = CompanionWorld.answer w "user-1"
+
+            Expect.equal (answer.GetProperty("withheldCount").GetInt32()) 1 "the hidden member is a count"
+
+            Expect.equal
+                (w.Store.Queries |> List.choose _.Subject |> List.map SubjectRef.toString)
+                [ "brand/sku-b" ]
+                "the only companion read is the visible member's"
+
+            Expect.isFalse (raw.Contains "sku-hidden") "the hidden member is never named"
+            Expect.isFalse (raw.Contains "3141.5") "nor its companion's value"
+        }
+
+        test "a principal the policy denies every fact is refused with the count and reads no companion" {
+            let w = CompanionWorld.world ()
+            CompanionWorld.assertFact w "sku-a" "revenue" 500.5m Surfaceable |> ignore
+            CompanionWorld.assertFact w "sku-b" "revenue" 400.5m Surfaceable |> ignore
+            CompanionWorld.assertFact w "sku-a" "shoppers" 1234.5m Surfaceable |> ignore
+            let raw, answer = CompanionWorld.answer w "outsider"
+
+            Expect.equal (answer.GetProperty("ranked").GetArrayLength()) 0 "no member crosses"
+
+            let refusal = answer.GetProperty("withheld").EnumerateArray() |> Seq.exactlyOne
+            Expect.equal (refusal.GetProperty("count").GetInt32()) 2 "both members are counted"
+
+            Expect.equal
+                (refusal.GetProperty("status").GetString())
+                (FactDisclosureVerdict.refusalText "outsider-policy")
+                "under the refusal naming the policy"
+
+            Expect.isEmpty w.Store.Queries "no companion is read for a member that did not cross"
+            Expect.isFalse (raw.Contains "1234.5") "and no companion value crosses"
+            Expect.isFalse (raw.Contains "500.5") "nor a ranked one"
+        }
+    ]
+
 let tests =
     testList "Phase 525 disclosure egress" [
         predicateTests
@@ -1805,4 +2064,5 @@ let tests =
         tableListingTests
         memberListingTests
         pipelineBlockTests
+        companionTests
     ]

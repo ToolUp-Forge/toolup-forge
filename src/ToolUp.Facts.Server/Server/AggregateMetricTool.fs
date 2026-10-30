@@ -116,12 +116,6 @@ module AggregateMetricTool =
 
     // ── Argument parsing ──────────────────────────────────────────
 
-    let private pathSegments (raw: string) : string list =
-        raw.Split('>')
-        |> Array.map _.Trim()
-        |> Array.filter (fun seg -> seg <> "")
-        |> Array.toList
-
     let private parseArgs (argsJson: string) : Result<AggregateQuery, string> =
         match FactTool.parseObject argsJson with
         | Error e -> Error e
@@ -131,28 +125,14 @@ module AggregateMetricTool =
                     "Metric and subject-hierarchy ids, and the hierarchy's level labels, come from `list_metric_coverage`."
                     root
 
-            let period =
-                match FactTool.instantArg root "period_from", FactTool.instantArg root "period_to" with
-                | Error e, _
-                | _, Error e -> Error e
-                | Ok None, Ok None -> Ok None
-                | Ok(Some f), Ok(Some t) when f >= t ->
-                    Error "Argument 'period_from' must be strictly before 'period_to'."
-                | Ok f, Ok t ->
-                    Ok(
-                        Some {
-                            From = f |> Option.defaultValue DateTime.MinValue
-                            To = t |> Option.defaultValue DateTime.MaxValue
-                            Label = None
-                        }
-                    )
-
             match required "metric", required "subject_hierarchy", required "group_by_level" with
             | Error e, _, _
             | _, Error e, _
             | _, _, Error e -> Error e
             | Ok metric, Ok hierarchy, Ok level ->
-                match period, FactTool.instantArg root "as_of", FactTool.stringArg root "path_prefix" with
+                match
+                    FactTool.periodArg root, FactTool.instantArg root "as_of", FactTool.stringArg root "path_prefix"
+                with
                 | Error e, _, _
                 | _, Error e, _
                 | _, _, Error e -> Error e
@@ -161,7 +141,10 @@ module AggregateMetricTool =
                         Metric = MetricRef metric
                         Hierarchy = hierarchy
                         GroupByLevel = level.Trim()
-                        PathPrefix = prefix |> Option.map pathSegments |> Option.filter (List.isEmpty >> not)
+                        PathPrefix =
+                            prefix
+                            |> Option.map FactTool.pathSegments
+                            |> Option.filter (List.isEmpty >> not)
                         PeriodOverlaps = period
                         AsOf = asOf
                     }

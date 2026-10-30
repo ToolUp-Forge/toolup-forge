@@ -1394,6 +1394,8 @@ ToolUp.Facts.PipelineTool.summary(ToolUp.Facts.PipelineToolResult) : System.Stri
 ToolUp.Facts.PlanEvents (class)
 ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
 ToolUp.Facts.PopulationQueryTool (class)
+ToolUp.Facts.PopulationQueryTool.MaxCompanionMetrics : System.Int32 (literal)
+ToolUp.Facts.PopulationQueryTool.MaxCompanionTopK : System.Int32 (literal)
 ToolUp.Facts.PopulationQueryTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.PopulationQueryTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.PopulationQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]

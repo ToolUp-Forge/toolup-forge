@@ -154,52 +154,26 @@ module FactQueryTool =
                     match FactTool.stringArg root "subject_path" with
                     | Error e -> Error e
                     | Ok pathArg ->
-                        let path =
-                            match pathArg with
-                            | None -> []
-                            | Some s ->
-                                s.Split('>')
-                                |> Array.map _.Trim()
-                                |> Array.filter (fun seg -> seg <> "")
-                                |> Array.toList
+                        let path = pathArg |> Option.map FactTool.pathSegments |> Option.defaultValue []
 
-                        match FactTool.instantArg root "period_from", FactTool.instantArg root "period_to" with
-                        | Error e, _
-                        | _, Error e -> Error e
-                        | Ok from, Ok to' ->
+                        match FactTool.periodArg root with
+                        | Error e -> Error e
+                        | Ok periodOverlaps ->
 
-                            let period =
-                                match from, to' with
-                                | None, None -> Ok None
-                                | Some f, Some t when f >= t ->
-                                    Error "Argument 'period_from' must be strictly before 'period_to'."
-                                | f, t ->
-                                    Ok(
-                                        Some {
-                                            From = f |> Option.defaultValue DateTime.MinValue
-                                            To = t |> Option.defaultValue DateTime.MaxValue
-                                            Label = None
-                                        }
-                                    )
-
-                            match period with
+                            match FactTool.instantArg root "as_of" with
                             | Error e -> Error e
-                            | Ok periodOverlaps ->
+                            | Ok asOf ->
 
-                                match FactTool.instantArg root "as_of" with
+                                match FactTool.boolArg root "include_superseded" with
                                 | Error e -> Error e
-                                | Ok asOf ->
-
-                                    match FactTool.boolArg root "include_superseded" with
-                                    | Error e -> Error e
-                                    | Ok includeSuperseded ->
-                                        Ok {
-                                            Subject = { Hierarchy = hierarchy; Path = path }
-                                            Metric = metric
-                                            PeriodOverlaps = periodOverlaps
-                                            AsOf = asOf
-                                            IncludeSuperseded = includeSuperseded |> Option.defaultValue false
-                                        }
+                                | Ok includeSuperseded ->
+                                    Ok {
+                                        Subject = { Hierarchy = hierarchy; Path = path }
+                                        Metric = metric
+                                        PeriodOverlaps = periodOverlaps
+                                        AsOf = asOf
+                                        IncludeSuperseded = includeSuperseded |> Option.defaultValue false
+                                    }
 
     // ── Execution (559.A + 559.B) ─────────────────────────────────
 
