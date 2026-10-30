@@ -23,6 +23,12 @@ module ToolUp.Platform.Tests.InProcess.PipelineToolTests
 //   4. **The door and the summary.** The slice is judged at `FactToolResult`;
 //      the summary names the shape, the columns and the withheld report, and
 //      never a value.
+//   5. **The answering form and the block (Phase 1156).** The model reads the
+//      summary and the message carries one pipeline block: the request, its
+//      hash and run stamp, and a node naming the columns, with no cell value
+//      anywhere it is persisted. A reader's re-run is judged at `FactBrowse`,
+//      draws the reference evaluator's grid, and says how a reader whose gate
+//      differs sees a different result.
 //
 // The egress instances (a withheld value, a denied principal) live in the
 // disclosure egress pack beside every other door.
@@ -34,6 +40,9 @@ open Fuaran.Compute
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
+open ToolUp.AI
+open ToolUp.Platform.AI
+open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
 
 // ─── Fixtures (shared with the disclosure egress pack) ──────────────
@@ -44,13 +53,7 @@ module PipelineFixtures =
     /// The tool's arguments: daily-trade revenue over `days` days from the
     /// first, and `pipeline`.
     let argsFor (tableId: string) (metric: string) (days: int) (pipeline: Transform list) : string =
-        sprintf
-            """{"table":"%s","period_from":"%s","period_to":"%s","metrics":["%s"],"pipeline":%s}"""
-            tableId
-            (day1.ToString "yyyy-MM-dd")
-            ((day1.AddDays(float days)).ToString "yyyy-MM-dd")
-            metric
-            (DataFrameCodec.encodePipeline pipeline)
+        pipelineArgs tableId metric days pipeline
 
     /// Revenue over the three seeded days.
     let revenueArgs (pipeline: Transform list) = argsFor trade.Id "revenue" 3 pipeline
@@ -522,10 +525,180 @@ let private answerTests =
         }
     ]
 
+// ─── 5. The answering form and the block ─────────────────────────────
+
+/// The answering form's answer in `w` for principal `u`.
+let private answeredForm (w: World) (args: string) : ToolHelpers.ToolAnswer =
+    PipelineAnsweringTool.answerWith w.Deps w.Scope "u" args
+    |> Async.RunSynchronously
+
+/// The reader's re-run of a persisted request in `w`, for principal `u`.
+let private rerun (w: World) (requestJson: string) : Result<PipelineBlockResult, string> =
+    PipelineAnsweringTool.rerunWith w.Deps w.Scope "u" requestJson
+    |> Async.RunSynchronously
+
+let private rerunOk (w: World) (requestJson: string) : PipelineBlockResult =
+    match rerun w requestJson with
+    | Ok result -> result
+    | Error e -> failtestf "expected a re-run, got %s" e
+
+/// Every slice cell's revenue as it stands: the raw values, so a persisted
+/// copy of any of them is caught.
+let private revenues: Transform list = [ Project [ FactBrowseSlice.SubjectColumn, "subject"; "revenue", "revenue" ] ]
+
+let private blockTests =
+    testList "the answering form and the pipeline block" [
+        test
+            "the model reads the executor's summary and the message carries one pipeline block, the request and no value" {
+            let w = world ()
+            let expected = answered w (revenueArgs ranked)
+            let form = answeredForm w (revenueArgs ranked)
+
+            Expect.equal form.Text (PipelineTool.summary expected) "the model reads the summary"
+
+            let node, provenance = blockOf form
+            Expect.equal provenance.Kind PipelineBlock.Kind "a pipeline block"
+            Expect.equal provenance.TableId trade.Id "the table"
+            Expect.equal provenance.Metric "revenue" "the metrics the slice named"
+            Expect.equal provenance.Period "2026-10-01T00:00:00Z/2026-10-04T00:00:00Z" "the slice's period"
+            Expect.equal provenance.FactIds expected.FactIds "the facts the lineage read"
+            Expect.isEmpty provenance.Withheld "nothing withheld"
+
+            match PipelineTool.requestOf provenance.Request with
+            | Error refusal -> failtestf "the persisted request does not read: %s" (PipelineRefusal.describe refusal)
+            | Ok request ->
+                Expect.equal request expected.Request "the request the executor answered, its pipeline canonical"
+
+            Expect.equal (PipelineBlock.recordedRunStamp provenance.Request) expected.RunStamp "the run stamp"
+
+            Expect.stringContains
+                provenance.Request
+                (sprintf "\"pipeline_hash\":\"%s\"" expected.PipelineHash)
+                "the pipeline's hash"
+
+            Expect.stringContains node "net_total" "the stored node names the result's columns"
+        }
+
+        test "no cell value reaches the model's text, the stored node or the stored request" {
+            let w = world ()
+            let form = answeredForm w (revenueArgs revenues)
+            let node, provenance = blockOf form
+
+            let values =
+                match PipelineBlock.rowsOf (rerunOk w provenance.Request) with
+                | Ok rows -> rows |> List.map List.last
+                | Error e -> failtest e
+
+            Expect.contains values (string DistinctiveValue) "the re-run carries the distinctive value"
+
+            for text in [ form.Text; node; provenance.Request ] do
+                for value in values do
+                    Expect.isFalse (text.Contains value) (sprintf "'%s' is in no persisted text" value)
+        }
+
+        test "the model's read is judged at the tool-result door and the reader's re-run at the browse door" {
+            let w = world ()
+            let _, provenance = blockOf (answeredForm w (revenueArgs perSubject))
+            let asked = List.length w.Gate.Surfaces
+            Expect.isGreaterThan asked 0 "the model's read was judged"
+            Expect.all w.Gate.Surfaces (fun s -> s = FactToolResult) "at FactToolResult"
+
+            rerunOk w provenance.Request |> ignore
+            let reread = w.Gate.Surfaces |> List.skip asked
+            Expect.isNonEmpty reread "the re-run was judged"
+            Expect.all reread (fun s -> s = FactBrowse) "at FactBrowse"
+        }
+
+        test "the reader's grid is the reference evaluator's over the same slice" {
+            let w = world ()
+            let _, provenance = blockOf (answeredForm w (revenueArgs ranked))
+            let result = rerunOk w provenance.Request
+
+            let expected =
+                match DataFrame.evalPipeline ranked (sliceTable w 3) with
+                | Ok t -> t
+                | Error e -> failtestf "%s" (DataFrame.errorString e)
+
+            let grid =
+                [ 0 .. Table.rowCount expected - 1 ]
+                |> List.map (fun i ->
+                    Table.columnNames expected
+                    |> List.map (fun c -> PipelineBlock.cellText (cells c expected).[i]))
+
+            Expect.equal (PipelineBlock.rowsOf result) (Ok grid) "the evaluator's own figures"
+            Expect.equal result.Columns [ "subject"; "net_total" ] "its columns"
+            Expect.isEmpty (PipelineBlock.differences provenance result) "the writer reads what was recorded"
+        }
+
+        test "a reader the gate withholds a fact from sees the column withheld and a note saying so" {
+            let w = world ()
+            let _, provenance = blockOf (answeredForm w (revenueArgs perSubject))
+            withheldOne w
+            let result = rerunOk w provenance.Request
+
+            Expect.equal (result.Withheld |> List.map _.Column) [ "total" ] "the total reads the withheld revenue"
+
+            match PipelineBlock.redraw<unit> provenance result with
+            | Error defect -> failtestf "the block did not draw: %s" (PresentationDefect.describe defect)
+            | Ok block ->
+                Expect.equal
+                    block.Notes
+                    [
+                        "'total' is withheld: it reads revenue, with 1 cell withheld (1 under trade-figures)."
+                    ]
+                    "the grid names the withheld column"
+
+                Expect.equal
+                    block.Provenance.Withheld
+                    [
+                        {
+                            PolicyRef = "trade-figures"
+                            Count = 1
+                        }
+                    ]
+                    "the reader's withheld report"
+
+                Expect.equal block.Provenance.Request provenance.Request "the part's request, verbatim"
+
+            Expect.equal
+                (PipelineBlock.differences provenance result)
+                [
+                    "More is withheld from you than from the writer: 1 withheld cell read now, against 0 when this result was written."
+                    "It reads different facts for you: 1 of the facts it was written with is not read now, and 0 are read now that were not."
+                ]
+                "the differences, word for word"
+        }
+
+        test "a reader the policy denies every fact gets a refusal from the re-run, never an empty grid" {
+            let w = world ()
+            let _, provenance = blockOf (answeredForm w (revenueArgs perSubject))
+
+            w.Gate.Deny [
+                for site in [ "s1"; "s2" ] do
+                    for offset in 0..2 do
+                        revenueFactId w site offset
+            ]
+
+            Expect.equal
+                (rerun w provenance.Request)
+                (Error
+                    "no cell of the slice carries a value you may be shown: 6 cell(s) read, 6 withheld under trade-figures")
+                "the executor's refusal, verbatim"
+        }
+
+        test "a refused evaluation answers the refusal and attaches nothing" {
+            let w = world ()
+            let form = answeredForm w "{}"
+            Expect.isEmpty form.Parts "nothing attached"
+            Expect.stringStarts form.Text "evaluate_pipeline refused the request: " "the refusal"
+        }
+    ]
+
 let tests =
     testList "Phase 1145 — evaluate_pipeline computes over a gated fact slice" [
         refusalTests
         resultTests
         withheldTests
         answerTests
+        blockTests
     ]

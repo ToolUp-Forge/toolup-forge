@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.Facts.Presentation Server — the render_chart and render_table AI tools: the model writes a presentation request, the server reads the series it names under the disclosure gate at the tool-result door, draws it with the presentation builders and answers with a text summary the model reads and the block the assistant message carries. Composed opt-in with PresentationCompose.withRenderTools; a deployment that does not compose it carries no Fuaran-UI dependency. Phase 1132.</Description>
+        <Description>ToolUp.Facts.Presentation Server — the render_chart and render_table AI tools: the model writes a presentation request, the server reads the series it names under the disclosure gate at the tool-result door, draws it with the presentation builders and answers with a text summary the model reads and the block the assistant message carries. And evaluate_pipeline in the same answering form: the summary the model reads and a pipeline block part carrying the request and never a row, with the re-run endpoint a reader's panel draws the block from under the reader's own gate. Composed opt-in with PresentationCompose.withRenderTools and PresentationCompose.withPipelineTool; a deployment that composes neither carries no Fuaran-UI dependency.</Description>
         <PackageTags>fsharp;sdk;server;facts;grounding;ai;tools;charts;fuaran-ui</PackageTags>
     </PropertyGroup>
     <ItemGroup>
@@ -21,6 +21,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Server\RenderTools.fs" />
+        <Compile Include="Server\PipelineAnsweringTool.fs" />
         <Compile Include="Server\PresentationCompose.fs" />
     </ItemGroup>
 </Project>
