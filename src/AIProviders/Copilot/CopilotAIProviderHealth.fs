@@ -1,6 +1,7 @@
 module CopilotAIProviderHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -23,7 +24,7 @@ type CopilotAIProviderHealthCheck(secretStore: ISecretStore) =
 
         member _.Check() = async {
             try
-                let! secret = secretStore.GetSecret("_platform", "AZURE_OPENAI_API_KEY")
+                let! secret = secretStore.GetSecret(ScopeKey.PlatformContainer, "AZURE_OPENAI_API_KEY")
 
                 match secret with
                 | Some value when not (String.IsNullOrWhiteSpace value) -> return Healthy

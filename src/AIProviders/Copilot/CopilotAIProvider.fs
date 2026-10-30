@@ -172,7 +172,7 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
         CopilotAIProvider(
             endpoint,
             defaultArg apiVersion DefaultApiVersion,
-            ApiKeyAuth(fun () -> secretStore.GetSecret("_platform", SecretKeyName)),
+            ApiKeyAuth(fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, SecretKeyName)),
             defaultArg model DefaultModel
         )
 
