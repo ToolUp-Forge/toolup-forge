@@ -129,8 +129,8 @@ let tests =
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
-                            "src/Server/Server.fsproj"
                             "src/Server/RemotingLeftovers.fs"
+                            "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
                         ]
                         "apply writes exactly the changed files, in plan order")
@@ -171,8 +171,8 @@ let tests =
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
-                            "src/Server/Server.fsproj"
                             "src/Server/RemotingLeftovers.fs"
+                            "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
                         ]
                         "the walk is the eligible files in ordinal relative-path order")
