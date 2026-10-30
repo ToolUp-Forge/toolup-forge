@@ -5,8 +5,6 @@ module ModuleVisibilityAdminUI
 
 open ToolUp.Elmish
 open Feliz
-open Fuaran.UI
-open Fuaran.UI.Types
 open ToolUp.Platform
 
 // ─── Module-visibility profile editor (client-tier admin slice) ──────
@@ -72,8 +70,9 @@ type Model = {
     /// `Allow` list IS an ordered curation (`ModuleVisibilityResolution`
     /// carries that order through), and a set would silently discard it.
     Selection: string list
-    /// Editor: the free-text note. Phase 1160 lifted it out of the form's
-    /// local React state, so it does round-trip per keystroke.
+    /// Editor seed for the free-text note. The live input value is React
+    /// state inside `EditorForm` (per the MVU rule on text inputs); this
+    /// field is what it seeds from on load, never a per-keystroke mirror.
     Note: string
     /// Per-page exclusions carried through from the loaded profile.
     ///
@@ -102,8 +101,9 @@ type Msg =
     | ResolutionLoaded of Result<ModuleVisibilityResolution option, string>
     | SetKind of RuleKind
     | ToggleModule of string
-    | SetNote of string
-    /// Save the edited profile.
+    /// Save the edited profile. Carries the note from the form's local
+    /// React state — text inputs do not round-trip through Elmish per
+    /// keystroke.
     | Save of note: string
     | SaveCompleted of Result<unit, string>
     | Clear
@@ -323,193 +323,281 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         },
         Cmd.none
 
-    | SetNote note -> { model with Note = note }, Cmd.none
-
     | DismissError -> { model with Error = None }, Cmd.none
 
     | DismissStatus -> { model with Status = None }, Cmd.none
 
 // ─── View helpers ────────────────────────────────────────────────────
-// ─── View ────────────────────────────────────────────────────────────
 
-/// One candidate as a checkbox field: its membership of the edited rule, and,
-/// once the resolution has landed, whether the server currently admits it.
-let private moduleField
-    (msgs: ModuleVisibilityAdminMessages)
-    (resolution: ModuleVisibilityResolution option)
-    (selection: string list)
-    (moduleId: string)
-    : FormField<Msg> =
-    {
-        Id = "module-" + moduleId
-        Kind =
-            FormFieldKind.checkboxControl (
-                Binding.Static(Some(List.contains moduleId selection)),
-                onChange = (fun (_: bool) -> Action.dispatch (ToggleModule moduleId))
-            )
-        Label = TreeLowering.literal moduleId
-        Required = false
-        Help =
-            resolution
-            |> Option.map (fun r ->
-                TreeLowering.literal (
-                    if ModuleVisibility.admitsModule r moduleId then
-                        msgs.VisibleNow
-                    else
-                        msgs.HiddenNow
-                ))
-        Rule = None
-    }
-
-/// The rule shape, the note and every candidate as one form. Submitting saves.
-let private editorForm (msgs: ModuleVisibilityAdminMessages) (model: Model) : Node<Msg> =
-    let kindOf (value: string option) =
-        if value = Some "deny" then
-            RuleKind.Deny
-        else
-            RuleKind.Allow
-
-    let kindField: FormField<Msg> = {
-        Id = "rule-kind"
-        Kind =
-            FormFieldKind.segmentedChoiceControl (
-                Binding.Static(
-                    Some [
-                        {
-                            Value = "allow"
-                            Label = msgs.AllowLabel
-                        }
-                        {
-                            Value = "deny"
-                            Label = msgs.DenyLabel
-                        }
-                    ]
-                ),
-                Binding.Static(Some(if model.Kind = RuleKind.Deny then "deny" else "allow")),
-                onChange = (fun value -> Action.dispatch (SetKind(kindOf value)))
-            )
-        Label = TreeLowering.literal msgs.YourProfileHeading
-        Required = false
-        Help =
-            Some(
-                TreeLowering.literal (
-                    if model.Kind = RuleKind.Deny then
-                        msgs.DenyDescription
-                    else
-                        msgs.AllowDescription
-                )
-            )
-        Rule = None
-    }
-
-    let noteField: FormField<Msg> = {
-        Id = "note"
-        Kind =
-            FormFieldKind.textControl (
-                Binding.Static(Some model.Note),
-                onChange = (fun text -> Action.dispatch (SetNote text))
-            )
-        Label = TreeLowering.literal msgs.NoteLabel
-        Required = false
-        Help = Some(TreeLowering.literal msgs.NotePlaceholder)
-        Rule = None
-    }
-
-    let candidates =
-        model.RegisteredModuleIds
-        |> List.map (moduleField msgs model.Resolved model.Selection)
-
-    Fuaran.form "editor" {
-        Defaults.form with
-            Fields = kindField :: candidates @ [ noteField ]
-            OnSubmit = Action.dispatch (Save model.Note)
-            SubmitLabel = TreeLowering.literal (if model.Busy then msgs.Working else msgs.SaveProfile)
-            Disabled = Some(binding.query "busy" unbox<bool>)
-    }
-
-/// The resolved answer, rendered beside the editable profile. See the header
-/// note: this is what makes "I allowed it and it still does not appear"
-/// answerable without leaving the page.
-let private resolvedPane (msgs: ModuleVisibilityAdminMessages) (model: Model) : Node<Msg> =
-    let section (id: string) (label: int -> string) (items: string list) =
-        TreeLowering.column id [
-            TreeLowering.text (id + "-label") (label (List.length items))
-            if List.isEmpty items then
-                TreeLowering.text (id + "-empty") msgs.NoItems
-            else
-                Fuaran.list (id + "-items") items
-        ]
-
-    let body =
-        match model.Resolved with
-        | None when not model.ResolvedLoaded -> [ TreeLowering.text "resolved-loading" msgs.Loading ]
-        | None -> [ TreeLowering.text "resolved-none" msgs.NoResolutionYet ]
-        | Some r -> [
-            section "governed" msgs.GovernedModules r.GovernedModuleIds
-            section "selected" msgs.SelectedAfterEveryLayer r.SelectedModuleIds
-            section "excluded" msgs.ExcludedEntries r.ExcludedEntryIds
-            section "scopes" msgs.ContributingScopes (r.ContributingScopes |> List.map FlagScope.slug)
-          ]
-
-    TreeLowering.card
-        "resolved"
-        msgs.ResolvedForYouHeading
-        (TreeLowering.text "resolved-help" msgs.ResolvedForYouHelp :: body)
-
-/// The whole surface as a value. Pure: everything it shows comes from `model`,
-/// so a test can read the tree without a DOM.
-let private surface (msgs: ModuleVisibilityAdminMessages) (model: Model) : Node<Msg> =
-    TreeLowering.column "module-visibility" [
-        TreeLowering.heading "heading" 2 msgs.Heading
-        TreeLowering.text "subheading" msgs.Subheading
-
-        match model.Error with
-        | Some text -> TreeLowering.banner "error" ToneVariant.Critical text msgs.Dismiss DismissError
-        | None -> ()
-
-        match model.Status with
-        | Some text -> TreeLowering.banner "status" ToneVariant.Success text msgs.Dismiss DismissStatus
-        | None -> ()
-
-        if model.Loaded then
-            TreeLowering.card "editor-card" msgs.YourProfileHeading [
-                TreeLowering.text "editor-help" msgs.YourProfileHelp
-                TreeLowering.text
-                    "registered-header"
-                    (msgs.RegisteredModulesHeader model.RegisteredModuleIds.Length model.Selection.Length)
-
-                if List.isEmpty model.RegisteredModuleIds then
-                    TreeLowering.text "no-modules" msgs.NoCuratableModules
-
-                editorForm msgs model
-
-                TreeLowering.button
-                    "clear"
-                    ButtonVariant.Destructive
-                    msgs.ClearProfile
-                    (model.Busy || model.StoredProfile.IsNone)
-                    Clear
+let private banner (msgs: ModuleVisibilityAdminMessages) (cls: string) (text: string) (onDismiss: unit -> unit) =
+    Html.div [
+        prop.className $"mb-4 p-3 border rounded text-sm flex items-center justify-between {cls}"
+        prop.children [
+            Html.span [ prop.text text ]
+            Html.button [
+                prop.className "text-xs hover:underline"
+                prop.text msgs.Dismiss
+                prop.onClick (fun _ -> onDismiss ())
             ]
-        else
-            TreeLowering.text "loading" msgs.Loading
-
-        resolvedPane msgs model
+        ]
     ]
 
-/// The form's disabled flag is the one value projected through the host seam.
-let internal projection: IHostStateProjection<Model> =
-    IHostStateProjection.ofFunc (fun model -> HostBindingSources.ofQueryResults (Map [ "busy", box model.Busy ]))
+let private kindButton (label: string) (description: string) (active: bool) (onClick: unit -> unit) =
+    Html.button [
+        prop.className [
+            "flex-1 text-left px-3 py-2 rounded-lg border transition-colors"
+            if active then
+                "border-brand bg-brand/5"
+            else
+                "border-border bg-white hover:border-brand"
+        ]
+        prop.onClick (fun _ -> onClick ())
+        prop.children [
+            Html.div [ prop.className "text-sm font-semibold"; prop.text label ]
+            Html.div [ prop.className "text-xs text-gray-500"; prop.text description ]
+        ]
+    ]
 
-/// Phase 751 - the module body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render, so the catalog hook needs its own site.
+/// One row of the candidate list: the module id, its membership of the
+/// edited rule, and — once the resolution has landed — whether the
+/// server currently admits it.
+let private moduleRow
+    (msgs: ModuleVisibilityAdminMessages)
+    (resolution: ModuleVisibilityResolution option)
+    (selected: bool)
+    (moduleId: string)
+    (onToggle: unit -> unit)
+    =
+    let admittedBadge =
+        match resolution with
+        | None -> Html.none
+        | Some r ->
+            if ModuleVisibility.admitsModule r moduleId then
+                Html.span [
+                    prop.className "text-xs px-2 py-0.5 rounded bg-green-100 text-green-700"
+                    prop.text msgs.VisibleNow
+                ]
+            else
+                Html.span [
+                    prop.className "text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600"
+                    prop.text msgs.HiddenNow
+                ]
+
+    Html.label [
+        prop.className "flex items-center gap-3 px-3 py-2 border-t border-border cursor-pointer hover:bg-gray-50"
+        prop.children [
+            Html.input [
+                prop.type' "checkbox"
+                prop.isChecked selected
+                prop.onChange (fun (_: bool) -> onToggle ())
+            ]
+            Html.span [ prop.className "font-mono text-xs flex-1 break-all"; prop.text moduleId ]
+            admittedBadge
+        ]
+    ]
+
+/// The resolved answer, rendered beside the editable profile. See the
+/// header note — this is what makes "I allowed it and it still does not
+/// appear" answerable without leaving the page.
+let private resolvedPane (msgs: ModuleVisibilityAdminMessages) (model: Model) =
+    let body =
+        match model.Resolved with
+        | None when not model.ResolvedLoaded ->
+            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+        | None -> Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoResolutionYet ]
+        | Some r ->
+            let list (label: int -> string) (items: string list) =
+                Html.div [
+                    prop.className "mb-3"
+                    prop.children [
+                        Html.div [
+                            prop.className "text-xs font-medium text-gray-600 mb-1"
+                            prop.text (label (List.length items))
+                        ]
+                        if List.isEmpty items then
+                            Html.p [ prop.className "text-xs text-gray-400"; prop.text msgs.NoItems ]
+                        else
+                            Html.div [
+                                prop.className "flex flex-wrap gap-1"
+                                prop.children [
+                                    for item in items ->
+                                        Html.span [
+                                            prop.className
+                                                "font-mono text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 break-all"
+                                            prop.text item
+                                        ]
+                                ]
+                            ]
+                    ]
+                ]
+
+            Html.div [
+                prop.children [
+                    list msgs.GovernedModules r.GovernedModuleIds
+                    list msgs.SelectedAfterEveryLayer r.SelectedModuleIds
+                    list msgs.ExcludedEntries r.ExcludedEntryIds
+                    list msgs.ContributingScopes (r.ContributingScopes |> List.map FlagScope.slug)
+                ]
+            ]
+
+    Html.div [
+        prop.className "bg-white rounded-lg border border-border p-4"
+        prop.children [
+            Html.h3 [
+                prop.className "text-sm font-semibold mb-1"
+                prop.text msgs.ResolvedForYouHeading
+            ]
+            Html.p [
+                prop.className "text-xs text-gray-500 mb-3"
+                prop.text msgs.ResolvedForYouHelp
+            ]
+            body
+        ]
+    ]
+
+/// The note field plus the two mutating actions. The note is local React
+/// state so free-typing does not round-trip through Elmish (CLAUDE.md MVU
+/// rule); `onSave` carries its value at submit time. Seeded once from
+/// `model.Note` on mount — a reload after a save must not overwrite what
+/// the operator is mid-way through typing.
 [<ReactComponent>]
-let private ModuleVisibilityAdminBody (model: Model) (sources: HostBindingSources) (host: ClientHostCapabilities<Msg>) =
+let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).ModuleVisibilityAdmin
-    TreeLowering.lowerHosted sources host (surface msgs model)
+    let note, setNote = React.useState model.Note
 
-let internal view (model: Model) (_: Msg -> unit) (host: ClientHostCapabilities<Msg>) (sources: HostBindingSources) =
-    ModuleVisibilityAdminBody model sources host
+    Html.div [
+        prop.children [
+            Html.label [
+                prop.className "block text-xs font-medium text-gray-700 mb-1"
+                prop.text msgs.NoteLabel
+            ]
+            Html.input [
+                prop.type' "text"
+                prop.value note
+                prop.placeholder msgs.NotePlaceholder
+                prop.onChange (fun (v: string) -> setNote v)
+                prop.className
+                    "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full text-sm mb-4"
+            ]
+
+            Html.div [
+                prop.className "flex gap-2"
+                prop.children [
+                    Html.button [
+                        prop.className [
+                            "px-4 py-2 text-sm rounded-lg text-white transition-colors"
+                            if model.Busy then
+                                "bg-gray-300 cursor-not-allowed"
+                            else
+                                "bg-brand hover:bg-brand-dark cursor-pointer"
+                        ]
+                        prop.disabled model.Busy
+                        prop.text (if model.Busy then msgs.Working else msgs.SaveProfile)
+                        prop.onClick (fun _ -> onSave note)
+                    ]
+                    Html.button [
+                        prop.className [
+                            "px-4 py-2 text-sm rounded-lg border transition-colors"
+                            if model.Busy || model.StoredProfile.IsNone then
+                                "border-border text-gray-400 cursor-not-allowed"
+                            else
+                                "border-border text-gray-700 hover:border-red-300 hover:text-red-600 cursor-pointer"
+                        ]
+                        prop.disabled (model.Busy || model.StoredProfile.IsNone)
+                        prop.text msgs.ClearProfile
+                        prop.onClick (fun _ -> onClear ())
+                    ]
+                ]
+            ]
+        ]
+    ]
+
+/// Phase 751 — the module body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
+/// inline by the shell's own render, so a hook there would join the shell's
+/// hook order and break the moment the active module changed.
+[<ReactComponent>]
+let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).ModuleVisibilityAdmin
+
+    let errorBanner =
+        match model.Error with
+        | Some msg -> banner msgs "bg-red-50 border-red-200 text-red-700" msg (fun () -> dispatch DismissError)
+        | None -> Html.none
+
+    let statusBanner =
+        match model.Status with
+        | Some msg -> banner msgs "bg-green-50 border-green-200 text-green-700" msg (fun () -> dispatch DismissStatus)
+        | None -> Html.none
+
+    let candidateRows =
+        if List.isEmpty model.RegisteredModuleIds then
+            [
+                Html.p [
+                    prop.className "px-3 py-3 text-xs text-gray-500"
+                    prop.text msgs.NoCuratableModules
+                ]
+            ]
+        else
+            [
+                for moduleId in model.RegisteredModuleIds ->
+                    moduleRow msgs model.Resolved (List.contains moduleId model.Selection) moduleId (fun () ->
+                        dispatch (ToggleModule moduleId))
+            ]
+
+    let candidateHeader =
+        Html.div [
+            prop.className "px-3 py-2 bg-gray-50 text-xs font-medium text-gray-600"
+            prop.text (msgs.RegisteredModulesHeader model.RegisteredModuleIds.Length model.Selection.Length)
+        ]
+
+    let editor =
+        if not model.Loaded then
+            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+        else
+            Html.div [
+                prop.className "bg-white rounded-lg border border-border p-4 mb-4"
+                prop.children [
+                    Html.h3 [
+                        prop.className "text-sm font-semibold mb-1"
+                        prop.text msgs.YourProfileHeading
+                    ]
+                    Html.p [ prop.className "text-xs text-gray-500 mb-3"; prop.text msgs.YourProfileHelp ]
+
+                    Html.div [
+                        prop.className "flex gap-2 mb-4"
+                        prop.children [
+                            kindButton msgs.AllowLabel msgs.AllowDescription (model.Kind = RuleKind.Allow) (fun () ->
+                                dispatch (SetKind RuleKind.Allow))
+                            kindButton msgs.DenyLabel msgs.DenyDescription (model.Kind = RuleKind.Deny) (fun () ->
+                                dispatch (SetKind RuleKind.Deny))
+                        ]
+                    ]
+
+                    Html.div [
+                        prop.className "border border-border rounded-lg overflow-hidden mb-4"
+                        prop.children (candidateHeader :: candidateRows)
+                    ]
+
+                    EditorForm model (fun note -> dispatch (Save note)) (fun () -> dispatch Clear)
+                ]
+            ]
+
+    Html.div [
+        prop.className "p-6 max-w-3xl"
+        prop.children [
+            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            errorBanner
+            statusBanner
+            editor
+            resolvedPane msgs model
+        ]
+    ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    ModuleVisibilityAdminBody model dispatch
+
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
@@ -542,7 +630,7 @@ let create (config: ModuleLabel option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ClientBoundHostView.withBoundElementView projection view
+    |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

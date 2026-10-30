@@ -6,8 +6,7 @@ module TeamManagerUI
 open System
 open ToolUp.Elmish
 open Feliz
-open Fuaran.UI
-open Fuaran.UI.Types
+open Toolup.UIToolkit
 open ToolUp.Platform
 
 // ─── Model ───────────────────────────────────────────────────────────
@@ -836,47 +835,72 @@ let update (msg: Msg) (model: Model) =
     | DismissError -> { model with Error = None }, Cmd.none
 
 // ─── View ────────────────────────────────────────────────────────────
-//
-// Phase 1160: the surface is a Fuaran-UI tree, a pure function of `Model`,
-// lowered once in `TeamManagerBody`. Two regions stay React behind islands
-// because they own hooks of their own: the directory typeahead and the
-// publication-readers panel.
 
-let private teamNameOf (teamId: string) (model: Model) =
-    model.Teams
-    |> List.tryFind (fun t -> t.TeamId = teamId)
-    |> Option.map _.Name
-    |> Option.defaultValue teamId
-
-let private teamRow (msgs: TeamManagerMessages) (team: TeamInfo) (isActive: bool) : Node<Msg> =
-    let id = "team-" + team.TeamId
-
-    TreeLowering.row id [
-        TreeLowering.text (id + "-name") team.Name
-        if isActive then
-            Fuaran.badge (id + "-active") {
-                Defaults.badge with
-                    Label = TreeLowering.literal msgs.ActiveBadge
-                    Variant = BadgeVariant.Brand
-            }
-        TreeLowering.text (id + "-id") (msgs.TeamIdLabel team.TeamId)
-        if not isActive then
-            TreeLowering.button
-                (id + "-switch")
-                ButtonVariant.Secondary
-                msgs.Switch
-                false
-                (SwitchActiveTeam team.TeamId)
-        TreeLowering.button (id + "-manage") ButtonVariant.Secondary msgs.Manage false (SelectTeam team.TeamId)
+let private teamRow
+    (msgs: TeamManagerMessages)
+    (team: TeamInfo)
+    (isActive: bool)
+    (onSelect: unit -> unit)
+    (onSwitch: unit -> unit)
+    =
+    Html.div [
+        prop.className [
+            "flex items-center justify-between p-4 border rounded-lg mb-2"
+            if isActive then
+                "border-brand bg-brand/5"
+            else
+                "border-border"
+        ]
+        prop.children [
+            Html.div [
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-center gap-2"
+                        prop.children [
+                            Html.span [ prop.className "font-medium text-base"; prop.text team.Name ]
+                            if isActive then
+                                Html.span [
+                                    prop.className "text-xs text-brand font-medium px-2 py-0.5 rounded bg-brand/10"
+                                    prop.text msgs.ActiveBadge
+                                ]
+                        ]
+                    ]
+                    Html.span [
+                        prop.className "text-xs text-muted"
+                        prop.text (msgs.TeamIdLabel team.TeamId)
+                    ]
+                ]
+            ]
+            Html.div [
+                prop.className "flex gap-2"
+                prop.children [
+                    if not isActive then
+                        Forms.Button.secondary msgs.Switch onSwitch
+                    Forms.Button.secondary msgs.Manage onSelect
+                ]
+            ]
+        ]
     ]
 
-let private myTeamsView (msgs: TeamManagerMessages) (model: Model) : Node<Msg> =
-    TreeLowering.card "my-teams" msgs.MyTeamsPanel [
-        if model.Teams.IsEmpty then
-            TreeLowering.text "no-teams" msgs.NoTeamsYet
-        else
-            for team in model.Teams do
-                teamRow msgs team (model.ActiveTeamId = Some team.TeamId)
+let private myTeamsView (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -> unit) =
+    Html.div [
+        prop.className "space-y-4"
+        prop.children [
+            Layout.Panel.panel msgs.MyTeamsPanel [
+                if model.Teams.IsEmpty then
+                    Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.NoTeamsYet ]
+                else
+                    Html.div [
+                        for team in model.Teams do
+                            teamRow
+                                msgs
+                                team
+                                (model.ActiveTeamId = Some team.TeamId)
+                                (fun () -> dispatch (SelectTeam team.TeamId))
+                                (fun () -> dispatch (SwitchActiveTeam team.TeamId))
+                    ]
+            ]
+        ]
     ]
 
 let private roleOfString =
@@ -911,63 +935,6 @@ let private assignableRoles (callerRole: TeamRole) : TeamRole list =
     | Admin -> [ Member ]
     | Member -> []
 
-let private assignableTo (callerRole: TeamRole option) : TeamRole list =
-    callerRole |> Option.map assignableRoles |> Option.defaultValue []
-
-let private roleOptions (roles: TeamRole list) : Binding<SelectOption list> =
-    Binding.Static(
-        Some [
-            for role in roles do
-                let name = TeamRoles.displayName role in ({ Label = name; Value = name }: SelectOption)
-        ]
-    )
-
-/// The role picker both invite forms use. `Owner` is excluded everywhere —
-/// initial ownership is set via Platform Management at team-create time.
-let private roleField
-    (msgs: TeamManagerMessages)
-    (roles: TeamRole list)
-    (current: TeamRole)
-    (onPick: TeamRole -> Msg)
-    : FormField<Msg> =
-    {
-        Id = "role"
-        Kind =
-            FormFieldKind.segmentedChoiceControl (
-                roleOptions roles,
-                Binding.Static(Some(TeamRoles.displayName current)),
-                onChange =
-                    (fun value ->
-                        value
-                        |> Option.map (roleOfString >> onPick >> Action.dispatch)
-                        |> Option.defaultValue Action.none)
-            )
-        Label = TreeLowering.literal msgs.RoleLabel
-        Required = true
-        Help = None
-        Rule = None
-    }
-
-/// Best-effort human labels for a user id: the JWT display name for the caller
-/// themselves, else the directory-resolved name and email, else the raw id.
-let private labelsFor (directory: Map<string, UserSummary>) (selfId: string) (userId: string) =
-    if userId = selfId then
-        UserSession.getDisplayName () |> Option.defaultValue userId, UserSession.getEmail ()
-    else
-        match Map.tryFind userId directory with
-        | Some s ->
-            let name = s.DisplayName |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
-            let email = s.Email |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
-
-            match name, email with
-            | Some n, _ -> n, email
-            | None, Some e -> e, None
-            | None, None -> userId, None
-        | None -> userId, None
-
-let private displayNameForId (directory: Map<string, UserSummary>) (selfId: string) (userId: string) : string =
-    fst (labelsFor directory selfId userId)
-
 let private memberRow
     (msgs: TeamManagerMessages)
     (teamId: string)
@@ -975,8 +942,8 @@ let private memberRow
     (callerRole: TeamRole option)
     (directory: Map<string, UserSummary>)
     (membership: TeamMembership)
-    : Node<Msg> =
-    let id = "member-" + membership.UserId
+    (dispatch: Msg -> unit)
+    =
     let isSelf = membership.UserId = selfId
 
     // Caller may act on this membership when they hold a role whose
@@ -987,47 +954,87 @@ let private memberRow
         | Some r -> TeamRoles.canManageRole r membership.Role
         | None -> false
 
-    let primaryLabel, secondaryLabel = labelsFor directory selfId membership.UserId
+    let roleBadge =
+        Html.span [
+            prop.className "text-xs text-muted px-2 py-0.5 rounded bg-gray-100"
+            prop.text (TeamRoles.displayName membership.Role)
+        ]
 
-    TreeLowering.row id [
-        TreeLowering.text (id + "-name") primaryLabel
+    let roleDropdown =
+        let optionRoles =
+            match callerRole with
+            | Some r -> assignableRoles r
+            | None -> []
 
-        match secondaryLabel with
-        | Some email -> TreeLowering.text (id + "-email") email
-        | None -> ()
+        Html.select [
+            prop.className [
+                "text-xs border border-border rounded px-2 py-1"
+                "focus:outline-none focus:border-brand"
+            ]
+            prop.value (TeamRoles.displayName membership.Role)
+            prop.onChange (fun (v: string) ->
+                let newRole = roleOfString v
 
-        if canManageTarget && not isSelf then
-            Fuaran.select (id + "-role") {
-                Defaults.select with
-                    Label = TreeLowering.literal msgs.RoleLabel
-                    Source = roleOptions (assignableTo callerRole)
-                    Value = Some(Binding.Static(Some(TeamRoles.displayName membership.Role)))
-                    OnChange =
-                        Some(fun value ->
-                            let newRole =
-                                value |> Option.map roleOfString |> Option.defaultValue membership.Role
+                if newRole <> membership.Role then
+                    dispatch (ChangeMemberRole(teamId, membership.UserId, newRole)))
+            prop.children [
+                for role in optionRoles do
+                    Html.option [
+                        prop.value (TeamRoles.displayName role)
+                        prop.text (TeamRoles.displayName role)
+                    ]
+            ]
+        ]
 
-                            if newRole <> membership.Role then
-                                Action.dispatch (ChangeMemberRole(teamId, membership.UserId, newRole))
-                            else
-                                Action.none)
-            }
-        else
-            Fuaran.badge (id + "-role") {
-                Defaults.badge with
-                    Label = TreeLowering.literal (TeamRoles.displayName membership.Role)
-            }
-
+    // Render the current user's display name + email from the JWT
+    // (`name` / `email` / `preferred_username` claims). Other members
+    // resolve via the directory companion (`IUserDirectoryApi`): display
+    // name + email when known, email alone, else the raw UserId as the
+    // last-resort fallback (no companion wired, or an unresolved id).
+    let primaryLabel, secondaryLabel =
         if isSelf then
-            TreeLowering.text (id + "-you") msgs.YouSuffix
+            let name = UserSession.getDisplayName () |> Option.defaultValue membership.UserId
 
-        if canManageTarget && not isSelf then
-            TreeLowering.button
-                (id + "-remove")
-                ButtonVariant.Secondary
-                msgs.RemoveMember
-                false
-                (RemoveMember(teamId, membership.UserId))
+            let email = UserSession.getEmail ()
+            name, email
+        else
+            match Map.tryFind membership.UserId directory with
+            | Some s ->
+                let name = s.DisplayName |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
+                let email = s.Email |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
+
+                match name, email with
+                | Some n, _ -> n, email
+                | None, Some e -> e, None
+                | None, None -> membership.UserId, None
+            | None -> membership.UserId, None
+
+    Html.div [
+        prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2"
+        prop.children [
+            Html.div [
+                prop.className "flex items-center gap-3"
+                prop.children [
+                    Html.div [
+                        prop.className "flex flex-col"
+                        prop.children [
+                            Html.span [ prop.className "font-medium"; prop.text primaryLabel ]
+                            match secondaryLabel with
+                            | Some email -> Html.span [ prop.className "text-xs text-muted"; prop.text email ]
+                            | None -> ()
+                        ]
+                    ]
+                    if canManageTarget && not isSelf then
+                        roleDropdown
+                    else
+                        roleBadge
+                    if isSelf then
+                        Html.span [ prop.className "text-xs text-brand font-medium"; prop.text msgs.YouSuffix ]
+                ]
+            ]
+            if canManageTarget && not isSelf then
+                Forms.Button.secondary msgs.RemoveMember (fun () -> dispatch (RemoveMember(teamId, membership.UserId)))
+        ]
     ]
 
 let private addMemberForm
@@ -1036,55 +1043,89 @@ let private addMemberForm
     (callerRole: TeamRole option)
     (model: Model)
     (dispatch: Msg -> unit)
-    : Node<Msg> =
-    TreeLowering.card "add-member" msgs.InvitePanel [
-        TreeLowering.text "add-member-help" msgs.InviteHelp
+    =
+    let allowedRoles =
+        match callerRole with
+        | Some r -> assignableRoles r
+        | None -> []
 
-        TreeLowering.island "add-member-typeahead" (fun () ->
-            UserDirectoryTypeahead.userTypeahead
-                model.AddMemberUserId
-                (fun v -> dispatch (SetAddMemberUserId v))
-                msgs.InviteIdentifierPlaceholder
-                UserDirectoryTypeahead.pickEmailPreferred)
+    Layout.Panel.panel msgs.InvitePanel [
+        Html.div [
+            prop.className "flex flex-col gap-3"
+            prop.children [
+                Html.p [ prop.className "text-xs text-muted"; prop.text msgs.InviteHelp ]
 
-        Fuaran.form "add-member-form" {
-            Defaults.form with
-                Fields = [
-                    roleField msgs (assignableTo callerRole) model.AddMemberRole SetAddMemberRole
+                UserDirectoryTypeahead.userTypeahead
+                    model.AddMemberUserId
+                    (fun v -> dispatch (SetAddMemberUserId v))
+                    msgs.InviteIdentifierPlaceholder
+                    UserDirectoryTypeahead.pickEmailPreferred
+
+                Html.div [
+                    prop.className "flex items-center gap-3 flex-wrap"
+                    prop.children [
+                        Html.span [ prop.className "text-sm text-muted"; prop.text msgs.RoleLabel ]
+                        for role in allowedRoles do
+                            let isSelected = model.AddMemberRole = role
+
+                            Html.button [
+                                prop.className [
+                                    "px-3 py-1 rounded text-sm transition-colors border"
+                                    if isSelected then
+                                        "bg-brand/10 text-brand border-brand"
+                                    else
+                                        "bg-white text-text border-border hover:bg-gray-50"
+                                ]
+                                prop.text (TeamRoles.displayName role)
+                                prop.onClick (fun _ -> dispatch (SetAddMemberRole role))
+                            ]
+                    ]
                 ]
-                OnSubmit = Action.dispatch (AddMember teamId)
-                // Disabled while a previous add/invite is in flight, so a
-                // double-click can't fire two requests.
-                SubmitLabel =
-                    TreeLowering.literal (
-                        if model.AddMemberSubmitting then
-                            msgs.Inviting
-                        else
-                            msgs.InviteMember
-                    )
-                Disabled = Some(Binding.Static(Some model.AddMemberSubmitting))
-        }
+
+                Html.div [
+                    if model.AddMemberSubmitting then
+                        // Disabled while a previous add/invite is in flight,
+                        // so a double-click can't fire two requests.
+                        Html.button [
+                            prop.disabled true
+                            prop.className [
+                                Tokens.Colours.brand
+                                Tokens.Colours.brandText
+                                Tokens.Spacing.buttonPaddingX
+                                Tokens.Spacing.buttonPaddingY
+                                Tokens.Typography.buttonText
+                                "rounded-lg"
+                                "opacity-50"
+                                "cursor-not-allowed"
+                            ]
+                            prop.text msgs.Inviting
+                        ]
+                    else
+                        Forms.Button.primary msgs.InviteMember (fun () -> dispatch (AddMember teamId))
+                ]
+            ]
+        ]
     ]
 
-let private modal (id: string) (heading: string) (onDismiss: Msg) (children: Node<Msg> list) : Node<Msg> =
-    Fuaran.modal id {
-        Defaults.modal with
-            Open = Binding.Static(Some true)
-            Heading = Some(TreeLowering.literal heading)
-            OnDismiss = Some(Action.dispatch onDismiss)
-            Children = children
-    }
+/// Best-effort human label for a user id, mirroring `memberRow`'s
+/// name resolution: the JWT display name for the caller themselves, else
+/// the directory-resolved name / email, else the raw id. Used by the
+/// Phase 304 transfer modal for both the candidate list and the
+/// confirmation copy.
+let private displayNameForId (directory: Map<string, UserSummary>) (selfId: string) (userId: string) : string =
+    if userId = selfId then
+        UserSession.getDisplayName () |> Option.defaultValue userId
+    else
+        match Map.tryFind userId directory with
+        | Some s ->
+            let name = s.DisplayName |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
+            let email = s.Email |> Option.filter (System.String.IsNullOrWhiteSpace >> not)
 
-let private submitError (id: string) (error: string option) : Node<Msg> list =
-    match error with
-    | Some text -> [
-        Fuaran.callout id {
-            Defaults.callout with
-                Body = TreeLowering.literal text
-                Tone = ToneVariant.Critical
-        }
-      ]
-    | None -> []
+            match name, email with
+            | Some n, _ -> n
+            | None, Some e -> e
+            | None, None -> userId
+        | None -> userId
 
 /// Phase 304 — the two-step "Transfer ownership" modal. Step one filters
 /// the team's current members (never mints a new membership); picking one
@@ -1096,10 +1137,16 @@ let private transferOwnershipModalView
     (teamId: string)
     (state: TransferOwnershipModalState)
     (model: Model)
-    : Node<Msg> =
+    (dispatch: Msg -> unit)
+    =
     let selfId = selfUserId ()
     let members = model.Members |> Map.tryFind teamId |> Option.defaultValue []
-    let teamName = teamNameOf teamId model
+
+    let teamName =
+        model.Teams
+        |> List.tryFind (fun t -> t.TeamId = teamId)
+        |> Option.map _.Name
+        |> Option.defaultValue teamId
 
     // Candidates: every current member except the caller (the outgoing
     // Owner). Ownership can only move to someone already on the team.
@@ -1116,45 +1163,60 @@ let private transferOwnershipModalView
                 let label = (displayNameForId model.Directory selfId m.UserId).ToLower()
                 label.Contains query || m.UserId.ToLower().Contains query)
 
+    let modalShell (children: ReactElement list) =
+        Html.div [
+            prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+            prop.children [
+                Html.div [
+                    prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
+                    prop.children children
+                ]
+            ]
+        ]
+
     match state.Step with
     | PickNewOwner ->
-        modal "transfer" msgs.TransferOwnership CloseTransferOwnership [
-            TreeLowering.text "transfer-help" (msgs.TransferOwnershipHelp teamName)
-
-            Fuaran.form "transfer-filter" {
-                Defaults.form with
-                    Fields = [
-                        {
-                            Id = "transfer-query"
-                            Kind =
-                                FormFieldKind.textControl (
-                                    Binding.Static(Some state.Query),
-                                    onChange = (SetTransferQuery >> Action.dispatch)
-                                )
-                            Label = TreeLowering.literal msgs.TransferFilterPlaceholder
-                            Required = false
-                            Help = None
-                            Rule = None
-                        }
-                    ]
-                    SubmitLabel = TreeLowering.literal msgs.Cancel
-                    OnSubmit = Action.dispatch CloseTransferOwnership
-            }
-
+        modalShell [
+            Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.TransferOwnership ]
+            Html.p [
+                prop.className "text-sm text-muted"
+                prop.text (msgs.TransferOwnershipHelp teamName)
+            ]
+            Forms.Input.text state.Query (fun v -> dispatch (SetTransferQuery v)) msgs.TransferFilterPlaceholder
             if List.isEmpty candidates then
-                TreeLowering.text "transfer-none" msgs.TransferNoOtherMembers
+                Html.p [
+                    prop.className "text-sm text-muted py-2"
+                    prop.text msgs.TransferNoOtherMembers
+                ]
             elif List.isEmpty filtered then
-                TreeLowering.text "transfer-no-match" msgs.TransferNoMatches
+                Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.TransferNoMatches ]
             else
-                for m in filtered do
-                    TreeLowering.button
-                        ("transfer-" + m.UserId)
-                        ButtonVariant.Secondary
-                        (displayNameForId model.Directory selfId m.UserId
-                         + " · "
-                         + TeamRoles.displayName m.Role)
-                        false
-                        (SelectTransferCandidate m.UserId)
+                Html.div [
+                    prop.className "max-h-64 overflow-y-auto flex flex-col gap-1"
+                    prop.children [
+                        for m in filtered do
+                            let label = displayNameForId model.Directory selfId m.UserId
+
+                            Html.button [
+                                prop.className
+                                    "flex items-center justify-between w-full text-left px-3 py-2 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                                prop.onClick (fun _ -> dispatch (SelectTransferCandidate m.UserId))
+                                prop.children [
+                                    Html.span [ prop.className "font-medium text-sm"; prop.text label ]
+                                    Html.span [
+                                        prop.className "text-xs text-muted"
+                                        prop.text (TeamRoles.displayName m.Role)
+                                    ]
+                                ]
+                            ]
+                    ]
+                ]
+            Html.div [
+                prop.className "flex justify-end gap-3 pt-2"
+                prop.children [
+                    Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseTransferOwnership)
+                ]
+            ]
         ]
     | ConfirmTransfer ->
         let newOwnerLabel =
@@ -1164,31 +1226,49 @@ let private transferOwnershipModalView
 
         let outgoingLabel = displayNameForId model.Directory selfId selfId
 
-        modal "transfer" msgs.TransferConfirmHeading CloseTransferOwnership [
-            TreeLowering.text "transfer-prompt" (msgs.TransferConfirmPrompt teamName outgoingLabel newOwnerLabel)
-            TreeLowering.text "transfer-role" (msgs.TransferRoleExplanation newOwnerLabel)
-            yield! submitError "transfer-error" state.SubmitError
-
-            TreeLowering.row "transfer-actions" [
-                TreeLowering.button "transfer-back" ButtonVariant.Secondary msgs.Back false BackToTransferPick
-                TreeLowering.button
-                    "transfer-confirm"
-                    ButtonVariant.Primary
-                    (if state.Submitting then
-                         msgs.Transferring
-                     else
-                         msgs.ConfirmTransfer)
-                    state.Submitting
-                    SubmitTransferOwnership
+        modalShell [
+            Html.h3 [
+                prop.className "text-lg font-semibold"
+                prop.text msgs.TransferConfirmHeading
+            ]
+            Html.p [
+                prop.className "text-sm text-muted"
+                prop.text (msgs.TransferConfirmPrompt teamName outgoingLabel newOwnerLabel)
+            ]
+            Html.p [
+                prop.className "text-sm text-muted"
+                prop.text (msgs.TransferRoleExplanation newOwnerLabel)
+            ]
+            match state.SubmitError with
+            | Some msg -> Html.p [ prop.className "text-sm text-red-600"; prop.text msg ]
+            | None -> Html.none
+            Html.div [
+                prop.className "flex justify-end gap-3 pt-2"
+                prop.children [
+                    Forms.Button.secondary msgs.Back (fun () -> dispatch BackToTransferPick)
+                    Html.button [
+                        prop.disabled state.Submitting
+                        prop.className [
+                            "px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                            if state.Submitting then
+                                "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            else
+                                "bg-brand text-brand-text hover:bg-brand-dark"
+                        ]
+                        prop.text (
+                            if state.Submitting then
+                                msgs.Transferring
+                            else
+                                msgs.ConfirmTransfer
+                        )
+                        prop.onClick (fun _ -> dispatch SubmitTransferOwnership)
+                    ]
+                ]
             ]
         ]
 
-let private teamDetailsView
-    (msgs: TeamManagerMessages)
-    (teamId: string)
-    (model: Model)
-    (dispatch: Msg -> unit)
-    : Node<Msg> =
+let private teamDetailsView (msgs: TeamManagerMessages) (teamId: string) (model: Model) (dispatch: Msg -> unit) =
+    let teamOpt = model.Teams |> List.tryFind (fun t -> t.TeamId = teamId)
     let members = model.Members |> Map.tryFind teamId |> Option.defaultValue []
     let callerRole = effectiveCallerRole model teamId
 
@@ -1205,172 +1285,252 @@ let private teamDetailsView
 
     let selfId = selfUserId ()
 
-    TreeLowering.column "team-details" [
-        TreeLowering.row "breadcrumb" [
-            TreeLowering.button "breadcrumb-teams" ButtonVariant.Tertiary msgs.BreadcrumbMyTeams false BackToMyTeams
-            TreeLowering.text "breadcrumb-team" (teamNameOf teamId model)
+    Html.div [
+        prop.className "space-y-4"
+        prop.children [
+            Html.div [
+                prop.className "flex items-center gap-3"
+                prop.children [
+                    Html.button [
+                        prop.className "text-sm text-brand hover:underline"
+                        prop.text msgs.BreadcrumbMyTeams
+                        prop.onClick (fun _ -> dispatch BackToMyTeams)
+                    ]
+                    Html.span [ prop.className "text-muted"; prop.text "/" ]
+                    Html.span [
+                        prop.className "font-medium"
+                        prop.text (teamOpt |> Option.map _.Name |> Option.defaultValue teamId)
+                    ]
+                    if canManage then
+                        Html.div [
+                            prop.className "ml-auto flex gap-2"
+                            prop.children [
+                                if isRealOwner then
+                                    Forms.Button.secondary msgs.TransferOwnership (fun () ->
+                                        dispatch (OpenTransferOwnership teamId))
+                                Forms.Button.secondary msgs.PendingInvites (fun () ->
+                                    dispatch (NavigatePendingInvites teamId))
+                            ]
+                        ]
+                ]
+            ]
+
+            Layout.Panel.panel msgs.MembersPanel [
+                if members.IsEmpty then
+                    Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.NoMembers ]
+                else
+                    Html.div [
+                        for m in members do
+                            memberRow msgs teamId selfId callerRole model.Directory m dispatch
+                    ]
+            ]
 
             if canManage then
-                if isRealOwner then
-                    TreeLowering.button
-                        "open-transfer"
-                        ButtonVariant.Secondary
-                        msgs.TransferOwnership
-                        false
-                        (OpenTransferOwnership teamId)
+                addMemberForm msgs teamId callerRole model dispatch
 
-                TreeLowering.button
-                    "open-pending"
-                    ButtonVariant.Secondary
-                    msgs.PendingInvites
-                    false
-                    (NavigatePendingInvites teamId)
-        ]
-
-        TreeLowering.card "members" msgs.MembersPanel [
-            if members.IsEmpty then
-                TreeLowering.text "no-members" msgs.NoMembers
-            else
-                for m in members do
-                    memberRow msgs teamId selfId callerRole model.Directory m
-        ]
-
-        if canManage then
-            addMemberForm msgs teamId callerRole model dispatch
-
-        // Phase 1107 — the team's in-platform publication readers, for
-        // its real Owner or Admin (no platform-admin bypass, as on the
-        // server).
-        TreeLowering.island "publication-readers" (fun () ->
+            // Phase 1107 — the team's in-platform publication readers, for
+            // its real Owner or Admin (no platform-admin bypass, as on the
+            // server).
             PublicationReadersAdminUI.panel
                 msgs
                 teamId
                 model.ActiveTeamId
                 (model.RoleInTeam
                  |> Map.tryFind teamId
-                 |> Option.exists TeamRoles.canWriteTeamConfig))
+                 |> Option.exists TeamRoles.canWriteTeamConfig)
 
-        match model.TransferOwnershipModal with
-        | Some state when state.TeamId = teamId -> transferOwnershipModalView msgs teamId state model
-        | _ -> ()
+            match model.TransferOwnershipModal with
+            | Some state when state.TeamId = teamId -> transferOwnershipModalView msgs teamId state model dispatch
+            | _ -> Html.none
+        ]
     ]
 
 // ─── Phase 3d.A — Pending Invites view (email sub-tab) ──────────────
+
+/// Phase 3d.A — sub-tab tag inside the Pending Invites view. Only
+/// `EmailInvites` is populated today; the link-based companion tab
+/// lands as a sibling here when the follow-on UI phase ships.
+type private PendingInvitesSubTab = EmailInvites
 
 let private pendingEmailRow
     (msgs: TeamManagerMessages)
     (teamId: string)
     (email: string)
     (entry: PendingInviteByEmail)
-    : Node<Msg> =
-    let id = "pending-" + email
-
-    TreeLowering.row id [
-        TreeLowering.text (id + "-email") email
-        TreeLowering.text
-            (id + "-expires")
-            (msgs.InviteExpires (TeamRoles.displayName entry.Role) (entry.ExpiresAt.ToString "yyyy-MM-dd"))
-        TreeLowering.button
-            (id + "-revoke")
-            ButtonVariant.Secondary
-            msgs.RevokeInvite
-            false
-            (OpenRevokeByEmailConfirm(teamId, email))
+    (dispatch: Msg -> unit)
+    =
+    Html.div [
+        prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2"
+        prop.children [
+            Html.div [
+                prop.className "flex flex-col"
+                prop.children [
+                    Html.span [ prop.className "font-medium"; prop.text email ]
+                    Html.span [
+                        prop.className "text-xs text-muted"
+                        prop.text (
+                            msgs.InviteExpires
+                                (TeamRoles.displayName entry.Role)
+                                (entry.ExpiresAt.ToString "yyyy-MM-dd")
+                        )
+                    ]
+                ]
+            ]
+            Forms.Button.secondary msgs.RevokeInvite (fun () -> dispatch (OpenRevokeByEmailConfirm(teamId, email)))
+        ]
     ]
 
-/// Phase 547.B — one recently-expired invite, with an **Expired** badge and a
-/// one-click **Re-issue** action. The re-issue re-calls
-/// `IssuePendingInviteByEmail` with the original role and the default expiry;
-/// the row then migrates back to the live list above.
+/// Phase 547.B — one recently-expired invite, rendered greyed with an
+/// **Expired** badge and a one-click **Re-issue** action. The re-issue
+/// re-calls `IssuePendingInviteByEmail` with the original role and the
+/// default expiry; the row then migrates back to the live list above.
 let private expiredInviteRow
     (msgs: TeamManagerMessages)
     (teamId: string)
     (entry: TeamInviteExpiredPayload)
     (inFlight: bool)
-    : Node<Msg> =
-    let id = "expired-" + entry.InviteeEmail
-
-    TreeLowering.row id [
-        TreeLowering.text (id + "-email") entry.InviteeEmail
-        Fuaran.badge (id + "-badge") {
-            Defaults.badge with
-                Label = TreeLowering.literal msgs.Expired
-        }
-        TreeLowering.text
-            (id + "-when")
-            (msgs.InviteExpired (TeamRoles.displayName entry.Role) (entry.ExpiredAt.ToString "yyyy-MM-dd"))
-        TreeLowering.button
-            (id + "-reissue")
-            ButtonVariant.Secondary
-            (if inFlight then msgs.Reissuing else msgs.Reissue)
-            inFlight
-            (ReissueExpiredInvite(teamId, entry.InviteeEmail, entry.Role))
+    (dispatch: Msg -> unit)
+    =
+    Html.div [
+        prop.className
+            "flex items-center justify-between p-3 border border-border rounded-lg mb-2 bg-gray-50 opacity-70"
+        prop.children [
+            Html.div [
+                prop.className "flex flex-col"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-center gap-2"
+                        prop.children [
+                            Html.span [ prop.className "font-medium text-muted"; prop.text entry.InviteeEmail ]
+                            Html.span [
+                                prop.className "text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
+                                prop.text msgs.Expired
+                            ]
+                        ]
+                    ]
+                    Html.span [
+                        prop.className "text-xs text-muted"
+                        prop.text (
+                            msgs.InviteExpired
+                                (TeamRoles.displayName entry.Role)
+                                (entry.ExpiredAt.ToString "yyyy-MM-dd")
+                        )
+                    ]
+                ]
+            ]
+            Html.button [
+                prop.disabled inFlight
+                prop.className [
+                    "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border"
+                    if inFlight then
+                        "bg-gray-200 text-gray-500 border-border cursor-not-allowed"
+                    else
+                        "bg-white text-brand border-brand hover:bg-brand/10"
+                ]
+                prop.text (if inFlight then msgs.Reissuing else msgs.Reissue)
+                prop.onClick (fun _ -> dispatch (ReissueExpiredInvite(teamId, entry.InviteeEmail, entry.Role)))
+            ]
+        ]
     ]
 
-/// The validated form this phase names: a required, email-formatted address,
-/// a role and a positive lifetime. The renderer's submit gate (Phase 864 on the
-/// language side) holds an invalid form back and marks the unmet field; the
-/// server-bound check in `update` stays, because a tree is a view and `update`
-/// is the module's contract.
+let private emptyPendingEmailState (msgs: TeamManagerMessages) =
+    Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.NoPendingInvites ]
+
 let private issueByEmailModalView
     (msgs: TeamManagerMessages)
     (callerRole: TeamRole option)
     (state: IssueByEmailModalState)
-    : Node<Msg> =
-    modal "issue-by-email" msgs.InviteByEmailHeading CloseIssueByEmailModal [
-        TreeLowering.text "issue-help" msgs.InviteByEmailHelp
+    (dispatch: Msg -> unit)
+    =
+    let allowedRoles =
+        match callerRole with
+        | Some r -> assignableRoles r
+        | None -> []
 
-        Fuaran.form "issue-form" {
-            Defaults.form with
-                Fields = [
-                    {
-                        Id = "email"
-                        Kind =
-                            FormFieldKind.textControl (
-                                Binding.Static(Some state.Email),
-                                onChange = (SetIssueByEmailEmail >> Action.dispatch)
-                            )
-                        Label = TreeLowering.literal msgs.EmailPlaceholder
-                        Required = true
-                        Help = None
-                        Rule =
-                            Some {
-                                Compare = None
-                                Format = Some TextFormat.Email
-                                MaxLength = None
-                                Message = Some(TreeLowering.literal msgs.EmailRequired)
-                                MinLength = None
-                                Pattern = None
-                            }
-                    }
-                    roleField msgs (assignableTo callerRole) state.Role SetIssueByEmailRole
-                    {
-                        Id = "expires"
-                        Kind =
-                            FormFieldKind.rangedNumberControl (
-                                Binding.Static(Some(float state.ExpiresInDays)),
-                                onChange = (int >> SetIssueByEmailExpiresInDays >> Action.dispatch),
-                                min = 1.0
-                            )
-                        Label = TreeLowering.literal msgs.ExpiresInDays
-                        Required = true
-                        Help = None
-                        Rule = None
-                    }
+    let roleOption (role: TeamRole) =
+        let isSelected = state.Role = role
+
+        Html.button [
+            prop.className [
+                "px-3 py-1 rounded text-sm transition-colors border"
+                if isSelected then
+                    "bg-brand/10 text-brand border-brand"
+                else
+                    "bg-white text-text border-border hover:bg-gray-50"
+            ]
+            prop.text (TeamRoles.displayName role)
+            prop.onClick (fun _ -> dispatch (SetIssueByEmailRole role))
+        ]
+
+    Html.div [
+        prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        prop.children [
+            Html.div [
+                prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
+                prop.children [
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.InviteByEmailHeading ]
+                    Html.p [ prop.className "text-sm text-muted"; prop.text msgs.InviteByEmailHelp ]
+                    Forms.Input.text state.Email (fun v -> dispatch (SetIssueByEmailEmail v)) msgs.EmailPlaceholder
+                    Html.div [
+                        prop.className "flex items-center gap-3 flex-wrap"
+                        prop.children [
+                            Html.span [ prop.className "text-sm text-muted"; prop.text msgs.RoleLabel ]
+                            // `Owner` is excluded everywhere — initial
+                            // ownership is set via Platform Management at
+                            // team-create time. `Admin` is offered only
+                            // to callers who can assign Admin (Owners +
+                            // Platform Admins); Admin callers see only
+                            // `Member`.
+                            for role in allowedRoles do
+                                roleOption role
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "flex items-center gap-3"
+                        prop.children [
+                            Html.label [ prop.className "text-sm text-muted"; prop.text msgs.ExpiresInDays ]
+                            Html.input [
+                                prop.type' "number"
+                                prop.min 1
+                                prop.value state.ExpiresInDays
+                                prop.onChange (fun (v: string) ->
+                                    match Int32.TryParse v with
+                                    | true, n -> dispatch (SetIssueByEmailExpiresInDays n)
+                                    | _ -> ())
+                                prop.className
+                                    "border border-border rounded px-3 py-1 w-24 focus:outline-none focus:border-brand"
+                            ]
+                        ]
+                    ]
+                    match state.SubmitError with
+                    | Some msg -> Html.p [ prop.className "text-sm text-red-600"; prop.text msg ]
+                    | None -> Html.none
+                    Html.div [
+                        prop.className "flex justify-end gap-3 pt-2"
+                        prop.children [
+                            Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseIssueByEmailModal)
+                            Html.button [
+                                prop.disabled state.Submitting
+                                prop.className [
+                                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                                    if state.Submitting then
+                                        "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                    else
+                                        "bg-brand text-brand-text hover:bg-brand-dark"
+                                ]
+                                prop.text (
+                                    if state.Submitting then
+                                        msgs.Issuing
+                                    else
+                                        msgs.IssueInvitation
+                                )
+                                prop.onClick (fun _ -> dispatch SubmitIssueByEmail)
+                            ]
+                        ]
+                    ]
                 ]
-                OnSubmit = Action.dispatch SubmitIssueByEmail
-                SubmitLabel =
-                    TreeLowering.literal (
-                        if state.Submitting then
-                            msgs.Issuing
-                        else
-                            msgs.IssueInvitation
-                    )
-                Disabled = Some(Binding.Static(Some state.Submitting))
-        }
-
-        yield! submitError "issue-error" state.SubmitError
-        TreeLowering.button "issue-cancel" ButtonVariant.Secondary msgs.Cancel false CloseIssueByEmailModal
+            ]
+        ]
     ]
 
 let private revokeByEmailConfirmView
@@ -1378,82 +1538,124 @@ let private revokeByEmailConfirmView
     (teamId: string)
     (email: string)
     (model: Model)
-    : Node<Msg> =
-    modal "revoke" msgs.RevokeInviteHeading CancelRevokeByEmail [
-        TreeLowering.text "revoke-prompt" (msgs.RevokeInvitePrompt email (teamNameOf teamId model))
-        TreeLowering.row "revoke-actions" [
-            TreeLowering.button "revoke-cancel" ButtonVariant.Secondary msgs.Cancel false CancelRevokeByEmail
-            TreeLowering.button "revoke-confirm" ButtonVariant.Primary msgs.RevokeInvite false ConfirmRevokeByEmail
+    (dispatch: Msg -> unit)
+    =
+    let teamName =
+        model.Teams
+        |> List.tryFind (fun t -> t.TeamId = teamId)
+        |> Option.map _.Name
+        |> Option.defaultValue teamId
+
+    Html.div [
+        prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        prop.children [
+            Html.div [
+                prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-sm space-y-4"
+                prop.children [
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.RevokeInviteHeading ]
+                    Html.p [
+                        prop.className "text-sm text-muted"
+                        prop.text (msgs.RevokeInvitePrompt email teamName)
+                    ]
+                    Html.div [
+                        prop.className "flex justify-end gap-3 pt-2"
+                        prop.children [
+                            Forms.Button.secondary msgs.Cancel (fun () -> dispatch CancelRevokeByEmail)
+                            Forms.Button.primary msgs.RevokeInvite (fun () -> dispatch ConfirmRevokeByEmail)
+                        ]
+                    ]
+                ]
+            ]
         ]
     ]
 
-let private pendingInvitesView (msgs: TeamManagerMessages) (teamId: string) (model: Model) : Node<Msg> =
+let private pendingInvitesView (msgs: TeamManagerMessages) (teamId: string) (model: Model) (dispatch: Msg -> unit) =
+    let teamName =
+        model.Teams
+        |> List.tryFind (fun t -> t.TeamId = teamId)
+        |> Option.map _.Name
+        |> Option.defaultValue teamId
+
     let entries = model.PendingByEmail |> Map.tryFind teamId
     let callerRole = effectiveCallerRole model teamId
 
-    TreeLowering.column "pending-invites" [
-        TreeLowering.row "breadcrumb" [
-            TreeLowering.button
-                "breadcrumb-members"
-                ButtonVariant.Tertiary
-                msgs.BreadcrumbMembers
-                false
-                (SelectTeam teamId)
-            TreeLowering.text "breadcrumb-team" (teamNameOf teamId model)
-            TreeLowering.text "breadcrumb-page" msgs.PendingInvites
+    let subTab = EmailInvites
+
+    Html.div [
+        prop.className "space-y-4"
+        prop.children [
+            Html.div [
+                prop.className "flex items-center gap-3"
+                prop.children [
+                    Html.button [
+                        prop.className "text-sm text-brand hover:underline"
+                        prop.text msgs.BreadcrumbMembers
+                        prop.onClick (fun _ -> dispatch (SelectTeam teamId))
+                    ]
+                    Html.span [ prop.className "text-muted"; prop.text "/" ]
+                    Html.span [ prop.className "font-medium"; prop.text teamName ]
+                    Html.span [ prop.className "text-muted"; prop.text "/" ]
+                    Html.span [ prop.className "font-medium"; prop.text msgs.PendingInvites ]
+                ]
+            ]
+
+            Layout.Tabs.tabGroup [ EmailInvites, msgs.PendingInvitesPanel ] subTab (fun _ -> ())
+
+            Layout.Panel.panel msgs.PendingInvitesPanel [
+                Html.div [
+                    prop.className "flex justify-end mb-3"
+                    prop.children [
+                        Forms.Button.primary msgs.InviteByEmail (fun () -> dispatch (OpenIssueByEmailModal teamId))
+                    ]
+                ]
+                match entries with
+                | None ->
+                    Html.p [
+                        prop.className "text-sm text-muted py-2"
+                        prop.text msgs.PendingInvitesLoading
+                    ]
+                | Some [] -> emptyPendingEmailState msgs
+                | Some rows ->
+                    Html.div [
+                        for email, entry in rows do
+                            pendingEmailRow msgs teamId email entry dispatch
+                    ]
+
+                // Phase 547.B — recently-expired invites (30-day window,
+                // read from the audit trail). Rendered only when there is
+                // something to show — an empty history is not worth a
+                // heading. Each row is greyed with an Expired badge and a
+                // one-click Re-issue.
+                match model.ExpiredInvites |> Map.tryFind teamId with
+                | Some expired when not (List.isEmpty expired) ->
+                    Html.div [
+                        prop.className "mt-4"
+                        prop.children [
+                            Html.h4 [
+                                prop.className "text-sm font-medium text-muted mb-2"
+                                prop.text msgs.RecentlyExpired
+                            ]
+                            Html.div [
+                                for entry in expired do
+                                    let inFlight =
+                                        model.ReissueInFlight
+                                        |> Set.contains (sprintf "%s|%s" teamId entry.InviteeEmail)
+
+                                    expiredInviteRow msgs teamId entry inFlight dispatch
+                            ]
+                        ]
+                    ]
+                | _ -> Html.none
+            ]
+
+            match model.IssueByEmailModal with
+            | Some state when state.TeamId = teamId -> issueByEmailModalView msgs callerRole state dispatch
+            | _ -> Html.none
+
+            match model.RevokeByEmailConfirm with
+            | Some(tid, email) when tid = teamId -> revokeByEmailConfirmView msgs tid email model dispatch
+            | _ -> Html.none
         ]
-
-        TreeLowering.card "pending" msgs.PendingInvitesPanel [
-            TreeLowering.button
-                "invite-by-email"
-                ButtonVariant.Primary
-                msgs.InviteByEmail
-                false
-                (OpenIssueByEmailModal teamId)
-
-            match entries with
-            | None -> TreeLowering.text "pending-loading" msgs.PendingInvitesLoading
-            | Some [] -> TreeLowering.text "pending-none" msgs.NoPendingInvites
-            | Some rows ->
-                for email, entry in rows do
-                    pendingEmailRow msgs teamId email entry
-
-            // Phase 547.B — recently-expired invites (30-day window, read
-            // from the audit trail). Rendered only when there is something to
-            // show — an empty history is not worth a heading.
-            match model.ExpiredInvites |> Map.tryFind teamId with
-            | Some expired when not (List.isEmpty expired) ->
-                TreeLowering.heading "expired-heading" 4 msgs.RecentlyExpired
-
-                for entry in expired do
-                    let inFlight =
-                        model.ReissueInFlight
-                        |> Set.contains (sprintf "%s|%s" teamId entry.InviteeEmail)
-
-                    expiredInviteRow msgs teamId entry inFlight
-            | _ -> ()
-        ]
-
-        match model.IssueByEmailModal with
-        | Some state when state.TeamId = teamId -> issueByEmailModalView msgs callerRole state
-        | _ -> ()
-
-        match model.RevokeByEmailConfirm with
-        | Some(tid, email) when tid = teamId -> revokeByEmailConfirmView msgs tid email model
-        | _ -> ()
-    ]
-
-/// The whole surface as a value.
-let internal surface (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -> unit) : Node<Msg> =
-    TreeLowering.column "team-manager" [
-        match model.Error with
-        | Some text -> TreeLowering.banner "error" ToneVariant.Critical text msgs.Dismiss DismissError
-        | None -> ()
-
-        match model.CurrentView with
-        | MyTeams -> myTeamsView msgs model
-        | TeamDetails teamId -> teamDetailsView msgs teamId model dispatch
-        | PendingInvites teamId -> pendingInvitesView msgs teamId model
     ]
 
 /// Phase 444 — the module body as a React COMPONENT, so it has a hook
@@ -1462,9 +1664,36 @@ let internal surface (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -
 [<ReactComponent>]
 let private TeamManagerBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).TeamManager
-    TreeLowering.lower HostBindingSources.empty dispatch (surface msgs model dispatch)
 
-let internal view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamManagerBody model dispatch
+    let errorBanner =
+        match model.Error with
+        | Some msg ->
+            Html.div [
+                prop.className
+                    "p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
+                prop.children [
+                    Html.span [ prop.text msg ]
+                    Html.button [
+                        prop.className "text-xs text-red-600 hover:underline"
+                        prop.text msgs.Dismiss
+                        prop.onClick (fun _ -> dispatch DismissError)
+                    ]
+                ]
+            ]
+        | None -> Html.none
+
+    let body =
+        match model.CurrentView with
+        | MyTeams -> myTeamsView msgs model dispatch
+        | TeamDetails teamId -> teamDetailsView msgs teamId model dispatch
+        | PendingInvites teamId -> pendingInvitesView msgs teamId model dispatch
+
+    // 0.5.6 — settings-shape FullWidth render. Error banner stacks
+    // above the body so it's immediately above the user's current
+    // context instead of in a separate squashed right pane.
+    Html.div [ prop.className "flex flex-col gap-3"; prop.children [ errorBanner; body ] ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamManagerBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

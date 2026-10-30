@@ -47,8 +47,6 @@ module ToolUp.AI.Client.Tests.ModuleViewA11yTests
 // CSS, focus rings, contrast, the browser's real accessibility tree. And
 // a state is covered only if it is in `viewStates` below.
 
-open Fable.Core
-open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform.Testing
@@ -244,330 +242,177 @@ let private expectThrows (body: unit -> unit) (message: string) : string =
                of work exists to prevent."
         )
 
-// ─── Phase 1160 — surfaces authored as Fuaran-UI trees ───────────────
-//
-// The rules and the mount are the ones above: the harness is renderer-neutral,
-// so a tree-authored view goes through it unchanged. Interaction goes through
-// real DOM events at the lowered markup, and the assertion is the messages the
-// module's dispatch received, which is what proves the tree is live.
-
-/// React's own change handler for `element`. The harness installs jsdom after
-/// React has loaded, so React takes its legacy input path and a real `input` event
-/// never reaches `onChange`; the handler is the tree's wiring under test.
-[<Emit("$0[Object.keys($0).find(k => k.startsWith('__reactProps'))].onChange({ target: { value: $1 }, currentTarget: { value: $1 } })")>]
-let private invokeChange (element: obj) (value: string) : unit = jsNative
-
-let private fire (element: obj) (kind: string) : unit =
-    let window: obj = element?ownerDocument?defaultView
-
-    let event: obj =
-        createNew window?Event (kind, createObj [ "bubbles" ==> true; "cancelable" ==> true ])
-
-    element?dispatchEvent event |> ignore
-
-let private clickButton (name: string) (host: obj) : unit =
-    let buttons: obj array =
-        host?querySelectorAll "button" |> JS.Constructors.Array.from
-
-    let button =
-        buttons
-        |> Array.tryFind (fun b -> (b?textContent: string).Trim() = name)
-        |> Option.defaultWith (fun () -> failwith ("no button named " + name + " in: " + (host?innerHTML: string)))
-
-    button?click () |> ignore
-
-let private typeInto (selector: string) (value: string) (host: obj) : unit =
-    let input: obj = host?querySelector selector
-
-    if isNull input then
-        failwith ("no input at " + selector)
-
-    invokeChange input value
-
-let private visibilityView (model: ModuleVisibilityAdminUI.Model) (dispatch: ModuleVisibilityAdminUI.Msg -> unit) =
-    ModuleVisibilityAdminUI.view
-        model
-        dispatch
-        (ToolUp.Platform.ClientHostCapabilities.create dispatch)
-        (ModuleVisibilityAdminUI.projection.Project model)
-
-let private loadedVisibility () =
-    (fromUnitInit ModuleVisibilityAdminUI.init ModuleVisibilityAdminUI.update)
-        .Dispatch(ModuleVisibilityAdminUI.RegisteredLoaded(Ok [ "alpha"; "_sdk.Team_Manager" ]))
-        .Dispatch(ModuleVisibilityAdminUI.ProfileLoaded(Ok None))
-        .Dispatch(ModuleVisibilityAdminUI.ResolutionLoaded(Ok None))
-
-let private teamInit () =
-    fromUnitInit (fun () -> TeamManagerUI.init ToolUp.Platform.ClientModuleContext.empty) TeamManagerUI.update
-
-/// Mount `view` over `model`, drive it, and return every message it dispatched.
-let private dispatched view (model: 'Model) (drive: obj -> unit) : 'Msg list =
-    let seen = ResizeArray<'Msg>()
-    ViewMount.mountAndInteract drive (view model seen.Add) |> ignore
-    List.ofSeq seen
-
-let private treeSurfaceTests = [
-    testCase "the local-state surface passes the Strict floor as a tree, in every state" (fun () ->
-        for harness in
-            [
-                fromUnitInit ModuleVisibilityAdminUI.init ModuleVisibilityAdminUI.update
-                loadedVisibility ()
-            ] do
-            harness.AssertAccessibleView(ViewMount.mount, visibilityView, Accessibility.Strict)
-            |> ignore)
-
-    testCase "a module id reads as itself, not as markdown emphasis" (fun () ->
-        let html = (loadedVisibility ()).RenderViewHtml(ViewMount.mount, visibilityView)
-        Expect.isTrue (html.Contains "_sdk.Team_Manager") "the id survives the text carrier unchanged"
-        Expect.isTrue (html.Contains "type=\"checkbox\"") "and each candidate is a live checkbox"
-        Expect.isTrue (html.Contains "--fuaran-tone-brand-fg:var(--color-brand)") "the shell's tokens drive the tree")
-
-    testCase "a checkbox, the note and the submit reach update as messages" (fun () ->
-        let model = (loadedVisibility ()).Model
-
-        let toggled =
-            dispatched visibilityView model (fun host ->
-                let box: obj = host?querySelector "input[type=checkbox]"
-                box?click () |> ignore)
-
-        Expect.equal toggled [ ModuleVisibilityAdminUI.ToggleModule "alpha" ] "the first candidate toggled"
-
-        let typed =
-            dispatched visibilityView model (typeInto "input[type=text]" "finance only")
-
-        Expect.equal typed [ ModuleVisibilityAdminUI.SetNote "finance only" ] "the note is lifted into Model"
-
-        let saved =
-            dispatched visibilityView model (fun host -> fire (host?querySelector "form") "submit")
-
-        Expect.equal saved [ ModuleVisibilityAdminUI.Save model.Note ] "the form saves")
-
-    testCase "the team manager's list and detail states pass the Strict floor as a tree" (fun () ->
-        let list = (teamInit ()).Dispatch(TeamManagerUI.TeamsLoaded [])
-
-        list.AssertAccessibleView(ViewMount.mount, TeamManagerUI.view, Accessibility.Strict)
-        |> ignore
-
-        let invites = (teamInit ()).Dispatch(TeamManagerUI.NavigatePendingInvites "t1")
-
-        invites.AssertAccessibleView(ViewMount.mount, TeamManagerUI.view, Accessibility.Strict)
-        |> ignore
-
-        let modal = invites.Dispatch(TeamManagerUI.OpenIssueByEmailModal "t1")
-
-        modal.AssertAccessibleView(ViewMount.mount, TeamManagerUI.view, Accessibility.Strict)
-        |> ignore)
-
-    testCase "the validated form holds an invalid address back and sends a valid one" (fun () ->
-        let opened =
-            (teamInit ())
-                .Dispatch(TeamManagerUI.NavigatePendingInvites "t1")
-                .Dispatch(TeamManagerUI.OpenIssueByEmailModal "t1")
-
-        let submit (host: obj) =
-            let forms: obj array =
-                host?ownerDocument?querySelectorAll "form" |> JS.Constructors.Array.from
-
-            fire forms[0] "submit"
-
-        let invalid =
-            (opened.Dispatch(TeamManagerUI.SetIssueByEmailEmail "not-an-address")).Model
-
-        Expect.equal
-            (dispatched TeamManagerUI.view invalid submit)
-            []
-            "an unmet rule keeps the submit out of update, with no island code"
-
-        let valid =
-            (opened.Dispatch(TeamManagerUI.SetIssueByEmailEmail "a@example.com")).Model
-
-        Expect.equal
-            (dispatched TeamManagerUI.view valid submit)
-            [ TeamManagerUI.SubmitIssueByEmail ]
-            "a met rule submits")
-
-    testCase "a live tree button dispatches into the module" (fun () ->
-        let errored = ((teamInit ()).Dispatch(TeamManagerUI.ApiError "boom")).Model
-        let dismissLabel = ToolUp.Platform.MessageCatalog.english.TeamManager.Dismiss.Trim()
-        let seen = dispatched TeamManagerUI.view errored (clickButton dismissLabel)
-        Expect.equal seen [ TeamManagerUI.DismissError ] "the banner's dismiss ran through the tree")
-]
-
 // ─── Cases ───────────────────────────────────────────────────────────
 
 let tests =
-    testList
-        "the Phase 180 a11y floor over a consumer module view"
-        (treeSurfaceTests
-         @ [
+    testList "the Phase 180 a11y floor over a consumer module view" [
 
-             // The floor itself, over every reachable state of a real module.
-             testCase "every UsageDashboard state passes the Phase 180 Strict rule set" (fun () ->
-                 let failures =
-                     viewStates
-                     |> List.collect (fun st ->
-                         let node =
-                             st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
-                             |> Accessibility.ofHtml
+        // The floor itself, over every reachable state of a real module.
+        testCase "every UsageDashboard state passes the Phase 180 Strict rule set" (fun () ->
+            let failures =
+                viewStates
+                |> List.collect (fun st ->
+                    let node =
+                        st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+                        |> Accessibility.ofHtml
 
-                         let _, real = classify node (Accessibility.check Accessibility.Strict node)
-                         real |> List.map (inState st.Name))
+                    let _, real = classify node (Accessibility.check Accessibility.Strict node)
+                    real |> List.map (inState st.Name))
 
-                 if not (List.isEmpty failures) then
-                     failwith (
-                         Accessibility.reportStates Accessibility.Strict failures
-                         + "\n\nEach finding is a control `UsageDashboard.view` renders in that state with \
+            if not (List.isEmpty failures) then
+                failwith (
+                    Accessibility.reportStates Accessibility.Strict failures
+                    + "\n\nEach finding is a control `UsageDashboard.view` renders in that state with \
                        no accessible name, no alt text, no label, or invalid ARIA. The rules are \
                        Phase 180's, unchanged; what this pack adds is running them over a MODULE's \
                        own view instead of a hand-built tree. Fix the control in \
                        `ToolUp.Platform.Client/Client/UsageDashboard.fs`."
-                     ))
+                ))
 
-             // The half a rule cannot do: a rule reports what is present and
-             // unnamed, never what is absent, so a control that vanished from
-             // the view is indistinguishable from a view with nothing wrong.
-             testCase "every state's expected controls are reachable BY NAME" (fun () ->
-                 let missing = [
-                     for st in viewStates do
-                         let node =
-                             st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
-                             |> Accessibility.ofHtml
+        // The half a rule cannot do: a rule reports what is present and
+        // unnamed, never what is absent, so a control that vanished from
+        // the view is indistinguishable from a view with nothing wrong.
+        testCase "every state's expected controls are reachable BY NAME" (fun () ->
+            let missing = [
+                for st in viewStates do
+                    let node =
+                        st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+                        |> Accessibility.ofHtml
 
-                         let names = Accessibility.interactiveNames node |> List.choose snd
+                    let names = Accessibility.interactiveNames node |> List.choose snd
 
-                         for expected in st.MustName do
-                             if not (List.contains expected names) then
-                                 yield st.Name, expected, names
-                 ]
+                    for expected in st.MustName do
+                        if not (List.contains expected names) then
+                            yield st.Name, expected, names
+            ]
 
-                 if not (List.isEmpty missing) then
-                     let detail = [
-                         for stateName, expected, found in missing do
-                             yield
-                                 sprintf
-                                     "  state \"%s\": no control is reachable as \"%s\" — the names actually exposed were [%s]"
-                                     stateName
-                                     expected
-                                     (found |> List.map (sprintf "\"%s\"") |> String.concat "; ")
-                     ]
+            if not (List.isEmpty missing) then
+                let detail = [
+                    for stateName, expected, found in missing do
+                        yield
+                            sprintf
+                                "  state \"%s\": no control is reachable as \"%s\" — the names actually exposed were [%s]"
+                                stateName
+                                expected
+                                (found |> List.map (sprintf "\"%s\"") |> String.concat "; ")
+                ]
 
-                     failwith (
-                         sprintf "%d expected control(s) are not reachable by name:\n" missing.Length
-                         + (detail |> String.concat "\n")
-                         + "\n\nEither the control lost its accessible name, or it is no longer rendered \
+                failwith (
+                    sprintf "%d expected control(s) are not reachable by name:\n" missing.Length
+                    + (detail |> String.concat "\n")
+                    + "\n\nEither the control lost its accessible name, or it is no longer rendered \
                        in that state at all, or the expectation in `viewStates` is stale (fix it \
                        HERE, and say why in the same commit — this list is the contract)."
-                     ))
+                ))
 
-             // Non-vacuity. A mount that silently produced "" would leave every
-             // case above passing, which is indistinguishable from a clean
-             // module — and is the precise failure mode this line of work
-             // exists to close.
-             testCase "the mount really renders the module's markup" (fun () ->
-                 for st in viewStates do
-                     let html = st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+        // Non-vacuity. A mount that silently produced "" would leave every
+        // case above passing, which is indistinguishable from a clean
+        // module — and is the precise failure mode this line of work
+        // exists to close.
+        testCase "the mount really renders the module's markup" (fun () ->
+            for st in viewStates do
+                let html = st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
 
-                     Expect.isTrue
-                         (html.Contains "<button")
-                         ("state \""
-                          + st.Name
-                          + "\" rendered no <button> at all — the mount is not mounting")
+                Expect.isTrue
+                    (html.Contains "<button")
+                    ("state \""
+                     + st.Name
+                     + "\" rendered no <button> at all — the mount is not mounting")
 
-                     Expect.isTrue
-                         (html.Contains "Per-team consumption")
-                         ("state \""
-                          + st.Name
-                          + "\" is missing the view's own copy — the markup captured is \
+                Expect.isTrue
+                    (html.Contains "Per-team consumption")
+                    ("state \""
+                     + st.Name
+                     + "\" is missing the view's own copy — the markup captured is \
                       not `UsageDashboard.view`'s")
 
-                 // And the state-dependent arms really differ, so the states
-                 // are not six captures of one tree.
-                 let loaded =
-                     viewStates
-                     |> List.find (fun s -> s.Name = "aggregate rows loaded")
-                     |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+            // And the state-dependent arms really differ, so the states
+            // are not six captures of one tree.
+            let loaded =
+                viewStates
+                |> List.find (fun s -> s.Name = "aggregate rows loaded")
+                |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
 
-                 let empty =
-                     viewStates
-                     |> List.find (fun s -> s.Name = "no usage records for this scope")
-                     |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+            let empty =
+                viewStates
+                |> List.find (fun s -> s.Name = "no usage records for this scope")
+                |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
 
-                 Expect.isTrue (loaded.Contains "<table") "the loaded state renders the aggregate table"
-                 Expect.isFalse (empty.Contains "<table") "the empty state renders the empty copy, not a table")
+            Expect.isTrue (loaded.Contains "<table") "the loaded state renders the aggregate table"
+            Expect.isFalse (empty.Contains "<table") "the empty state renders the empty copy, not a table")
 
-             // The pins have to be load-bearing in both directions: a pinned
-             // gap that has been FIXED is a stale pin, and a stale pin is how a
-             // whole class quietly stops being checked.
-             testCase "every pinned known gap still fires somewhere" (fun () ->
-                 for gap in knownGaps do
-                     let fires =
-                         viewStates
-                         |> List.exists (fun st ->
-                             let node =
-                                 st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
-                                 |> Accessibility.ofHtml
+        // The pins have to be load-bearing in both directions: a pinned
+        // gap that has been FIXED is a stale pin, and a stale pin is how a
+        // whole class quietly stops being checked.
+        testCase "every pinned known gap still fires somewhere" (fun () ->
+            for gap in knownGaps do
+                let fires =
+                    viewStates
+                    |> List.exists (fun st ->
+                        let node =
+                            st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+                            |> Accessibility.ofHtml
 
-                             let pinned, _ = classify node (Accessibility.check Accessibility.Strict node)
-                             not (List.isEmpty pinned))
+                        let pinned, _ = classify node (Accessibility.check Accessibility.Strict node)
+                        not (List.isEmpty pinned))
 
-                     Expect.isTrue
-                         fires
-                         ("the known gap pinned for rule `"
-                          + gap.Rule
-                          + "` no longer fires in any UsageDashboard state. If it was fixed, DELETE the "
-                          + "pin — leaving it in place exempts an element class that is now clean, and "
-                          + "the next real instance of it would pass. The pin reads: "
-                          + gap.Why))
+                Expect.isTrue
+                    fires
+                    ("the known gap pinned for rule `"
+                     + gap.Rule
+                     + "` no longer fires in any UsageDashboard state. If it was fixed, DELETE the "
+                     + "pin — leaving it in place exempts an element class that is now clean, and "
+                     + "the next real instance of it would pass. The pin reads: "
+                     + gap.Why))
 
-             // The floor has to be able to FAIL, and through the harness path
-             // rather than by calling the rules directly — what is under test
-             // here is the WIRING (view → mount → parse → rules → throw), not
-             // the Phase 180 rules, which have their own pack.
-             testCase "AssertAccessibleView rejects a module view that lost a control's name" (fun () ->
-                 let named = fromUnitInit toyInit toyUpdate
+        // The floor has to be able to FAIL, and through the harness path
+        // rather than by calling the rules directly — what is under test
+        // here is the WIRING (view → mount → parse → rules → throw), not
+        // the Phase 180 rules, which have their own pack.
+        testCase "AssertAccessibleView rejects a module view that lost a control's name" (fun () ->
+            let named = fromUnitInit toyInit toyUpdate
 
-                 named.AssertAccessibleView(ViewMount.mount, toyView, Accessibility.Strict)
-                 |> ignore
+            named.AssertAccessibleView(ViewMount.mount, toyView, Accessibility.Strict)
+            |> ignore
 
-                 let stripped = named.Dispatch StripTheName
+            let stripped = named.Dispatch StripTheName
 
-                 let message =
-                     expectThrows
-                         (fun () ->
-                             stripped.AssertAccessibleView(ViewMount.mount, toyView, Accessibility.Strict)
-                             |> ignore)
-                         "removing the only accessible name from a module view's button must fail \
+            let message =
+                expectThrows
+                    (fun () ->
+                        stripped.AssertAccessibleView(ViewMount.mount, toyView, Accessibility.Strict)
+                        |> ignore)
+                    "removing the only accessible name from a module view's button must fail \
                      AssertAccessibleView"
 
-                 Expect.isTrue
-                     (message.Contains "everyInteractiveHasAccessibleName")
-                     ("the failure must NAME the rule that fired, so the reader knows what broke. Got: "
-                      + message)
+            Expect.isTrue
+                (message.Contains "everyInteractiveHasAccessibleName")
+                ("the failure must NAME the rule that fired, so the reader knows what broke. Got: "
+                 + message)
 
-                 Expect.isTrue
-                     (message.Contains "button")
-                     ("the failure must NAME the offending element, so the fix has a target. Got: "
-                      + message))
+            Expect.isTrue
+                (message.Contains "button")
+                ("the failure must NAME the offending element, so the fix has a target. Got: "
+                 + message))
 
-             // `CheckAccessibleView` is the non-throwing half the pinning above
-             // runs on; if it ever stopped agreeing with the throwing one, the
-             // pins would be classifying a different finding set than the gate
-             // fails on.
-             testCase "CheckAccessibleView reports exactly what AssertAccessibleView fails on" (fun () ->
-                 let stripped = (fromUnitInit toyInit toyUpdate).Dispatch StripTheName
+        // `CheckAccessibleView` is the non-throwing half the pinning above
+        // runs on; if it ever stopped agreeing with the throwing one, the
+        // pins would be classifying a different finding set than the gate
+        // fails on.
+        testCase "CheckAccessibleView reports exactly what AssertAccessibleView fails on" (fun () ->
+            let stripped = (fromUnitInit toyInit toyUpdate).Dispatch StripTheName
 
-                 let findings =
-                     stripped.CheckAccessibleView(ViewMount.mount, toyView, Accessibility.Strict)
+            let findings =
+                stripped.CheckAccessibleView(ViewMount.mount, toyView, Accessibility.Strict)
 
-                 Expect.equal
-                     (findings |> List.map _.Rule)
-                     [ "everyInteractiveHasAccessibleName" ]
-                     "the unnamed icon-only button produces exactly the accessible-name finding — if this \
+            Expect.equal
+                (findings |> List.map _.Rule)
+                [ "everyInteractiveHasAccessibleName" ]
+                "the unnamed icon-only button produces exactly the accessible-name finding — if this \
                  is empty the rules are inspecting nothing and every other case here is vacuous"
 
-                 Expect.isEmpty
-                     ((fromUnitInit toyInit toyUpdate)
-                         .CheckAccessibleView(ViewMount.mount, toyView, Accessibility.Strict))
-                     "and the same view WITH its aria-label is clean, so the finding tracks the name and \
+            Expect.isEmpty
+                ((fromUnitInit toyInit toyUpdate).CheckAccessibleView(ViewMount.mount, toyView, Accessibility.Strict))
+                "and the same view WITH its aria-label is clean, so the finding tracks the name and \
                  not the shape")
-         ])
+    ]

@@ -106,11 +106,9 @@ let private isTextEntryTarget (target: obj) : bool =
             let editable: bool = target?isContentEditable
             tag = "INPUT" || tag = "TEXTAREA" || tag = "SELECT" || editable = true
 
-/// The row a caller is about to activate, and the rows around it. This body owns
-/// what a tree cannot express: a document-wide shortcut, focus on open, and
-/// scrolling the keyboard cursor into view.
+/// The row a caller is about to activate, and the rows around it.
 [<ReactComponent>]
-let private CommandPaletteIsland (props: CommandPaletteProps) =
+let CommandPalette (props: CommandPaletteProps) =
     let inputRef = React.useRef<Browser.Types.HTMLInputElement option> None
     let listRef = React.useRef<Browser.Types.HTMLDivElement option> None
     // Phase 444 — the overlay's own chrome. The entries themselves carry
@@ -333,9 +331,3 @@ let private CommandPaletteIsland (props: CommandPaletteProps) =
                 ]
             ]
         ]
-
-/// Phase 1160 - the palette as a tree holding one island. The public signature
-/// stays, so the shell's mount is unchanged.
-let CommandPalette (props: CommandPaletteProps) : ReactElement =
-    TreeLowering.island "command-palette" (fun () -> CommandPaletteIsland props)
-    |> TreeLowering.lower HostBindingSources.empty ignore<unit>
