@@ -129,7 +129,6 @@ let tests =
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
-                            "src/Server/RemotingLeftovers.fs"
                             "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
                         ]
