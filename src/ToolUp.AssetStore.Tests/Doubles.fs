@@ -156,16 +156,16 @@ type ManualJobScheduler() =
             match registration.Idempotency with
             | Some key ->
                 match idempotency.TryGetValue((registration.ScopeId, key.Key)) with
-                | true, existing -> return Ok existing
+                | true, existing -> return Ok(Coalesced existing)
                 | false, _ ->
                     let jobId = Guid.NewGuid()
                     jobs[jobId] <- registration
                     idempotency[(registration.ScopeId, key.Key)] <- jobId
-                    return Ok jobId
+                    return Ok(Scheduled jobId)
             | None ->
                 let jobId = Guid.NewGuid()
                 jobs[jobId] <- registration
-                return Ok jobId
+                return Ok(Scheduled jobId)
         }
 
         member _.Cancel(_, _) = async.Return()

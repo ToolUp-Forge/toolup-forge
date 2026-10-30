@@ -169,10 +169,15 @@ let jobApi (ctx: HttpContext) : JobApi =
                                 CreatedBy = accessContext.UserId
                         }
 
-                        match requestScope with
-                        | Some resolved when not resolved.IsAnonymous && resolved.ScopeId = scope.ScopeId ->
-                            return! s.Schedule(resolved, safeRegistration)
-                        | _ -> return! s.Schedule safeRegistration
+                        // The wire answers the job id either way: an admin
+                        // registration that coalesced names the job it joined.
+                        let! scheduled =
+                            match requestScope with
+                            | Some resolved when not resolved.IsAnonymous && resolved.ScopeId = scope.ScopeId ->
+                                s.Schedule(resolved, safeRegistration)
+                            | _ -> s.Schedule safeRegistration
+
+                        return scheduled |> Result.map ScheduleOutcome.jobId
             }
 
         Cancel =
@@ -212,6 +217,8 @@ let jobApi (ctx: HttpContext) : JobApi =
 
                     match rbac with
                     | Error msg -> return Error msg
-                    | Ok() -> return! s.TriggerOnce(scopeId, jobId, accessContext.UserId)
+                    | Ok() ->
+                        let! triggered = s.TriggerOnce(scopeId, jobId, accessContext.UserId)
+                        return triggered |> Result.mapError TriggerError.message
                 })
     }

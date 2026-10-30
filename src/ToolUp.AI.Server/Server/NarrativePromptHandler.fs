@@ -532,9 +532,9 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
 
                         match! scheduler.Schedule(caller.Resolved, registration) with
                         | Error error -> return Error(describeScheduleError error)
-                        | Ok jobId ->
+                        | Ok(Scheduled jobId | Coalesced jobId) ->
                             match! scheduler.TriggerOnce(caller.Scope.ScopeId, jobId, caller.UserId) with
-                            | Error reason -> return Error reason
+                            | Error refusal -> return Error(TriggerError.message refusal)
                             | Ok() -> return Ok jobId
                 })
     }

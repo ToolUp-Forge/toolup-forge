@@ -196,7 +196,7 @@ let kickoffOnboardingJob: WorkflowAction =
             | Ok() -> return ()
             // Throwing is how an action defers to its registered
             // `ActionFailurePolicy` — see below.
-            | Error reason -> return failwith reason
+            | Error refusal -> return failwith (TriggerError.message refusal)
     }
 ```
 

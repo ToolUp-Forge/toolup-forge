@@ -380,10 +380,11 @@ module ModelFitBatch =
 
                         match! scheduler.Schedule registration with
                         | Error e -> failures.Add(index, FitEnqueueRefusal.ScheduleRefused e)
-                        | Ok jobId ->
+                        | Ok(Scheduled jobId | Coalesced jobId) ->
                             match! scheduler.TriggerOnce(batch.ScopeId, jobId, submittedBy) with
                             | Ok() -> scheduled.Add(index, jobId)
-                            | Error reason -> failures.Add(index, FitEnqueueRefusal.TriggerRefused reason)
+                            | Error refusal ->
+                                failures.Add(index, FitEnqueueRefusal.TriggerRefused(TriggerError.message refusal))
 
                     // Release the concurrency slots now the items are
                     // queued — the scheduler owns their concurrency from

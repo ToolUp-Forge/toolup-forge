@@ -439,7 +439,7 @@ let create
                             | Result.Error err ->
                                 do! deps.Store.Fail(ticket, $"schedule failed: {err}")
                                 return Result.Error $"Failed to schedule export job: {err}"
-                            | Result.Ok jobId ->
+                            | Result.Ok(Scheduled jobId | Coalesced jobId) ->
                                 // Fire immediately (Manual trigger) so the
                                 // export does not wait for the next scheduler
                                 // tick. TriggerOnce enqueues the attempt now.

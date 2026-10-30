@@ -217,11 +217,12 @@ module JsonRpcPeerHost =
 
             match scheduled with
             | Error e -> return Error(PeerHandler $"failed to schedule long-running peer job: {scheduleErrorMessage e}")
-            | Ok jobId ->
+            | Ok(Scheduled jobId | Coalesced jobId) ->
                 let! triggered = fusion.Scheduler.TriggerOnce(PeerJob.Scope, jobId, PeerJob.SourceModule)
 
                 match triggered with
-                | Error msg -> return Error(PeerHandler $"failed to trigger long-running peer job: {msg}")
+                | Error refusal ->
+                    return Error(PeerHandler $"failed to trigger long-running peer job: {TriggerError.message refusal}")
                 | Ok() -> return Ok(JsonRpc.serialize jobId)
         }
 

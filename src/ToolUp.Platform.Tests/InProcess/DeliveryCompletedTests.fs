@@ -107,14 +107,14 @@ type private RecordingScheduler() =
             let id = Guid.NewGuid()
             typed.Enqueue(scope, registration)
             jobs[id] <- (registration, Some scope)
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Schedule(registration: JobRegistration) = async {
             let id = Guid.NewGuid()
             untyped.Enqueue registration
             jobs[id] <- (registration, None)
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Cancel(_, _) = async { return () }
@@ -126,7 +126,7 @@ type private RecordingScheduler() =
 
         member _.TriggerOnce(_, jobId, byUserId) = async {
             match jobs.TryGetValue jobId with
-            | false, _ -> return Error "unknown job"
+            | false, _ -> return Error(TriggerError.DispatchRefused "unknown job")
             | true, (registration, scope) ->
                 let ctx: JobContext = {
                     JobId = jobId
@@ -558,7 +558,7 @@ let private jobTests =
 
             let! jobId = async {
                 match! scheduler.Schedule(resolved, registration) with
-                | Ok id -> return id
+                | Ok(Scheduled id | Coalesced id) -> return id
                 | Error e -> return failtestf "scheduling failed: %A" e
             }
 
@@ -605,7 +605,7 @@ let private jobTests =
 
             let! jobId = async {
                 match! scheduler.Schedule registration with
-                | Ok id -> return id
+                | Ok(Scheduled id | Coalesced id) -> return id
                 | Error e -> return failtestf "scheduling failed: %A" e
             }
 

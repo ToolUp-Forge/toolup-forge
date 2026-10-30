@@ -93,9 +93,11 @@ ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsApiStability : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsCapabilities : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsDeprecations : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsJobOutcomes : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemoting : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsShellSlots : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.JobOutcomes : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Remoting : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ShellSlots : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Surfaces : ToolUp.Platform.CodemodMigration { get }
@@ -105,6 +107,7 @@ ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ApiStability : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Deprecations : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.JobOutcomes : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Remoting : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ShellSlots : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Surfaces : System.Int32 (literal)

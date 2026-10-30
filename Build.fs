@@ -4595,6 +4595,387 @@ let main args =
             Trace.tracefn "▶ VerifyAll: ServiceConfigFold (the closure-fold's one home, via VerifyServiceConfigFold)"
             runVerifyServiceConfigFold __SOURCE_DIRECTORY__)
 
+    // The Fuaran co-resolution rule and the co-build probe.
+    //
+    // This repository's Fuaran substrate floors (`FuaranCoreVersion`,
+    // `FuaranComputeVersion`) against the newest PUBLISHED Fuaran.UI release's:
+    // a floor ahead of the UI tier's across a breaking boundary lifts every
+    // consumer composing both onto a substrate its UI tier was not compiled for,
+    // and nothing in this repository's own build can see it. The rule lives in
+    // FuaranCoResolution.fs (pure, proved offline in ToolUp.Platform.Build.Tests);
+    // its three inputs are committed files, so the gate never fetches:
+    //
+    // - `Directory.Packages.props` — the pins;
+    // - `fuaran-ui-floors.json` — the snapshot of the newest published Fuaran.UI
+    //   release's floors, written only by `RefreshFuaranUiFloors`;
+    // - `docs/platform/open-core-boundary.md` — the declared leads.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyFuaranCoResolution`
+    //        `… [--props <file>] [--snapshot <file>] [--boundary <file>]` reads
+    //        the named file instead (how the rule is shown red on a planted
+    //        drift without touching the tree). A leg of `VerifyAll` in the fast
+    //        and full lanes.
+    let fuaranFloorsFile = Path.Combine(__SOURCE_DIRECTORY__, "fuaran-ui-floors.json")
+
+    let argValue (name: string) =
+        match args |> Array.tryFindIndex ((=) name) with
+        | Some i when i + 1 < args.Length -> Some args[i + 1]
+        | _ -> None
+
+    let readFuaranSnapshot (path: string) =
+        match FuaranCoResolution.snapshotOfJson (File.ReadAllText path) with
+        | Ok s -> s
+        | Error e -> failwithf "%s: %s" path e
+
+    let runVerifyFuaranCoResolution (propsPath: string) (snapshotPath: string) (boundaryPath: string) : int =
+        let inputs =
+            match
+                FuaranCoResolution.pinsOfPackagesProps (File.ReadAllText propsPath),
+                FuaranCoResolution.snapshotOfJson (File.ReadAllText snapshotPath),
+                FuaranCoResolution.leadsOfMarkdown (File.ReadAllText boundaryPath)
+            with
+            | Ok pins, Ok snapshot, Ok leads -> Ok(pins, snapshot, leads)
+            | pins, snapshot, leads ->
+                Error [
+                    match pins with
+                    | Error es -> yield! es |> List.map (sprintf "%s: %s" propsPath)
+                    | Ok _ -> ()
+                    match snapshot with
+                    | Error e -> yield sprintf "%s: %s" snapshotPath e
+                    | Ok _ -> ()
+                    match leads with
+                    | Error e -> yield sprintf "%s: %s" boundaryPath e
+                    | Ok _ -> ()
+                ]
+
+        match inputs with
+        | Error errors ->
+            for e in errors do
+                Trace.traceError ("VerifyFuaranCoResolution: " + e)
+
+            1
+        | Ok(pins, snapshot, leads) ->
+            let verdicts = FuaranCoResolution.evaluate pins snapshot leads
+            Trace.tracefn ""
+            Trace.tracefn "VerifyFuaranCoResolution: against the published Fuaran.UI %s" snapshot.Release
+
+            for v in verdicts do
+                match FuaranCoResolution.severity v with
+                | FuaranCoResolution.Pass -> Trace.tracefn "  ok      %s" (FuaranCoResolution.describe v)
+                | FuaranCoResolution.Warning -> Trace.traceImportant ("  warning " + FuaranCoResolution.describe v)
+                | FuaranCoResolution.Refusal -> Trace.traceError ("  REFUSED " + FuaranCoResolution.describe v)
+
+            match FuaranCoResolution.refusals verdicts with
+            | [] ->
+                Trace.tracefn "VerifyFuaranCoResolution: OK — every Fuaran floor resolves beside the published UI tier."
+                0
+            | refused ->
+                Trace.traceError (sprintf "VerifyFuaranCoResolution: %d refusal(s), named above." refused.Length)
+                1
+
+    Target.create "VerifyFuaranCoResolution" (fun _ ->
+        let file name fallback =
+            argValue name |> Option.map Path.GetFullPath |> Option.defaultValue fallback
+
+        match
+            runVerifyFuaranCoResolution
+                (file "--props" (Path.Combine(__SOURCE_DIRECTORY__, "Directory.Packages.props")))
+                (file "--snapshot" fuaranFloorsFile)
+                (file "--boundary" (Path.Combine(__SOURCE_DIRECTORY__, "docs", "platform", "open-core-boundary.md")))
+        with
+        | 0 -> ()
+        | code -> failwithf "VerifyFuaranCoResolution: exited %d; the verdicts are printed above." code)
+
+    match TestLane.current with
+    | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "FuaranCoResolution" (fun () ->
+            Trace.tracefn "▶ VerifyAll: FuaranCoResolution (Fuaran floors beside the published Fuaran.UI)"
+
+            runVerifyFuaranCoResolution
+                (Path.Combine(__SOURCE_DIRECTORY__, "Directory.Packages.props"))
+                fuaranFloorsFile
+                (Path.Combine(__SOURCE_DIRECTORY__, "docs", "platform", "open-core-boundary.md")))
+
+    // The snapshot's ONE writer. Reads nuget.org's flat container: the newest
+    // released Fuaran.UI, or `--release <v>`, refused when nuget.org does not
+    // serve it, and every tier package's nuspec at that version. Run it when a
+    // Fuaran.UI release ships (and when the rule says the snapshot is behind a
+    // pin), then commit the file.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- RefreshFuaranUiFloors [--release <v>]`
+    Target.create "RefreshFuaranUiFloors" (fun _ ->
+        let registry = "https://api.nuget.org/v3-flatcontainer/"
+
+        use http =
+            new System.Net.Http.HttpClient(Timeout = System.TimeSpan.FromSeconds 60.0)
+
+        let get (url: string) =
+            use response = http.GetAsync(url).GetAwaiter().GetResult()
+
+            if response.IsSuccessStatusCode then
+                Some(response.Content.ReadAsStringAsync().GetAwaiter().GetResult())
+            elif response.StatusCode = System.Net.HttpStatusCode.NotFound then
+                None
+            else
+                failwithf "RefreshFuaranUiFloors: %s answered %d." url (int response.StatusCode)
+
+        let index (id: string) =
+            match get (sprintf "%s%s/index.json" registry (id.ToLowerInvariant())) with
+            | Some json ->
+                use doc = System.Text.Json.JsonDocument.Parse json
+
+                doc.RootElement.GetProperty("versions").EnumerateArray()
+                |> Seq.map _.GetString()
+                |> List.ofSeq
+            | None -> failwithf "RefreshFuaranUiFloors: nuget.org does not list %s." id
+
+        let release =
+            match FuaranCoResolution.chooseRelease (argValue "--release") (index "Fuaran.UI") with
+            | Ok r -> r
+            | Error e -> failwith ("RefreshFuaranUiFloors: " + e)
+
+        let packages =
+            FuaranCoResolution.uiTierPackages
+            |> List.map (fun id ->
+                let lower = id.ToLowerInvariant()
+
+                match get (sprintf "%s%s/%s/%s.nuspec" registry lower release lower) with
+                | Some nuspec -> id, FuaranCoResolution.floorsOfNuspec nuspec
+                | None ->
+                    failwithf
+                        "RefreshFuaranUiFloors: %s %s is not published; the tier releases together, so the snapshot is not written."
+                        id
+                        release)
+            |> Map.ofList
+
+        let snapshot: FuaranCoResolution.UiSnapshot = {
+            Release = release
+            Packages = packages
+        }
+
+        let json = FuaranCoResolution.snapshotToJson snapshot registry
+
+        let previous =
+            if File.Exists fuaranFloorsFile then
+                File.ReadAllText fuaranFloorsFile
+            else
+                ""
+
+        if previous = json then
+            Trace.tracefn "RefreshFuaranUiFloors: unchanged — Fuaran.UI %s." release
+        else
+            File.WriteAllText(fuaranFloorsFile, json)
+            Trace.tracefn "RefreshFuaranUiFloors: wrote fuaran-ui-floors.json for Fuaran.UI %s. Commit it." release)
+
+    // The co-build probe: the shape that failed, built for real. A scratch
+    // consumer composing the fact tier (ToolUp.Facts.Server + ToolUp.Facts.Client)
+    // beside the published Fuaran.UI + Fuaran.UI.Renderer.Server (server) and
+    // Fuaran.UI.Renderer (client) restores, builds on .NET and Fable-compiles its
+    // client, from this tree's own packs plus nuget.org and nothing else.
+    //
+    // In the template gates' shape: the tree's closure is packed at a throwaway
+    // version into a scratch feed, the consumer restores into a package folder
+    // private to this checkout (under obj/), and the consumer lives OUTSIDE the
+    // repository with a nuget.config that clears every inherited source, so no
+    // machine-local feed can paper over a missing package. Only the throwaway
+    // `toolup.*` entries are evicted between runs: every other package in the
+    // folder is a published, immutable version. A downgrade (NU1605) and a
+    // fallback past the throwaway version (NU1603) are errors.
+    //
+    // A leg of `VerifyAll` in the FULL lane: the defect is introduced by a commit
+    // that moves a floor, not by a release tag, so it is gated where every
+    // landing is. Not in `fast`: it packs sixteen projects and runs a Fable
+    // compile, minutes the fast lane exists to save.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyFuaranCoBuild`
+    //        `… --ui-version <v>` probes another published Fuaran.UI (default:
+    //        the snapshot's release); `… --toolup-version <v>` restores a
+    //        PUBLISHED ToolUp release from nuget.org instead of packing the tree
+    //        (how a past release is shown red or green).
+    let fuaranCoBuildVersion = "0.0.0-fuarancobuild"
+
+    let fuaranCoBuildRoots = [
+        "src/ToolUp.Facts.Server/ToolUp.Facts.Server.fsproj"
+        "src/ToolUp.Facts.Client/ToolUp.Facts.Client.fsproj"
+    ]
+
+    let runVerifyFuaranCoBuild (uiVersion: string option) (toolUpVersion: string option) =
+        let root = __SOURCE_DIRECTORY__
+
+        let ui =
+            uiVersion |> Option.defaultValue (readFuaranSnapshot fuaranFloorsFile).Release
+
+        let feedDir = Path.Combine(root, "obj", "fuaran-cobuild-feed")
+        let packages = Path.Combine(root, "obj", "fuaran-cobuild-packages")
+
+        let scratch =
+            let key =
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(root.ToLowerInvariant())
+                )
+                |> System.Convert.ToHexString
+
+            Path.Combine(Path.GetTempPath(), "toolup-fuaran-cobuild-" + key.Substring(0, 12).ToLowerInvariant())
+
+        let run (workDir: string) (exe: string) (argv: string list) =
+            let result =
+                CreateProcess.fromRawCommand exe argv
+                |> CreateProcess.withWorkingDirectory workDir
+                |> CreateProcess.setEnvironmentVariable "NUGET_PACKAGES" packages
+                |> CreateProcess.redirectOutput
+                |> Proc.run
+
+            let output = result.Result.Output + result.Result.Error
+            printfn "%s" output
+
+            if result.ExitCode <> 0 && FuaranCoResolution.CoBuild.isSubstrateMismatch output then
+                Trace.traceError (
+                    sprintf
+                        "VerifyFuaranCoBuild: the FS0193 class — the fact tier at %s beside the published Fuaran.UI %s resolves a Fuaran substrate one side was not compiled against."
+                        (toolUpVersion |> Option.defaultValue "this tree")
+                        ui
+                )
+
+            result.ExitCode
+
+        let toolUp =
+            match toolUpVersion with
+            | Some v -> v
+            | None ->
+                // The closure, walked from the two roots' ProjectReferences, so a
+                // reference added to the fact tier is packed by the commit that
+                // adds it.
+                let closure =
+                    let seen =
+                        System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+
+                    let rec walk (proj: string) =
+                        if seen.Add proj then
+                            let doc = System.Xml.Linq.XDocument.Load proj
+
+                            for r in doc.Descendants() do
+                                if r.Name.LocalName = "ProjectReference" then
+                                    let inc = r.Attribute(System.Xml.Linq.XName.Get "Include")
+
+                                    if not (isNull inc) then
+                                        walk (Path.GetFullPath(Path.Combine(Path.GetDirectoryName proj, inc.Value)))
+
+                    for r in fuaranCoBuildRoots do
+                        walk (Path.GetFullPath(Path.Combine(root, r)))
+
+                    List.ofSeq seen
+
+                Shell.deleteDir feedDir
+                Directory.ensure feedDir
+
+                for proj in closure do
+                    Trace.tracefn
+                        "▶ VerifyFuaranCoBuild: packing %s @ %s"
+                        (Path.GetRelativePath(root, proj))
+                        fuaranCoBuildVersion
+
+                    CreateProcess.fromRawCommand "dotnet" [
+                        "pack"
+                        proj
+                        sprintf "-p:Version=%s" fuaranCoBuildVersion
+                        "-o"
+                        feedDir
+                        "--nologo"
+                    ]
+                    |> CreateProcess.withWorkingDirectory root
+                    |> CreateProcess.ensureExitCode
+                    |> Proc.run
+                    |> ignore
+
+                fuaranCoBuildVersion
+
+        // Evict the throwaway version only; the folder is this checkout's own.
+        Directory.ensure packages
+
+        for dir in Directory.EnumerateDirectories(packages, "toolup.*") do
+            Shell.deleteDir dir
+
+        Shell.deleteDir scratch
+        let serverDir = Path.Combine(scratch, "Server")
+        let clientDir = Path.Combine(scratch, "Client")
+        Directory.ensure serverDir
+        Directory.ensure (Path.Combine(clientDir, ".config"))
+
+        let ownFeed =
+            match toolUpVersion with
+            | None -> Some(feedDir.Replace('\\', '/'))
+            | Some _ -> None
+
+        let fableVersion =
+            let manifest =
+                Path.Combine(root, "samples", "MinimalClient", ".config", "dotnet-tools.json")
+
+            use doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText manifest)
+            doc.RootElement.GetProperty("tools").GetProperty("fable").GetProperty("version").GetString()
+
+        File.WriteAllText(Path.Combine(scratch, "nuget.config"), FuaranCoResolution.CoBuild.nugetConfig ownFeed)
+
+        File.WriteAllText(
+            Path.Combine(serverDir, "CoBuild.Server.fsproj"),
+            FuaranCoResolution.CoBuild.serverProject toolUp ui
+        )
+
+        File.WriteAllText(Path.Combine(serverDir, "Program.fs"), FuaranCoResolution.CoBuild.serverSource)
+
+        File.WriteAllText(
+            Path.Combine(clientDir, "CoBuild.Client.fsproj"),
+            FuaranCoResolution.CoBuild.clientProject toolUp ui
+        )
+
+        File.WriteAllText(Path.Combine(clientDir, "App.fs"), FuaranCoResolution.CoBuild.clientSource)
+
+        File.WriteAllText(
+            Path.Combine(clientDir, ".config", "dotnet-tools.json"),
+            FuaranCoResolution.CoBuild.toolManifest fableVersion
+        )
+
+        Trace.tracefn
+            "▶ VerifyFuaranCoBuild: the fact tier at %s beside the published Fuaran.UI %s, in %s"
+            toolUp
+            ui
+            scratch
+
+        try
+            Aggregate.runAll "VerifyFuaranCoBuild" "co-build leg" [
+                Aggregate.leg "server: restore and build on .NET" (fun () ->
+                    match run serverDir "dotnet" [ "restore"; "--nologo" ] with
+                    | 0 -> run serverDir "dotnet" [ "build"; "--no-restore"; "--nologo"; "-v:q" ]
+                    | code -> code)
+                Aggregate.leg "server: render and encode a page" (fun () ->
+                    run serverDir "dotnet" [ FuaranCoResolution.CoBuild.serverAssembly ])
+                Aggregate.leg "client: restore and build on .NET" (fun () ->
+                    match run clientDir "dotnet" [ "restore"; "--nologo" ] with
+                    | 0 -> run clientDir "dotnet" [ "build"; "--no-restore"; "--nologo"; "-v:q" ]
+                    | code -> code)
+                Aggregate.leg "client: Fable compile" (fun () ->
+                    match run clientDir "dotnet" [ "tool"; "restore" ] with
+                    | 0 -> run clientDir "dotnet" [ "fable"; "-o"; "output"; "--noCache" ]
+                    | code -> code)
+            ]
+        finally
+            Shell.deleteDir scratch
+
+    Target.create "VerifyFuaranCoBuild" (fun _ ->
+        runVerifyFuaranCoBuild (argValue "--ui-version") (argValue "--toolup-version"))
+
+    match TestLane.current with
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "FuaranCoBuild" (fun () ->
+            Trace.tracefn
+                "▶ VerifyAll: FuaranCoBuild (the fact tier beside the published Fuaran.UI, via VerifyFuaranCoBuild)"
+
+            runVerifyFuaranCoBuild None None
+            0)
+    | TestLane.Lane.Pure
+    | TestLane.Lane.Fast -> ()
+
     // App-specific target: Azure deployment
     Target.create "Deploy-CD" (fun _ ->
         let dotnet args dir =

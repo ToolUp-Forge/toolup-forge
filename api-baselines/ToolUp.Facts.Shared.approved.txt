@@ -239,13 +239,15 @@ ToolUp.Facts.FactSliceQuery.PeriodTo : System.DateTime { get }
 ToolUp.Facts.FactSliceQuery.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactSliceQuery.TableId : System.String { get }
 ToolUp.Facts.FactTableColumnView (class)
-ToolUp.Facts.FactTableColumnView..ctor(System.String, System.String, System.String)
+ToolUp.Facts.FactTableColumnView..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.FactTableColumnView.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.FactTableColumnView.Disclosure : System.String { get }
 ToolUp.Facts.FactTableColumnView.Metric : System.String { get }
 ToolUp.Facts.FactTableColumnView.Shape : System.String { get }
 ToolUp.Facts.FactTableDetail (class)
-ToolUp.Facts.FactTableDetail..ctor(ToolUp.Facts.FactTableListing, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableColumnView], System.String, System.Int32, System.Int64, System.String)
+ToolUp.Facts.FactTableDetail..ctor(ToolUp.Facts.FactTableListing, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableColumnView], System.String, System.Int32, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.FactTableDetail.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableColumnView] { get }
+ToolUp.Facts.FactTableDetail.Description : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.FactTableDetail.Listing : ToolUp.Facts.FactTableListing { get }
 ToolUp.Facts.FactTableDetail.ProducingOperation : System.String { get }
 ToolUp.Facts.FactTableDetail.RefreshCadenceSeconds : System.Int64 { get }

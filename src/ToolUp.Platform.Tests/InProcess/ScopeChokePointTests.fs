@@ -617,14 +617,14 @@ type private CarryingScheduler(handler: unit -> IJobHandler, remints: bool) =
             let id = Guid.NewGuid()
             typed.Enqueue(scope, registration)
             jobs[id] <- (registration, Some scope)
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Schedule(registration: JobRegistration) = async {
             let id = Guid.NewGuid()
             untyped.Enqueue registration
             jobs[id] <- (registration, None)
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Cancel(_, _) = async { return () }
@@ -636,7 +636,7 @@ type private CarryingScheduler(handler: unit -> IJobHandler, remints: bool) =
 
         member _.TriggerOnce(_, jobId, byUserId) = async {
             match jobs.TryGetValue jobId with
-            | false, _ -> return Error "unknown job"
+            | false, _ -> return Error(TriggerError.DispatchRefused "unknown job")
             | true, (registration, scope) ->
                 let ctx: JobContext = {
                     JobId = jobId

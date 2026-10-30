@@ -148,3 +148,73 @@ repository, and a released ToolUp package that carries them restores anonymously
   Core release it was not compiled against.
 - **Fable-clean.** Both packages ship their sources under `fable/`, so the builders compile
   in a browser as well as on a server.
+
+## Resolving beside the published Fuaran-UI tier
+
+**The hazard.** A consumer composing the ToolUp packages with Fuaran-UI pages resolves ONE
+version of each Fuaran substrate package for its whole graph: the highest floor any package
+declares. When a floor here (`FuaranCoreVersion`, `FuaranComputeVersion`) is ahead of the floor
+the newest published Fuaran.UI release was built against, NuGet lifts every such consumer onto a
+substrate its UI tier was not compiled for. Below 1.0 a substrate minor may remove what the UI
+tier calls, and the consumer fails to build or run: FS0193 or a `TypeLoadException` on .NET, and
+the UI tier's own sources failing in its Fable client. This repository's own build cannot see it,
+because it compiles its Fuaran consumption only against itself.
+
+**The rule** (`dotnet run --project Build.fsproj -- VerifyFuaranCoResolution`, a `VerifyAll` leg
+in the fast and full lanes; `FuaranCoResolution.fs`). Fuaran repositories release their packages
+in lockstep, so the rule compares per family (`Fuaran.Core`, `Fuaran.Compute`): the floor pinned
+here against the lowest floor any package of the snapshotted Fuaran.UI release declares in that
+family.
+
+| Verdict | When | Effect |
+|---|---|---|
+| aligned | at or behind the UI tier's floor | passes |
+| ahead, compatible | ahead within one compatibility range (a patch below 1.0, a minor from 1.0) | warns |
+| ahead, breaking | ahead across a minor below 1.0, or a major from 1.0 | **refused**, naming both versions |
+| ahead, declared | ahead, breaking, with an open lead below for exactly that family and floor | passes, and prints the lead |
+| behind | the UI tier ahead of this repository across a breaking boundary | warns; the co-build probe decides |
+| lead not needed | an open lead no comparison used (the UI tier caught up, or the floor moved) | **refused**: record it closed |
+| snapshot behind a pin | a `Fuaran.UI*` pin newer than the snapshotted release | **refused**: refresh the snapshot |
+
+A family the UI tier does not depend on is out of scope.
+
+**The snapshot.** `fuaran-ui-floors.json` at the repository root records the newest published
+Fuaran.UI release and every `Fuaran.*` floor its tier packages declare (`Fuaran.UI`,
+`Fuaran.UI.Charts`, `Fuaran.UI.Renderer`, `Fuaran.UI.Renderer.Server`). The gate reads it and
+never fetches. Its one writer is `dotnet run --project Build.fsproj -- RefreshFuaranUiFloors`
+(`--release <v>` for a named release), which reads nuget.org and refuses a version nuget.org does
+not serve. Refresh it when a Fuaran.UI release ships, and commit the file.
+
+**The co-build probe** (`dotnet run --project Build.fsproj -- VerifyFuaranCoBuild`, a `VerifyAll`
+leg in the full lane). A scratch consumer composing the fact tier (`ToolUp.Facts.Server`,
+`ToolUp.Facts.Client`) beside the snapshotted `Fuaran.UI` and `Fuaran.UI.Renderer.Server` on the
+server and `Fuaran.UI.Renderer` in the client restores, builds on .NET, renders and encodes a page,
+and Fable-compiles its client. It packs this tree's closure at a throwaway version, restores into
+a package folder private to the checkout, and clears every inherited package source, so it sees
+this tree's packs and nuget.org and nothing else. It runs on every full lane rather than on a
+release tag, because the hazard is introduced by the commit that moves a floor. `--ui-version <v>`
+probes another published Fuaran.UI; `--toolup-version <v>` restores a published ToolUp release
+instead of this tree.
+
+### Declared leads
+
+A lead is a decision to stay ahead of the published UI tier, recorded here, never a silent pass.
+Each row names the family, the floor declared ahead, the Fuaran.UI release it was declared
+against and that release's floor, its status (`open`, or `closed by Fuaran.UI <version>`), and the
+consumer shapes that break until it closes. The rule reads this table: an open row excuses
+exactly its family at exactly its floor, a closed row excuses nothing, and an open row no
+comparison needs is refused until it is recorded closed. A new floor is a new row. An open lead
+reaches the release notes through the migration note of the release that declares it, which the
+CHANGELOG generator links (for the open row below,
+[1133-fuaran-co-resolution](../migrations/1133-fuaran-co-resolution.md)).
+
+| Family | Floor here | Fuaran.UI release | Its floor | Status | Broken until closed |
+|---|---|---|---|---|---|
+| `Fuaran.Core` | `0.40.2` | `0.97.0` | `0.38.1` | closed by Fuaran.UI 0.98.1 | Every consumer composing the fact tier beside Fuaran-UI pages on Fuaran.UI 0.97.0 or older: the Core minors after 0.38 removed entities the UI tier calls (`Fuaran.Core.Canon` among them), so the server failed with FS0193 or a `TypeLoadException` for `Fuaran.Core.Canon`, and the Fable client failed compiling the UI tier's own sources. Recorded after the fact: this pin shipped in 0.35.0 before the rule existed. |
+| `Fuaran.Compute` | `0.42.0` | `0.99.1` | `0.41.0` | open | None observed. `Fuaran.Compute.DataFrame` 0.42.0 ships Fable sources byte-identical to 0.41.0's, and the co-build probe passes beside Fuaran.UI 0.99.1. Closes with the first Fuaran.UI release built on `Fuaran.Compute.DataFrame` 0.42.0 or later. |
+
+The first row is the worked example. The 0.35.0 release pinned `Fuaran.Core.Column` 0.40.2 while
+every published Fuaran.UI was built on Core 0.38.1, and Fuaran.UI 0.98.1, built on Core 0.40.2,
+closed it. Both ends are pinned in `ToolUp.Platform.Build.Tests` (the rule) and reproduced by the
+probe (`--toolup-version 0.35.0 --ui-version 0.97.0` fails, `--ui-version 0.98.1` passes).
+

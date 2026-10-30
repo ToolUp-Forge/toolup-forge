@@ -29,6 +29,10 @@ type CodemodMigration =
     /// Phase 1095 — `IDataSource` declares what a connector can do as a
     /// `Capabilities` record.
     | Capabilities
+    /// Phase 1066 — `IJobScheduler.Schedule` answers `ScheduleOutcome`
+    /// (`Scheduled` / `Coalesced`) and `TriggerOnce` refuses with a typed
+    /// `TriggerError`.
+    | JobOutcomes
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -42,6 +46,8 @@ module CodemodMigration =
         | CodemodMigration.ShellSlots -> "docs/migrations/879-shell-slots.md"
         | CodemodMigration.AgentLoop -> "docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md"
         | CodemodMigration.Capabilities -> "docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md"
+        | CodemodMigration.JobOutcomes ->
+            "docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -53,6 +59,7 @@ module CodemodMigration =
         | CodemodMigration.ShellSlots -> "Phase 879"
         | CodemodMigration.AgentLoop -> "Phase 1077"
         | CodemodMigration.Capabilities -> "Phase 1095"
+        | CodemodMigration.JobOutcomes -> "Phase 1066"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -559,6 +566,39 @@ module Codemod =
             @"\bToolUp\.DataSources\.Common\.(IWatchableFileSource|WatchedObject)\b"
             "ToolUp.Platform.$1"
             "`ToolUp.DataSources.Common.IWatchableFileSource` / `WatchedObject` → `ToolUp.Platform.…`"
+        // `Schedule` answers a `ScheduleOutcome`, so the result type a
+        // helper or an implementer declares for it moves with it. Only the
+        // annotation moves: a site that reads the job id is reported below.
+        rewrite
+            "1066-schedule-result-type"
+            CodemodMigration.JobOutcomes
+            CodemodFileClass.Source
+            @"\bResult<\s*(?:JobId|Guid)\s*,\s*ScheduleError\s*>"
+            "Result<ScheduleOutcome, ScheduleError>"
+            "`Result<JobId, ScheduleError>` (a `Schedule` answer) → `Result<ScheduleOutcome, ScheduleError>`"
+        // An implementer that re-typed the platform's `TriggerOnce` refusals
+        // answered with its exact sentences; each is one `TriggerError` case.
+        rewrite
+            "1066-trigger-error-not-found"
+            CodemodMigration.JobOutcomes
+            CodemodFileClass.Source
+            @"\bError\s*\(?\s*\$""Job %A\{(\w+)\} not found in scope %s\{(\w+)\}""\s*\)?"
+            "Error(TriggerError.JobNotFound($2, $1))"
+            "`Error $\"Job %A{jobId} not found in scope %s{scopeId}\"` → `Error(TriggerError.JobNotFound(scopeId, jobId))`"
+        rewrite
+            "1066-trigger-error-cancelled"
+            CodemodMigration.JobOutcomes
+            CodemodFileClass.Source
+            @"\bError\s*\(?\s*""Cannot trigger a cancelled job""\s*\)?"
+            "Error TriggerError.JobCancelled"
+            "`Error \"Cannot trigger a cancelled job\"` → `Error TriggerError.JobCancelled`"
+        rewrite
+            "1066-trigger-error-disabled"
+            CodemodMigration.JobOutcomes
+            CodemodFileClass.Source
+            @"\bError\s*\(?\s*""Cannot trigger a disabled job; enable it first""\s*\)?"
+            "Error TriggerError.JobDisabled"
+            "`Error \"Cannot trigger a disabled job; enable it first\"` → `Error TriggerError.JobDisabled`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -737,6 +777,26 @@ module Codemod =
             CodemodFileClass.Source
             @":\?\s*(?:[\w.]+\.)?(?:IWatchableFileSource|IEmitsNativePayload)\b"
             "a connector's capabilities are its declared `Capabilities` record now: read `ConnectorCapabilities.watchable` / `ConnectorCapabilities.native` (or `source.Capabilities`), never the type — a decorator forwards its inner connector's record"
+        // A `Schedule` call site: whether it reads the job id, and whether
+        // it should act on a coalesced job, is the site's decision.
+        review
+            "1066-schedule-call"
+            CodemodMigration.JobOutcomes
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b).*\.Schedule\s*(?:\(|\s+[\w{])"
+            "`Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once"
+        review
+            "1066-trigger-once-call"
+            CodemodMigration.JobOutcomes
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b).*\.TriggerOnce\s*\("
+            "`TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`"
+        review
+            "1066-scheduler-implementer"
+            CodemodMigration.JobOutcomes
+            CodemodFileClass.Source
+            @"\bmember\s+\w+\.(?:Schedule|TriggerOnce)\b"
+            "an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy"
     ]
 
 

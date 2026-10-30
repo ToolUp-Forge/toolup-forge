@@ -171,7 +171,7 @@ type private RecordingScheduler() =
 
         member _.Schedule(registration) = async {
             registered <- Some registration
-            return Ok(Guid.NewGuid())
+            return Ok(Scheduled(Guid.NewGuid()))
         }
 
         member _.TriggerOnce(_scopeId, _jobId, _byUserId) = async { return Ok() }

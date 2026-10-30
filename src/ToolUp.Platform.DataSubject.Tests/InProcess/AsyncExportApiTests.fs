@@ -49,7 +49,7 @@ type private InlineScheduler() =
         member _.Schedule(registration) = async {
             let jobId = Guid.NewGuid()
             jobs[jobId] <- (registration.Handler, registration.Payload)
-            return Ok jobId
+            return Ok(Scheduled jobId)
         }
 
         member _.TriggerOnce(scopeId, jobId, _byUserId) = async {
@@ -59,8 +59,8 @@ type private InlineScheduler() =
                 | true, handler ->
                     let! _ = handler.Execute(jobContext scopeId payload)
                     return Ok()
-                | false, _ -> return Error $"handler {handlerName} not registered"
-            | false, _ -> return Error $"job {jobId} unknown"
+                | false, _ -> return Error(TriggerError.DispatchRefused $"handler {handlerName} not registered")
+            | false, _ -> return Error(TriggerError.JobNotFound(scopeId, jobId))
         }
 
         member _.Cancel(_, _) = async { return () }

@@ -265,7 +265,7 @@ let projectionTests =
 
             let jobId =
                 match result with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "Schedule: %A" e
 
             let! jobExists = quartz.Exists(QuartzMapping.jobKey scope jobId).AsTask() |> Async.AwaitTask
@@ -305,7 +305,7 @@ let projectionTests =
 
             let schedule () = async {
                 match! scheduler.Schedule(mk ()) with
-                | Ok id -> return id
+                | Ok(Scheduled id | Coalesced id) -> return id
                 | Error e -> return failtestf "Schedule: %A" e
             }
 
@@ -359,7 +359,7 @@ let projectionTests =
 
             let jobId =
                 match result with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "Schedule: %A" e
 
             // Lose the Quartz view, exactly as a restart of the
@@ -459,12 +459,12 @@ let dispatchTests =
 
                 let jobId =
                     match result with
-                    | Ok id -> id
+                    | Ok(Scheduled id | Coalesced id) -> id
                     | Error e -> failtestf "Schedule: %A" e
 
                 match! scheduler.TriggerOnce(scope, jobId, "alice") with
                 | Ok() -> ()
-                | Error e -> failtestf "TriggerOnce: %s" e
+                | Error e -> failtestf "TriggerOnce: %A" e
 
                 let ran = waitFor 15_000 (fun () -> not executed.IsEmpty)
                 Expect.isTrue ran "the registered handler ran"
@@ -538,12 +538,12 @@ let dispatchTests =
 
                 let jobId =
                     match result with
-                    | Ok id -> id
+                    | Ok(Scheduled id | Coalesced id) -> id
                     | Error e -> failtestf "Schedule: %A" e
 
                 match! scheduler.TriggerOnce(scope, jobId, "alice") with
                 | Ok() -> ()
-                | Error e -> failtestf "TriggerOnce: %s" e
+                | Error e -> failtestf "TriggerOnce: %A" e
 
                 let deadLettered () =
                     scheduler.GetRecentRuns(scope, jobId, 5)

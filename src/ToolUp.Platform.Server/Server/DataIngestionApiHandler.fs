@@ -209,7 +209,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                             | _ -> s.Schedule registration
 
                         match scheduled with
-                        | Ok jobId ->
+                        | Ok(Scheduled jobId | Coalesced jobId) ->
                             // The scheduler treats Manual triggers as
                             // dispatch-on-TriggerOnce; immediately fire it
                             // so admin-UI "Refresh now" actually runs the
@@ -217,7 +217,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                             // next minute tick.
                             match! s.TriggerOnce(scope.ScopeId, jobId, accessContext.UserId) with
                             | Ok() -> return Ok jobId
-                            | Error msg -> return Error msg
+                            | Error refusal -> return Error(TriggerError.message refusal)
                         | Error err -> return Error(sprintf "%A" err)
             }
 

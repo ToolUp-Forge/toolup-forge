@@ -122,7 +122,7 @@ type private RecordingScheduler() =
         member _.Schedule(reg: JobRegistration) = async {
             let id = Guid.NewGuid()
             scheduled.Enqueue reg
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Cancel(_, _) = async { return () }

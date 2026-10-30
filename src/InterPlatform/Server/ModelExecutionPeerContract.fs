@@ -1853,10 +1853,14 @@ module ModelExecutionPeerContract =
 
             match! fusion.Scheduler.Schedule registration with
             | Error _ -> return Error(PeerHandler $"failed to schedule the federated '{methodName}' call")
-            | Ok jobId ->
+            | Ok(Scheduled jobId | Coalesced jobId) ->
                 match! fusion.Scheduler.TriggerOnce(PeerJob.Scope, jobId, PeerJob.SourceModule) with
-                | Error message ->
-                    return Error(PeerHandler $"failed to trigger the federated '{methodName}' call: {message}")
+                | Error refusal ->
+                    return
+                        Error(
+                            PeerHandler
+                                $"failed to trigger the federated '{methodName}' call: {TriggerError.message refusal}"
+                        )
                 | Ok() -> return Ok(JsonRpc.serialize jobId)
         }
 

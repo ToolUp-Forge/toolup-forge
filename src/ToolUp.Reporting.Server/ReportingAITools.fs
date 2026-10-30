@@ -1042,11 +1042,14 @@ let private enqueue
 
         match! scheduler.Schedule registration with
         | Error err -> return errorPayload "RenderQueueFailed" $"The background render could not be queued: %A{err}"
-        | Ok jobId ->
+        | Ok(Scheduled jobId | Coalesced jobId) ->
             // A `Manual` job runs on `TriggerOnce`, not on a tick.
             match! scheduler.TriggerOnce(caller.ScopeId, jobId, caller.UserId) with
-            | Error reason ->
-                return errorPayload "RenderQueueFailed" $"The background render could not be started: {reason}"
+            | Error refusal ->
+                return
+                    errorPayload
+                        "RenderQueueFailed"
+                        $"The background render could not be started: {TriggerError.message refusal}"
             | Ok() ->
                 return
                     serialise {|

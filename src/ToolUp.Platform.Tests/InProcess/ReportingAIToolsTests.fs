@@ -81,7 +81,7 @@ type private RecordingScheduler() =
 
         member _.Schedule registration =
             scheduled.Enqueue registration
-            async.Return(Ok jobId)
+            async.Return(Ok(Scheduled jobId))
 
         member _.Cancel(_, _) = async.Return()
         member _.Disable(_, _) = async.Return()

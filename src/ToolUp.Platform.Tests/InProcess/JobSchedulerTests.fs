@@ -580,7 +580,7 @@ let private scheduleManualJob (fixture: HandoffFixture) (handler: IJobHandler) (
     }
 
     match scheduler.Schedule registration |> Async.RunSynchronously with
-    | Ok jobId -> scope, jobId
+    | Ok(Scheduled jobId | Coalesced jobId) -> scope, jobId
     | Error e -> failtestf "schedule failed: %A" e
 
 let private triggerOnce (fixture: HandoffFixture) (scope: string) (jobId: JobId) =
@@ -589,7 +589,7 @@ let private triggerOnce (fixture: HandoffFixture) (scope: string) (jobId: JobId)
         |> Async.RunSynchronously
     with
     | Ok() -> ()
-    | Error e -> failtestf "TriggerOnce failed: %s" e
+    | Error e -> failtestf "TriggerOnce failed: %A" e
 
 /// The newest run row for a job, or `None`.
 let private latestRun (fixture: HandoffFixture) (scope: string) (jobId: JobId) : JobRun option =
@@ -1174,7 +1174,7 @@ let private handoffTests =
 
             let jobId =
                 match iface.Schedule registration |> Async.RunSynchronously with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "schedule failed: %A" e
 
             // Reconciliation is a no-op, and safe to call.
@@ -1183,7 +1183,7 @@ let private handoffTests =
             // An ordinary handler still behaves exactly as before (GP 11).
             match iface.TriggerOnce(scope, jobId, "test") |> Async.RunSynchronously with
             | Ok() -> ()
-            | Error e -> failtestf "TriggerOnce failed: %s" e
+            | Error e -> failtestf "TriggerOnce failed: %A" e
 
             Expect.isTrue (waitFor 5000 (fun () -> handler.Executed.Length >= 1)) "the in-process handler ran"
 
@@ -1426,7 +1426,7 @@ let private defect1064Tests =
 
             let jobId =
                 match ijs.Schedule registration |> Async.RunSynchronously with
-                | Ok id -> id
+                | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "schedule failed: %A" e
 
             triggerOnce fixture scope jobId
@@ -1554,6 +1554,672 @@ let private restartContractTests =
 let private carriedScopeContractTests =
     IJobSchedulerContract.carriedScopeTests "InProcessJobScheduler" restartBinding
 
+let private pinJobId (outcome: ScheduleOutcome) = ScheduleOutcome.jobId outcome
+
+/// Captured from the tree before the eleven terminal sites moved onto
+/// `JobLifecycle.transition`; regenerate only for a deliberate behaviour change.
+let private approvedTransitionPin =
+    """== completed
+job <g1>
+event JobCompleted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"DurationMs":<n>}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=Succeeded error=None completed=true duration=true handle=false
+definition status=Active lastRunStatus=Some Succeeded lastRunError=None failures=0 lastRunAt=true nextRunAt=false
+== retriable, then completed
+job <g1>
+event JobCompleted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":2,"DurationMs":<n>}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":2,"TriggerSource":{"ScheduledManually":"test"}}
+event JobFailed {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g3>","Attempt":1,"Error":"transient boom","DurationMs":<n>}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g3>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g3> attempt=1 status=Failed error=Some "transient boom" completed=true duration=true handle=false
+row <g2> attempt=2 status=Succeeded error=None completed=true duration=true handle=false
+definition status=Active lastRunStatus=Some Succeeded lastRunError=Some "transient boom" failures=0 lastRunAt=true nextRunAt=false
+== retriable until exhausted
+job <g1>
+event JobDeadLettered {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Error":"transient boom","Attempts":2}
+event JobFailed {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":2,"Error":"transient boom","DurationMs":<n>}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":2,"TriggerSource":{"ScheduledManually":"test"}}
+event JobFailed {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g3>","Attempt":1,"Error":"transient boom","DurationMs":<n>}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g3>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g3> attempt=1 status=Failed error=Some "transient boom" completed=true duration=true handle=false
+row <g2> attempt=2 status=Failed error=Some "transient boom" completed=true duration=true handle=false
+row <g4> attempt=2 status=DeadLettered error=Some "transient boom" completed=true duration=true handle=false
+definition status=Active lastRunStatus=Some DeadLettered lastRunError=Some "transient boom" failures=1 lastRunAt=true nextRunAt=false
+notify SystemMessage
+  (Warning,
+   "Job pin-handler failed permanently after 2 attempts: transient boom")
+== terminal
+job <g1>
+event JobDeadLettered {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Error":"permanent boom","Attempts":1}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=DeadLettered error=Some "permanent boom" completed=true duration=true handle=false
+definition status=Active lastRunStatus=Some DeadLettered lastRunError=Some "permanent boom" failures=1 lastRunAt=true nextRunAt=false
+notify SystemMessage
+  (Warning,
+   "Job pin-handler failed permanently after 3 attempts: permanent boom")
+== handed off
+job <g1>
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=AwaitingExternal error=None completed=false duration=false handle=true
+definition status=Active lastRunStatus=Some AwaitingExternal lastRunError=None failures=0 lastRunAt=true nextRunAt=false
+== external succeeded
+job <g1>
+event JobExternalReconciled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","Outcome":"succeeded","ResultRef":"s3://pin/result","Error":null,"Retriable":null,"AwaitedMs":<n>}
+event JobCompleted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"DurationMs":<n>}
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=Succeeded error=None completed=true duration=true handle=true
+definition status=Active lastRunStatus=Some Succeeded lastRunError=None failures=0 lastRunAt=true nextRunAt=false
+== external retriable, attempts remain
+job <g1>
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":2,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-2","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":2,"TriggerSource":{"ScheduledByEvent":["_external-retry","<g4>"]}}
+event JobFailed {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g4>","Attempt":1,"Error":"backend blip","DurationMs":<n>}
+event JobExternalReconciled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g4>","Attempt":1,"HandleId":"<g5>","Backend":"gpu-pool","NativeRef":"native-1","Outcome":"failed","ResultRef":null,"Error":"backend blip","Retriable":true,"AwaitedMs":<n>}
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g4>","Attempt":1,"HandleId":"<g5>","Backend":"gpu-pool","NativeRef":"native-1","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g4>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g4> attempt=1 status=Failed error=Some "backend blip" completed=true duration=true handle=true
+row <g2> attempt=2 status=AwaitingExternal error=None completed=false duration=false handle=true
+definition status=Active lastRunStatus=Some AwaitingExternal lastRunError=None failures=0 lastRunAt=true nextRunAt=false
+== external retriable, attempts spent
+job <g1>
+event JobDeadLettered {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Error":"backend blip","Attempts":1}
+event JobExternalReconciled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","Outcome":"failed","ResultRef":null,"Error":"backend blip","Retriable":true,"AwaitedMs":<n>}
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=DeadLettered error=Some "backend blip" completed=true duration=true handle=true
+definition status=Active lastRunStatus=Some DeadLettered lastRunError=Some "backend blip" failures=1 lastRunAt=true nextRunAt=false
+notify SystemMessage
+  (Warning, "Job pin-handler failed permanently after 1 attempts: backend blip")
+== external terminal failure
+job <g1>
+event JobDeadLettered {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Error":"backend refused","Attempts":1}
+event JobExternalReconciled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","Outcome":"failed","ResultRef":null,"Error":"backend refused","Retriable":false,"AwaitedMs":<n>}
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=DeadLettered error=Some "backend refused" completed=true duration=true handle=true
+definition status=Active lastRunStatus=Some DeadLettered lastRunError=Some "backend refused" failures=1 lastRunAt=true nextRunAt=false
+notify SystemMessage
+  (Warning,
+   "Job pin-handler failed permanently after 3 attempts: backend refused")
+== external cancelled
+job <g1>
+event JobExternalReconciled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","Outcome":"cancelled","ResultRef":null,"Error":null,"Retriable":null,"AwaitedMs":<n>}
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=ExternallyCancelled error=None completed=true duration=true handle=true
+definition status=Active lastRunStatus=Some ExternallyCancelled lastRunError=None failures=0 lastRunAt=true nextRunAt=false
+== reconciliation: definition gone
+job <g1>
+event JobExternalHandedOff {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"HandleId":"<g3>","Backend":"gpu-pool","NativeRef":"native-1","SubmittedAt":"<t>"}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g2> attempt=1 status=DeadLettered error=Some "job definition no longer exists; external hand-off abandoned" completed=true duration=true handle=true
+definition <none>
+== reconciliation: handle missing
+job <g1>
+event JobDeadLettered {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Error":"external hand-off recorded no handle; the run cannot be polled","Attempts":2}
+event JobExternalHandleMissing {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g2>","Attempt":2}
+event JobCompleted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g3>","Attempt":1,"DurationMs":<n>}
+event JobStarted {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","RunId":"<g3>","Attempt":1,"TriggerSource":{"ScheduledManually":"test"}}
+event JobScheduled {"JobId":"<g1>","ScopeId":"<scope>","Handler":"pin-handler","Trigger":"Manual","CreatedBy":"test","NextRunAt":null}
+row <g3> attempt=1 status=Succeeded error=None completed=true duration=true handle=false
+row <g2> attempt=2 status=DeadLettered error=Some "external hand-off recorded no handle; the run cannot be polled" completed=true duration=true handle=false
+definition status=Active lastRunStatus=Some DeadLettered lastRunError=Some "external hand-off recorded no handle; the run cannot be polled" failures=1 lastRunAt=true nextRunAt=false
+notify SystemMessage
+  (Warning,
+   "Job pin-handler failed permanently after 3 attempts: external hand-off recorded no handle; the run cannot be polled")"""
+
+// ─── The transition pin ──────────────────────────────────────────────
+//
+// Every way a run ends (the four handler results, the exhausted promotion,
+// the three external outcomes with the retriable one's two exits, and the two
+// reconciliation abandonments) driven through the REAL scheduler, with the
+// events, rows, definition fold and notification each leaves rendered as
+// normalised text. `approvedTransitionPin` was captured from the tree before
+// those sites moved onto `JobLifecycle.transition`, so the refactor is pinned
+// by this test staying green: "identical to an in-process failure" and
+// "identical whether by push or by poll" as a test rather than a comment.
+//
+// Normalisation keeps only what a deployment observes and neither the clock
+// nor the GUID generator decides: GUIDs become first-appearance tokens,
+// durations and timestamps placeholders, the scope id `<scope>`.
+
+/// Answers `Get` with `None` for a hidden job — a definition deleted while
+/// its external work ran (the reconciliation orphan).
+type private HidingJobStore(inner: IJobStore) =
+    let hidden = System.Collections.Concurrent.ConcurrentDictionary<JobId, bool>()
+
+    member _.Hide(jobId: JobId) = hidden[jobId] <- true
+
+    interface IJobStore with
+        member _.Save d = inner.Save d
+
+        member _.Get(scope, jobId) =
+            if hidden.ContainsKey jobId then
+                async.Return None
+            else
+                inner.Get(scope, jobId)
+
+        member _.ListJobs scope = inner.ListJobs scope
+        member _.Update d = inner.Update d
+
+        member _.FindByIdempotencyKey(scope, key, ttl, now) =
+            inner.FindByIdempotencyKey(scope, key, ttl, now)
+
+        member _.RecordRun run = inner.RecordRun run
+
+        member _.GetRecentRuns(scope, jobId, count) =
+            inner.GetRecentRuns(scope, jobId, count)
+
+        member _.DueJobs(scope, now) = inner.DueJobs(scope, now)
+
+        member _.AwaitingExternalRuns(scope, limit) =
+            inner.AwaitingExternalRuns(scope, limit)
+
+        member _.ListScopesWithJobs() = inner.ListScopesWithJobs()
+
+type private PinFixture = {
+    Store: HidingJobStore
+    EventStore: IEventStore
+    Channel: RecordingChannel
+    Dispatcher: FakeExternalDispatcher
+    Scheduler: JobScheduler.InProcessJobScheduler
+}
+
+let private pinStore (fixture: PinFixture) = fixture.Store :> IJobStore
+
+let private buildPin () : PinFixture =
+    let root =
+        Path.Combine(Path.GetTempPath(), "toolup-jobsched-pin-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory root |> ignore
+    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+    let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let store = HidingJobStore(JobStore.create storage eventStore)
+    let channel = RecordingChannel()
+    let dispatcher = FakeExternalDispatcher("gpu-pool")
+
+    let scheduler =
+        new JobScheduler.InProcessJobScheduler(
+            store,
+            eventStore,
+            channel,
+            ServerConfig.defaults,
+            silentLogger,
+            NoOpActivitySink() :> IActivitySink,
+            distributedLock = InProcessDistributedLock.create (),
+            externalDispatcher = dispatcher
+        )
+
+    {
+        Store = store
+        EventStore = eventStore
+        Channel = channel
+        Dispatcher = dispatcher
+        Scheduler = scheduler
+    }
+
+let private pinRender (fixture: PinFixture) (scope: string) (jobId: JobId) : string =
+    let tokens = System.Collections.Generic.Dictionary<string, string>()
+
+    let normalise (text: string) =
+        let text = text.Replace(scope, "<scope>")
+
+        let text =
+            RegularExpressions.Regex.Replace(
+                text,
+                "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                fun m ->
+                    let key = m.Value.ToLowerInvariant()
+
+                    match tokens.TryGetValue key with
+                    | true, t -> t
+                    | _ ->
+                        let t = sprintf "<g%d>" (tokens.Count + 1)
+                        tokens[key] <- t
+                        t
+            )
+
+        let text =
+            RegularExpressions.Regex.Replace(text, "\"(DurationMs|AwaitedMs)\":\"?[+-]?\\d+\"?", "\"$1\":<n>")
+
+        RegularExpressions.Regex.Replace(text, "\\d{4}-\\d{2}-\\d{2}T[0-9:.]+Z?", "<t>")
+
+    let store = pinStore fixture
+    let lines = ResizeArray<string>()
+    lines.Add(normalise (sprintf "job %O" jobId))
+
+    for e in fixture.EventStore.ReadAll scope |> Async.RunSynchronously do
+        lines.Add(normalise (sprintf "event %s %s" e.EventType e.Payload))
+
+    let runs =
+        store.GetRecentRuns(scope, jobId, 50)
+        |> Async.RunSynchronously
+        |> List.sortBy (fun r -> r.StartedAt, r.Attempt)
+
+    for r in runs do
+        lines.Add(
+            normalise (
+                sprintf
+                    "row %O attempt=%d status=%A error=%A completed=%b duration=%b handle=%b"
+                    r.RunId
+                    r.Attempt
+                    r.Status
+                    r.Error
+                    r.CompletedAt.IsSome
+                    r.DurationMs.IsSome
+                    r.ExternalHandle.IsSome
+            )
+        )
+
+    match store.Get(scope, jobId) |> Async.RunSynchronously with
+    | None -> lines.Add "definition <none>"
+    | Some j ->
+        lines.Add(
+            sprintf
+                "definition status=%A lastRunStatus=%A lastRunError=%A failures=%d lastRunAt=%b nextRunAt=%b"
+                j.Status
+                j.LastRunStatus
+                j.LastRunError
+                j.ConsecutiveFailures
+                j.LastRunAt.IsSome
+                j.NextRunAt.IsSome
+        )
+
+    for (_, n) in fixture.Channel.Published do
+        lines.Add(normalise (sprintf "notify %A" n))
+
+    String.Join("\n", lines)
+
+let private settledAt (fixture: PinFixture) scope jobId (status: JobRunStatus) =
+    Expect.isTrue
+        (waitFor 10000 (fun () ->
+            (pinStore fixture).Get(scope, jobId)
+            |> Async.RunSynchronously
+            |> Option.exists (fun j -> j.LastRunStatus = Some status)))
+        (sprintf "the run settled at %A" status)
+
+    // The fold is the last write; give the lease release its tail.
+    Threading.Thread.Sleep 50
+
+/// Schedule a manual job whose attempts answer `script` (the last entry
+/// repeating), trigger it, and wait until its definition records `settled`.
+let private pinRun
+    (fixture: PinFixture)
+    (maxAttempts: int)
+    (script: (JobContext -> Async<JobResult>) list)
+    (settled: JobRunStatus)
+    : string * JobId =
+    let scheduler = fixture.Scheduler :> IJobScheduler
+    let scope = "pin-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+
+    let handler =
+        { new IJobHandler with
+            member _.Execute ctx =
+                (script |> List.item (min (ctx.Attempt - 1) (List.length script - 1))) ctx
+        }
+
+    scheduler.RegisterHandler("pin-handler", handler)
+
+    let registration: JobRegistration = {
+        ScopeId = scope
+        Handler = "pin-handler"
+        Payload = "{}"
+        Trigger = Manual
+        Idempotency = None
+        RetryPolicy = {
+            JobRetryPolicy.defaults with
+                MaxAttempts = maxAttempts
+                InitialBackoff = TimeSpan.Zero
+                MaxBackoff = TimeSpan.Zero
+        }
+        ShardKey = None
+        Precision = Minute
+        CreatedBy = "test"
+        Tags = Map.empty
+    }
+
+    let jobId =
+        match scheduler.Schedule registration |> Async.RunSynchronously with
+        | Ok outcome -> pinJobId outcome
+        | Error e -> failtestf "schedule failed: %A" e
+
+    match scheduler.TriggerOnce(scope, jobId, "test") |> Async.RunSynchronously with
+    | Ok() -> ()
+    | Error e -> failtestf "TriggerOnce failed: %A" e
+
+    settledAt fixture scope jobId settled
+    scope, jobId
+
+let private handOff (fixture: PinFixture) : JobContext -> Async<JobResult> =
+    fun ctx -> async {
+        let dispatcher = fixture.Dispatcher :> IExternalComputeDispatcher
+
+        match! dispatcher.Submit(ctx.ScopeId, ExternalWorkSpec.create "pin" ctx.Payload) with
+        | Ok handle -> return HandedOff handle
+        | Error e -> return PermanentFailure e.Message
+    }
+
+let private pinScenario (name: string) (drive: PinFixture -> string * JobId) : string =
+    let fixture = buildPin ()
+    let scope, jobId = drive fixture
+    sprintf "== %s\n%s" name (pinRender fixture scope jobId)
+
+let private backendFailure (retriable: bool) (message: string) =
+    ExternalOutcome.Failed {
+        Message = message
+        Retriable = retriable
+    }
+
+let private pinCapture () : string =
+    let succeed (_: JobContext) = async.Return Success
+
+    let transient (_: JobContext) =
+        async.Return(TransientFailure "transient boom")
+
+    let permanent (_: JobContext) =
+        async.Return(PermanentFailure "permanent boom")
+
+    let reconciled (outcome: ExternalOutcome) (settled: JobRunStatus) (maxAttempts: int) (fixture: PinFixture) =
+        let scope, jobId = pinRun fixture maxAttempts [ handOff fixture ] AwaitingExternal
+        fixture.Dispatcher.SetOutcome outcome
+        fixture.Scheduler.ReconcileAwaitingExternal() |> Async.RunSynchronously
+        settledAt fixture scope jobId settled
+        scope, jobId
+
+    [
+        pinScenario "completed" (fun f -> pinRun f 3 [ succeed ] Succeeded)
+        pinScenario "retriable, then completed" (fun f -> pinRun f 3 [ transient; succeed ] Succeeded)
+        pinScenario "retriable until exhausted" (fun f -> pinRun f 2 [ transient ] DeadLettered)
+        pinScenario "terminal" (fun f -> pinRun f 3 [ permanent ] DeadLettered)
+        pinScenario "handed off" (fun f -> pinRun f 3 [ handOff f ] AwaitingExternal)
+        pinScenario "external succeeded" (reconciled (ExternalOutcome.Succeeded "s3://pin/result") Succeeded 3)
+        pinScenario "external retriable, attempts remain" (fun f ->
+            // The continuation re-dispatches at attempt 2, which hands off
+            // again, so the definition passes `Failed` and settles awaiting.
+            let scope, jobId = pinRun f 3 [ handOff f ] AwaitingExternal
+            f.Dispatcher.SetOutcome(backendFailure true "backend blip")
+            f.Scheduler.ReconcileAwaitingExternal() |> Async.RunSynchronously
+            f.Dispatcher.SetOutcome ExternalOutcome.Pending
+
+            Expect.isTrue
+                (waitFor 10000 (fun () ->
+                    (pinStore f).GetRecentRuns(scope, jobId, 10)
+                    |> Async.RunSynchronously
+                    |> List.exists (fun r -> r.Attempt = 2 && r.Status = AwaitingExternal)))
+                "the retry continuation handed off again at attempt 2"
+
+            settledAt f scope jobId AwaitingExternal
+            scope, jobId)
+        pinScenario
+            "external retriable, attempts spent"
+            (reconciled (backendFailure true "backend blip") DeadLettered 1)
+        pinScenario "external terminal failure" (reconciled (backendFailure false "backend refused") DeadLettered 3)
+        pinScenario "external cancelled" (reconciled ExternalOutcome.Cancelled ExternallyCancelled 3)
+        pinScenario "reconciliation: definition gone" (fun f ->
+            let scope, jobId = pinRun f 3 [ handOff f ] AwaitingExternal
+            f.Store.Hide jobId
+            f.Scheduler.ReconcileAwaitingExternal() |> Async.RunSynchronously
+            scope, jobId)
+        pinScenario "reconciliation: handle missing" (fun f ->
+            let scope, jobId = pinRun f 3 [ succeed ] Succeeded
+
+            // An awaiting row that carries no handle: hand-edited state, or
+            // a store that lost the field on a round-trip.
+            (pinStore f).RecordRun {
+                RunId = Guid.NewGuid()
+                JobId = jobId
+                ScopeId = scope
+                Attempt = 2
+                StartedAt = DateTime.UtcNow
+                CompletedAt = None
+                Status = AwaitingExternal
+                Error = None
+                DurationMs = None
+                ExternalHandle = None
+            }
+            |> Async.RunSynchronously
+
+            f.Scheduler.ReconcileAwaitingExternal() |> Async.RunSynchronously
+            scope, jobId)
+    ]
+    |> String.concat "\n"
+
+let private pinTests =
+    testList "Phase 1066 — the transition pin" [
+        test "every way a run ends emits the events, rows, fold and notification it emitted before Phase 1066" {
+            let actual = pinCapture ()
+
+            match Environment.GetEnvironmentVariable "TOOLUP_TRANSITION_PIN_OUT" with
+            | null
+            | "" -> ()
+            | path -> File.WriteAllText(path, actual)
+
+            Expect.equal actual approvedTransitionPin "the transition pin moved"
+        }
+    ]
+
+// ─── JobLifecycle — one transition, one apply ────────────────────────
+//
+// The pin above holds the scheduler to what it did before; these hold the
+// function itself to the properties the pin cannot name: an outcome ends the
+// same way whoever reports it, only the dispatch loop re-advances
+// `NextRunAt`, and `apply` performs a transition in one order.
+
+let private lifecycleNow = DateTime(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc)
+
+let private lifecycleJob: JobDefinition = {
+    JobId = Guid.Parse "11111111-1111-1111-1111-111111111111"
+    ScopeId = "team-lifecycle"
+    Handler = "lifecycle-handler"
+    Payload = "{}"
+    Trigger = CronTrigger "0 * * * *"
+    Idempotency = None
+    RetryPolicy = {
+        JobRetryPolicy.defaults with
+            MaxAttempts = 3
+    }
+    ShardKey = None
+    Precision = Minute
+    Status = Active
+    CreatedAt = lifecycleNow.AddDays -1.0
+    CreatedBy = "test"
+    NextRunAt = Some(lifecycleNow.AddMinutes -1.0)
+    LastRunAt = None
+    LastRunStatus = None
+    LastRunError = None
+    ConsecutiveFailures = 2
+    Tags = Map.empty
+}
+
+let private lifecycleHandle: ExternalHandle = {
+    HandleId = Guid.Parse "22222222-2222-2222-2222-222222222222"
+    Backend = "gpu-pool"
+    ScopeId = "team-lifecycle"
+    NativeRef = "native-1"
+    SubmittedAt = lifecycleNow.AddMinutes -10.0
+}
+
+let private lifecycleRun (attempt: int) : JobRun = {
+    RunId = Guid.Parse "33333333-3333-3333-3333-333333333333"
+    JobId = lifecycleJob.JobId
+    ScopeId = lifecycleJob.ScopeId
+    Attempt = attempt
+    StartedAt = lifecycleNow.AddMinutes -10.0
+    CompletedAt = None
+    Status = Running
+    Error = None
+    DurationMs = None
+    ExternalHandle = None
+}
+
+let private ended (origin: JobLifecycle.TransitionOrigin) (attempt: int) (outcome: JobLifecycle.RunOutcome) =
+    JobLifecycle.transition origin (Some lifecycleJob) (lifecycleRun attempt) lifecycleNow outcome
+
+let private externally (outcome: ExternalOutcome) =
+    JobLifecycle.External(lifecycleHandle, outcome)
+
+let private eventsOf (eventType: string) (t: JobLifecycle.Transition) =
+    t.Events |> List.filter (fun e -> e.EventType = eventType)
+
+let private lifecycleTests =
+    testList "JobLifecycle — one transition, one apply" [
+
+        test "a backend's terminal failure dead-letters with the bytes an in-process one does" {
+            let inProcess =
+                ended (JobLifecycle.Loop(600_000L, None)) 1 (JobLifecycle.Terminal "boom")
+
+            let external =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "boom"; Retriable = false }))
+                    1
+                    (JobLifecycle.Terminal "boom")
+
+            Expect.equal
+                (eventsOf "JobDeadLettered" external)
+                (eventsOf "JobDeadLettered" inProcess)
+                "the JobDeadLettered payload is byte-identical"
+
+            Expect.equal external.Notify inProcess.Notify "the same notification"
+            Expect.equal external.Row inProcess.Row "the same row (the awaited time equals the attempt's duration here)"
+
+            Expect.equal
+                (external.Events |> List.map _.EventType)
+                [ "JobExternalReconciled"; "JobDeadLettered" ]
+                "the external companion event rides beside it, never instead of it"
+        }
+
+        test "a backend's success completes with the bytes an in-process success does" {
+            let inProcess = ended (JobLifecycle.Loop(600_000L, None)) 2 JobLifecycle.Completed
+
+            let external =
+                ended (externally (ExternalOutcome.Succeeded "s3://result")) 2 JobLifecycle.Completed
+
+            Expect.equal (eventsOf "JobCompleted" external) (eventsOf "JobCompleted" inProcess) "JobCompleted"
+            Expect.equal external.Definition.Value.ConsecutiveFailures 0 "success resets the failure budget"
+        }
+
+        test "only the dispatch loop re-advances NextRunAt; a reconciliation never does" {
+            let loop = ended (JobLifecycle.Loop(5L, None)) 1 JobLifecycle.Completed
+
+            let external =
+                ended (externally (ExternalOutcome.Succeeded "s3://result")) 1 JobLifecycle.Completed
+
+            Expect.equal
+                loop.Definition.Value.NextRunAt
+                (SchedulerPolicy.computeNextRunAt lifecycleJob.Trigger lifecycleNow)
+                "the loop computes the next occurrence"
+
+            Expect.equal external.Definition.Value.NextRunAt lifecycleJob.NextRunAt "the reconciliation leaves it"
+        }
+
+        test "a retriable failure retries in the loop without folding, and folds and retries outside it" {
+            let loop = ended (JobLifecycle.Loop(5L, None)) 1 (JobLifecycle.Retriable "blip")
+            Expect.equal loop.Continue (JobLifecycle.RetryAt 2) "the loop retries at the next attempt"
+            Expect.isNone loop.Definition "and folds nothing until it ends"
+
+            let external =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "blip"; Retriable = true }))
+                    1
+                    (JobLifecycle.Retriable "blip")
+
+            Expect.equal external.Continue (JobLifecycle.RetryAt 2) "an external retriable failure starts attempt 2"
+
+            Expect.equal
+                (external.Definition |> Option.map _.LastRunStatus)
+                (Some(Some Failed))
+                "and records the failed attempt"
+        }
+
+        test "the retry budget decides between a retry and a dead letter" {
+            let loop = ended (JobLifecycle.Loop(5L, None)) 3 (JobLifecycle.Retriable "blip")
+            Expect.equal loop.Continue JobLifecycle.Exhausted "the loop's last attempt is promoted"
+
+            let external =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "blip"; Retriable = true }))
+                    3
+                    (JobLifecycle.Retriable "blip")
+
+            Expect.equal external.Continue JobLifecycle.Stop "a backend's spent attempt is the run's end"
+            Expect.equal (external.Row |> Option.map _.Status) (Some DeadLettered) "dead-lettered"
+            Expect.equal external.Definition.Value.ConsecutiveFailures 3 "and counted"
+        }
+
+        test "a definition that no longer exists abandons the run whatever the outcome" {
+            for outcome in
+                [
+                    JobLifecycle.Completed
+                    JobLifecycle.Terminal "boom"
+                    JobLifecycle.ExternallyCancelled
+                ] do
+                let t =
+                    JobLifecycle.transition JobLifecycle.Reconciliation None (lifecycleRun 1) lifecycleNow outcome
+
+                Expect.equal (t.Row |> Option.map _.Status) (Some DeadLettered) "the run leaves AwaitingExternal"
+                Expect.isEmpty t.Events "with nothing to announce"
+                Expect.isNone t.Definition "and nothing to fold"
+        }
+
+        testAsync "apply writes the row, the gate, the events, the notification and the definition, in that order" {
+            let log = ResizeArray<string>()
+
+            let effects: JobLifecycle.LifecycleEffects = {
+                RecordRun = fun _ -> async { log.Add "row" }
+                Emit = fun _ e -> async { log.Add("event " + e.EventType) }
+                Notify = fun _ _ -> async { log.Add "notify" }
+                Update = fun _ -> async { log.Add "definition" }
+            }
+
+            let t =
+                ended
+                    (externally (ExternalOutcome.Failed { Message = "boom"; Retriable = false }))
+                    1
+                    (JobLifecycle.Terminal "boom")
+
+            let! announced =
+                JobLifecycle.apply
+                    effects
+                    (async {
+                        log.Add "gate"
+                        return true
+                    })
+                    t
+
+            Expect.isTrue announced "an open gate lets the rest through"
+
+            Expect.equal
+                (List.ofSeq log)
+                [
+                    "row"
+                    "gate"
+                    "event JobExternalReconciled"
+                    "event JobDeadLettered"
+                    "notify"
+                    "definition"
+                ]
+                "row, gate, events, notification, definition"
+
+            log.Clear()
+            let! refused = JobLifecycle.apply effects (async { return false }) t
+            Expect.isFalse refused "a closed gate is reported"
+            Expect.equal (List.ofSeq log) [ "row" ] "and stops everything after the row"
+        }
+    ]
+
 let tests =
     let factory () =
         let scheduler = buildScheduler () :> IJobScheduler
@@ -1570,4 +2236,6 @@ let tests =
         catchUpTests
         handoffTests
         defect1064Tests
+        pinTests
+        lifecycleTests
     ]

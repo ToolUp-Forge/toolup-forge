@@ -968,6 +968,18 @@
       `registerManifestLiveInterface`. `SchemaVersion` steps to 3; the field
       is not sealed, and a composition seals to the same bytes as before.
     -->
+    <!-- Phase 1066 rides the 0.38.0 draft, breaking: `IJobScheduler.Schedule` answers `ScheduleOutcome` (`Scheduled` / `Coalesced`) and `TriggerOnce` refuses with `TriggerError`; codemod rules `1066-*`, migration recipe `docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md`. -->
+    <!--
+      Phase 1150 rides the 0.38.0 draft (untagged, publicly unpinned; the
+      draft is already breaking): `FactTableDetail` and `FactTableColumnView`
+      gain `Description: string option`, and `ServerModule` / `ServerApp`
+      gain a description field each, so a full record literal adds a field
+      (`Description = None`; build modules and apps from `create` / `empty`).
+      Additive otherwise: `FactTableDescription`, `IDescribesFactTables`,
+      `ServerModule.describeFactTables`, `ServerApp.factTableRegistry`,
+      `FactTableRegistry.tryDescription`. Migration recipe:
+      `docs/migrations/1150-fact-table-descriptions.md`.
+    -->
     <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

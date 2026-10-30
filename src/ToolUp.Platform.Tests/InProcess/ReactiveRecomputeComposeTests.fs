@@ -165,7 +165,7 @@ type private DispatchingScheduler() =
             let id = Guid.NewGuid()
             scheduled.Enqueue registration
             jobs[id] <- registration
-            return Ok id
+            return Ok(Scheduled id)
         }
 
         member _.Cancel(_, _) = async { return () }
@@ -177,13 +177,14 @@ type private DispatchingScheduler() =
 
         member _.TriggerOnce(scopeId, jobId, byUserId) = async {
             match jobs.TryGetValue jobId with
-            | false, _ -> return Error "unknown job"
+            | false, _ -> return Error(TriggerError.DispatchRefused "unknown job")
             | true, registration ->
                 match handlers.TryGetValue registration.Handler with
                 | false, _ ->
                     // The handler was never registered — exactly what a
                     // missing compose registration looks like.
-                    return Error(sprintf "no handler registered for %s" registration.Handler)
+                    return
+                        Error(TriggerError.DispatchRefused(sprintf "no handler registered for %s" registration.Handler))
                 | true, handler ->
                     let ctx: JobContext = {
                         JobId = jobId
@@ -815,10 +816,11 @@ let zeroCostTests =
 // then triggers the job it got back. A scheduler that coalesces on the
 // idempotency key hands back the job already pending, so a fact
 // invalidated twice inside the TTL triggers that one job twice. The caller
-// cannot tell a fresh job from a coalesced one until the scheduler says
-// which it returned (`ScheduleOutcome.Coalesced`, Phase 1066); the fix is
-// Phase 998's, which turns this case on. The first site is
-// `GroundedNarrativeTrigger.enqueueFor`, pinned in GroundedNarrativeTests.
+// can now tell a fresh job from a coalesced one (the scheduler answers
+// `ScheduleOutcome.Coalesced`); acting on it at this site is Phase 998's,
+// which turns this case on. The first site,
+// `GroundedNarrativeTrigger.enqueueFor`, acts on it and is pinned live in
+// GroundedNarrativeTests.
 
 /// Coalesces on the idempotency key, as a real scheduler does, and counts
 /// the triggers each job receives.
@@ -835,7 +837,10 @@ type private CoalescingScheduler() =
             |> Option.map _.Key
             |> Option.defaultWith (fun () -> Guid.NewGuid().ToString "N")
 
-        Ok(byKey.GetOrAdd(key, fun _ -> Guid.NewGuid()))
+        let fresh = Guid.NewGuid()
+        let jobId = byKey.GetOrAdd(key, fresh)
+
+        Ok(if jobId = fresh then Scheduled jobId else Coalesced jobId)
 
     interface IJobScheduler with
         member _.RegisterHandler(_, _) = ()

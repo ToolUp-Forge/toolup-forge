@@ -289,7 +289,7 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
                 | ScheduleError.StorageFailure msg -> sprintf "scheduler storage failure: %s" msg
 
             return Error(OrchestratorStorageFailure reason)
-        | Ok jobId ->
+        | Ok(Scheduled jobId | Coalesced jobId) ->
             jobByBuild[buildId] <- jobId
 
             do!
@@ -308,8 +308,10 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
 
             match triggered with
             | Ok _ -> return Ok buildId
-            | Error msg ->
-                logger.Warn $"[BuildOrchestrator] event=triggeronce_failed buildId={buildId}: {msg}"
+            | Error refusal ->
+                logger.Warn
+                    $"[BuildOrchestrator] event=triggeronce_failed buildId={buildId}: {TriggerError.message refusal}"
+
                 return Ok buildId
     }
 

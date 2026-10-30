@@ -471,12 +471,19 @@ let enqueue
 
         match! scheduler.Schedule registration with
         | Error err -> return Error(sprintf "failed to schedule offboard job: %A" err)
-        | Ok jobId ->
+        | Ok(Scheduled jobId | Coalesced jobId) ->
             // Fire it now: a `Manual` job never fires on its own. Phase 1059 —
             // a refused trigger is reported, not discarded: discarded, the
             // caller held a handle to an offboard that would never start.
             match! scheduler.TriggerOnce(scopeId, jobId, actorUserId) with
-            | Error err -> return Error(sprintf "scheduled offboard job %A but could not trigger it: %s" jobId err)
+            | Error refusal ->
+                return
+                    Error(
+                        sprintf
+                            "scheduled offboard job %A but could not trigger it: %s"
+                            jobId
+                            (TriggerError.message refusal)
+                    )
             | Ok() ->
                 return
                     Ok {
@@ -607,7 +614,7 @@ let scheduleDeprovision
 
             match! scheduler.Schedule registration with
             | Error err -> return Error(sprintf "failed to schedule grace-period offboard: %A" err)
-            | Ok jobId ->
+            | Ok(Scheduled jobId | Coalesced jobId) ->
                 return
                     Ok {
                         ScopeId = scopeId

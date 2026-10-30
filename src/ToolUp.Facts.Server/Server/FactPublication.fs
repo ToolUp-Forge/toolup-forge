@@ -1828,7 +1828,7 @@ module FactPublicationJobs =
         (grantId: string)
         (trigger: Trigger)
         (createdBy: string)
-        : Async<Result<JobId, ScheduleError>> =
+        : Async<Result<ScheduleOutcome, ScheduleError>> =
         scheduler.Schedule(source, registration PublishHandler grantId trigger createdBy)
 
     /// Schedule a consolidation table's refresh under the target team's
@@ -1839,5 +1839,5 @@ module FactPublicationJobs =
         (tableId: string)
         (trigger: Trigger)
         (createdBy: string)
-        : Async<Result<JobId, ScheduleError>> =
+        : Async<Result<ScheduleOutcome, ScheduleError>> =
         scheduler.Schedule(target, registration RefreshHandler tableId trigger createdBy)

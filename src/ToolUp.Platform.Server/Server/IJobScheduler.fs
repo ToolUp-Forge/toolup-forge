@@ -4,7 +4,7 @@ open System
 
 // ─── IJobScheduler ───────────────────────────────────────────────
 //
-// Top-level orchestrator for the background-job substrate (Phase 9b).
+// Top-level orchestrator for the background-job substrate.
 // Combines the scheduling policy (when does a job run?) with the
 // dispatch policy (which handler runs it?). Modules and admin UIs
 // see this surface; `IJobStore` and `IJobHandler` are dependencies
@@ -18,7 +18,7 @@ open System
 // precision is rejected at registration via
 // `ScheduleError.PrecisionUnsupported`.
 //
-// **Phase 9c portability rules** (all six honoured below):
+// **The portability rules** (all six honoured below):
 //
 //   1. Identity by value. Every method takes / returns `JobId` (Guid)
 //      and `ScopeId` (string) — no live handles.
@@ -40,6 +40,73 @@ open System
 // so the Fable admin UI and module client code can construct
 // registrations and submit them through the `JobApi` ToolUp.Remoting
 // surface.
+
+/// What a `Schedule` call did with a registration that passed validation.
+///
+/// A registration carrying an `Idempotency` key whose live job already
+/// exists in the scope is not registered again: the call answers
+/// `Coalesced` with the existing job's id and creates nothing. Every other
+/// accepted registration answers `Scheduled` with the id it was given. The
+/// caller can therefore tell a job it created from one it did not, and a
+/// caller that fires what it schedules fires only `Scheduled`, so a replayed
+/// request runs its work once.
+type ScheduleOutcome =
+    /// A new job was persisted under this id.
+    | Scheduled of JobId
+    /// A live job with the registration's idempotency key already exists in
+    /// the scope; nothing was created. This is that job's id.
+    | Coalesced of JobId
+
+module ScheduleOutcome =
+    /// The job id the outcome names, whether it was created or recovered.
+    let jobId (outcome: ScheduleOutcome) : JobId =
+        match outcome with
+        | Scheduled jobId
+        | Coalesced jobId -> jobId
+
+    /// `true` when the call created the job.
+    let isScheduled (outcome: ScheduleOutcome) : bool =
+        match outcome with
+        | Scheduled _ -> true
+        | Coalesced _ -> false
+
+/// Why `TriggerOnce` dispatched nothing. Every case is a refusal taken before
+/// a run row exists: no attempt was started and nothing was written.
+[<RequireQualifiedAccess>]
+type TriggerError =
+    /// No job with this id exists in the scope.
+    | JobNotFound of scopeId: string * jobId: JobId
+    /// The job is `Cancelled`; it never runs again.
+    | JobCancelled
+    /// The job is `Disabled`. `Disable` stops dispatch, and a manual fire is
+    /// a dispatch; `Enable` it first.
+    | JobDisabled
+    /// The scheduler is stopping and accepts no new dispatch.
+    | SchedulerStopping
+    /// A quota decorator refused the fire before it reached the scheduler.
+    | QuotaExceeded of breach: ToolUp.Platform.Usage.QuotaBreached
+    /// The scheduler's backend refused to start the dispatch (for example a
+    /// Quartz `TriggerJob` that threw). Carries the backend's account of it.
+    | DispatchRefused of reason: string
+
+[<RequireQualifiedAccess>]
+module TriggerError =
+    /// The refusal as a sentence: the text `TriggerOnce` answered with when
+    /// its error was a string, so a wire that still carries one (the job
+    /// admin API) is unchanged.
+    let message (error: TriggerError) : string =
+        match error with
+        | TriggerError.JobNotFound(scopeId, jobId) -> $"Job %A{jobId} not found in scope %s{scopeId}"
+        | TriggerError.JobCancelled -> "Cannot trigger a cancelled job"
+        | TriggerError.JobDisabled -> "Cannot trigger a disabled job; enable it first"
+        | TriggerError.SchedulerStopping -> "Cannot trigger a job while the scheduler is stopping"
+        | TriggerError.QuotaExceeded breach ->
+            sprintf
+                "Job concurrency quota exceeded: limit=%M requested=%M scope=%s"
+                breach.Limit
+                breach.Requested
+                breach.ScopeId
+        | TriggerError.DispatchRefused reason -> reason
 
 type IJobScheduler =
     /// Register a handler under `name`. Idempotent — re-registering
@@ -68,7 +135,8 @@ type IJobScheduler =
     /// gossip / quorum timeout).
     abstract RegisterHandlerAsync: name: string * handler: IJobHandler -> Async<Result<unit, string>>
 
-    /// Submit a new job. Returns the assigned `JobId` on success.
+    /// Submit a new job. Answers `Scheduled jobId` when a definition was
+    /// persisted.
     ///
     /// Validation chain (in order):
     ///   1. `Trigger.CronTrigger` parses against the supported cron
@@ -78,17 +146,15 @@ type IJobScheduler =
     /// First failure short-circuits with the appropriate
     /// `ScheduleError` case.
     ///
-    /// Idempotency: if `Idempotency` is `Some` and a live job with
-    /// the same key exists in the same scope within the TTL,
-    /// returns the existing `JobId` without registering a new
-    /// definition (the duplicate registration is a no-op). The
-    /// caller cannot tell from the return value whether the job is
-    /// brand-new or recovered — by design, since the contract
-    /// guarantees "submitting twice = the job runs once".
-    abstract Schedule: registration: JobRegistration -> Async<Result<JobId, ScheduleError>>
+    /// Idempotency: if `Idempotency` is `Some` and a live job with the same
+    /// key exists in the same scope within the TTL, nothing is registered
+    /// and the call answers `Coalesced` with the existing `JobId`. The caller
+    /// can tell the two apart, and a caller that fires what it schedules
+    /// fires only a `Scheduled` job, so submitting twice runs the work once.
+    abstract Schedule: registration: JobRegistration -> Async<Result<ScheduleOutcome, ScheduleError>>
 
     /// Submit a new job under a scope the platform's scope resolution
-    /// minted (Phase 818). The same validation chain and idempotency rule
+    /// minted. The same validation chain and idempotency rule
     /// as the string overload; the job is registered under
     /// `scope.ScopeId`, and `registration.ScopeId` is ignored.
     ///
@@ -100,7 +166,7 @@ type IJobScheduler =
     /// A job scheduled through the string overload runs under the
     /// anonymous scope on that field — never a widening.
     ///
-    /// Re-minting is the platform's act (Phase 935): the scope rides the
+    /// Re-minting is the platform's act: the scope rides the
     /// definition as a token the platform's `ScopeCarrier` issued for this
     /// job, and a dispatch redeems it through the same carrier, so an
     /// implementation outside the platform's server tier re-mints exactly
@@ -108,7 +174,8 @@ type IJobScheduler =
     /// promote a string: a token re-mints only the scope it was issued for,
     /// for the job it was issued for. Passing `ResolvedScope.anonymous` here
     /// registers an ordinary job under the anonymous scope.
-    abstract Schedule: scope: ResolvedScope * registration: JobRegistration -> Async<Result<JobId, ScheduleError>>
+    abstract Schedule:
+        scope: ResolvedScope * registration: JobRegistration -> Async<Result<ScheduleOutcome, ScheduleError>>
 
     /// Cancel a job — sets `Status = Cancelled`. The scheduler skips
     /// it on subsequent ticks; no further runs are dispatched. Does
@@ -116,7 +183,7 @@ type IJobScheduler =
     /// Returns `unit` on success; idempotent — cancelling an already-
     /// cancelled or unknown job is a no-op.
     ///
-    /// Phase 1064 — the transition takes the job's lease, which an
+    /// The transition takes the job's lease, which an
     /// in-flight dispatch holds across its retry backoff. The in-process
     /// scheduler waits for it a bounded time (five seconds) and then
     /// REFUSES, raising an `InvalidOperationException` that changes
@@ -126,7 +193,7 @@ type IJobScheduler =
 
     /// Disable a job — sets `Status = Disabled`. Stops dispatch
     /// without losing the schedule — a manual `TriggerOnce` included
-    /// (Phase 1064, ruling 12). Admins re-enable via a separate
+    /// (ruling 12). Admins re-enable via a separate
     /// `Enable` call.
     abstract Disable: scopeId: string * jobId: JobId -> Async<unit>
 
@@ -154,10 +221,12 @@ type IJobScheduler =
     /// `TriggerSource.ScheduledManually byUserId`. Cron-triggered
     /// jobs continue on their schedule; event-triggered jobs
     /// continue to react to events; manual fires are additive.
-    /// Returns `Error`, and dispatches nothing, when the job is unknown,
-    /// `Cancelled`, or `Disabled` (Phase 1064, ruling 12 — every scheduler
-    /// the contract pack runs against refuses all three).
-    abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: string -> Async<Result<unit, string>>
+    /// Answers `Error`, and dispatches nothing, when the job is unknown
+    /// (`TriggerError.JobNotFound`), `Cancelled` (`JobCancelled`) or
+    /// `Disabled` (`JobDisabled`), and when the scheduler is stopping
+    /// (`SchedulerStopping`). Every scheduler the contract pack runs against
+    /// refuses all four the same way.
+    abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: string -> Async<Result<unit, TriggerError>>
 
     /// Notify the scheduler that an event was written to
     /// `IEventStore`. The scheduler matches it against every
@@ -169,7 +238,7 @@ type IJobScheduler =
     /// a single write maps to a single notify).
     abstract NotifyEventWritten: scopeId: string * eventType: string * eventId: System.Guid -> Async<unit>
 
-// ─── Phase 818 / 935 — the carried scope, persisted with the job ─────
+// ─── the carried scope, persisted with the job ───────────────────────
 //
 // A job's scope is persisted as a string (`JobDefinition.ScopeId`, rule 1:
 // identity by value), and the dispatch that runs it happens later, in
@@ -183,12 +252,11 @@ type IJobScheduler =
 // by every job store and crosses the job-admin wire, and a field would
 // retype its constructor for every store and decoder in the ecosystem.
 //
-// Since Phase 935 what rides there is ONE opaque token the platform's
-// `ScopeCarrier` issued for this job (`CarriedScopeToken.fs`), not the
-// three plain strings Phase 818 wrote. Phase 818 treated the job store as
-// trusted — a party that could write definitions could write the three
-// tags and claim any container and persistence for the job's scope id.
-// The token closes that: a store writer can delete or corrupt it (the job
+// What rides there is ONE opaque token the platform's `ScopeCarrier` issued
+// for this job (`CarriedScopeToken.fs`), not plain strings: strings would
+// treat the job store as trusted — a party that could write definitions
+// could write them and claim any container and persistence for the job's
+// scope id. The token closes that: a store writer can delete or corrupt it (the job
 // runs anonymous) or copy a genuine one from another job (the purpose, the
 // job's scope id and job id, refuses it), and cannot write one. Both
 // schedulers — the in-process default and a companion outside the server
@@ -196,12 +264,12 @@ type IJobScheduler =
 // carrier, not two. The string `Schedule` still strips the prefix, so a
 // registration that arrives over the wire cannot even present a token.
 //
-// A definition persisted with Phase 818's three tags and no token runs
-// anonymous: those tags are no longer read, and nothing released ever
-// wrote them.
+// A definition persisted with the earlier three plain tags and no token runs
+// anonymous: those tags are no longer read, and nothing released ever wrote
+// them.
 
 /// Why a scheduler refused to re-issue an existing job's carried scope
-/// (Phase 991, `IJobScopeReissue`).
+/// (`IJobScopeReissue`).
 [<RequireQualifiedAccess>]
 type ScopeReissueError =
     /// The scope offered does not own the job's shard: it is the anonymous
@@ -217,7 +285,7 @@ type ScopeReissueError =
     /// write. The job keeps the token it had.
     | Failed of reason: string
 
-/// The carried scope of a scheduled job (Phases 818 and 935): the token a
+/// The carried scope of a scheduled job: the token a
 /// typed `Schedule` persists on the definition's tags, and the scope a
 /// dispatch of the definition runs under. Public so a scheduler outside the
 /// platform's server tier stamps and redeems exactly as the in-process
@@ -288,7 +356,7 @@ module CarriedJobScope =
         not scope.IsAnonymous
         && String.Equals(scope.ScopeId, scopeId, StringComparison.Ordinal)
 
-    /// Phase 991 — `definition` with its token re-issued for `scope`: the
+    /// `definition` with its token re-issued for `scope`: the
     /// caller's tags kept, the previous token (valid, foreign, expired or
     /// absent) replaced by one the carrier issues now for this job. Refused
     /// unless `scope` owns the job's shard, so a re-issue can never move a
@@ -306,7 +374,7 @@ module CarriedJobScope =
             |> Result.mapError ScopeReissueError.Failed
             |> Result.map (fun tags -> { definition with Tags = tags })
 
-/// Phase 935 — a scheduler that carries a resolved scope through the
+/// A scheduler that carries a resolved scope through the
 /// platform's `ScopeCarrier`. Composition binds the deployment's carrier
 /// (over its DataProtection key ring) into the scheduler it composes or
 /// adopts, so a job scheduled under a resolved scope runs under it after a
@@ -317,7 +385,7 @@ type IScopeCarrierBinding =
     /// Bind the carrier this scheduler stamps and redeems job scopes with.
     abstract BindScopeCarrier: carrier: ScopeCarrier -> unit
 
-// ─── Phase 991 — re-issuing an existing job's carried scope ──────────
+// ─── re-issuing an existing job's carried scope ──────────────────────
 //
 // A job recovered by its idempotency key keeps the token it was first
 // issued, by design: "submitting twice = the job runs once" must not let a
@@ -337,7 +405,7 @@ type IScopeCarrierBinding =
 // `JobScopeReissue.reissue`, which answers `Unsupported` for a scheduler that
 // does not, so a caller can say so instead of assuming the job moved.
 
-/// Phase 991 — a scheduler that can re-issue an existing job's carried scope.
+/// A scheduler that can re-issue an existing job's carried scope.
 /// Implemented by the in-process default and the Quartz companion, and
 /// forwarded by the SDK's scheduler decorators.
 type IJobScopeReissue =
@@ -349,7 +417,7 @@ type IJobScopeReissue =
     abstract ReissueScope:
         scope: ResolvedScope * scopeId: string * jobId: JobId -> Async<Result<unit, ScopeReissueError>>
 
-/// Phase 991 — re-issue through whatever scheduler the deployment composed.
+/// Re-issue through whatever scheduler the deployment composed.
 [<RequireQualifiedAccess>]
 module JobScopeReissue =
 
@@ -365,7 +433,7 @@ module JobScopeReissue =
         | :? IJobScopeReissue as reissuing -> reissuing.ReissueScope(scope, scopeId, jobId)
         | _ -> async { return Error ScopeReissueError.Unsupported }
 
-// ─── Phase 9b.B — compose-time scheduled-job declarations ─────────────
+// ─── compose-time scheduled-job declarations ──────────────────────────
 //
 // A `ServerModule` or `ServerApp` carries declarations of recurring /
 // event-driven jobs it wants the SDK to register + schedule for it at
@@ -496,7 +564,7 @@ module ScheduledJobDeclaration =
 
     /// Register + schedule ONE declaration against a live scheduler —
     /// the per-declaration body `ComposeJobs.registerScheduledJobDeclarations`
-    /// runs at compose time, lifted here (Phase 623) so the DI-deferred
+    /// runs at compose time, lifted here so the DI-deferred
     /// form below reaches the identical registration path instead of
     /// re-implementing it. Behaviour is unchanged: `RegisterHandler`
     /// (idempotent at the scheduler), `Scopes = []` defaulted to
@@ -544,17 +612,16 @@ module ScheduledJobDeclaration =
                     sprintf "[Phase 9b.B] Failed to schedule %s in scope %s: %A" declaration.HandlerName scopeId err
                 )
 
-// ─── Phase 623 — DI-deferred scheduled-job declarations ──────────────
+// ─── DI-deferred scheduled-job declarations ──────────────────────────
 //
 // `ScheduledJobDeclaration.Handler` is a **constructed** `IJobHandler`,
 // which a compose root can only supply when the handler's dependencies
 // are already in hand. Companion composition is **lazy-DI**: the store,
 // the scheduler, a metric registry and the like are only resolvable from
 // the *built* `IServiceProvider`, long after the declaration list is
-// assembled. Three in-tree companions (Phase 449 model-fit, Phase 9h.A
-// DSR, Phase 563 fact-base coherence) each hand-rolled the same startup
-// `IHostedService` to bridge that gap; Phase 623 makes the bridge
-// substrate so the fourth (reactive fact recomputation) and every later
+// assembled. Three in-tree companions (model-fit, DSR, fact-base coherence)
+// each hand-rolled the same startup `IHostedService` to bridge that gap; this
+// makes the bridge substrate so the fourth (reactive fact recomputation) and every later
 // one declare instead of hand-roll.
 //
 // **Additive by construction (GP 11).** `ScheduledJobDeclaration` is

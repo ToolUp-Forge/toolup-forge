@@ -85,7 +85,7 @@ let tests (name: string) (factory: unit -> RestartableScheduler) =
         }
 
         match scheduler.Schedule(scope, registration) |> Async.RunSynchronously with
-        | Ok id -> id
+        | Ok(Scheduled id | Coalesced id) -> id
         | Error e -> failtestf "typed Schedule: %A" e
 
     /// Fire the job and return the scope its handler ran under.
@@ -95,7 +95,7 @@ let tests (name: string) (factory: unit -> RestartableScheduler) =
 
         match scheduler.TriggerOnce(scopeId, jobId, "alice") |> Async.RunSynchronously with
         | Ok() -> ()
-        | Error e -> failtestf "TriggerOnce: %s" e
+        | Error e -> failtestf "TriggerOnce: %A" e
 
         Expect.isTrue (waitFor 30_000 (fun () -> not seen.IsEmpty)) "the handler ran"
         (Seq.head seen).Scope

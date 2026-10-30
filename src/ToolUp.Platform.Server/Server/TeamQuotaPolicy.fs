@@ -294,15 +294,7 @@ type QuotaGatedJobScheduler(inner: IJobScheduler, quotaPolicy: ITeamQuotaPolicy)
             let! gate = quotaPolicy.CheckJobConcurrency(scopeId, 0)
 
             match gate with
-            | Error breach ->
-                return
-                    Error(
-                        sprintf
-                            "Job concurrency quota exceeded: limit=%M requested=%M scope=%s"
-                            breach.Limit
-                            breach.Requested
-                            breach.ScopeId
-                    )
+            | Error breach -> return Error(TriggerError.QuotaExceeded breach)
             | Ok() -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
         }
 

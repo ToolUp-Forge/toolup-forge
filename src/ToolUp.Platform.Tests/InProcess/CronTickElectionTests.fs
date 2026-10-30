@@ -261,7 +261,7 @@ let private scheduleOverdueCron (replica: Replica) : string * JobId =
             (replica.Scheduler :> IJobScheduler).Schedule registration
             |> Async.RunSynchronously
         with
-        | Ok id -> id
+        | Ok(Scheduled id | Coalesced id) -> id
         | Error e -> failtestf "schedule failed: %A" e
 
     let definition =

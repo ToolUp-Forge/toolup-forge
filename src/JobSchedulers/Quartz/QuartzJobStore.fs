@@ -10,7 +10,7 @@ open System.Threading.Tasks
 open Quartz
 open ToolUp.Platform
 
-// ─── Phase 9c.E — the Quartz side of a forge job ─────────────────────
+// ─── the Quartz side of a forge job ──────────────────────────────────
 //
 // This file holds everything that answers "what does a `JobDefinition`
 // look like to Quartz?" — the key mapping, the trigger and retry-policy
@@ -21,7 +21,7 @@ open ToolUp.Platform
 // **Why the canonical record is NOT Quartz's job store.** Quartz stores
 // *schedules*: a job detail, its triggers, and their fire state. An
 // `IJobStore` stores rather more — per-scope isolation (GP 4), an
-// idempotency-key index, per-attempt run history, and the Phase 319
+// idempotency-key index, per-attempt run history, and the
 // awaiting-external secondary index — and Quartz has an equivalent for
 // none of them. Rebuilding those over `JobDataMap` (a string/object bag
 // with no query surface) would produce a second, weaker persistence
@@ -190,7 +190,7 @@ type internal QuartzDispatchContext = {
     NotificationChannel: INotificationChannel
     Config: ServerConfig
     Logger: ILogger
-    /// Phase 935 — the carrier a fire redeems the job's scope token
+    /// The carrier a fire redeems the job's scope token
     /// through. A cell, so composition's binding reaches the dispatch the
     /// scheduler's own container resolves.
     ScopeCarrier: ScopeCarrier ref
@@ -258,79 +258,36 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
             ScheduledByEvent(eventType, eventId)
         | _ -> ScheduledByCron
 
-    /// Record (or overwrite) this attempt's run row. One `RunId` per
-    /// attempt, written twice — once as `Running` so an in-flight run is
-    /// visible, once with the terminal status — which is what the store
-    /// layout (`runs/{runId}.json`) already models.
-    let recordRun (job: JobDefinition) (runId: Guid) (attempt: int) (startedAt: DateTime) status error handle = async {
-        let completedAt =
-            match status with
-            | Running -> None
-            | _ -> Some DateTime.UtcNow
-
-        let run: JobRun = {
-            RunId = runId
-            JobId = job.JobId
-            ScopeId = job.ScopeId
-            Attempt = attempt
-            StartedAt = startedAt
-            CompletedAt = completedAt
-            Status = status
-            Error = error
-            DurationMs = completedAt |> Option.map (fun c -> int64 (c - startedAt).TotalMilliseconds)
-            ExternalHandle = handle
-        }
-
-        try
-            do! context.Store.RecordRun run
-        with ex ->
-            context.Logger.Warn
-                $"[QuartzJobScheduler] event=run_record_failed jobId={job.JobId} runId={runId} attempt={attempt}: {ex.Message}"
-    }
-
-    /// Fold an attempt's outcome back into the persisted definition.
-    /// `nextRunAt` comes from the trigger Quartz just advanced, so the
-    /// canonical record mirrors the schedule that will actually fire
-    /// rather than a second, independently-computed one.
-    let updateDefinition
-        (job: JobDefinition)
-        (status: JobRunStatus)
-        (error: string option)
-        (nextRunAt: DateTime option)
-        =
-        async {
-            let updated = {
-                job with
-                    LastRunAt = Some DateTime.UtcNow
-                    LastRunStatus = Some status
-                    LastRunError = error
-                    ConsecutiveFailures =
-                        match status with
-                        | Succeeded -> 0
-                        | DeadLettered -> job.ConsecutiveFailures + 1
-                        | _ -> job.ConsecutiveFailures
-                    NextRunAt =
-                        match nextRunAt with
-                        | Some _ -> nextRunAt
-                        | None -> job.NextRunAt
+    /// Where a fired run's transition goes: the canonical store, logged and
+    /// swallowed on failure (a store blip must not turn into a Quartz
+    /// misfire), and the notification channel. This companion has no event
+    /// store, so the lifecycle events are written nowhere.
+    let effects: JobLifecycle.LifecycleEffects = {
+        RecordRun =
+            fun run -> async {
+                try
+                    do! context.Store.RecordRun run
+                with ex ->
+                    context.Logger.Warn
+                        $"[QuartzJobScheduler] event=run_record_failed jobId={run.JobId} runId={run.RunId} attempt={run.Attempt}: {ex.Message}"
             }
-
-            try
-                do! context.Store.Update updated
-            with ex ->
-                context.Logger.Warn
-                    $"[QuartzJobScheduler] event=definition_update_failed jobId={job.JobId} status=%A{status}: {ex.Message}"
-        }
-
-    let notifyDeadLetter (job: JobDefinition) (error: string) = async {
-        try
-            let text =
-                $"Job {job.Handler} failed permanently after {job.RetryPolicy.MaxAttempts} attempts: {error}"
-
-            do! context.NotificationChannel.Publish(job.ScopeId, SystemMessage(SystemMessageLevel.Warning, text))
-        with ex ->
-            context.Logger.Warn
-                $"[QuartzJobScheduler] event=dead_letter_notify_failed jobId={job.JobId} handler={job.Handler}: {ex.Message}"
+        Emit = fun _ _ -> async.Return()
+        Notify =
+            fun scopeId text -> async {
+                try
+                    do! context.NotificationChannel.Publish(scopeId, SystemMessage(SystemMessageLevel.Warning, text))
+                with ex ->
+                    context.Logger.Warn
+                        $"[QuartzJobScheduler] event=dead_letter_notify_failed scope=%s{scopeId} notification=%s{text}: {ex.Message}"
+            }
+        Update =
+            fun job -> async {
+                try
+                    do! context.Store.Update job
+                with ex ->
+                    context.Logger.Warn
+                        $"[QuartzJobScheduler] event=definition_update_failed jobId={job.JobId} status=%A{job.LastRunStatus}: {ex.Message}"
+            }
     }
 
     let execute (ctx: IJobExecutionContext) = async {
@@ -359,26 +316,31 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
             | Some job ->
                 let source = triggerSourceOf map
 
-                // A cancelled or disabled job never runs — a manual fire
-                // included (Phase 1064, ruling 12: `Disable` stops dispatch,
-                // and `TriggerOnce` refuses a disabled job before it gets
-                // here; this is the backstop for a fire already queued when
-                // the job was disabled).
-                if job.Status = Cancelled || job.Status = Disabled then
+                // Only an `Active` job runs, a manual fire included: this is
+                // the backstop for a fire already queued when the job was
+                // disabled or cancelled (`TriggerOnce` refuses one before it
+                // gets here).
+                if job.Status <> Active then
                     context.Logger.Debug
                         $"[QuartzJobScheduler] event=fire_skipped jobId={jobId} status=%A{job.Status} source=%A{source}"
                 else
                     let attempt = ctx.RetryAttempt + 1
-                    let runId = Guid.NewGuid()
                     let startedAt = DateTime.UtcNow
 
-                    let nextRunAt =
-                        if ctx.NextFireTimeUtc.HasValue then
-                            Some ctx.NextFireTimeUtc.Value.UtcDateTime
-                        else
-                            None
+                    let runningRow: JobRun = {
+                        RunId = Guid.NewGuid()
+                        JobId = job.JobId
+                        ScopeId = job.ScopeId
+                        Attempt = attempt
+                        StartedAt = startedAt
+                        CompletedAt = None
+                        Status = Running
+                        Error = None
+                        DurationMs = None
+                        ExternalHandle = None
+                    }
 
-                    do! recordRun job runId attempt startedAt Running None None
+                    do! effects.RecordRun runningRow
 
                     let jobContext: JobContext = {
                         JobId = job.JobId
@@ -386,9 +348,9 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
                         AccessContext = systemContext context.Config job.ScopeId
                         Attempt = attempt
                         Trigger = job.Trigger
-                        // Phase 935 — the scope the typed `Schedule`'s
-                        // token carries, redeemed by the platform for this
-                        // job; the anonymous scope for any other job.
+                        // The scope the typed `Schedule`'s token carries,
+                        // redeemed by the platform for this job; the anonymous
+                        // scope for any other job.
                         Scope = CarriedJobScope.ofDefinition context.ScopeCarrier.Value job
                         TriggerSource = source
                         ScheduledAt =
@@ -401,7 +363,7 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
                         DeadLetterDestination = job.RetryPolicy.DeadLetterDestination
                     }
 
-                    let! outcome = async {
+                    let! result = async {
                         match context.Handlers.TryGet job.Handler with
                         | None ->
                             return PermanentFailure $"Handler '{job.Handler}' is not registered with this scheduler"
@@ -412,48 +374,38 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
                                 return TransientFailure ex.Message
                     }
 
-                    // `MaxAttempts` is inclusive of the first dispatch,
-                    // so attempts remain while `attempt < MaxAttempts`.
-                    let retriesRemain = attempt < job.RetryPolicy.MaxAttempts
+                    let now = DateTime.UtcNow
 
-                    match outcome with
-                    | Success ->
-                        do! recordRun job runId attempt startedAt Succeeded None None
-                        do! updateDefinition job Succeeded None nextRunAt
+                    // Quartz owns the retries (it re-fires with the backoff the
+                    // `JobRetryPolicy` was mapped onto), and the fold mirrors
+                    // the trigger Quartz just advanced rather than a second,
+                    // independently computed schedule.
+                    let origin =
+                        JobLifecycle.Backend(
+                            int64 (now - startedAt).TotalMilliseconds,
+                            (if ctx.NextFireTimeUtc.HasValue then
+                                 Some ctx.NextFireTimeUtc.Value.UtcDateTime
+                             else
+                                 None)
+                        )
 
-                    | HandedOff handle ->
-                        // Phase 319's non-blocking hand-off. The handle
-                        // is persisted so nothing is lost, but this
-                        // companion runs NO reconciliation pass — that
-                        // lives in the in-process scheduler — so the run
-                        // stays awaiting until something drives it. Said
-                        // once, loudly, rather than left to be inferred
-                        // from a run that never finishes.
-                        do! recordRun job runId attempt startedAt AwaitingExternal None (Some handle)
+                    let outcome = JobLifecycle.RunOutcome.ofJobResult result
+                    let transition = JobLifecycle.transition origin (Some job) runningRow now outcome
+                    let! _ = JobLifecycle.apply effects JobLifecycle.ungated transition
 
+                    match transition.Continue, outcome with
+                    | JobLifecycle.Await handle, _ ->
+                        // The handle is persisted so nothing is lost, but this
+                        // companion runs NO reconciliation pass (that lives in
+                        // the in-process scheduler), so the run stays awaiting
+                        // until something drives it. Said once, loudly.
                         context.Logger.Warn
                             $"[QuartzJobScheduler] event=external_handoff_unreconciled jobId={jobId} handle={handle.HandleId} — the Quartz companion persists the handle but runs no external-compute reconciliation pass, so this run stays AwaitingExternal. Use JobScheduler = InProcessJobScheduler for external-compute hand-off, or drive IExternalCompletionSink yourself."
-
-                        do! updateDefinition job AwaitingExternal None nextRunAt
-
-                    | PermanentFailure error ->
-                        do! recordRun job runId attempt startedAt DeadLettered (Some error) None
-                        do! updateDefinition job DeadLettered (Some error) nextRunAt
-                        do! notifyDeadLetter job error
-
-                    | TransientFailure error when retriesRemain ->
-                        do! recordRun job runId attempt startedAt Failed (Some error) None
-                        do! updateDefinition job Failed (Some error) nextRunAt
-
-                        // Hand the retry decision to the trigger's own
-                        // policy: Quartz re-fires, with the backoff the
-                        // `JobRetryPolicy` was mapped onto.
+                    | JobLifecycle.RetryAt _, JobLifecycle.Retriable error ->
+                        // Hand the retry to the trigger's own policy: Quartz
+                        // re-fires.
                         raise (JobExecutionException(error))
-
-                    | TransientFailure error ->
-                        do! recordRun job runId attempt startedAt DeadLettered (Some error) None
-                        do! updateDefinition job DeadLettered (Some error) nextRunAt
-                        do! notifyDeadLetter job error
+                    | _ -> ()
     }
 
     interface IJob with
