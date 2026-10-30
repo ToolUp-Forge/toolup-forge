@@ -74,7 +74,7 @@ module ScimConfig =
 
     let create (teamId: string) : ScimConfig = {
         TeamId = teamId
-        SecretScope = $"team-{teamId}"
+        SecretScope = ScopeKey.container (ScopeKey.Team teamId)
         TokenKey = DefaultTokenKey
         Mapping = ScimAttributeMapping.defaults
         BaseUrl = None
