@@ -147,22 +147,25 @@ module ComputedLineage =
 
 module DisclosureTaint =
 
+    /// The routine a node declares: a node whose one operation is in the
+    /// catalog. A node with no operation, or with two (a join of payloads
+    /// that disagree), is never a declassifier.
+    let private routineOf (config: DisclosureTaintConfig) (node: DisclosureTaintNode) : DeclassificationRoutine option =
+        match node.Operations with
+        | [ operationId ] -> DisclosureTaintConfig.declassifierFor config operationId
+        | _ -> None
+
     /// The declassification routine a fact's method declares, when any — a
     /// `Computed` fact whose operation id is in the catalog. A
     /// `HumanAsserted` / `Imported` fact is never a declassifier (a routine
     /// is a deterministic operation, plan 562.B).
     let declassifierOf (config: DisclosureTaintConfig) (fact: Fact) : DeclassificationRoutine option =
-        match fact.Method with
-        | Computed(operationId, _, _) -> DisclosureTaintConfig.declassifierFor config operationId
-        | HumanAsserted _
-        | Imported _ -> None
+        routineOf config (DisclosureTaintNode.ofFact fact)
 
-    /// Whether a fact is a taint *source* — directly `Restricted` under a
-    /// policy declared `TaintPropagating`.
-    let private taintSourcePolicy (config: DisclosureTaintConfig) (fact: Fact) : string option =
-        match fact.Disclosure with
-        | Restricted policyRef when DisclosureTaintConfig.isTaintPropagating config policyRef -> Some policyRef
-        | _ -> None
+    /// The policies that make a node a taint *source*: the `Restricted`
+    /// policies it carries that are declared `TaintPropagating`.
+    let private sourcePolicies (config: DisclosureTaintConfig) (node: DisclosureTaintNode) : string list =
+        node.Policies |> List.filter (DisclosureTaintConfig.isTaintPropagating config)
 
     /// Analyse the taint reaching `targetId` in `graph` under `config`.
     ///
@@ -205,10 +208,11 @@ module DisclosureTaint =
     /// party can mistake an inference for a computation. A fact with no
     /// evidence inputs at all raises nothing: there is no derivation there to
     /// have inferred.
-    let analyzeWithLineage
+    let private walk
         (config: DisclosureTaintConfig)
         (lineage: ComputedLineage)
-        (graph: FactDerivationGraph)
+        (nodeOf: string -> DisclosureTaintNode option)
+        (upstreamOf: string -> string list)
         (targetId: string)
         : TaintOutcome =
         // Memoised output-taint per fact id: the distinct policy refs the
@@ -226,8 +230,8 @@ module DisclosureTaint =
         /// A fact with evidence inputs but no computed label had its upstream
         /// INFERRED. A fact with no inputs is a leaf: nothing was inferred
         /// about it, so reporting it would be noise on every clean lineage.
-        let noteInferred (factId: string) (fact: Fact) =
-            if not (List.isEmpty fact.Evidence.InputHashes) then
+        let noteInferred (factId: string) (node: DisclosureTaintNode) =
+            if not (List.isEmpty node.Inputs) then
                 inferred.Add factId |> ignore
 
         let noteContributor (policyRef: string) =
@@ -258,22 +262,22 @@ module DisclosureTaint =
                     []
                 else
                     let result =
-                        match graph.Facts.TryFind factId with
+                        match nodeOf factId with
                         // An input with no visible producing fact contributes
                         // no taint (it is not a taint source we can see).
                         | None -> []
-                        | Some fact ->
+                        | Some node ->
                             let visiting' = Set.add factId visiting
 
                             let inputTaint =
                                 match lineage.LabelOf factId with
                                 | Some computed -> TaintLabel.policyRefs computed
                                 | None ->
-                                    noteInferred factId fact
+                                    noteInferred factId node
 
-                                    graph.UpstreamOf factId |> List.collect (outputTaint visiting') |> List.distinct
+                                    upstreamOf factId |> List.collect (outputTaint visiting') |> List.distinct
 
-                            match declassifierOf config fact with
+                            match routineOf config node with
                             | Some routine ->
                                 // A declassifier clears only what its
                                 // accepting scopes entitle it to; anything
@@ -292,9 +296,9 @@ module DisclosureTaint =
                                 // nearest declared policy), then inherited —
                                 // a fact can be a source AND carry upstream
                                 // taint, and the conjunction needs both.
-                                match taintSourcePolicy config fact with
-                                | Some src -> src :: inputTaint |> List.distinct
-                                | None -> inputTaint
+                                match sourcePolicies config node with
+                                | [] -> inputTaint
+                                | sources -> sources @ inputTaint |> List.distinct
 
                     // Every policy this fact's output carries is a
                     // contribution; a ref cleared upstream by a declassifier
@@ -309,20 +313,18 @@ module DisclosureTaint =
         // The target's inherited taint = the union of its inputs' output
         // taint, less whatever the target's own routine (if it is a
         // declassifier) is entitled to clear.
-        let targetFact = graph.Facts.TryFind targetId
+        let targetNode = nodeOf targetId
 
         let inputTaint =
             match lineage.LabelOf targetId with
             | Some computed -> TaintLabel.policyRefs computed
             | None ->
-                targetFact |> Option.iter (noteInferred targetId)
+                targetNode |> Option.iter (noteInferred targetId)
 
-                graph.UpstreamOf targetId
-                |> List.collect (outputTaint Set.empty)
-                |> List.distinct
+                upstreamOf targetId |> List.collect (outputTaint Set.empty) |> List.distinct
 
         let inheritedPolicyRefs =
-            match targetFact |> Option.bind (declassifierOf config) with
+            match targetNode |> Option.bind (routineOf config) with
             | Some routine ->
                 let cleared, retained =
                     inputTaint
@@ -338,12 +340,8 @@ module DisclosureTaint =
         // party's own fact disclosed under its own policy is still that
         // party's data leaving (the audit facet, plan D4). Its egress
         // stance is the Phase 525 resolver's business, not the walk's.
-        match targetFact with
-        | Some fact ->
-            match fact.Disclosure with
-            | Restricted policyRef -> noteContributor policyRef
-            | _ -> ()
-        | None -> ()
+        targetNode
+        |> Option.iter (fun node -> node.Policies |> List.iter noteContributor)
 
         {
             InheritedPolicyRef = List.tryHead inheritedPolicyRefs
@@ -363,6 +361,32 @@ module DisclosureTaint =
                     [ DisclosureFinding.LineageInferred(inferred |> List.ofSeq |> List.sort) ]
         }
 
+    /// The walk over an explicit graph of facts.
+    let analyzeWithLineage
+        (config: DisclosureTaintConfig)
+        (lineage: ComputedLineage)
+        (graph: FactDerivationGraph)
+        (targetId: string)
+        : TaintOutcome =
+        walk
+            config
+            lineage
+            (fun factId -> graph.Facts.TryFind factId |> Option.map DisclosureTaintNode.ofFact)
+            graph.UpstreamOf
+            targetId
+
+    /// The walk over a scope's disclosure-taint index: the same outcome the
+    /// walk over the scope's facts gives, read from the nodes the writes
+    /// recorded. `upstream` is `DisclosureTaintIndex.upstream index`, built
+    /// once per check and shared by every fact the check judges.
+    let analyzeIndex
+        (config: DisclosureTaintConfig)
+        (index: DisclosureTaintIndex)
+        (upstream: string -> string list)
+        (targetId: string)
+        : TaintOutcome =
+        walk config ComputedLineage.none (fun factId -> DisclosureTaintIndex.tryNode factId index) upstream targetId
+
     /// The walk with no computed lineage — every derivation taken from the
     /// inferred graph, which is what the store can offer on its own. Verdicts
     /// are byte-for-byte Phase 674; the only difference is that the outcome
@@ -371,38 +395,16 @@ module DisclosureTaint =
         analyzeWithLineage config ComputedLineage.none graph targetId
 
     /// Project a fact listing onto a `FactDerivationGraph`. The upstream
-    /// adjacency links a fact's `Evidence.InputHashes` to the facts whose
-    /// `Series` value produced those data-object versions — the store's
-    /// only fact→fact derivation signal. Facts with no such linkage are
-    /// leaves (empty upstream), so a deployment that does not chain facts
-    /// through series outputs has an edgeless graph and sees no taint.
-    let buildGraph (facts: Fact list) : FactDerivationGraph =
-        let byId = facts |> List.map (fun f -> f.FactId, f) |> Map.ofList
-
-        // data-object version id → the fact that produced it as a Series
-        // value. Last writer wins on a duplicate version (acceptable — a
-        // version is content-addressed, so two producers of one version
-        // are the same assertion).
-        let producerOfVersion =
-            facts
-            |> List.choose (fun f ->
-                match f.Value with
-                | Series version -> Some(version, f.FactId)
-                | _ -> None)
-            |> Map.ofList
-
-        let upstreamOf (factId: string) : string list =
-            match byId.TryFind factId with
-            | None -> []
-            | Some fact ->
-                fact.Evidence.InputHashes
-                |> List.choose producerOfVersion.TryFind
-                |> List.distinct
-
-        {
-            Facts = byId
-            UpstreamOf = upstreamOf
-        }
+    /// adjacency is the disclosure-taint index's (`DisclosureTaintIndex.upstream`):
+    /// a fact's `Evidence.InputHashes` linked to the facts whose `Series`
+    /// value produced those data-object versions, every producer of a version
+    /// included. Facts with no such linkage are leaves, so a deployment that
+    /// does not chain facts through series outputs has an edgeless graph and
+    /// sees no taint.
+    let buildGraph (facts: Fact list) : FactDerivationGraph = {
+        Facts = facts |> List.map (fun f -> f.FactId, f) |> Map.ofList
+        UpstreamOf = DisclosureTaintIndex.upstream (DisclosureTaintIndex.ofFacts facts)
+    }
 
 /// Phase 794 — the bridge between the dataset-assembly transform algebra
 /// and the taint lattice: the one place the two tiers meet.
