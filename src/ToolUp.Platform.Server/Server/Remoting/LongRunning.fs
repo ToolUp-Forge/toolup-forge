@@ -152,14 +152,6 @@ module internal LongRunning =
         let case = FSharpType.GetUnionCases(handleType resultType)[0]
         FSharpValue.MakeUnion(case, [| box "" |])
 
-    let private isTerminal (status: JobStatus<'T>) =
-        match status with
-        | JobStatus.Succeeded _
-        | JobStatus.Failed _
-        | JobStatus.Cancelled -> true
-        | JobStatus.Queued
-        | JobStatus.Running _ -> false
-
     // ── Typed bridges, closed over `'T` via MakeGenericMethod ─────────────
     //
     // The companion route knows `'T` only as a `Type` (from the
@@ -195,7 +187,7 @@ module internal LongRunning =
         : IAsyncEnumerable<JobStatus<'T>> =
         let typedHandle = handle :?> JobHandle<'T>
 
-        AsyncStream.fromCallback isTerminal (fun emit -> async {
+        AsyncStream.fromCallback JobStatusTerminal.isTerminal (fun emit -> async {
             use _caller = CallContext.beginSubject subject jobAdmin
             let mutable last: obj = null
             let mutable finished = false
@@ -207,7 +199,7 @@ module internal LongRunning =
                     emit status
                     last <- box status
 
-                if isTerminal status then
+                if JobStatusTerminal.isTerminal status then
                     finished <- true
                 else
                     do! Async.Sleep PollInterval

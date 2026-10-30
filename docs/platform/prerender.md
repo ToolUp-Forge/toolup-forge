@@ -126,7 +126,7 @@ let build (args: string array) =
 - Imports the SDK's prerender entry-point (which calls `react-dom/server`'s `renderToString` against the Elmish view tree).
 - Iterates `prerenderRoutes`, writes `dist/{slug}.html` per route, populated `<head>` + marker.
 
-Best when your deployment pipeline is `dotnet`-driven (Azure DevOps, Octopus, GitHub Actions with `dotnet run` steps). Composes cleanly with the rest of the FAKE pipeline (`Bundle`, `Verify`, `Pack`, `Deploy-CD`).
+Best when your deployment pipeline is `dotnet`-driven (Azure DevOps, Octopus, GitHub Actions with `dotnet run` steps). Composes cleanly with the rest of the FAKE pipeline (`Bundle`, `Verify`, `Pack`).
 
 ### Vite seam — post-build plugin
 

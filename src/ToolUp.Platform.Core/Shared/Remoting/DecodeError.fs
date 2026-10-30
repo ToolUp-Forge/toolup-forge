@@ -83,8 +83,9 @@ module DecodeError =
     /// `$.a.b` reader paths and the Phase 69e validation violation paths
     /// already use. An indexer is carried INSIDE its segment
     /// (`"args[0]"`), never as a segment of its own, so the join needs no
-    /// special case and a consumer splitting on `.` recovers exactly the
-    /// list that was sent.
+    /// special case. A map key holding a dot stays in one bracketed segment,
+    /// so splitting the rendered path on `.` does not always recover the
+    /// list that was sent: read `Path` when the segments matter.
     let renderPath (path: string list) : string = path |> String.concat "."
 
     /// One sentence: `expected int at args[0].count, got string`. With an

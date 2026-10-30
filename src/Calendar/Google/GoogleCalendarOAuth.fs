@@ -454,7 +454,28 @@ type GoogleCalendarTokenSource
 
                 match response |> Result.bind parseGrant with
                 | Error e -> return Error(toBridgeError e)
-                | Ok grant -> return Ok grant.AccessToken
+                | Ok grant ->
+                    // The same rule as the flow's refresh: a rotated token
+                    // is the one irreplaceable credential, so a refused
+                    // persist withholds the access token.
+                    let! persisted =
+                        match grant.RefreshToken with
+                        | Some rotated when rotated <> refreshToken ->
+                            secretStore.SetSecret(scopeId, refreshTokenKey flowName connectionId, rotated)
+                        | _ -> async { return Ok() }
+
+                    match persisted with
+                    | Error e ->
+                        return
+                            Error(
+                                AuthenticationFailed(
+                                    sprintf
+                                        "Google rotated the refresh token for connection '%s' but the secret store refused to persist it (%s); the access token was withheld — retry, and reconnect if the previous token is already invalid"
+                                        connectionId
+                                        e
+                                )
+                            )
+                    | Ok() -> return Ok grant.AccessToken
     }
 
     let readCached (scopeId: string) (connectionId: string) = async {
