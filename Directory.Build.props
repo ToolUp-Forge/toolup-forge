@@ -955,6 +955,17 @@
       provider reads `ServerApp.serviceConfig app`. Migration recipe:
       `docs/migrations/1052-serviceconfig-append-and-contribution-service.md`.
     -->
+    <!--
+      Phase 1150 rides the 0.38.0 draft (untagged, publicly unpinned; the
+      draft is already breaking): `FactTableDetail` and `FactTableColumnView`
+      gain `Description: string option`, and `ServerModule` / `ServerApp`
+      gain a description field each, so a full record literal adds a field
+      (`Description = None`; build modules and apps from `create` / `empty`).
+      Additive otherwise: `FactTableDescription`, `IDescribesFactTables`,
+      `ServerModule.describeFactTables`, `ServerApp.factTableRegistry`,
+      `FactTableRegistry.tryDescription`. Migration recipe:
+      `docs/migrations/1150-fact-table-descriptions.md`.
+    -->
     <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

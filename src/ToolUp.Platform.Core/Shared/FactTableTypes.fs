@@ -185,6 +185,35 @@ module FactTableDefinition =
         |> List.tryFindIndex (fun l -> l = level)
         |> Option.map (fun i -> i + 1)
 
+/// What a declared table is FOR, beside the declaration it describes: a
+/// description of the table and of any of its columns, keyed by table id.
+/// A record of its own rather than a field on `FactTableDefinition`, so
+/// every existing full-literal declaration (a generated composition's
+/// `FactTables.fs` among them) compiles unchanged. Registered by
+/// `ServerModule.describeFactTables`; a description naming an undeclared
+/// table or column is refused at compose, naming both.
+///
+/// **Prose about the TABLE, never a value.** A description is
+/// interpretation, not data. A number — a level, a ranking, a "currently
+/// around X" — belongs in a fact, where it is bitemporal, superseded when
+/// it changes, disclosure-classified, and carries its provenance. A value
+/// copied here is none of those things: it is a claim nothing can
+/// supersede, on a compose-time declaration readable by anything that
+/// resolves `IFactTableRegistry`, and it egresses through surfaces the
+/// disclosure gate does not guard.
+///
+/// Generic substrate (GP 1): opaque text the declaring module supplies;
+/// nothing here parses or interprets it.
+type FactTableDescription = {
+    /// The described table's `FactTableDefinition.Id`.
+    TableId: string
+    /// What the table is for and how its rows are derived.
+    Description: string
+    /// Per-column descriptions as `(metric id, description)`, each naming
+    /// one of the table's `Columns`. A column left out is undescribed.
+    Columns: (string * string) list
+}
+
 /// One declared table paired with the module that declared it — the
 /// provenance the duplicate diagnostic and the preflight name.
 type FactTableRegistration = {
@@ -192,6 +221,15 @@ type FactTableRegistration = {
     Module: string
     /// The declared table.
     Definition: FactTableDefinition
+}
+
+/// One table description paired with the module that registered it — the
+/// provenance the compose-time refusal names.
+type FactTableDescriptionRegistration = {
+    /// The `ServerModule.Name` that registered the description.
+    Module: string
+    /// The registered description.
+    Description: FactTableDescription
 }
 
 /// Where the composition binds a declared table's rows — the physical side
@@ -250,17 +288,34 @@ type IFactTableRegistry =
     /// unbound.
     abstract DestinationOf: tableId: string -> string option
 
+/// The optional capability of a table registry that carries declared
+/// descriptions (`ServerModule.describeFactTables`). A capability beside
+/// `IFactTableRegistry` rather than a member on it, so no external
+/// implementation breaks: a reader probes for it
+/// (`FactTableRegistry.tryDescription`), and a registry without it simply
+/// has no descriptions. The composed registry implements it.
+type IDescribesFactTables =
+    /// The description registered for a table; `None` when the table is
+    /// undescribed or undeclared.
+    abstract TryGetTableDescription: tableId: string -> FactTableDescription option
+
 /// Construction for the composed table registry.
 [<RequireQualifiedAccess>]
 module FactTableRegistry =
 
-    type private Registry(tables: FactTableRegistration list, bindings: FactTableBinding list) =
+    type private Registry
+        (tables: FactTableRegistration list, bindings: FactTableBinding list, descriptions: FactTableDescription list) =
         // First declaration wins per id. Two MODULES declaring one id is
         // refused by the compose-time preflight before the app starts, so
         // this only collapses a module re-declaring its own table.
         let distinct = tables |> List.distinctBy _.Definition.Id
         let definitions = distinct |> List.map _.Definition
         let byId = distinct |> List.map (fun r -> r.Definition.Id, r) |> Map.ofList
+
+        let descriptionById = descriptions |> List.map (fun d -> d.TableId, d) |> Map.ofList
+
+        interface IDescribesFactTables with
+            member _.TryGetTableDescription tableId = descriptionById |> Map.tryFind tableId
 
         interface IFactTableRegistry with
             member _.Tables = definitions
@@ -282,9 +337,114 @@ module FactTableRegistry =
                 else
                     None
 
+    let private quoted (values: string list) : string =
+        match values |> List.distinct with
+        | [] -> "none"
+        | vs -> vs |> List.map (sprintf "'%s'") |> String.concat ", "
+
+    /// Every reason a description cannot stand beside the declarations, each
+    /// naming the describing module, the table and (where it applies) the
+    /// column: a table no module declares, a column the table does not
+    /// carry, a table described twice, a column described twice.
+    let private descriptionProblems
+        (tables: FactTableRegistration list)
+        (descriptions: FactTableDescriptionRegistration list)
+        : string list =
+        let declared =
+            tables
+            |> List.distinctBy _.Definition.Id
+            |> List.map (fun r -> r.Definition.Id, r.Definition)
+            |> Map.ofList
+
+        let twice =
+            descriptions
+            |> List.groupBy _.Description.TableId
+            |> List.choose (fun (tableId, group) ->
+                match group with
+                | []
+                | [ _ ] -> None
+                | _ ->
+                    Some(
+                        sprintf
+                            "Fact table '%s' is described more than once (by modules %s). Describe a table once."
+                            tableId
+                            (quoted (group |> List.map _.Module))
+                    ))
+
+        let perDescription =
+            descriptions
+            |> List.collect (fun r ->
+                let d = r.Description
+
+                match declared |> Map.tryFind d.TableId with
+                | None -> [
+                    sprintf
+                        "Module '%s' describes fact table '%s', which no module declares. Declared tables: %s."
+                        r.Module
+                        d.TableId
+                        (quoted (declared |> Map.toList |> List.map fst))
+                  ]
+                | Some table ->
+                    let columns = FactTableDefinition.metrics table
+
+                    [
+                        for metric, _ in d.Columns do
+                            if not (List.contains metric columns) then
+                                sprintf
+                                    "Module '%s' describes column '%s' of fact table '%s', which the table does not declare. Its columns: %s."
+                                    r.Module
+                                    metric
+                                    d.TableId
+                                    (quoted columns)
+                        for metric, count in d.Columns |> List.countBy fst do
+                            if count > 1 then
+                                sprintf
+                                    "Module '%s' describes column '%s' of fact table '%s' %d times. Describe a column once."
+                                    r.Module
+                                    metric
+                                    d.TableId
+                                    count
+                    ])
+
+        twice @ perDescription
+
+    /// Fold the composition's declarations, bindings and table descriptions
+    /// into a registry that also carries `IDescribesFactTables`, or every
+    /// reason the descriptions are refused (a table or column no module
+    /// declares, a table or column described twice), each naming the module,
+    /// the table and the column.
+    let tryBuildDescribed
+        (tables: FactTableRegistration list)
+        (bindings: FactTableBinding list)
+        (descriptions: FactTableDescriptionRegistration list)
+        : Result<IFactTableRegistry, string> =
+        match descriptionProblems tables descriptions with
+        | [] -> Ok(Registry(tables, bindings, descriptions |> List.map _.Description) :> IFactTableRegistry)
+        | problems -> Error(String.concat "\n" problems)
+
+    /// `tryBuildDescribed` that raises on a refused description — the
+    /// compose-time call site, so a description of nothing fails startup
+    /// rather than a read.
+    let buildDescribed
+        (tables: FactTableRegistration list)
+        (bindings: FactTableBinding list)
+        (descriptions: FactTableDescriptionRegistration list)
+        : IFactTableRegistry =
+        match tryBuildDescribed tables bindings descriptions with
+        | Ok registry -> registry
+        | Error message -> failwith message
+
     /// Fold the composition's declarations and bindings into a registry.
     let build (tables: FactTableRegistration list) (bindings: FactTableBinding list) : IFactTableRegistry =
-        Registry(tables, bindings) :> IFactTableRegistry
+        buildDescribed tables bindings []
+
+    /// The description a registry carries for a table: `None` when the table
+    /// is undescribed, or when the registry does not carry descriptions
+    /// (`IDescribesFactTables` is an optional capability).
+    let tryDescription (registry: IFactTableRegistry) (tableId: string) : FactTableDescription option =
+        match registry with
+        | :? IDescribesFactTables as described -> described.TryGetTableDescription tableId
+        | _ -> None
 
     /// The empty registry — no table declared, nothing bound.
     let empty: IFactTableRegistry = build [] []

@@ -408,6 +408,11 @@ module FactBrowseHandler =
             | Error e -> return Error e
             | Ok table ->
                 let! row = listing deps scope.ScopeId table
+                let description = FactTableRegistry.tryDescription deps.Tables tableId
+
+                let columnDescription (metric: string) =
+                    description
+                    |> Option.bind (fun d -> d.Columns |> List.tryFind (fun (m, _) -> m = metric) |> Option.map snd)
 
                 return
                     Ok {
@@ -418,11 +423,13 @@ module FactBrowseHandler =
                                 Metric = column.Metric
                                 Shape = sprintf "%A" column.Shape
                                 Disclosure = tableDisclosureLabel (FactTableDefinition.columnDisclosure table column)
+                                Description = columnDescription column.Metric
                             })
                         ProducingOperation = table.ProducingOperation
                         SchemaVersion = table.SchemaVersion
                         RefreshCadenceSeconds = int64 table.RefreshCadence.TotalSeconds
                         Requirement = sprintf "%A" table.Requirement
+                        Description = description |> Option.map _.Description
                     }
         }
 

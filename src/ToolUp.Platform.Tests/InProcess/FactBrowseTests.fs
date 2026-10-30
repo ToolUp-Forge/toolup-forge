@@ -2748,6 +2748,182 @@ let private sessionCostTests =
         }
     ]
 
+// ─── A fact table describes itself ───────────────────────────────────
+//
+// A description is declared beside the declaration it describes
+// (`ServerModule.describeFactTables`), refused at compose when it names a
+// table or column no module declares, and read back on the path the browse
+// reads AND the model's fact tools share: the `IFactTableRegistry` the
+// request resolves (`FactBrowseHandler.factBrowseDeps`).
+
+let private skuDescription: FactTableDescription = {
+    TableId = skuTable.Id
+    Description = "Monthly revenue by SKU, from the order header extract, excluding cancelled orders."
+    Columns = [ "revenue", "Net revenue after returns." ]
+}
+
+let private describingApp (descriptions: FactTableDescription list) : ServerApp =
+    ServerApp.empty
+    |> ServerApp.addModules [
+        ServerModule.create "sales"
+        |> ServerModule.declareFactTables [ skuTable ]
+        |> ServerModule.describeFactTables descriptions
+    ]
+    |> ServerApp.bindFactTables (BindAllFactTables DefaultFactTableWriter.Destination)
+
+/// The message `ServerApp.factTableRegistry` refuses a composition with.
+let private refusal (app: ServerApp) : string =
+    let refused =
+        try
+            ServerApp.factTableRegistry app |> ignore
+            None
+        with ex ->
+            Some ex.Message
+
+    match refused with
+    | Some message -> message
+    | None -> failtest "expected the composition to be refused at compose"
+
+let private descriptionTests =
+    testList "a fact table describes itself" [
+        test "a composed description reaches the browse detail through the registry the request resolves" {
+            let app = describingApp [ skuDescription ]
+
+            let composed =
+                ServerApp.factTableRegistry app
+                |> Option.defaultWith (fun () -> failtest "a declaring composition registers a table registry")
+
+            let w = world ()
+            let services = ServiceCollection()
+            services.AddSingleton<IFactStore>(w.Store) |> ignore
+
+            services.AddSingleton<IFactDisclosureGate>(FactDisclosureGate(w.Store, w.Events))
+            |> ignore
+
+            services.AddSingleton<IFactTableRegistry>(composed) |> ignore
+            let ctx = DefaultHttpContext()
+            ctx.RequestServices <- services.BuildServiceProvider()
+
+            let deps =
+                FactBrowseHandler.factBrowseDeps ctx
+                |> Option.defaultWith (fun () -> failtest "the fact tier is composed")
+
+            Expect.equal
+                (FactTableRegistry.tryDescription deps.Tables skuTable.Id)
+                (Some skuDescription)
+                "the model's tools read the description off the same resolved registry"
+
+            let detail = ok "table" (FactBrowseHandler.getTable deps w.Scope skuTable.Id)
+
+            Expect.equal detail.Description (Some skuDescription.Description) "the table's description"
+
+            Expect.equal
+                (detail.Columns |> List.map (fun c -> c.Metric, c.Description))
+                [ "revenue", Some "Net revenue after returns."; "segment", None ]
+                "each column carries its description, and an undescribed column reads None"
+        }
+
+        test "a table declared without a description reads None" {
+            let w = world ()
+            let detail = ok "table" (FactBrowseHandler.getTable w.Deps w.Scope skuTable.Id)
+            Expect.isNone detail.Description "no table description"
+            Expect.all detail.Columns (fun c -> c.Description.IsNone) "no column description"
+
+            let composed = describingApp [] |> ServerApp.factTableRegistry |> Option.get
+            Expect.isNone (FactTableRegistry.tryDescription composed skuTable.Id) "nothing described"
+        }
+
+        test "a registry without the capability has no descriptions" {
+            let bare =
+                { new IFactTableRegistry with
+                    member _.Tables = [ skuTable ]
+                    member _.TryGetTable _ = Some skuTable
+                    member _.TablesByModule _ = [ skuTable ]
+                    member _.DeclaringModule _ = Some "sales"
+                    member _.DestinationOf _ = None
+                }
+
+            Expect.isNone (FactTableRegistry.tryDescription bare skuTable.Id) "probed, absent"
+        }
+
+        test "a composition that declares and describes nothing registers no table registry" {
+            Expect.isNone (ServerApp.factTableRegistry ServerApp.empty) "nothing registered (GP 13)"
+        }
+
+        test "a description of a table no module declares is refused at compose, naming the module and the table" {
+            let message =
+                refusal (
+                    describingApp [
+                        {
+                            skuDescription with
+                                TableId = "brand-sales"
+                                Columns = []
+                        }
+                    ]
+                )
+
+            Expect.stringContains message "'brand-sales'" "the undeclared table"
+            Expect.stringContains message "'sales'" "the describing module"
+            Expect.stringContains message "'sku-sales'" "the declared tables"
+        }
+
+        test "a description of a column the table does not declare is refused at compose, naming both" {
+            let message =
+                refusal (
+                    describingApp [
+                        {
+                            skuDescription with
+                                Columns = [ "margin", "Gross margin." ]
+                        }
+                    ]
+                )
+
+            Expect.stringContains message "column 'margin'" "the undeclared column"
+            Expect.stringContains message "fact table 'sku-sales'" "its table"
+            Expect.stringContains message "'revenue', 'segment'" "the table's declared columns"
+        }
+
+        test "a description with no table declared at all is refused at compose" {
+            let app =
+                ServerApp.empty
+                |> ServerApp.addModules [
+                    ServerModule.create "notes"
+                    |> ServerModule.describeFactTables [ skuDescription ]
+                ]
+
+            Expect.stringContains (refusal app) "'sku-sales', which no module declares" "refused, not ignored"
+        }
+
+        test "a table or a column described twice is refused at compose" {
+            let twice =
+                refusal (
+                    ServerApp.empty
+                    |> ServerApp.addModules [
+                        ServerModule.create "sales"
+                        |> ServerModule.declareFactTables [ skuTable ]
+                        |> ServerModule.describeFactTables [ skuDescription ]
+                        ServerModule.create "finance"
+                        |> ServerModule.describeFactTables [ skuDescription ]
+                    ]
+                )
+
+            Expect.stringContains twice "described more than once" "a table described twice"
+            Expect.stringContains twice "'sales', 'finance'" "both describing modules"
+
+            let column =
+                refusal (
+                    describingApp [
+                        {
+                            skuDescription with
+                                Columns = [ "revenue", "Net."; "revenue", "Gross." ]
+                        }
+                    ]
+                )
+
+            Expect.stringContains column "column 'revenue' of fact table 'sku-sales' 2 times" "a column described twice"
+        }
+    ]
+
 let tests =
     testList "Phase 895 — fact browse surface" [
         boundedTests
@@ -2765,4 +2941,5 @@ let tests =
         heldTests
         sliceTests
         sessionCostTests
+        descriptionTests
     ]

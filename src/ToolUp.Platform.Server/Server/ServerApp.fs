@@ -226,6 +226,14 @@ type ServerModule = {
     /// byte-for-byte as before (GP 13). Declare via
     /// `ServerModule.declareFactTables`.
     FactTables: Grounding.FactTableDefinition list
+    /// What this module's declared tables are FOR: a description per table
+    /// and per column, keyed by table id, beside the declarations they
+    /// describe. `addModule` fans these into the app; the composed table
+    /// registry carries them (`IDescribesFactTables`) and refuses, at
+    /// compose, one naming a table or column no module declares. Empty (the
+    /// default) — the composition is byte-for-byte unchanged (GP 13).
+    /// Register via `ServerModule.describeFactTables`.
+    FactTableDescriptions: Grounding.FactTableDescription list
     /// Phase 1042 — the work this module runs once a DELIVERY has
     /// completed: every table one request or one ingestion job attempt
     /// ingested has settled. `addModule` registers each with the app
@@ -260,6 +268,7 @@ module ServerModule =
         AIExposure = None
         NotificationCategories = []
         FactTables = []
+        FactTableDescriptions = []
         DeliveryCompletedHooks = []
     }
 
@@ -545,6 +554,19 @@ module ServerModule =
     let declareFactTables (defs: Grounding.FactTableDefinition list) (m: ServerModule) : ServerModule = {
         m with
             FactTables = m.FactTables @ defs
+    }
+
+    /// Describe declared fact tables: what each table is for and how its
+    /// rows are derived, and what any of its columns holds — prose, never a
+    /// figure (see `FactTableDescription`). **Adds**, composing left to
+    /// right beside `declareFactTables`. A description naming a table no
+    /// module declares, or a column its table does not carry, is refused at
+    /// compose, naming the module, the table and the column; so is a table
+    /// or a column described twice. Optional — a module that describes
+    /// nothing composes byte-for-byte unchanged (GP 13).
+    let describeFactTables (descriptions: Grounding.FactTableDescription list) (m: ServerModule) : ServerModule = {
+        m with
+            FactTableDescriptions = m.FactTableDescriptions @ descriptions
     }
 
     /// Declare a per-route latency ceiling for one of this module's
@@ -944,6 +966,10 @@ type ServerApp = {
     /// registry is composed and no fact-table preflight is registered, so
     /// the composition is byte-for-byte the pre-887 graph (GP 13).
     RegisteredFactTables: Grounding.FactTableRegistration list
+    /// Accumulated fact-table descriptions across every registered
+    /// `ServerModule` (`ServerModule.describeFactTables`), each paired with
+    /// its describing module. Empty (the default) — nothing changes.
+    RegisteredFactTableDescriptions: Grounding.FactTableDescriptionRegistration list
     /// Phase 887 — where the composition binds declared tables
     /// (`ServerApp.bindFactTables`). The physical half of the logical
     /// declaration: a `Required` table no binding covers refuses to start.
@@ -1282,6 +1308,7 @@ module ServerApp =
         RegisteredMetrics = []
         RegisteredSubjects = []
         RegisteredFactTables = []
+        RegisteredFactTableDescriptions = []
         FactTableBindings = []
         RegisteredPurposes = []
         ActivitySink = None
@@ -2943,6 +2970,13 @@ module ServerApp =
                         Definition = d
                     })
 
+                let factTableDescriptionRegistrations: Grounding.FactTableDescriptionRegistration list =
+                    m.FactTableDescriptions
+                    |> List.map (fun d -> {
+                        Grounding.FactTableDescriptionRegistration.Module = m.Name
+                        Description = d
+                    })
+
                 // Phase 283 — permit the `component_id` correlation
                 // dimension on every module metric's tag allowlist so
                 // per-component telemetry can be keyed by the stable
@@ -3042,6 +3076,8 @@ module ServerApp =
                         RegisteredMetrics = app.RegisteredMetrics @ metricRegistryRegistrations
                         RegisteredSubjects = app.RegisteredSubjects @ subjectRegistryRegistrations
                         RegisteredFactTables = app.RegisteredFactTables @ factTableRegistrations
+                        RegisteredFactTableDescriptions =
+                            app.RegisteredFactTableDescriptions @ factTableDescriptionRegistrations
                         ModuleSurfaceDefaults = app.ModuleSurfaceDefaults @ surfaceDefaultsForModule
                         RouteSurfaceOverrides = app.RouteSurfaceOverrides @ m.RouteSurfaceRequirements
                         // Phase 637 — the same declarations, keyed by
@@ -3281,6 +3317,26 @@ module ServerApp =
         Subjects = app.RegisteredSubjects
         Bindings = app.FactTableBindings
     }
+
+    /// The `IFactTableRegistry` `run` registers: the declared tables, their
+    /// bindings and their descriptions (`IDescribesFactTables`) — what every
+    /// browse read and fact tool resolves. `None` when no module declares or
+    /// describes a table, so nothing is registered (GP 13). Raises at
+    /// compose on a description naming a table or column no module declares,
+    /// naming the module, the table and the column.
+    let factTableRegistry (app: ServerApp) : Grounding.IFactTableRegistry option =
+        if
+            List.isEmpty app.RegisteredFactTables
+            && List.isEmpty app.RegisteredFactTableDescriptions
+        then
+            None
+        else
+            Some(
+                Grounding.FactTableRegistry.buildDescribed
+                    app.RegisteredFactTables
+                    app.FactTableBindings
+                    app.RegisteredFactTableDescriptions
+            )
 
     /// Phase 583 — project the live registry into the reference edges the
     /// composition rules read but the `CompositionManifest` cannot carry.
@@ -3540,20 +3596,17 @@ module ServerApp =
                     withUserDirectory
                     |> ServiceConfig.append (fun s -> s.AddSingleton<Grounding.IMetricRegistry>(registry))
 
-            // Phase 887 — fold the declared fact tables into an
-            // `IFactTableRegistry` singleton and register the compose-time
-            // fact-table preflight (duplicate ids, unregistered metrics,
-            // unknown subject levels, `Required` tables bound to no store,
-            // a metric with two homes). A composition that declares no
-            // table appends nothing — byte-for-byte the pre-887 graph
-            // (GP 13).
+            // Fold the declared fact tables and their descriptions into an
+            // `IFactTableRegistry` singleton (`factTableRegistry`, which
+            // refuses a description of nothing) and register the
+            // compose-time fact-table preflight (duplicate ids, unregistered
+            // metrics, unknown subject levels, `Required` tables bound to no
+            // store, a metric with two homes). A composition that declares
+            // and describes no table appends nothing (GP 13).
             let withFactTableRegistry =
-                if List.isEmpty app.RegisteredFactTables then
-                    withMetricRegistry
-                else
-                    let tables =
-                        Grounding.FactTableRegistry.build app.RegisteredFactTables app.FactTableBindings
-
+                match factTableRegistry app with
+                | None -> withMetricRegistry
+                | Some tables ->
                     let withRegistry =
                         withMetricRegistry
                         |> ServiceConfig.append (fun s -> s.AddSingleton<Grounding.IFactTableRegistry>(tables))

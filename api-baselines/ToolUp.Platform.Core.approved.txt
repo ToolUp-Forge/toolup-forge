@@ -6895,6 +6895,15 @@ ToolUp.Platform.Grounding.FactTableDefinitionModule.column(System.String, ToolUp
 ToolUp.Platform.Grounding.FactTableDefinitionModule.columnDisclosure(ToolUp.Platform.Grounding.FactTableDefinition, ToolUp.Platform.Grounding.FactTableColumn) : ToolUp.Platform.Grounding.FactTableDisclosure
 ToolUp.Platform.Grounding.FactTableDefinitionModule.levelDepth(ToolUp.Platform.Grounding.SubjectDefinition, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
 ToolUp.Platform.Grounding.FactTableDefinitionModule.metrics(ToolUp.Platform.Grounding.FactTableDefinition) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Grounding.FactTableDescription (class)
+ToolUp.Platform.Grounding.FactTableDescription..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Platform.Grounding.FactTableDescription.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.Grounding.FactTableDescription.Description : System.String { get }
+ToolUp.Platform.Grounding.FactTableDescription.TableId : System.String { get }
+ToolUp.Platform.Grounding.FactTableDescriptionRegistration (class)
+ToolUp.Platform.Grounding.FactTableDescriptionRegistration..ctor(System.String, ToolUp.Platform.Grounding.FactTableDescription)
+ToolUp.Platform.Grounding.FactTableDescriptionRegistration.Description : ToolUp.Platform.Grounding.FactTableDescription { get }
+ToolUp.Platform.Grounding.FactTableDescriptionRegistration.Module : System.String { get }
 ToolUp.Platform.Grounding.FactTableDisclosure (class)
 ToolUp.Platform.Grounding.FactTableDisclosure.Internal : ToolUp.Platform.Grounding.FactTableDisclosure { get }
 ToolUp.Platform.Grounding.FactTableDisclosure.IsInternal : System.Boolean { get }
@@ -6969,7 +6978,10 @@ ToolUp.Platform.Grounding.FactTableRegistration.Definition : ToolUp.Platform.Gro
 ToolUp.Platform.Grounding.FactTableRegistration.Module : System.String { get }
 ToolUp.Platform.Grounding.FactTableRegistry (class)
 ToolUp.Platform.Grounding.FactTableRegistry.build(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableBinding]) : ToolUp.Platform.Grounding.IFactTableRegistry
+ToolUp.Platform.Grounding.FactTableRegistry.buildDescribed(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableBinding], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDescriptionRegistration]) : ToolUp.Platform.Grounding.IFactTableRegistry
 ToolUp.Platform.Grounding.FactTableRegistry.empty : ToolUp.Platform.Grounding.IFactTableRegistry { get }
+ToolUp.Platform.Grounding.FactTableRegistry.tryBuildDescribed(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableBinding], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDescriptionRegistration]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.IFactTableRegistry, System.String]
+ToolUp.Platform.Grounding.FactTableRegistry.tryDescription(ToolUp.Platform.Grounding.IFactTableRegistry, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDescription]
 ToolUp.Platform.Grounding.FactTableRequirement (class)
 ToolUp.Platform.Grounding.FactTableRequirement.IsOptional : System.Boolean { get }
 ToolUp.Platform.Grounding.FactTableRequirement.IsRequired : System.Boolean { get }
@@ -7058,6 +7070,8 @@ ToolUp.Platform.Grounding.FactTableWatermark.Sequence : System.Int64 { get }
 ToolUp.Platform.Grounding.FactTableWatermark.TableId : System.String { get }
 ToolUp.Platform.Grounding.FactTableWatermarkModule (class)
 ToolUp.Platform.Grounding.FactTableWatermarkModule.render(ToolUp.Platform.Grounding.FactTableWatermark) : System.String
+ToolUp.Platform.Grounding.IDescribesFactTables (interface)
+ToolUp.Platform.Grounding.IDescribesFactTables.TryGetTableDescription(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDescription]
 ToolUp.Platform.Grounding.IFactTableRegistry (interface)
 ToolUp.Platform.Grounding.IFactTableRegistry.DeclaringModule(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Grounding.IFactTableRegistry.DestinationOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]

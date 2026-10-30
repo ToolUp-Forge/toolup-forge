@@ -48,6 +48,21 @@ let private headerCell (label: string) =
 let private cell (value: string) =
     Html.td [ prop.className "px-3 py-2 text-sm text-gray-700"; prop.text value ]
 
+/// A column's metric id, with its declared description beneath it as the
+/// column's hint (and its tooltip). An undescribed column renders as `cell`.
+let private describedCell (value: string) (description: string option) =
+    match description with
+    | None -> cell value
+    | Some hint ->
+        Html.td [
+            prop.className "px-3 py-2 text-sm text-gray-700"
+            prop.title hint
+            prop.children [
+                Html.div [ prop.text value ]
+                Html.div [ prop.className "text-xs text-gray-500"; prop.text hint ]
+            ]
+        ]
+
 let private monoCell (value: string) =
     Html.td [
         prop.className "px-3 py-2 text-sm text-gray-700 font-mono break-all"
@@ -455,6 +470,10 @@ let TablePage (model: Model) (dispatch: Msg -> unit) =
                     ]
                 ]
 
+                match detail.Description with
+                | Some description -> Html.p [ prop.className "text-sm text-gray-700"; prop.text description ]
+                | None -> ()
+
                 Html.p [
                     prop.className "text-sm text-gray-600"
                     prop.text (
@@ -493,7 +512,7 @@ let TablePage (model: Model) (dispatch: Msg -> unit) =
                      |> List.map (fun c ->
                          Html.tr [
                              prop.key c.Metric
-                             prop.children [ cell c.Metric; cell c.Shape; cell c.Disclosure ]
+                             prop.children [ describedCell c.Metric c.Description; cell c.Shape; cell c.Disclosure ]
                          ]))
 
                 sectionHeading "Population"
