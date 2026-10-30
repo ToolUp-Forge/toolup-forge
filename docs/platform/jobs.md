@@ -12,8 +12,10 @@ type IJobScheduler =
     abstract RegisterHandlerAsync: name: string * handler: IJobHandler -> Async<Result<unit, string>>
 
     // Submit a job. The scheduler assigns the JobId — the caller supplies
-    // registration-time intent only, never runtime state (rule 1).
-    abstract Schedule: registration: JobRegistration -> Async<Result<JobId, ScheduleError>>
+    // registration-time intent only, never runtime state (rule 1). The
+    // answer says whether a job was created (`Scheduled id`) or an
+    // idempotency key recovered a live one (`Coalesced id`).
+    abstract Schedule: registration: JobRegistration -> Async<Result<ScheduleOutcome, ScheduleError>>
 
     // Lifecycle. Cancel is terminal; Disable / Enable are reversible.
     // All three are idempotent and scope-qualified.
@@ -27,8 +29,9 @@ type IJobScheduler =
     abstract GetRecentRuns: scopeId: string * jobId: JobId * count: int -> Async<JobRun list>
 
     // Fire now, regardless of Trigger. Additive — a cron job stays on its
-    // schedule. Error when the job is unknown or Cancelled.
-    abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: string -> Async<Result<unit, string>>
+    // schedule. A typed refusal when the job is unknown, Cancelled or
+    // Disabled, or the scheduler is stopping.
+    abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: string -> Async<Result<unit, TriggerError>>
 
     // Called by the JobNotifyEventStore decorator on every matching write.
     abstract NotifyEventWritten: scopeId: string * eventType: string * eventId: Guid -> Async<unit>
@@ -166,16 +169,21 @@ scheduler.TriggerOnce(scopeId, myJobId, userId)
 `JobId` is only meaningful inside its scope) plus the acting user, which the
 scheduler records as `TriggerSource.ScheduledManually` on the resulting run.
 
+It refuses, starting nothing and writing no run row, with a `TriggerError`: `JobNotFound`, `JobCancelled`,
+`JobDisabled` (`Disable` stops dispatch, and a manual fire is a dispatch), `SchedulerStopping` (the host is
+shutting the scheduler down), `QuotaExceeded` (the quota decorator) or `DispatchRefused` (the backend would not
+start it). `TriggerError.message` renders each as a sentence.
+
 Common pattern: the data-ingestion subsystem schedules a `Manual` job on `IDataIngestionApi.TriggerRefresh` and immediately calls `TriggerOnce`.
 
 ### Idempotency
 
 `JobDefinition.Idempotency` carries an `IdempotencyKey` — a caller-supplied string plus a TTL in
 **seconds**. If a job is registered whose `Key` matches a live job in the same scope inside the TTL
-window, `Schedule` returns the *existing* `JobId` and registers nothing new. The caller cannot tell
-from the return value whether the job is brand-new or recovered — by design: the contract guarantees
-"submitting twice = the job runs once". Useful for "schedule this job, but only once per (user,
-action) within 5 minutes".
+window, `Schedule` answers `Coalesced` with the *existing* `JobId` and registers nothing new; a job it
+created is `Scheduled`. The caller can tell the two apart, which is what keeps "submitting twice = the job
+runs once" true for a caller that also fires what it schedules. Useful for "schedule this job, but only
+once per (user, action) within 5 minutes".
 
 ```fsharp
 let idempotency: IdempotencyKey option =
@@ -189,14 +197,19 @@ The lookup is per-scope.
 Idempotency covers `Schedule`, not what a caller does with the `JobId` it returns. A caller that
 schedules a `Manual` job under an idempotency key and then calls `TriggerOnce` on the returned id
 triggers the job again every time the key coalesces, so "submitting twice = the job runs once"
-stops holding. Two sites in the SDK do this today, and both are pinned by pending tests that turn on
-when `Schedule` reports whether it coalesced (Phase 1066's `ScheduleOutcome.Coalesced`; the fix is
-Phase 998's):
+stops holding. Fire only a `Scheduled` job:
 
-| Site | Schedule | Trigger | Pending pin |
-|---|---|---|---|
-| `GroundedNarrativeTrigger.enqueueFor` | `src/ToolUp.Facts.Server/Server/ReactiveDataChange.fs:468` | `:472` | `GroundedNarrativeTests` — "double run, first site" |
-| `RecomputeJobHandler.applyPolicies` (an `Eager` recompute) | `src/ToolUp.Facts.Server/Server/RecomputeJobHandler.fs:317` | `:325` | `ReactiveRecomputeComposeTests` — "double run, second site" |
+```fsharp skip=fragment
+match! scheduler.Schedule registration with
+| Ok(Scheduled jobId) -> do! fire jobId
+| Ok(Coalesced _) -> ()   // already pending: fired when it was created
+| Error e -> log e
+```
+
+| Site | Status | Pin |
+|---|---|---|
+| `GroundedNarrativeTrigger.enqueueFor` | fires only `Scheduled` | `GroundedNarrativeTests` — "double run, first site" |
+| `RecomputeJobHandler.applyPolicies` (an `Eager` recompute) | still fires a coalesced job (Phase 998) | `ReactiveRecomputeComposeTests` — "double run, second site", pending |
 
 ### Lifecycle events
 
