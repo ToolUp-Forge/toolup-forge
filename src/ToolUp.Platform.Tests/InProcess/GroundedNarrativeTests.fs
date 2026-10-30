@@ -2617,6 +2617,117 @@ let doubleRunTests =
             | Choice2Of2 ex -> Expect.stringContains ex.Message "not started" "the raise names the unstarted run"
             | Choice1Of2() -> failtest "a refused narrative trigger must not be dropped by the reaction"
         }
+
+        // The first pin in this list counts triggers on a double. This one counts what the
+        // property is about, model calls and publications, through the
+        // in-process scheduler and the real job handler: a replay while the
+        // first run is in flight and a replay after it finished both coalesce
+        // and run nothing, and a different change is a different job.
+        testCaseAsync
+            "998: one data-arrival change replayed runs the narrative once on the in-process scheduler; a different change runs it again"
+        <| async {
+            let answers = ref 0
+
+            let counting: Writer =
+                fun id rendering ->
+                    Interlocked.Increment(&answers.contents) |> ignore
+                    citingWriter id rendering
+
+            let deployment = deploy counting
+
+            let computed = {
+                assertedDraft "revenue" 1250m Surfaceable with
+                    Method = Computed("rollup", "1", "p0")
+                    Evidence = {
+                        ResultRef = None
+                        InputHashes = [ "sales.rollup" ]
+                        TriggerRef = None
+                    }
+            }
+
+            assertOk deployment.Store deployment.TeamId computed |> ignore
+
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
+
+            use scheduler =
+                new JobScheduler.InProcessJobScheduler(
+                    jobStore,
+                    events,
+                    { new INotificationChannel with
+                        member _.Publish(_, _) = async { return () }
+                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                        member _.Unsubscribe(_) = async { return () }
+                    },
+                    ServerConfig.defaults,
+                    silentLogger,
+                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
+                )
+
+            let jobs = scheduler :> IJobScheduler
+            let registry = deployment.Services.GetRequiredService<GroundedNarrativeRegistry>()
+
+            jobs.RegisterHandler(
+                GroundedNarrativeTrigger.HandlerName,
+                GroundedNarrativeTrigger.GroundedNarrativeJobHandler(
+                    deployment.Store,
+                    None,
+                    registry,
+                    deployment.Services.GetRequiredService<IGroundedNarrativeRun>()
+                )
+            )
+
+            let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
+            let change = DataChangeScope.Resolved deployment.Scope
+
+            let enqueue changedIds =
+                GroundedNarrativeTrigger.enqueueFor lineage deployment.Store jobs registry change changedIds
+
+            // Every job in the scope has a finished run, and there are `count`.
+            let settled count = async {
+                let deadline = DateTime.UtcNow.AddSeconds 30.0
+                let mutable finished = false
+
+                while not finished && DateTime.UtcNow < deadline do
+                    let! listed = jobs.ListJobs deployment.TeamId
+
+                    let! runs =
+                        listed
+                        |> List.map (fun job -> jobs.GetRecentRuns(deployment.TeamId, job.JobId, 20))
+                        |> Async.Sequential
+
+                    finished <-
+                        listed.Length = count
+                        && runs |> Array.forall (List.exists (fun r -> r.Status = JobRunStatus.Succeeded))
+
+                    if not finished then
+                        do! Async.Sleep 100
+
+                return finished
+            }
+
+            let! first = enqueue [ "sales.rollup" ]
+            let! inFlight = enqueue [ "sales.rollup" ]
+            let! firstSettled = settled 1
+            let! afterwards = enqueue [ "sales.rollup" ]
+            do! Async.Sleep 300
+
+            let! listed = jobs.ListJobs deployment.TeamId
+            Expect.hasLength listed 1 "one job for the one change"
+            Expect.equal answers.Value 1 "the model wrote the narrative once"
+            Expect.hasLength (published deployment) 1 "and it was published once"
+            Expect.equal first [ summaryRun.Key ] "the change enqueued the run"
+            Expect.isEmpty inFlight "a replay while the run is in flight coalesced and enqueued nothing"
+            Expect.isTrue firstSettled "the one run finished"
+            Expect.isEmpty afterwards "a replay after the run finished coalesced and enqueued nothing"
+
+            let! different = enqueue [ "sales.rollup"; "sales.rollup@v2" ]
+            let! secondSettled = settled 2
+
+            Expect.equal different [ summaryRun.Key ] "a different change enqueued the run again"
+            Expect.isTrue secondSettled "as a second job, which ran"
+            Expect.equal answers.Value 2 "so the model wrote it a second time, once per change"
+        }
     ]
 
 // ── H. Requested projections and conjecture (Phase 1136) ────────────

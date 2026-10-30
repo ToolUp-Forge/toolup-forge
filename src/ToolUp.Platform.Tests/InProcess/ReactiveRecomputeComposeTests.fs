@@ -810,17 +810,26 @@ let zeroCostTests =
         }
     ]
 
-// ─── The double run's second site, pinned pending ───────────────────
+// ─── The second schedule-then-trigger site fires a coalesced job ─────
 //
 // `RecomputeJobHandler.applyPolicies` schedules an `Eager` recompute and
-// then triggers the job it got back. A scheduler that coalesces on the
-// idempotency key hands back the job already pending, so a fact
-// invalidated twice inside the TTL triggers that one job twice. The caller
-// can now tell a fresh job from a coalesced one (the scheduler answers
-// `ScheduleOutcome.Coalesced`); acting on it at this site is Phase 998's,
-// which turns this case on. The first site,
-// `GroundedNarrativeTrigger.enqueueFor`, acts on it and is pinned live in
-// GroundedNarrativeTests.
+// then triggers the job it got back, `Scheduled` or `Coalesced`. That is
+// not the narrative trigger's double run. The narrative job's idempotency
+// key names the CHANGE, so `Coalesced` there means "this change again", and
+// `GroundedNarrativeTrigger.enqueueFor` fires only `Scheduled` (pinned in
+// GroundedNarrativeTests). The recompute job's key names only the FACT
+// ("recompute-<factId>"), and the scheduler coalesces on when a job was
+// CREATED, not on whether it has run. So `Coalesced` here also means "a
+// different change to a fact whose job was created inside the TTL", usually
+// a job that has already run. Firing it is the only way that second change
+// reaches the fact; firing only `Scheduled` would leave the fact stale.
+// Keying the job on the change instead would fire, but would give each
+// change its own job id, and the in-process scheduler serialises dispatches
+// by job id and ignores `ShardKey`, so two recomputes of one fact could race
+// and the older could assert last. One job per fact, fired on every change,
+// is the design; a replay of the SAME change re-runs an idempotent recompute
+// (an identical tuple, a no-op `Assert`, no data change for the narrative
+// trigger to react to). docs/platform/jobs.md records both key shapes.
 
 /// Coalesces on the idempotency key, as a real scheduler does, and counts
 /// the triggers each job receives.
@@ -867,10 +876,10 @@ type private CoalescingScheduler() =
         member _.NotifyEventWritten(_, _, _) = async { return () }
 
 let doubleRunTests =
-    testList "double run, second site" [
+    testList "schedule-then-trigger, second site" [
 
-        ptestCaseAsync
-            "998: an Eager recompute coalesced onto its pending job is not triggered again (RecomputeJobHandler.applyPolicies)"
+        testCaseAsync
+            "998: a different change to an Eager fact inside the TTL fires its one coalesced recompute job again (RecomputeJobHandler.applyPolicies)"
         <| async {
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = BlobFactStore.create (InMemoryBlobStorage()) events
@@ -880,14 +889,36 @@ let doubleRunTests =
             let registry = registryWith [ metricDef "eager_m" UntilUpstreamChange (Some Eager) ]
             let! _ = store.Assert(scope, draftFor "eager_m" InputObject 1m)
 
-            for _ in 1..2 do
-                let! _ =
-                    RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) scope [ InputObject ]
+            // Two arrivals of the input with different content: the second
+            // version's identity joins the changed ids, as the decorator's
+            // seed does when a new version lands.
+            let! first =
+                RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) scope [ InputObject ]
 
-                ()
+            let! second =
+                RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) scope [
+                    InputObject
+                    InputObject + "@v2"
+                ]
 
-            Expect.equal scheduler.Jobs 1 "the second invalidation coalesced onto the pending job"
-            Expect.equal scheduler.AllTriggers 1 "and that job was triggered once, not once per schedule call"
+            let enqueued outcomes =
+                outcomes
+                |> List.choose (function
+                    | Enqueued(factId, _) -> Some factId
+                    | _ -> None)
+
+            Expect.hasLength (enqueued first) 1 "the first change enqueued the fact's recompute"
+            Expect.hasLength (enqueued second) 1 "and so did the second, different change"
+
+            Expect.equal
+                scheduler.Jobs
+                1
+                "one job per fact: the second change coalesced onto it (a job per change would let one fact's recomputes race)"
+
+            Expect.equal
+                scheduler.AllTriggers
+                2
+                "and that job was fired again, the only way the second change reaches the fact"
         }
     ]
 
