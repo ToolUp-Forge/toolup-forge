@@ -1150,6 +1150,34 @@ let private tokenTests =
                 "authenticated with the stored client secret"
         }
 
+        // Phase 1105 — the substrate's own refresh path: a rotation the store
+        // refuses fails the refresh naming the data source, never an access
+        // token over a connection whose next refresh is `invalid_grant`.
+        testAsync "the flow's refresh fails, naming the connection, when the store refuses the rotated token" {
+            let f = fixtureWith settings
+            let inner = f.Secrets :> ISecretStore
+
+            let refusing =
+                { new ISecretStore with
+                    member _.GetSecret(s, k) = inner.GetSecret(s, k)
+                    member _.SetSecret(_, _, _) = async { return Error "store is read-only" }
+                    member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                    member _.ListKeys s = inner.ListKeys s
+                }
+
+            let flow =
+                createFlow (new HttpClient(new StubHandler(f.Server))) refusing None settings
+
+            let ctx =
+                OAuthFlowContext.forDataSource f.Link.ScopeId (connectionId f.Link.UserId) None
+
+            match! flow.RefreshAccessToken(ctx, "rt-0") with
+            | Error(OAuthFlowFailed message) ->
+                Expect.stringContains message (connectionId f.Link.UserId) "names the data source"
+                Expect.stringContains message "store is read-only" "carries the refusal"
+            | other -> failtestf "expected OAuthFlowFailed, got %A" other
+        }
+
         testAsync "a 401 on a cached token forces one refresh and re-sends" {
             let f = fixtureWith settings
             let! _ = (f.Bridge :> ICalendarBridge).LinkResource f.Link
@@ -1227,6 +1255,39 @@ let private subscriptionTests =
             let! relinked = (f.Bridge :> ICalendarBridge).LinkResource f.Link
             expectOk "re-link" relinked
             Expect.equal f.Server.Subscriptions.Count 1 "renewed, not duplicated"
+        }
+
+        // Phase 1105 — a subscription nobody recorded can be neither renewed
+        // nor deleted, so a refused record closes it again and the link fails.
+        testAsync "a subscription the store refuses to record is deleted at Graph, and the link reports it" {
+            let! fixture, _ = syncFixture (fun () -> utc 2026 10 1 12)
+            let f = fixture.F
+            let inner = f.Secrets :> ISecretStore
+
+            let refusing =
+                { new ISecretStore with
+                    member _.GetSecret(s, k) = inner.GetSecret(s, k)
+
+                    member _.SetSecret(s, k, v) =
+                        if k.StartsWith "msgraph-calendar-subscription-" then
+                            async { return Error "store is read-only" }
+                        else
+                            inner.SetSecret(s, k, v)
+
+                    member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                    member _.ListKeys s = inner.ListKeys s
+                }
+
+            let bridge =
+                MicrosoftGraphCalendarBridge(refusing, f.Refresher, webhookSettings, new StubHandler(f.Server))
+                :> ICalendarBridge
+
+            match! bridge.LinkResource f.Link with
+            | Error(Unreachable message) ->
+                Expect.stringContains message "store is read-only" "the link names the store's refusal"
+            | other -> failtestf "expected Unreachable, got %A" other
+
+            Expect.equal f.Server.Subscriptions.Count 0 "the unrecorded subscription was closed again at Graph"
         }
 
         testAsync "the handshake is answered as text/plain, verbatim" {

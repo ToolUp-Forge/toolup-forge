@@ -76,7 +76,6 @@ ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorSchemaMode+Tags.Aut
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorSchemaMode+Tags.VerifyOnly : System.Int32 (literal)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException (class)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException..ctor()
-ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException..ctor(System.String)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException.message : System.String { get }
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning (class)

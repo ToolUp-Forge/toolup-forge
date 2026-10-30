@@ -781,6 +781,31 @@ let private flowTests =
             | Error other -> failtestf "expected ProviderRejected, got %A" other
         }
 
+        // Phase 1105 — Google does not rotate today, but a rotation the store
+        // refuses fails the refresh naming the data source, never an access
+        // token over a credential that would die as `invalid_grant` later.
+        testCaseAsync "a rotated refresh token the store refuses fails the refresh, naming the data source"
+        <| async {
+            let inner = DerivedSecretStore() :> ISecretStore
+
+            let refusing =
+                { new ISecretStore with
+                    member _.GetSecret(s, k) = inner.GetSecret(s, k)
+                    member _.SetSecret(_, _, _) = async { return Error "store is read-only" }
+                    member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                    member _.ListKeys s = inner.ListKeys s
+                }
+
+            let flow = mkFlow refusing None (new StubGoogle())
+
+            match! flow.RefreshAccessToken(flowCtx, "stale-refresh") with
+            | Error(OAuthFlowFailed msg) ->
+                Expect.stringContains msg "ds-1" "names the data source"
+                Expect.stringContains msg "store is read-only" "carries the store's refusal"
+            | Error other -> failtestf "expected OAuthFlowFailed, got %A" other
+            | Ok _ -> failtest "a refused rotation persist must not read as a successful refresh"
+        }
+
         testCaseAsync "missing client credentials name the key to fill"
         <| async {
             let flow = mkFlow (EmptySecretStore()) None (new StubGoogle())

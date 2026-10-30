@@ -119,6 +119,7 @@ IActivitySinkContract
 IArtifactSignerContract
 IArtifactVerifierContract
 IAssetStoreContract
+IBackgroundExportStoreContract
 IBookingSchedulerContract
 IBuildOrchestratorContract
 IClientToolAuthorizerContract
@@ -136,6 +137,7 @@ IEvidencePackGeneratorContract
 IExternalComputeDispatcherContract
 IExternalHandleStoreContract
 IFeatureFlagStoreContract
+IFieldClassifierContract
 IFormStoreContract
 IGrantConsentStoreContract
 ILifecycleLockContract

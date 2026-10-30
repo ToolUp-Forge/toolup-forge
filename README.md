@@ -22,7 +22,7 @@ Add the meta-manifest to your `Directory.Packages.props`:
 
 ```xml
 <PropertyGroup>
-  <ToolUpSdkVersion>0.20.0</ToolUpSdkVersion> <!-- pin the latest release tag -->
+  <ToolUpSdkVersion>0.37.0</ToolUpSdkVersion> <!-- pin the latest release tag -->
 </PropertyGroup>
 <ItemGroup>
   <PackageReference Include="ToolUp.Sdk" />
@@ -125,8 +125,8 @@ ToolUp.Elmish's classical Elm Architecture (Init / Update / View / Cmd / Sub) is
 | `ToolUp.Metrics.OpenTelemetry` | OTLP metrics export |
 | `ToolUp.Secrets.AzureKeyVault` | `ISecretStore` companion |
 | `ToolUp.VectorStores.Hnsw` | Scalable HNSW vector store |
-| `Feliz.AgGrid` / `Feliz.AgCharts` | Standalone Feliz bindings for AG Grid / AG Charts Community |
-| `Feliz.AgGrid.Enterprise` | AG Grid Enterprise initialisation shim (opt-in) |
+| `ToolUp.Feliz.AgGrid` / `ToolUp.Feliz.AgCharts` | Standalone Feliz bindings for AG Grid / AG Charts Community (assemblies `Feliz.AgGrid` / `Feliz.AgCharts`) |
+| `ToolUp.Feliz.AgGrid.Enterprise` | AG Grid Enterprise initialisation shim (opt-in) |
 
 ## Building from source
 
@@ -154,7 +154,7 @@ Contract test packs in `ToolUp.Platform.Tests` / `ToolUp.Forms.Tests` / `ToolUp.
 - License: [Apache 2.0](LICENSE).
 - DCO `Signed-off-by:` required on every commit — CI enforces.
 - Contribution flow + maintenance tiers: [CONTRIBUTING.md](CONTRIBUTING.md).
-- Code of Conduct: Contributor Covenant v2.1 (shipping shortly).
+- Code of Conduct: Contributor Covenant v2.1 — [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 - Security disclosure: [SECURITY.md](SECURITY.md).
 - Trademark policy: [TRADEMARK.md](TRADEMARK.md).
 

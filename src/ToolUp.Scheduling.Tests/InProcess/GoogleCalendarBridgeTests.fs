@@ -1063,6 +1063,36 @@ let tests =
                 | other -> failtestf "expected OAuthFlowFailed, got %A" other
             }
 
+            // Phase 1105 — a rotated refresh token the store refuses fails the
+            // refresh, naming the data source.
+            testAsync "a rotated refresh token the store refuses fails the refresh, naming the connection" {
+                let secrets = MemorySecretStore()
+                seedCredentials secrets "team-f" "rt-1"
+                let inner = secrets :> ISecretStore
+
+                let refusing =
+                    { new ISecretStore with
+                        member _.GetSecret(s, k) = inner.GetSecret(s, k)
+                        member _.SetSecret(_, _, _) = async { return Error "store is read-only" }
+                        member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                        member _.ListKeys s = inner.ListKeys s
+                    }
+
+                let post: OAuthTokenPost =
+                    fun _ _ -> async { return Ok """{"access_token":"a","refresh_token":"rt-2","expires_in":3600}""" }
+
+                let flow =
+                    ToolUp.Calendar.GoogleCalendarOAuth.create post refusing None GoogleCalendarOAuthConfig.defaults
+
+                let ctx = OAuthFlowContext.forDataSource "team-f" Connection None
+
+                match! flow.RefreshAccessToken(ctx, "rt-1") with
+                | Error(OAuthFlowFailed message) ->
+                    Expect.stringContains message Connection "names the data source"
+                    Expect.stringContains message "store is read-only" "carries the refusal"
+                | other -> failtestf "expected OAuthFlowFailed, got %A" other
+            }
+
             testAsync "revoking unregisters the refresh descriptor first" {
                 let secrets = MemorySecretStore()
                 let server = StubGoogleCalendar(fun () -> DateTimeOffset.UtcNow)

@@ -342,8 +342,15 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                         /// clears rather than writing an empty profile,
                         /// so a first-ever save that fails leaves the
                         /// scope exactly as it was found.
-                        let revert () = async {
-                            let! _ =
+                        ///
+                        /// Phase 1105 — the undo IS the refusal's promise:
+                        /// "the API key was not saved" is true only if the
+                        /// unverified key (and entry) went and the previous
+                        /// ones came back. Both writes are attempted, and a
+                        /// refusal of either is returned naming what is
+                        /// still at rest, for the caller to report instead.
+                        let revert () : Async<Result<unit, string>> = async {
+                            let! profileRestored =
                                 match existing with
                                 | Some prior -> providerProfile.Set(scope, prior)
                                 | None -> async {
@@ -351,12 +358,42 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                                     return Ok()
                                   }
 
-                            let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
+                            let! keyRestored =
                                 match priorSecret with
                                 | Some previous -> secretStore.SetSecret(scope.Container, keyName, previous)
                                 | None -> secretStore.DeleteSecret(scope.Container, keyName)
 
-                            return ()
+                            let failures = [
+                                match profileRestored with
+                                | Error e -> $"the previous provider profile could not be restored ({e})"
+                                | Ok() -> ()
+                                match keyRestored with
+                                | Error e ->
+                                    $"the unverified API key is still stored under '{keyName}' — the previous one could not be put back ({e})"
+                                | Ok() -> ()
+                            ]
+
+                            match failures with
+                            | [] -> return Ok()
+                            | _ -> return Error(String.concat "; " failures)
+                        }
+
+                        /// What a refused save answers once `revert` ran:
+                        /// "not saved" only when the undo landed.
+                        let refusedAfterRevert (why: string) = async {
+                            match! revert () with
+                            | Ok() ->
+                                logger.Warn
+                                    $"AI settings: {why} for label='{req.Label}' scope={scope.Container}; change reverted"
+
+                                return Error $"The API key was not saved — {why}"
+                            | Error undo ->
+                                logger.Warn
+                                    $"AI settings: {why} for label='{req.Label}' scope={scope.Container}; the revert was refused: {undo}"
+
+                                return
+                                    Error
+                                        $"The API key change was refused — {why} — but it could NOT be fully reverted: {undo}. Re-save the previous key."
                         }
 
                         match saveResult with
@@ -392,23 +429,12 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
 
                                 return Ok()
                             | Ok result ->
-                                do! revert ()
-
                                 let diagnostic =
                                     result.Diagnostic
                                     |> Option.defaultValue "the provider rejected the verification call"
 
-                                logger.Warn
-                                    $"AI settings: verification failed for label='{req.Label}' scope={scope.Container}; change reverted: {diagnostic}"
-
-                                return Error $"The API key was not saved — verification failed: {diagnostic}"
-                            | Error e ->
-                                do! revert ()
-
-                                logger.Warn
-                                    $"AI settings: verification could not run for label='{req.Label}' scope={scope.Container}; change reverted: {e}"
-
-                                return Error $"The API key was not saved — verification could not run: {e}"
+                                return! refusedAfterRevert $"verification failed: {diagnostic}"
+                            | Error e -> return! refusedAfterRevert $"verification could not run: {e}"
                         | Ok() ->
                             logger.Info
                                 $"AI settings: saved instance label='{req.Label}' provider={req.ProviderId} model={req.Model} scope={scope.Container} keyRotated={keyRotated}"

@@ -400,21 +400,37 @@ let create
                 | Error e -> return Error e
                 | Ok g ->
                     // Google does not rotate; handle it anyway (see the
-                    // module note). Best-effort — a write failure does
-                    // not invalidate the access token we just minted.
-                    match g.RefreshToken with
-                    | Some rotated when rotated <> refreshToken ->
-                        let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                        ()
-                    | _ -> ()
+                    // module note). Phase 1105 — if a rotation ever arrives
+                    // and the store refuses it, the refresh fails naming the
+                    // data source: the access token we just minted outlives
+                    // the refusal by an hour, and then the connection would
+                    // die as `invalid_grant` with nothing saying why.
+                    let! persisted =
+                        match g.RefreshToken with
+                        | Some rotated when rotated <> refreshToken ->
+                            secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated)
+                        | _ -> async { return Ok() }
 
-                    let expiresIn = g.ExpiresInSeconds |> Option.defaultValue defaultExpirySeconds
+                    match persisted with
+                    | Error e ->
+                        return
+                            Error(
+                                OAuthFlowFailed(
+                                    sprintf
+                                        "Google rotated the refresh token for data source '%s' (flow '%s') but the secret store refused to persist it (%s); the access token was withheld — retry the refresh, and reconnect if the previous token is already invalid"
+                                        ctx.DataSourceId
+                                        flowName
+                                        e
+                                )
+                            )
+                    | Ok() ->
+                        let expiresIn = g.ExpiresInSeconds |> Option.defaultValue defaultExpirySeconds
 
-                    return
-                        Ok {
-                            Token = g.AccessToken
-                            ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
-                        }
+                        return
+                            Ok {
+                                Token = g.AccessToken
+                                ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
+                            }
         }
 
         member _.Revoke(ctx, refreshToken) = async {

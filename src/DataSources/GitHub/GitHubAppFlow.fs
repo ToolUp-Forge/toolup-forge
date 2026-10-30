@@ -293,24 +293,40 @@ let create (httpClient: HttpClient) (secretStore: ISecretStore) (config: GitHubA
                 match grant with
                 | Error e -> return Error e
                 | Ok g ->
-                    // GitHub rotates the refresh token on every refresh.
-                    // Persist the new one back to the substrate's slot so
-                    // the next refresh doesn't fail `invalid_grant`. Best-
-                    // effort: a write failure is swallowed (the access token
-                    // is still valid now) rather than failing the refresh.
-                    match g.RefreshToken with
-                    | Some rotated when rotated <> refreshToken ->
-                        let! _ = secretStore.SetSecret(ctx.ScopeId, refreshKey flowName ctx.DataSourceId, rotated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                        ()
-                    | _ -> ()
+                    // GitHub rotates the refresh token on every refresh and
+                    // invalidates the old one. Persist the new one back to
+                    // the substrate's slot so the next refresh doesn't fail
+                    // `invalid_grant`. Phase 1105 — a refused persist fails
+                    // THIS refresh: swallowed, the access token worked for
+                    // ~8h and the connection then died with no row naming
+                    // why. Reported now, it names the data source and the
+                    // store's refusal while the cause is still in hand.
+                    let! persisted =
+                        match g.RefreshToken with
+                        | Some rotated when rotated <> refreshToken ->
+                            secretStore.SetSecret(ctx.ScopeId, refreshKey flowName ctx.DataSourceId, rotated)
+                        | _ -> async { return Ok() }
 
-                    let expiresIn = g.ExpiresInSeconds |> Option.defaultValue defaultExpirySeconds
+                    match persisted with
+                    | Error e ->
+                        return
+                            Error(
+                                OAuthFlowFailed(
+                                    sprintf
+                                        "GitHub rotated the refresh token for data source '%s' (flow '%s') but the secret store refused to persist it (%s); the access token was withheld — reconnect if the previous token is already invalid"
+                                        ctx.DataSourceId
+                                        flowName
+                                        e
+                                )
+                            )
+                    | Ok() ->
+                        let expiresIn = g.ExpiresInSeconds |> Option.defaultValue defaultExpirySeconds
 
-                    return
-                        Ok {
-                            Token = g.AccessToken
-                            ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
-                        }
+                        return
+                            Ok {
+                                Token = g.AccessToken
+                                ExpiresAt = DateTime.UtcNow.AddSeconds(float expiresIn)
+                            }
         }
 
         member _.Revoke(ctx, refreshToken) = async {

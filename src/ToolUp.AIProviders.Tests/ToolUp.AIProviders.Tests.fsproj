@@ -26,6 +26,8 @@
         <Compile Include="Tests\ModelOverrideTests.fs" />
         <!-- Both Claude sends back off from a 429 by the same floor: offline. -->
         <Compile Include="Tests\ClaudeRetryFloorTests.fs" />
+        <!-- Phase 1105 - a refused AI-settings revert is reported, offline. -->
+        <Compile Include="Tests\AISettingsRevertTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

@@ -244,17 +244,63 @@ type PackableAssembly = {
 }
 
 // Directory-based exclusions Pack applies that are NOT expressed via
-// `<IsPackable>false</IsPackable>` (reference-app + private-package dirs).
-// Most are absent in the OSS forge tree; kept for faithfulness to Pack.
-let private excludedDirSegments = [
-    "ToolUpApp-Server"
-    "ToolUpApp-Client"
-    "Modules"
-    "TestHarness"
-    "ToolUp.Algorithms"
-]
+// `<IsPackable>false</IsPackable>`. Read from the ONE declaration the
+// `Pack` / `Publish` globs and the SDK manifest read — `PackScope` in
+// `ToolUp.Platform.Build`'s `SDK.BuildTypes.fs` (Phase 1096) — rather than
+// kept as a fourth copy: this pack does not reference that package, and a
+// copy held equal by a test is still a copy. The read is strict: a line in
+// the list that is neither a string literal nor a name bound to one in the
+// same file fails discovery loudly, because a silently-short list would
+// widen the approved surface set without a word.
+let packScopeSource = "src/ToolUp.Platform.Build/Build/SDK.BuildTypes.fs"
 
-let private isPackableProject (fsprojPath: string) =
+/// The `PackScope.excludedDirs` entries in `sourceText`, in order.
+let packScopeDirsIn (sourceText: string) : string list =
+    let lines = sourceText.Replace("\r\n", "\n").Split('\n') |> Array.map _.Trim()
+
+    let bound =
+        lines
+        |> Array.choose (fun l ->
+            let m = Regex.Match(l, "^let\\s+(\\w+)\\s*=\\s*\"([^\"]*)\"$")
+
+            if m.Success then
+                Some(m.Groups[1].Value, m.Groups[2].Value)
+            else
+                None)
+        |> Map.ofArray
+
+    match lines |> Array.tryFindIndex (fun l -> l = "let excludedDirs = [") with
+    | None ->
+        failwithf
+            "%s declares no `let excludedDirs = [` list — PackScope moved; update packScopeDirsIn."
+            packScopeSource
+    | Some start ->
+        let body = lines[start + 1 ..] |> Array.takeWhile (fun l -> l <> "]")
+
+        if body.Length = lines.Length - start - 1 then
+            failwithf "%s: the PackScope.excludedDirs list is not closed by a `]` line." packScopeSource
+
+        [
+            for l in body do
+                if l <> "" then
+                    let literal = Regex.Match(l, "^\"([^\"]+)\"$")
+
+                    if literal.Success then
+                        yield literal.Groups[1].Value
+                    else
+                        match bound.TryFind l with
+                        | Some value -> yield value
+                        | None ->
+                            failwithf
+                                "%s: PackScope.excludedDirs entry `%s` is neither a string literal nor a name bound to one."
+                                packScopeSource
+                                l
+        ]
+
+let private excludedDirSegmentsUnder (root: string) =
+    packScopeDirsIn (File.ReadAllText(Path.Combine(root, packScopeSource)))
+
+let private isPackableProject (excludedDirSegments: string list) (fsprojPath: string) =
     let text = File.ReadAllText fsprojPath
 
     let notMarkedUnpackable =
@@ -310,9 +356,10 @@ let private assemblyNameOf (fsprojPath: string) =
 /// The `config` argument it used to take went with the probe.
 let discoverPackable (root: string) : PackableAssembly list =
     let srcDir = Path.Combine(root, "src")
+    let excluded = excludedDirSegmentsUnder root
 
     Directory.EnumerateFiles(srcDir, "*.fsproj", SearchOption.AllDirectories)
-    |> Seq.filter isPackableProject
+    |> Seq.filter (isPackableProject excluded)
     |> Seq.map (fun fsproj -> {
         Name = assemblyNameOf fsproj
         ProjectPath = fsproj

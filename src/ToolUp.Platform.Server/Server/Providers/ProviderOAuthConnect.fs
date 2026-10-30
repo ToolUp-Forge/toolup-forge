@@ -132,24 +132,46 @@ let internal completeConnectObserved
                 // Seed the access-token cache when the exchange
                 // already minted one, so the first consumer call does
                 // not pay a refresh round-trip it does not need.
+                //
+                // Phase 1105 — best-effort by design, and said so: the
+                // seed caches a token `refreshEntry` re-derives from the
+                // refresh token persisted above. The expiry is written
+                // only once the token landed, and a refused token write
+                // clears the expiry key, so `refreshEntry` finds no
+                // expiry, treats the window as open, and its first tick
+                // mints and caches a token — never a fresh expiry over a
+                // stale (or absent) token. A refusal is a Warning naming
+                // the key, never a failed connect.
                 do!
                     match credentials.AccessToken, credentials.ExpiresAt with
                     | Some token, Some expiry -> async {
-                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                            secretStore.SetSecret(
-                                scope.Container,
-                                ProviderOAuthKeys.accessTokenKey flow.Name correlation,
-                                token
-                            )
+                        let tokenKey = ProviderOAuthKeys.accessTokenKey flow.Name correlation
+                        let expiryKey = ProviderOAuthKeys.accessExpiryKey flow.Name correlation
 
-                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                            secretStore.SetSecret(
-                                scope.Container,
-                                ProviderOAuthKeys.accessExpiryKey flow.Name correlation,
-                                expiry.ToUniversalTime().ToString("o")
-                            )
+                        let seedRefused (key: string) (e: string) =
+                            warn
+                                $"access-token cache seed ('{key}')"
+                                (InvalidOperationException(
+                                    $"{e} — the first scheduled refresh mints and caches a token"
+                                ))
 
-                        return ()
+                        match! secretStore.SetSecret(scope.Container, tokenKey, token) with
+                        | Error e ->
+                            seedRefused tokenKey e
+
+                            match! secretStore.DeleteSecret(scope.Container, expiryKey) with
+                            | Ok() -> return ()
+                            | Error e -> seedRefused expiryKey $"clearing a prior expiry: {e}"
+                        | Ok() ->
+                            match!
+                                secretStore.SetSecret(
+                                    scope.Container,
+                                    expiryKey,
+                                    expiry.ToUniversalTime().ToString("o")
+                                )
+                            with
+                            | Ok() -> return ()
+                            | Error e -> seedRefused expiryKey e
                       }
                     | _ -> async { return () }
 
@@ -359,35 +381,68 @@ let refreshEntry
                     let ctx = OAuthFlowContext.forCorrelation scope.Container correlation
                     let! result = flow.RefreshAccessToken(ctx, token)
 
-                    match result with
-                    | Ok minted ->
-                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                            secretStore.SetSecret(
-                                scope.Container,
-                                ProviderOAuthKeys.accessTokenKey flow.Name correlation,
-                                minted.Token
-                            )
-
-                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                            secretStore.SetSecret(
-                                scope.Container,
-                                expiryKey,
-                                minted.ExpiresAt.ToUniversalTime().ToString("o")
-                            )
-
+                    // Health `Degraded`, the error count bumped; the job
+                    // substrate retries per its `JobRetryPolicy`.
+                    let degraded (reason: string) = async {
                         let! _ =
                             providerProfile.SetEntryHealth(
                                 scope,
                                 entry.Label,
                                 {
-                                    LastVerifiedAt = Some now
-                                    RecentErrorCount = 0
-                                    RateLimitHeadroom = entry.Health.RateLimitHeadroom
-                                    Status = ProviderHealthStatus.Healthy
+                                    entry.Health with
+                                        RecentErrorCount = entry.Health.RecentErrorCount + 1
+                                        Status = ProviderHealthStatus.Degraded
                                 }
                             )
 
-                        return Refreshed minted.ExpiresAt
+                        return TransientFailure reason
+                    }
+
+                    match result with
+                    | Ok minted ->
+                        // Phase 1105 — the minted token IS the refresh's
+                        // product: consumers read it from the cache, and
+                        // `NotDue` trusts the cached expiry. So the token is
+                        // written first and the expiry only once it landed —
+                        // a fresh expiry over a stale token would hold the
+                        // entry at `NotDue` while every call failed — and a
+                        // refusal of either is a transient failure (the
+                        // stale expiry keeps the window open, so the retry
+                        // refreshes again), never `Refreshed`.
+                        let tokenKey = ProviderOAuthKeys.accessTokenKey flow.Name correlation
+
+                        let! cached = async {
+                            match! secretStore.SetSecret(scope.Container, tokenKey, minted.Token) with
+                            | Error e -> return Error(tokenKey, e)
+                            | Ok() ->
+                                match!
+                                    secretStore.SetSecret(
+                                        scope.Container,
+                                        expiryKey,
+                                        minted.ExpiresAt.ToUniversalTime().ToString("o")
+                                    )
+                                with
+                                | Error e -> return Error(expiryKey, e)
+                                | Ok() -> return Ok()
+                        }
+
+                        match cached with
+                        | Error(key, e) ->
+                            return! degraded $"The refreshed access token could not be cached under '{key}': {e}"
+                        | Ok() ->
+                            let! _ =
+                                providerProfile.SetEntryHealth(
+                                    scope,
+                                    entry.Label,
+                                    {
+                                        LastVerifiedAt = Some now
+                                        RecentErrorCount = 0
+                                        RateLimitHeadroom = entry.Health.RateLimitHeadroom
+                                        Status = ProviderHealthStatus.Healthy
+                                    }
+                                )
+
+                            return Refreshed minted.ExpiresAt
                     | Error err ->
                         match classifyRefreshError err with
                         | NeedsReauthorization reason ->
@@ -399,16 +454,5 @@ let refreshEntry
                                 | TransientFailure r -> r
                                 | _ -> OAuthError.toMessage err
 
-                            let! _ =
-                                providerProfile.SetEntryHealth(
-                                    scope,
-                                    entry.Label,
-                                    {
-                                        entry.Health with
-                                            RecentErrorCount = entry.Health.RecentErrorCount + 1
-                                            Status = ProviderHealthStatus.Degraded
-                                    }
-                                )
-
-                            return TransientFailure reason
+                            return! degraded reason
     }

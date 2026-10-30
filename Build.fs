@@ -13,10 +13,14 @@ open ToolUp.Forge
 let config = {
     BuildConfig.defaults with
         Port = 5000
-        // The 4 in-tree Expecto runners — `dotnet run -- VerifyAll`
-        // iterates these sequentially. AIProviders.Tests is env-gated;
-        // arms with no API-key env var report Pending (not Failed), so
-        // a fresh checkout is green without per-provider credentials.
+        // The in-tree Expecto runners — `dotnet run -- VerifyAll` builds
+        // the solution once, then launches each pack's built dll in turn.
+        // Every `*.Tests.fsproj` in the solution or on disk is a row here
+        // or a named exclusion in `gateExclusions` below; the
+        // `GateReconcile` leg holds the two together (Phase 1096).
+        // AIProviders.Tests is env-gated; arms with no API-key env var
+        // report Pending (not Failed), so a fresh checkout is green
+        // without per-provider credentials.
         TestPacks = [
             TestPack.create "Platform" "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
             TestPack.create "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj"
@@ -162,14 +166,55 @@ let config = {
             TestPack.create
                 "TriageCalibration"
                 "tools/ToolUp.TriageCalibration.Tests/ToolUp.TriageCalibration.Tests.fsproj"
+            // Phase 1096 — four packs that were in the solution, built on
+            // every push and run by nothing, so ~84 cases could not go red.
+            // Each was green on its first run. `Classification` holds the
+            // only `IFieldClassifier` contract law and `DataSubject` the only
+            // `IBackgroundExportStore` one (the Platform pack's
+            // `IDataSubjectRequestContract` is the orchestrator's, a
+            // different seam), so neither duplicates a Contracts law.
+            TestPack.create "Tabular" "src/ToolUp.Tabular.Tests/ToolUp.Tabular.Tests.fsproj"
+            TestPack.create
+                "Classification"
+                "src/ToolUp.Platform.Classification.Tests/ToolUp.Platform.Classification.Tests.fsproj"
+            TestPack.create
+                "DataSubject"
+                "src/ToolUp.Platform.DataSubject.Tests/ToolUp.Platform.DataSubject.Tests.fsproj"
+            TestPack.create "ReportingHtmlPdf" "src/Reporting/HtmlPdf.Tests/ToolUp.Reporting.HtmlPdf.Tests.fsproj"
         ]
 }
 
+/// Phase 1096 — the test projects `VerifyAll` deliberately does not run as
+/// packs, each with the runner that does run it or the input it needs. The
+/// `GateReconcile` leg is red for any `*.Tests.fsproj` (in the solution, or
+/// on disk under `src/`, `tests/`, `tools/`) that is neither a row above nor
+/// named here, and for an entry here that names nothing.
+let private gateExclusions = [
+    Gate.exclude
+        "src/ToolUp.AI.Client.Tests/ToolUp.AI.Client.Tests.fsproj"
+        "Fable-tier node:test harness, not an Expecto pack: run by the Fable leg of VerifyAll (VerifyFable) and the fable-tier CI job."
+    Gate.exclude
+        "src/ToolUp.AI.Wire.Fable.Tests/ToolUp.AI.Wire.Fable.Tests.fsproj"
+        "Fable-host twin of the wire pack, run under node:test after a Fable compile: the checks.yml fable-wire-smoke job runs it."
+    Gate.exclude
+        "src/ToolUp.AI.Wire.Tests/ToolUp.AI.Wire.Tests.fsproj"
+        "the .NET host half of the wire-layer smoke, run beside its Fable twin by the checks.yml fable-wire-smoke job."
+    Gate.exclude
+        "tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/ToolUp.BrowserSmoke.Tests.fsproj"
+        "launches real browsers (Phase 761): run by the opt-in VerifyBrowserSmoke target and its own CI job, outside the solution."
+    Gate.exclude
+        "tests/CompanionFuzz/ToolUp.Companions.Fuzz.Tests.fsproj"
+        "needs Verovio.NET's native libverovio off the local feed (not on nuget.org, so it cannot join the solution CI restores) and a host that enforces a per-child kernel memory cap; run by an operator per tests/CompanionFuzz/README.md."
+]
+
 // ─── Phase 762 — gate lanes (`TOOLUP_TEST_LANE`) ────────────────────
 //
-// `VerifyAll` is ~16 minutes (measured 2026-09-12 on the campaign
-// machine: 967 s over the 23 packs above, of which the Platform pack is
-// 884.8 s — 91.5 %). A dispatched worker has to spend all of it before
+// A full `VerifyAll` is tens of minutes, nearly all of it inside the
+// Platform pack, and the `Samples` leg (Phase 904) — every sample built
+// and the Fable ones transpiled — is part of every full lane. No figure
+// is restated here: one stated six ways went stale six ways, and none
+// counted the samples leg. `VerifyAll` prints the measured figure itself
+// once Phase 1098 lands. A dispatched worker has to spend all of it before
 // it learns whether its own change is green, and then spend it AGAIN on
 // the folded tree, which is the only run a ship may cite.
 //
@@ -188,27 +233,24 @@ let config = {
 // Unset ⇒ `full` ⇒ this list, unfiltered: the pre-phase gate, unchanged.
 
 /// Packs whose own test sources touch no filesystem, process, socket or
-/// environment variable — the `pure` lane. 10.5 s of the 967 s total.
+/// environment variable — the `pure` lane, seconds rather than minutes.
 ///
 /// Membership is opt-IN and mechanically re-derivable, so it can
-/// under-claim but never over-claim. The audit that seeded it, run over
-/// each pack's `*.fs` outside `bin`/`obj` on 2026-09-12:
+/// under-claim but never over-claim. The audit, over each pack's `*.fs`
+/// outside `bin`/`obj`:
 ///
 ///     grep -rlE 'System\.IO|File\.|Directory\.|Path\.GetTempPath|Process|HttpClient|Socket|Environment\.GetEnvironmentVariable|__SOURCE_DIRECTORY__'
 ///
-/// These six matched in ZERO files; every other pack matched in at least
-/// one. The claim is about each pack's TEST sources — what the pack
-/// itself does — not a transitive claim about the SDK assemblies it
-/// binds, and a pack is added here only by re-running that audit.
+/// Each member matches in ZERO files. The claim is about each pack's TEST
+/// sources — what the pack itself does — not a transitive claim about the
+/// SDK assemblies it binds. The audit seeded six members on 2026-09-12;
+/// since Phase 1096 it is a TEST, not a one-off (`PureLaneTests` in the
+/// Build pack re-runs it over every member and is red when one reads the
+/// tree), which is how `RemotingAnalyzers` (Phase 776's tree scan) and
+/// `Offline` (its sync-handler tests) were found to have stopped
+/// qualifying and left.
 let private pureLanePacks =
-    set [
-        "RemotingAnalyzers"
-        "Voice"
-        "AlgorithmProviders"
-        "AssetStore"
-        "Reporting"
-        "Offline"
-    ]
+    set [ "Voice"; "AlgorithmProviders"; "AssetStore"; "Reporting" ]
 
 /// `config` for the lane this process runs. Kept as a projection OF
 /// `config` rather than folded into it so the authoritative pack list
@@ -228,6 +270,18 @@ let private lanedConfig =
     | TestLane.Lane.Fast
     | TestLane.Lane.Full -> config
 
+/// Phase 1096 — what a type declaration in a documentation `fsharp` block
+/// is, which decides which of its members the doc-parity arm reads and which
+/// comparison applies. A union rather than four strings, so each match over
+/// it is exhaustive and a fifth kind is a compile error at every arm.
+[<RequireQualifiedAccess>]
+type DocDeclKind =
+    | Interface
+    | Union
+    | Record
+    /// Not comparable: neither abstract members, union cases nor record fields.
+    | Other
+
 [<EntryPoint>]
 let main args =
     init args
@@ -240,6 +294,22 @@ let main args =
     )
 
     registerTargets lanedConfig
+
+    // Phase 1096 — every test project runs or is excluded by name. Pure
+    // file reading (the solution and three directory scans), so it is
+    // registered in every lane, `pure` included. Reconciles the FULL pack
+    // list, not the lane's projection of it: a lane narrows what runs, it
+    // does not make an undeclared project declared.
+    VerifyLeg.register "GateReconcile" (fun () ->
+        Trace.tracefn "▶ VerifyAll: GateReconcile (every *.Tests.fsproj is a pack or a named exclusion)"
+
+        match Gate.reconcile (Path.getFullName ".") config.TestPacks gateExclusions with
+        | Ok() -> 0
+        | Error findings ->
+            for f in findings do
+                Trace.traceError (sprintf "GateReconcile: %s" f)
+
+            1)
 
     // Phase 614 — the Fable-tier test gate as ONE invocation.
     //
@@ -2241,34 +2311,34 @@ let main args =
 
                 let kind =
                     if matches @"^\s+abstract\s" then
-                        "interface"
+                        DocDeclKind.Interface
                     elif matches @"^\s*\|\s*[A-Z]" then
-                        "union"
+                        DocDeclKind.Union
                     elif seg |> Array.exists (fun l -> l.Contains "{") then
-                        "record"
+                        DocDeclKind.Record
                     else
-                        "other"
+                        DocDeclKind.Other
 
                 let members =
                     match kind with
-                    | "interface" ->
+                    | DocDeclKind.Interface ->
                         seg
                         |> Array.choose (
                             rxGroups @"^\s+abstract\s+(?:member\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$"
                         )
                         |> Array.map (fun g -> g[1], g[2])
-                    | "record" ->
+                    | DocDeclKind.Record ->
                         seg
                         |> Array.choose (rxGroups @"^\s+(?:mutable\s+)?([A-Z][A-Za-z0-9_]*)\s*:\s*(.+)$")
                         |> Array.map (fun g -> g[1], g[2])
-                    | "union" ->
+                    | DocDeclKind.Union ->
                         // `| Some x -> …` in a sample body is not a case
                         // declaration; an arrow disqualifies the line.
                         seg
                         |> Array.filter (fun l -> not (l.Contains "->"))
                         |> Array.choose (rxGroups @"^\s*\|\s*([A-Z][A-Za-z0-9_]*)\s*(?:of\b.*)?$")
                         |> Array.map (fun g -> g[1], "")
-                    | _ -> [||]
+                    | DocDeclKind.Other -> [||]
 
                 rel, _ord, start + i, name, kind, List.ofArray members)
             |> List.ofArray
@@ -2289,7 +2359,7 @@ let main args =
 
         let notComparable =
             redeclarations
-            |> List.filter (fun (_, _, _, _, kind, _) -> kind = "other")
+            |> List.filter (fun (_, _, _, _, kind, _) -> kind = DocDeclKind.Other)
             |> List.length
 
         // ---- Phase 668: the comparison ----
@@ -2312,7 +2382,7 @@ let main args =
                 ]
 
                 match kind with
-                | "union" ->
+                | DocDeclKind.Union ->
                     let cases = realUnionCases full
 
                     members
@@ -2325,8 +2395,8 @@ let main args =
                                 (sprintf "%s has no such case." full)
                                 (sprintf "| %s" caseName)
                                 (cases |> Set.toList |> List.sort |> String.concat " | "))
-                | "interface"
-                | "record" ->
+                | DocDeclKind.Interface
+                | DocDeclKind.Record ->
                     members
                     |> List.collect (fun (memberName, memberSig) ->
                         let candidates = realMembers |> List.filter (fun (n, _) -> n = memberName)
@@ -2377,7 +2447,7 @@ let main args =
                                     why
                                     (sprintf "%s: %s" memberName memberSig)
                                     (candidates |> List.map snd |> String.concat "  |  "))
-                | _ -> [])
+                | DocDeclKind.Other -> [])
 
         // ---- Phase 672: the name universe a fragment is held to ----
         // Built once by `readApiSurface` above and shared with
@@ -3962,8 +4032,8 @@ let main args =
     // that is red on the tree gates nothing. Phase 971 triaged all 69 — each
     // operation's own delete now propagates, each cleanup carries the marker
     // naming the pass that re-sweeps it (storage-write-results.md) — so the
-    // walk is the default. `--single-delete` is accepted as a no-op for one
-    // release, so a script that passes it keeps working.
+    // walk is the default. The flag's one-release no-op ended with 0.28.0 and
+    // Phase 1096 removed it.
     //
     // Scope: production code under `src/`. Test projects (a directory named
     // `*.Tests`) are excluded — a fixture that seeds a blob is not a store,
@@ -3971,9 +4041,6 @@ let main args =
     // skipped, so prose quoting the pattern is not a finding.
     //
     // Usage: `dotnet run --project Build.fsproj -- VerifyUploadResults`
-    //        `… -- VerifyUploadResults --single-delete` is a no-op (Phase 971
-    //        made the single-call `Delete` walk the default; the flag is kept
-    //        for one release).
     //        `… -- VerifyUploadResults --root <dir>` scans `<dir>/src` instead
     //        of this repository's (how the check is shown red on a planted
     //        discard without touching the tree).
@@ -3986,12 +4053,8 @@ let main args =
         let srcDir = Path.Combine(root, "src")
 
         // Phase 971 - a SINGLE-call `Delete` discarded where it is made is always
-        // counted; `--single-delete` (Phase 967's opt-in) is a no-op kept for one release.
+        // counted (Phase 967 had it behind an opt-in flag).
         let includeSingleDelete = true
-
-        if args |> Array.contains "--single-delete" then
-            Trace.tracefn
-                "VerifyUploadResults: --single-delete is now the default and the flag is a no-op (Phase 971); it will be removed in a later release."
 
         if not (Directory.Exists srcDir) then
             failwithf "VerifyUploadResults: no `src` directory under %s — nothing to scan is not a pass." root
@@ -4977,17 +5040,6 @@ let main args =
     | TestLane.Lane.Pure
     | TestLane.Lane.Fast -> ()
 
-    // App-specific target: Azure deployment
-    Target.create "Deploy-CD" (fun _ ->
-        let dotnet args dir =
-            CreateProcess.fromRawCommand "dotnet" args
-            |> CreateProcess.withWorkingDirectory dir
-            |> CreateProcess.ensureExitCode
-
-        dotnet [ "run"; "--project"; "deploy/azure/Deploy.fsproj"; "--"; "cd" ] "."
-        |> Proc.run
-        |> ignore)
-
     // Phase 326 — the ToolUp.Sdk meta-manifest, emitted from the tree.
     //
     // `src/ToolUp.Sdk/build/ToolUp.Sdk.props` is the one-line
@@ -5083,31 +5135,6 @@ let main args =
             dotnet [ "pack"; proj; "-c"; "Release"; "-o"; outputDir; "--nologo" ] "."
             |> Proc.run
             |> ignore)
-
-    // Phase 4b dev convenience — wipe the local Platform Admin list
-    // so the next `dotnet run` re-bootstraps from
-    // `TOOLUP_INITIAL_PLATFORM_ADMIN` or `ServerConfig.AutoBootstrapDevAdmin`.
-    // Saves the manual file-delete step when iterating on bootstrap.
-    // Does NOT clear the rest of `data/` — KB content, files, teams,
-    // etc. are preserved.
-    //
-    // Usage: `dotnet run -- ResetPlatformAdmins`
-    //
-    // The reset only applies to the reference deployment's
-    // `LocalFileStorage` data path under `src/ToolUpApp-Server/data/`.
-    // Cloud-storage deployments (Azure Blob, S3, GCS) are unaffected
-    // — operators clear those via the cloud provider's tooling.
-    Target.create "ResetPlatformAdmins" (fun _ ->
-        let adminListPath =
-            Path.Combine(__SOURCE_DIRECTORY__, "src", "ToolUpApp-Server", "data", "_platform", "platform-admins.json")
-
-        if File.Exists adminListPath then
-            File.Delete adminListPath
-            Trace.tracefn "Removed %s" adminListPath
-            Trace.tracefn "Next `dotnet run` will re-bootstrap the Platform Admin list."
-        else
-            Trace.tracefn "No admin list to remove (already empty / no LocalFileStorage data)."
-            Trace.tracefn "Path checked: %s" adminListPath)
 
     // Phase 167 — pack the `toolup` CLI as a tool-manifest-installable
     // `dotnet tool` into the shared local feed. The standard `Pack`
@@ -6221,7 +6248,7 @@ let main args =
         let tags =
             match System.Environment.GetEnvironmentVariable "TOOLUP_SEMVER_BASE" with
             | null
-            | "" -> git [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ] |> lines
+            | "" -> ReleaseChannel.Tags.released root
             | explicitBase -> [ explicitBase ]
 
         match SemVerBump.releasesAhead declared tags with
@@ -6595,7 +6622,9 @@ let main args =
     // call. Six discrete checks, each pass/fail with its measured value
     // and the threshold it was graded against, written to
     // `docs/reference/v1-readiness.md` — the document the operator reads
-    // before tagging. What each row reads and why is in `V1Readiness.fs`;
+    // before tagging. The render is gitignored and never committed (Phase
+    // 1096): a committed copy went nine releases stale, because no workflow
+    // runs this target. What each row reads and why is in `V1Readiness.fs`;
     // this target only does the READING (git, files, the environment)
     // and hands data to the pure checks, so a fixture can score every row
     // without a checkout.
@@ -6669,8 +6698,7 @@ let main args =
         let releases =
             try
                 let tags =
-                    git [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ]
-                    |> lines
+                    ReleaseChannel.Tags.released root
                     |> SemVerBump.releaseTags
                     |> List.sortWith (fun (_, a) (_, b) -> SemVerBump.Version.compare b a)
 
@@ -6900,8 +6928,7 @@ let main args =
         // a second `## [1.0.0]` claiming a release that has not happened.
         // The stable section covers the whole interval they soaked in.
         let tags =
-            git [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ]
-            |> lines
+            ReleaseChannel.Tags.released root
             |> List.filter (SemVerBump.isPrerelease >> not)
             |> SemVerBump.releaseTags
             |> List.sortWith (fun (_, a) (_, b) -> SemVerBump.Version.compare a b)
@@ -7139,17 +7166,6 @@ let main args =
         |> CreateProcess.disableTraceCommand
         |> Proc.run
 
-    let releaseTagsIn (root: string) =
-        let r = releaseGitRun root [ "tag"; "--list"; "v*" ]
-
-        if r.ExitCode <> 0 then
-            failwithf "the release tags could not be listed (`git tag --list v*` exited %d)." r.ExitCode
-
-        r.Result.Output.Replace("\r\n", "\n").Split('\n')
-        |> Array.map _.Trim()
-        |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
-        |> List.ofArray
-
     // What nuget.org says about a candidate, read from the registration
     // leaf of every package the published-package smoke probes — the ids
     // that job already restores, so no second list of "representative"
@@ -7270,7 +7286,7 @@ let main args =
             | Ok v -> v
             | Error e -> failwithf "VerifyReleaseChannel: %s" e
 
-        let tags = releaseTagsIn root
+        let tags = ReleaseChannel.Tags.released root
 
         Trace.tracefn
             "▶ VerifyReleaseChannel: this run releases %s on the %s channel (from %s)"
@@ -7351,7 +7367,7 @@ let main args =
             | Error e -> failwithf "VerifyRcPromotion: %s" e
 
         let rendered = ReleaseChannel.ReleaseVersion.render version
-        let tags = releaseTagsIn root
+        let tags = ReleaseChannel.Tags.released root
 
         match ReleaseChannel.stableTagOf version.Core tags with
         | Some stable ->

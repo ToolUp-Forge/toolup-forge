@@ -1469,7 +1469,6 @@ ToolUp.InterPlatform.PeerIdentity.DisplayName : System.String { get }
 ToolUp.InterPlatform.PeerIdentity.PeerId : System.String { get }
 ToolUp.InterPlatform.PeerInvocationException (class)
 ToolUp.InterPlatform.PeerInvocationException..ctor()
-ToolUp.InterPlatform.PeerInvocationException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.InterPlatform.PeerInvocationException..ctor(ToolUp.InterPlatform.PeerError)
 ToolUp.InterPlatform.PeerInvocationException.Data0 : ToolUp.InterPlatform.PeerError { get }
 ToolUp.InterPlatform.PeerJob (class)

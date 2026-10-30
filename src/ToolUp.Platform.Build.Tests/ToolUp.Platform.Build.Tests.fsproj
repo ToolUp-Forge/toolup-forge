@@ -113,6 +113,11 @@
         <Compile Include="StaleEsbuildTests.fs" />
         <Compile Include="..\..\FuaranCoResolution.fs" Link="FuaranCoResolution.fs" />
         <Compile Include="FuaranCoResolutionTests.fs" />
+        <!-- Phase 1096 - the GateReconcile leg's go-red proof: every
+             *.Tests.fsproj is a VerifyAll pack or a named exclusion. -->
+        <Compile Include="GateReconcileTests.fs" />
+        <!-- Phase 1096 - the pure lane's membership audit, as a test. -->
+        <Compile Include="PureLaneTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

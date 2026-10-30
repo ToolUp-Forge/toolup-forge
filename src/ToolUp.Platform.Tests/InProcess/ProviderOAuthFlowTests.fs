@@ -323,4 +323,132 @@ let tests =
                 ProviderHealthStatus.Degraded
                 "a retryable failure degrades the badge; it does not demand a reconnect"
         }
+
+        // Phase 1105 — the minted token is the refresh's product. A store
+        // that refuses to cache it is a transient failure, and the expiry is
+        // not advanced over the stale token (which would hold the entry at
+        // `NotDue` while every call failed).
+        testCaseAsync "a refused access-token cache write is transient, and the expiry is not advanced"
+        <| async {
+            let flow = claudeFlow grantingPost
+            let inner = SeededSecrets [ ClaudeOAuth.FlowName ] :> ISecretStore
+            let refuseAccess = ref false
+
+            let secrets =
+                { new ISecretStore with
+                    member _.GetSecret(s, k) = inner.GetSecret(s, k)
+
+                    member _.SetSecret(s, k, v) =
+                        if refuseAccess.Value && k.EndsWith ".access" then
+                            async { return Error "store is read-only" }
+                        else
+                            inner.SetSecret(s, k, v)
+
+                    member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                    member _.ListKeys s = inner.ListKeys s
+                }
+
+            let profiles = ProviderOAuthTestSupport.memoryProviderProfile ()
+            let correlation = OAuthCorrelationKey.providerEntry "anthropic"
+            let staleExpiry = DateTime.UtcNow.AddMinutes 1.0
+
+            let credentials: OAuthCredentials = {
+                RefreshToken = "rt-0"
+                AccessToken = Some "at-0"
+                ExpiresAt = Some staleExpiry
+                IdToken = None
+            }
+
+            match!
+                ProviderOAuthConnect.completeConnect
+                    profiles
+                    secrets
+                    None
+                    scope
+                    "user-1"
+                    flow
+                    correlation
+                    credentials
+                    DateTime.UtcNow
+            with
+            | Error e -> failtestf "connect failed: %s" e
+            | Ok() -> ()
+
+            let! profile = profiles.Get scope
+            let entry = profile.Value.Entries |> List.find (fun e -> e.Label = "anthropic")
+            let expiryKey = ProviderOAuthKeys.accessExpiryKey flow.Name correlation
+            let! expiryBefore = secrets.GetSecret(scope.Container, expiryKey)
+            refuseAccess.Value <- true
+
+            let! outcome =
+                ProviderOAuthConnect.refreshEntry
+                    profiles
+                    secrets
+                    None
+                    scope
+                    flow
+                    entry
+                    DateTime.UtcNow
+                    ProviderOAuthConnect.DefaultLeadTime
+
+            match outcome with
+            | ProviderOAuthConnect.TransientFailure reason ->
+                Expect.stringContains reason "store is read-only" "the store's refusal is the reason"
+            | other -> failtestf "expected TransientFailure; got %A" other
+
+            let! expiryAfter = secrets.GetSecret(scope.Container, expiryKey)
+            Expect.equal expiryAfter expiryBefore "the expiry is not advanced over a token that was not cached"
+
+            let! after = profiles.Get scope
+            let degraded = after.Value.Entries |> List.find (fun e -> e.Label = "anthropic")
+            Expect.equal degraded.Health.Status ProviderHealthStatus.Degraded "the badge says degraded, not healthy"
+        }
+
+        testCaseAsync "a refused access-token seed on connect still connects, and leaves the refresh window open"
+        <| async {
+            let flow = claudeFlow grantingPost
+            let inner = SeededSecrets [ ClaudeOAuth.FlowName ] :> ISecretStore
+
+            let secrets =
+                { new ISecretStore with
+                    member _.GetSecret(s, k) = inner.GetSecret(s, k)
+
+                    member _.SetSecret(s, k, v) =
+                        if k.EndsWith ".access" then
+                            async { return Error "store is read-only" }
+                        else
+                            inner.SetSecret(s, k, v)
+
+                    member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                    member _.ListKeys s = inner.ListKeys s
+                }
+
+            let profiles = ProviderOAuthTestSupport.memoryProviderProfile ()
+            let correlation = OAuthCorrelationKey.providerEntry "anthropic"
+
+            let credentials: OAuthCredentials = {
+                RefreshToken = "rt-0"
+                AccessToken = Some "at-0"
+                ExpiresAt = Some(DateTime.UtcNow.AddHours 1.0)
+                IdToken = None
+            }
+
+            match!
+                ProviderOAuthConnect.completeConnect
+                    profiles
+                    secrets
+                    None
+                    scope
+                    "user-1"
+                    flow
+                    correlation
+                    credentials
+                    DateTime.UtcNow
+            with
+            | Error e -> failtestf "a refused cache seed must not fail the connect: %s" e
+            | Ok() -> ()
+
+            let! expiry = secrets.GetSecret(scope.Container, ProviderOAuthKeys.accessExpiryKey flow.Name correlation)
+            Expect.isNone expiry "no expiry over an uncached token, so the first refresh tick mints one"
+        }
     ]
