@@ -191,7 +191,11 @@ type private OpenAIEmbeddingProviderImpl
                     |}
 
                 let evt =
-                    Events.create "_platform" "ToolUp.RAG" KnowledgeEmbeddingProviderUnavailableEvent payload
+                    Events.create
+                        ScopeKey.PlatformContainer
+                        "ToolUp.RAG"
+                        KnowledgeEmbeddingProviderUnavailableEvent
+                        payload
 
                 do! store.Write evt
             with _ ->
@@ -285,7 +289,7 @@ type private OpenAIEmbeddingProviderImpl
                     )
                 )
         else
-            let! apiKeyOpt = secretStore.GetSecret("_platform", "openai-api-key")
+            let! apiKeyOpt = secretStore.GetSecret(ScopeKey.PlatformContainer, "openai-api-key")
 
             match apiKeyOpt with
             | Some apiKey when not (String.IsNullOrWhiteSpace apiKey) ->
@@ -801,7 +805,7 @@ let private probeClient =
 /// the `_platform / openai-api-key` secret. Never throws — transport /
 /// timeout failures map to `ProbeTransient`.
 let probeEmbeddingsApi (secretStore: ISecretStore) (model: string) : Async<EmbeddingProbeResult> = async {
-    let! keyOpt = secretStore.GetSecret("_platform", "openai-api-key")
+    let! keyOpt = secretStore.GetSecret(ScopeKey.PlatformContainer, "openai-api-key")
 
     match keyOpt with
     | Some apiKey when not (String.IsNullOrWhiteSpace apiKey) ->
@@ -854,7 +858,7 @@ type OpenAIEmbeddingConfigValidator(secretStore: ISecretStore, ?timeout: TimeSpa
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let! keyOpt = secretStore.GetSecret("_platform", "openai-api-key")
+            let! keyOpt = secretStore.GetSecret(ScopeKey.PlatformContainer, "openai-api-key")
 
             match keyOpt with
             | Some k when not (String.IsNullOrWhiteSpace k) -> return ToolUp.Platform.ConfigValidation.Ok
