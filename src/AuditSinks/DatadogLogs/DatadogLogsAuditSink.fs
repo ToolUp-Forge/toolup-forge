@@ -160,7 +160,7 @@ let private serializeBatch (settings: DatadogLogsSettings) (batch: AuditEnvelope
     "[" + String.Join(",", entries) + "]"
 
 [<Literal>]
-let private SecretStoreScope = "_platform"
+let private SecretStoreScope = ScopeKey.PlatformContainer
 
 /// SDK Datadog Logs `IAuditSink`. One POST per batch. API key from
 /// `ISecretStore` per call.
