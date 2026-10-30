@@ -281,7 +281,7 @@ module McpHostConstants =
     /// Blob container for the agent grant store — the reserved platform
     /// container every other SDK store writes under.
     [<Literal>]
-    let GrantContainer = "_platform"
+    let GrantContainer = ScopeKey.PlatformContainer
 
     /// Cost one tool call reserves against `AgentBudget.CallAllowance`.
     /// One call, one unit: the allowance is a call count, not a spend
