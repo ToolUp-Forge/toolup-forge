@@ -7,13 +7,15 @@ open System
 open System.Collections.Generic
 open System.Text
 open System.Text.Json
+open Microsoft.Extensions.DependencyInjection
 open Npgsql
 open NpgsqlTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.ProviderExceptions
 open ToolUp.Facts
 
-// ─── Phase 941 — migrating a BlobFactStore into the Postgres store ──
+// ─── Migrating a BlobFactStore into the Postgres store ──
 //
 // A deployment that has run on `BlobFactStore` moves its facts into the
 // table without losing history, and proves the copy faithful.
@@ -54,7 +56,7 @@ open ToolUp.Facts
 // already lives in `IEventStore` and is not the fact store's to copy, so
 // no per-fact event is re-emitted.
 //
-// **Bounded (Phase 964).** Reading a scope whole is what makes the source
+// **Bounded.** Reading a scope whole is what makes the source
 // check and the differential possible — both need every fact of a lineage,
 // and the differential also reads the scope's target rows whole — so the
 // migration holds a scope's facts in memory twice over, with no bound of
@@ -86,7 +88,7 @@ type FactStoreMigrationOptions = {
     AllowUnreadableSource: bool
     /// The source's name in progress rows and audit records.
     SourceName: string
-    /// Phase 964 — the most fact blobs a scope may hold to be migrated or
+    /// The most fact blobs a scope may hold to be migrated or
     /// verified. A scope is read whole, and verified against its target
     /// rows read whole, so this bounds what one scope holds in memory; a
     /// larger scope is refused before any fact is read, naming its count.
@@ -143,7 +145,7 @@ type MigrationDifference =
     | InvalidSource of factId: string * reason: string
     /// A source blob that did not read, parse, or sit under its own id.
     | UnreadableSource of blobName: string * reason: string
-    /// Phase 964 — the scope holds more fact blobs than
+    /// The scope holds more fact blobs than
     /// `FactStoreMigrationOptions.MaxScopeFacts`; nothing was read.
     | ScopeExceedsBound of
         /// The fact blobs the scope holds.
@@ -196,6 +198,10 @@ type ScopeMigrationOutcome =
     /// A page failed to write; pages already committed stay, and the next
     /// run resumes after them.
     | CopyFailed of error: string
+    /// A dry run (`FactStoreMigration.preview`) read and checked
+    /// the source and found it migratable; nothing was written. `ResumedFrom`
+    /// is what an earlier, interrupted run had already committed.
+    | WouldMigrate
 
 /// One scope's migration (or verification) result.
 type ScopeMigrationReport = {
@@ -215,8 +221,15 @@ type ScopeMigrationReport = {
     Inserted: int
     /// Facts an earlier, interrupted run had already committed.
     ResumedFrom: int
+    /// Rows this run offered that the target already held, so
+    /// wrote nothing (a page replayed after an interruption).
+    Skipped: int
     /// Every difference found, each naming its fact.
     Differences: MigrationDifference list
+    /// The id of the `FactStoreMigrated` audit record this run
+    /// wrote for the scope; `None` when it wrote none (a dry run, a
+    /// verification, or a scope an earlier run already verified).
+    AuditId: Guid option
 }
 
 /// The result of a migration (or verification) run over several scopes.
@@ -231,7 +244,8 @@ type FactStoreMigrationReport = {
         |> List.forall (fun s ->
             match s.Outcome with
             | Verified
-            | AlreadyVerified -> true
+            | AlreadyVerified
+            | WouldMigrate -> true
             | _ -> false)
 
 /// Payload of a `FactStoreMigrated` audit event — one per scope per run.
@@ -260,7 +274,7 @@ type FactStoreMigratedEvent = {
     Detail: string
 }
 
-/// The statements the migration adds to the store's own (Phase 941).
+/// The statements the migration adds to the store's own.
 /// Every one that reads or writes a scope's rows binds `@scope`.
 module MigrationSql =
 
@@ -312,12 +326,12 @@ ON CONFLICT (scope) DO UPDATE SET source = EXCLUDED.source, source_digest = EXCL
     let targetRows (table: string) =
         $"SELECT fact_id, lineage_hash, as_of_ticks, supersedes, is_head, payload FROM {table} WHERE scope = @scope"
 
-    /// Phase 1089 — re-key one row: its id, its supersession link and its
+    /// Re-key one row: its id, its supersession link and its
     /// payload, which carries both.
     let rekeyRow (table: string) =
         $"UPDATE {table} SET fact_id = @to, supersedes = @supersedes, payload = @payload WHERE scope = @scope AND fact_id = @from"
 
-    /// Phase 1089 — drop a row whose migrated fact is already stored.
+    /// Drop a row whose migrated fact is already stored.
     let deleteRow (table: string) =
         $"DELETE FROM {table} WHERE scope = @scope AND fact_id = @from"
 
@@ -341,8 +355,9 @@ type internal TargetRow = {
 }
 
 /// Migrating a `BlobFactStore` into a `PostgresFactStore`, and verifying
-/// the copy (Phase 941). A compose-time / operator entry point: the
-/// `toolup` CLI is dependency-free by rule and cannot carry Npgsql.
+/// the copy. An operator entry point: `toolup facts migrate` runs it through
+/// the composition root's `facts-migrate` task (`FactsMigrateTask`), so the
+/// dependency-free CLI never carries Npgsql.
 module FactStoreMigration =
 
     /// The audit event type — one per scope per run, under the reserved
@@ -755,6 +770,7 @@ module FactStoreMigration =
             | VerificationFailed -> "verification-failed"
             | SourceRefused -> "source-refused"
             | CopyFailed _ -> "copy-failed"
+            | WouldMigrate -> "would-migrate"
 
         let payload: FactStoreMigratedEvent = {
             Source = options.SourceName
@@ -770,13 +786,22 @@ module FactStoreMigration =
             Detail = detail
         }
 
-        events.Write {
-            Id = Guid.NewGuid()
-            OccurredAt = DateTime.UtcNow
-            ScopeId = report.Scope
-            SourceModule = FactEvents.SourceModule
-            EventType = MigratedType
-            Payload = JsonSerializer.Serialize(payload, jsonOptions)
+        // The record's id rides back on the report, so an operator can find
+        // the record a run wrote.
+        async {
+            let id = Guid.NewGuid()
+
+            do!
+                events.Write {
+                    Id = id
+                    OccurredAt = DateTime.UtcNow
+                    ScopeId = report.Scope
+                    SourceModule = FactEvents.SourceModule
+                    EventType = MigratedType
+                    Payload = JsonSerializer.Serialize(payload, jsonOptions)
+                }
+
+            return { report with AuditId = Some id }
         }
 
     let private summarise (differences: MigrationDifference list) =
@@ -801,10 +826,12 @@ module FactStoreMigration =
         Lineages = facts |> List.map FactRow.lineageHash |> List.distinct |> List.length
         Inserted = 0
         ResumedFrom = 0
+        Skipped = 0
         Differences = []
+        AuditId = None
     }
 
-    /// Phase 964 — the refusal a scope of `factBlobs` fact blobs meets
+    /// The refusal a scope of `factBlobs` fact blobs meets
     /// under `options`, if any.
     let scopeBound (options: FactStoreMigrationOptions) (factBlobs: int) : MigrationDifference option =
         if factBlobs > options.MaxScopeFacts then
@@ -829,6 +856,30 @@ module FactStoreMigration =
 
         unreadable @ validateSource export.Facts
 
+    // The read every non-writing pass makes first (`verify`, `preview`): the
+    // scale bound, then the export and its refusals. `Error` is the scope's
+    // finished `SourceRefused` report; `Ok` carries the export and the
+    // scope's base report.
+    let private checkSource (source: BlobFactStore) (options: FactStoreMigrationOptions) (scope: string) = async {
+        let! factBlobs = source.CountScope scope
+
+        match scopeBound options factBlobs with
+        | Some refused -> return Error(oversized scope factBlobs refused)
+        | None ->
+            let! export = source.ExportScope scope
+            let report = baseReport scope export.Facts
+
+            match refusals options export with
+            | _ :: _ as refused ->
+                return
+                    Error {
+                        report with
+                            Outcome = SourceRefused
+                            Differences = refused
+                    }
+            | [] -> return Ok(export, report)
+    }
+
     let private migrateScope
         (source: BlobFactStore)
         (target: PostgresFactStore)
@@ -844,8 +895,7 @@ module FactStoreMigration =
                 let report = oversized scope factBlobs refused
                 let detail = summarise [ refused ]
                 do! saveProgress target options scope "" factBlobs 0 "source-refused" detail
-                do! audit events target options report detail
-                return report
+                return! audit events target options report detail
             | None ->
 
                 let! export = source.ExportScope scope
@@ -871,8 +921,7 @@ module FactStoreMigration =
 
                     let detail = summarise refused
                     do! saveProgress target options scope digest facts.Length 0 "source-refused" detail
-                    do! audit events target options refusedReport detail
-                    return refusedReport
+                    return! audit events target options refusedReport detail
                 | _, [] ->
                     let resumeFrom =
                         match progress with
@@ -893,6 +942,7 @@ module FactStoreMigration =
 
                     let copied = ref resumeFrom
                     let inserted = ref 0
+                    let skipped = ref 0
                     let failure = ref None
 
                     for page in pages do
@@ -905,6 +955,7 @@ module FactStoreMigration =
                             | Choice1Of2 n ->
                                 copied.Value <- copied.Value + page.Length
                                 inserted.Value <- inserted.Value + n
+                                skipped.Value <- skipped.Value + (page.Length - n)
                             | Choice2Of2 ex ->
                                 let message =
                                     match ex with
@@ -918,6 +969,7 @@ module FactStoreMigration =
                         report with
                             Inserted = inserted.Value
                             ResumedFrom = resumeFrom
+                            Skipped = skipped.Value
                     }
 
                     match failure.Value with
@@ -933,8 +985,7 @@ module FactStoreMigration =
                         let detail =
                             sprintf "page failed after %d of %d facts: %s" copied.Value facts.Length message
 
-                        do! audit events target options failed detail
-                        return failed
+                        return! audit events target options failed detail
                     | None ->
                         let! differences, targetFacts = differential source target options scope facts
 
@@ -956,8 +1007,7 @@ module FactStoreMigration =
                                 "verification-failed", summarise differences
 
                         do! saveProgress target options scope digest facts.Length copied.Value state detail
-                        do! audit events target options verified detail
-                        return verified
+                        return! audit events target options verified detail
         }
 
     /// Migrate each scope from `source` into `target`, then verify it:
@@ -1006,42 +1056,88 @@ module FactStoreMigration =
             let results = ResizeArray<ScopeMigrationReport>()
 
             for scope in scopes do
-                let! factBlobs = source.CountScope scope
+                match! checkSource source options scope with
+                | Error refused -> results.Add refused
+                | Ok(export, report) ->
+                    let! differences, targetFacts = differential source target options scope export.Facts
 
-                match scopeBound options factBlobs with
-                | Some refused -> results.Add(oversized scope factBlobs refused)
-                | None ->
-
-                    let! export = source.ExportScope scope
-                    let report = baseReport scope export.Facts
-
-                    match refusals options export with
-                    | _ :: _ as refused ->
-                        results.Add {
-                            report with
-                                Outcome = SourceRefused
-                                Differences = refused
-                        }
-                    | [] ->
-                        let! differences, targetFacts = differential source target options scope export.Facts
-
-                        results.Add {
-                            report with
-                                Outcome =
-                                    if List.isEmpty differences then
-                                        Verified
-                                    else
-                                        VerificationFailed
-                                TargetFacts = targetFacts
-                                Differences = differences
-                        }
+                    results.Add {
+                        report with
+                            Outcome =
+                                if List.isEmpty differences then
+                                    Verified
+                                else
+                                    VerificationFailed
+                            TargetFacts = targetFacts
+                            Differences = differences
+                    }
 
             return { Scopes = List.ofSeq results }
         }
 
-    /// A process exit code for an operator host: `0` when every scope
-    /// verified, `1` otherwise.
-    /// Phase 1089 — move one scope's persisted fact ids onto the canonical
+    // The progress row, or `None` when there is none — including when no
+    // migration has ever run, so the progress table does not exist yet: a
+    // dry run must not create it.
+    let private tryReadProgress (target: PostgresFactStore) (scope: string) = async {
+        let undefinedTable (ex: exn) =
+            match ex with
+            | ProviderException(p: PostgresException) -> p.SqlState = PostgresErrorCodes.UndefinedTable
+            | _ -> false
+
+        try
+            return! readProgress target scope
+        with ex when undefinedTable ex ->
+            return None
+    }
+
+    /// A dry run of `migrate`: read and check each scope of
+    /// `source` exactly as `migrate` does before it writes (the scale bound,
+    /// unreadable blobs, the fact-base laws) and read the target's progress
+    /// row, writing nothing to either store and no audit record. A
+    /// migratable scope reports `WouldMigrate` (with `ResumedFrom` set when an
+    /// interrupted run already committed pages over the same source facts), a
+    /// scope an earlier run verified over the same source facts reports
+    /// `AlreadyVerified`, and a scope `migrate` would refuse reports
+    /// `SourceRefused` with each reason. Raises `ArgumentException` for
+    /// invalid options.
+    let preview
+        (source: BlobFactStore)
+        (target: PostgresFactStore)
+        (options: FactStoreMigrationOptions)
+        (scopes: string list)
+        : Async<FactStoreMigrationReport> =
+        async {
+            failOnInvalid options
+            let results = ResizeArray<ScopeMigrationReport>()
+
+            for scope in scopes do
+                match! checkSource source options scope with
+                | Error refused -> results.Add refused
+                | Ok(export, report) ->
+                    let digest = digestOf export.Facts
+                    let! progress = tryReadProgress target scope
+
+                    let previewed =
+                        match progress with
+                        | Some(recorded, copied, "verified") when recorded = digest -> {
+                            report with
+                                Outcome = AlreadyVerified
+                                TargetFacts = export.Facts.Length
+                                ResumedFrom = copied
+                          }
+                        | Some(recorded, copied, _) when recorded = digest -> {
+                            report with
+                                Outcome = WouldMigrate
+                                ResumedFrom = min copied export.Facts.Length
+                          }
+                        | _ -> { report with Outcome = WouldMigrate }
+
+                    results.Add previewed
+
+            return { Scopes = List.ofSeq results }
+        }
+
+    /// Move one scope's persisted fact ids onto the canonical
     /// frame, once: the Postgres half of `BlobFactStore.MigrateIds`, over
     /// the same plan (`FactIdMigration.plan`). Each fact whose stored id is
     /// not `Fact.computeFor` of its own fields has its row re-keyed —
@@ -1131,6 +1227,8 @@ module FactStoreMigration =
                     return Ok report
         }
 
+    /// A process exit code for an operator host: `0` when every scope
+    /// verified (or, on a dry run, would migrate), `1` otherwise.
     let exitCode (report: FactStoreMigrationReport) : int = if report.Passed then 0 else 1
 
     /// The report as text: one line per scope, then one line per
@@ -1146,10 +1244,16 @@ module FactStoreMigration =
                 | VerificationFailed -> "VERIFICATION FAILED"
                 | SourceRefused -> "SOURCE REFUSED"
                 | CopyFailed e -> "COPY FAILED: " + e
+                | WouldMigrate -> "would migrate (dry run, nothing written)"
+
+            let audit =
+                match s.AuditId with
+                | Some id -> sprintf ", audit record %O" id
+                | None -> ""
 
             sb.AppendLine(
                 sprintf
-                    "%s: %s — %d source facts, %d target rows, %d heads, %d lineages, %d inserted, resumed from %d, %d differences"
+                    "%s: %s — %d source facts, %d target rows, %d heads, %d lineages, %d inserted, %d skipped as already present, resumed from %d, %d differences%s"
                     s.Scope
                     outcome
                     s.SourceFacts
@@ -1157,8 +1261,10 @@ module FactStoreMigration =
                     s.Heads
                     s.Lineages
                     s.Inserted
+                    s.Skipped
                     s.ResumedFrom
                     s.Differences.Length
+                    audit
             )
             |> ignore
 
@@ -1166,3 +1272,282 @@ module FactStoreMigration =
                 sb.AppendLine("  " + MigrationDifference.describe d) |> ignore
 
         sb.ToString()
+
+// ─── The migration as an operator task ─────────────────────────────
+//
+// `toolup facts migrate` runs the deployment's own composition root in its
+// `--operator-task facts-migrate` startup mode, and this is the task it
+// starts. Running inside the composition is the point: the blob backend is
+// whichever storage companion the deployment composed, the Postgres
+// connection string is the one the deployment resolves for its
+// `withPostgresFactStore` (from its environment or secret store, never from
+// a flag), and the event store that takes the audit record and the metric
+// registry the verification reads are the deployment's own. The CLI that
+// starts it stays dependency-free.
+
+/// What `facts-migrate` does to each scope it is given.
+[<RequireQualifiedAccess>]
+type FactsMigrateMode =
+    /// Copy and verify (`FactStoreMigration.migrate`).
+    | Migrate
+    /// Read and check the source, write nothing (`FactStoreMigration.preview`).
+    | DryRun
+    /// Compare an existing copy with its source, write nothing
+    /// (`FactStoreMigration.verify`).
+    | Verify
+    /// Move persisted fact ids onto the canonical frame, in the
+    /// blob store and in the Postgres table when one is composed
+    /// (`BlobFactStore.MigrateIds`, `FactStoreMigration.migrateIds`). With
+    /// `dryRun`, plan and write nothing.
+    | Ids of dryRun: bool
+
+/// Which scopes `facts-migrate` runs over.
+[<RequireQualifiedAccess>]
+type FactsMigrateScopes =
+    /// The scopes named with `--scope`, in the order given.
+    | Named of string list
+    /// Every scope the composition enumerates (`--all-scopes`): the composed
+    /// `IScopeEnumerator`, else the team store, else the two well-known
+    /// containers — the enumeration the blob store's scale guard counts.
+    | All
+
+/// A parsed `facts-migrate` invocation.
+type FactsMigrateRequest = {
+    Mode: FactsMigrateMode
+    Scopes: FactsMigrateScopes
+    Options: FactStoreMigrationOptions
+}
+
+/// The `facts-migrate` operator task.
+module FactsMigrateTask =
+
+    /// The name `--operator-task` and `toolup facts migrate` use.
+    [<Literal>]
+    let Name = "facts-migrate"
+
+    /// The usage text a malformed invocation is answered with.
+    let usage =
+        String.concat "\n" [
+            "facts-migrate (--scope <id>... | --all-scopes) [--dry-run | --verify | --ids]"
+            "              [--max-scope-facts <n>] [--allow-unreadable-source]"
+            "  --scope <id>               A scope to run over; repeatable."
+            "  --all-scopes               Every scope the composition enumerates."
+            "  --dry-run                  Read and check the source; write nothing."
+            "  --verify                   Compare the existing copy with its source; write nothing."
+            "  --ids                      Move persisted fact ids onto the canonical frame (with"
+            "                             --dry-run: plan only)."
+            "  --max-scope-facts <n>      Raise the per-scope bound for this run."
+            "  --allow-unreadable-source  Migrate scopes holding unreadable blobs (an operator's call)."
+        ]
+
+    /// Parse the task's own arguments.
+    let parse (args: string list) : Result<FactsMigrateRequest, string> =
+        let rec go (scopes: string list) (all: bool) (dry: bool) (verify: bool) (ids: bool) options args =
+            match args with
+            | [] ->
+                match List.rev scopes, all with
+                | [], false -> Error "name a scope (--scope <id>) or pass --all-scopes"
+                | _ :: _, true -> Error "--scope and --all-scopes are exclusive"
+                | named, _ ->
+                    let mode =
+                        match dry, verify, ids with
+                        | _, true, true -> Error "--verify and --ids are exclusive"
+                        | true, true, _ ->
+                            Error "--dry-run and --verify are exclusive (--verify writes nothing already)"
+                        | _, _, true -> Ok(FactsMigrateMode.Ids dry)
+                        | true, _, _ -> Ok FactsMigrateMode.DryRun
+                        | _, true, _ -> Ok FactsMigrateMode.Verify
+                        | _ -> Ok FactsMigrateMode.Migrate
+
+                    mode
+                    |> Result.bind (fun mode ->
+                        match FactStoreMigrationOptions.validate options with
+                        | [] ->
+                            Ok {
+                                Mode = mode
+                                Scopes =
+                                    (if all then
+                                         FactsMigrateScopes.All
+                                     else
+                                         FactsMigrateScopes.Named named)
+                                Options = options
+                            }
+                        | problems -> Error(String.concat " " problems))
+            | "--scope" :: id :: rest when not (id.StartsWith "--") -> go (id :: scopes) all dry verify ids options rest
+            | "--scope" :: _ -> Error "--scope needs a scope id"
+            | "--all-scopes" :: rest -> go scopes true dry verify ids options rest
+            | "--dry-run" :: rest -> go scopes all true verify ids options rest
+            | "--verify" :: rest -> go scopes all dry true ids options rest
+            | "--ids" :: rest -> go scopes all dry verify true options rest
+            | "--allow-unreadable-source" :: rest ->
+                go
+                    scopes
+                    all
+                    dry
+                    verify
+                    ids
+                    {
+                        options with
+                            AllowUnreadableSource = true
+                    }
+                    rest
+            | "--max-scope-facts" :: n :: rest ->
+                match Int32.TryParse n with
+                | true, value -> go scopes all dry verify ids { options with MaxScopeFacts = value } rest
+                | _ -> Error(sprintf "--max-scope-facts needs a whole number (got '%s')" n)
+            | [ "--max-scope-facts" ] -> Error "--max-scope-facts needs a whole number"
+            | unknown :: _ -> Error(sprintf "unknown argument '%s'" unknown)
+
+        go [] false false false false FactStoreMigrationOptions.defaults args
+
+    let private header (request: FactsMigrateRequest) (scopes: string list) =
+        let doing =
+            match request.Mode with
+            | FactsMigrateMode.Migrate -> "migrating"
+            | FactsMigrateMode.DryRun -> "dry run — reading and checking, writing nothing —"
+            | FactsMigrateMode.Verify -> "verifying, writing nothing —"
+            | FactsMigrateMode.Ids true -> "planning the fact-id migration, writing nothing —"
+            | FactsMigrateMode.Ids false -> "moving fact ids onto the canonical frame —"
+
+        sprintf "facts-migrate: %s %d scope(s)\n" doing scopes.Length
+
+    let private idsLeg (store: string) (results: Result<FactIdMigrationReport, string> list) =
+        let lines =
+            results
+            |> List.map (function
+                | Ok r -> sprintf "  %s %s" store (FactIdMigration.render r)
+                | Error reason -> sprintf "  %s REFUSED: %s" store reason)
+
+        lines, results |> List.exists Result.isError
+
+    /// Run `request` over `scopes`: the report text and the process exit
+    /// code — `0` when every scope verified (or would migrate, or moved its
+    /// ids), `1` otherwise, `2` when the composition cannot run this mode.
+    /// `target` is the composed Postgres store, `None` when the composition
+    /// serves facts from elsewhere; only `--ids` runs without one.
+    let run
+        (source: BlobFactStore)
+        (target: PostgresFactStore option)
+        (events: IEventStore)
+        (request: FactsMigrateRequest)
+        (scopes: string list)
+        : Async<string * int> =
+        async {
+            let head = header request scopes
+
+            match request.Mode, target with
+            | FactsMigrateMode.Ids dryRun, _ ->
+                let blob = ResizeArray()
+                let table = ResizeArray()
+
+                for scope in scopes do
+                    let! moved = source.MigrateIds(scope, dryRun)
+                    blob.Add moved
+
+                    match target with
+                    | Some t ->
+                        let! rekeyed = FactStoreMigration.migrateIds t scope dryRun
+                        table.Add rekeyed
+                    | None -> ()
+
+                let blobLines, blobRefused = idsLeg "blob" (List.ofSeq blob)
+                let tableLines, tableRefused = idsLeg "postgres" (List.ofSeq table)
+
+                let note =
+                    match target with
+                    | Some _ -> []
+                    | None -> [ "  (no Postgres fact store is composed: the blob store only)" ]
+
+                let text = head + String.concat "\n" (blobLines @ tableLines @ note) + "\n"
+                return text, (if blobRefused || tableRefused then 1 else 0)
+            | _, None ->
+                return
+                    head
+                    + "the composed fact store is not a PostgresFactStore: compose PostgresFactStoreCompose.withPostgresFactStore (and this task's FactStoreMigrationCompose.withFactsMigrateTask) in the composition root you run, then run again\n",
+                    2
+            | mode, Some t ->
+                let! report =
+                    match mode with
+                    | FactsMigrateMode.DryRun -> FactStoreMigration.preview source t request.Options scopes
+                    | FactsMigrateMode.Verify -> FactStoreMigration.verify source t request.Options scopes
+                    | _ -> FactStoreMigration.migrate source t events request.Options scopes
+
+                return head + FactStoreMigration.render report, FactStoreMigration.exitCode report
+        }
+
+    let private tryService<'T> (sp: IServiceProvider) : 'T option =
+        match sp.GetService(typeof<'T>) with
+        | :? 'T as s -> Some s
+        | _ -> None
+
+    /// The scopes the composition enumerates: the composed
+    /// `IScopeEnumerator`, else the team store, else the two well-known
+    /// containers (the order the blob store's scale guard reads them in).
+    let listScopes (sp: IServiceProvider) : Async<string list> =
+        match tryService<IScopeEnumerator> sp, tryService<TeamManagement.ITeamStore> sp with
+        | Some enumerator, _ -> enumerator.ListScopes()
+        | None, Some teams -> (ScopeEnumeration.fromTeamStore teams).ListScopes()
+        | None, None -> async { return ScopeEnumeration.wellKnownContainers }
+
+    /// Build the source and target from a composed provider and run. The
+    /// source is the composed store when it is a `BlobFactStore`, else one
+    /// built over the composed `IBlobStorage` with the defaults the fact
+    /// tier composes it with; the target is the composed `IFactStore` when
+    /// it is a `PostgresFactStore`.
+    let runComposed (sp: IServiceProvider) (args: string list) : Async<string * int> = async {
+        match parse args with
+        | Error problem -> return sprintf "facts-migrate: %s\n%s\n" problem usage, 2
+        | Ok request ->
+            let events = sp.GetRequiredService<IEventStore>()
+            let composed = tryService<IFactStore> sp
+
+            let source =
+                match composed with
+                | Some(:? BlobFactStore as blob) -> blob
+                | _ ->
+                    BlobFactStore(
+                        sp.GetRequiredService<BlobStorage.IBlobStorage>(),
+                        events,
+                        tryService<Grounding.IMetricRegistry> sp,
+                        (fun () -> DateTime.UtcNow)
+                    )
+
+            let target =
+                match composed with
+                | Some(:? PostgresFactStore as table) -> Some table
+                | _ -> None
+
+            let! scopes =
+                match request.Scopes with
+                | FactsMigrateScopes.Named named -> async { return named }
+                | FactsMigrateScopes.All -> listScopes sp
+
+            return! run source target events request scopes
+    }
+
+    /// The registered task.
+    let task: StartupModes.OperatorTask =
+        StartupModes.OperatorTask(
+            Name,
+            "migrate a BlobFactStore into the composed PostgresFactStore, verify it, or move fact ids onto the canonical frame",
+            runComposed
+        )
+
+/// Composition for the `facts-migrate` operator task.
+module FactStoreMigrationCompose =
+
+    /// Contribute the `facts-migrate` operator task, so
+    /// `toolup facts migrate` (the `--operator-task facts-migrate` startup
+    /// mode) can run against this composition. Registers nothing a normal
+    /// boot reads: the task runs only when the process is started in that
+    /// mode, and never binds a listener. Compose it beside
+    /// `PostgresFactStoreCompose.withPostgresFactStore`; without a composed
+    /// Postgres store only `--ids` runs.
+    let withFactsMigrateTask (app: ServerApp) : ServerApp =
+        let register (services: IServiceCollection) =
+            services.AddSingleton<StartupModes.OperatorTask>(FactsMigrateTask.task)
+
+        app
+        |> ServerApp.addContribution (
+            Contribution.service (ComponentId.forCompanionSlot "ToolUp.FactStores.Postgres") register
+        )

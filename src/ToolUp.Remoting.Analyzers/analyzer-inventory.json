@@ -122,7 +122,7 @@
         "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/GiraffeAdapter.fs": 2,
         "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/SharedReader.fs": 1,
         "src/ToolUp.Platform.Server/Server/RemotingHelpers.fs": 7,
-        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 1,
+        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 2,
         "src/ToolUp.Platform.Server/Server/SbomProjection.fs": 1,
         "src/ToolUp.Platform.Server/Server/ScheduledDeprovisionJobHandler.fs": 1,
         "src/ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs": 3,
@@ -224,6 +224,13 @@
         "src/ToolUp.RAG.Server/Server/RagVectorStoreLifecycle.fs": 1,
         "src/ToolUp.Reporting.Server/ReportingAITools.fs": 3,
         "src/ToolUp.Scheduling.Server/Server/SchedulingCompose.fs": 7
+      }
+    },
+    {
+      "rule": "TUA001",
+      "reason": "The fact-store migration operator task (`toolup facts migrate`, run through the --operator-task startup mode): OperatorTask.Run is handed the composed provider by contract and resolves the source and target stores from it once, with no host serving and no request in flight.",
+      "sites": {
+        "src/FactStores/Postgres/FactStoreMigration.fs": 3
       }
     },
     {
@@ -431,9 +438,9 @@
     },
     {
       "rule": "TUA003",
-      "reason": "The CLI startup modes (--verify-deployment, --describe): build a provider, run the deployment report or render the description, and exit; no host is serving.",
+      "reason": "The CLI startup modes (--verify-deployment, --describe, --operator-task): build a provider, run the deployment report, render the description or run the contributed operator task, and exit; no host is serving.",
       "sites": {
-        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 2
+        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 3
       }
     },
     {

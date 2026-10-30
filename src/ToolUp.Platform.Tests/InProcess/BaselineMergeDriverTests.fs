@@ -738,11 +738,360 @@ let private gitMergeTest =
         }
     ]
 
+// ─── The registration outlives the checkout that wrote it ────────────
+//
+// `.git/config` is shared by every worktree of a clone, so a driver command
+// that names one worktree's copy of the script dies with that worktree, and
+// from then on every merge of its files, in every worktree, is reported as a
+// conflict. `Setup` therefore resolves the script through the clone's common
+// directory, whose parent is the primary checkout. These cases pin that rule
+// end to end, and the draft-note mode beside it.
+
+/// A scratch directory under the system temp dir, deleted afterwards (git
+/// leaves read-only objects on Windows).
+let private withScratch (prefix: string) (body: string -> unit) =
+    let dir = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString "N")
+
+    Directory.CreateDirectory dir |> ignore
+
+    try
+        body dir
+    finally
+        try
+            for f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories) do
+                File.SetAttributes(f, FileAttributes.Normal)
+
+            Directory.Delete(dir, true)
+        with _ ->
+            ()
+
+/// `git` in `cwd`, asserted to succeed.
+let private gitIn (cwd: string) (args: string list) =
+    let exit, out, err = run "git" args cwd
+    Expect.equal exit 0 (sprintf "git %s failed: %s%s" (String.concat " " args) out err)
+    out.Trim()
+
+let private newRepo (dir: string) =
+    gitIn dir [ "init"; "-b"; "main" ] |> ignore
+    gitIn dir [ "config"; "user.email"; "phase1149@example.invalid" ] |> ignore
+    gitIn dir [ "config"; "user.name"; "Phase 1149" ] |> ignore
+    // The fixtures compare bytes; a machine-wide autocrlf would rewrite them.
+    gitIn dir [ "config"; "core.autocrlf"; "false" ] |> ignore
+
+/// The command `Setup` writes, for one driver mode and one script path.
+let private driverCommand (shell: string) (script: string) (mode: string) =
+    sprintf
+        "\"%s\" -NoProfile -File \"%s\" -Mode %s %%O %%A %%B %%P"
+        (shell.Replace('\\', '/'))
+        (script.Replace('\\', '/'))
+        mode
+
+/// `<path>` normalised for comparison: full, forward-slashed, no trailing
+/// separator, case-folded on Windows.
+let private samePath (a: string) (b: string) =
+    let norm (p: string) =
+        let full = Path.GetFullPath(p).Replace('\\', '/').TrimEnd('/')
+
+        if OperatingSystem.IsWindows() then
+            full.ToLowerInvariant()
+        else
+            full
+
+    norm a = norm b
+
+/// The two paths a registered command names: its shell and its `-File`
+/// script. The shape is the one `Setup` writes.
+let private registeredPaths (command: string) =
+    let shell = Text.RegularExpressions.Regex.Match(command, "^\"([^\"]+)\"")
+
+    let script = Text.RegularExpressions.Regex.Match(command, "-File\\s+\"([^\"]+)\"")
+
+    (if shell.Success then Some shell.Groups[1].Value else None),
+    (if script.Success then Some script.Groups[1].Value else None)
+
+let private worktreeRegistrationTest =
+    testList "a registration survives the removal of the worktree that wrote it" [
+        test "the script resolved through the common dir outlives the worktree; the old per-checkout path does not" {
+            let shell = pwsh.Value |> Option.defaultWith (fun () -> failwith "pwsh not on PATH")
+
+            withScratch "toolup-1149-wt-" (fun scratch ->
+                let primary = Path.Combine(scratch, "primary")
+                let worktree = Path.Combine(scratch, "setup-worktree")
+                Directory.CreateDirectory(Path.Combine(primary, "dev-scripts")) |> ignore
+                Directory.CreateDirectory(Path.Combine(primary, "api-baselines")) |> ignore
+                newRepo primary
+
+                File.Copy(driverPath, Path.Combine(primary, "dev-scripts", "merge-baselines.ps1"))
+
+                File.WriteAllText(
+                    Path.Combine(primary, ".gitattributes"),
+                    "api-baselines/*.approved.txt merge=toolup-members\n"
+                )
+
+                let baselineFile = Path.Combine(primary, "api-baselines", "Fixture.approved.txt")
+                File.WriteAllText(baselineFile, membersFixture baseBody)
+                gitIn primary [ "add"; "-A" ] |> ignore
+                gitIn primary [ "commit"; "-m"; "base" ] |> ignore
+
+                // Setup run from a WORKTREE, the 2026-10-29 shape.
+                gitIn primary [ "worktree"; "add"; worktree; "-b"; "setup-branch" ] |> ignore
+
+                let commonDir =
+                    gitIn worktree [ "rev-parse"; "--path-format=absolute"; "--git-common-dir" ]
+
+                let resolved =
+                    Path.Combine(
+                        Path.GetDirectoryName(commonDir.TrimEnd('/', '\\')),
+                        "dev-scripts",
+                        "merge-baselines.ps1"
+                    )
+
+                let perCheckout = Path.Combine(worktree, "dev-scripts", "merge-baselines.ps1")
+
+                Expect.isTrue
+                    (samePath (Path.GetDirectoryName(Path.GetDirectoryName resolved)) primary)
+                    (sprintf "the common dir's parent should be the primary checkout %s, got %s" primary resolved)
+
+                gitIn primary [ "worktree"; "remove"; "--force"; worktree ] |> ignore
+
+                Expect.isFalse
+                    (File.Exists perCheckout)
+                    "falsifier: the per-checkout path a worktree-run Setup used to write is gone with the worktree"
+
+                Expect.isTrue (File.Exists resolved) "the common-dir path still exists"
+
+                gitIn primary [ "checkout"; "-b"; "theirs" ] |> ignore
+
+                File.WriteAllText(
+                    baselineFile,
+                    membersFixture [
+                        "Demo.T (class)"
+                        "Demo.T.Aardvark() : System.Int32"
+                        "Demo.T.Alpha() : System.Int32"
+                        "Demo.U (class)"
+                        "Demo.U.Zed : System.String { get }"
+                    ]
+                )
+
+                gitIn primary [ "commit"; "-am"; "theirs adds Aardvark" ] |> ignore
+                gitIn primary [ "checkout"; "main" ] |> ignore
+
+                File.WriteAllText(
+                    baselineFile,
+                    membersFixture [
+                        "Demo.T (class)"
+                        "Demo.T.Alpha() : System.Int32"
+                        "Demo.T.Beta() : System.Int32"
+                        "Demo.U (class)"
+                        "Demo.U.Zed : System.String { get }"
+                    ]
+                )
+
+                gitIn primary [ "commit"; "-am"; "ours adds Beta" ] |> ignore
+
+                // The dead registration first: git reports the merge as a
+                // conflict for a file the driver exists to merge.
+                gitIn primary [
+                    "config"
+                    "merge.toolup-members.driver"
+                    driverCommand shell perCheckout "members"
+                ]
+                |> ignore
+
+                let deadExit, _, _ = run "git" [ "merge"; "--no-edit"; "theirs" ] primary
+                Expect.notEqual deadExit 0 "falsifier: a registration to the removed worktree's script cannot merge"
+                gitIn primary [ "merge"; "--abort" ] |> ignore
+
+                gitIn primary [
+                    "config"
+                    "merge.toolup-members.driver"
+                    driverCommand shell resolved "members"
+                ]
+                |> ignore
+
+                let exit, out, err = run "git" [ "merge"; "--no-edit"; "theirs" ] primary
+
+                Expect.equal
+                    exit
+                    0
+                    (sprintf "the common-dir registration should still merge after the worktree is gone:\n%s%s" out err))
+        }
+    ]
+
+// ─── The append-only draft note (draftnote mode) ─────────────────────
+
+/// The marker that opens the list. Spelled here, in the driver and in the
+/// root `Directory.Build.props`; the first case pins the three together.
+let private draftNoteMarker =
+    "==== draft notes: append ONE line per change below this marker, never edit one ===="
+
+let private rootProps =
+    lazy (File.ReadAllText(Path.Combine(root, "Directory.Build.props")).Replace("\r\n", "\n"))
+
+/// `props` with `note` appended at the end of the draft-note list: the line
+/// before the comment's closing `-->` that follows the marker.
+let private appendNote (props: string) (note: string) =
+    let lines = props.Split('\n') |> List.ofArray
+
+    let marker =
+        lines
+        |> List.tryFindIndex (fun l -> l.Trim() = draftNoteMarker)
+        |> Option.defaultWith (fun () -> failtest "the props carry no draft-note marker")
+
+    let closing =
+        lines
+        |> List.indexed
+        |> List.tryFind (fun (i, l) -> i > marker && l.Trim() = "-->")
+        |> Option.map fst
+        |> Option.defaultWith (fun () -> failtest "the draft-note list has no closing `-->`")
+
+    List.insertAt closing ("      " + note) lines |> String.concat "\n"
+
+/// Two branches of a repo holding the root props: `ours` on main, `theirs`
+/// merged into it. Returns git's exit code and the merged props.
+let private mergeProps (registerDriver: bool) (ours: string -> string) (theirs: string -> string) =
+    let shell = pwsh.Value |> Option.defaultWith (fun () -> failwith "pwsh not on PATH")
+    let result = ref (-1, "")
+
+    withScratch "toolup-1149-note-" (fun dir ->
+        newRepo dir
+        let props = Path.Combine(dir, "Directory.Build.props")
+        File.WriteAllText(Path.Combine(dir, ".gitattributes"), "/Directory.Build.props merge=toolup-draftnote\n")
+
+        if registerDriver then
+            gitIn dir [
+                "config"
+                "merge.toolup-draftnote.driver"
+                driverCommand shell driverPath "draftnote"
+            ]
+            |> ignore
+
+        File.WriteAllText(props, rootProps.Value)
+        gitIn dir [ "add"; "-A" ] |> ignore
+        gitIn dir [ "commit"; "-m"; "base" ] |> ignore
+        gitIn dir [ "checkout"; "-b"; "theirs" ] |> ignore
+        File.WriteAllText(props, theirs rootProps.Value)
+        gitIn dir [ "commit"; "-am"; "theirs" ] |> ignore
+        gitIn dir [ "checkout"; "main" ] |> ignore
+        File.WriteAllText(props, ours rootProps.Value)
+        gitIn dir [ "commit"; "-am"; "ours" ] |> ignore
+        let exit, _, _ = run "git" [ "merge"; "--no-edit"; "theirs" ] dir
+        result.Value <- (exit, File.ReadAllText(props).Replace("\r\n", "\n")))
+
+    result.Value
+
+let private oursNote = "- 9001 (0.38.0): additive — the ours branch appends a line."
+
+let private theirsNote =
+    "- 9002 (0.38.0): breaking — the theirs branch appends a line."
+
+let private draftNoteTests =
+    testList "the append-only draft note merges without a hand resolution" [
+        test "the root props and the driver carry the same marker" {
+            Expect.isTrue
+                (rootProps.Value.Split('\n')
+                 |> Array.exists (fun l -> l.Trim() = draftNoteMarker))
+                "Directory.Build.props carries the draft-note marker line"
+
+            Expect.stringContains
+                (File.ReadAllText driverPath)
+                draftNoteMarker
+                "the draftnote mode matches the same marker"
+        }
+
+        test "two branches that each append a line merge clean, ours then theirs" {
+            let exit, merged =
+                mergeProps true (fun p -> appendNote p oursNote) (fun p -> appendNote p theirsNote)
+
+            Expect.equal exit 0 "two appended notes merge with no conflict"
+            Expect.isFalse (merged.Contains "<<<<<<< ") "no conflict markers"
+
+            Expect.stringContains
+                merged
+                ("      " + oursNote + "\n      " + theirsNote + "\n    -->")
+                "both lines survive, ours first, at the end of the list"
+        }
+
+        test "falsifier: without the driver the same two appends conflict" {
+            let exit, _ =
+                mergeProps false (fun p -> appendNote p oursNote) (fun p -> appendNote p theirsNote)
+
+            Expect.notEqual exit 0 "git's line merge cannot order two insertions at one point"
+        }
+
+        test "two different <Version> lines stay a conflict, even with the notes resolved" {
+            let bump (v: string) (p: string) =
+                p.Replace("<Version>0.38.0</Version>", sprintf "<Version>%s</Version>" v)
+
+            Expect.stringContains rootProps.Value "<Version>0.38.0</Version>" "precondition: the fixture's version line"
+
+            let exit, merged =
+                mergeProps true (fun p -> appendNote (bump "0.39.0" p) oursNote) (fun p ->
+                    appendNote (bump "0.38.1" p) theirsNote)
+
+            Expect.notEqual exit 0 "a version disagreement is not the driver's to decide"
+
+            Expect.stringContains
+                merged
+                "<<<<<<< ours\n    <Version>0.39.0</Version>"
+                "the version line keeps its markers"
+
+            Expect.stringContains merged ("      " + oursNote + "\n      " + theirsNote) "the notes are still joined"
+        }
+
+        test "an edit to a note already in the list stays a conflict" {
+            let existing =
+                rootProps.Value.Split('\n')
+                |> Array.find (fun l -> l.TrimStart().StartsWith "- 1149 (")
+
+            let edit (suffix: string) (p: string) = p.Replace(existing, existing + suffix)
+
+            let exit, _ = mergeProps true (edit " Ours.") (edit " Theirs.")
+            Expect.notEqual exit 0 "the list is append-only; an edit on both sides is a real disagreement"
+        }
+    ]
+
+// ─── This clone's own registration ───────────────────────────────────
+
+let private cloneRegistrationTest =
+    testList "this clone's registration" [
+        test "every registered merge driver names a shell and a script that exist" {
+            let exit, out, _ =
+                run "git" [ "config"; "--get-regexp"; "^merge\\.toolup-.*\\.driver$" ] root
+
+            // Exit 1 is "nothing registered": a clone that never ran Setup
+            // (CI) gets git's text merge, which is legitimate.
+            if exit = 0 then
+                for line in out.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries) do
+                    let key, command =
+                        match line.IndexOf ' ' with
+                        | -1 -> line, ""
+                        | i -> line.Substring(0, i), line.Substring(i + 1)
+
+                    match registeredPaths command with
+                    | Some shellPath, Some script ->
+                        Expect.isTrue
+                            (File.Exists shellPath)
+                            (sprintf "%s names the shell %s, which does not exist; re-run Setup" key shellPath)
+
+                        Expect.isTrue
+                            (File.Exists script)
+                            (sprintf
+                                "%s names the script %s, which does not exist (a removed worktree?); re-run `dotnet run --project Build.fsproj -- Setup`"
+                                key
+                                script)
+                    | _ -> failtestf "%s is not in the shape Setup writes: %s" key command
+            else
+                Expect.equal exit 1 "git config --get-regexp exits 1 when nothing matches, and nothing else"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 805 — generated-baseline merge drivers" [
         specTests
         approveWriteTests
+        cloneRegistrationTest
 
         // The driver is a `.ps1`. Where no `pwsh` exists there is nothing to
         // invoke — but the link-1 cases above are pure F# and still run, so
@@ -751,6 +1100,8 @@ let tests =
             driverTests
             retypeTests
             gitMergeTest
+            worktreeRegistrationTest
+            draftNoteTests
         else
             testList "the merge driver" [ ptest "pwsh is not on PATH — the merge-driver cases cannot run here" { () } ]
     ]

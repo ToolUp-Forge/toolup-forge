@@ -922,6 +922,107 @@ let demoTests =
         }
     ]
 
+// ── Subject descriptions ──────────────────────────────────────────
+
+let private geographyRegistry (descriptions: SubjectDescription list) : IMetricRegistry =
+    MetricRegistry.buildDescribed
+        [
+            {
+                Module = "TestModule"
+                Definition = metricDef "revenue" HigherIsBetter UntilSuperseded None
+            }
+        ]
+        [
+            {
+                Module = "TestModule"
+                Definition = subjectDef "geography" [ "site"; "market"; "country" ]
+            }
+            {
+                Module = "TestModule"
+                Definition = subjectDef "brand" [ "brand"; "sku" ]
+            }
+        ]
+        (descriptions
+         |> List.map (fun d -> {
+             Module = "TestModule"
+             Description = d
+         }))
+
+let private geographyDescription: SubjectDescription = {
+    SubjectId = "geography"
+    Description = "Where a sale is booked: each site sits in one market, each market in one country."
+    // Listed out of declaration order on purpose.
+    Levels = [ "country", "The sovereign state."; "site", "A single trading outlet." ]
+}
+
+let private hierarchy (el: JsonElement) (id: string) : JsonElement =
+    items el "subjectHierarchies" |> List.find (fun s -> str s "id" = id)
+
+let private hasProperty (el: JsonElement) (name: string) : bool = fst (el.TryGetProperty name)
+
+let descriptionTests =
+    testList "list_metric_coverage subject descriptions" [
+
+        testCase "a declared description and its level descriptions are reported, levels in declaration order"
+        <| fun () ->
+            let _, sp =
+                composedUnder EnabledFactStore (Some(geographyRegistry [ geographyDescription ]))
+
+            let geography = hierarchy (executeVia sp (newScope ()) noArgs) "geography"
+
+            Expect.equal (str geography "description") geographyDescription.Description "what the subject is"
+
+            Expect.equal
+                (items geography "levelDescriptions"
+                 |> List.map (fun l -> str l "level", str l "description"))
+                [ "site", "A single trading outlet."; "country", "The sovereign state." ]
+                "only described levels, root to leaf, whatever order they were declared in"
+
+            Expect.equal
+                (items geography "levels" |> List.map _.GetString())
+                [ "site"; "market"; "country" ]
+                "the level list itself is unchanged"
+
+        testCase "an undescribed hierarchy serialises exactly as it did without descriptions"
+        <| fun () ->
+            let withDescriptions =
+                composedUnder EnabledFactStore (Some(geographyRegistry [ geographyDescription ]))
+                |> snd
+
+            let without = composedUnder EnabledFactStore (Some(geographyRegistry [])) |> snd
+
+            let brandWith = hierarchy (executeVia withDescriptions (newScope ()) noArgs) "brand"
+            let brandWithout = hierarchy (executeVia without (newScope ()) noArgs) "brand"
+
+            Expect.equal
+                (brandWith.GetRawText())
+                (brandWithout.GetRawText())
+                "another hierarchy being described changes nothing about this one"
+
+            Expect.isFalse (hasProperty brandWith "description") "the field is absent, not null"
+            Expect.isFalse (hasProperty brandWith "levelDescriptions") "likewise"
+
+        testCase "a registry that predates the capability reports no descriptions and still answers"
+        <| fun () ->
+            let inner = twoMetricRegistry
+
+            let bare =
+                { new IMetricRegistry with
+                    member _.Metrics = inner.Metrics
+                    member _.Subjects = inner.Subjects
+                    member _.TryGetMetric id = inner.TryGetMetric id
+                    member _.TryGetSubject id = inner.TryGetSubject id
+                    member _.MetricsByModule m = inner.MetricsByModule m
+                    member _.MetricsByOperation o = inner.MetricsByOperation o
+                }
+
+            let _, sp = composedUnder EnabledFactStore (Some bare)
+            let el = executeVia sp (newScope ()) noArgs
+
+            Expect.equal (num el "metricCount") 2 "the report is the ordinary one"
+            Expect.isFalse (hasProperty (hierarchy el "brand") "description") "and carries no description"
+    ]
+
 let tests =
     testList "CoverageTool (Phase 705)" [
         registrationTests
@@ -929,5 +1030,6 @@ let tests =
         coverageTests
         disclosureTests
         filterTests
+        descriptionTests
         demoTests
     ]

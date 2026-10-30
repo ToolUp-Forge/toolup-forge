@@ -57,3 +57,12 @@
 # `doc-coverage` line must follow the `*.approved.txt` glob.
 api-baselines/*.approved.txt            merge=toolup-members
 api-baselines/doc-coverage.approved.txt merge=toolup-coverage
+
+# The draft note in `Directory.Build.props` is append-only: each change adds one
+# line at the end of the list under its marker. Two branches that each append a
+# line still conflict under git's line merge, because both insert at one point,
+# so the same Setup registration names a third mode of the same driver. It runs
+# an ordinary three-way merge and resolves only a conflict that is a pure
+# insertion on both sides inside that list; everything else in the file, the
+# `<Version>` line included, merges, or conflicts, exactly as it does without it.
+/Directory.Build.props                  merge=toolup-draftnote
