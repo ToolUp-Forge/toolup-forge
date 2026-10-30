@@ -396,6 +396,37 @@ let tests =
             | PermanentFailure _ -> ()
             | other -> failtestf "an unknown kind is terminal; expected PermanentFailure, got %A" other
         }
+
+        // A capability the provider declares survives a decorator: a wrapper
+        // forwarding the seam's members is still the same provider, and the
+        // evaluation it declared must still be found.
+        testCaseAsync "a decorated provider keeps the evaluation capability it declared"
+        <| async {
+            let decorated =
+                { new IModelFitProvider with
+                    member _.Kind = provider.Kind
+                    member _.ProviderVersion = provider.ProviderVersion
+                    member _.DeclareGates() = provider.DeclareGates()
+                    member _.Fit request = provider.Fit request
+                }
+
+            let schema: DatasetSchema = {
+                Columns = [
+                    {
+                        Name = "y"
+                        DType = DatasetDType.Float
+                        Nullable = false
+                        Role = DatasetColumnRole.Target
+                    }
+                ]
+            }
+
+            let rows: DatasetRow list = [ { Cells = [ DatasetValue.Float 1.0 ] } ]
+
+            match! decorated.Evaluate(schema, rows, schema, rows) with
+            | Ok _ -> ()
+            | Error e -> failtestf "the wrapped provider declared its metrics; got %A" e
+        }
     ]
 
 /// Phase 603 — SpecHash opacity contract. The composite key assumes

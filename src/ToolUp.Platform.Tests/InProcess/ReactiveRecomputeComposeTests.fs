@@ -891,6 +891,44 @@ let doubleRunTests =
         }
     ]
 
+let refusalTests =
+    testList "a missing composition dependency is a typed refusal" [
+
+        test "team output visibility composed without the fact store's gate names what is missing" {
+            let app =
+                {
+                    ServerApp.empty with
+                        Config = {
+                            ServerConfig.defaults with
+                                FactStore = EnabledFactStore
+                        }
+                }
+                |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible ]
+
+            let services = ServiceCollection()
+
+            let raised =
+                try
+                    match ServerApp.serviceConfig app with
+                    | Some cfg -> cfg services |> ignore
+                    | None -> ()
+
+                    None
+                with ex ->
+                    Some ex
+
+            match raised with
+            | None -> failtest "composing without the gate must refuse"
+            | Some ex ->
+                Expect.notEqual
+                    (ex.GetType())
+                    typeof<Exception>
+                    "a refusal is typed data a caller can match, not a raw failwith string"
+
+                Expect.stringContains ex.Message "IFactDisclosureGate" "and it names the missing dependency"
+        }
+    ]
+
 let tests =
     testList "Phase 623 reactive recomputation activation" [
         declarationTests
@@ -898,4 +936,5 @@ let tests =
         endToEndTests
         zeroCostTests
         doubleRunTests
+        refusalTests
     ]

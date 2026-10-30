@@ -1155,6 +1155,50 @@ let private failureMapTests =
                 "and the running observation still reached the progress sink on the poll path"
         }
 
+        testCaseAsync "a callback-capable backend behind the execution-profile gate is still handed its credential"
+        <| async {
+            let! datasets, version = seededDatasets "scope-fit"
+            let credentials = ConcurrentQueue<Guid>()
+
+            let scripted =
+                ScriptedDispatcher [ ExternalOutcome.Failed(ExternalComputeError.terminal "done") ]
+
+            let backend =
+                { new IExternalComputeDispatcher with
+                    member _.Backend = "scripted"
+
+                    member _.Submit(scopeId, spec) =
+                        (scripted :> IExternalComputeDispatcher).Submit(scopeId, spec)
+
+                    member _.Poll handle =
+                        (scripted :> IExternalComputeDispatcher).Poll handle
+
+                    member _.Cancel handle =
+                        (scripted :> IExternalComputeDispatcher).Cancel handle
+                  interface IExternalCallbackCapableBackend with
+                      member _.AcceptCallbackCredential(handle, _credential) = async {
+                          credentials.Enqueue handle.HandleId
+                      }
+                }
+
+            let provider =
+                ExternalModelFitProvider(
+                    ExecutionProfileGate.enforce backend,
+                    datasets,
+                    ExternalFitCompletionRegistry(),
+                    options,
+                    Some(InMemoryExternalHandleStore() :> IExternalHandleStore),
+                    None
+                )
+
+            let! _ = provider.FitExternally(requestFor "scope-fit" version.Version [])
+
+            Expect.equal
+                credentials.Count
+                1
+                "the gate is a decorator, not a backend: the callback capability the backend declared reaches it"
+        }
+
         testCaseAsync "a fit that outruns its budget is cancelled at the backend, not merely abandoned"
         <| async {
             let! datasets, version = seededDatasets "scope-fit"
