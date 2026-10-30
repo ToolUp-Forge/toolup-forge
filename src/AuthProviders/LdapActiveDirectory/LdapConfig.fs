@@ -4,6 +4,7 @@
 module ToolUp.AuthProviders.LdapConfig
 
 open System
+open ToolUp.Platform
 
 // ─── LDAP / Active Directory auth-provider config ────────────────────
 //
@@ -153,7 +154,7 @@ module LdapConfig =
     /// The reserved `_platform` secret scope the bind password lives
     /// under — mirrors the `ISecretStore` scope conventions.
     [<Literal>]
-    let SecretScope = "_platform"
+    let SecretScope = ScopeKey.PlatformContainer
 
     /// Default port for a channel binding.
     let defaultPortFor =
