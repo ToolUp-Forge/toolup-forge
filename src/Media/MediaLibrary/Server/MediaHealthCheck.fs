@@ -3,6 +3,7 @@
 
 module ToolUp.MediaLibrary.MediaHealthCheck
 
+open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.HealthChecks
 
@@ -20,7 +21,7 @@ type private Impl(storage: IBlobStorage) =
 
         member _.Check() = async {
             try
-                let! _ = storage.Exists("_platform", "media/_health/probe")
+                let! _ = storage.Exists(ScopeKey.PlatformContainer, "media/_health/probe")
                 return Healthy
             with ex ->
                 return Unhealthy ex.Message

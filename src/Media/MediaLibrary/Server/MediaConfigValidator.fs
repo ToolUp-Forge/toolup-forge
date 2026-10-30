@@ -107,7 +107,7 @@ let create (options: MediaLibraryOptions) : IConfigValidator = Impl(options) :> 
 /// failed delete leaves one small, self-describing blob rather than
 /// accumulating.
 [<Literal>]
-let private probeContainer = "_platform"
+let private probeContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private probeBlob = "media/_preflight/range-probe"

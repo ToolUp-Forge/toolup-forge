@@ -27,7 +27,7 @@ open ToolUp.Platform.Secrets
 // crypto + expiry logic is unit-testable without an `ISecretStore`.
 
 [<Literal>]
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private signingKeySecretName = "media_library_signing_key"
