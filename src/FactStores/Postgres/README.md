@@ -280,11 +280,33 @@ non-zero exit. A host with the memory for a larger scope raises
 `MaxScopeFacts` for that run. Paging the read would bound the copy alone and
 leave the verification unbounded, so the bound is the honest form.
 
-**Where to run it.** It is a compose-time / operator entry point, not a
-`toolup` CLI command: the CLI is a dependency-free host (pure BCL +
-`FSharp.Core`), and the migration needs Npgsql and the fact tier, which live
-in this package. Run it from a small console or script that references this
-package and can build the deployment's blob backend:
+**Where to run it: `toolup facts migrate`.** Compose the task beside the
+store, and the `toolup` CLI runs it through the composition root, with no
+listener bound:
+
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withStorage blob
+|> FactsCompose.withFactStore
+|> PostgresFactStoreCompose.withPostgresFactStore connectionString PostgresFactStoreOptions.defaults
+|> FactStoreMigrationCompose.withFactsMigrateTask
+```
+
+```powershell
+toolup facts migrate --dll ./publish/App.dll --all-scopes --dry-run   # check, write nothing
+toolup facts migrate --dll ./publish/App.dll --all-scopes             # migrate and verify
+toolup facts migrate --dll ./publish/App.dll --all-scopes --verify    # verify again before the switch
+```
+
+The CLI stays dependency-free: it starts the root in its
+`--operator-task facts-migrate` startup mode, and the task (`FactsMigrateTask`)
+builds the source over the composed `IBlobStorage`, takes the composed
+`PostgresFactStore` as the target, and audits into the composed event store,
+so no connection string or storage credential is ever a flag. `--ids` moves
+persisted fact ids onto the canonical frame through the same task.
+`FactsMigrateTask.run` is the same entry point for a host that builds its own
+stores. The library form, for a console or script that references this
+package directly:
 
 ```fsharp skip=fragment
 let events: IEventStore = (* the deployment's event store *)

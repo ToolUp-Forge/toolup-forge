@@ -30,6 +30,9 @@
     <Compile Include="..\..\templates\platformsdk-module-packaged\src\MyModule\SharedTypes.fs" Link="Fixtures\PackagedModule\SharedTypes.fs" />
     <Compile Include="..\..\templates\platformsdk-module-packaged\src\MyModule\Server.fs" Link="Fixtures\PackagedModule\Server.fs" />
     <Compile Include="DescribeCommandTests.fs" />
+    <!-- `facts migrate`: the verb, the startup-mode argv, the task grammar,
+         and the task over a composed provider against a live database. -->
+    <Compile Include="FactsMigrateTests.fs" />
     <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
          ToolUp.Platform.Tests so there is one implementation. -->
     <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -46,6 +49,9 @@
     <!-- Phase 782 — the sample module the module form of `describe` must report as
          declaring no ServerModule of its own. -->
     <ProjectReference Include="..\..\samples\HelloWorld\HelloWorld.Module\HelloWorld.Module.fsproj" />
+    <!-- The facts-migrate operator task `toolup facts migrate` starts. Test-only:
+         the CLI itself never references the fact stores. -->
+    <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />

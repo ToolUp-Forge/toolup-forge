@@ -58,7 +58,7 @@ ToolUp.BrandKit 65/210
 ToolUp.Calendar.CalDAV 22/25
 ToolUp.Calendar.Google 86/102
 ToolUp.Calendar.Microsoft 71/76
-ToolUp.Cli 154/316
+ToolUp.Cli 164/329
 ToolUp.Client.ModelViewer 28/65
 ToolUp.Cloud.Aws 0/0
 ToolUp.Cloud.Azure 0/0
@@ -90,7 +90,7 @@ ToolUp.EntityStores.Postgres 11/17
 ToolUp.Experiments.Core 9/41
 ToolUp.Experiments.Server 5/10
 ToolUp.ExternalCompute.Http 100/144
-ToolUp.FactStores.Postgres 111/178
+ToolUp.FactStores.Postgres 135/225
 ToolUp.Facts.Client 51/118
 ToolUp.Facts.Core 495/873
 ToolUp.Facts.Presentation 68/126
@@ -139,7 +139,7 @@ ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 316/576
 ToolUp.Platform.Client 2945/7262
 ToolUp.Platform.Core 7257/15355
-ToolUp.Platform.Server 7154/13001
+ToolUp.Platform.Server 7160/13013
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 72/184
