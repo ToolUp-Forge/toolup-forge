@@ -28,6 +28,13 @@ a `Metric` span whose reference:
 4. **states its value** — compared by number at the precision stated, so `1.25m` for 1,248,300
    passes and `1.3m` does not. A verbatim rendering always passes.
 
+The value a number must hold to be emitted is a **`GroundedRead`** whose `Verdict` is
+`FactDisclosable`: the disclosure gate's one answer per fact (`FactDisclosureGate.Read`), carrying
+what the verdict was decided from — the fact's own classification, the purpose, the taint walk of
+its derivation and the declassification budget. Condition 2 is that read's verdict, asked through
+`IFactDisclosureGate.Check`, which is its projection; no door re-derives it (see the fact store
+guide, "Four stages, one read, and an index the writes keep").
+
 A numeral anywhere in prose is a claim (any Unicode number character), and so is a number in words
 (`twelve`, `million`, `doubled`; the list is `GroundingPolicy.NumberWords`). A metric's label is
 prose, too — only its value may carry a figure. Every element is checked recursively: tables cell
