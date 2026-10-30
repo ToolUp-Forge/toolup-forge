@@ -367,6 +367,98 @@ ToolUp.Facts.MetricRef (class)
 ToolUp.Facts.MetricRef.Item : System.String { get }
 ToolUp.Facts.MetricRef.Tag : System.Int32 { get }
 ToolUp.Facts.MetricRef.Value : System.String { get }
+ToolUp.Facts.PipelineRefusal (class)
+ToolUp.Facts.PipelineRefusal.IsEvaluationFailed : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsMalformedArguments : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsMalformedPipeline : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsNamedSource : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsNoFacts : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsNothingDisclosable : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsOpenSchema : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsResultOverCap : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsSliceRefused : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsUnboundParameter : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsUnknownColumn : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsUnpinnedClock : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+EvaluationFailed (class)
+ToolUp.Facts.PipelineRefusal+EvaluationFailed.reason : System.String { get }
+ToolUp.Facts.PipelineRefusal+MalformedArguments (class)
+ToolUp.Facts.PipelineRefusal+MalformedArguments.reason : System.String { get }
+ToolUp.Facts.PipelineRefusal+MalformedPipeline (class)
+ToolUp.Facts.PipelineRefusal+MalformedPipeline.reason : System.String { get }
+ToolUp.Facts.PipelineRefusal+MalformedPipeline.step : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.PipelineRefusal+NamedSource (class)
+ToolUp.Facts.PipelineRefusal+NamedSource.step : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+NamedSource.verb : System.String { get }
+ToolUp.Facts.PipelineRefusal+NoFacts (class)
+ToolUp.Facts.PipelineRefusal+NoFacts.tableId : System.String { get }
+ToolUp.Facts.PipelineRefusal+NothingDisclosable (class)
+ToolUp.Facts.PipelineRefusal+NothingDisclosable.cells : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+NothingDisclosable.withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount] { get }
+ToolUp.Facts.PipelineRefusal+OpenSchema (class)
+ToolUp.Facts.PipelineRefusal+OpenSchema.reason : System.String { get }
+ToolUp.Facts.PipelineRefusal+OpenSchema.step : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+ResultOverCap (class)
+ToolUp.Facts.PipelineRefusal+ResultOverCap.cap : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+ResultOverCap.cells : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+SliceRefused (class)
+ToolUp.Facts.PipelineRefusal+SliceRefused.reason : System.String { get }
+ToolUp.Facts.PipelineRefusal+Tags (class)
+ToolUp.Facts.PipelineRefusal+Tags.EvaluationFailed : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.MalformedArguments : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.MalformedPipeline : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.NamedSource : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.NoFacts : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.NothingDisclosable : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.OpenSchema : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.ResultOverCap : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.SliceRefused : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.UnboundParameter : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.UnknownColumn : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.UnpinnedClock : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+UnboundParameter (class)
+ToolUp.Facts.PipelineRefusal+UnboundParameter.names : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineRefusal+UnboundParameter.step : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+UnknownColumn (class)
+ToolUp.Facts.PipelineRefusal+UnknownColumn.available : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineRefusal+UnknownColumn.column : System.String { get }
+ToolUp.Facts.PipelineRefusal+UnknownColumn.step : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+UnpinnedClock (class)
+ToolUp.Facts.PipelineRefusal+UnpinnedClock.step : System.Int32 { get }
+ToolUp.Facts.PipelineRefusalModule (class)
+ToolUp.Facts.PipelineRefusalModule.describe(ToolUp.Facts.PipelineRefusal) : System.String
+ToolUp.Facts.PipelineRefusalModule.withheldPhrase(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount]) : System.String
+ToolUp.Facts.PipelineToolRequest (class)
+ToolUp.Facts.PipelineToolRequest..ctor(System.String, System.DateTime, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
+ToolUp.Facts.PipelineToolRequest.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineToolRequest.PathPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineToolRequest.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.PipelineToolRequest.PeriodTo : System.DateTime { get }
+ToolUp.Facts.PipelineToolRequest.Pipeline : System.String { get }
+ToolUp.Facts.PipelineToolRequest.TableId : System.String { get }
+ToolUp.Facts.PipelineToolResult (class)
+ToolUp.Facts.PipelineToolResult..ctor(ToolUp.Facts.PipelineToolRequest, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldColumn], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32)
+ToolUp.Facts.PipelineToolResult.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineToolResult.FactIdCount : System.Int32 { get }
+ToolUp.Facts.PipelineToolResult.FactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineToolResult.PipelineHash : System.String { get }
+ToolUp.Facts.PipelineToolResult.ReadAt : System.DateTime { get }
+ToolUp.Facts.PipelineToolResult.Request : ToolUp.Facts.PipelineToolRequest { get }
+ToolUp.Facts.PipelineToolResult.Rows : System.Int32 { get }
+ToolUp.Facts.PipelineToolResult.RunStamp : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.PipelineToolResult.SliceCells : System.Int32 { get }
+ToolUp.Facts.PipelineToolResult.Table : System.String { get }
+ToolUp.Facts.PipelineToolResult.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldColumn] { get }
+ToolUp.Facts.PipelineWithheldColumn (class)
+ToolUp.Facts.PipelineWithheldColumn..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount])
+ToolUp.Facts.PipelineWithheldColumn.Column : System.String { get }
+ToolUp.Facts.PipelineWithheldColumn.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineWithheldColumn.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount] { get }
+ToolUp.Facts.PipelineWithheldCount (class)
+ToolUp.Facts.PipelineWithheldCount..ctor(System.String, System.Int32)
+ToolUp.Facts.PipelineWithheldCount.Count : System.Int32 { get }
+ToolUp.Facts.PipelineWithheldCount.PolicyRef : System.String { get }
 ToolUp.Facts.PlanRefusalReason (class)
 ToolUp.Facts.PlanRefusalReason.IsInvalidSubjectPath : System.Boolean { get }
 ToolUp.Facts.PlanRefusalReason.IsPopulationNotOrderable : System.Boolean { get }

@@ -138,6 +138,27 @@ module FactBrowseHandler =
         Clock: unit -> DateTime
     }
 
+    /// `inner` asked at `surface` whichever door a read names — the browse
+    /// reads ask at `FactBrowse`, and a reader whose answer is a tool result
+    /// (the render tools, `evaluate_pipeline`) is judged at `FactToolResult`.
+    /// The row form is offered exactly when `inner` offers it, so a read keeps
+    /// its one-download path and a decorator is never bypassed.
+    let atSurface (surface: FactEgressSurface) (inner: IHeldFactDisclosureGate) : IHeldFactDisclosureGate =
+        match inner with
+        | :? IHeldFactRowDisclosureGate as rows ->
+            { new IHeldFactDisclosureGate with
+                member _.CheckHeld(scope, principal, _, factIds, held) =
+                    inner.CheckHeld(scope, principal, surface, factIds, held)
+              interface IHeldFactRowDisclosureGate with
+                  member _.CheckHeldRows(scope, principal, _, factIds, held) =
+                      rows.CheckHeldRows(scope, principal, surface, factIds, held)
+            }
+        | _ ->
+            { new IHeldFactDisclosureGate with
+                member _.CheckHeld(scope, principal, _, factIds, held) =
+                    inner.CheckHeld(scope, principal, surface, factIds, held)
+            }
+
     // ── Projections ──────────────────────────────────────────────
 
     let private freshnessLabel (freshness: FactTableFreshness) : string * int64 option =
