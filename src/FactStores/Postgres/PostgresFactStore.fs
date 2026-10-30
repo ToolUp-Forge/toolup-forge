@@ -198,6 +198,10 @@ type internal RowFilter = {
     Path: string list option
     Level: int option
     PathPrefix: string list option
+    /// Admit a row whose path starts with any of these; `Some []` admits none.
+    PathAnyOf: string list list option
+    /// Drop a row whose path starts with any of these.
+    PathExclude: string list list option
     Metric: string option
     Period: TemporalExtent option
     MethodIdentity: string option
@@ -210,6 +214,8 @@ module internal RowFilter =
         Path = None
         Level = None
         PathPrefix = None
+        PathAnyOf = None
+        PathExclude = None
         Metric = None
         Period = None
         MethodIdentity = None
@@ -266,6 +272,23 @@ module Sql =
     let memberColumns (alias: string) =
         $"{alias}.fact_id, {alias}.hierarchy, {alias}.path, {alias}.magnitude::text, {alias}.period_from_ticks, {alias}.period_to_ticks, {alias}.as_of_ticks, {alias}.method_identity"
 
+    /// A disjunction of path-prefix tests over `alias`, one per branch, each
+    /// binding two parameters named for the branch's position. The empty
+    /// branch starts every path; the empty list is the empty disjunction,
+    /// which is false. Each test is the slice comparison the prefix clause
+    /// uses, over the path the population index carries.
+    let internal pathAnyOf (alias: string) (name: string) (branches: string list list) : string =
+        match branches with
+        | [] -> "FALSE"
+        | _ ->
+            branches
+            |> List.mapi (fun i branch ->
+                match branch with
+                | [] -> "TRUE"
+                | _ -> $"{alias}.path[1:@{name}{i}_len] = @{name}{i}")
+            |> String.concat " OR "
+            |> sprintf "(%s)"
+
     /// The filter clauses of `filter` over `alias`, each prefixed ` AND `.
     let internal filterClauses (alias: string) (filter: RowFilter) : string =
         let sb = StringBuilder()
@@ -279,6 +302,13 @@ module Sql =
 
         match filter.PathPrefix with
         | Some(_ :: _) -> add $"{alias}.path[1:@prefix_len] = @prefix"
+        | _ -> ()
+
+        filter.PathAnyOf
+        |> Option.iter (fun branches -> add (pathAnyOf alias "any_path" branches))
+
+        match filter.PathExclude with
+        | Some(_ :: _ as branches) -> add ("NOT " + pathAnyOf alias "excluded_path" branches)
         | _ -> ()
 
         filter.Metric |> Option.iter (fun _ -> add $"{alias}.metric = @metric")
@@ -610,6 +640,16 @@ type PostgresFactStore
             addTextArray cmd "prefix" prefix
         | _ -> ()
 
+        let bindBranches (name: string) (branches: string list list) =
+            branches
+            |> List.iteri (fun i branch ->
+                if not (List.isEmpty branch) then
+                    addInt cmd $"{name}{i}_len" (List.length branch)
+                    addTextArray cmd $"{name}{i}" branch)
+
+        filter.PathAnyOf |> Option.iter (bindBranches "any_path")
+        filter.PathExclude |> Option.iter (bindBranches "excluded_path")
+
         filter.Metric |> Option.iter (addText cmd "metric")
 
         filter.Period
@@ -806,6 +846,8 @@ type PostgresFactStore
             Hierarchy = Some query.Hierarchy
             Level = query.Level
             PathPrefix = query.PathPrefix
+            PathAnyOf = query.PathAnyOf
+            PathExclude = query.PathExclude
             Metric = Some query.Metric.Value
             Period = query.PeriodOverlaps
             MethodIdentity =

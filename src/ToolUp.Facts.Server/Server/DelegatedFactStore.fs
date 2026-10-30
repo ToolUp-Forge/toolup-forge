@@ -1078,88 +1078,113 @@ type DelegatedFactStore
                     Stats = PopulationStats.empty
                 }
 
-                let! current = tables.Current(ops.ScopeId, d.TableId)
-
-                let! target =
-                    match q.AsOf, d.History with
-                    | None, _ -> async.Return(current |> Result.map (fun c -> c, true))
-                    | Some t, SnapshotFidelity.Approximate ->
-                        async.Return(
+                // The path clauses as the ONE prefix the table's declared
+                // query reads. A filter that query cannot express is refused
+                // by name, before any table read: dropping it would rank a
+                // wider population than the one asked about.
+                let path =
+                    match q.PathAnyOf, q.PathExclude with
+                    | None, None -> Ok(Some q.PathPrefix)
+                    | _ ->
+                        match PopulationQuery.asOnePrefix q with
+                        | UnderPrefix [] -> Ok(Some None)
+                        | UnderPrefix prefix -> Ok(Some(Some prefix))
+                        | NoSubject -> Ok None
+                        | NotOnePrefix filter ->
                             Error(
-                                DelegateRefusal.describe (
-                                    DelegateRefusal.ApproximateHistory(d.Metric.Value, d.TableId, t)
+                                sprintf
+                                    "the population read for '%s' on delegated table '%s' is refused: the table's declared query reads one path prefix, and the %s filter asked for cannot be stated as one. Ask for one branch at a time, or drop the filter."
+                                    q.Metric.Value
+                                    d.TableId
+                                    filter
+                            )
+
+                match path with
+                | Error refused -> return Error refused
+                | Ok None -> return Ok empty
+                | Ok(Some pathPrefix) ->
+                    let! current = tables.Current(ops.ScopeId, d.TableId)
+
+                    let! target =
+                        match q.AsOf, d.History with
+                        | None, _ -> async.Return(current |> Result.map (fun c -> c, true))
+                        | Some t, SnapshotFidelity.Approximate ->
+                            async.Return(
+                                Error(
+                                    DelegateRefusal.describe (
+                                        DelegateRefusal.ApproximateHistory(d.Metric.Value, d.TableId, t)
+                                    )
                                 )
                             )
-                        )
-                    | Some t, SnapshotFidelity.Exact -> async {
-                        match! tables.At(ops.ScopeId, d.TableId, t) with
-                        | Error e -> return Error e
-                        | Ok found ->
-                            let isCurrent =
-                                match current, found with
-                                | Ok(Some c), Some f -> c.Run.RunId = f.Run.RunId
-                                | _ -> false
-
-                            return Ok(found, isCurrent)
-                      }
-
-                match target with
-                | Error e -> return Error e
-                | Ok(None, _) -> return Ok empty
-                | Ok(Some commit, isCurrent) ->
-                    let at = q.AsOf |> Option.defaultValue (now ())
-
-                    // Phase 964 — a read for one imported lineage ranks the
-                    // rows that lineage holds: those under the root member of
-                    // the run's origin for that certificate, so the prefix is
-                    // narrowed to it. A run with no origin for it holds no row
-                    // in that lineage.
-                    let! prefix =
-                        match imported with
-                        | None -> async.Return(Ok(Some q.PathPrefix))
-                        | Some certificateRef -> async {
-                            match! tables.Provenance(ops.ScopeId, commit.Run) with
+                        | Some t, SnapshotFidelity.Exact -> async {
+                            match! tables.At(ops.ScopeId, d.TableId, t) with
                             | Error e -> return Error e
-                            | Ok provenance ->
-                                return
-                                    DelegateLineages.importedPrefix provenance certificateRef q.PathPrefix
-                                    |> Result.mapError (fun roots ->
-                                        sprintf
-                                            "the population read for Imported %s on delegated table '%s' is refused: its run imports that certificate under %d root members (%s), and a ranked read over one imported lineage is answered from one root"
-                                            certificateRef
-                                            d.TableId
-                                            (List.length roots)
-                                            (String.concat ", " roots))
+                            | Ok found ->
+                                let isCurrent =
+                                    match current, found with
+                                    | Ok(Some c), Some f -> c.Run.RunId = f.Run.RunId
+                                    | _ -> false
+
+                                return Ok(found, isCurrent)
                           }
 
-                    match prefix with
-                    | Error refused -> return Error refused
-                    | Ok None -> return Ok empty
-                    | Ok(Some pathPrefix) ->
-                        let pushed =
-                            DelegateTableRead.Ranked(pathPrefix, q.PeriodOverlaps, q.Threshold, direction, k)
+                    match target with
+                    | Error e -> return Error e
+                    | Ok(None, _) -> return Ok empty
+                    | Ok(Some commit, isCurrent) ->
+                        let at = q.AsOf |> Option.defaultValue (now ())
 
-                        match! read ops d commit.Run pushed at with
-                        | Error e -> return Error(DelegateRefusal.describe (refusal d e))
-                        | Ok(DelegateTableAnswer.Ranked(rows, stats, truncated)) ->
-                            let! quoted =
-                                if isCurrent then
-                                    mint ops d commit.Run rows
-                                else
-                                    quoteHistorical ops d commit.Run rows
+                        // Phase 964 — a read for one imported lineage ranks the
+                        // rows that lineage holds: those under the root member of
+                        // the run's origin for that certificate, so the prefix is
+                        // narrowed to it. A run with no origin for it holds no row
+                        // in that lineage.
+                        let! prefix =
+                            match imported with
+                            | None -> async.Return(Ok(Some pathPrefix))
+                            | Some certificateRef -> async {
+                                match! tables.Provenance(ops.ScopeId, commit.Run) with
+                                | Error e -> return Error e
+                                | Ok provenance ->
+                                    return
+                                        DelegateLineages.importedPrefix provenance certificateRef pathPrefix
+                                        |> Result.mapError (fun roots ->
+                                            sprintf
+                                                "the population read for Imported %s on delegated table '%s' is refused: its run imports that certificate under %d root members (%s), and a ranked read over one imported lineage is answered from one root"
+                                                certificateRef
+                                                d.TableId
+                                                (List.length roots)
+                                                (String.concat ", " roots))
+                              }
 
-                            match quoted with
-                            | Error e -> return Error e
-                            | Ok facts ->
-                                return
-                                    Ok {
-                                        Ranked = facts
-                                        Direction = direction
-                                        EffectiveTopK = k
-                                        Truncated = truncated
-                                        Stats = stats
-                                    }
-                        | Ok _ -> return Ok empty
+                        match prefix with
+                        | Error refused -> return Error refused
+                        | Ok None -> return Ok empty
+                        | Ok(Some pathPrefix) ->
+                            let pushed =
+                                DelegateTableRead.Ranked(pathPrefix, q.PeriodOverlaps, q.Threshold, direction, k)
+
+                            match! read ops d commit.Run pushed at with
+                            | Error e -> return Error(DelegateRefusal.describe (refusal d e))
+                            | Ok(DelegateTableAnswer.Ranked(rows, stats, truncated)) ->
+                                let! quoted =
+                                    if isCurrent then
+                                        mint ops d commit.Run rows
+                                    else
+                                        quoteHistorical ops d commit.Run rows
+
+                                match quoted with
+                                | Error e -> return Error e
+                                | Ok facts ->
+                                    return
+                                        Ok {
+                                            Ranked = facts
+                                            Direction = direction
+                                            EffectiveTopK = k
+                                            Truncated = truncated
+                                            Stats = stats
+                                        }
+                            | Ok _ -> return Ok empty
     }
 
     let get (ops: InnerScope) (factId: string) : Async<Fact option> = async {

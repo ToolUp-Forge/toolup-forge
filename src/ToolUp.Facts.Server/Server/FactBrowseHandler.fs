@@ -666,6 +666,8 @@ module FactBrowseHandler =
                             None
                         else
                             Some request.SubjectPrefix
+                    PathAnyOf = None
+                    PathExclude = None
                     PeriodOverlaps = None
                     Threshold = None
                     Ordering =

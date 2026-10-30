@@ -355,6 +355,8 @@ type AnswerPlanner
                                 None
                             else
                                 Some triple.PathPrefix
+                        PathAnyOf = None
+                        PathExclude = None
                         PeriodOverlaps =
                             match triple.PeriodFrom, triple.PeriodTo with
                             | None, None -> None
