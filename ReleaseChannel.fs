@@ -603,6 +603,50 @@ let findingsReport (heading: string) (findings: string list) =
         Environment.NewLine
         (findings |> List.map (sprintf "  - %s") |> String.concat Environment.NewLine)
 
+// ─── Phase 1096 — the one release-tag reader ─────────────────────────
+
+/// The release tags, read one way for every reader: the bump check, the
+/// scorecard, the changelog and the release channel. Four readers used to
+/// spell it twice — three asked for the tags merged into HEAD and the channel
+/// check asked for every tag — so a candidate tagged off-branch was visible
+/// to the channel and invisible to the changelog.
+///
+/// The rule is `git tag --list v* --merged HEAD`, filtered to the names that
+/// parse as versions (`SemVerBump.releaseTags`). Merged-only is right for
+/// the channel too, for the reason recorded on 2026-09-22: a promotion is a
+/// NEW tag on a descendant commit, so a release on another branch is not
+/// one this tree has made.
+module Tags =
+
+    /// `git tag --list v* --merged HEAD` in `root`, version-shaped names only,
+    /// in git's order. Raises when git cannot list them: a reader that saw no
+    /// tags would answer every release question as if nothing were released.
+    let released (root: string) : string list =
+        let psi =
+            Diagnostics.ProcessStartInfo("git", RedirectStandardOutput = true, RedirectStandardError = true)
+
+        psi.WorkingDirectory <- root
+
+        for a in [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ] do
+            psi.ArgumentList.Add a
+
+        use p = Diagnostics.Process.Start psi
+        let output = p.StandardOutput.ReadToEnd()
+        let err = p.StandardError.ReadToEnd()
+        p.WaitForExit()
+
+        if p.ExitCode <> 0 then
+            failwithf
+                "the release tags could not be listed (`git tag --list v* --merged HEAD` exited %d): %s"
+                p.ExitCode
+                (err.Trim())
+
+        output.Replace("\r\n", "\n").Split('\n')
+        |> Array.map _.Trim()
+        |> Array.filter (String.IsNullOrWhiteSpace >> not)
+        |> releaseTags
+        |> List.map fst
+
 // ─── The workflow, linted ────────────────────────────────────────────
 
 let publishJobId = "publish"
@@ -679,5 +723,26 @@ let publishWorkflowFindings (workflowText: string) : string list = [
                 "the `%s` job runs `%s` after `NuGet/login`. A release the channel refuses must fail before a credential is minted."
                 publishJobId
                 channelTargetName
+        | Some _, _ -> ()
+
+        // Phase 1096 — the CHANGELOG is rendered here, on the tag (Phase
+        // 1149), so the lint holds the step. A `Changelog --check` does not
+        // count: at a tag the tracked file gains the tag's section only once
+        // the tag exists, so the check fails there by construction.
+        let render =
+            block
+            |> List.tryFindIndex (fun (l: string) ->
+                Regex.IsMatch(l, @"--\s+Changelog\s*$")
+                || Regex.IsMatch(l, @"--\s+Changelog\s+[^-]"))
+
+        match render, indexOf "-- Publish" with
+        | None, _ ->
+            sprintf
+                "the `%s` job does not render the CHANGELOG (`dotnet run --project Build.fsproj -- Changelog`, not `--check`): the tracked file holds released sections only, and the release run is the one place the tag's section is rendered."
+                publishJobId
+        | Some r, Some pack when r > pack ->
+            sprintf
+                "the `%s` job renders the CHANGELOG after `Publish`. It runs before the pack, so a renderer that cannot read the release fails before anything is packed or a credential is minted."
+                publishJobId
         | Some _, _ -> ()
 ]

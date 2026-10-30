@@ -26,7 +26,6 @@ ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+Key.pending(ToolUp.RAG
 ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+Key.processing(ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+RedisIngestionQueueOptions) : System.String
 ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+RedisIngestionQueueException (class)
 ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+RedisIngestionQueueException..ctor()
-ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+RedisIngestionQueueException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+RedisIngestionQueueException..ctor(System.String)
 ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+RedisIngestionQueueException.message : System.String { get }
 ToolUp.RAG.IngestionQueues.Redis.RedisIngestionQueueStore+RedisIngestionQueueOptions (class)

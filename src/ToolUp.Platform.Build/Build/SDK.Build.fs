@@ -175,6 +175,172 @@ module TemplateGate =
             version
             (String.concat ", " unproduced)
 
+// ─── Phase 1096 — every test project runs or is excluded by name ────
+
+/// Reconciles the repository's test projects against the packs `VerifyAll`
+/// runs.
+///
+/// A test project nothing runs cannot go red: it builds on every push, so it
+/// reads as covered, and its cases are dead weight that look like a gate.
+/// Four such packs (about 84 cases) sat in forge's solution for months for
+/// exactly that reason — nothing compared the pack list with the solution.
+/// This is the `SampleGate.reconcile` shape lifted one level: every
+/// `*.Tests.fsproj` is a declared `TestPacks` row or a named exclusion with
+/// its reason, and a declaration naming nothing is stale.
+///
+/// The candidate set is the solution's projects UNION the `*.Tests.fsproj`
+/// files on disk under `src/`, `tests/` and `tools/`, because a project left
+/// out of the solution is the more dormant of the two: it is not even built.
+/// Names projects by path, never by what they test (GP 9).
+module Gate =
+
+    /// A test project the gate deliberately does not run as a pack, with the
+    /// reason — the runner that does run it, or the input it needs that a
+    /// default gate cannot supply. Recorded as data where a reader of a green
+    /// run will look, not as a comment beside the pack list.
+    type Exclusion = {
+        /// Repo-relative path to the excluded `.fsproj`.
+        Project: string
+        Reason: string
+    }
+
+    /// Declare an exclusion: the repo-relative project and why it is not a pack.
+    let exclude project reason = { Project = project; Reason = reason }
+
+    /// The directories under the repository root scanned for `*.Tests.fsproj`.
+    let scannedDirs = [ "src"; "tests"; "tools" ]
+
+    let private normalise (path: string) =
+        path.Replace('\\', '/').TrimStart('.', '/')
+
+    let private key (path: string) = (normalise path).ToLowerInvariant()
+
+    let private isTestProject (path: string) =
+        (normalise path).EndsWith(".Tests.fsproj", StringComparison.OrdinalIgnoreCase)
+
+    /// Every `.fsproj` a `.sln` or `.slnx` text names, forward-slashed.
+    let solutionProjects (solutionText: string) : string list =
+        let sln =
+            Text.RegularExpressions.Regex.Matches(
+                solutionText,
+                @"Project\(""[^""]*""\)\s*=\s*""[^""]*""\s*,\s*""([^""]+\.fsproj)"""
+            )
+
+        let slnx =
+            Text.RegularExpressions.Regex.Matches(solutionText, @"<Project\s+Path=""([^""]+\.fsproj)""")
+
+        Seq.append sln slnx
+        |> Seq.map (fun m -> normalise m.Groups[1].Value)
+        |> Seq.distinctBy key
+        |> List.ofSeq
+
+    /// The reconciliation's findings, empty when clean. Pure: `solution` is the
+    /// solution's projects (`None` when the repository has no single solution,
+    /// which skips the in-solution check), `onDisk` the `*.Tests.fsproj` files
+    /// found under `scannedDirs`.
+    let findings
+        (solution: string list option)
+        (onDisk: string list)
+        (packs: ToolUp.Platform.TestPack list)
+        (excluded: Exclusion list)
+        : string list =
+        let packKeys = packs |> List.map (fun p -> key p.Project) |> Set.ofList
+        let excludedKeys = excluded |> List.map (fun e -> key e.Project) |> Set.ofList
+        let diskKeys = onDisk |> List.map key |> Set.ofList
+        let solutionKeys = solution |> Option.defaultValue [] |> List.map key |> Set.ofList
+
+        let candidates =
+            (solution |> Option.defaultValue []) @ onDisk
+            |> List.filter isTestProject
+            |> List.distinctBy key
+            |> List.sortBy key
+
+        let unrun = [
+            for project in candidates do
+                let k = key project
+
+                if not (packKeys.Contains k || excludedKeys.Contains k) then
+                    let where =
+                        if solutionKeys.Contains k then
+                            "in the solution"
+                        else
+                            "on disk, not in the solution"
+
+                    yield
+                        sprintf
+                            "`%s` (%s) is neither a TestPacks row nor a named exclusion: VerifyAll never runs it, so its cases cannot go red. Add a `TestPack.create` row, or a `Gate.exclude` naming the runner that does run it or the input it needs."
+                            (normalise project)
+                            where
+        ]
+
+        let notBuilt = [
+            match solution with
+            | None -> ()
+            | Some _ ->
+                for pack in packs do
+                    if not (solutionKeys.Contains(key pack.Project)) then
+                        yield
+                            sprintf
+                                "TestPacks row `%s` names `%s`, which is not in the solution: VerifyAll builds the solution once and launches each pack's built dll, so this pack is never built."
+                                pack.Name
+                                (normalise pack.Project)
+        ]
+
+        let stale = [
+            for e in excluded do
+                let k = key e.Project
+
+                if not (diskKeys.Contains k || solutionKeys.Contains k) then
+                    yield
+                        sprintf
+                            "exclusion `%s` names a project that does not exist: a stale exclusion hides nothing and reads as coverage. Remove it."
+                            (normalise e.Project)
+
+                if packKeys.Contains k then
+                    yield
+                        sprintf
+                            "`%s` is both a TestPacks row and a named exclusion: it can be one or the other."
+                            (normalise e.Project)
+        ]
+
+        unrun @ notBuilt @ stale
+
+    /// Reconcile the repository at `root`: its single `.sln` / `.slnx` (when
+    /// there is exactly one) and the `*.Tests.fsproj` under `scannedDirs`,
+    /// against the declared packs and exclusions. `Error` carries every
+    /// finding, never only the first.
+    let reconcile
+        (root: string)
+        (packs: ToolUp.Platform.TestPack list)
+        (excluded: Exclusion list)
+        : Result<unit, string list> =
+        let solution =
+            match
+                List.ofSeq (Seq.append (IO.Directory.GetFiles(root, "*.slnx")) (IO.Directory.GetFiles(root, "*.sln")))
+            with
+            | [ single ] -> Some(solutionProjects (IO.File.ReadAllText single))
+            | _ -> None
+
+        let skip (path: string) =
+            let p = path.Replace('\\', '/')
+            p.Contains "/bin/" || p.Contains "/obj/" || p.Contains "/node_modules/"
+
+        let onDisk = [
+            for dir in scannedDirs do
+                let full = IO.Path.Combine(root, dir)
+
+                if IO.Directory.Exists full then
+                    for file in IO.Directory.EnumerateFiles(full, "*.Tests.fsproj", IO.SearchOption.AllDirectories) do
+                        let relative = IO.Path.GetRelativePath(root, file)
+
+                        if not (skip ("/" + relative)) then
+                            yield normalise relative
+        ]
+
+        match findings solution onDisk packs excluded with
+        | [] -> Ok()
+        | found -> Error found
+
 // ─── Aggregating gate runner ─────────────────────────────────────────
 
 /// Runs a set of INDEPENDENT gate legs and reports on all of them.
@@ -694,14 +860,15 @@ type BuildConfig = {
     /// that haven't opted in, preserving zero behaviour change for
     /// downstream `Build.fs` files that construct `BuildConfig` via
     /// `{ BuildConfig.defaults with … }`. Forge's own root `Build.fs`
-    /// populates this list with the 4 in-tree Expecto runners.
+    /// populates this list with its in-tree Expecto runners, reconciled
+    /// against the solution by `Gate.reconcile`.
     TestPacks: TestPack list
 }
 
 module BuildConfig =
     let defaults = {
-        ServerProject = "src/ToolUpApp-Server/ToolupApp-Server.fsproj"
-        ClientProject = "src/ToolUpApp-Client/ToolupApp-Client.fsproj"
+        ServerProject = sprintf "src/%s/ToolupApp-Server.fsproj" PackScope.appServerDir
+        ClientProject = sprintf "src/%s/ToolupApp-Client.fsproj" PackScope.appClientDir
         Output = BuildOutput.defaults
         Port = 5000
         TestPacks = []
@@ -879,17 +1046,8 @@ let registerTargets (config: BuildConfig) =
         Directory.ensure outputDir
 
         let projects =
-            !!"src/**/*.fsproj"
-            -- "src/ToolUpApp-Server/**/*.fsproj"
-            -- "src/ToolUpApp-Client/**/*.fsproj"
-            -- "src/Modules/**/*.fsproj"
-            -- "src/TestHarness/**/*.fsproj"
-            -- "src/ToolUp.Algorithms/**/*.fsproj"
-            -- "src/ToolUp.Platform.Tests/**/*.fsproj"
-            -- "src/ToolUp.Forms.Tests/**/*.fsproj"
-            -- "src/ToolUp.Scheduling.Tests/**/*.fsproj"
-            -- "src/ToolUp.RAG.Evaluation/**/*.fsproj"
-            -- "src/ToolUp.RAG.Benchmarks/**/*.fsproj"
+            PackScope.excludedDirs
+            |> List.fold (fun g dir -> g -- sprintf "src/%s/**/*.fsproj" dir) !!"src/**/*.fsproj"
 
         // Pack every project, then fail at the end — the `VerifyAll`
         // shape above, for the same reason. A packaging defect in one
@@ -970,17 +1128,8 @@ let registerTargets (config: BuildConfig) =
         Shell.cleanDir artifactsDir
 
         let projects =
-            !!"src/**/*.fsproj"
-            -- "src/ToolUpApp-Server/**/*.fsproj"
-            -- "src/ToolUpApp-Client/**/*.fsproj"
-            -- "src/Modules/**/*.fsproj"
-            -- "src/TestHarness/**/*.fsproj"
-            -- "src/ToolUp.Algorithms/**/*.fsproj"
-            -- "src/ToolUp.Platform.Tests/**/*.fsproj"
-            -- "src/ToolUp.Forms.Tests/**/*.fsproj"
-            -- "src/ToolUp.Scheduling.Tests/**/*.fsproj"
-            -- "src/ToolUp.RAG.Evaluation/**/*.fsproj"
-            -- "src/ToolUp.RAG.Benchmarks/**/*.fsproj"
+            PackScope.excludedDirs
+            |> List.fold (fun g dir -> g -- sprintf "src/%s/**/*.fsproj" dir) !!"src/**/*.fsproj"
 
         for proj in projects do
             Trace.tracefn "Packing %s for publish..." proj

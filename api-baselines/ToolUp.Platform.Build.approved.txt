@@ -16,6 +16,16 @@ ToolUp.Platform.Build+BuildConfig.ServerProject : System.String { get }
 ToolUp.Platform.Build+BuildConfig.TestPacks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TestPack] { get }
 ToolUp.Platform.Build+BuildConfigModule (class)
 ToolUp.Platform.Build+BuildConfigModule.defaults : ToolUp.Platform.Build+BuildConfig { get }
+ToolUp.Platform.Build+Gate (class)
+ToolUp.Platform.Build+Gate.exclude(System.String, System.String) : ToolUp.Platform.Build+Gate+Exclusion
+ToolUp.Platform.Build+Gate.findings(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TestPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+Gate+Exclusion]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Gate.reconcile(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TestPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+Gate+Exclusion]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.Build+Gate.scannedDirs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Build+Gate.solutionProjects(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Gate+Exclusion (class)
+ToolUp.Platform.Build+Gate+Exclusion..ctor(System.String, System.String)
+ToolUp.Platform.Build+Gate+Exclusion.Project : System.String { get }
+ToolUp.Platform.Build+Gate+Exclusion.Reason : System.String { get }
 ToolUp.Platform.Build+Proc (class)
 ToolUp.Platform.Build+Proc+Parallel (class)
 ToolUp.Platform.Build+Proc+Parallel.colors : System.ConsoleColor[] { get }
@@ -291,6 +301,11 @@ ToolUp.Platform.LighthousePageReport.CategoryScores : Microsoft.FSharp.Collectio
 ToolUp.Platform.LighthousePageReport.MetricValues : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CoreWebVitalsMetric, System.Double]] { get }
 ToolUp.Platform.LighthousePageReport.PagePath : System.String { get }
 ToolUp.Platform.LighthousePageReport.ReportLabel : System.String { get }
+ToolUp.Platform.PackScope (class)
+ToolUp.Platform.PackScope.appClientDir : System.String { get }
+ToolUp.Platform.PackScope.appServerDir : System.String { get }
+ToolUp.Platform.PackScope.excludedDirs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PackScope.isExcluded(System.String) : System.Boolean
 ToolUp.Platform.PackagedModuleCheckOptions (class)
 ToolUp.Platform.PackagedModuleCheckOptions..ctor(System.String, System.String, ToolUp.Platform.PackagedModuleManifestSource, ToolUp.Platform.PackagedModuleContract)
 ToolUp.Platform.PackagedModuleCheckOptions.Contract : ToolUp.Platform.PackagedModuleContract { get }

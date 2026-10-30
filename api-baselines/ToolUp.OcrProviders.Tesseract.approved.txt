@@ -25,7 +25,6 @@ ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+Mime.isPdf(System.String)
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+Mime.isSupported(System.String) : System.Boolean
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrException (class)
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrException..ctor()
-ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrException..ctor(System.String)
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrException.message : System.String { get }
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrOptions (class)

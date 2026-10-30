@@ -85,3 +85,8 @@ docs-snippets/generated/
 /proofs/.fstar/
 /proofs/.cache/
 /proofs/.extract/
+
+# Phase 1096 - the v1.0 readiness scorecard is rendered on demand
+# (`dotnet run --project Build.fsproj -- V1Readiness`) and never committed:
+# a committed render went nine releases stale because nothing regenerates it.
+/docs/reference/v1-readiness.md

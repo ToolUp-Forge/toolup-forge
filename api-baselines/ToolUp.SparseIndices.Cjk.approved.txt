@@ -10,7 +10,6 @@ ToolUp.SparseIndices.Cjk.CjkAnalyzer.idFor(ToolUp.SparseIndices.Cjk.CjkAnalyzer+
 ToolUp.SparseIndices.Cjk.CjkAnalyzer.isCjk(System.Char) : System.Boolean
 ToolUp.SparseIndices.Cjk.CjkAnalyzer+CjkAnalyzerConfigurationException (class)
 ToolUp.SparseIndices.Cjk.CjkAnalyzer+CjkAnalyzerConfigurationException..ctor()
-ToolUp.SparseIndices.Cjk.CjkAnalyzer+CjkAnalyzerConfigurationException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.SparseIndices.Cjk.CjkAnalyzer+CjkAnalyzerConfigurationException..ctor(System.String)
 ToolUp.SparseIndices.Cjk.CjkAnalyzer+CjkAnalyzerConfigurationException.message : System.String { get }
 ToolUp.SparseIndices.Cjk.CjkAnalyzer+CjkOptions (class)

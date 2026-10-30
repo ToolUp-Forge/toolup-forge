@@ -105,7 +105,34 @@ let private tagTrigger =
     "  push:\n    tags:\n      - \"v*.*.*\"\n  workflow_dispatch:"
 
 let private goodSteps =
-    "      - run: dotnet run --project Build.fsproj -- VerifyReleaseChannel\n      - uses: NuGet/login@v1\n      - run: dotnet run --project Build.fsproj -- Publish"
+    "      - run: dotnet run --project Build.fsproj -- VerifyReleaseChannel\n      - run: dotnet run --project Build.fsproj -- Changelog\n      - uses: NuGet/login@v1\n      - run: dotnet run --project Build.fsproj -- Publish"
+
+/// Run git in `dir`, failing the test on a non-zero exit.
+let private gitIn (dir: string) (args: string list) =
+    let psi =
+        Diagnostics.ProcessStartInfo("git", RedirectStandardOutput = true, RedirectStandardError = true)
+
+    psi.WorkingDirectory <- dir
+
+    for a in
+        [
+            "-c"
+            "user.name=t"
+            "-c"
+            "user.email=t@example.com"
+            "-c"
+            "commit.gpgsign=false"
+        ]
+        @ args do
+        psi.ArgumentList.Add a
+
+    use p = Diagnostics.Process.Start psi
+    p.StandardOutput.ReadToEnd() |> ignore
+    let err = p.StandardError.ReadToEnd()
+    p.WaitForExit()
+
+    if p.ExitCode <> 0 then
+        failtestf "git %s exited %d: %s" (String.concat " " args) p.ExitCode err
 
 let tests =
     testList "ReleaseChannel" [
@@ -436,6 +463,42 @@ let tests =
                 Expect.equal (declaredVersionIn (props "1.0.0-rc.1")) (Ok(v (1, 0, 0))) "parsed")
         ]
 
+        // ── Phase 1096 — the one release-tag reader ──
+        testList "Tags.released" [
+            testCase "a tag not merged into HEAD is not a release, and a non-version tag is not one either" (fun _ ->
+                // A promotion is a NEW tag on a descendant commit (the
+                // 2026-09-22 reason), so a candidate tagged off-branch is
+                // invisible to every reader alike: the channel check, the
+                // bump check, the scorecard and the changelog.
+                let dir =
+                    Path.Combine(Path.GetTempPath(), "tags-released-" + Guid.NewGuid().ToString "N")
+
+                Directory.CreateDirectory dir |> ignore
+
+                try
+                    gitIn dir [ "init"; "-q"; "-b"; "main" ]
+                    gitIn dir [ "commit"; "-q"; "--allow-empty"; "-m"; "one" ]
+                    gitIn dir [ "tag"; "v0.1.0" ]
+                    gitIn dir [ "tag"; "vnext" ]
+                    gitIn dir [ "checkout"; "-q"; "-b"; "side" ]
+                    gitIn dir [ "commit"; "-q"; "--allow-empty"; "-m"; "two" ]
+                    gitIn dir [ "tag"; "v0.2.0-rc.1" ]
+                    gitIn dir [ "checkout"; "-q"; "main" ]
+
+                    Expect.equal (Tags.released dir) [ "v0.1.0" ] "only the merged, version-shaped tag"
+
+                    gitIn dir [ "merge"; "-q"; "--ff-only"; "side" ]
+                    Expect.equal (Tags.released dir) [ "v0.1.0"; "v0.2.0-rc.1" ] "merged, the candidate is visible"
+                finally
+                    try
+                        for f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories) do
+                            File.SetAttributes(f, FileAttributes.Normal)
+
+                        Directory.Delete(dir, true)
+                    with _ ->
+                        ())
+        ]
+
         // ── the workflow, linted ──
         testList "publishWorkflowFindings" [
             testCase "a well-formed fixture passes" (fun _ ->
@@ -466,6 +529,28 @@ let tests =
                     "      - uses: NuGet/login@v1\n      - run: dotnet run --project Build.fsproj -- VerifyReleaseChannel\n      - run: dotnet run --project Build.fsproj -- Publish"
 
                 expectFinding (publishWorkflowFindings (workflow tagTrigger steps)) "before a credential")
+
+            // Phase 1096 — the CHANGELOG is rendered on the tag, before the
+            // pack (Phase 1149). A `Changelog --check` cannot stand in for it:
+            // at a tag the tracked file gains the tag's section only once the
+            // tag exists, so the check fails by construction there.
+            testCase "a publish job with no Changelog render step is refused" (fun _ ->
+                let steps =
+                    "      - run: dotnet run --project Build.fsproj -- VerifyReleaseChannel\n      - uses: NuGet/login@v1\n      - run: dotnet run --project Build.fsproj -- Publish"
+
+                expectFinding (publishWorkflowFindings (workflow tagTrigger steps)) "render")
+
+            testCase "a Changelog --check in place of the render is refused" (fun _ ->
+                let steps =
+                    "      - run: dotnet run --project Build.fsproj -- VerifyReleaseChannel\n      - run: dotnet run --project Build.fsproj -- Changelog --check\n      - uses: NuGet/login@v1\n      - run: dotnet run --project Build.fsproj -- Publish"
+
+                expectFinding (publishWorkflowFindings (workflow tagTrigger steps)) "render")
+
+            testCase "a Changelog render after the pack is refused" (fun _ ->
+                let steps =
+                    "      - run: dotnet run --project Build.fsproj -- VerifyReleaseChannel\n      - uses: NuGet/login@v1\n      - run: dotnet run --project Build.fsproj -- Publish\n      - run: dotnet run --project Build.fsproj -- Changelog"
+
+                expectFinding (publishWorkflowFindings (workflow tagTrigger steps)) "before the pack")
 
             // ── And the SHIPPED files, not only fixtures ──
 

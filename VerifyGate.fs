@@ -6,8 +6,8 @@
 ///
 /// **What this is for.** On 2026-08-27 three to four worktrees of this
 /// repository ran the ~9,000-test Platform pack at once and each crawled
-/// at a few percent of a core: a quiet-machine gate of ~17–21 minutes
-/// became more than two hours, and two runs were abandoned. That campaign
+/// at a few percent of a core: a gate of tens of minutes on a quiet
+/// machine became more than two hours, and two runs were abandoned. That campaign
 /// worked around it with a lock-directory protocol written into the
 /// orchestration briefs. A convention held only in briefs is not a fix —
 /// the gate itself has to own its serialisation — and this module is that
@@ -46,9 +46,11 @@
 /// cannot wedge the gate the way a lock directory could. What remains is
 /// a holder that is alive and stuck — a test host wedged at 0% CPU — and
 /// for that the wait is bounded (`TOOLUP_VERIFY_GATE_WAIT_MINUTES`,
-/// default 60: comfortably past a full lane's ~16 minutes plus two of the
-/// advisory lanes that might be queued ahead of it, and short of the
-/// queue's own 90-minute claim bound). Past the bound the run PROCEEDS
+/// default 60: derived as one full lane — every pack plus the legs, the
+/// `Samples` leg's build-and-transpile of every sample (Phase 904)
+/// included, which the original sizing predated — plus two of the advisory
+/// lanes that might be queued ahead of it, and short of the queue's own
+/// 90-minute claim bound). Past the bound the run PROCEEDS
 /// unserialised with a loud line, because the pre-phase behaviour is the
 /// floor: a gate that fails BECAUSE it is guarding against slowness has
 /// traded a slow run for no run.

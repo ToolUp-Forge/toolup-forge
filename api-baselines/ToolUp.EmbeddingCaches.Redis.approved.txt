@@ -53,7 +53,6 @@ ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCache.Options
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCache.Stats() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+EmbeddingCacheStats]
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheException (class)
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheException..ctor()
-ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheException..ctor(System.String)
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheException.message : System.String { get }
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions (class)
