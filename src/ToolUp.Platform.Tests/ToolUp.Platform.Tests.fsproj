@@ -606,6 +606,7 @@
         <Compile Include="InProcess\FactFirstRetrievalTests.fs" />
         <Compile Include="InProcess\AnswerVerifierTests.fs" />
         <Compile Include="InProcess\FactRenderToolTests.fs" />
+        <Compile Include="InProcess\PipelineToolTests.fs" />
         <Compile Include="InProcess\DisclosureEgressTests.fs" />
         <Compile Include="InProcess\DisclosureExportWebhookTests.fs" />
         <Compile Include="InProcess\DisclosureTaintTests.fs" />

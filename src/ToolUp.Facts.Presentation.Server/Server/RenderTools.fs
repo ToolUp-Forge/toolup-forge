@@ -183,29 +183,6 @@ module RenderTools =
         Effects = ToolEffectDeclaration.readFacts
     }
 
-    // ── The read, at the tool-result door ─────────────────────────
-
-    /// `inner` asked at `surface` whichever door the read names — the series
-    /// read asks at `FactBrowse`, and a tool result is judged at
-    /// `FactToolResult`. The row form is offered exactly when `inner` offers
-    /// it, so the read keeps its one-download path and a decorator is never
-    /// bypassed.
-    let private atSurface (surface: FactEgressSurface) (inner: IHeldFactDisclosureGate) : IHeldFactDisclosureGate =
-        match inner with
-        | :? IHeldFactRowDisclosureGate as rows ->
-            { new IHeldFactDisclosureGate with
-                member _.CheckHeld(scope, principal, _, factIds, held) =
-                    inner.CheckHeld(scope, principal, surface, factIds, held)
-              interface IHeldFactRowDisclosureGate with
-                  member _.CheckHeldRows(scope, principal, _, factIds, held) =
-                      rows.CheckHeldRows(scope, principal, surface, factIds, held)
-            }
-        | _ ->
-            { new IHeldFactDisclosureGate with
-                member _.CheckHeld(scope, principal, _, factIds, held) =
-                    inner.CheckHeld(scope, principal, surface, factIds, held)
-            }
-
     // ── The answer ────────────────────────────────────────────────
 
     let private refusal (tool: RenderTool) (reason: string) : ToolHelpers.ToolAnswer = {
@@ -365,7 +342,7 @@ module RenderTools =
                 | Ok() ->
                     let gated = {
                         deps with
-                            Gate = atSurface FactToolResult deps.Gate
+                            Gate = FactBrowseHandler.atSurface FactToolResult deps.Gate
                     }
 
                     let! answers =

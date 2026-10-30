@@ -1035,6 +1035,7 @@ let private registeredTests =
         DeliveryCompletedTests.tests
         FactPresentationTests.tests
         FactRenderToolTests.tests
+        PipelineToolTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
