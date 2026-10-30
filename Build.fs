@@ -4340,9 +4340,6 @@ let main args =
         "src/ToolUp.Platform.Core/Shared/Types/EgressPolicyTypes.fs",
         1,
         "a ComponentId (the platform as the component an outbound call is attributed to), not a scope; it compiles ahead of ScopeKey.fs"
-        "src/ToolUp.Facts.Server/Server/FactsCompose.fs",
-        1,
-        "held for Phase 1152, which owns this file this tier; the one-token sweep onto ScopeKey.PlatformContainer follows its landing"
         "src/Calendar/Google/GoogleCalendarBridge.fs",
         1,
         "held for Phase 1105, whose lease covers this file; the one-token sweep onto ScopeKey.PlatformContainer follows its landing"

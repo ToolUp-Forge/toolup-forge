@@ -2089,7 +2089,7 @@ type BlobFactStore
                             // An orphaned leaf is ignored by every read (reads
                             // consult census members only), so its delete is
                             // tidying; the fact blob's is the one that counts.
-                            let! _ = storage.Delete(scopeId, FactIndexLayout.leafName (deserialise (serialise before)))
+                            let! _ = storage.Delete(scopeId, FactIndexLayout.leafName (deserialise (serialise before))) // best-effort-write: an orphaned leaf names an id the census no longer holds, so every read ignores it; a failed delete leaves an inert leaf, never a wrong read, and the migration's outcome is the fact-blob delete below
                             let! r = storage.Delete(scopeId, blobName before.FactId)
                             return r |> Result.mapError (sprintf "%s: %s" before.FactId)
                         })

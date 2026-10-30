@@ -1326,7 +1326,11 @@ module FactsCompose =
 
                                 scheduler.RegisterHandler(CoherenceJobHandler.HandlerName, handler)
 
-                                let effectiveScopes = if List.isEmpty scopes then [ "_platform" ] else scopes
+                                let effectiveScopes =
+                                    if List.isEmpty scopes then
+                                        [ ScopeKey.PlatformContainer ]
+                                    else
+                                        scopes
 
                                 let scheduleAll = async {
                                     for scopeId in effectiveScopes do
