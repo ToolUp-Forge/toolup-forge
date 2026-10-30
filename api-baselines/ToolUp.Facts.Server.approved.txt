@@ -1370,11 +1370,23 @@ ToolUp.Facts.PeerTrustAnchorModule.create(System.String, ToolUp.ArtefactSigning.
 ToolUp.Facts.PeerTrustAnchorModule.defaultAdmissibleLevels : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.ArtefactSigning.AttestationLevel] { get }
 ToolUp.Facts.PeerTrustAnchorModule.withAdmissibleLevels(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.AttestationLevel], ToolUp.Facts.PeerTrustAnchor) : ToolUp.Facts.PeerTrustAnchor
 ToolUp.Facts.PeerTrustAnchorModule.withCeiling(ToolUp.Facts.Disclosure, ToolUp.Facts.PeerTrustAnchor) : ToolUp.Facts.PeerTrustAnchor
+ToolUp.Facts.PipelineAssertion (class)
+ToolUp.Facts.PipelineAssertion.ComputeVersion : System.String { get }
+ToolUp.Facts.PipelineAssertion.MaxInputs : System.Int32 { get }
+ToolUp.Facts.PipelineAssertion.OperationId : System.String (literal)
+ToolUp.Facts.PipelineAssertion.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Facts.PipelineToolResult, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionResult]], ToolUp.Facts.PipelineRefusal]]
+ToolUp.Facts.PipelineAssertion.draft(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.FactSlice, ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineAssertionRequest, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft], ToolUp.Facts.PipelineRefusal]
+ToolUp.Facts.PipelineAssertion.factIdOf(ToolUp.Facts.FactDraft) : System.String
+ToolUp.Facts.PipelineAssertion.methodOf(System.String) : ToolUp.Facts.MethodRef
+ToolUp.Facts.PipelineAssertion.text(ToolUp.Facts.PipelineAssertionResult) : System.String
 ToolUp.Facts.PipelineTool (class)
+ToolUp.Facts.PipelineTool.AssertArgument : System.String (literal)
 ToolUp.Facts.PipelineTool.Name : System.String (literal)
 ToolUp.Facts.PipelineTool.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]
+ToolUp.Facts.PipelineTool.assertionOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionRequest], ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.decode(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.PipelineTool.definitionWithAssertions : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.PipelineTool.evaluate(ToolUp.Facts.PipelineToolRequest, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.FactSlice, System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.refusalText(ToolUp.Facts.PipelineRefusal) : System.String
 ToolUp.Facts.PipelineTool.requestOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolRequest, ToolUp.Facts.PipelineRefusal]

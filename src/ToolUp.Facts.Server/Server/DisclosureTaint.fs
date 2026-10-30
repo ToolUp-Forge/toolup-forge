@@ -48,6 +48,13 @@ open ToolUp.Platform
 // for one resting on computation. Verdicts are otherwise unchanged — a
 // deployment wiring no transform trees is byte-for-byte Phase 674.
 //
+// **A fact computed from named facts.** A derived fact whose evidence names
+// its inputs as facts (`FactInput`, `fact:<id>`) carries a computed lineage
+// of its own: its label is the join of those facts' labels, read from the
+// same nodes, so a restricted input taints it at every door, a declared
+// routine for its operation clears it, and no `LineageInferred` finding is
+// raised for it.
+//
 // **Pure core.** The walk (`analyze`) is a pure function over an explicit
 // `FactDerivationGraph`, so it is unit-testable with hand-built graphs and
 // carries no store dependency; `buildGraph` projects an `IFactStore`
@@ -227,11 +234,12 @@ module DisclosureTaint =
         // graph because no transform tree had labelled them.
         let inferred = HashSet<string>()
 
-        /// A fact with evidence inputs but no computed label had its upstream
-        /// INFERRED. A fact with no inputs is a leaf: nothing was inferred
-        /// about it, so reporting it would be noise on every clean lineage.
+        /// A fact with inferred evidence inputs and no computed label had its
+        /// upstream INFERRED. A fact with no inputs is a leaf, and a fact whose
+        /// every input names a fact (`FactInput`) had its lineage computed:
+        /// nothing was inferred about either, so reporting them would be noise.
         let noteInferred (factId: string) (node: DisclosureTaintNode) =
-            if not (List.isEmpty node.Inputs) then
+            if not (List.isEmpty (DisclosureTaintNode.inferredInputs node)) then
                 inferred.Add factId |> ignore
 
         let noteContributor (policyRef: string) =
@@ -252,7 +260,24 @@ module DisclosureTaint =
                         |> List.sort
                 }
 
-        let rec outputTaint (visiting: Set<string>) (factId: string) : string list =
+        /// The taint a fact's inputs carry. A label a transform tree computed
+        /// is the fact's upstream outright. Otherwise the facts its evidence
+        /// names (`FactInput`) are its computed lineage, and the data-object
+        /// versions it names are taken from the inferred graph, which is
+        /// reported. The result is the join of the inputs' labels: their union,
+        /// nearest-declared first, so a deny keeps naming the nearest policy.
+        let rec inputTaintOf (visiting: Set<string>) (factId: string) (node: DisclosureTaintNode) : string list =
+            match lineage.LabelOf factId with
+            | Some computed -> TaintLabel.policyRefs computed
+            | None ->
+                let named =
+                    DisclosureTaintNode.namedInputs node |> List.collect (outputTaint visiting)
+
+                noteInferred factId node
+                let inferredTaint = upstreamOf factId |> List.collect (outputTaint visiting)
+                named @ inferredTaint |> List.distinct
+
+        and outputTaint (visiting: Set<string>) (factId: string) : string list =
             match memo.TryGetValue factId with
             | true, cached -> cached
             | _ ->
@@ -269,13 +294,7 @@ module DisclosureTaint =
                         | Some node ->
                             let visiting' = Set.add factId visiting
 
-                            let inputTaint =
-                                match lineage.LabelOf factId with
-                                | Some computed -> TaintLabel.policyRefs computed
-                                | None ->
-                                    noteInferred factId node
-
-                                    upstreamOf factId |> List.collect (outputTaint visiting') |> List.distinct
+                            let inputTaint = inputTaintOf visiting' factId node
 
                             match routineOf config node with
                             | Some routine ->
@@ -316,12 +335,10 @@ module DisclosureTaint =
         let targetNode = nodeOf targetId
 
         let inputTaint =
-            match lineage.LabelOf targetId with
-            | Some computed -> TaintLabel.policyRefs computed
-            | None ->
-                targetNode |> Option.iter (noteInferred targetId)
-
-                upstreamOf targetId |> List.collect (outputTaint Set.empty) |> List.distinct
+            match targetNode, lineage.LabelOf targetId with
+            | Some node, _ -> inputTaintOf Set.empty targetId node
+            | None, Some computed -> TaintLabel.policyRefs computed
+            | None, None -> upstreamOf targetId |> List.collect (outputTaint Set.empty) |> List.distinct
 
         let inheritedPolicyRefs =
             match targetNode |> Option.bind (routineOf config) with

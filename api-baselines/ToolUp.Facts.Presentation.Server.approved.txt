@@ -5,14 +5,18 @@
 # still be folded into this file in the same PR.
 ToolUp.Facts.Presentation.PipelineAnsweringTool (class)
 ToolUp.Facts.Presentation.PipelineAnsweringTool.answer(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
+ToolUp.Facts.Presentation.PipelineAnsweringTool.answerAsserting(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
+ToolUp.Facts.Presentation.PipelineAnsweringTool.answerAssertingWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
 ToolUp.Facts.Presentation.PipelineAnsweringTool.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
 ToolUp.Facts.Presentation.PipelineAnsweringTool.api(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Facts.Presentation.IPipelineBlockApi
+ToolUp.Facts.Presentation.PipelineAnsweringTool.assertingTool : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.Facts.Presentation.PipelineAnsweringTool.handler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
 ToolUp.Facts.Presentation.PipelineAnsweringTool.requestOf(ToolUp.Facts.PipelineToolResult) : ToolUp.Facts.Presentation.PipelineBlockRequest
 ToolUp.Facts.Presentation.PipelineAnsweringTool.rerunWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]
 ToolUp.Facts.Presentation.PipelineAnsweringTool.resultOf(ToolUp.Facts.PipelineToolResult) : ToolUp.Facts.Presentation.PipelineBlockResult
 ToolUp.Facts.Presentation.PipelineAnsweringTool.tool : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.Facts.Presentation.PresentationCompose (class)
+ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.Facts.Presentation.PresentationCompose.withPipelineTool(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.Facts.Presentation.PresentationCompose.withRenderTools(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.Facts.Presentation.RenderTool (class)

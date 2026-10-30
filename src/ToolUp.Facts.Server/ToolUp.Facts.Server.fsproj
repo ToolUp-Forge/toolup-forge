@@ -147,6 +147,10 @@
              model writes, evaluated over the fact browse's gated view slice.
              After the browse handler, whose slice read it calls. -->
         <Compile Include="Server\PipelineTool.fs" />
+        <!-- A pipeline result's column asserted as facts of a registered
+             derived metric. After the pipeline tool, whose evaluation it
+             asserts from. -->
+        <Compile Include="Server\PipelineAssertion.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
          FSharp.Core is implicit via the .NET SDK. -->

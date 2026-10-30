@@ -5,7 +5,7 @@ namespace ToolUp.Facts
 
 open System
 
-// ─── evaluate_pipeline (Phase 1145) ──────────────────────────────────
+// ─── evaluate_pipeline ───────────────────────────────────────────────
 //
 // The assistant computes over the deployment's facts by WRITING a
 // computation, never by typing a number: it names one bounded slice of one
@@ -101,6 +101,65 @@ type PipelineToolResult = {
     FactIdCount: int
 }
 
+// ─── Asserting a result as facts ─────────────────────────────────────
+//
+// A deployment that composes derived assertions lets the model ask, in the
+// same call, that one numeric column of the result be ASSERTED: one fact per
+// result row, of a registered derived metric, with a `Computed` method naming
+// the pipeline's hash and evidence naming every fact the row was computed from
+// (`FactInput`). The figure then has an id, a lineage, a disclosure stance and
+// a supersession edge, so the answer verifier and the grounding gate check it
+// as they check any fact.
+
+/// What the model asks to assert from an evaluation: one result column, as a
+/// registered derived metric, at the hierarchy level the result's key names.
+type PipelineAssertionRequest = {
+    /// The result column whose values are asserted.
+    Column: string
+    /// The registered derived metric the values are facts of.
+    AsMetric: string
+    /// The hierarchy level the result's subject key names: the slice's level.
+    Level: string
+}
+
+/// One fact an assertion stored, or found already stored.
+type PipelineAssertedFact = {
+    /// The fact's content-addressed id.
+    FactId: string
+    /// The fact's subject, rendered (`hierarchy/member>member`).
+    Subject: string
+    /// The derived metric.
+    Metric: string
+    /// The value in the metric's display format. `None` when the disclosure
+    /// gate withholds the fact at the tool-result door.
+    Rendering: string option
+    /// The policy that withheld it, when one did.
+    WithheldPolicy: string option
+    /// How many facts the value was computed from.
+    InputCount: int
+}
+
+/// What an assertion answers: the evaluation it asserted from, and the facts
+/// the store holds for it.
+type PipelineAssertionResult = {
+    /// The evaluation, exactly as the tool answers it without an assertion.
+    Evaluation: PipelineToolResult
+    /// The asserted column.
+    Column: string
+    /// The derived metric.
+    Metric: string
+    /// One fact per result row, in result order.
+    Facts: PipelineAssertedFact list
+    /// Rows newly stored as the first fact of their lineage.
+    AssertedCount: int
+    /// Rows newly stored that superseded a predecessor.
+    SupersedingCount: int
+    /// Rows whose fact was already stored.
+    IdempotentCount: int
+    /// The batch receipt's digest over its full ordered disposition.
+    ReceiptDigest: string
+}
+
 /// Why an evaluation was refused. Every case names what to repair.
 [<RequireQualifiedAccess>]
 type PipelineRefusal =
@@ -135,6 +194,37 @@ type PipelineRefusal =
     | EvaluationFailed of reason: string
     /// The result would hold more cells than the cap.
     | ResultOverCap of cells: int * cap: int
+    /// The request asks for an assertion and this deployment does not compose
+    /// derived assertions.
+    | AssertionNotOffered
+    /// The `assert` argument is not the assertion's shape.
+    | MalformedAssertion of reason: string
+    /// The asserted column is not a column of the result.
+    | AssertedColumnUnknown of column: string * available: string list
+    /// The asserted column is withheld: its values are partial.
+    | AssertedColumnWithheld of column: string * withheld: PipelineWithheldCount list
+    /// The asserted column does not hold numbers.
+    | AssertedColumnNotNumeric of column: string * columnType: string
+    /// The asserted column passes through a host-rounded function, so two hosts
+    /// may differ in its last place: it is not one fact.
+    | AssertedColumnHostRounded of column: string
+    /// The metric is not registered.
+    | UnregisteredMetric of metric: string
+    /// The metric is registered, but not as produced by the pipeline operation.
+    | NotADerivedMetric of metric: string * producingOperation: string option
+    /// The result's rows do not name subjects at the level asked.
+    | SubjectKeyUnresolved of reason: string
+    /// Two rows of the result name one subject.
+    | SubjectRepeated of subject: string
+    /// The asserted column has no value for a subject.
+    | ValueMissing of subject: string
+    /// A row's value reads no fact the slice carried, so its inputs cannot be
+    /// named.
+    | InputsUnnamed of subject: string
+    /// A row's value reads more facts than one fact may name.
+    | InputsOverCap of subject: string * inputs: int * cap: int
+    /// The fact store refused the batch.
+    | AssertionFailed of reason: string
 
 /// Reading a `PipelineRefusal`.
 [<RequireQualifiedAccess>]
@@ -204,3 +294,45 @@ module PipelineRefusal =
                 "the result would hold %d cells, over the cap of %d; end the pipeline with a limit step or keep fewer columns"
                 cells
                 cap
+        | PipelineRefusal.AssertionNotOffered ->
+            "this deployment does not assert derived figures as facts; evaluate without the 'assert' argument"
+        | PipelineRefusal.MalformedAssertion reason -> sprintf "the 'assert' argument is malformed: %s" reason
+        | PipelineRefusal.AssertedColumnUnknown(column, available) ->
+            sprintf "the result has no column '%s' to assert (its columns: %s)" column (quoted available)
+        | PipelineRefusal.AssertedColumnWithheld(column, withheld) ->
+            sprintf
+                "column '%s' is withheld (%s), so its values are partial and none is asserted; narrow the slice to a region with nothing withheld"
+                column
+                (withheldPhrase withheld)
+        | PipelineRefusal.AssertedColumnNotNumeric(column, columnType) ->
+            sprintf "column '%s' holds %s values, and only a number is asserted" column columnType
+        | PipelineRefusal.AssertedColumnHostRounded column ->
+            sprintf
+                "column '%s' passes through a host-rounded function (exp, ln, log10 or a non-integer power), so two hosts may differ in its last place and it is not one fact"
+                column
+        | PipelineRefusal.UnregisteredMetric metric ->
+            sprintf
+                "metric '%s' is not registered; a derived metric is registered, with its display format and roll-up, before it is asserted"
+                metric
+        | PipelineRefusal.NotADerivedMetric(metric, producing) ->
+            sprintf
+                "metric '%s' is registered as produced by %s, not by the pipeline operation, so the assistant does not assert it"
+                metric
+                (match producing with
+                 | Some operation -> sprintf "'%s'" operation
+                 | None -> "no declared operation")
+        | PipelineRefusal.SubjectKeyUnresolved reason -> sprintf "the result's rows do not name subjects: %s" reason
+        | PipelineRefusal.SubjectRepeated subject ->
+            sprintf "two rows of the result name subject '%s'; group by the subject so each row is one subject" subject
+        | PipelineRefusal.ValueMissing subject -> sprintf "the asserted column has no value for subject '%s'" subject
+        | PipelineRefusal.InputsUnnamed subject ->
+            sprintf
+                "the value for subject '%s' reads no fact of the slice, so its inputs cannot be named and it is not asserted"
+                subject
+        | PipelineRefusal.InputsOverCap(subject, inputs, cap) ->
+            sprintf
+                "the value for subject '%s' reads %d facts, over the %d one fact may name; narrow the slice"
+                subject
+                inputs
+                cap
+        | PipelineRefusal.AssertionFailed reason -> sprintf "the fact store refused the assertion: %s" reason
