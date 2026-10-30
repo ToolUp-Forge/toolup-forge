@@ -100,7 +100,7 @@ module CefSinkSettings =
         Identity = CefDeviceIdentity.defaults
         Protocol = CefUdpSyslog
         Framing = CefSyslogFraming.defaults
-        ConfigContainer = "_platform"
+        ConfigContainer = ScopeKey.PlatformContainer
         ConfigBlobName = "audit/cef.json"
         SeverityOverride = None
     }
@@ -184,7 +184,7 @@ type CefAuditSink
                 return Ok()
             else
                 try
-                    let! secret = secretStore.GetSecret("_platform", endpointSecretKey)
+                    let! secret = secretStore.GetSecret(ScopeKey.PlatformContainer, endpointSecretKey)
 
                     match secret with
                     | None ->
