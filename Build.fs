@@ -4328,7 +4328,6 @@ let main args =
     //        the tree). Also a leg of `VerifyAll` in the fast and full lanes.
     let scopeLiteralCeilings: Map<string, int> =
         Map.ofList [
-            "ToolUp.AuditSinks.SplunkHec", 1
             "ToolUp.ExternalCompute.Http", 3
             "ToolUp.Facts.Server", 6
             "ToolUp.Forms.Server", 1

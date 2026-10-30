@@ -136,7 +136,7 @@ let private serializeBatch (settings: SplunkHecSettings) (batch: AuditEnvelope l
     |> fun lines -> String.Join("\n", lines)
 
 [<Literal>]
-let private SecretStoreScope = "_platform"
+let private SecretStoreScope = ScopeKey.PlatformContainer
 
 /// SDK Splunk HEC `IAuditSink`. One POST per batch. Token from
 /// `ISecretStore` per call.
