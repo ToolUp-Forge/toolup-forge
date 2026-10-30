@@ -192,24 +192,54 @@ let idempotency: IdempotencyKey option =
 
 The lookup is per-scope.
 
-#### Schedule-then-trigger is not idempotent
+#### Schedule-then-trigger: what the key names decides what to fire
 
-Idempotency covers `Schedule`, not what a caller does with the `JobId` it returns. A caller that
-schedules a `Manual` job under an idempotency key and then calls `TriggerOnce` on the returned id
-triggers the job again every time the key coalesces, so "submitting twice = the job runs once"
-stops holding. Fire only a `Scheduled` job:
+Idempotency covers `Schedule`, not what a caller does with the `JobId` it returns. `TriggerOnce` is
+not idempotent either: a manual trigger is a request for a run, and a second one queues behind the
+first rather than being dropped. So a caller that schedules a `Manual` job under an idempotency key
+and then fires whatever `Schedule` returned runs the job again every time the key coalesces.
+
+`Coalesced` does **not** mean "already pending". The store matches a key against when a job was
+*created*, inside the TTL, whatever has happened to the job since, so a coalesced job may be
+pending, running, or long finished. Which fire is right depends on what the key names:
+
+- **The key names the cause** — the change, the request, the batch item, so that two registrations
+  with one key are the same work. Fire only a `Scheduled` job; a coalesced one was fired when it was
+  created, and firing it again runs the same work twice:
 
 ```fsharp skip=fragment
 match! scheduler.Schedule registration with
 | Ok(Scheduled jobId) -> do! fire jobId
-| Ok(Coalesced _) -> ()   // already pending: fired when it was created
+| Ok(Coalesced _) -> ()   // this cause again: its job was fired when it was created
 | Error e -> log e
 ```
 
-| Site | Status | Pin |
-|---|---|---|
-| `GroundedNarrativeTrigger.enqueueFor` | fires only `Scheduled` | `GroundedNarrativeTests` — "double run, first site" |
-| `RecomputeJobHandler.applyPolicies` (an `Eager` recompute) | still fires a coalesced job (Phase 998) | `ReactiveRecomputeComposeTests` — "double run, second site", pending |
+- **The key names a subject that is worked repeatedly** — one job per fact, one per report, reused
+  as a vessel. A coalesced job may have run already for an earlier cause, and firing it is how the
+  new cause gets run. Fire both. On the in-process scheduler one job per subject also serialises the
+  subject's runs: a manual fire waits for the job's dispatch lease, and `ShardKey` is ignored, so a
+  job per cause would let two runs of one subject overlap and the older finish last.
+
+Every call site in the SDK that schedules and then fires (Phase 998):
+
+| Site | Key | Fires | Pin |
+|---|---|---|---|
+| `GroundedNarrativeTrigger.enqueueFor` (data arrival) | run + change | only `Scheduled` | `GroundedNarrativeTests` — "double run, first site": a replayed change runs the narrative once on the in-process scheduler; a different change runs it again |
+| `RecomputeJobHandler.applyPolicies` (an `Eager` recompute) | fact (vessel) | both | `ReactiveRecomputeComposeTests` — "schedule-then-trigger, second site": a different change inside the TTL fires the fact's one job again |
+| `NarrativePromptHandler` regenerate on demand | run (vessel) | both | — an explicit "regenerate now" |
+| `DataSubjectRequestApiHandler` DSR export | request id | both | — |
+| `ModelFitJobHandler` batch item | batch + index | both | — |
+| `TenantLifecycleAggregator` lifecycle phase | phase + scope | both | — |
+| `DerivativeJobs` derivative render | content hash + derivative | both | — the handler re-checks its cache, so a second run renders nothing |
+| `JsonRpcPeerHost`, `ModelExecutionPeerContract`, `DataIngestionApiHandler`, `JobSchedulerBuildOrchestrator`, `IngestionService`, `ReportingAITools` | none | — | a registration without a key never coalesces |
+
+The recompute's vessel has one known cost: a replay of the *same* change fires the fact's job again,
+and the recompute runs a second time. It asserts an identical tuple, so `Assert` is a no-op and no
+data object changes, which leaves the narrative trigger nothing to react to: one data-arrival change
+still yields one narrative run. The four cause-keyed rows that fire both re-run their work on a
+replayed request inside the TTL, which is also what lets a request re-run a job whose earlier run
+failed. Closing that without losing the retry is a scheduler-contract change — a trigger absorbed by
+a run of the same job that has not yet started — and is not made here.
 
 ### Lifecycle events
 
