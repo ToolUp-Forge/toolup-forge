@@ -121,7 +121,6 @@
         "src/ToolUp.Platform.Server/Server/PublicationReaderApiHandler.fs": 1,
         "src/ToolUp.Platform.Server/Server/ReflectionTools.fs": 3,
         "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/GiraffeAdapter.fs": 2,
-        "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/SharedReader.fs": 1,
         "src/ToolUp.Platform.Server/Server/RemotingHelpers.fs": 7,
         "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 2,
         "src/ToolUp.Platform.Server/Server/SbomProjection.fs": 1,
