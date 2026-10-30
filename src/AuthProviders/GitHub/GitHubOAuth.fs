@@ -7,6 +7,7 @@ open System
 open System.Net.Http
 open System.Text.Json
 open System.Threading.Tasks
+open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
 
@@ -94,7 +95,7 @@ type GitHubTokenResponse = {
 /// The reserved cross-tenant secret scope (per `ISecretStore`). The
 /// OAuth App client secret is platform-level, not per-user/per-team.
 [<Literal>]
-let private platformScope = "_platform"
+let private platformScope = ScopeKey.PlatformContainer
 
 let private urlEncode (value: string) : string = Uri.EscapeDataString value
 
