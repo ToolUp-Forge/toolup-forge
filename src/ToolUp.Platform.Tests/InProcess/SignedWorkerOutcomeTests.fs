@@ -1145,17 +1145,22 @@ type private ScriptedSink() =
 /// isolation posture — what `RequireForIsolatingBackends` keys on.
 type private PostureDispatcher(isolating: bool) =
     interface IExternalComputeDispatcher with
+        member _.Capabilities = {
+            BackendCapabilities.none with
+                Isolated =
+                    Some(
+                        if isolating then
+                            IsolationPosture.clauses "test sandbox"
+                        else
+                            IsolationPosture.standardOnly
+                    )
+        }
+
         member _.Backend = "gpu-pool"
         member _.Submit(_, _) = async { return Error(ExternalComputeError.terminal "not used") }
         member _.Poll _ = async { return ExternalOutcome.Pending }
         member _.Cancel _ = async { return () }
 
-    interface IIsolatedComputeBackend with
-        member _.IsolationPosture =
-            if isolating then
-                IsolationPosture.clauses "test sandbox"
-            else
-                IsolationPosture.standardOnly
 
 type private Harness = {
     Client: HttpClient

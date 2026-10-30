@@ -920,7 +920,7 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
                             let! observed = metricsFor policy scopeId artifact
 
                             match observed with
-                            | Error reason -> return Choice2Of2 reason
+                            | Error reason -> return Error reason
                             | Ok observed ->
                                 let! incumbent = incumbentFor scopeId artifact
 
@@ -933,13 +933,13 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
                                         | Error _ -> return None
                                 }
 
-                                return Choice1Of2(observed, incumbent, incumbentMetrics)
+                                return Ok(observed, incumbent, incumbentMetrics)
                         with ex ->
-                            return Choice2Of2(sprintf "policy evaluation failed: %s" ex.Message)
+                            return Error(sprintf "policy evaluation failed: %s" ex.Message)
                     }
 
                     match resolved with
-                    | Choice2Of2 reason ->
+                    | Error reason ->
                         return!
                             recordDecision (
                                 queuedDecision
@@ -952,7 +952,7 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
                                     []
                                     (sprintf "queued — %s" reason)
                             )
-                    | Choice1Of2(observed, incumbent, incumbentMetrics) ->
+                    | Ok(observed, incumbent, incumbentMetrics) ->
                         let incumbentKey = incumbent |> Option.map (fun a -> a.CompositeKey.Hash)
                         let verdict, checks, reason = PromotionJudge.judge policy observed incumbentMetrics
 

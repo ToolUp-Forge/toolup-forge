@@ -983,6 +983,15 @@ ToolUp.Facts.FactTableWriteError+Tags.FactTableUndeclared : System.Int32 (litera
 ToolUp.Facts.FactTableWriteErrorModule (class)
 ToolUp.Facts.FactTableWriteErrorModule.RenderedDefectCap : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteErrorModule.describe(ToolUp.Facts.FactTableWriteError) : System.String
+ToolUp.Facts.FactTool (class)
+ToolUp.Facts.FactTool.define(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactToolContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.FactToolContext (class)
+ToolUp.Facts.FactToolContext..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String)
+ToolUp.Facts.FactToolContext.Gate : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate { get }
+ToolUp.Facts.FactToolContext.Registry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry] { get }
+ToolUp.Facts.FactToolContext.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Facts.FactToolContext.Store : ToolUp.Facts.IFactStore { get }
+ToolUp.Facts.FactToolContext.UserId : System.String { get }
 ToolUp.Facts.FactViewerContext (class)
 ToolUp.Facts.FactViewerContext.middleware(Microsoft.AspNetCore.Http.HttpContext, System.Func`1[System.Threading.Tasks.Task]) : System.Threading.Tasks.Task
 ToolUp.Facts.FactWithCompetition (class)

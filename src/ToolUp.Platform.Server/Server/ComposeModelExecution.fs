@@ -179,36 +179,33 @@ let private mergeObservers
 let register (options: ModelExecutionComposeOptions) (services: IServiceCollection) : unit =
     services.TryAddSingleton<IModelRegistry>(fun (sp: System.IServiceProvider) ->
         let logger =
-            match sp.GetService(typeof<ILogger>) with
-            | :? ILogger as l -> l
-            | _ -> ConsoleLogger.ConsoleLogger() :> ILogger
+            ServiceComposition.tryService<ILogger> sp
+            |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
 
-        let audit =
-            match sp.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as a -> a
-            | _ ->
-                // Unreachable in a forge composition (`ComposeRuntimeServices`
-                // always registers one), but stated rather than cast: a null
-                // reference here would surface as an NRE inside the registry's
-                // first audited write, which names nothing.
-                failwith
-                    $"{BuilderName} needs an IAuditLog in DI to build the default model registry. Compose one, or supply a registry with ModelExecutionComposeOptions.withRegistry."
+        let required (found: 'T option) : 'T =
+            match found with
+            | Some service -> service
+            | None ->
+                // Unreachable in a forge composition for the audit log
+                // (`ComposeRuntimeServices` always registers one), but stated
+                // rather than cast: a null here would surface inside the
+                // registry's first write, which names nothing.
+                ServiceComposition.refuse (
+                    CompositionRefusal.MissingDependency(
+                        BuilderName,
+                        typeof<'T>.Name,
+                        "compose one, or supply a registry with ModelExecutionComposeOptions.withRegistry"
+                    )
+                )
+
+        let audit = required (ServiceComposition.tryService<IAuditLog> sp)
 
         let inner =
             match options.Registry with
             | Some registry -> registry
             | None ->
-                let dataObjects =
-                    match sp.GetService(typeof<IDataObjectStore>) with
-                    | :? IDataObjectStore as store -> store
-                    | _ ->
-                        failwith
-                            $"{BuilderName} needs an IDataObjectStore in DI to build the default model registry. Compose one, or supply a registry with ModelExecutionComposeOptions.withRegistry."
-
-                let lineage =
-                    match sp.GetService(typeof<ILineageStore>) with
-                    | :? ILineageStore as l -> Some l
-                    | _ -> None
+                let dataObjects = required (ServiceComposition.tryService<IDataObjectStore> sp)
+                let lineage = ServiceComposition.tryService<ILineageStore> sp
 
                 BlobModelRegistry.createWithLimits dataObjects audit lineage options.AttachmentLimits
 

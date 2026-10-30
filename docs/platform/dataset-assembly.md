@@ -25,6 +25,14 @@ shows exactly what moved.
   `DatasetVersion.Metadata` is an existing field, provenance is
   queryable/joinable with zero new machinery.
 
+## Reading a whole vintage
+
+Assembly, the evaluation runner, the scorer and declassification all read a source vintage in full through one
+function, `DatasetStore.readAll store scopeId datasetId version`: it pages `IDatasetStore.ReadPage` in fixed windows
+until the store's `TotalRows`, and returns the schema with the rows in store order, or the first failing page's
+`DatasetError` for the caller to map onto its own refusal. A store may cap a page below the window; that only costs
+round trips. The function asks nothing of a store beyond `ReadPage`, so a companion store needs no capability for it.
+
 ## Scope guard — assembly is plumbing, not features (plan risk #3, GP 1)
 
 **Assembly rearranges and folds; it never computes a new derived value outside

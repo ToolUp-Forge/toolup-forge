@@ -39,3 +39,35 @@ type ResultDiff = {
 module ResultEventType =
     [<Literal>]
     let AnalysisCompleted = "AnalysisCompleted"
+
+/// The `result { }` computation expression: `let!` binds an `Ok` and
+/// short-circuits on the first `Error`, in the order the expression reads.
+/// FSharp.Core only, and Fable-safe.
+type ResultBuilder() =
+    member _.Return(value: 'T) : Result<'T, 'E> = Ok value
+    member _.ReturnFrom(result: Result<'T, 'E>) : Result<'T, 'E> = result
+    member _.Bind(result: Result<'T, 'E>, binder: 'T -> Result<'U, 'E>) : Result<'U, 'E> = Result.bind binder result
+    member _.Zero() : Result<unit, 'E> = Ok()
+    member _.Delay(body: unit -> Result<'T, 'E>) : unit -> Result<'T, 'E> = body
+    member _.Run(body: unit -> Result<'T, 'E>) : Result<'T, 'E> = body ()
+
+    member _.Combine(first: Result<unit, 'E>, rest: unit -> Result<'T, 'E>) : Result<'T, 'E> = Result.bind rest first
+
+/// The `result` builder and the patterns that read a validated value.
+[<AutoOpen>]
+module ResultExpression =
+    /// `result { let! a = … ; return … }`.
+    let result = ResultBuilder()
+
+    /// A lowercase hexadecimal SHA-256 digest: 64 characters, `0-9a-f`.
+    /// Lowercase is required rather than normalised, so one digest has one
+    /// spelling.
+    let (|Hex64|_|) (value: string) : string option =
+        if
+            not (isNull value)
+            && value.Length = 64
+            && value |> Seq.forall (fun c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))
+        then
+            Some value
+        else
+            None

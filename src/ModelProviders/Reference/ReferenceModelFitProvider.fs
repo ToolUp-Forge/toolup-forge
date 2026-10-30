@@ -199,6 +199,12 @@ module ReferenceModelFitProvider =
     /// shape every evaluation-capable provider follows.
     let create () : IModelFitProvider =
         { new IModelFitProvider with
+            member this.Capabilities = {
+                ModelFitProviderCapabilities.none with
+                    Metrics = Some(this :?> IModelEvaluationMetrics)
+                    PlanMetrics = Some(this :?> IModelEvaluationPlanMetrics)
+            }
+
             member _.Kind = Kind
             member _.ProviderVersion = Version
             member _.DeclareGates() = DeclaredGates

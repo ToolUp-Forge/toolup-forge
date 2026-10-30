@@ -73,6 +73,7 @@ type private RecordingBackend(label: string, ?delayMs: int, ?outcome: ExternalOu
     member _.LastMinted = lock sync (fun () -> lastMinted)
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = label
 
         member _.Submit(scopeId, spec) = async {
@@ -119,6 +120,7 @@ type private SpendProbe(inner: IExternalComputeDispatcher) =
     member _.Spend = Threading.Interlocked.Read(&spend[0])
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = inner.Backend
 
         member _.Submit(scopeId, spec) = async {
@@ -747,9 +749,7 @@ let optInTests =
                 MemoizedComputeDispatcher(backend, ttl = ttl) :> IExternalComputeDispatcher
 
             Expect.isFalse
-                (match box memo with
-                 | :? IIsolatedComputeBackend -> true
-                 | _ -> false)
+                (memo.Capabilities.Isolated |> Option.isSome)
                 "the decorator is not a backend and must not present as one"
 
             Expect.equal

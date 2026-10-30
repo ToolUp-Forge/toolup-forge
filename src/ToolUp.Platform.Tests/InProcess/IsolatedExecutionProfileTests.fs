@@ -72,6 +72,11 @@ type private RecordingDispatcher(posture: IsolationPosture option) =
     member _.Cancelled = List.ofSeq cancelled
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = {
+            BackendCapabilities.none with
+                Isolated = posture
+        }
+
         member _.Backend = "test-backend"
 
         member _.Submit(_scopeId, spec) = async {
@@ -83,13 +88,8 @@ type private RecordingDispatcher(posture: IsolationPosture option) =
 
         member _.Cancel(h) = async { cancelled.Add h }
 
-    interface IIsolatedComputeBackend with
-        member _.IsolationPosture =
-            match posture with
-            | Some p -> p
-            | None -> IsolationPosture.standardOnly
 
-/// A dispatcher that does NOT implement `IIsolatedComputeBackend` at all
+/// A dispatcher that declares no posture at all (`BackendCapabilities.none`)
 /// — the shape every pre-478 companion has. It must read as
 /// `standardOnly`, never as "unspecified, therefore fine".
 type private UndeclaringDispatcher() =
@@ -97,6 +97,7 @@ type private UndeclaringDispatcher() =
     member _.Submitted = List.ofSeq submitted
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "undeclaring-backend"
 
         member _.Submit(_scopeId, spec) = async {

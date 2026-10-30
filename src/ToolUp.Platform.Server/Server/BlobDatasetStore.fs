@@ -30,7 +30,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 /// non-Remoting JSON). Zero vendor dependency. `Encode` / `Decode` are pure
 /// with respect to their inputs (GP 12 rule 4).
 type JsonFrameDatasetCodec() =
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = FableConverters.shared
 
     interface IDatasetCodec with
         member _.Format = "toolup-frame-v1"
@@ -73,7 +73,7 @@ type BlobDatasetStore(dataObjects: IDataObjectStore, codec: IDatasetCodec) =
     [<Literal>]
     static let MaxPageLimit = 10000
 
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = FableConverters.shared
 
     /// Reserved metadata keys the store owns; stripped from the user-facing
     /// `Metadata` on read.
@@ -483,3 +483,43 @@ module BlobDatasetStore =
     /// companion codec for native compute handoff).
     let createWithCodec (dataObjects: IDataObjectStore) (codec: IDatasetCodec) : IDatasetStore =
         BlobDatasetStore(dataObjects, codec) :> IDatasetStore
+
+/// Reads over any `IDatasetStore`.
+[<RequireQualifiedAccess>]
+module DatasetStore =
+    /// The window `readAll` pages in. A store may cap `Limit` below it; the
+    /// loop pages until the store's own total, so a smaller cap only adds
+    /// round trips.
+    [<Literal>]
+    let PageSize = 1000
+
+    /// Read every row of a vintage, paging in fixed windows until the
+    /// store's `TotalRows` is reached (or a page comes back empty). Returns
+    /// the schema the last page carried and the rows in store order; the
+    /// first failing page's `DatasetError` is returned as it stands.
+    let readAll
+        (store: IDatasetStore)
+        (scopeId: string)
+        (datasetId: string)
+        (version: int)
+        : Async<Result<DatasetSchema * DatasetRow list, DatasetError>> =
+        let rec loop (offset: int64) (pages: DatasetRow list list) = async {
+            let query: DatasetPageQuery = {
+                Offset = offset
+                Limit = PageSize
+                Filters = []
+            }
+
+            match! store.ReadPage(scopeId, datasetId, version, query) with
+            | Error e -> return Error e
+            | Ok page ->
+                let pages = page.Rows :: pages
+                let read = offset + int64 (List.length page.Rows)
+
+                if List.isEmpty page.Rows || read >= page.TotalRows then
+                    return Ok(page.Schema, pages |> List.rev |> List.concat)
+                else
+                    return! loop read pages
+        }
+
+        loop 0L []

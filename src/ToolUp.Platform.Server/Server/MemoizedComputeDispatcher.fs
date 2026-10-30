@@ -108,8 +108,8 @@ open ToolUp.Platform.Metrics
 // memoized hit costs zero budget". The reverse order (budget outside memo)
 // charges for every hit and is simply the feature not working.
 //
-// **This decorator does NOT implement `IIsolatedComputeBackend`, and must
-// not.** It is not a backend and has no posture of its own. Re-declaring
+// **This decorator declares `BackendCapabilities.none`, and must claim no
+// posture.** It is not a backend and has no posture of its own. Re-declaring
 // the inner posture — which Phase 478's `ExecutionProfileGate.enforce`
 // correctly does — would be wrong here in both directions: over a plain
 // backend it would claim a guarantee about work the memo may answer without
@@ -695,6 +695,7 @@ type MemoizedComputeDispatcher
     }
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         /// The inner dispatcher's label, unchanged.
         ///
         /// Phase 478's choice, not Phase 484's: a single-dispatcher

@@ -105,6 +105,7 @@ type private RecordingDispatcher() =
     member _.SubmitCount = submitted.Count
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "recording"
 
         member _.Submit(scopeId, spec) = async {
@@ -133,6 +134,7 @@ type private ControllablePoll(outcome: unit -> ExternalOutcome) =
     member _.Cancelled = List.ofSeq cancelled
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "controllable"
 
         member _.Submit(scopeId, spec) = async {
@@ -630,6 +632,7 @@ let private dispatcherTests =
 
                 let refusing =
                     { new IExternalComputeDispatcher with
+                        member _.Capabilities = BackendCapabilities.none
                         member _.Backend = "refusing"
                         member _.Submit(_, _) = async { return Error(ExternalComputeError.retriable "backend busy") }
                         member _.Poll _ = async { return ExternalOutcome.Pending }

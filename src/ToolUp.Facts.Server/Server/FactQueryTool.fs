@@ -4,10 +4,7 @@
 namespace ToolUp.Facts
 
 open System
-open System.Globalization
-open System.Text.Json
 open Microsoft.AspNetCore.Http
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -54,11 +51,6 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// `FactsCompose.withFactStore`; consumers normally never call this
 /// module directly.
 module FactQueryTool =
-
-    let private jsonOptions = FableConverters.create ()
-
-    let private serialize (value: obj) : string =
-        JsonSerializer.Serialize(value, jsonOptions)
 
     // ── Tool definition (559.A / 559.C) ───────────────────────────
 
@@ -144,63 +136,12 @@ module FactQueryTool =
         IncludeSuperseded: bool
     }
 
-    let private tryProperty (root: JsonElement) (name: string) : JsonElement option =
-        match root.TryGetProperty name with
-        | true, v when v.ValueKind <> JsonValueKind.Null -> Some v
-        | _ -> None
-
-    /// A required / optional string argument; `Error` when present with a
-    /// non-string shape.
-    let private stringArg (root: JsonElement) (name: string) : Result<string option, string> =
-        match tryProperty root name with
-        | None -> Ok None
-        | Some v when v.ValueKind = JsonValueKind.String -> Ok(Some(v.GetString()))
-        | Some _ -> Error(sprintf "Argument '%s' must be a string." name)
-
-    let private boolArg (root: JsonElement) (name: string) : Result<bool option, string> =
-        match tryProperty root name with
-        | None -> Ok None
-        | Some v when v.ValueKind = JsonValueKind.True -> Ok(Some true)
-        | Some v when v.ValueKind = JsonValueKind.False -> Ok(Some false)
-        | Some _ -> Error(sprintf "Argument '%s' must be a boolean." name)
-
-    let private instantArg (root: JsonElement) (name: string) : Result<DateTime option, string> =
-        match stringArg root name with
-        | Error e -> Error e
-        | Ok None -> Ok None
-        | Ok(Some s) when String.IsNullOrWhiteSpace s -> Ok None
-        | Ok(Some s) ->
-            match
-                DateTime.TryParse(
-                    s,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal ||| DateTimeStyles.AdjustToUniversal
-                )
-            with
-            | true, t -> Ok(Some t)
-            | false, _ -> Error(sprintf "Argument '%s' is not a parseable ISO-8601 instant: '%s'." name s)
-
     let private parseArgs (argsJson: string) : Result<QueryArgs, string> =
-        let parsed =
-            try
-                Ok((JsonDocument.Parse argsJson).RootElement.Clone())
-            with _ ->
-                Error "Arguments are not valid JSON."
-
-        match parsed with
+        match FactTool.parseObject argsJson with
         | Error e -> Error e
-        | Ok root when root.ValueKind <> JsonValueKind.Object -> Error "Arguments must be a JSON object."
         | Ok root ->
-            let required name =
-                match stringArg root name with
-                | Ok(Some s) when not (String.IsNullOrWhiteSpace s) -> Ok s
-                | Ok _ ->
-                    Error(
-                        sprintf
-                            "Required argument '%s' is missing. Subject and metric ids come from the deployment's grounding registry."
-                            name
-                    )
-                | Error e -> Error e
+            let required =
+                FactTool.requiredArg "Subject and metric ids come from the deployment's grounding registry." root
 
             match required "subject_hierarchy" with
             | Error e -> Error e
@@ -210,7 +151,7 @@ module FactQueryTool =
                 | Error e -> Error e
                 | Ok metric ->
 
-                    match stringArg root "subject_path" with
+                    match FactTool.stringArg root "subject_path" with
                     | Error e -> Error e
                     | Ok pathArg ->
                         let path =
@@ -222,7 +163,7 @@ module FactQueryTool =
                                 |> Array.filter (fun seg -> seg <> "")
                                 |> Array.toList
 
-                        match instantArg root "period_from", instantArg root "period_to" with
+                        match FactTool.instantArg root "period_from", FactTool.instantArg root "period_to" with
                         | Error e, _
                         | _, Error e -> Error e
                         | Ok from, Ok to' ->
@@ -245,11 +186,11 @@ module FactQueryTool =
                             | Error e -> Error e
                             | Ok periodOverlaps ->
 
-                                match instantArg root "as_of" with
+                                match FactTool.instantArg root "as_of" with
                                 | Error e -> Error e
                                 | Ok asOf ->
 
-                                    match boolArg root "include_superseded" with
+                                    match FactTool.boolArg root "include_superseded" with
                                     | Error e -> Error e
                                     | Ok includeSuperseded ->
                                         Ok {
@@ -280,7 +221,7 @@ module FactQueryTool =
         : Async<string> =
         async {
             match parseArgs argsJson with
-            | Error message -> return serialize {| error = message |}
+            | Error message -> return FactTool.serialize {| error = message |}
             | Ok args ->
                 let query: FactQuery = {
                     SubjectBranch = None
@@ -377,52 +318,19 @@ module FactQueryTool =
                     |> Async.Sequential
 
                 return
-                    serialize {|
+                    FactTool.serialize {|
                         facts = Array.toList projected
                         withheld = withheldMarkers
                     |}
         }
 
-    // ── HttpContext adapter (the registered executor) ─────────────
+    // ── HttpContext adapter ───────────────────────────────────────
 
-    // Phase 797 — the scope is not read from the request items here. The
-    // door asks `ScopeResolution.forRequest`, which returns the
-    // `ResolvedScope` the scope-resolution middleware minted for this
-    // request or the explicit anonymous scope, and nothing a caller can
-    // fabricate. There is no user-id rung and no literal fallback: an
-    // unresolved request reads the anonymous shard, which holds only what
-    // was asserted anonymously.
-
-    let private userIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
-    let private serviceOf<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
-        match ctx.RequestServices.GetService(typeof<'T>) with
-        | :? 'T as service -> Some service
-        | _ -> None
-
-    /// The registered `HttpContext` executor. Resolves the fact store,
-    /// the disclosure gate, and the optional metric registry from DI —
-    /// all registered by the same `FactsCompose.withFactStore` knob that
-    /// declares this tool, so a composed deployment always finds them.
+    /// The registered `HttpContext` executor.
     let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
-        match serviceOf<IFactStore> ctx, serviceOf<IFactDisclosureGate> ctx with
-        | Some store, Some gate ->
-            let registry = serviceOf<Grounding.IMetricRegistry> ctx
-
-            executeWith
-                store
-                gate
-                registry
-                (fun () -> DateTime.UtcNow)
-                (StorageScopeResolver.ScopeResolution.forRequest ctx)
-                (userIdOf ctx)
-                argsJson
-        | _ -> async {
-            return
-                serialize {|
-                    error = "The fact store is not composed in this deployment — `query_facts` is unavailable."
-                |}
-          }
+        FactTool.define
+            "query_facts"
+            (fun c argsJson ->
+                executeWith c.Store c.Gate c.Registry (fun () -> DateTime.UtcNow) c.Scope c.UserId argsJson)
+            ctx
+            argsJson
