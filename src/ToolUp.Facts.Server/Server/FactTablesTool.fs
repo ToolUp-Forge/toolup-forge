@@ -106,8 +106,9 @@ type FactTableLevelView = {
     Members: FactLevelMembers option
 }
 
-/// What a deployment declares of the table listing. Registered as a service;
-/// absent means `FactTablesOptions.defaults`.
+/// What a deployment declares of the table listing, handed to
+/// `FactsCompose.withFactTablesOptions`; undeclared means
+/// `FactTablesOptions.defaults`.
 type FactTablesOptions = {
     /// The most distinct members a level may hold and still be listed by
     /// name. `0` turns member listing off.
@@ -767,21 +768,19 @@ module FactTablesTool =
         : Async<string> =
         executeWithOptions FactTablesOptions.defaults deps scope principal argsJson
 
-    /// The registered `HttpContext` executor: the fact tool shell's scope and
-    /// caller, over the fact browse's dependencies for this request.
-    let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
+    /// The `HttpContext` executor under `options`: the fact tool shell's scope
+    /// and caller, over the fact browse's dependencies for this request. The
+    /// options are a value handed in at composition
+    /// (`FactsCompose.withFactTablesOptions`); nothing here reads the container
+    /// for them.
+    let executeFor (options: FactTablesOptions) (ctx: HttpContext) (argsJson: string) : Async<string> =
         FactTool.define
             Name
             (fun c argsJson ->
                 // The shell found the store and the gate, which are exactly
                 // what the browse dependencies need.
                 match FactBrowseHandler.factBrowseDeps ctx with
-                | Some deps ->
-                    let options =
-                        ServiceComposition.tryService<FactTablesOptions> ctx.RequestServices
-                        |> Option.defaultValue FactTablesOptions.defaults
-
-                    executeWithOptions options deps c.Scope c.UserId argsJson
+                | Some deps -> executeWithOptions options deps c.Scope c.UserId argsJson
                 | None ->
                     async.Return(
                         FactTool.serialize {|
@@ -790,3 +789,7 @@ module FactTablesTool =
                     ))
             ctx
             argsJson
+
+    /// The registered `HttpContext` executor under `FactTablesOptions.defaults`.
+    let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
+        executeFor FactTablesOptions.defaults ctx argsJson

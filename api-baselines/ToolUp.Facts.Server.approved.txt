@@ -1078,6 +1078,7 @@ ToolUp.Facts.FactTablesTool.UnenumeratedReason : System.String (literal)
 ToolUp.Facts.FactTablesTool.UnsampledReason : System.String (literal)
 ToolUp.Facts.FactTablesTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.FactTablesTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.FactTablesTool.executeFor(ToolUp.Facts.FactTablesOptions, Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactTablesTool.executeWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactTablesTool.executeWithOptions(ToolUp.Facts.FactTablesOptions, ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactTablesTool.project(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableView], System.String]]
@@ -1111,6 +1112,7 @@ ToolUp.Facts.FactsCompose.withFactPublication(ToolUp.Facts.FactPublicationConfig
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStoreImplementation(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, ToolUp.Facts.IFactStore], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactTableWriter(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withFactTablesOptions(ToolUp.Facts.FactTablesOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactTier(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.GroundingEnvelope]], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

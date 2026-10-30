@@ -740,6 +740,52 @@ let private compositionTests =
             Expect.isFalse (row.GetProperty("withheld").GetBoolean()) "described"
             Expect.equal (row.GetProperty("rowCount").GetInt32()) 6 "its committed rows, in this scope"
         }
+
+        test "withFactTablesOptions hands the cap to the executor as a value" {
+            let app, sp, _ = composedUnder EnabledFactStore
+            let scope = newScope ()
+            seed (sp.GetRequiredService<IFactTableWriter>()) scope trade "revenue"
+
+            let run (a: ServerApp) =
+                let exec =
+                    a.AITools |> List.find (fun (d, _) -> d.Name = FactTablesTool.Name) |> snd
+
+                exec (contextFor sp scope) "{}" |> Async.RunSynchronously
+
+            Expect.stringContains
+                (run app)
+                "\"names\":[\"s1\",\"s2\"]"
+                "composed plainly, the default cap lists the sites"
+
+            let capped = FactsCompose.withFactTablesOptions { MemberCap = 1 } app
+            Expect.stringContains (run capped) "\"listed\":false" "a cap of one counts only"
+
+            let off = FactsCompose.withFactTablesOptions FactTablesOptions.membersOff app
+            Expect.isFalse ((run off).Contains "\"members\"") "a cap of zero lists none"
+
+            Expect.equal
+                (off.AITools |> List.map (fun (d, _) -> d.Name))
+                (app.AITools |> List.map (fun (d, _) -> d.Name))
+                "the same tools, in the same order"
+        }
+
+        test "withFactTablesOptions is refused before withFactStore and inert without a store" {
+            let enabled = {
+                ServerApp.empty with
+                    Config = {
+                        ServerConfig.defaults with
+                            FactStore = EnabledFactStore
+                    }
+            }
+
+            Expect.throwsT<CompositionRefused>
+                (fun () -> FactsCompose.withFactTablesOptions FactTablesOptions.defaults enabled |> ignore)
+                "the tool is not declared yet"
+
+            Expect.isEmpty
+                (FactsCompose.withFactTablesOptions FactTablesOptions.defaults ServerApp.empty).AITools
+                "no fact store, nothing declared"
+        }
     ]
 
 // ─── 5. A scripted turn ──────────────────────────────────────────────

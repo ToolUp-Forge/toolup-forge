@@ -1233,8 +1233,9 @@ the grounded narrative also offers), server-resident, declaring `ReadFacts`.
   committed rows carry no value that could be checked is withheld, saying so; a table with no committed row has
   nothing to withhold and is described. The sample is a floor, not a proof, as coverage's probe is.
 - **A small level names its members.** The level a table's rows sit at lists its members' names when it holds at most a
-  declared cap of distinct members; a deployment declares the cap by registering a `FactTablesOptions` (default 20,
-  `MemberCap = 0` turns it off, `FactTablesOptions.membersOff`). On that level's entry of `path` the result carries a
+  declared cap of distinct members; a deployment declares the cap with `FactsCompose.withFactTablesOptions` after `withFactStore` (default 20,
+  `MemberCap = 0` turns it off, `FactTablesOptions.membersOff`); the options are captured at composition, never read from
+  the container per request. On that level's entry of `path` the result carries a
   `members` block: `listed: true` with `names` (ordinal-sorted), `count` and `unlisted`, or `listed: false` with the
   `count`, the `cap` and why only a count is given. Names, never values: a member is a subject identity. The model is told
   to use a listed name as it is, and to find a member of a level above the cap by ranking.

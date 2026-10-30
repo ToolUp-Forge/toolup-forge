@@ -837,6 +837,38 @@ module FactsCompose =
             }
             |> contribute register
 
+    /// Declare what `list_fact_tables` lists: the cap on the distinct members
+    /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
+    /// turns member listing off). Call it after `withFactStore`, which declares
+    /// the tool; the options are captured here as a value and the executor
+    /// reads the container for nothing. With no fact store composed it changes
+    /// nothing, and calling it before `withFactStore` is refused.
+    let withFactTablesOptions (options: FactTablesOptions) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let declared (definition: AIToolDefinition, _) = definition.Name = FactTablesTool.Name
+
+            if not (List.exists declared app.AITools) then
+                ServiceComposition.refuse (
+                    CompositionRefusal.MissingDependency(
+                        "FactsCompose.withFactTablesOptions",
+                        FactTablesTool.Name,
+                        "call FactsCompose.withFactStore first, which declares it"
+                    )
+                )
+            else
+                {
+                    app with
+                        AITools =
+                            app.AITools
+                            |> List.map (fun (definition, executor) ->
+                                if declared (definition, executor) then
+                                    definition, FactTablesTool.executeFor options
+                                else
+                                    definition, executor)
+                }
+
     // ─── Phase 592 — purpose-bound disclosure (opt-in) ────────────────
     //
     // The "declared why" facet: a composition declares its purpose
