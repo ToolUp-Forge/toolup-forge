@@ -1,6 +1,7 @@
 module AzureSpeechTranscriptionProviderHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -21,8 +22,11 @@ type AzureSpeechTranscriptionProviderHealthCheck(secretStore: ISecretStore) =
 
         member _.Check() = async {
             try
-                let! key = secretStore.GetSecret("_platform", AzureSpeechTranscriptionProvider.KeySecretName)
-                let! region = secretStore.GetSecret("_platform", AzureSpeechTranscriptionProvider.RegionSecretName)
+                let! key =
+                    secretStore.GetSecret(ScopeKey.PlatformContainer, AzureSpeechTranscriptionProvider.KeySecretName)
+
+                let! region =
+                    secretStore.GetSecret(ScopeKey.PlatformContainer, AzureSpeechTranscriptionProvider.RegionSecretName)
 
                 let present (v: string option) =
                     match v with

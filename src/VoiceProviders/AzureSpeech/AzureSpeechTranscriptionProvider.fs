@@ -4,6 +4,7 @@ open System
 open System.Net.Http
 open System.Net.Http.Headers
 open System.Text.Json
+open ToolUp.Platform
 open ToolUp.Voice
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
@@ -268,8 +269,8 @@ type private AzureSpeechTranscriptionProviderImpl
 /// reconstruction).
 let create (secretStore: ISecretStore) : ITranscriptionProvider =
     AzureSpeechTranscriptionProviderImpl(
-        (fun () -> secretStore.GetSecret("_platform", KeySecretName)),
-        (fun () -> secretStore.GetSecret("_platform", RegionSecretName))
+        (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, KeySecretName)),
+        (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, RegionSecretName))
     )
 
 /// Create from a directly-supplied subscription key + region (both
@@ -294,8 +295,8 @@ type AzureSpeechConfigValidator(secretStore: ISecretStore, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let! keyOpt = secretStore.GetSecret("_platform", KeySecretName)
-            let! regionOpt = secretStore.GetSecret("_platform", RegionSecretName)
+            let! keyOpt = secretStore.GetSecret(ScopeKey.PlatformContainer, KeySecretName)
+            let! regionOpt = secretStore.GetSecret(ScopeKey.PlatformContainer, RegionSecretName)
 
             let present (v: string option) =
                 match v with
