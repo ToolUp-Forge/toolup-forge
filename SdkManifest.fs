@@ -114,23 +114,6 @@ type Reconciliation = {
     Excluded: Exclusion list
 }
 
-/// Directory-based exclusions the `Pack` / `Publish` globs apply that are
-/// NOT expressed via `<IsPackable>false</IsPackable>`. Kept verbatim in
-/// step with the `--` clauses in `SDK.Build.fs`; most are absent from the
-/// OSS tree and are listed for faithfulness to the glob rather than
-/// because they match anything here.
-let private excludedDirSegments = [
-    "ToolUpApp-Server"
-    "ToolUpApp-Client"
-    "Modules"
-    "TestHarness"
-    "ToolUp.Algorithms"
-    "ToolUp.Platform.Tests"
-    "ToolUp.Forms.Tests"
-    "ToolUp.Scheduling.Tests"
-    "ToolUp.RAG.Evaluation"
-    "ToolUp.RAG.Benchmarks"
-]
 
 let private forwardSlashed (path: string) = path.Replace('\\', '/')
 
@@ -157,13 +140,9 @@ let private isPackableProject (fsprojPath: string) (text: string) =
     let notMarkedUnpackable =
         not (text.Replace(" ", "").Contains "<IsPackable>false</IsPackable>")
 
-    let normalised = forwardSlashed fsprojPath
-
-    let notExcludedDir =
-        excludedDirSegments
-        |> List.forall (fun seg -> not (normalised.Contains(sprintf "/%s/" seg)))
-
-    notMarkedUnpackable && notExcludedDir
+    // Directory exclusions NOT expressed via `<IsPackable>false</IsPackable>`:
+    // the one declaration the `Pack` / `Publish` globs read (Phase 1096).
+    notMarkedUnpackable && not (ToolUp.Platform.PackScope.isExcluded fsprojPath)
 
 /// MSBuild's defaulting chain: an absent `<PackageId>` falls back to
 /// `<AssemblyName>`, which falls back to the project filename. Several

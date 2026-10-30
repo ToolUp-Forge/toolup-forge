@@ -4,11 +4,12 @@
 /// Phase 762 — the gate lane, read from `TOOLUP_TEST_LANE` once per
 /// process.
 ///
-/// The full gate is ~16 minutes of wall-clock (measured 2026-09-12: 967 s
-/// over 23 packs), which a dispatched worker has to spend before it can
-/// know whether its own change compiles green. A lane lets it spend
-/// minutes on its own work first and the full gate ONCE, on the folded
-/// tree — the citable run.
+/// The full gate is tens of minutes of wall-clock — every pack plus the
+/// legs, the `Samples` leg (Phase 904) among them — which a dispatched
+/// worker has to spend before it can know whether its own change compiles
+/// green. A lane lets it spend minutes on its own work first and the full
+/// gate ONCE, on the folded tree — the citable run. No figure is restated
+/// here; `VerifyAll` prints the measured one once Phase 1098 lands.
 ///
 /// **The lane is an environment variable, not a `verify.ps1` switch, and
 /// that is deliberate.** `verify.ps1` is a hard-denied path on the forge

@@ -332,11 +332,12 @@ jobs:
   #      their premise. Blob names are now normalised to `/` and the
   #      shape is pinned by the `IBlobStorage` contract pack.
   #
-  # Measured cost (2-core ubuntu-latest, warm NuGet cache): solution
-  # build 6m10s, then the packs — Platform alone is 5m36s for 5,214
-  # cases. Budget ~15 minutes for a completing run. `timeout-minutes`
-  # stays generous but finite: a hang must fail loudly rather than burn
-  # the 6-hour default, which is exactly how (1) was caught.
+  # Cost: one solution build, then the packs (the Platform pack is most
+  # of it) and the legs, the `Samples` leg (Phase 904) included. No
+  # figure is restated here — `VerifyAll` prints the measured one once
+  # Phase 1098 lands. `timeout-minutes` stays generous but finite: a hang
+  # must fail loudly rather than burn the 6-hour default, which is
+  # exactly how (1) was caught.
   #
   # ── The CloudParity emulator legs are NOT armed IN THIS JOB ─────────
   #
@@ -636,8 +637,16 @@ jobs:
           # One more `PASS` line in the same summary block. Raised 28 → 29
           # by Phase 776: the `Analyzers` leg runs the TUA analyser rules
           # over every tracked `src/` file and reconciles the sites with
-          # the committed inventory. One more `PASS` line.
-          EXPECTED_PACKS: 29
+          # the committed inventory. One more `PASS` line. Raised 29 → 34 by
+          # Phase 1096: four packs that were in the solution and run by
+          # nothing (Tabular, Classification, DataSubject, ReportingHtmlPdf)
+          # are rows now, and the `GateReconcile` leg holds every
+          # `*.Tests.fsproj` to a row or a named exclusion — one more `PASS`
+          # line. (Five legs registered since Phase 776 — ScopeLiterals,
+          # ServiceConfigFold, FuaranCoResolution, FuaranCoBuild,
+          # MergeDrivers — never raised this floor; Phase 1098 renders it
+          # from the gate manifest instead of hand-counting it.)
+          EXPECTED_PACKS: 34
           # Part of the memory-headroom block above. Since Phase 731
           # VerifyAll builds ONCE and then launches each pack's built dll
           # directly, so the per-pack inner builds this originally guarded

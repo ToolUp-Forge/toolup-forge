@@ -85,6 +85,11 @@ let private registeredTests =
         // project's own node_modules; a decoy elsewhere survives. Real processes.
         StaleEsbuildTests.tests
         FuaranCoResolutionTests.tests
+        // Phase 1096 - every test project in the solution or on disk is a
+        // VerifyAll pack or a named exclusion (the GateReconcile leg's go-red proof).
+        GateReconcileTests.tests
+        // Phase 1096 - the pure lane's grep audit re-run over every member.
+        PureLaneTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
