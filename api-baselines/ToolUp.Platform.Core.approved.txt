@@ -15093,10 +15093,8 @@ ToolUp.Remoting.MsgPack.IntegerWidthModule.label(ToolUp.Remoting.MsgPack.Integer
 ToolUp.Remoting.MsgPack.Read (class)
 ToolUp.Remoting.MsgPack.Read.interpretFloatAs$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Single], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Double], System.Type, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretFloatAs`1(System.Type, a) : System.Object
-ToolUp.Remoting.MsgPack.Read.interpretIntegerAs$W`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, a], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, System.SByte], System.Type, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretIntegerAsFrom$W`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, a], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, System.SByte], System.Type, System.Int32, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretIntegerAsFrom`1(System.Type, System.Int32, a) : System.Object
-ToolUp.Remoting.MsgPack.Read.interpretIntegerAs`1(System.Type, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretStringAs(System.Type, System.String) : System.Object
 ToolUp.Remoting.MsgPack.Read+DictionaryDeserializer`2 (class)
 ToolUp.Remoting.MsgPack.Read+DictionaryDeserializer`2..ctor()
@@ -15178,10 +15176,6 @@ ToolUp.Remoting.MsgPack.ValueModule.describe(ToolUp.Remoting.MsgPack.Value) : Sy
 ToolUp.Remoting.MsgPack.ValueModule.signedFits(System.Int32, System.Int32, System.Int64, System.UInt64, System.Int64) : System.Boolean
 ToolUp.Remoting.MsgPack.ValueModule.size(ToolUp.Remoting.MsgPack.Value) : System.Int32
 ToolUp.Remoting.MsgPack.ValueModule.unsignedFits(System.Int32, System.Int32, System.UInt64, System.UInt64) : System.Boolean
-ToolUp.Remoting.MsgPack.Write (class)
-ToolUp.Remoting.MsgPack.Write+Fable (class)
-ToolUp.Remoting.MsgPack.Write+Fable.writeObject(System.Object, System.Type, System.Collections.Generic.List`1[System.Byte]) : System.Void
-ToolUp.Remoting.MsgPack.Write+Fable.writeType`1(T, System.Collections.Generic.List`1[System.Byte]) : System.Object
 ToolUp.Remoting.PlatformDecoders (class)
 ToolUp.Remoting.PlatformDecoders.accessibleModulesResponse : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AccessibleModulesResponse, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.activeAiSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ActiveAiSummary, ToolUp.Remoting.DecodeError]] { get }

@@ -2,20 +2,16 @@
 // Copyright (c) Zaid Ajaj and Fable.Remoting contributors
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Remoting.MsgPack.Write
+/// The MessagePack writer as Fable compiles it. No browser path writes
+/// MessagePack, so it lives here, in the Fable test tier, and not on Core's
+/// `fable/` floor: its one job is to give the Fable reader a writer of the
+/// same format to round-trip against.
+module ToolUp.AI.Client.Tests.Remoting.MsgPackWrite
 
-open System.IO
 open System
 open System.Text
 open FSharp.Reflection
-open FSharp.NativeInterop
-open System.Reflection
-open System.Collections.Concurrent
-
-// Phase 902 — the .NET MessagePack writer (`makeSerializer`,
-// `serializeObj` and the TypeShape engine behind them) lives in
-// ToolUp.Platform.Server, in a module of this same name, which F# resolves
-// as one with this half. What stays here is the writer Fable compiles.
+open ToolUp.Remoting.MsgPack
 
 module Fable =
     let private serializerCache =

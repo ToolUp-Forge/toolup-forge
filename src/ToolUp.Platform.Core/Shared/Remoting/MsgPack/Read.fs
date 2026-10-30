@@ -297,18 +297,6 @@ let inline interpretIntegerAsFrom (typ: Type) (sourceBits: int) n =
             DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #endif
 
-/// The pre-786 entry, kept at its original shape so existing callers
-/// compile and link unchanged (GP 11).
-///
-/// A caller who arrives here has not said what width the value came from,
-/// and there is no way to recover it, so this assumes the widest source
-/// the format has. That is the SAFE assumption rather than the compatible
-/// one: it refuses a narrowing this function used to perform silently,
-/// and it refuses a same-width reinterpretation it cannot know is one.
-/// `Reader` does not come through here — every arm of `Read` knows its
-/// format's width and calls `interpretIntegerAsFrom` with it.
-let inline interpretIntegerAs (typ: Type) n = interpretIntegerAsFrom typ 64 n
-
 let inline interpretFloatAs (typ: Type) n =
 #if FABLE_COMPILER
     box n

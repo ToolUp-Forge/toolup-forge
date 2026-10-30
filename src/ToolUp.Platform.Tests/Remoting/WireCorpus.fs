@@ -31,7 +31,7 @@
 /// declared value at its static type and compares a decoded `obj` against
 /// it there — never by `obj` equality, and never after a `%A` rendering.
 /// This is the whole point of the numeric-width and date classes. The
-/// reader's `interpretIntegerAs` performs an UNCHECKED conversion
+/// reader's `interpretIntegerAsFrom` performs an UNCHECKED conversion
 /// (`int32 n`) once it knows the target type, so a decode that lands on
 /// the wrong width produces a plausible number rather than an error; boxed
 /// equality would then compare an `Int32` with an `Int64`, get `false` for
@@ -1350,7 +1350,7 @@ let mutations () : WireMutation list =
         // The narrowing the whole corpus is built around, asked of the
         // REFUSAL path. Reading an int64 payload at int32 is a decode that
         // cannot be right, and until Phase 786 it was ACCEPTED:
-        // `interpretIntegerAs` narrowed with an unchecked conversion once
+        // `interpretIntegerAsFrom` narrowed with an unchecked conversion once
         // it knew the target type, so nothing in the reader was in a
         // position to notice — a silent wrong ANSWER rather than a missing
         // error, which is why this was the most valuable row in the list.

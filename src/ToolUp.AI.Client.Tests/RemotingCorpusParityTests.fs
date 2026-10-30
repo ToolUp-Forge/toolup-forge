@@ -50,7 +50,9 @@ module ToolUp.AI.Client.Tests.RemotingCorpusParityTests
 open Fable.Core
 open Fable.Core.JsInterop
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.Remoting
 open ToolUp.Platform.Tests.Remoting
+open ToolUp.Remoting.MsgPack
 
 [<Import("readFileSync", from = "node:fs")>]
 let private readFileSync (path: obj) : obj = jsNative
@@ -83,6 +85,16 @@ let private cases = WireCorpus.crossHostCases
 
 let tests =
     testList "Remoting wire corpus — Fable parity" [
+        testCase "the Fable writer's bytes read back through the Fable reader"
+        <| fun () ->
+            let written = ResizeArray<byte>()
+            MsgPackWrite.Fable.writeType "parity" written
+
+            Expect.equal
+                (Read.Reader(written.ToArray()).Read typeof<string> |> unbox<string>)
+                "parity"
+                "one format, written and read on this host"
+
         testCase "the corpus directory resolved and is not empty"
         <| fun () ->
             // The non-vacuity floor. Every case below would pass by

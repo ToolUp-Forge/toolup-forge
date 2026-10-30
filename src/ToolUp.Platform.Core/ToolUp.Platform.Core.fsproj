@@ -762,7 +762,6 @@
              documents against them) and BEFORE Read.fs, which produces
              it. -->
         <Compile Include="Shared\Remoting\MsgPack\Value.fs" />
-        <Compile Include="Shared\Remoting\MsgPack\Write.fs" />
         <Compile Include="Shared\Remoting\MsgPack\Read.fs" />
         <!-- Phase 785 — the total combinators over that model, the
              opt-in registry, and the platform's own hand-written
