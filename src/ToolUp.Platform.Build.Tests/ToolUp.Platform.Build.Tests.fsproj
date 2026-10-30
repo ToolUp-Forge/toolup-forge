@@ -111,6 +111,8 @@
              remainder report, driven by a fake runner (no network). -->
         <Compile Include="NugetPushTests.fs" />
         <Compile Include="StaleEsbuildTests.fs" />
+        <Compile Include="..\..\FuaranCoResolution.fs" Link="FuaranCoResolution.fs" />
+        <Compile Include="FuaranCoResolutionTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -143,6 +145,17 @@
              same bytes CI does. -->
         <None Include="..\..\perf-budgets.json"
               Link="fixtures\perf\shipped-budget.json"
+              CopyToOutputDirectory="PreserveNewest" />
+        <!-- The Fuaran co-resolution rule's three committed inputs, linked so
+             a malformed one fails this pack as well as the gate leg. -->
+        <None Include="..\..\fuaran-ui-floors.json"
+              Link="fixtures\fuaran\shipped-floors.json"
+              CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\..\docs\platform\open-core-boundary.md"
+              Link="fixtures\fuaran\open-core-boundary.md"
+              CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\..\Directory.Packages.props"
+              Link="fixtures\fuaran\Directory.Packages.props"
               CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

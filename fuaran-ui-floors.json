@@ -1,0 +1,68 @@
+{
+  "release": "0.99.1",
+  "source": "https://api.nuget.org/v3-flatcontainer/",
+  "packages": {
+    "Fuaran.UI": {
+      "Fuaran.Compute.DataFrame": "0.41.0",
+      "Fuaran.Core.Column": "0.40.2",
+      "Fuaran.Core.Ops": "0.40.2",
+      "Fuaran.Core.Propagation": "0.40.2",
+      "Fuaran.Core.Relation": "0.40.2",
+      "Fuaran.Core.Text": "0.40.2",
+      "Fuaran.Core.Tree": "0.40.2",
+      "Fuaran.Core.Unit": "0.40.2",
+      "Fuaran.Core.Validator": "0.40.2",
+      "Fuaran.Core.Wire": "0.40.2"
+    },
+    "Fuaran.UI.Charts": {
+      "Fuaran.Compute.DataFrame": "0.41.0",
+      "Fuaran.Core.Column": "0.40.2",
+      "Fuaran.Core.Ops": "0.40.2",
+      "Fuaran.Core.Propagation": "0.40.2",
+      "Fuaran.Core.Relation": "0.40.2",
+      "Fuaran.Core.Text": "0.40.2",
+      "Fuaran.Core.Tree": "0.40.2",
+      "Fuaran.Core.Unit": "0.40.2",
+      "Fuaran.Core.Validator": "0.40.2",
+      "Fuaran.Core.Wire": "0.40.2",
+      "Fuaran.UI": "0.99.1",
+      "Fuaran.UI.Renderer.Core": "0.99.1"
+    },
+    "Fuaran.UI.Renderer": {
+      "Fuaran.Compute.DataFrame": "0.41.0",
+      "Fuaran.Core.Column": "0.40.2",
+      "Fuaran.Core.Ops": "0.40.2",
+      "Fuaran.Core.Propagation": "0.40.2",
+      "Fuaran.Core.Relation": "0.40.2",
+      "Fuaran.Core.Text": "0.40.2",
+      "Fuaran.Core.Tree": "0.40.2",
+      "Fuaran.Core.Unit": "0.40.2",
+      "Fuaran.Core.Validator": "0.40.2",
+      "Fuaran.Core.Wire": "0.40.2",
+      "Fuaran.UI": "0.99.1",
+      "Fuaran.UI.Charts": "0.99.1",
+      "Fuaran.UI.LayoutObserver.Abstractions": "0.99.1",
+      "Fuaran.UI.Ops.Abstractions": "0.99.1",
+      "Fuaran.UI.Renderer.Core": "0.99.1",
+      "Fuaran.UI.Telemetry.Abstractions": "0.99.1"
+    },
+    "Fuaran.UI.Renderer.Server": {
+      "Fuaran.Compute.DataFrame": "0.41.0",
+      "Fuaran.Core.Column": "0.40.2",
+      "Fuaran.Core.Function": "0.40.2",
+      "Fuaran.Core.OpStream": "0.40.2",
+      "Fuaran.Core.Ops": "0.40.2",
+      "Fuaran.Core.Propagation": "0.40.2",
+      "Fuaran.Core.Relation": "0.40.2",
+      "Fuaran.Core.Text": "0.40.2",
+      "Fuaran.Core.Tree": "0.40.2",
+      "Fuaran.Core.Unit": "0.40.2",
+      "Fuaran.Core.Validator": "0.40.2",
+      "Fuaran.Core.Wire": "0.40.2",
+      "Fuaran.UI": "0.99.1",
+      "Fuaran.UI.Charts": "0.99.1",
+      "Fuaran.UI.OpStream.Abstractions": "0.99.1",
+      "Fuaran.UI.Renderer.Core": "0.99.1"
+    }
+  }
+}

@@ -84,6 +84,7 @@ let private registeredTests =
         // Phase 1108 - KillStaleProcesses stops only the esbuild under the
         // project's own node_modules; a decoy elsewhere survives. Real processes.
         StaleEsbuildTests.tests
+        FuaranCoResolutionTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

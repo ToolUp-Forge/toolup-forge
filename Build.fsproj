@@ -125,6 +125,13 @@
          ToolUp.Platform.Build.Tests so the target and its go-red proofs
          run one implementation. -->
     <Compile Include="SampleGate.fs" />
+    <!-- The Fuaran co-resolution rule: this repository's Fuaran substrate
+         floors against the newest published Fuaran.UI release's, behind the
+         VerifyFuaranCoResolution / RefreshFuaranUiFloors / VerifyFuaranCoBuild
+         targets in Build.fs. BCL-only and source-linked into
+         ToolUp.Platform.Build.Tests, so the gate and its go-red proofs run one
+         implementation. -->
+    <Compile Include="FuaranCoResolution.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>
