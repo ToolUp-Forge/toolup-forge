@@ -227,4 +227,172 @@ let tests =
             Expect.equal (registry.Metrics |> List.map _.Id |> List.sort) [ "a1"; "b1" ] "both metrics in registry"
             Expect.equal (registry.MetricsByModule "modA" |> List.map _.Id) [ "a1" ] "modA lookup"
         }
+
+        // ─── Subject descriptions ─────────────────────────────────────
+
+        let described moduleName (descriptions: SubjectDescription list) =
+            ServerModule.create moduleName
+            |> ServerModule.declareSubjects [ subject "geography" [ "site"; "market"; "country" ] ]
+            |> ServerModule.describeSubjects descriptions
+
+        let geographyDescription: SubjectDescription = {
+            SubjectId = "geography"
+            Description = "Where a sale is booked; each site belongs to one market and each market to one country."
+            Levels = [
+                "site", "A single trading outlet."
+                "country", "The sovereign state a market is in."
+            ]
+        }
+
+        let refusal (app: ServerApp) : string =
+            try
+                ServerApp.metricRegistry app |> ignore
+                failtest "expected the composition to be refused"
+            with Failure message ->
+                message
+
+        test "a module describes a subject and its levels, and the composed registry carries them" {
+            let app =
+                ServerApp.empty
+                |> ServerApp.addModule (described "trade" [ geographyDescription ])
+
+            let registry = (ServerApp.metricRegistry app).Value
+
+            Expect.equal
+                (MetricRegistry.trySubjectDescription registry "geography")
+                (Some geographyDescription)
+                "the registered description is read back by subject id"
+
+            Expect.isNone (MetricRegistry.trySubjectDescription registry "unknown") "an unregistered subject has none"
+
+            Expect.equal
+                (registry.TryGetSubject "geography" |> Option.map _.Levels)
+                (Some [ "site"; "market"; "country" ])
+                "the declaration is unchanged"
+        }
+
+        test "an undescribed subject reads None, and a composition describing nothing registers the same registry" {
+            let app = ServerApp.empty |> ServerApp.addModule (described "trade" [])
+
+            let registry = (ServerApp.metricRegistry app).Value
+            Expect.isNone (MetricRegistry.trySubjectDescription registry "geography") "declared, undescribed"
+            Expect.isNone (ServerApp.metricRegistry ServerApp.empty) "nothing declared, nothing registered"
+        }
+
+        test "a registry without the capability has no descriptions" {
+            let inner = MetricRegistry.empty
+
+            let bare =
+                { new IMetricRegistry with
+                    member _.Metrics = inner.Metrics
+                    member _.Subjects = inner.Subjects
+                    member _.TryGetMetric id = inner.TryGetMetric id
+                    member _.TryGetSubject id = inner.TryGetSubject id
+                    member _.MetricsByModule m = inner.MetricsByModule m
+                    member _.MetricsByOperation o = inner.MetricsByOperation o
+                }
+
+            Expect.isNone
+                (MetricRegistry.trySubjectDescription bare "geography")
+                "probing a registry that predates it yields nothing"
+        }
+
+        test "describeSubjects accumulates, and addModule tags each description with its module" {
+            let m =
+                described "trade" [ geographyDescription ]
+                |> ServerModule.describeSubjects [
+                    {
+                        geographyDescription with
+                            SubjectId = "other"
+                    }
+                ]
+
+            Expect.equal (m.SubjectDescriptions |> List.map _.SubjectId) [ "geography"; "other" ] "adds, left to right"
+
+            let app = ServerApp.empty |> ServerApp.addModule m
+
+            Expect.equal
+                (app.RegisteredSubjectDescriptions
+                 |> List.map (fun r -> r.Module, r.Description.SubjectId))
+                [ "trade", "geography"; "trade", "other" ]
+                "registrations carry the module"
+        }
+
+        test "a description of a subject no module declares is refused, naming the module and the subject" {
+            let app =
+                ServerApp.empty
+                |> ServerApp.addModule (
+                    ServerModule.create "trade"
+                    |> ServerModule.describeSubjects [
+                        {
+                            geographyDescription with
+                                SubjectId = "ghost"
+                        }
+                    ]
+                )
+
+            let message = refusal app
+            Expect.stringContains message "Module 'trade'" "names the describing module"
+            Expect.stringContains message "'ghost'" "names the subject"
+            Expect.stringContains message "no module declares" "says why"
+        }
+
+        test "a description of a level the subject does not carry is refused, naming module, subject and level" {
+            let app =
+                ServerApp.empty
+                |> ServerApp.addModule (
+                    described "trade" [
+                        {
+                            geographyDescription with
+                                Levels = [ "region", "Not a level." ]
+                        }
+                    ]
+                )
+
+            let message = refusal app
+            Expect.stringContains message "Module 'trade'" "names the describing module"
+            Expect.stringContains message "level 'region'" "names the level"
+            Expect.stringContains message "subject 'geography'" "names the subject"
+            Expect.stringContains message "'site', 'market', 'country'" "and lists the levels it does carry"
+        }
+
+        test "a subject described twice, and a level described twice, are refused" {
+            let twice =
+                ServerApp.empty
+                |> ServerApp.addModule (described "trade" [ geographyDescription; geographyDescription ])
+
+            Expect.stringContains (refusal twice) "described more than once" "a subject is described once"
+
+            let levelTwice =
+                ServerApp.empty
+                |> ServerApp.addModule (
+                    described "trade" [
+                        {
+                            geographyDescription with
+                                Levels = [ "site", "One."; "site", "Two." ]
+                        }
+                    ]
+                )
+
+            let message = refusal levelTwice
+            Expect.stringContains message "level 'site'" "names the level"
+            Expect.stringContains message "2 times" "says how many"
+        }
+
+        test "a subject declared by another module can be described by this one" {
+            let describer =
+                ServerModule.create "docs"
+                |> ServerModule.describeSubjects [ geographyDescription ]
+
+            let app =
+                ServerApp.empty |> ServerApp.addModules [ described "trade" []; describer ]
+
+            let registry = (ServerApp.metricRegistry app).Value
+
+            Expect.equal
+                (MetricRegistry.trySubjectDescription registry "geography"
+                 |> Option.map _.Description)
+                (Some geographyDescription.Description)
+                "the declaration and its description need not share a module"
+        }
     ]

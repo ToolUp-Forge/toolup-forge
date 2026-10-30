@@ -1,10 +1,11 @@
-# A fact table describes itself: `ServerModule.describeFactTables`
+# A fact table and a subject describe themselves: `describeFactTables` and `describeSubjects`
 
 **Ships in:** ToolUp.Platform.Core, ToolUp.Platform.Server and ToolUp.Facts.Shared 0.38.0.
 
 **Affected:** nobody has to change anything to keep working. A module that declares fact tables adds one call to say
-what they are for. Code that builds a `FactTableDetail` or `FactTableColumnView` as a full record literal (usually a
-test fixture) adds `Description = None`.
+what they are for, and a module that declares subjects adds one to say what they mean. Code that builds a `FactTableDetail` or `FactTableColumnView` as a full record literal (usually a
+test fixture) adds `Description = None`. Code that builds a `ServerModule` or `ServerApp` as a full record literal (very
+rare: use `create` / `empty`) adds `SubjectDescriptions = []` / `RegisteredSubjectDescriptions = []`.
 
 ## What changes
 
@@ -24,6 +25,18 @@ test fixture) adds `Description = None`.
    the description. The table page shows it under the table's title, and each column's description as that column's
    hint. An undescribed table reads `None` and renders as before.
 
+5. **Subjects.** `SubjectDescription = { SubjectId; Description; Levels }` in `ToolUp.Platform.Core`
+   (`ToolUp.Platform.Grounding`) is the same shape for a subject hierarchy: what it is and how its levels nest, plus an
+   optional `(level, description)` per level. `ServerModule.describeSubjects` registers it beside `declareSubjects`.
+   `ServerApp.metricRegistry` is the registry `run` registers, and the place the refusal happens: a description of a
+   subject no module declares, or of a level its subject does not carry, stops the composition, naming the module, the
+   subject and the level; so does a subject or a level described twice. `IMetricRegistry` is not widened. The composed
+   registry also implements the optional capability `IDescribesSubjects`, and `MetricRegistry.trySubjectDescription
+   registry subjectId` probes for it: a registry that predates it has no descriptions.
+6. **The coverage tool.** `list_metric_coverage` adds `description` and `levelDescriptions` (described levels only,
+   in declaration order) to a hierarchy that has a description. A hierarchy without one serialises exactly as before:
+   the fields are absent, not null.
+
 ## What to do
 
 Add one call beside the declaration. Describe the columns that need it, and leave out the rest:
@@ -40,6 +53,20 @@ ServerModule.create "trade"
 ]
 ```
 
+Subjects follow the same shape:
+
+```fsharp skip=fragment
+ServerModule.create "trade"
+|> ServerModule.declareSubjects [ geography ]
+|> ServerModule.describeSubjects [
+    {
+        SubjectId = "geography"
+        Description = "Where a sale is booked: each site sits in one market, each market in one country."
+        Levels = [ "site", "A single trading outlet." ]
+    }
+]
+```
+
 A test fixture that builds `FactTableDetail` or `FactTableColumnView` in full adds `Description = None`.
 
 ## Verification
@@ -50,6 +77,12 @@ A registry without the capability has no descriptions. Each refusal names what i
 `fact browse pages` checks that the table page renders the description and the column hint, and renders neither for an
 undescribed table.
 
+In the Platform pack, `MetricRegistry (Phase 519)` covers the subject side: a description is read back by subject id, a
+registry without the capability has none, and each refusal (an undeclared subject, an undeclared level, a subject or
+level described twice) names the module, the subject and the level. `CoverageTool (Phase 705)` checks that
+`list_metric_coverage` reports the description and the level descriptions in declaration order, and that an
+undescribed hierarchy is byte-identical with and without another hierarchy being described.
+
 ## Rollback
 
-Remove the `describeFactTables` call. The composition is then exactly what it was without it.
+Remove the `describeFactTables` and `describeSubjects` calls. The composition is then exactly what it was without it.

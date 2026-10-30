@@ -981,6 +981,13 @@
       `docs/migrations/1150-fact-table-descriptions.md`.
     -->
     <!-- Phase 1135 rides the 0.38.0 draft, breaking: `StartupModes.StartupMode` gains `RunOperatorTask` (an exhaustive match adds the case), `ScopeMigrationReport` gains `Skipped` and `AuditId` (a full record literal adds both) and `ScopeMigrationOutcome` gains `WouldMigrate` (an exhaustive match adds the case); additive otherwise: the operator-task startup mode's seam (`StartupModes.OperatorTask`, `operatorTask`, `operatorTaskOut`), `FactStoreMigration.preview`, `FactsMigrateTask`, `FactStoreMigrationCompose.withFactsMigrateTask`, and the `toolup facts migrate` verb. -->
+    <!--
+      Phase 1151 rides the same draft: `ServerModule` and `ServerApp` gain a subject-description field each
+      (`SubjectDescriptions` / `RegisteredSubjectDescriptions`; a full record literal adds it, or builds from
+      `create` / `empty`). Additive otherwise: `SubjectDescription`, `IDescribesSubjects`,
+      `ServerModule.describeSubjects`, `ServerApp.metricRegistry`, `MetricRegistry.buildDescribed`,
+      `MetricRegistry.trySubjectDescription`. Recipe: `docs/migrations/1150-fact-table-descriptions.md`.
+    -->
     <Version>0.38.0</Version>
     <!--
       The draft note is APPEND-ONLY. A change that rides or advances the

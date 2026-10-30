@@ -7076,6 +7076,8 @@ ToolUp.Platform.Grounding.FactTableWatermarkModule (class)
 ToolUp.Platform.Grounding.FactTableWatermarkModule.render(ToolUp.Platform.Grounding.FactTableWatermark) : System.String
 ToolUp.Platform.Grounding.IDescribesFactTables (interface)
 ToolUp.Platform.Grounding.IDescribesFactTables.TryGetTableDescription(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDescription]
+ToolUp.Platform.Grounding.IDescribesSubjects (interface)
+ToolUp.Platform.Grounding.IDescribesSubjects.TryGetSubjectDescription(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDescription]
 ToolUp.Platform.Grounding.IFactTableRegistry (interface)
 ToolUp.Platform.Grounding.IFactTableRegistry.DeclaringModule(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Grounding.IFactTableRegistry.DestinationOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
@@ -7109,8 +7111,11 @@ ToolUp.Platform.Grounding.MetricRegistration.Definition : ToolUp.Platform.Ground
 ToolUp.Platform.Grounding.MetricRegistration.Module : System.String { get }
 ToolUp.Platform.Grounding.MetricRegistry (class)
 ToolUp.Platform.Grounding.MetricRegistry.build(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration]) : ToolUp.Platform.Grounding.IMetricRegistry
+ToolUp.Platform.Grounding.MetricRegistry.buildDescribed(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDescriptionRegistration]) : ToolUp.Platform.Grounding.IMetricRegistry
 ToolUp.Platform.Grounding.MetricRegistry.empty : ToolUp.Platform.Grounding.IMetricRegistry { get }
 ToolUp.Platform.Grounding.MetricRegistry.tryBuild(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.IMetricRegistry, System.String]
+ToolUp.Platform.Grounding.MetricRegistry.tryBuildDescribed(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDescriptionRegistration]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.IMetricRegistry, System.String]
+ToolUp.Platform.Grounding.MetricRegistry.trySubjectDescription(ToolUp.Platform.Grounding.IMetricRegistry, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDescription]
 ToolUp.Platform.Grounding.RecomputePolicy (class)
 ToolUp.Platform.Grounding.RecomputePolicy.Eager : ToolUp.Platform.Grounding.RecomputePolicy { get }
 ToolUp.Platform.Grounding.RecomputePolicy.IsEager : System.Boolean { get }
@@ -7156,6 +7161,15 @@ ToolUp.Platform.Grounding.SubjectDefinition.Calendar : Microsoft.FSharp.Core.FSh
 ToolUp.Platform.Grounding.SubjectDefinition.Id : System.String { get }
 ToolUp.Platform.Grounding.SubjectDefinition.Levels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Grounding.SubjectDefinition.Name : System.String { get }
+ToolUp.Platform.Grounding.SubjectDescription (class)
+ToolUp.Platform.Grounding.SubjectDescription..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Platform.Grounding.SubjectDescription.Description : System.String { get }
+ToolUp.Platform.Grounding.SubjectDescription.Levels : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.Grounding.SubjectDescription.SubjectId : System.String { get }
+ToolUp.Platform.Grounding.SubjectDescriptionRegistration (class)
+ToolUp.Platform.Grounding.SubjectDescriptionRegistration..ctor(System.String, ToolUp.Platform.Grounding.SubjectDescription)
+ToolUp.Platform.Grounding.SubjectDescriptionRegistration.Description : ToolUp.Platform.Grounding.SubjectDescription { get }
+ToolUp.Platform.Grounding.SubjectDescriptionRegistration.Module : System.String { get }
 ToolUp.Platform.Grounding.SubjectRegistration (class)
 ToolUp.Platform.Grounding.SubjectRegistration..ctor(System.String, ToolUp.Platform.Grounding.SubjectDefinition)
 ToolUp.Platform.Grounding.SubjectRegistration.Definition : ToolUp.Platform.Grounding.SubjectDefinition { get }
@@ -14649,7 +14663,6 @@ ToolUp.Remoting.DecodeErrorModule.renderPath(Microsoft.FSharp.Collections.FSharp
 ToolUp.Remoting.DecodeErrorModule.under(System.String, ToolUp.Remoting.DecodeError) : ToolUp.Remoting.DecodeError
 ToolUp.Remoting.DecodeException (class)
 ToolUp.Remoting.DecodeException..ctor()
-ToolUp.Remoting.DecodeException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Remoting.DecodeException..ctor(ToolUp.Remoting.DecodeError)
 ToolUp.Remoting.DecodeException.Data0 : ToolUp.Remoting.DecodeError { get }
 ToolUp.Remoting.DecoderDivergence (class)

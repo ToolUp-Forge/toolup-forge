@@ -946,6 +946,40 @@ ServerModule.create "trade"
 
 Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-descriptions.md).
 
+## What a subject and its levels mean: their description
+
+A subject declaration gives an id, a name and level labels. It does not say what "spend band" or "shopper type" is,
+what a "site" is in this deployment, or that a `geography` path reads site, market, country. The module knows, and
+`ServerModule.describeSubjects` lets it declare that beside the declaration, on the same rule as a table description:
+
+```fsharp skip=fragment
+ServerModule.create "trade"
+|> ServerModule.declareSubjects [ geography ]
+|> ServerModule.describeSubjects [
+    {
+        SubjectId = "geography"
+        Description = "Where a sale is booked: each site sits in one market, each market in one country."
+        Levels = [ "site", "A single trading outlet." ]
+    }
+]
+```
+
+- **Its own record, keyed by subject id.** `SubjectDescription` is not a field on `SubjectDefinition`, so every existing
+  declaration compiles unchanged. A level left out of `Levels` is undescribed.
+- **Prose, never a figure.** The same rule as above: a number belongs in a fact, where it is superseded and
+  disclosure-classified.
+- **Refused at compose, by name.** A description naming a subject no module declares, or a level its subject does not
+  carry, stops the composition, as does a subject or a level described twice. The message names the module, the subject
+  and the level (`ServerApp.metricRegistry`, the registry `run` registers).
+- **An optional capability, not a wider interface.** `IMetricRegistry` gains no member. The composed registry also
+  implements `IDescribesSubjects`; `MetricRegistry.trySubjectDescription` probes for it, so a registry that predates it
+  compiles unchanged and its callers see no descriptions.
+- **The model reads it where it already looks.** `list_metric_coverage` adds `description` and `levelDescriptions` (the
+  described levels, root to leaf) to a hierarchy that has them. A hierarchy without a description serialises exactly as
+  before, with the fields absent rather than null.
+
+Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-descriptions.md).
+
 ## Disclosure at birth
 
 Every fact carries a `Disclosure` from its first assertion (plan D14).
