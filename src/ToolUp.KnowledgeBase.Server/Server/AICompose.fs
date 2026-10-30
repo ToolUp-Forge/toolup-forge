@@ -51,7 +51,7 @@ let private resolveScope (ctx: HttpContext) : StorageScope =
 
         {
             ScopeId = userId
-            Container = sprintf "user-%s" userId
+            Container = ScopeKey.container (ScopeKey.User userId)
             Persist = true
         }
 
@@ -254,7 +254,7 @@ type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, se
 
     // The KB platform container: probing it writes nothing on a
     // conditional backend (an `IfMatch` against an absent blob is refused).
-    static let probeContainer = "_platform"
+    static let probeContainer = ScopeKey.PlatformContainer
 
     interface ConfigValidation.IConfigValidator with
         member _.Name = "knowledge-base:index-instance"

@@ -298,7 +298,7 @@ module KnowledgeApiDeps =
 
                 {
                     ScopeId = userId
-                    Container = sprintf "user-%s" userId
+                    Container = ScopeKey.container (ScopeKey.User userId)
                     Persist = true
                 }
 
@@ -312,10 +312,9 @@ module KnowledgeApiDeps =
         // authenticated users. `Deployment` is now reserved for genuinely
         // deployment-wide shared content only.
         let vectorScope =
-            if scope.Container.StartsWith "team-" then
-                Team scope.ScopeId
-            else
-                User scope.ScopeId
+            match StorageScope.tryTeamId scope with
+            | Some teamId -> Team teamId
+            | None -> User scope.ScopeId
 
         // Vector store and event store are resolved lazily — only the Notes
         // and AI-context paths need them, and tests bypassing `composeWithRAG`

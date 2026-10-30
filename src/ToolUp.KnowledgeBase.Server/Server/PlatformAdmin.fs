@@ -56,7 +56,7 @@ open KnowledgeBase.ServerApiDocuments
 // pre-populatable by admins.
 
 [<Literal>]
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private platformScope: StorageScope = {
     ScopeId = platformContainer

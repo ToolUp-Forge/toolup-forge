@@ -107,13 +107,9 @@ module RetentionSweepReport =
 /// `KnowledgeBaseLifecycle` already use. An already-prefixed id is taken
 /// verbatim; a bare id is a team id (the tenant unit).
 let containerOf (scopeId: string) : string =
-    if
-        scopeId.StartsWith("user-", StringComparison.Ordinal)
-        || scopeId.StartsWith("team-", StringComparison.Ordinal)
-    then
-        scopeId
-    else
-        "team-" + scopeId
+    match ScopeKey.tryParseContainer scopeId with
+    | Some(ScopeKey.User _) -> scopeId
+    | _ -> ScopeEnumeration.containerForTeam scopeId
 
 /// Vector scope for a container, mirroring `KnowledgeApiDeps.resolve`
 /// exactly: a `team-` container is the team-shared vector scope, anything
@@ -121,12 +117,10 @@ let containerOf (scopeId: string) : string =
 /// is reserved for genuinely deployment-wide shared content, and routing
 /// a per-user purge at it would delete another caller's chunks.
 let vectorScopeOf (container: string) : VectorScope =
-    if container.StartsWith("team-", StringComparison.Ordinal) then
-        Team(container.Substring 5)
-    else if container.StartsWith("user-", StringComparison.Ordinal) then
-        User(container.Substring 5)
-    else
-        User container
+    match ScopeKey.tryParseContainer container with
+    | Some(ScopeKey.Team teamId) -> Team teamId
+    | Some(ScopeKey.User userId) -> User userId
+    | _ -> User container
 
 /// Per-scope content-hash dedup index (Phase 14x), rebuilt here so a
 /// purged document's hash ref is dropped alongside its index entry — a

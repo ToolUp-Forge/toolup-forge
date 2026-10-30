@@ -50,12 +50,9 @@ open KnowledgeBase.ServerInventory
 /// prefix is honoured verbatim; everything else (bare id or `team-{id}`)
 /// resolves to the team container.
 let private containerOf (scopeId: string) =
-    if scopeId.StartsWith("user-", StringComparison.Ordinal) then
-        scopeId
-    elif scopeId.StartsWith("team-", StringComparison.Ordinal) then
-        scopeId
-    else
-        "team-" + scopeId
+    match ScopeKey.tryParseContainer scopeId with
+    | Some(ScopeKey.User _) -> scopeId
+    | _ -> ScopeEnumeration.containerForTeam scopeId
 
 type KnowledgeBaseLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with
