@@ -1009,6 +1009,7 @@
       opens the next draft appends below it like any other line.
       ==== draft notes: append ONE line per change below this marker, never edit one ====
       - 1149 (0.38.0): none — CHANGELOG.md is rendered at release instead of by each change, this note is append-only, and the merge drivers are registered through the clone's common directory; no package surface moves (docs/migrations/1149-changelog-at-release.md).
+      - 1094 (0.38.0): breaking — IModelFitProvider, IModelRegistry and IExternalComputeDispatcher gain an abstract Capabilities member (codemod rules 1094-*), IIsolatedComputeBackend and ModelFitWorkSpec.isArtifactDigest are removed, and a facts or model-execution composition that cannot be built raises CompositionRefused; additive ServiceComposition, DatasetStore.readAll, FactTool.define, the result builder and Hex64; recipe docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     -->
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

@@ -299,6 +299,14 @@ Register `provider` as an `IModelFitProvider` singleton, and register `ExternalF
 
 Nothing here is composed by default. A deployment that does not want external fits builds none of it and pays nothing.
 
+**What the provider and the backend declare.** Each seam carries a `Capabilities` record the implementation states
+once, and the platform reads it instead of testing the object's type. `ExternalModelFitProvider` declares
+`ModelFitProviderCapabilities.none`: it fits, and evaluation is a separate provider's job. Whether the platform hands
+the per-handle credential of section 5 to the backend is decided by the dispatcher's `BackendCapabilities.Callback`;
+a dispatcher that declares none is never handed one and its fits resolve by polling, which is correct, only slower.
+A decorator states what it carries: the execution-profile gate a `Verified` deployment wraps the dispatcher in
+carries the backend's callback and posture, so composing it costs the push path nothing.
+
 ## See also
 
 - [`external-compute.md`](external-compute.md) — the dispatcher seam, the handle, and the outcome vocabulary this contract rides on.

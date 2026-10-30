@@ -11405,6 +11405,15 @@ ToolUp.Platform.RestoreDrillPassedPayload.Invariants : Microsoft.FSharp.Collecti
 ToolUp.Platform.RestoreDrillPassedPayload.RestoreId : System.String { get }
 ToolUp.Platform.RestoreDrillPassedPayload.SnapshotId : System.String { get }
 ToolUp.Platform.RestoreDrillPassedPayload.StartedAt : System.DateTime { get }
+ToolUp.Platform.ResultBuilder (class)
+ToolUp.Platform.ResultBuilder..ctor()
+ToolUp.Platform.ResultBuilder.Bind`3(Microsoft.FSharp.Core.FSharpResult`2[T, E], Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.FSharpResult`2[U, E]]) : Microsoft.FSharp.Core.FSharpResult`2[U, E]
+ToolUp.Platform.ResultBuilder.Combine`2(Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, E], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpResult`2[T, E]]) : Microsoft.FSharp.Core.FSharpResult`2[T, E]
+ToolUp.Platform.ResultBuilder.Delay`2(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpResult`2[T, E]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpResult`2[T, E]]
+ToolUp.Platform.ResultBuilder.ReturnFrom`2(Microsoft.FSharp.Core.FSharpResult`2[T, E]) : Microsoft.FSharp.Core.FSharpResult`2[T, E]
+ToolUp.Platform.ResultBuilder.Return`2(T) : Microsoft.FSharp.Core.FSharpResult`2[T, E]
+ToolUp.Platform.ResultBuilder.Run`2(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpResult`2[T, E]]) : Microsoft.FSharp.Core.FSharpResult`2[T, E]
+ToolUp.Platform.ResultBuilder.Zero`1() : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, E]
 ToolUp.Platform.ResultDiff (class)
 ToolUp.Platform.ResultDiff..ctor(System.String, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldChange])
 ToolUp.Platform.ResultDiff.Changes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldChange] { get }
@@ -11413,6 +11422,9 @@ ToolUp.Platform.ResultDiff.ObjectId : System.String { get }
 ToolUp.Platform.ResultDiff.ToVersion : System.Int32 { get }
 ToolUp.Platform.ResultEventType (class)
 ToolUp.Platform.ResultEventType.AnalysisCompleted : System.String (literal)
+ToolUp.Platform.ResultExpression (class)
+ToolUp.Platform.ResultExpression.result : ToolUp.Platform.ResultBuilder { get }
+ToolUp.Platform.ResultExpression.|Hex64|_|(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.ResultStoreMode (class)
 ToolUp.Platform.ResultStoreMode.InMemoryResultStore : ToolUp.Platform.ResultStoreMode { get }
 ToolUp.Platform.ResultStoreMode.IsInMemoryResultStore : System.Boolean { get }
