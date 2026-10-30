@@ -1,6 +1,7 @@
 module GeminiAIProviderHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -19,7 +20,7 @@ type GeminiAIProviderHealthCheck(secretStore: ISecretStore) =
 
         member _.Check() = async {
             try
-                let! secret = secretStore.GetSecret("_platform", GeminiAIProvider.SecretKeyName)
+                let! secret = secretStore.GetSecret(ScopeKey.PlatformContainer, GeminiAIProvider.SecretKeyName)
 
                 match secret with
                 | Some value when not (String.IsNullOrWhiteSpace value) -> return Healthy

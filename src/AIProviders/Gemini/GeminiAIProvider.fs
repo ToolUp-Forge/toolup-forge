@@ -212,7 +212,10 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
     /// Construct reading the API key from the secret store on every
     /// request. Reads `GEMINI_API_KEY` from the `_platform` scope.
     new(secretStore: ISecretStore, ?model: string) =
-        GeminiAIProvider((fun () -> secretStore.GetSecret("_platform", SecretKeyName)), defaultArg model DefaultModel)
+        GeminiAIProvider(
+            (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, SecretKeyName)),
+            defaultArg model DefaultModel
+        )
 
     interface IAIProvider with
         member _.Capabilities = {

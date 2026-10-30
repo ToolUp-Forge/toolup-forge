@@ -4328,7 +4328,6 @@ let main args =
     //        the tree). Also a leg of `VerifyAll` in the fast and full lanes.
     let scopeLiteralCeilings: Map<string, int> =
         Map.ofList [
-            "Gemini", 2
             "GitHubAuth", 1
             "GoogleCloudStorage", 1
             "GoogleDirectory", 1
