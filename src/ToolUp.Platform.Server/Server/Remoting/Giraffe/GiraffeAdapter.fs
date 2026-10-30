@@ -168,14 +168,6 @@ module internal GiraffeUtil =
     /// here, not per request. The returned function accepts a per-request
     /// `implBuilder` and yields the `HttpHandler` that dispatches a single
     /// request against that builder.
-    ///
-    /// The pre-69n `buildFromImplementation` baked both phases into a
-    /// single function: callers that wanted to vary the impl per-request
-    /// (the `fromContextAsync` shape) had to call the whole thing per
-    /// request, paying the substrate cost on every call. The carve here
-    /// preserves the `fromContext` / `fromValue` semantics (build once,
-    /// dispatch many) AND restores the `fromContextAsync` contract to
-    /// build-once / read-per-call.
     let buildDispatcherTable<'impl> (options: RemotingOptions<HttpContext, 'impl>) =
         // Phase 856.B — the proxy with its argument parse exposed, so the
         // validation pre-flight decodes the first argument through the
@@ -2054,16 +2046,6 @@ module internal GiraffeUtil =
                                     | EndpointNotFound -> return! notFound options next ctx
             }
 
-    /// Phase 69n — backwards-compatible shim. Preserves the pre-69n
-    /// signature `buildFromImplementation implBuilder options : HttpHandler`
-    /// for the `StaticValue` / `FromContext` paths in `buildHttpHandler`.
-    /// Behaviour-equivalent to `buildDispatcherTable options implBuilder`.
-    let buildFromImplementation<'impl>
-        (implBuilder: HttpContext -> 'impl)
-        (options: RemotingOptions<HttpContext, 'impl>)
-        : HttpHandler =
-        buildDispatcherTable options implBuilder
-
 module Remoting =
 
     // 0.1.16 — once-per-type registry so the Empty-impl warning
@@ -2090,19 +2072,16 @@ module Remoting =
                 "ToolUp.Remoting (Giraffe): composed with Empty implementation; no routes will dispatch. This is almost always a misconfiguration — pipe through Remoting.fromValue / .fromContext / .fromContextAsync to register a real impl."
 
             fun _ _ -> skipPipeline
-        | StaticValue impl -> GiraffeUtil.buildFromImplementation (fun _ -> impl) options
-        | FromContext createImplementationFrom -> GiraffeUtil.buildFromImplementation createImplementationFrom options
+        | StaticValue impl -> GiraffeUtil.buildDispatcherTable options (fun _ -> impl)
+        | FromContext createImplementationFrom -> GiraffeUtil.buildDispatcherTable options createImplementationFrom
         | FromContextAsync createImplementationFromAsync ->
             // Phase 69b.B — await the async resolver per request, then dispatch
             // through the sync path with the resolved impl. The resolver is
             // invoked on every request, not snapshotted at composition time.
             //
-            // Phase 69n — build the dispatcher table ONCE at compose time
-            // (proxy + classifier maps + rmsManager + guards), then per
-            // request just await the async resolver and hand the result to
-            // the pre-built dispatcher. Pre-69n this branch called
-            // `buildFromImplementation` per request, rebuilding the entire
-            // dispatcher substrate every time.
+            // The dispatcher table is built ONCE at compose time (proxy +
+            // classifier maps + rmsManager + guards); per request just await
+            // the async resolver and hand the result to it.
             let dispatch = GiraffeUtil.buildDispatcherTable options
 
             fun (next: HttpFunc) (ctx: HttpContext) -> task {

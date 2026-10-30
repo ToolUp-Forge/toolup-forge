@@ -202,15 +202,6 @@ let tests =
                 "an empty path drops the `at …` clause rather than rendering it empty"
         }
 
-        test "ParsingArgumentsError is the rendered form, not a second vocabulary" {
-            let error = DecodeError.at [ "Echo"; "args[0]" ] "int" "string"
-
-            Expect.equal
-                (ParsingArgumentsError.ofDecodeError error).ParsingArgumentsError
-                (DecodeError.render error)
-                "the legacy stringly-typed shape is produced from the structured one"
-        }
-
         test "`under` annotates outermost-first as a refusal unwinds" {
             let annotated =
                 DecodeError.create "int" "string"

@@ -31,20 +31,6 @@ module TypeInfo =
 /// (GP 10). Construct it with `ToolUp.Remoting.DecodeError` in scope.
 type DecodeError = ToolUp.Remoting.DecodeError
 
-/// The pre-783 argument-parse error shape. Retained as a rendering of
-/// `DecodeError` rather than as a second vocabulary: `ofDecodeError` is
-/// the only sanctioned way to produce one, so a caller reading the
-/// stringly-typed form and a caller branching on the structured form can
-/// never disagree about what failed.
-type ParsingArgumentsError = { ParsingArgumentsError: string }
-
-[<RequireQualifiedAccess>]
-module ParsingArgumentsError =
-    /// Render a decode refusal into the legacy stringly-typed shape.
-    let ofDecodeError (error: DecodeError) : ParsingArgumentsError = {
-        ParsingArgumentsError = ToolUp.Remoting.DecodeError.render error
-    }
-
 /// Route information that is propagated to error handler when exceptions are thrown
 type RouteInfo<'ctx> = {
     /// The full path of the request

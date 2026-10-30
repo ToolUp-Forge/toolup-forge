@@ -48,13 +48,6 @@ EncryptedSecretStore+RotationOutcome+Unchanged.reason : System.String { get }
 EnvironmentSecretStore (class)
 EnvironmentSecretStore+EnvironmentSecretStore (class)
 EnvironmentSecretStore+EnvironmentSecretStore..ctor()
-Extensions (class)
-Extensions.HttpContext.GetService`1(Microsoft.AspNetCore.Http.HttpContext) : t
-Extensions.getService`1(Microsoft.AspNetCore.Http.HttpContext) : t
-Extensions.reader`1() : ToolUp.Remoting.Server.ReaderBuilder`2[Microsoft.AspNetCore.Http.HttpContext, t]
-Extensions.resolve`1() : ToolUp.Remoting.Server.Reader`2[Microsoft.AspNetCore.Http.HttpContext, t]
-Extensions+Remoting (class)
-Extensions+Remoting.fromReader`1(ToolUp.Remoting.Server.Reader`2[Microsoft.AspNetCore.Http.HttpContext, t], ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, t]) : ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, t]
 FileSecretStore (class)
 FileSecretStore+FileSecretStore (class)
 FileSecretStore+FileSecretStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
@@ -12423,7 +12416,6 @@ ToolUp.Remoting.MsgPack.Write (class)
 ToolUp.Remoting.MsgPack.Write.makeSerializerObj(System.Type) : System.Action`2[System.Object, System.IO.Stream]
 ToolUp.Remoting.MsgPack.Write.makeSerializer`1() : System.Action`2[T, System.IO.Stream]
 ToolUp.Remoting.MsgPack.Write.serializeObj(System.Object, System.IO.Stream) : System.Void
-ToolUp.Remoting.MsgPack.Write.stackalloc`1(System.Int32) : System.Span`1[a]
 ToolUp.Remoting.MsgPack.Write.this : System.Type { get }
 ToolUp.Remoting.MsgPack.Write.write32bitNumber$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, a]], a, System.IO.Stream) : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.MsgPack.Write.write32bitNumberBytes(System.Byte, System.Byte, System.Byte, System.Byte, System.IO.Stream, System.Boolean) : System.Void
@@ -12843,11 +12835,6 @@ ToolUp.Remoting.Server.MultipartCapExceededException..ctor(System.String)
 ToolUp.Remoting.Server.NotEmptyAttribute (class)
 ToolUp.Remoting.Server.NotEmptyAttribute..ctor()
 ToolUp.Remoting.Server.NotEmptyAttribute.Validate(System.Object) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
-ToolUp.Remoting.Server.ParsingArgumentsError (class)
-ToolUp.Remoting.Server.ParsingArgumentsError..ctor(System.String)
-ToolUp.Remoting.Server.ParsingArgumentsError.ParsingArgumentsError : System.String { get }
-ToolUp.Remoting.Server.ParsingArgumentsErrorModule (class)
-ToolUp.Remoting.Server.ParsingArgumentsErrorModule.ofDecodeError(ToolUp.Remoting.DecodeError) : ToolUp.Remoting.Server.ParsingArgumentsError
 ToolUp.Remoting.Server.Patterns (class)
 ToolUp.Remoting.Server.Patterns.|AsyncField|_|(Microsoft.FSharp.Quotations.FSharpExpr) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Remoting.Server.Patterns.|EightArgLambda|_|(Microsoft.FSharp.Quotations.FSharpExpr) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Object]]]
@@ -12926,17 +12913,6 @@ ToolUp.Remoting.Server.RateLimitWindow.perDay : System.Int32 (literal)
 ToolUp.Remoting.Server.RateLimitWindow.perHour : System.Int32 (literal)
 ToolUp.Remoting.Server.RateLimitWindow.perMinute : System.Int32 (literal)
 ToolUp.Remoting.Server.RateLimitWindow.perSecond : System.Int32 (literal)
-ToolUp.Remoting.Server.Reader (class)
-ToolUp.Remoting.Server.Reader.bindM`3(Microsoft.FSharp.Core.FSharpFunc`2[a, ToolUp.Remoting.Server.Reader`2[b, c]], ToolUp.Remoting.Server.Reader`2[b, a]) : ToolUp.Remoting.Server.Reader`2[b, c]
-ToolUp.Remoting.Server.Reader.returnM`2(a) : ToolUp.Remoting.Server.Reader`2[b, a]
-ToolUp.Remoting.Server.Reader.run`2(a, ToolUp.Remoting.Server.Reader`2[a, b]) : b
-ToolUp.Remoting.Server.ReaderBuilder`2 (class)
-ToolUp.Remoting.Server.ReaderBuilder`2..ctor()
-ToolUp.Remoting.Server.ReaderBuilder`2.Bind`3(ToolUp.Remoting.Server.Reader`2[a, b], Microsoft.FSharp.Core.FSharpFunc`2[b, ToolUp.Remoting.Server.Reader`2[a, c]]) : ToolUp.Remoting.Server.Reader`2[a, c]
-ToolUp.Remoting.Server.ReaderBuilder`2.Return`2(a) : ToolUp.Remoting.Server.Reader`2[b, a]
-ToolUp.Remoting.Server.Reader`2 (class)
-ToolUp.Remoting.Server.Reader`2.Item : Microsoft.FSharp.Core.FSharpFunc`2[a, b] { get }
-ToolUp.Remoting.Server.Reader`2.Tag : System.Int32 { get }
 ToolUp.Remoting.Server.RegexAttribute (class)
 ToolUp.Remoting.Server.RegexAttribute..ctor(System.String)
 ToolUp.Remoting.Server.RegexAttribute.Pattern : System.String { get }
@@ -13068,22 +13044,6 @@ ToolUp.Remoting.Server.SupportsSchemaAttribute..ctor(System.Int32[])
 ToolUp.Remoting.Server.SupportsSchemaAttribute.Versions : System.Int32[] { get }
 ToolUp.Remoting.Server.TenantScopedAttribute (class)
 ToolUp.Remoting.Server.TenantScopedAttribute..ctor()
-ToolUp.Remoting.Server.ThreadSafeCell (class)
-ToolUp.Remoting.Server.ThreadSafeCell.computeOnce`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, t]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[t]]
-ToolUp.Remoting.Server.ThreadSafeCell.create`1() : Microsoft.FSharp.Control.FSharpMailboxProcessor`1[ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1[a]]
-ToolUp.Remoting.Server.ThreadSafeCell.get`1(Microsoft.FSharp.Control.FSharpMailboxProcessor`1[ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1[t]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[t]]
-ToolUp.Remoting.Server.ThreadSafeCell.set`1(t, Microsoft.FSharp.Control.FSharpMailboxProcessor`1[ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1[t]]) : System.Void
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1 (class)
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1.IsGet : System.Boolean { get }
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1.IsSet : System.Boolean { get }
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1.Tag : System.Int32 { get }
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1+Get (class)
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1+Get.Item : Microsoft.FSharp.Control.FSharpAsyncReplyChannel`1[Microsoft.FSharp.Core.FSharpOption`1[t]] { get }
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1+Set (class)
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1+Set.Item : t { get }
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1+Tags (class)
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1+Tags.Get : System.Int32 (literal)
-ToolUp.Remoting.Server.ThreadSafeCell+CellOperations`1+Tags.Set : System.Int32 (literal)
 ToolUp.Remoting.Server.TypeInfo (class)
 ToolUp.Remoting.Server.TypeInfo.flattenFuncTypes(System.Type) : System.Type[]
 ToolUp.Remoting.Server.UriAttribute (class)

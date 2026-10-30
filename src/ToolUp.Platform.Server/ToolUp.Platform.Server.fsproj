@@ -130,9 +130,6 @@
         <Compile Include="Server\Remoting\Proxy.fs" />
         <Compile Include="Server\Remoting\DocsApp.fs" />
         <Compile Include="Server\Remoting\Remoting.fs" />
-        <Compile Include="Server\Remoting\Reader.fs" />
-        <Compile Include="Server\Remoting\ThreadSafeCell.fs" />
-        <Compile Include="Server\Remoting\Giraffe\SharedReader.fs" />
         <Compile Include="Server\Remoting\Giraffe\GiraffeAdapter.fs" />
         <Compile Include="Server\Remoting\AspNetCore\Middleware.fs" />
         <Compile Include="Server\Rag\IEmbeddingProvider.fs" />

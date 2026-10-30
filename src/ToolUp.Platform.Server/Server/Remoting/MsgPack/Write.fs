@@ -18,11 +18,7 @@ open TypeShape_Utils
 #nowarn "9"
 #nowarn "51"
 
-// Phase 902 — the .NET MessagePack writer, moved from ToolUp.Platform.Core,
-// where it shipped to every Fable consumer behind a `#if !FABLE_COMPILER`
-// guard. The module path is preserved: Core keeps the Fable writer
-// (`Write.Fable`) in a module of this same name, and F# resolves the two as
-// one. `this` names the executing assembly, which is now this one.
+// The .NET MessagePack writer. `this` names the executing assembly.
 
 let this = Assembly.GetExecutingAssembly().GetType("ToolUp.Remoting.MsgPack.Write")
 
@@ -41,36 +37,6 @@ let internal (|BclIsInstanceOfSystemDataTable|_|) (s: TypeShape) =
         Shape.SomeU
     else
         None
-
-#if NETCOREAPP2_1_OR_GREATER
-/// **UNSOUND — do not call. Allocate the stack buffer in the function
-/// that reads it.**
-///
-/// This returns a `Span` over memory `NativePtr.stackalloc` obtained in
-/// THIS function's frame. When the `inline` is honoured the allocation
-/// lands in the caller's frame and the span is valid; when it is NOT —
-/// and with the F# optimiser off it is not — the frame is popped on
-/// return and the caller reads whatever the next call reuses that stack
-/// for.
-///
-/// Found 2026-09-13 by the Phase 784 wire corpus and independently by the
-/// Phase 786 regression guard: `writeString`, `writeDecimal` and
-/// `writeGuid` all took their buffers from here, and the first two wrote
-/// unrelated memory onto the wire — non-deterministically, under a
-/// correct length header, so the payload was well-formed and wrong.
-/// `writeGuid` survived only because it read its buffer back before
-/// making any other call. Measured `-c Debug` corrupt, `-c Release`
-/// correct, `-c Debug -p:Optimize=true` correct: the discriminator is the
-/// optimiser, so production (Release) was unaffected and every Debug test
-/// run in this repository was exchanging corrupt MsgPack payloads with
-/// nothing looking. All three call sites now allocate their own buffer.
-///
-/// It is kept rather than deleted ONLY because it is public surface with
-/// a committed API baseline, and removing a token from a baseline scores
-/// as a breaking change. Nothing in this assembly calls it.
-let inline stackalloc<'a when 'a: unmanaged> length =
-    Span<'a>(NativePtr.stackalloc<'a> length |> NativePtr.toVoidPtr, length)
-#endif
 
 #if NET6_0_OR_GREATER
 let internal (|DateOnly|_|) (s: TypeShape) = Shape.test<DateOnly> s
@@ -284,11 +250,9 @@ let inline writeDouble (n: float) (out: Stream) =
 #endif
 let writeDecimal (n: decimal) (out: Stream) =
 #if NET5_0_OR_GREATER
-    // Allocated HERE, not through the `stackalloc` helper: the buffer is
-    // read back across the `write32bitNumber` calls below, and a helper
-    // that is not inlined hands back a popped frame. See the helper's own
-    // note. `12345.6789m` came back as `123456789m` — the scale word lost
-    // to whatever the intervening call left on the stack.
+    // Allocated HERE, in the function that reads it: the buffer is read back
+    // across the `write32bitNumber` calls below, and a helper that returned a
+    // stack buffer would hand back a popped frame.
     let bitsPtr = NativePtr.stackalloc<int> 4
     let bits = Span<int>(NativePtr.toVoidPtr bitsPtr, 4)
     Decimal.GetBits(n, bits) |> ignore
@@ -326,13 +290,8 @@ let writeString (str: string) (out: Stream) =
 
         // allocate space on the stack if the string is not too long
         if maxLength < 1500 then
-            // Allocated HERE, not through the `stackalloc` helper. The
-            // header write between filling this buffer and reading it is
-            // a call, and a helper that is not inlined has already popped
-            // the frame the buffer lives in — so `"probe"` went out as a
-            // correct `A5` header over five bytes of unrelated memory.
-            // The `ArrayPool` branch below was never affected, which is
-            // why strings over ~500 characters were fine.
+            // Allocated HERE, in the function that reads it: the header write
+            // between filling this buffer and reading it is a call.
             let bufferPtr = NativePtr.stackalloc<byte> maxLength
             let buffer = Span<byte>(NativePtr.toVoidPtr bufferPtr, maxLength)
             let bytesWritten = Encoding.UTF8.GetBytes(String.op_Implicit str, buffer)
