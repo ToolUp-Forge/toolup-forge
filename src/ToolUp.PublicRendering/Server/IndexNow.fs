@@ -218,7 +218,7 @@ type BlobIndexNowStateStore(blobStorage: IBlobStorage, container: string, blobNa
 
 module BlobIndexNowStateStore =
     [<Literal>]
-    let DefaultContainer = "_platform"
+    let DefaultContainer = ScopeKey.PlatformContainer
 
     [<Literal>]
     let DefaultBlobName = "indexnow/last-submission.json"

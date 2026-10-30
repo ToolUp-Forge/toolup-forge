@@ -101,7 +101,7 @@ module PublicationAudit =
                         OccurredAt = DateTime.UtcNow
                         ScopeId =
                             if String.IsNullOrWhiteSpace row.PublishingScope then
-                                "_platform"
+                                ScopeKey.PlatformContainer
                             else
                                 row.PublishingScope
                         SourceModule = SourceModule
