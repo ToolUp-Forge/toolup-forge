@@ -954,6 +954,18 @@
       `Extensions.ServiceConfig`, so code that read that field to build a
       provider reads `ServerApp.serviceConfig app`. Migration recipe:
       `docs/migrations/1052-serviceconfig-append-and-contribution-service.md`.
+      Phase 860 rides the 0.38.0 draft (untagged, publicly unpinned; its
+      surface movement is breaking-class, the draft's own class, not above
+      it): `ToolUp.Platform.Server`'s `CompositionManifest` gains
+      `LiveInterfaceTools`, so a full record construction adds a field (the
+      in-tree constructions are `CompositionManifest.build` and the `with*`
+      builders, which callers use). The rest is additive:
+      `CompositionManifest.isLiveInterfaceTool` / `liveInterfaceToolsOf` /
+      `liveInterfaceTools` / `recordsLiveInterfaceTools` /
+      `withLiveInterfaceTools`, `LiveInterfaceSchemaVersion`, and
+      `DeploymentReadinessReport.liveInterfaceFromManifest` /
+      `registerManifestLiveInterface`. `SchemaVersion` steps to 3; the field
+      is not sealed, and a composition seals to the same bytes as before.
     -->
     <Version>0.38.0</Version>
     <!--

@@ -801,6 +801,9 @@ let private registeredTests =
         BootVerificationPreflightTests.tests
         GroundedAnswerChainJoinTests.tests
         GroundingEnvelopeSealTests.tests
+        // Phase 860 - the live-interface posture reaches the composition
+        // manifest as an unsealed field, and readiness reads it without RAG.
+        CompositionManifestLiveInterfaceTests.tests
         DeployPlaneTests.defaultPipelineRollbackTests
         SvgPropTests.tests
         DataPropTests.tests

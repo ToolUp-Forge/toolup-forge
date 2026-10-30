@@ -763,6 +763,11 @@
         <Compile Include="InProcess\BootVerificationPreflightTests.fs" />
         <Compile Include="InProcess\GroundedAnswerChainJoinTests.fs" />
         <Compile Include="InProcess\GroundingEnvelopeSealTests.fs" />
+        <!-- Phase 860 - the live-interface posture on the composition manifest:
+             populated from the flag, never the name; one predicate shared with
+             the tool-aware framing; not sealed (pre-860 canonical bytes pinned);
+             readiness without RAG. After BuildTranscriptTests (StubSealer). -->
+        <Compile Include="InProcess\CompositionManifestLiveInterfaceTests.fs" />
         <Compile Include="InProcess\PlatformPeerTests.fs" />
         <Compile Include="InProcess\PeerFederationTests.fs" />
         <Compile Include="InProcess\CleanRoomBrokerTests.fs" />

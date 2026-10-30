@@ -1,5 +1,5 @@
 {
-  "SchemaVersion": 2,
+  "SchemaVersion": 3,
   "Modules": [
     {
       "Id": {
@@ -105,5 +105,6 @@
       "Value": "NoFactStore"
     }
   ],
-  "CanonicalMethods": []
+  "CanonicalMethods": [],
+  "LiveInterfaceTools": []
 }
