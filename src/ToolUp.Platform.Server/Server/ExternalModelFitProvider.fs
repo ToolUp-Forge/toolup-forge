@@ -438,24 +438,29 @@ module ModelFitWorkSpec =
                 if gate.ValueKind <> JsonValueKind.Object then
                     Error "an element of 'gates' is not an object"
                 else
-                    match
-                        requireString gate "name", requireNumber gate "threshold", requireString gate "direction"
-                    with
-                    | Ok name, Ok threshold, Ok direction ->
-                        match GateDirection.parse direction, readOptionalString gate "unit" with
-                        | _, Error e -> Error $"in 'gates': %s{e}"
-                        | Some _, Ok unit ->
-                            Ok {
+                    result {
+                        let! name, threshold, direction, unit =
+                            result {
+                                let! name = requireString gate "name"
+                                let! threshold = requireNumber gate "threshold"
+                                let! direction = requireString gate "direction"
+                                let! unit = readOptionalString gate "unit"
+                                return name, threshold, direction, unit
+                            }
+                            |> Result.mapError (fun e -> $"in 'gates': %s{e}")
+
+                        match GateDirection.parse direction with
+                        | None ->
+                            return!
+                                Error $"gate '%s{name}' has direction '%s{direction}'; expected one of AtLeast, AtMost"
+                        | Some _ ->
+                            return {
                                 ModelFitWireGate.Name = name
                                 ModelFitWireGate.Threshold = threshold
                                 ModelFitWireGate.Unit = unit
                                 ModelFitWireGate.Direction = direction
                             }
-                        | None, Ok _ ->
-                            Error $"gate '%s{name}' has direction '%s{direction}'; expected one of AtLeast, AtMost"
-                    | Error e, _, _
-                    | _, Error e, _
-                    | _, _, Error e -> Error $"in 'gates': %s{e}")
+                    })
             |> List.ofSeq
             |> allOk
 
@@ -485,79 +490,50 @@ module ModelFitWorkSpec =
     /// contract document alone is sufficient to write a worker, which is
     /// the acceptance criterion this whole binding is built around.
     let parsePayload (text: string) : Result<ModelFitWorkPayload, string> =
-        parseDocument text (fun root ->
-            let dataset = requireObject root "datasetParquetRef"
+        parseDocument text (fun root -> result {
+            let! dataset = requireObject root "datasetParquetRef"
+            let! envelope = requireString root "envelope"
+            let! scopeId = requireString root "scopeId"
+            let! specRef = requireString root "specRef"
+            let! specHash = requireString root "specHash"
+            let! specHashAlgorithm = optionalString root "specHashAlgorithm"
+            let! seed = requireInt64 root "seed"
 
-            match dataset with
-            | Error e -> Error e
-            | Ok dataset ->
-                let contentRef =
-                    match
-                        requireString dataset "scopeId",
-                        requireString dataset "datasetId",
-                        requireInt dataset "version",
-                        requireString dataset "contentHash",
-                        requireString dataset "format",
-                        requireInt64 dataset "rowCount"
-                    with
-                    | Ok scopeId, Ok datasetId, Ok version, Ok contentHash, Ok format, Ok rowCount ->
-                        Ok {
-                            ScopeId = scopeId
-                            DatasetId = datasetId
-                            Version = version
-                            ContentHash = contentHash
-                            Format = format
-                            RowCount = rowCount
-                        }
-                    | Error e, _, _, _, _, _
-                    | _, Error e, _, _, _, _
-                    | _, _, Error e, _, _, _
-                    | _, _, _, Error e, _, _
-                    | _, _, _, _, Error e, _
-                    | _, _, _, _, _, Error e -> Error $"in 'datasetParquetRef': %s{e}"
+            let! contentRef =
+                result {
+                    let! scopeId = requireString dataset "scopeId"
+                    let! datasetId = requireString dataset "datasetId"
+                    let! version = requireInt dataset "version"
+                    let! contentHash = requireString dataset "contentHash"
+                    let! format = requireString dataset "format"
+                    let! rowCount = requireInt64 dataset "rowCount"
 
-                match
-                    requireString root "envelope",
-                    requireString root "scopeId",
-                    requireString root "specRef",
-                    requireString root "specHash",
-                    optionalString root "specHashAlgorithm",
-                    requireInt64 root "seed"
-                with
-                | Ok envelope, Ok scopeId, Ok specRef, Ok specHash, Ok specHashAlgorithm, Ok seed ->
-                    match contentRef, readGates root, readStringMap root "resourceHints" with
-                    | Ok contentRef, Ok gates, Ok hints ->
-                        Ok {
-                            Envelope = envelope
-                            ScopeId = scopeId
-                            SpecRef = specRef
-                            SpecHash = specHash
-                            SpecHashAlgorithm = specHashAlgorithm
-                            DatasetParquetRef = contentRef
-                            Seed = seed
-                            Gates = gates
-                            ResourceHints = hints
-                        }
-                    | Error e, _, _
-                    | _, Error e, _
-                    | _, _, Error e -> Error e
-                | Error e, _, _, _, _, _
-                | _, Error e, _, _, _, _
-                | _, _, Error e, _, _, _
-                | _, _, _, Error e, _, _
-                | _, _, _, _, Error e, _
-                | _, _, _, _, _, Error e -> Error e)
+                    return {
+                        ScopeId = scopeId
+                        DatasetId = datasetId
+                        Version = version
+                        ContentHash = contentHash
+                        Format = format
+                        RowCount = rowCount
+                    }
+                }
+                |> Result.mapError (fun e -> $"in 'datasetParquetRef': %s{e}")
 
-    /// Is `value` a lowercase hex SHA-256 digest?
-    ///
-    /// Lowercase is required rather than normalised, for the reason
-    /// `WorkerOutcomeSignature.isHexDigest` requires it: the digest is
-    /// compared and carried as text, and accepting either case would make
-    /// two distinct strings name one artifact.
-    let isArtifactDigest (value: string) : bool =
-        not (isNull value)
-        && value.Length = 64
-        && value |> Seq.forall (fun c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))
+            let! gates = readGates root
+            let! hints = readStringMap root "resourceHints"
+
+            return {
+                Envelope = envelope
+                ScopeId = scopeId
+                SpecRef = specRef
+                SpecHash = specHash
+                SpecHashAlgorithm = specHashAlgorithm
+                DatasetParquetRef = contentRef
+                Seed = seed
+                Gates = gates
+                ResourceHints = hints
+            }
+        })
 
     /// Parse the artifact descriptor a worker returns as its `resultRef`.
     ///
@@ -566,57 +542,52 @@ module ModelFitWorkSpec =
     /// a worker that upgraded ahead of the deployment, and reading its
     /// fields anyway would be assuming a schema nobody promised.
     let parseDescriptor (text: string) : Result<ModelFitArtifactDescriptor, string> =
-        parseDocument text (fun root ->
-            match
-                requireString root "envelope",
-                requireString root "artifactId",
-                requireString root "contentHash",
-                requireInt64 root "byteLength"
-            with
-            | Ok envelope, Ok artifactId, Ok contentHash, Ok byteLength ->
+        parseDocument text (fun root -> result {
+            let! envelope = requireString root "envelope"
+            let! artifactId = requireString root "artifactId"
+            let! contentHash = requireString root "contentHash"
+            let! byteLength = requireInt64 root "byteLength"
+
+            do!
                 if envelope <> Kind then
                     Error $"the artifact descriptor declares envelope '%s{envelope}'; this platform reads '%s{Kind}'"
                 elif String.IsNullOrWhiteSpace artifactId then
                     Error "field 'artifactId' is empty"
-                elif not (isArtifactDigest contentHash) then
-                    Error "field 'contentHash' is not a lowercase hex SHA-256 digest"
-                elif byteLength < 0L then
-                    Error "field 'byteLength' is negative"
                 else
-                    match
-                        readNumberMap root "diagnostics",
-                        readStringMap root "diagnosticUnits",
-                        requireInt64 root "durationMs",
-                        requireNumber root "costUnits"
-                    with
-                    | Ok diagnostics, Ok diagnosticUnits, Ok durationMs, Ok costUnits ->
-                        // Phase 1011 — a unit for a diagnostic the worker did
-                        // not report says nothing about anything it measured.
-                        match
-                            diagnosticUnits
-                            |> Map.tryFindKey (fun name _ -> not (diagnostics.ContainsKey name))
-                        with
-                        | Some orphan ->
-                            Error $"field 'diagnosticUnits' names '%s{orphan}', which is not a member of 'diagnostics'"
-                        | None ->
-                            Ok {
-                                ModelFitArtifactDescriptor.Envelope = envelope
-                                ModelFitArtifactDescriptor.ArtifactId = artifactId
-                                ModelFitArtifactDescriptor.ContentHash = contentHash
-                                ModelFitArtifactDescriptor.ByteLength = byteLength
-                                ModelFitArtifactDescriptor.Diagnostics = diagnostics
-                                ModelFitArtifactDescriptor.DiagnosticUnits = diagnosticUnits
-                                ModelFitArtifactDescriptor.DurationMs = durationMs
-                                ModelFitArtifactDescriptor.CostUnits = costUnits
-                            }
-                    | Error e, _, _, _
-                    | _, Error e, _, _
-                    | _, _, Error e, _
-                    | _, _, _, Error e -> Error e
-            | Error e, _, _, _
-            | _, Error e, _, _
-            | _, _, Error e, _
-            | _, _, _, Error e -> Error e)
+                    // Lowercase is required rather than normalised, as
+                    // `WorkerOutcomeSignature.isHexDigest` requires it: the
+                    // digest is carried as text, and accepting either case
+                    // would make two distinct strings name one artifact.
+                    match contentHash with
+                    | Hex64 _ when byteLength < 0L -> Error "field 'byteLength' is negative"
+                    | Hex64 _ -> Ok()
+                    | _ -> Error "field 'contentHash' is not a lowercase hex SHA-256 digest"
+
+            let! diagnostics = readNumberMap root "diagnostics"
+            let! diagnosticUnits = readStringMap root "diagnosticUnits"
+            let! durationMs = requireInt64 root "durationMs"
+            let! costUnits = requireNumber root "costUnits"
+
+            // A unit for a diagnostic the worker did not report says nothing
+            // about anything it measured.
+            match
+                diagnosticUnits
+                |> Map.tryFindKey (fun name _ -> not (diagnostics.ContainsKey name))
+            with
+            | Some orphan ->
+                return! Error $"field 'diagnosticUnits' names '%s{orphan}', which is not a member of 'diagnostics'"
+            | None ->
+                return {
+                    ModelFitArtifactDescriptor.Envelope = envelope
+                    ModelFitArtifactDescriptor.ArtifactId = artifactId
+                    ModelFitArtifactDescriptor.ContentHash = contentHash
+                    ModelFitArtifactDescriptor.ByteLength = byteLength
+                    ModelFitArtifactDescriptor.Diagnostics = diagnostics
+                    ModelFitArtifactDescriptor.DiagnosticUnits = diagnosticUnits
+                    ModelFitArtifactDescriptor.DurationMs = durationMs
+                    ModelFitArtifactDescriptor.CostUnits = costUnits
+                }
+        })
 
     /// Build the payload for one fit request against a resolved dataset
     /// content reference.
@@ -787,7 +758,9 @@ type ExternalModelFitException(failure: ExternalFitFailure) =
 /// backend that retries on a non-2xx retries a correct duplicate forever.
 /// Retention bounds that: an entry is swept once it has been complete for
 /// longer than `retention`, opportunistically, on the next `Register`.
-type ExternalFitCompletionRegistry(retention: TimeSpan) =
+/// `clock` stamps completions and dates the sweep, so retention is testable
+/// without waiting on the wall clock.
+type ExternalFitCompletionRegistry(retention: TimeSpan, clock: unit -> DateTime) =
 
     // Documented mutable-state exception to GP 5, and the same one
     // `InMemoryExternalHandleStore` takes: a rendezvous IS state, and this
@@ -800,12 +773,15 @@ type ExternalFitCompletionRegistry(retention: TimeSpan) =
     /// deployment's completed entries do not accumulate for a shift.
     new() = ExternalFitCompletionRegistry(TimeSpan.FromMinutes 15.0)
 
+    /// `retention` over the system clock.
+    new(retention: TimeSpan) = ExternalFitCompletionRegistry(retention, fun () -> DateTime.UtcNow)
+
     /// Drop entries that have been complete for longer than `retention`.
     /// Called opportunistically rather than on a timer, so the registry
     /// needs no hosted service and a deployment that stops fitting stops
     /// paying for it entirely (GP 13).
     member private _.Sweep() =
-        let cutoff = DateTime.UtcNow - retention
+        let cutoff = clock () - retention
 
         for KeyValue(handleId, (_, completedAt)) in waiters do
             match completedAt with
@@ -839,7 +815,7 @@ type ExternalFitCompletionRegistry(retention: TimeSpan) =
         match waiters.TryGetValue handleId with
         | true, ((source, _) as current) ->
             if source.TrySetResult outcome then
-                waiters.TryUpdate(handleId, (source, Some DateTime.UtcNow), current) |> ignore
+                waiters.TryUpdate(handleId, (source, Some(clock ())), current) |> ignore
                 true
             else
                 false

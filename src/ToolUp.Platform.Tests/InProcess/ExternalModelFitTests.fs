@@ -1364,6 +1364,25 @@ let private compositionTests =
             // registration, so the dictionary cannot grow without bound.
             registry.Register(Guid.NewGuid())
             Expect.equal registry.Tracked 1 "only the live rendezvous remains"
+
+        testCase "retention is read on the injected clock"
+        <| fun _ ->
+            let mutable now = DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc)
+
+            let registry =
+                ExternalFitCompletionRegistry(TimeSpan.FromMinutes 15.0, fun () -> now)
+
+            let first = Guid.NewGuid()
+            registry.Register first
+            Expect.isTrue (registry.TryComplete(first, ExternalOutcome.Cancelled)) "completed at noon"
+
+            now <- now.AddMinutes 14.0
+            registry.Register(Guid.NewGuid())
+            Expect.equal registry.Tracked 2 "inside retention the completed entry still answers a replay"
+
+            now <- now.AddMinutes 2.0
+            registry.Register(Guid.NewGuid())
+            Expect.isFalse (registry.Knows first) "past retention, by the injected clock, it is swept"
     ]
 
 [<Tests>]

@@ -282,13 +282,12 @@ module FoldAggregation =
         let usable (v: float) = not (Double.IsNaN v)
 
         let complete =
-            if
-                List.isEmpty foldMetrics
-                || foldMetrics |> List.exists (fun v -> v |> Option.exists usable |> not)
-            then
+            let values = foldMetrics |> List.choose (Option.filter usable)
+
+            if List.isEmpty foldMetrics || List.length values <> List.length foldMetrics then
                 None
             else
-                Some(foldMetrics |> List.map Option.get)
+                Some values
 
         match aggregation with
         | FoldAggregation.AggregateMetric -> aggregate |> Option.filter usable
@@ -439,19 +438,19 @@ module ModelComparison =
         (direction: MetricDirection)
         (entrants: (string * float option) list)
         : ComparisonStanding list * string list * ComparisonResult =
-        let ranked, missing =
-            entrants
-            |> List.partition (fun (_, metric) ->
-                match metric with
-                | Some v -> not (Double.IsNaN v)
-                | None -> false)
+        let ranked (metric: float option) =
+            metric |> Option.filter (Double.IsNaN >> not)
+
+        let missing = entrants |> List.filter (snd >> ranked >> Option.isNone)
 
         let standings =
-            ranked
-            |> List.map (fun (key, metric) -> {
-                ArtifactKeyHash = key
-                Metric = Option.get metric
-            })
+            entrants
+            |> List.choose (fun (key, metric) ->
+                ranked metric
+                |> Option.map (fun value -> {
+                    ArtifactKeyHash = key
+                    Metric = value
+                }))
             |> match direction with
                | MetricDirection.HigherIsBetter -> List.sortByDescending _.Metric
                | MetricDirection.LowerIsBetter -> List.sortBy _.Metric
