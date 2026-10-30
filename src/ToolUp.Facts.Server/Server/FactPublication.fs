@@ -689,7 +689,7 @@ module internal GrantPersistence =
     /// The platform-reserved container grants are written under — they
     /// belong to two teams, so to neither team's scope.
     [<Literal>]
-    let Container = "_platform"
+    let Container = ScopeKey.PlatformContainer
 
     /// The blob prefix every grant is written under.
     [<Literal>]

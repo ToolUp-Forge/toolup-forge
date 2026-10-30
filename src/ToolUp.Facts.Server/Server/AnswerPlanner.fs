@@ -1086,11 +1086,9 @@ module AnswerPlanner =
     /// team's configuration it cannot see. Provider resolution reads only
     /// the subject; module permissions play no part in it.
     let compilerAccessContext (scope: StorageScope option) (principal: string) : AccessContext =
-        match scope with
-        | Some s when s.Container.StartsWith("team-", StringComparison.Ordinal) ->
-            AccessContext.unrestricted (TeamMember(principal, s.ScopeId))
-        | Some s when s.Container.StartsWith("user-", StringComparison.Ordinal) ->
-            AccessContext.unrestricted (AuthenticatedUser principal)
+        match scope |> Option.bind StorageScope.tryKey with
+        | Some(ScopeKey.Team teamId) -> AccessContext.unrestricted (TeamMember(principal, teamId))
+        | Some(ScopeKey.User _) -> AccessContext.unrestricted (AuthenticatedUser principal)
         | _ -> AccessContext.unrestricted (AnonymousSession principal)
 
     /// The Phase 706 structured-output compiler over a provider the

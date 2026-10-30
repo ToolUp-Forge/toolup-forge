@@ -141,7 +141,7 @@ module CoherenceConfig =
     let defaults: CoherenceConfig = {
         VintageWindow = TimeSpan.FromDays 1.0
         UnitSlipRelativeTolerance = 0.01m
-        HealthScope = "_platform"
+        HealthScope = ScopeKey.PlatformContainer
         DeriveVintageFromStaleness = false
     }
 

@@ -765,11 +765,7 @@ type FactDisclosureGate
           }
 
     let scopeTeamOf (scope: ResolvedScope) : string option option =
-        Some(
-            scope.Storage
-            |> Option.filter (fun storage -> storage.Container.StartsWith("team-", StringComparison.Ordinal))
-            |> Option.map _.ScopeId
-        )
+        Some(scope.Storage |> Option.bind StorageScope.tryTeamId)
 
     // The one audit step, after the verdicts are composed: each read's rows
     // (`DisclosureStages.auditRows`), written best-effort under the same
