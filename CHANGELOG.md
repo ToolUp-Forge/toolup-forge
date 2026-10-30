@@ -19,11 +19,12 @@ Migration notes:
 
 - [1052-serviceconfig-append-and-contribution-service](docs/migrations/1052-serviceconfig-append-and-contribution-service.md)
 - [1069-redesign-e-defects-client-shell](docs/migrations/1069-redesign-e-defects-client-shell.md)
+- [1089-redesign-h-sha256-hex-and-canonicalframe](docs/migrations/1089-redesign-h-sha256-hex-and-canonicalframe.md)
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 - [1145-pipeline-tool](docs/migrations/1145-pipeline-tool.md)
 
-_Surface since `v0.37.0`: **breaking** — 11 packages moved; 285 members added, 5 members changed, 8 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 12 packages moved; 313 members added, 5 members changed, 9 members removed; 1 package new._
 
 ### Added
 
@@ -54,7 +55,12 @@ _Surface since `v0.37.0`: **breaking** — 11 packages moved; 285 members added,
   - `ToolUp.DataSources.Common.DeliveryCancel.SourceId : System.String { get }`
   - `ToolUp.DataSources.Common.DeliveryObservation (class)`
   - … and 40 more — `git diff v0.37.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
-- `ToolUp.Facts.Core` — 92 members:
+- `ToolUp.FactStores.Postgres` — 3 members:
+  - `ToolUp.FactStores.Postgres.FactStoreMigration.migrateIds(ToolUp.FactStores.Postgres.PostgresFactStore, System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]`
+  - `ToolUp.FactStores.Postgres.MigrationSql.deleteRow(System.String) : System.String`
+  - `ToolUp.FactStores.Postgres.MigrationSql.rekeyRow(System.String) : System.String`
+- `ToolUp.Facts.Core` — 93 members:
+  - `ToolUp.Facts.FactModule.IdLabel : System.String (literal)`
   - `ToolUp.Facts.PipelineRefusal (class)`
   - `ToolUp.Facts.PipelineRefusal+EvaluationFailed (class)`
   - `ToolUp.Facts.PipelineRefusal+EvaluationFailed.reason : System.String { get }`
@@ -74,21 +80,30 @@ _Surface since `v0.37.0`: **breaking** — 11 packages moved; 285 members added,
   - `ToolUp.Facts.PipelineRefusal+OpenSchema (class)`
   - `ToolUp.Facts.PipelineRefusal+OpenSchema.reason : System.String { get }`
   - `ToolUp.Facts.PipelineRefusal+OpenSchema.step : System.Int32 { get }`
-  - `ToolUp.Facts.PipelineRefusal+ResultOverCap (class)`
-  - … and 72 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
+  - … and 73 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
 - `ToolUp.Facts.Presentation.Server` — new package (21 public members)
-- `ToolUp.Facts.Server` — 11 members:
+- `ToolUp.Facts.Server` — 28 members:
+  - `ToolUp.Facts.BlobFactStore.MigrateIds(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]`
   - `ToolUp.Facts.FactBrowseHandler.atSurface(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.IHeldFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate`
   - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
+  - `ToolUp.Facts.FactIdChange (class)`
+  - `ToolUp.Facts.FactIdChange..ctor(System.String, System.String)`
+  - `ToolUp.Facts.FactIdChange.From : System.String { get }`
+  - `ToolUp.Facts.FactIdChange.To : System.String { get }`
+  - `ToolUp.Facts.FactIdMigration (class)`
+  - `ToolUp.Facts.FactIdMigration.plan(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.Fact, ToolUp.Facts.Fact]]`
+  - `ToolUp.Facts.FactIdMigration.render(ToolUp.Facts.FactIdMigrationReport) : System.String`
+  - `ToolUp.Facts.FactIdMigration.report(System.String, System.Boolean, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.Fact, ToolUp.Facts.Fact]]) : ToolUp.Facts.FactIdMigrationReport`
+  - `ToolUp.Facts.FactIdMigrationReport (class)`
+  - `ToolUp.Facts.FactIdMigrationReport..ctor(System.String, System.Boolean, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactIdChange])`
+  - `ToolUp.Facts.FactIdMigrationReport.DryRun : System.Boolean { get }`
+  - `ToolUp.Facts.FactIdMigrationReport.FactsRead : System.Int32 { get }`
+  - `ToolUp.Facts.FactIdMigrationReport.FirstDivergent : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactIdChange] { get }`
+  - `ToolUp.Facts.FactIdMigrationReport.Rekeyed : System.Int32 { get }`
+  - `ToolUp.Facts.FactIdMigrationReport.Relinked : System.Int32 { get }`
+  - `ToolUp.Facts.FactIdMigrationReport.ScopeId : System.String { get }`
   - `ToolUp.Facts.PipelineTool (class)`
-  - `ToolUp.Facts.PipelineTool.Name : System.String (literal)`
-  - `ToolUp.Facts.PipelineTool.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]`
-  - `ToolUp.Facts.PipelineTool.decode(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.PipelineRefusal]`
-  - `ToolUp.Facts.PipelineTool.definition : ToolUp.Platform.AIToolDefinition { get }`
-  - `ToolUp.Facts.PipelineTool.evaluate(ToolUp.Facts.PipelineToolRequest, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.FactSlice, System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]`
-  - `ToolUp.Facts.PipelineTool.refusalText(ToolUp.Facts.PipelineRefusal) : System.String`
-  - `ToolUp.Facts.PipelineTool.requestOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolRequest, ToolUp.Facts.PipelineRefusal]`
-  - `ToolUp.Facts.PipelineTool.summary(ToolUp.Facts.PipelineToolResult) : System.String`
+  - … and 8 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }`
@@ -103,7 +118,7 @@ _Surface since `v0.37.0`: **breaking** — 11 packages moved; 285 members added,
   - `ToolUp.Platform.TeamManagerMessages.RevokeInvitePrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }`
   - `ToolUp.Platform.TeamManagerMessages.TransferSelectedMemberFallback : System.String { get }`
   - `Toolup.UIToolkit.Layout.registerHeaderIdentityAction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]) : System.Void`
-- `ToolUp.Platform.Core` — 52 members:
+- `ToolUp.Platform.Core` — 59 members:
   - `ToolUp.Platform.AuditScope (class)`
   - `ToolUp.Platform.AuditScope+Scoped (class)`
   - `ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }`
@@ -116,15 +131,15 @@ _Surface since `v0.37.0`: **breaking** — 11 packages moved; 285 members added,
   - `ToolUp.Platform.AuditScope.Tag : System.Int32 { get }`
   - `ToolUp.Platform.AuditScopeModule (class)`
   - `ToolUp.Platform.AuditScopeModule.streamKey(ToolUp.Platform.AuditScope) : System.String`
+  - `ToolUp.Platform.CanonicalFrame (class)`
+  - `ToolUp.Platform.CanonicalFrame.digest(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String`
+  - `ToolUp.Platform.CanonicalFrame.frame(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Byte[]`
+  - `ToolUp.Platform.CanonicalFrame.text(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String`
   - `ToolUp.Platform.PlatformShard (class)`
   - `ToolUp.Platform.PlatformShard.Platform : ToolUp.Platform.PlatformShard { get }`
   - `ToolUp.Platform.PlatformShard.Tag : System.Int32 { get }`
   - `ToolUp.Platform.ScopeKey (class)`
-  - `ToolUp.Platform.ScopeKey+Claim (class)`
-  - `ToolUp.Platform.ScopeKey+Claim.claimScopeId : System.String { get }`
-  - `ToolUp.Platform.ScopeKey+Platform (class)`
-  - `ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }`
-  - … and 32 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+  - … and 39 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
 - `ToolUp.Platform.Server` — 54 members:
   - `ToolUp.Platform.CapabilityNotDeclared (class)`
   - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
@@ -174,6 +189,8 @@ _Surface since `v0.37.0`: **breaking** — 11 packages moved; 285 members added,
   - `ToolUp.DataSources.Common.WatchedObject.Table : System.String { get }`
 - `ToolUp.Platform.Client` — 1 member:
   - `Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement`
+- `ToolUp.Platform.Server` — 1 member:
+  - `ToolUp.Platform.CountersignatureCanonical.sha256Hex(System.Byte[]) : System.String`
 
 ## [0.37.0] — 2026-10-29
 
