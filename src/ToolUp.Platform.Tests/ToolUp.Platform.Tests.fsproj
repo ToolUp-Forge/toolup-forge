@@ -208,6 +208,7 @@
         <Compile Include="InProcess\ConversationStoreTests.fs" />
         <Compile Include="InProcess\LineageStoreTests.fs" />
         <Compile Include="InProcess\MetricRegistryTests.fs" />
+        <Compile Include="InProcess\CanonicalFrameTests.fs" />
         <Compile Include="InProcess\FactStoreTests.fs" />
         <Compile Include="InProcess\CanonicalMethodTests.fs" />
         <Compile Include="InProcess\FactInvalidationTests.fs" />

@@ -4,7 +4,6 @@
 namespace ToolUp.Platform
 
 open System
-open System.Security.Cryptography
 open System.Text
 
 // ─── Phase 713 — the join, with every break reported as data ─────────
@@ -129,8 +128,7 @@ module EvidenceChainSources =
             | Ok pack ->
                 let entries = List.length pack.Manifest.Entries
 
-                let digest =
-                    Convert.ToHexString(SHA256.HashData pack.ManifestBytes).ToLowerInvariant()
+                let digest = Sha256.hex pack.ManifestBytes
 
                 match pack.Signature with
                 | Some _ -> return Ok(EvidencePackReading.PackSigned(digest, entries))
@@ -989,8 +987,7 @@ type DefaultEvidenceChainWalker(sources: EvidenceChainSources, caps: EvidenceCha
     /// the canonical form it hashes is declared in `Platform.Core`, so
     /// any host recomputes the same digest from the same chain.
     static member VerdictDigest(hops: EvidenceHop list) : string =
-        let bytes = Encoding.UTF8.GetBytes(EvidenceChain.canonicalForm hops)
-        Convert.ToHexString(SHA256.HashData bytes).ToLowerInvariant()
+        Sha256.hexOfUtf8 (EvidenceChain.canonicalForm hops)
 
     interface IEvidenceChainWalker with
         member _.GetCaps() = async { return caps }

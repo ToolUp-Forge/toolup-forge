@@ -109,7 +109,9 @@ let private registeredTests =
         IFactTableOrphanSweepContract.tests
             "notifying decorator over DefaultFactTableWriter"
             IFactTableOrphanSweepContract.notifyingWriterFactory
+        CanonicalFrameTests.tests
         FactStoreTests.tests
+        FactStoreTests.factIdTests
         FactStoreTests.auditAndFreshnessTests
         FactStoreTests.batchAssertTests
         FactStoreTests.populationRegistryTests

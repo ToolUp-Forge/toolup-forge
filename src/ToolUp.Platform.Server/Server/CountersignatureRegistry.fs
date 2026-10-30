@@ -5,7 +5,6 @@ namespace ToolUp.Platform
 
 open System
 open System.Globalization
-open System.Security.Cryptography
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
@@ -281,10 +280,6 @@ module CountersignatureCanonical =
         field sb (string (List.length ordered))
         ordered |> List.iter (field sb)
 
-    /// Lowercase hex SHA-256, the estate's existing digest presentation.
-    let sha256Hex (bytes: byte[]) : string =
-        SHA256.HashData bytes |> Convert.ToHexString |> _.ToLowerInvariant()
-
     /// The stable wire name of a lifecycle action. Written out rather
     /// than derived from the DU case name so renaming a case in F# source
     /// cannot silently invalidate every record already signed.
@@ -356,7 +351,7 @@ module CountersignatureCanonical =
     /// retry must not read as a second approval.
     let recordId (record: CountersignatureRecord) : string =
         Array.append (recordBytes record) (Encoding.UTF8.GetBytes record.Signature)
-        |> sha256Hex
+        |> Sha256.hex
 
 [<RequireQualifiedAccess>]
 module CountersignatureSubject =
@@ -377,7 +372,7 @@ module CountersignatureSubject =
     /// neither approval can be replayed as the other.
     let ofCanonicalBytes (kind: string) (subjectId: string) (payload: byte[]) : CountersignatureSubject =
         let digest =
-            CountersignatureCanonical.sha256Hex (CountersignatureCanonical.subjectBytes kind subjectId payload)
+            Sha256.hex (CountersignatureCanonical.subjectBytes kind subjectId payload)
 
         create kind subjectId $"sha256:{digest}"
 
@@ -916,7 +911,7 @@ module BudgetAmendment =
         CountersignatureCanonical.field sb amendment.TemplateId
         CountersignatureCanonical.field sb amendment.PartyId
 
-        CountersignatureCanonical.sha256Hex (Encoding.UTF8.GetBytes(sb.ToString()))
+        Sha256.hexOfUtf8 (sb.ToString())
 
     /// The canonical payload the subject hash is taken over: the pair
     /// the amendment belongs to, the baseline, and the delta. Emitted

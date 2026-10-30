@@ -6,7 +6,6 @@ namespace ToolUp.Platform
 open System
 open System.Text
 open System.Text.Json
-open System.Security.Cryptography
 open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Phase 645 — registry promotion policies ────────────────────────────
@@ -419,8 +418,7 @@ module PromotionDecision =
 
     /// Deterministic decision id — lowercase SHA-256 hex of `canonical`.
     let id (scopeId: string) (artifactKeyHash: string) : string =
-        SHA256.HashData(Encoding.UTF8.GetBytes(canonical scopeId artifactKeyHash))
-        |> Convert.ToHexStringLower
+        Sha256.hexOfUtf8 (canonical scopeId artifactKeyHash)
 
     /// The per-metric deltas that justified a supersession: every check that
     /// had both an observed and an incumbent value, as

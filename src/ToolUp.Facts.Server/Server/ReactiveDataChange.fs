@@ -402,20 +402,13 @@ module GroundedNarrativeTrigger =
             MaxBackoff = TimeSpan.FromMinutes 10.0
     }
 
-    let private sha256Hex (s: string) : string =
-        use sha = System.Security.Cryptography.SHA256.Create()
-
-        sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes s)
-        |> Array.map (sprintf "%02x")
-        |> String.concat ""
-
     /// The job for one run over one change. Idempotency keys on the run AND
     /// the change, so a replayed change coalesces while a second, different
     /// change is never swallowed by the first's job. `ShardKey` is the run,
     /// so a distributed scheduler serialises one report's runs.
     let registrationFor (scopeId: string) (runKey: string) (invalidated: Set<string>) : JobRegistration =
         let changeDigest =
-            (invalidated |> Set.toList |> String.concat "\n" |> sha256Hex).Substring(0, 16)
+            (CanonicalFrame.digest ("narrative-trigger-change" :: Set.toList invalidated)).Substring(0, 16)
 
         {
             ScopeId = scopeId

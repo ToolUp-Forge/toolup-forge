@@ -206,6 +206,10 @@ markers — nothing classified them (GP 11 / GP 13).
   bounds the fact / message hops.
 - **Default composition unchanged (GP 13).** A deployment that never
   constructs a graph builds nothing.
+- **Every id in the graph is one frame (Phase 1089).** A fact id, a certificate's node hash
+  and every other content id the walk meets is `CanonicalFrame.digest` of a documented field
+  list — the length-prefixed frame described in [the fact store](facts.md#content-ids-one-frame-phase-1089) —
+  so a reader holding a node can recompute its id from the node's own fields.
 
 The signed-export / certificate work (plan D11/D16) is a future consumer of
 this traversal — this phase is the read substrate underneath it.

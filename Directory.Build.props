@@ -941,6 +941,7 @@
       `ToolUp.Platform.Server` gains
       `StorageScopeDerivation.tryKeyFromSubject`. Nothing is removed or
       retyped.
+      Phase 1089 rides the 0.38.0 draft, breaking: every fact id moves onto `CanonicalFrame.digest` (persisted ids migrate once through `BlobFactStore.MigrateIds` / `FactStoreMigration.migrateIds`), and `CountersignatureCanonical.sha256Hex` gives way to `Sha256.hex` / `Sha256.hexOfUtf8`. Migration recipe: `docs/migrations/1089-redesign-h-sha256-hex-and-canonicalframe.md`.
     -->
     <!--
       Phase 1052 rides the 0.38.0 draft (untagged, publicly unpinned; the

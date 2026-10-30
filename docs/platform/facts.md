@@ -14,7 +14,7 @@ A **fact** is a verified assertion about a `(subject, metric, period)`:
 
 | Field | Meaning |
 |---|---|
-| `FactId` | Content-addressed identity — `hash(subject, metric, period, method, inputHashes)`. |
+| `FactId` | Content-addressed identity — `CanonicalFrame.digest` of `(subject, metric, period, method, inputHashes)` ([Content ids](#content-ids-one-frame-phase-1089)). |
 | `Subject` | A node in a registered subject hierarchy (`{ Hierarchy; Path }`). |
 | `Metric` | A registered metric id (`MetricRef`). |
 | `Value` | `Scalar` / `Interval` / `Series` (a data-object version ref) / `Distribution` / `Categorical` / `Absent`. |
@@ -50,6 +50,41 @@ Two consequences the model gives for free:
 - **Competing facts are never merged (D19).** Two *methods* computing one
   `(subject, metric, period)` produce two current, method-attributed
   facts — not a supersession. `FactQuery.Method` selects one lineage.
+
+## Content ids: one frame (Phase 1089)
+
+Every content id the fact plane mints is `CanonicalFrame.digest` of a documented field list —
+lowercase-hex SHA-256 over the UTF-8 bytes of the fields, each written `<length>:<field>` with the
+length in UTF-16 code units (`ToolUp.Platform.CanonicalFrame`, in `ToolUp.Platform.Core`). The frame
+is the one the deployment evidence chain and the grounding-envelope seal already used
+(`ProvenanceFraming.frame`); a length prefix, unlike a delimiter, cannot be smuggled through a field
+value, so two different field lists never frame to the same bytes. `Sha256.hex` / `Sha256.hexOfUtf8`
+is the one SHA-256 helper beside it. The first field names the recipe, so a fact id can never equal a
+different kind of id over the same values.
+
+| Id | Field list |
+|---|---|
+| `FactId` (`Fact.compute`) | `"fact"`, subject (`hierarchy/a>b`), metric, period (`from..to`, both UTC round-trip), method identity, then each input hash, ordinal-sorted |
+| `BatchAssertReceipt.Digest` | `"batch-assert-receipt"`, then each disposition's outcome and fact id, in submission order |
+| `FactTableSnapshot.digest` (a watermark's content digest) | `"fact-table-snapshot"`, table id, then per row: the subject path's length and members, from, to, the cell count, each cell's metric and value hash |
+| A grounding certificate's node hash | `"certificate-node"`, node id, kind, disclosure, method, certificate ref, `withheld` / `disclosed` |
+| A narrative trigger's change key | the first 16 hex of `"narrative-trigger-change"` + the invalidated keys, sorted |
+
+The subject, period and method renderings are the ones the lineage key uses, and the lineage key,
+`Fact.valueHash` and `InputHash.isContentHash` are unchanged in meaning. So is every id a signature
+covers: a team publication's manifest and a promoted artifact's signing input keep their bytes,
+because signatures over them are at rest (and the second is fixed by the federation specification).
+The model envelope ids (the fit composite key, the evaluation, fold, comparison and registration ids,
+the promotion decision id) are routed through `Sha256.hexOfUtf8` with their recipes unchanged and
+pinned byte for byte in `FederatedModelExecutionTests`: they move with the sidecar store that holds
+them, so they move once.
+
+**Ids written before 0.38.0 are migrated, not dual-read.** `BlobFactStore.MigrateIds(scope, dryRun)`
+and `FactStoreMigration.migrateIds target scope dryRun` re-key a scope's persisted facts —
+`FactId`, `Supersedes`, the blob store's point-read index leaves, the Postgres row and its payload —
+through one shared plan (`FactIdMigration.plan`); a second run changes nothing. The upgrade step, its
+verification and its rollback are in
+[`docs/migrations/1089-redesign-h-sha256-hex-and-canonicalframe.md`](../migrations/1089-redesign-h-sha256-hex-and-canonicalframe.md).
 
 ## Assert / query
 

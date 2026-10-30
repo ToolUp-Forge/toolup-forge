@@ -223,6 +223,20 @@ module GroundingEnvelope =
         |> List.distinctBy declarationKey
         |> List.sortBy declarationKey
 
+    /// The envelope's canonical field list, in frame order.
+    let private canonicalFields (envelope: GroundingEnvelope) : string list =
+        let declarations = canonicalDeclarations envelope
+
+        [
+            FramingVersion
+            string envelope.SchemaVersion
+            string declarations.Length
+            for declaration in declarations do
+                GroundingFacet.label declaration.Facet
+                declaration.Subject
+                declaration.Value
+        ]
+
     /// Length-framed canonical text for an envelope — the exact bytes its
     /// digest is taken over.
     ///
@@ -230,32 +244,22 @@ module GroundingEnvelope =
     /// same reason: without it two distinct envelopes could canonicalise
     /// to identical text by concatenation, and a digest over them would
     /// be meaningless.
+    ///
+    /// Phase 1089: the field list is framed by `CanonicalFrame`, the one
+    /// frame every content id is taken over — byte-identical to the
+    /// hand-framed form it replaces, pinned in `CanonicalFrameTests`.
     let canonicalForm (envelope: GroundingEnvelope) : string =
-        let builder = StringBuilder()
-        let frame = ProvenanceFraming.frame builder
-
-        let declarations = canonicalDeclarations envelope
-
-        frame FramingVersion
-        frame (string envelope.SchemaVersion)
-        frame (string declarations.Length)
-
-        for declaration in declarations do
-            frame (GroundingFacet.label declaration.Facet)
-            frame declaration.Subject
-            frame declaration.Value
-
-        builder.ToString()
+        envelope |> canonicalFields |> CanonicalFrame.text
 
     /// The canonical bytes an envelope's digest covers.
     let canonicalBytes (envelope: GroundingEnvelope) : byte[] =
-        envelope |> canonicalForm |> Encoding.UTF8.GetBytes
+        envelope |> canonicalFields |> CanonicalFrame.frame
 
     /// Lowercase-hex SHA-256 over the canonical bytes — the value the
     /// seal names, every mutation record carries, and the continuity
     /// check compares.
     let digest (envelope: GroundingEnvelope) : string =
-        envelope |> canonicalBytes |> DeployRecords.digestBytes
+        envelope |> canonicalFields |> CanonicalFrame.digest
 
     // ─── Projection ──────────────────────────────────────────────────
 

@@ -3287,7 +3287,22 @@ let private seriesRowTests =
             let! _ = reader.QueryPopulation(scope, populationOf "revenue")
             let! rebuilt = snapshotBytes storage scope "revenue"
 
-            Expect.equal rebuilt current "the read rebuilt it, through the census path, into the current shape"
+            // A rebuild lists its rows in the store's listing order, and the
+            // in-memory store's listing is dictionary order, which a resize
+            // between the two reads can reshuffle (Phase 1089 found it red
+            // once in a full gate, green in isolation). The shape is the
+            // header plus the set of row and census lines, so that is what
+            // is compared.
+            let shape (bytes: byte[] option) =
+                bytes
+                |> Option.map (fun b ->
+                    let lines = Encoding.UTF8.GetString(b).Split('\n')
+                    lines[0], Array.sort lines[1..])
+
+            Expect.equal
+                (shape rebuilt)
+                (shape current)
+                "the read rebuilt it, through the census path, into the current shape"
         }
     ]
 
@@ -3573,4 +3588,170 @@ let pointReadIndexTests =
         seriesReadTests
         firstUploadSurfaceTests
         seriesRowTests
+    ]
+
+// ─── Phase 1089 — fact ids on the canonical frame ────────────────────
+//
+// The golden ids below were computed OUTSIDE this code base — Python's
+// `hashlib` over the hand-written frame text — so a recipe change, or a
+// drift in a field's rendering, goes red here rather than re-pinning
+// itself. The legacy pin is the id a pre-1089 store holds for the same
+// fact: it proves the test pack's `legacyFactId` reproduces what an
+// upgrading deployment actually has at rest, which is what the migration
+// law seeds.
+
+let private goldenDraft (inputs: string list) : FactDraft = {
+    scalarDraft "unused" 100m with
+        Evidence = {
+            ResultRef = None
+            InputHashes = inputs
+            TriggerRef = None
+        }
+}
+
+let private inputA = "sha256:" + String.replicate 32 "ab"
+let private inputB = "sha256:" + String.replicate 32 "0c"
+
+let private computeOf (d: FactDraft) =
+    Fact.compute d.Subject d.Metric d.Period d.Method (Fact.effectiveInputHashes d.Method d.Evidence d.Value)
+
+/// The fact a pre-1089 store would hold for `d`.
+let private storedFor (d: FactDraft) : Fact = {
+    FactId = ""
+    Subject = d.Subject
+    Metric = d.Metric
+    Value = d.Value
+    Period = d.Period
+    AsOf = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+    Method = d.Method
+    Evidence = d.Evidence
+    Confidence = d.Confidence
+    Supersedes = None
+    Disclosure = d.Disclosure
+}
+
+let private blobJson = FableConverters.create ()
+
+let private migrationHarness (surfaces: FactSurfaceOptions) () : IFactStoreContract.FactIdMigrationHarness =
+    let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+
+    let store =
+        BlobFactStore(
+            storage,
+            InMemoryEventStore.InMemoryEventStore(),
+            None,
+            (fun () -> DateTime.UtcNow),
+            surfaces,
+            FactIndexOptions.always
+        )
+
+    let scope = newScope ()
+
+    {
+        IFactStoreContract.Store = store
+        Scope = scope
+        SeedRaw =
+            fun facts -> async {
+                for f in facts do
+                    let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(f, blobJson))
+                    let! r = storage.Upload(scope, sprintf "_facts/%s.json" f.FactId, bytes)
+                    Expect.isOk r "seeded"
+
+                let! _ = store.RebuildIndex scope
+                ()
+            }
+        Migrate = fun dryRun -> store.MigrateIds(scope, dryRun)
+    }
+
+let factIdTests =
+    testList "Phase 1089 — fact ids on the canonical frame" [
+
+        testCase "Fact.compute is pinned against an independently computed id"
+        <| fun () ->
+            Expect.equal
+                (computeOf (goldenDraft [ inputA ]))
+                "40727a358c081002f3a3bfd84dc402727bdd7fe423445939e3ddde4fe3b78417"
+                "frame of fact | subject | metric | period | method | input"
+
+            Expect.equal
+                (computeOf (goldenDraft [ inputA; inputB ]))
+                "18428aedfa0d799356786c65ee4271ca25ce6d66e3be5a2845f7d1341b55441a"
+                "two inputs, ordinal-sorted, each its own field"
+
+            Expect.equal
+                (computeOf (goldenDraft [ inputB; inputA ]))
+                (computeOf (goldenDraft [ inputA; inputB ]))
+                "input order does not change identity"
+
+        testCase "the legacy recipe the migration reads is pinned against the ids at rest"
+        <| fun () ->
+            Expect.equal
+                (IFactStoreContract.legacyFactId (storedFor (goldenDraft [ inputA ])))
+                "c05cdc0b8ca539eb87004c0f3f46ab98f07a386e6bbf07d768694fc5b11852c4"
+                "the pre-1089 id of the golden fact"
+
+            Expect.equal
+                (IFactStoreContract.legacyFactId (storedFor (goldenDraft [ inputA; inputB ])))
+                "8218b9611e19e7d139b09784618855e8173b8c7f740cf8cfc5b8b0161a86c4d3"
+                "and with two inputs"
+
+        testCase "the migration plan moves a legacy id to Fact.computeFor and maps the link"
+        <| fun () ->
+            let v1 = storedFor (goldenDraft [ inputA ])
+
+            let v1 = {
+                v1 with
+                    FactId = IFactStoreContract.legacyFactId v1
+            }
+
+            let v2 = {
+                storedFor (goldenDraft [ inputB ]) with
+                    AsOf = DateTime(2026, 8, 2, 0, 0, 0, DateTimeKind.Utc)
+                    Supersedes = Some v1.FactId
+            }
+
+            let v2 = {
+                v2 with
+                    FactId = IFactStoreContract.legacyFactId v2
+            }
+
+            let plan = FactIdMigration.plan [ v1; v2 ]
+
+            Expect.equal
+                (plan |> List.map (fun (b, a) -> b.FactId, a.FactId))
+                [ v1.FactId, Fact.computeFor v1; v2.FactId, Fact.computeFor v2 ]
+                "each id recomputed"
+
+            Expect.equal (plan |> List.last |> snd |> _.Supersedes) (Some(Fact.computeFor v1)) "the link mapped"
+            Expect.isEmpty (FactIdMigration.plan (plan |> List.map snd)) "a migrated scope plans nothing"
+
+        IFactStoreContract.idMigrationTests "BlobFactStore" (migrationHarness FactSurfaceOptions.disabled)
+        IFactStoreContract.idMigrationTests "BlobFactStore (surfaces on)" (migrationHarness FactSurfaceOptions.always)
+
+        testCaseAsync "after a migration the point-read index and the census agree"
+        <| async {
+            let h = migrationHarness FactSurfaceOptions.always ()
+            let store = h.Store :?> BlobFactStore
+            let v1 = storedFor (goldenDraft [ inputA ])
+
+            let v1 = {
+                v1 with
+                    FactId = IFactStoreContract.legacyFactId v1
+            }
+
+            do! h.SeedRaw [ v1 ]
+            let! _ = h.Migrate false
+            let! check = store.IndexConsistencyCheck(h.Scope, 10)
+
+            match check with
+            | [ entry ] ->
+                Expect.equal entry.SampleSize 1 "the one fact sampled"
+                Expect.equal entry.ConsistentEntries 1 "its leaf describes it"
+                Expect.equal entry.OrphanedIndexEntries 0 "the legacy leaf was removed"
+            | other -> failtestf "expected one consistency entry, got %A" other
+
+            let! export = store.ExportScope h.Scope
+            Expect.isEmpty export.Unreadable "every blob reads as its own fact"
+            Expect.equal (export.Facts |> List.map _.FactId) [ Fact.computeFor v1 ] "one blob, under the new id"
+        }
     ]

@@ -312,11 +312,22 @@ ON CONFLICT (scope) DO UPDATE SET source = EXCLUDED.source, source_digest = EXCL
     let targetRows (table: string) =
         $"SELECT fact_id, lineage_hash, as_of_ticks, supersedes, is_head, payload FROM {table} WHERE scope = @scope"
 
+    /// Phase 1089 — re-key one row: its id, its supersession link and its
+    /// payload, which carries both.
+    let rekeyRow (table: string) =
+        $"UPDATE {table} SET fact_id = @to, supersedes = @supersedes, payload = @payload WHERE scope = @scope AND fact_id = @from"
+
+    /// Phase 1089 — drop a row whose migrated fact is already stored.
+    let deleteRow (table: string) =
+        $"DELETE FROM {table} WHERE scope = @scope AND fact_id = @from"
+
     /// The statements that name a scope's rows, for the scope-binding check.
     let scopeBoundStatements (table: string) : string list = [
         readProgress table
         saveProgress table
         targetRows table
+        rekeyRow table
+        deleteRow table
     ]
 
 /// One target row, as the verification reads it.
@@ -415,7 +426,7 @@ module FactStoreMigration =
         |> List.map _.FactId
         |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
         |> String.concat "\n"
-        |> FactRow.sha256Hex
+        |> Sha256.hexOfUtf8
 
     let private heads (facts: Fact list) =
         let superseded = HashSet<string>(facts |> List.choose _.Supersedes, ordinal)
@@ -1030,6 +1041,96 @@ module FactStoreMigration =
 
     /// A process exit code for an operator host: `0` when every scope
     /// verified, `1` otherwise.
+    /// Phase 1089 — move one scope's persisted fact ids onto the canonical
+    /// frame, once: the Postgres half of `BlobFactStore.MigrateIds`, over
+    /// the same plan (`FactIdMigration.plan`). Each fact whose stored id is
+    /// not `Fact.computeFor` of its own fields has its row re-keyed —
+    /// `fact_id`, `supersedes` and the payload's own `FactId` /
+    /// `Supersedes` — and a fact whose id was current but whose
+    /// predecessor moved has its link rewritten. Every other column is a
+    /// projection of fields the migration does not change (the lineage
+    /// hash, the head flag, the transaction time), so it stays as it is.
+    /// One transaction under the scope's exclusive write lock: the scope
+    /// moves whole or not at all, and a second run plans nothing.
+    ///
+    /// `dryRun` reads and plans and writes nothing. A row whose payload
+    /// names a different fact id than its `fact_id` column is refused,
+    /// naming the row, before anything is written. Run it with the
+    /// deployment's writers stopped.
+    let migrateIds
+        (target: PostgresFactStore)
+        (scope: string)
+        (dryRun: bool)
+        : Async<Result<FactIdMigrationReport, string>> =
+        async {
+            let! rows = readTargetRows target scope
+            let stored = rows |> List.map (fun r -> r, FactRow.deserialise r.Payload)
+
+            match stored |> List.filter (fun (r, f) -> r.FactId <> f.FactId) with
+            | _ :: _ as mismatched ->
+                let named =
+                    mismatched
+                    |> List.map (fun (r, f) -> sprintf "%s (payload names %s)" r.FactId f.FactId)
+                    |> String.concat "; "
+
+                return
+                    Error(
+                        sprintf
+                            "scope %s holds rows whose payload is another fact; nothing was migrated: %s"
+                            scope
+                            named
+                    )
+            | [] ->
+                let facts = stored |> List.map snd
+                let changes = FactIdMigration.plan facts
+                let report = FactIdMigration.report scope dryRun facts.Length changes
+
+                if dryRun || List.isEmpty changes then
+                    return Ok report
+                else
+                    let table = target.Options.Table
+                    let held = HashSet<string>(facts |> List.map _.FactId, ordinal)
+                    use! conn = target.DataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+                    use! tx = conn.BeginTransactionAsync().AsTask() |> Async.AwaitTask
+
+                    do! async {
+                        use lock = command target Sql.lockScopeExclusive conn tx
+                        add lock "scope" NpgsqlDbType.Text scope
+                        let! _ = exec lock
+                        ()
+                    }
+
+                    for before, after in changes do
+                        if before.FactId <> after.FactId && held.Contains after.FactId then
+                            // The migrated fact is already stored under its id
+                            // (a duplicate copy): the old row goes.
+                            use drop = command target (MigrationSql.deleteRow table) conn tx
+                            add drop "scope" NpgsqlDbType.Text scope
+                            add drop "from" NpgsqlDbType.Text before.FactId
+                            let! _ = exec drop
+                            ()
+                        else
+                            use rekey = command target (MigrationSql.rekeyRow table) conn tx
+                            add rekey "scope" NpgsqlDbType.Text scope
+                            add rekey "from" NpgsqlDbType.Text before.FactId
+                            add rekey "to" NpgsqlDbType.Text after.FactId
+
+                            add
+                                rekey
+                                "supersedes"
+                                NpgsqlDbType.Text
+                                (match after.Supersedes with
+                                 | Some id -> box id
+                                 | None -> box DBNull.Value)
+
+                            add rekey "payload" NpgsqlDbType.Text (FactRow.serialise after)
+                            let! _ = exec rekey
+                            ()
+
+                    do! tx.CommitAsync() |> Async.AwaitTask
+                    return Ok report
+        }
+
     let exitCode (report: FactStoreMigrationReport) : int = if report.Passed then 0 else 1
 
     /// The report as text: one line per scope, then one line per

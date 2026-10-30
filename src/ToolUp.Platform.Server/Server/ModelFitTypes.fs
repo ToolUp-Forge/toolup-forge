@@ -5,7 +5,6 @@ namespace ToolUp.Platform
 
 open System
 open System.Text
-open System.Security.Cryptography
 
 // ─── Phase 449 — Model-fit envelope core types ──────────────────────────
 //
@@ -62,8 +61,7 @@ type ModelSpecRef = {
 
 module ModelSpecRef =
     /// Lowercase SHA-256 hex of a spec payload's UTF-8 bytes.
-    let hashOf (payload: string) : string =
-        SHA256.HashData(Encoding.UTF8.GetBytes payload) |> Convert.ToHexStringLower
+    let hashOf (payload: string) : string = Sha256.hexOfUtf8 payload
 
     /// Wrap an opaque payload, computing its `SpecHash`. The canonical
     /// constructor — callers never set `SpecHash` by hand.
@@ -305,7 +303,7 @@ module FitCompositeKey =
             Seed = seed
             ProviderId = providerId
             ProviderVersion = providerVersion
-            Hash = SHA256.HashData(Encoding.UTF8.GetBytes c) |> Convert.ToHexStringLower
+            Hash = Sha256.hexOfUtf8 c
         }
 
 /// Value reference to a fitted artifact the provider produced. Opaque to

@@ -5,7 +5,6 @@ namespace ToolUp.Facts
 
 open System
 open System.Collections.Concurrent
-open System.Security.Cryptography
 open System.Text
 open ToolUp.ArtefactSigning
 open ToolUp.Platform
@@ -275,11 +274,6 @@ module internal PublicationLedger =
     let originName (tableId: string) (originTeam: string) =
         sprintf "%s%s.json" (originPrefix tableId) originTeam
 
-    let sha256Hex (text: string) : string =
-        SHA256.HashData(Encoding.UTF8.GetBytes text)
-        |> Array.map (fun b -> b.ToString "x2")
-        |> String.concat ""
-
     /// The canonical bytes a signed run seals: every field that says what
     /// was published, in a fixed order, with the rows digested.
     let manifest (origin: PublishedOrigin) (targetTable: string) : byte[] =
@@ -297,7 +291,7 @@ module internal PublicationLedger =
             "target-table=" + targetTable
             "origin-run=" + (origin.OriginRun |> Option.defaultValue "")
             "run=" + origin.PublicationRunId
-            "rows=" + sha256Hex rows
+            "rows=" + Sha256.hexOfUtf8 rows
         ]
         |> String.concat "\n"
         |> Encoding.UTF8.GetBytes
@@ -738,7 +732,7 @@ module internal GrantPersistence =
                 consent.At.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             ]
             |> FactTableBlobIo.serialize
-            |> PublicationLedger.sha256Hex
+            |> Sha256.hexOfUtf8
 
         CarriedScopePurpose.Grant(
             "fact-publication.consent." + (PublicationSide.name side).ToLowerInvariant(),
