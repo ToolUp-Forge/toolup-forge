@@ -571,6 +571,13 @@ ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Registry : Microsoft.FSharp.Core.F
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Store : ToolUp.Facts.IFactStore { get }
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Tables : ToolUp.Platform.Grounding.IFactTableRegistry { get }
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Writer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter] { get }
+ToolUp.Facts.FactDeclarationsAudit (class)
+ToolUp.Facts.FactDeclarationsAudit.Unattributed : System.String (literal)
+ToolUp.Facts.FactDeclarationsAudit.ValidatorName : System.String (literal)
+ToolUp.Facts.FactDeclarationsAudit.message(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.UndescribedDeclarations]) : System.String
+ToolUp.Facts.FactDeclarationsAudit.undescribed(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IFactTableRegistry]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.UndescribedDeclarations]
+ToolUp.Facts.FactDeclarationsValidator (class)
+ToolUp.Facts.FactDeclarationsValidator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IFactTableRegistry]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit])
 ToolUp.Facts.FactDerivationGraph (class)
 ToolUp.Facts.FactDerivationGraph..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Facts.FactDerivationGraph.Facts : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact] { get }
@@ -1282,6 +1289,12 @@ ToolUp.Facts.TaintOutcome.InheritedLabel : ToolUp.Facts.TaintLabel { get }
 ToolUp.Facts.TaintOutcome.InheritedPolicyRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.InheritedPolicyRefs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.UnsatisfiedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.UndescribedDeclarations (class)
+ToolUp.Facts.UndescribedDeclarations..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.UndescribedDeclarations.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.UndescribedDeclarations.ModuleName : System.String { get }
+ToolUp.Facts.UndescribedDeclarations.Subjects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.UndescribedDeclarations.Tables : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.ViewerAwareDisclosure (class)
 ToolUp.Facts.ViewerAwareDisclosure..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.DisclosureViewer, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]]], ToolUp.Facts.DisclosureViewerSources)
 ToolUp.Facts.ViewerAwareDisclosure.Resolver : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.DisclosureViewer, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]]] { get }

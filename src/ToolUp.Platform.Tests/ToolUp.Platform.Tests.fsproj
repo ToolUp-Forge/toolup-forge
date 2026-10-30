@@ -864,6 +864,7 @@
         <Compile Include="InProcess\ConversationListingTests.fs" />
         <Compile Include="InProcess\ConversationVisibilityTests.fs" />
         <Compile Include="InProcess\FactBrowseTests.fs" />
+        <Compile Include="InProcess\FactDeclarationsValidatorTests.fs" />
         <Compile Include="InProcess\DelegateFactTests.fs" />
         <Compile Include="InProcess\TeamOutputVisibilityTests.fs" />
         <Compile Include="InProcess\FactPublicationTests.fs" />

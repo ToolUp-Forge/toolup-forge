@@ -804,6 +804,8 @@ module FactsCompose =
                 |> registerBlobScaleGuard app.Config.ReplicaCount
                 // Phase 986 — the dormant-push-door warning.
                 |> registerQuestionCompilerGuard
+                // The undescribed-declarations report (information only).
+                |> FactDeclarationsValidatorRegistration.register
 
             {
                 app with

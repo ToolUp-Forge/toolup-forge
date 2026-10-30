@@ -1013,6 +1013,7 @@ let private registeredTests =
         ConversationListingTests.tests
         ConversationVisibilityTests.tests
         FactBrowseTests.tests
+        FactDeclarationsValidatorTests.tests
         DelegateFactTests.tests
         TeamOutputVisibilityTests.tests
         FactPublicationTests.tests
