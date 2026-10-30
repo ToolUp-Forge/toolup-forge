@@ -351,7 +351,7 @@ let private featureSlot (term: string) : int * float =
 // ─── Persistence shape ───────────────────────────────────────────
 
 [<Literal>]
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private stateBlobName = "embeddings/_local-tfidf-state.json"
