@@ -51,7 +51,7 @@ type BuildOptions = {
 let private openAiSecretStore: ISecretStore =
     { new ISecretStore with
         member _.GetSecret(scopeId, key) = async {
-            if scopeId = "_platform" && key = "openai-api-key" then
+            if scopeId = ScopeKey.PlatformContainer && key = "openai-api-key" then
                 let value =
                     [ "OPENAI_API_KEY"; "openai-api-key" ]
                     |> List.tryPick (fun name ->
