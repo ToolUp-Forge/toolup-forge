@@ -28,7 +28,7 @@ open ToolUp.Platform.HealthChecks
 // (post-rotation) credential.
 
 [<Literal>]
-let private healthContainer = "_platform"
+let private healthContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private healthProbePrefix = "health/probe"
