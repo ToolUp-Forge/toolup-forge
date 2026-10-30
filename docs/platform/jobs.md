@@ -268,9 +268,42 @@ Write paths (`Schedule` / `Cancel` / `Disable` / `Enable` / `TriggerOnce`) are g
 
 `IJobHandler` is a single method — `Execute: ctx: JobContext -> Async<JobResult>`. The handler name
 is *not* on the interface: it is the string the scheduler registers the implementation under, so one
-implementation can serve several names. Dependencies are captured by the handler's **constructor** at
+implementation can serve several names. Dependencies are captured when the handler is built at
 compose time; `JobContext` carries the run's state (payload, scope, attempt, trigger), never a
 service provider.
+
+**A platform job is written as a `RunJob<'Req>`** — a name, a parse and a run — and
+`RunJob.handler` turns it into the `IJobHandler`. The handler decides the one question every job
+used to decide for itself: a payload that does not parse is `PermanentFailure` (the same bytes will
+not parse on the next attempt), a run that returns `RunFailure.Terminal` is `PermanentFailure`, and
+a run that returns `RunFailure.Retryable` is `TransientFailure`, which the scheduler's retry policy
+takes from there. `RunJob.ofPayload` parses with `JobPayload`, the SDK's one job-payload codec (the
+standard `FableConverters` JSON); write the payload you schedule with `JobPayload.serialise`.
+
+```fsharp
+let myJob: RunJob<MyJobPayload> =
+    RunJob.ofPayload "my-handler" (fun _ctx input -> async {
+        try
+            do! doWork input
+            return Ok()
+        with ex ->
+            return Error(RunFailure.Retryable ex.Message) // retried per RetryPolicy
+    })
+
+let myHandler (logger: ILogger) : IJobHandler = RunJob.handler logger myJob
+```
+
+Every job in the grounding and modelling plane is written this way — the fit, batch-item, scoring,
+evaluation, re-evaluation sweep, promotion, dataset re-vintage and fact recompute jobs — and each
+keeps its terminal-versus-retryable split as one `failureOf` beside it. Their handler names never
+change: they are persisted on every queued job. For the kinds of run a scheduler executes,
+`RunKind.handlerName` is the source of the name (`RunKind.ModelFit` →
+`_platform.modelfit.run`, `RunKind.Evaluation` → `_platform.modeleval.run`,
+`RunKind.PromotionDecision` → `_platform.modelpromotion.evaluate`, `RunKind.Revintage` →
+`_platform.dataset.revintage`); a kind that runs inline inside another run has none.
+
+Implementing the interface by hand is still legal, and is the shape for a handler that returns a
+`JobResult` `RunJob` does not produce (handing off to an external backend, say):
 
 ```fsharp
 type MyJobHandler() =

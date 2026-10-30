@@ -11434,6 +11434,40 @@ ToolUp.Platform.RulesView..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp
 ToolUp.Platform.RulesView.CapturedAtUtc : System.DateTime { get }
 ToolUp.Platform.RulesView.Defects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedDefect] { get }
 ToolUp.Platform.RulesView.Rules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedRule] { get }
+ToolUp.Platform.RunKind (class)
+ToolUp.Platform.RunKind.Assembly : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.Comparison : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.Evaluation : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.ExternalWork : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.FactTableRun : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.FoldEvaluation : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.IsAssembly : System.Boolean { get }
+ToolUp.Platform.RunKind.IsComparison : System.Boolean { get }
+ToolUp.Platform.RunKind.IsEvaluation : System.Boolean { get }
+ToolUp.Platform.RunKind.IsExternalWork : System.Boolean { get }
+ToolUp.Platform.RunKind.IsFactTableRun : System.Boolean { get }
+ToolUp.Platform.RunKind.IsFoldEvaluation : System.Boolean { get }
+ToolUp.Platform.RunKind.IsModelFit : System.Boolean { get }
+ToolUp.Platform.RunKind.IsPromotionDecision : System.Boolean { get }
+ToolUp.Platform.RunKind.IsRevintage : System.Boolean { get }
+ToolUp.Platform.RunKind.ModelFit : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.PromotionDecision : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.Revintage : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunKind.Tag : System.Int32 { get }
+ToolUp.Platform.RunKind+Tags (class)
+ToolUp.Platform.RunKind+Tags.Assembly : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.Comparison : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.Evaluation : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.ExternalWork : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.FactTableRun : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.FoldEvaluation : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.ModelFit : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.PromotionDecision : System.Int32 (literal)
+ToolUp.Platform.RunKind+Tags.Revintage : System.Int32 (literal)
+ToolUp.Platform.RunKindModule (class)
+ToolUp.Platform.RunKindModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RunKind] { get }
+ToolUp.Platform.RunKindModule.handlerName(ToolUp.Platform.RunKind) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.RunKindModule.label(ToolUp.Platform.RunKind) : System.String
 ToolUp.Platform.RuntimeAttestor (class)
 ToolUp.Platform.RuntimeAttestor.UnattestedName : System.String (literal)
 ToolUp.Platform.RuntimeAttestor.unattested : ToolUp.Platform.IRuntimeAttestor { get }
@@ -14649,7 +14683,6 @@ ToolUp.Remoting.DecodeErrorModule.renderPath(Microsoft.FSharp.Collections.FSharp
 ToolUp.Remoting.DecodeErrorModule.under(System.String, ToolUp.Remoting.DecodeError) : ToolUp.Remoting.DecodeError
 ToolUp.Remoting.DecodeException (class)
 ToolUp.Remoting.DecodeException..ctor()
-ToolUp.Remoting.DecodeException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Remoting.DecodeException..ctor(ToolUp.Remoting.DecodeError)
 ToolUp.Remoting.DecodeException.Data0 : ToolUp.Remoting.DecodeError { get }
 ToolUp.Remoting.DecoderDivergence (class)

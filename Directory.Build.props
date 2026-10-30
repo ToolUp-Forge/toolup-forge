@@ -980,6 +980,7 @@
       `FactTableRegistry.tryDescription`. Migration recipe:
       `docs/migrations/1150-fact-table-descriptions.md`.
     -->
+    <!-- Phase 1090 rides the 0.38.0 draft, breaking: the per-envelope job-payload serialisers, `tryParse*` and `isTerminal` give way to `JobPayload` and each handler module's `failureOf`, and the eight model/fact handler classes are gone (their modules keep `create` and the handler names); additive `SidecarStore<'T>`, `RunKind`, `RunJob<'Req>`, `RunFailure`, `ConditionalDataObjectStore.isAtomic`. Migration recipe, including the one rolling-upgrade step: `docs/migrations/1090-sidecarstore-and-runjob.md`. -->
     <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

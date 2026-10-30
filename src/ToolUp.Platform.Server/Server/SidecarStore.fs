@@ -48,6 +48,12 @@ open ToolUp.Remoting.Json.SystemTextJson
 //     a save that completed before the manifest named the key is in the
 //     second listing, and one that saw the key named added itself.
 //
+// **Every write of the type goes through `Save`.** A record written to the
+// data type behind the store's back — by another component, or by an
+// earlier version during a rolling upgrade — is not filed, and a read by a
+// complete key would miss it. Evicting the type's manifest
+// (`SidecarStore.manifestObjectId`) makes the next read rebuild every key.
+//
 // **Backfill on first read.** A key the manifest does not list is
 // backfilled by the first `QueryBy` on it — one-time, two listings, and
 // that read is answered from the listing. A deployment that never reads

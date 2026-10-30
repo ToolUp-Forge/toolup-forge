@@ -250,6 +250,12 @@ let classify (outcome: ExternalOutcome) : string =
 
 Step 2 is the part worth being deliberate about. A handler that submits and then polls in a loop has moved the blocking from the compute to the scheduler slot, which is the problem this seam exists to remove.
 
+### Where the run records live
+
+The records the modelling substrate keeps about the runs it brokers — registered model artifacts, evaluation runs and their per-fold outcomes, comparisons, standing re-evaluation registrations, and promotion decisions — are each a `SidecarStore<'T>` over `IDataObjectStore`. A store declares the sidecar keys it reads by (an artifact's spec hash and dataset version, an evaluation's artifact, a fold's run, a decision's artifact) and keeps an index for them, so a read by one of those keys costs the index and one object per match whatever the size of the scope; a coordinate that names most of the scope (a status, a verdict) is read by scanning. The index is backfilled by the first read of a key, written only through a version claim, and rebuilt from a listing when it cannot be read, so it narrows a read without ever being the authority on it. A sweep over a store — the standing re-evaluation sweep's registrations, a future sweep of the compute memo — is one listing of the scope, never one per record.
+
+The compute memo below is not yet on this store: its entries live at their own blob path, and a sweep of them should be written as a `SidecarStore` sweep once they move rather than against that layout.
+
 Distinct from **`IContainerScheduler`** (the Layer 3 deploy plane), which launches a container and owns its lifecycle — you asked for a process and you get one. The dispatcher hands work to a backend that owns its own execution and gives you a reference. A container backend is a perfectly reasonable *implementation* of a dispatcher; it is not the same abstraction.
 
 Distinct from **`IModelFitProvider`**, which executes a fit in-process through a provider companion and returns a `FitOutcome` synchronously-shaped (`Async<FitOutcome>`, one call). Where the fit is too heavy for the serving process, a provider can be written over a dispatcher — that is the intended layering, not a conflict.
