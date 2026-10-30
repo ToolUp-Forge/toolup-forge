@@ -37,6 +37,7 @@ toolup docker emit --help
 | `tenants list` / `preview` / `offboard` | Scripted tenant lifecycle over a running deployment's admin API: enumerate teams, preview an offboard's blast radius, run one. |
 | `users list` / `offboard` | Enumerate the principals the substrate has evidence for (`--team-less` for the stray-account residue), and offboard one's personal scope. |
 | `describe` | Emits a deployment's self-description — composition, verification report, per-component seam reach — as JSON without a running server, or one built module's `ModuleSurface`. |
+| `facts migrate` | Runs the deployment's composition root to move its facts from the blob fact store into the Postgres fact store, verify a copy, or move fact ids onto the canonical frame. |
 
 #### `describe`
 
@@ -102,6 +103,40 @@ configured trust anchors. Crypto is pure BCL (HMAC-SHA256 / ES256 over a NIST P-
 | `--mac-key-file <f>` / `--mac-key <base64>` | Base64 HMAC-SHA256 key (symmetric anchor). |
 | `--ec-key-file <pem>` | PEM P-256 EC private key (asymmetric / ES256 anchor). |
 | `--unbind` | Remove the named modules' entries instead of stamping. |
+
+#### `facts migrate`
+
+```powershell
+toolup facts migrate --dll ./publish/App.dll --all-scopes --dry-run   # check the source, write nothing
+toolup facts migrate --dll ./publish/App.dll --scope team-1           # copy and verify one scope
+toolup facts migrate --project ./src/Server --all-scopes --verify     # compare an existing copy
+toolup facts migrate --dll ./publish/App.dll --all-scopes --ids       # move fact ids onto the canonical frame
+```
+
+Moves a deployment's facts from its `BlobFactStore` into its `PostgresFactStore`, verifying each
+scope. Like `describe`, it runs the deployment's composition root (`--project`, default `.`, or
+`--dll`) in a startup mode that binds no listener — here `--operator-task facts-migrate` — and
+prints the report the task writes. The root must compose `PostgresFactStoreCompose.withPostgresFactStore`
+and `FactStoreMigrationCompose.withFactsMigrateTask` (the `ToolUp.FactStores.Postgres` companion).
+The blob backend is whichever storage the root composes and the connection string is the one it
+resolves, so neither is a flag here and neither is printed. Stop every writer first.
+
+Per scope it prints facts read, rows written, rows skipped as already present, the verification's
+verdict with every differing fact id, and the audit record's id. A second run skips a scope already
+verified over the same source facts; an interrupted run resumes after its last committed page.
+Exit `0` when every scope verified (or, with `--dry-run`, would migrate), `1` when any scope differs,
+is refused by the source check or failed to copy, `2` for a usage error.
+
+| Option | Meaning |
+|---|---|
+| `--scope <id>` / `--all-scopes` | The scopes (repeatable), or every scope the composition enumerates. One is required. |
+| `--dry-run` | Read and check the source; write nothing. With `--ids`, plan only. |
+| `--verify` | Compare the existing copy with its source; write nothing. |
+| `--ids` | Move persisted fact ids onto the canonical frame, in the blob store and the table. |
+| `--max-scope-facts <n>` | Raise the per-scope bound (300,000) for this run. |
+| `--allow-unreadable-source` | Migrate scopes holding unreadable blobs (an operator's decision). |
+| `--project <path>` / `--dll <path>` | The composition root to run. |
+| `--timeout <seconds>` | How long to wait for the root (default 3600). |
 
 #### `memberships doctor`
 
@@ -223,12 +258,11 @@ longest-path-prefix dispatch. Subcommands are appended in `Program.fs` and never
 or each other — vendor-specific subcommands isolate their dependencies in their own modules (GP 1),
 and the base CLI carries no paid or cloud dependency (GP 2).
 
-**What is deliberately not a command here.** Migrating a `BlobFactStore` into the PostgreSQL fact
-store needs Npgsql and the fact tier, which this host does not carry, so it is not a `toolup`
-subcommand. It is an entry point in the `ToolUp.FactStores.Postgres` package
-(`FactStoreMigration.migrate`, with `exitCode` for a script); that package's README has the
-procedure (Phase 941). It reads each scope whole, so it refuses a scope above
-`FactStoreMigrationOptions.MaxScopeFacts` (300,000 fact blobs by default) by name before reading it
-(Phase 964).
+**A verb that needs the deployment runs the deployment.** Migrating a `BlobFactStore` into the
+PostgreSQL fact store needs Npgsql, the fact tier and the deployment's own storage, secrets and
+stores, none of which this host carries. So `facts migrate` does not link them: like `describe`, it
+runs the composition root in a startup mode that binds no listener, and the work happens in the
+task the `ToolUp.FactStores.Postgres` companion contributes. The host stays pure BCL +
+`FSharp.Core`.
 
 Licensed under Apache-2.0.

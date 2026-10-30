@@ -173,6 +173,14 @@ type ServerModule = {
     /// hierarchy, geography, org chart). Same fan-in + duplicate-id
     /// rejection as `Metrics`. Empty by default (GP 13).
     Subjects: Grounding.SubjectDefinition list
+    /// What this module's declared subjects MEAN: a description per
+    /// subject and per level, keyed by subject id, beside the declarations
+    /// they describe. `addModule` fans these into the app; the composed
+    /// metric registry carries them (`IDescribesSubjects`) and refuses, at
+    /// compose, one naming a subject or level no module declares. Empty (the
+    /// default) — the composition is byte-for-byte unchanged (GP 13).
+    /// Register via `ServerModule.describeSubjects`.
+    SubjectDescriptions: Grounding.SubjectDescription list
     /// Phase 551 — the module's own declared precondition on being
     /// granted to anyone. `AdminDiscretion` (the default) is byte-for-byte
     /// today: no registry is composed, no grant records are loaded, and
@@ -264,6 +272,7 @@ module ServerModule =
         ComponentId = None
         Metrics = []
         Subjects = []
+        SubjectDescriptions = []
         GrantPolicy = GrantPolicy.AdminDiscretion
         AIExposure = None
         NotificationCategories = []
@@ -540,6 +549,19 @@ module ServerModule =
     let declareSubjects (defs: Grounding.SubjectDefinition list) (m: ServerModule) : ServerModule = {
         m with
             Subjects = m.Subjects @ defs
+    }
+
+    /// Describe declared subject hierarchies: what each subject is and how
+    /// its levels nest, and what any level holds — prose, never a figure
+    /// (see `SubjectDescription`). **Adds**, composing left to right beside
+    /// `declareSubjects`. A description naming a subject no module declares,
+    /// or a level its subject does not carry, is refused at compose, naming
+    /// the module, the subject and the level; so is a subject or a level
+    /// described twice. Optional — a module that describes nothing composes
+    /// byte-for-byte unchanged (GP 13).
+    let describeSubjects (descriptions: Grounding.SubjectDescription list) (m: ServerModule) : ServerModule = {
+        m with
+            SubjectDescriptions = m.SubjectDescriptions @ descriptions
     }
 
     /// Phase 887 — declare one or more **fact tables** this module
@@ -960,6 +982,10 @@ type ServerApp = {
     /// Phase 519 — accumulated grounding **subject** registrations, the
     /// hierarchy twin of `RegisteredMetrics`.
     RegisteredSubjects: Grounding.SubjectRegistration list
+    /// Accumulated subject descriptions across every registered
+    /// `ServerModule` (`ServerModule.describeSubjects`), each paired with
+    /// its describing module. Empty (the default) — nothing changes.
+    RegisteredSubjectDescriptions: Grounding.SubjectDescriptionRegistration list
     /// Phase 887 — accumulated **fact-table** declarations across every
     /// registered `ServerModule` (`ServerModule.declareFactTables`), each
     /// paired with its declaring module. Empty (the default) — no table
@@ -1307,6 +1333,7 @@ module ServerApp =
         MetricRegistrations = []
         RegisteredMetrics = []
         RegisteredSubjects = []
+        RegisteredSubjectDescriptions = []
         RegisteredFactTables = []
         RegisteredFactTableDescriptions = []
         FactTableBindings = []
@@ -2960,6 +2987,13 @@ module ServerApp =
                         Definition = d
                     })
 
+                let subjectDescriptionRegistrations: Grounding.SubjectDescriptionRegistration list =
+                    m.SubjectDescriptions
+                    |> List.map (fun d -> {
+                        Grounding.SubjectDescriptionRegistration.Module = m.Name
+                        Description = d
+                    })
+
                 // Phase 887 — the module's fact-table declarations, tagged
                 // with the declaring module the same way. Empty for a
                 // module that declares none (byte-identical, GP 13).
@@ -3075,6 +3109,8 @@ module ServerApp =
                         MetricRegistrations = app.MetricRegistrations @ metricRegistrations
                         RegisteredMetrics = app.RegisteredMetrics @ metricRegistryRegistrations
                         RegisteredSubjects = app.RegisteredSubjects @ subjectRegistryRegistrations
+                        RegisteredSubjectDescriptions =
+                            app.RegisteredSubjectDescriptions @ subjectDescriptionRegistrations
                         RegisteredFactTables = app.RegisteredFactTables @ factTableRegistrations
                         RegisteredFactTableDescriptions =
                             app.RegisteredFactTableDescriptions @ factTableDescriptionRegistrations
@@ -3323,6 +3359,27 @@ module ServerApp =
         Subjects = app.RegisteredSubjects
         Bindings = app.FactTableBindings
     }
+
+    /// The `IMetricRegistry` `run` registers: the declared metrics and
+    /// subjects and the subject descriptions (`IDescribesSubjects`). `None`
+    /// when no module declares or describes anything, so nothing is
+    /// registered (GP 13). Raises at compose on a metric or subject id two
+    /// modules declare, and on a description naming a subject or level no
+    /// module declares, naming the module, the subject and the level.
+    let metricRegistry (app: ServerApp) : Grounding.IMetricRegistry option =
+        if
+            List.isEmpty app.RegisteredMetrics
+            && List.isEmpty app.RegisteredSubjects
+            && List.isEmpty app.RegisteredSubjectDescriptions
+        then
+            None
+        else
+            Some(
+                Grounding.MetricRegistry.buildDescribed
+                    app.RegisteredMetrics
+                    app.RegisteredSubjects
+                    app.RegisteredSubjectDescriptions
+            )
 
     /// The `IFactTableRegistry` `run` registers: the declared tables, their
     /// bindings and their descriptions (`IDescribesFactTables`) — what every
@@ -3586,19 +3643,16 @@ module ServerApp =
 
             // Phase 519 — build the grounding metric & subject registry
             // from the accumulated module declarations and fold
-            // `IMetricRegistry` into DI. `MetricRegistry.build` rejects a
+            // `IMetricRegistry` into DI (`metricRegistry`, which rejects a
             // duplicate metric/subject id declared by two modules with a
-            // naming-both-modules diagnostic (fail-fast at compose). A
-            // composition that registered nothing appends no registration
-            // and constructs no registry — byte-for-byte the pre-519
-            // graph (GP 13).
+            // naming-both-modules diagnostic, and a subject description of
+            // nothing: fail-fast at compose). A composition that registered
+            // nothing appends no registration and constructs no registry —
+            // byte-for-byte the pre-519 graph (GP 13).
             let withMetricRegistry =
-                if List.isEmpty app.RegisteredMetrics && List.isEmpty app.RegisteredSubjects then
-                    withUserDirectory
-                else
-                    let registry =
-                        Grounding.MetricRegistry.build app.RegisteredMetrics app.RegisteredSubjects
-
+                match metricRegistry app with
+                | None -> withUserDirectory
+                | Some registry ->
                     withUserDirectory
                     |> ServiceConfig.append (fun s -> s.AddSingleton<Grounding.IMetricRegistry>(registry))
 

@@ -4819,11 +4819,21 @@ let main args =
 
             Path.Combine(Path.GetTempPath(), "toolup-fuaran-cobuild-" + key.Substring(0, 12).ToLowerInvariant())
 
+        // The tool resolver cache is machine-wide (`~/.dotnet/toolResolverCache`)
+        // and records the path a local tool was restored to. Restored under this
+        // leg's private NUGET_PACKAGES, the Fable entry pointed into a worktree's
+        // `obj/`; once that worktree was removed, every `dotnet fable` on the
+        // machine answered "Run dotnet tool restore" while restore kept reporting
+        // success. The cache lives in the scratch directory instead, and goes
+        // with it.
+        let cliHome = Path.Combine(scratch, "cli-home")
+
         let run (workDir: string) (exe: string) (argv: string list) =
             let result =
                 CreateProcess.fromRawCommand exe argv
                 |> CreateProcess.withWorkingDirectory workDir
                 |> CreateProcess.setEnvironmentVariable "NUGET_PACKAGES" packages
+                |> CreateProcess.setEnvironmentVariable "DOTNET_CLI_HOME" cliHome
                 |> CreateProcess.redirectOutput
                 |> Proc.run
 
@@ -4902,6 +4912,7 @@ let main args =
         let clientDir = Path.Combine(scratch, "Client")
         Directory.ensure serverDir
         Directory.ensure (Path.Combine(clientDir, ".config"))
+        Directory.ensure cliHome
 
         let ownFeed =
             match toolUpVersion with
@@ -6266,8 +6277,8 @@ let main args =
         | Some report, false -> failwithf "VerifySemVerBump: %s" report)
 
 
-    // Phase 805 — register the generated baselines' three-way merge drivers
-    // in THIS CLONE's `.git/config`.
+    // Phase 805 — register the generated files' three-way merge drivers in
+    // THIS CLONE's `.git/config`.
     //
     // `.gitattributes` can name a driver per path but cannot define what it
     // runs: git reads `merge.<name>.driver` from the config only, because a
@@ -6276,56 +6287,181 @@ let main args =
     // A clone that never runs Setup resolves the name to nothing and gets
     // git's built-in text merge — today's plain conflict, unchanged (GP 11).
     //
+    // The config is SHARED by every worktree of the clone, so the script it
+    // names must outlive any one of them. It is resolved through the clone's
+    // common directory (`git rev-parse --git-common-dir`, whose parent is
+    // the primary checkout), never through the checkout that ran Setup: a
+    // registration written from a worktree that was later removed sent every
+    // baseline merge in every worktree to a script that no longer existed,
+    // and git reported each one as a conflict.
+    //
     // Usage: `dotnet run --project Build.fsproj -- Setup`
+    //        `dotnet run --project Build.fsproj -- Setup --check` writes
+    //        nothing, and fails naming every driver that is unregistered or
+    //        registered to a shell or script that does not exist.
+
+    /// Driver name, `merge-baselines.ps1` mode, and the `merge.<name>.name`
+    /// git shows for it.
+    let mergeDrivers = [
+        "toolup-members", "members", "ToolUp members-baseline three-way merge"
+        "toolup-coverage", "coverage", "ToolUp coverage-baseline three-way merge"
+        "toolup-draftnote", "draftnote", "ToolUp append-only draft-note merge"
+    ]
+
+    let gitOutput (cwd: string) (gitArgs: string list) =
+        let result =
+            CreateProcess.fromRawCommand "git" gitArgs
+            |> CreateProcess.withWorkingDirectory cwd
+            |> CreateProcess.redirectOutput
+            |> CreateProcess.disableTraceCommand
+            |> Proc.run
+
+        result.ExitCode, result.Result.Output.Trim()
+
+    /// The two absolute paths a registered command names: the quoted shell
+    /// it opens with, and the script after `-File`. The shape is the one
+    /// `Setup` writes; anything else names no path this target can check.
+    let driverPathsOf (command: string) =
+        let shell = System.Text.RegularExpressions.Regex.Match(command, "^\"([^\"]+)\"")
+
+        let script =
+            System.Text.RegularExpressions.Regex.Match(command, "-File\\s+\"([^\"]+)\"")
+
+        (if shell.Success then Some shell.Groups[1].Value else None),
+        (if script.Success then Some script.Groups[1].Value else None)
+
+    let unregistered = "it is not registered"
+
+    /// Every expected driver with what is wrong with its registration in the
+    /// clone `root` belongs to, or `None` when it names a shell and a script
+    /// that both exist.
+    let mergeDriverProblems (root: string) =
+        mergeDrivers
+        |> List.map (fun (name, _, _) ->
+            match gitOutput root [ "config"; "--get"; sprintf "merge.%s.driver" name ] with
+            | 0, command when command <> "" ->
+                let problem =
+                    match driverPathsOf command with
+                    | Some shell, Some script ->
+                        match
+                            [
+                                if not (File.Exists shell) then
+                                    sprintf "its shell %s does not exist" shell
+                                if not (File.Exists script) then
+                                    sprintf "its script %s does not exist" script
+                            ]
+                        with
+                        | [] -> None
+                        | missing -> Some(String.concat " and " missing)
+                    | _ -> Some(sprintf "its command names no shell and `-File` script Setup would write: %s" command)
+
+                name, problem
+            | _ -> name, Some unregistered)
+
     Target.create "Setup" (fun _ ->
         let root = Path.getFullName "."
-        let driver = Path.Combine(root, "dev-scripts", "merge-baselines.ps1")
 
-        if not (File.Exists driver) then
-            failwithf
-                "Setup: %s is missing. The merge drivers cannot be registered without it — check the file out before registering, or the next baseline merge runs a command that does not exist."
-                driver
+        if args |> Array.contains "--check" then
+            let problems = mergeDriverProblems root
 
-        // Resolved to an absolute path rather than left as a bare `pwsh`: git
-        // runs a merge driver through a shell whose PATH is not necessarily
-        // the one this target was launched with.
-        let shell =
-            match ProcessUtils.tryFindFileOnPath "pwsh" with
-            | Some path -> path
-            | None ->
-                failwith
-                    "Setup: `pwsh` is not on PATH. The baseline merge drivers are PowerShell 7 scripts — they run inside `git merge`, in a tree that may not build, so they deliberately depend on nothing else. Install PowerShell 7 and re-run."
+            for name, problem in problems do
+                match problem with
+                | None -> Trace.tracefn "  ok      merge.%s.driver" name
+                | Some p -> Trace.traceError (sprintf "  NOT OK  merge.%s.driver — %s" name p)
 
-        let git (gitArgs: string list) =
-            CreateProcess.fromRawCommand "git" gitArgs
-            |> CreateProcess.withWorkingDirectory root
-            |> CreateProcess.ensureExitCode
-            |> Proc.run
-            |> ignore
+            match problems |> List.filter (snd >> Option.isSome) with
+            | [] ->
+                Trace.tracefn "▶ Setup --check: every merge driver is registered to a shell and a script that exist."
+            | dead ->
+                failwithf
+                    "Setup --check: %d merge driver(s) unregistered or registered to a missing path, named above. Run `dotnet run --project Build.fsproj -- Setup` (from any checkout of this clone: every one resolves the same script)."
+                    dead.Length
+        else
+            let commonDir =
+                match gitOutput root [ "rev-parse"; "--path-format=absolute"; "--git-common-dir" ] with
+                | 0, dir when dir <> "" -> dir
+                | code, _ -> failwithf "Setup: `git rev-parse --git-common-dir` exited %d in %s." code root
 
-        // Forward slashes on both paths: the command string is interpreted by
-        // git's own shell, where a backslash is an escape character.
-        let slash (path: string) = path.Replace('\\', '/')
+            let primary = Path.GetDirectoryName(commonDir.TrimEnd('/', '\\'))
+            let driver = Path.Combine(primary, "dev-scripts", "merge-baselines.ps1")
 
-        let register (name: string) (mode: string) =
-            let command =
-                sprintf "\"%s\" -NoProfile -File \"%s\" -Mode %s %%O %%A %%B %%P" (slash shell) (slash driver) mode
+            if not (File.Exists driver) then
+                failwithf
+                    "Setup: %s is missing. The drivers are registered to the PRIMARY checkout's script (the parent of the clone's common directory, %s), because the config is shared by every worktree and a worktree can be removed. Check the script out there, then re-run."
+                    driver
+                    commonDir
 
-            git [ "config"; sprintf "merge.%s.driver" name; command ]
+            // A primary checkout behind this one runs an older driver for
+            // every worktree; say so rather than register silently.
+            let here = Path.Combine(root, "dev-scripts", "merge-baselines.ps1")
 
-            git [
-                "config"
-                sprintf "merge.%s.name" name
-                sprintf "ToolUp %s-baseline three-way merge (Phase 805)" mode
-            ]
+            if
+                Path.GetFullPath here <> Path.GetFullPath driver
+                && File.Exists here
+                && File.ReadAllText here <> File.ReadAllText driver
+            then
+                Trace.traceImportant (
+                    sprintf
+                        "Setup: %s differs from this checkout's copy. Every worktree of the clone runs the primary checkout's script; pull the primary checkout so it runs the driver you expect."
+                        driver
+                )
 
-            Trace.tracefn "  merge.%s.driver = %s" name command
+            // Resolved to an absolute path rather than left as a bare `pwsh`:
+            // git runs a merge driver through a shell whose PATH is not
+            // necessarily the one this target was launched with.
+            let shell =
+                match ProcessUtils.tryFindFileOnPath "pwsh" with
+                | Some path -> path
+                | None ->
+                    failwith
+                        "Setup: `pwsh` is not on PATH. The merge drivers are PowerShell 7 scripts — they run inside `git merge`, in a tree that may not build, so they deliberately depend on nothing else. Install PowerShell 7 and re-run."
 
-        register "toolup-members" "members"
-        register "toolup-coverage" "coverage"
+            let git (gitArgs: string list) =
+                CreateProcess.fromRawCommand "git" gitArgs
+                |> CreateProcess.withWorkingDirectory root
+                |> CreateProcess.ensureExitCode
+                |> Proc.run
+                |> ignore
 
-        Trace.tracefn
-            "▶ Setup: the api-baselines merge drivers are registered in this clone. Two branches that each ADD disjoint public members now merge without a hand resolution; a removal, or a coverage row whose arithmetic cannot be reconciled, is still left as a conflict for a human.")
+            // Forward slashes on both paths: the command string is
+            // interpreted by git's own shell, where a backslash is an escape
+            // character.
+            let slash (path: string) = path.Replace('\\', '/')
+
+            for name, mode, title in mergeDrivers do
+                let command =
+                    sprintf "\"%s\" -NoProfile -File \"%s\" -Mode %s %%O %%A %%B %%P" (slash shell) (slash driver) mode
+
+                git [ "config"; sprintf "merge.%s.driver" name; command ]
+                git [ "config"; sprintf "merge.%s.name" name; title ]
+                Trace.tracefn "  merge.%s.driver = %s" name command
+
+            Trace.tracefn
+                "▶ Setup: the merge drivers are registered in this clone, to the primary checkout's script. Two branches that each ADD disjoint public members, or each append a draft-note line, now merge without a hand resolution; a disagreement no three-way rule can decide is still left as a conflict for a human.")
+
+    // Warn-only: an unregistered driver is a clone's choice (git falls back
+    // to its text merge), but one registered to a missing path turns every
+    // merge of its files into a conflict, in every worktree of the clone.
+    match TestLane.current with
+    | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "MergeDrivers" (fun () ->
+            let dead =
+                mergeDriverProblems (Path.getFullName ".")
+                |> List.choose (fun (name, problem) ->
+                    match problem with
+                    | Some p when p <> unregistered -> Some(sprintf "merge.%s.driver: %s" name p)
+                    | _ -> None)
+
+            if not (List.isEmpty dead) then
+                Trace.traceImportant (
+                    sprintf
+                        "▶ VerifyAll: WARNING — a merge driver is registered to a missing path, so git reports every merge of its files as a conflict (%s). Re-run `dotnet run --project Build.fsproj -- Setup`; `Setup --check` names each one."
+                        (String.concat "; " dead)
+                )
+
+            0)
 
     // Phase 805 — the regenerate-from-the-merged-tree fallback.
     //
@@ -6709,30 +6845,43 @@ let main args =
     //
     //   dotnet run --project Build.fsproj -- Changelog
     //   dotnet run --project Build.fsproj -- Changelog --check
+    //   dotnet run --project Build.fsproj -- Changelog --draft
     //
-    // The default regenerates the file and exits 0. `--check` writes
-    // nothing and exits 1 when the committed file is not what this tree
-    // renders — the release workflow's guard against a stale changelog.
+    // The tracked file holds the RELEASED sections only, so it changes
+    // once per release tag and never under a change that merely moves a
+    // baseline. Rendering the unreleased section into it made the file a
+    // merge conflict between any two changes that each moved a surface,
+    // because both rewrote the same draft section. The publish workflow
+    // renders it on the tag, before the pack, and uploads it as the run's
+    // `changelog` artefact; the release's follow-up commit carries it to
+    // `main`. Run locally after `git fetch --tags` it renders the same
+    // bytes, because both read the same tags, baselines and migration
+    // docs. The default writes the file and exits 0; `--check` writes
+    // nothing and exits 1 when the committed file is not the released
+    // render of this tree.
+    //
+    // `--draft` prints the unreleased section to stdout and writes
+    // nothing: the declared `<Version>`'s movement since the newest tag,
+    // over the WORKING tree's baselines, the same interval the
+    // scorecard's stability row and the bump check read. It is for
+    // reading ahead of a release; nothing commits it.
     //
     // The diff per interval is the one VerifySemVerBump takes at a
     // release, read the same way: `git diff --name-only` between the two
     // tags names the baselines that MOVED, and only those are read on
     // both sides, so the cost tracks the churn rather than the ~165-file
     // baseline set times the tag count. A tag that predates
-    // `api-baselines/` renders as a section saying so. The draft at the
-    // top is the declared `<Version>`'s movement since the newest tag,
-    // over the WORKING tree's baselines — the same interval the
-    // scorecard's stability row and the bump check read.
+    // `api-baselines/` renders as a section saying so.
     //
-    // Registered here and NOT added to `verify.ps1`, for the reason
-    // V1Readiness gives: the draft section moves with every commit that
-    // moves a baseline, so gating it per commit would make every
-    // surface change a two-file commit for no per-commit fact. The
-    // renderer's rules run on every commit in the Build test pack.
+    // Not a leg of `VerifyAll`: the released render moves only at a tag,
+    // so there is no per-change fact to gate. The renderer's rules run on
+    // every commit in the Build test pack.
     Target.create "Changelog" (fun _ ->
         let root = Path.getFullName "."
 
-        let checkOnly = System.Environment.GetCommandLineArgs() |> Array.contains "--check"
+        let commandLine = System.Environment.GetCommandLineArgs()
+        let checkOnly = commandLine |> Array.contains "--check"
+        let draftOnly = commandLine |> Array.contains "--draft"
 
         let gitProc (args: string list) =
             CreateProcess.fromRawCommand "git" args
@@ -6815,7 +6964,7 @@ let main args =
                 SemVerBump.classifyPackage (SemVerBump.packageOfBaselinePath path) (readSince path) (readCurrent path)
                 |> Changelog.entryOf)
 
-        let releases =
+        let releases () =
             tags
             |> List.mapi (fun i (tag, version) ->
                 let since = if i = 0 then None else Some(fst tags[i - 1])
@@ -6862,9 +7011,13 @@ let main args =
                 })
 
         // ── the draft: the declared version since the newest tag ──
-        let draft =
+        //
+        // `None` when there is no tag yet, or nothing moved since the
+        // newest one. Read only by `--draft`: the tracked file never
+        // carries it.
+        let draft () =
             match List.tryLast tags with
-            | None -> []
+            | None -> None
             | Some(newest, newestVersion) ->
                 let propsPath = Path.Combine(root, "Directory.Build.props")
 
@@ -6888,7 +7041,7 @@ let main args =
                         docsIntroduced
 
                 if List.isEmpty changed && Set.isEmpty docsIntroduced then
-                    []
+                    None
                 else
                     let surface =
                         Changelog.Baselines(
@@ -6904,45 +7057,57 @@ let main args =
                         else
                             "Unreleased"
 
-                    [
-                        {
-                            Changelog.Version = heading
-                            Changelog.Tag = None
-                            Changelog.Date = None
-                            Changelog.Since = Some newest
-                            Changelog.Surface = surface
-                            Changelog.MigrationDocs = docs
-                        }
-                    ]
+                    Some {
+                        Changelog.Version = heading
+                        Changelog.Tag = None
+                        Changelog.Date = None
+                        Changelog.Since = Some newest
+                        Changelog.Surface = surface
+                        Changelog.MigrationDocs = docs
+                    }
 
-        let document = Changelog.render Changelog.defaultLimits (draft @ List.rev releases)
+        if draftOnly then
+            // stdout, not the trace: the section is the output, and a
+            // reader pipes it into a file or a pager.
+            match draft () with
+            | Some section -> stdout.Write(Changelog.renderRelease Changelog.defaultLimits section)
+            | None ->
+                match List.tryLast tags with
+                | Some(newest, _) ->
+                    stdout.WriteLine(sprintf "_No unreleased public-surface change since `%s`._" newest)
+                | None -> stdout.WriteLine "_No release tag is reachable from HEAD, so there is no draft to render._"
+        else
+            let releases = releases ()
 
-        let outPath = Path.Combine(root, "CHANGELOG.md")
+            let document = Changelog.render Changelog.defaultLimits (List.rev releases)
 
-        let existing =
-            if File.Exists outPath then
-                Some(File.ReadAllText(outPath).Replace("\r\n", "\n"))
-            else
-                None
+            let outPath = Path.Combine(root, "CHANGELOG.md")
 
-        let regenerate =
-            "regenerate with `dotnet run --project Build.fsproj -- Changelog` and commit CHANGELOG.md"
+            let existing =
+                if File.Exists outPath then
+                    Some(File.ReadAllText(outPath).Replace("\r\n", "\n"))
+                else
+                    None
 
-        match checkOnly, existing with
-        | true, Some current when current = document ->
-            Trace.tracefn "▶ Changelog --check: CHANGELOG.md is current (%d release(s))." releases.Length
-        | true, Some _ ->
-            failwithf "Changelog --check: CHANGELOG.md is STALE — this tree renders a different file; %s." regenerate
-        | true, None -> failwithf "Changelog --check: CHANGELOG.md is absent — %s." regenerate
-        | false, Some current when current = document ->
-            Trace.tracefn "▶ Changelog: CHANGELOG.md unchanged (%d release(s))." releases.Length
-        | false, _ ->
-            File.WriteAllText(outPath, document)
+            let render =
+                "it is rendered on the release tag (the publish run's `changelog` artefact), or locally with `git fetch --tags` then `dotnet run --project Build.fsproj -- Changelog`; commit CHANGELOG.md"
 
-            Trace.tracefn
-                "▶ Changelog: CHANGELOG.md regenerated (%d release(s)%s). Commit it."
-                releases.Length
-                (if List.isEmpty draft then "" else " + the unreleased draft"))
+            match checkOnly, existing with
+            | true, Some current when current = document ->
+                Trace.tracefn "▶ Changelog --check: CHANGELOG.md is current (%d release(s))." releases.Length
+            | true, Some _ ->
+                failwithf
+                    "Changelog --check: CHANGELOG.md is not the released render of this tree — %s. A section headed `unreleased` in it is the pre-release-render form; the render drops it."
+                    render
+            | true, None -> failwithf "Changelog --check: CHANGELOG.md is absent — %s." render
+            | false, Some current when current = document ->
+                Trace.tracefn "▶ Changelog: CHANGELOG.md unchanged (%d release(s))." releases.Length
+            | false, _ ->
+                File.WriteAllText(outPath, document)
+
+                Trace.tracefn
+                    "▶ Changelog: CHANGELOG.md rendered (%d release(s)). Commit it with the release; `-- Changelog --draft` prints the unreleased section."
+                    releases.Length)
 
     // ── Phase 263 — the release-candidate channel and its soak gate ──
     //

@@ -39,14 +39,51 @@ and it is standard NuGet behaviour, not something this repository enforces.
    **skipped** for a candidate run — an RC must never be the run that first publishes a stable version
    of anything.
 2. **`GenerateSdkManifest --check`** (Phase 326) and **`VerifySemVerBump`** (Phase 260) — unchanged.
-3. Login, pack, push, provenance attestation — unchanged.
-4. **`published-package-smoke`** (Phase 184) — restores the just-published version from nuget.org
+3. **`Changelog`** — renders `CHANGELOG.md` on the tag and keeps it as the run's `changelog` artefact
+   (see [The CHANGELOG is rendered at release](#the-changelog-is-rendered-at-release)).
+4. Login, pack, push, provenance attestation — unchanged.
+5. **`published-package-smoke`** (Phase 184) — restores the just-published version from nuget.org
    **anonymously**, outside the checkout, and compiles against it. On a candidate tag it probes
    `X.0.0-rc.N`, so every candidate publish carries its own restore proof.
 
 The trigger block is tag-only plus manual dispatch, and the Build test pack lints that on every push
 (`ReleaseChannel.publishWorkflowFindings`): a branch, pull-request, schedule, `workflow_run` or
 `release` trigger would turn an ordinary push into a release.
+
+## The CHANGELOG is rendered at release
+
+[`CHANGELOG.md`](../../CHANGELOG.md) is generated (`dotnet run --project Build.fsproj -- Changelog`)
+from the release tags, each tag's API baselines and the migration notes under `docs/migrations/`. The
+tracked file holds the **released** sections only, and it changes once per release, never per change.
+A change that moves a public surface regenerates its baselines and appends its line to the draft note in
+`Directory.Build.props`; it does not touch `CHANGELOG.md`. When every such change regenerated the file,
+two of them landing concurrently always conflicted in the same unreleased section, and a text merge of a
+generated file is the one resolution that can silently drop a side.
+
+The render is the same function wherever it runs, so where it runs is a matter of having the inputs:
+
+- **At the tag**, `publish-nuget.yml` renders the file before the pack and keeps it as the run's
+  `changelog` artefact. The section it adds for the tag is the section the draft showed, under the tag's
+  date.
+- **After the run**, carry it to `main` in one commit. Download the artefact, or render it locally; both
+  give the same bytes, because both read the same tags, baselines and notes:
+
+  ```powershell
+  git fetch --tags
+  git checkout main
+  git pull --ff-only
+  dotnet run --project Build.fsproj -- Changelog          # adds the new release's section
+  dotnet run --project Build.fsproj -- Changelog --check  # exit 0: the file is the released render
+  git add CHANGELOG.md
+  git commit -s -m "docs(changelog): render vX.Y.Z"
+  ```
+
+- **Ahead of a release**, `dotnet run --project Build.fsproj -- Changelog --draft` prints the unreleased
+  section (the declared `<Version>`'s movement since the newest tag, over the working tree) to stdout and
+  writes nothing.
+
+`--check` exits 1 when the committed file is not the released render of the tree, which between a tag and
+its follow-up commit is expected: the new section exists only once the tag does.
 
 ## Cutting a release candidate
 

@@ -3287,22 +3287,7 @@ let private seriesRowTests =
             let! _ = reader.QueryPopulation(scope, populationOf "revenue")
             let! rebuilt = snapshotBytes storage scope "revenue"
 
-            // A rebuild lists its rows in the store's listing order, and the
-            // in-memory store's listing is dictionary order, which a resize
-            // between the two reads can reshuffle (Phase 1089 found it red
-            // once in a full gate, green in isolation). The shape is the
-            // header plus the set of row and census lines, so that is what
-            // is compared.
-            let shape (bytes: byte[] option) =
-                bytes
-                |> Option.map (fun b ->
-                    let lines = Encoding.UTF8.GetString(b).Split('\n')
-                    lines[0], Array.sort lines[1..])
-
-            Expect.equal
-                (shape rebuilt)
-                (shape current)
-                "the read rebuilt it, through the census path, into the current shape"
+            Expect.equal rebuilt current "the read rebuilt it, through the census path, into the current shape"
         }
     ]
 

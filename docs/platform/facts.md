@@ -805,6 +805,51 @@ guard reports stops a deployment starting. A single-replica deployment
 registers nothing, and the guard stands down once another store is
 composed.
 
+### Moving a deployment onto it: `toolup facts migrate`
+
+A deployment that has run on `BlobFactStore` moves its facts into the table with
+`FactStoreMigration` (the companion's README has the procedure: rows written raw so every `AsOf`
+read answers as before, a page per transaction, resumable, verified by a differential check, one
+`FactStoreMigrated` audit record per scope). The operator verb is `toolup facts migrate`. The CLI
+is dependency-free, so it does not run the migration itself: it runs the deployment's own
+composition root in the `--operator-task facts-migrate` startup mode, which composes the
+application, runs the task and exits without binding a listener. The task is contributed by
+`FactStoreMigrationCompose.withFactsMigrateTask`:
+
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withStorage blob
+|> FactsCompose.withFactStore
+|> PostgresFactStoreCompose.withPostgresFactStore connectionString PostgresFactStoreOptions.defaults
+|> FactStoreMigrationCompose.withFactsMigrateTask
+```
+
+Running inside the composition is what makes the move faithful. The source is the blob storage the
+root composed, whichever storage companion that is; the target is the composed `PostgresFactStore`,
+so the table and the connection string are the ones the deployment will serve from (resolved from
+its environment or secret store, never passed as a flag, never printed); the audit record goes to
+the deployment's event store; and the verification reads with the deployment's metric registry.
+
+```powershell
+toolup facts migrate --dll ./publish/App.dll --all-scopes --dry-run   # check the source, write nothing
+toolup facts migrate --dll ./publish/App.dll --all-scopes             # copy and verify each scope
+toolup facts migrate --dll ./publish/App.dll --all-scopes --verify    # re-check before the switch
+```
+
+Per scope it prints the facts read, the rows written, the rows skipped as already present, the
+verdict with every differing fact id, and the audit record's id. It exits `1` when any scope
+differs, is refused by the source check (a non-linear chain, two heads in a lineage, an unreadable
+blob, a scope over `MaxScopeFacts`) or failed to copy. A second run skips a scope already verified
+over the same source facts, saying so; an interrupted run resumes after its last committed page.
+`--all-scopes` enumerates scopes as the multi-replica guard does: the composed `IScopeEnumerator`,
+else the team store, else the two well-known containers.
+
+`--ids` drives the fact-id migration onto the canonical frame (see
+[Content ids](#content-ids-one-frame-phase-1089)) through the same task: the blob store's
+`BlobFactStore.MigrateIds` and, when a Postgres store is composed, `FactStoreMigration.migrateIds`,
+with `--dry-run` to plan only. Without a composed Postgres store only `--ids` runs, over the blob
+store, and the copying modes say what the composition is missing.
+
 ## Fact vs result vs model artifact
 
 The fact store sits **above** the analysis-result and model-artifact
@@ -898,6 +943,40 @@ ServerModule.create "trade"
   descriptions. The browse's `GetTable` and the model's fact tools resolve the same registry
   (`FactBrowseHandler.factBrowseDeps`). `FactTableDetail.Description` and each `FactTableColumnView.Description` carry
   the text, and the table page shows it under the title, with each column's description as its hint.
+
+Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-descriptions.md).
+
+## What a subject and its levels mean: their description
+
+A subject declaration gives an id, a name and level labels. It does not say what "spend band" or "shopper type" is,
+what a "site" is in this deployment, or that a `geography` path reads site, market, country. The module knows, and
+`ServerModule.describeSubjects` lets it declare that beside the declaration, on the same rule as a table description:
+
+```fsharp skip=fragment
+ServerModule.create "trade"
+|> ServerModule.declareSubjects [ geography ]
+|> ServerModule.describeSubjects [
+    {
+        SubjectId = "geography"
+        Description = "Where a sale is booked: each site sits in one market, each market in one country."
+        Levels = [ "site", "A single trading outlet." ]
+    }
+]
+```
+
+- **Its own record, keyed by subject id.** `SubjectDescription` is not a field on `SubjectDefinition`, so every existing
+  declaration compiles unchanged. A level left out of `Levels` is undescribed.
+- **Prose, never a figure.** The same rule as above: a number belongs in a fact, where it is superseded and
+  disclosure-classified.
+- **Refused at compose, by name.** A description naming a subject no module declares, or a level its subject does not
+  carry, stops the composition, as does a subject or a level described twice. The message names the module, the subject
+  and the level (`ServerApp.metricRegistry`, the registry `run` registers).
+- **An optional capability, not a wider interface.** `IMetricRegistry` gains no member. The composed registry also
+  implements `IDescribesSubjects`; `MetricRegistry.trySubjectDescription` probes for it, so a registry that predates it
+  compiles unchanged and its callers see no descriptions.
+- **The model reads it where it already looks.** `list_metric_coverage` adds `description` and `levelDescriptions` (the
+  described levels, root to leaf) to a hierarchy that has them. A hierarchy without a description serialises exactly as
+  before, with the fields absent rather than null.
 
 Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-descriptions.md).
 

@@ -25,6 +25,7 @@ let main argv =
         Commands.Users.listCommand
         Commands.Users.offboardCommand
         DescribeCommand.command
+        FactsMigrateCommand.command
     ]
 
     Dispatch.run commands argv

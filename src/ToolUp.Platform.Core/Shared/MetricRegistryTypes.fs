@@ -292,6 +292,53 @@ type SubjectRegistration = {
     Definition: SubjectDefinition
 }
 
+/// What a registered subject hierarchy MEANS, beside the declaration it
+/// describes: a description of the subject and of any of its levels, keyed
+/// by subject id. A record of its own rather than a field on
+/// `SubjectDefinition`, so every existing full-literal declaration compiles
+/// unchanged. Registered by `ServerModule.describeSubjects`; a description
+/// naming an undeclared subject or level is refused at compose, naming
+/// both. Reported by `list_metric_coverage` beside the subject's levels.
+///
+/// **Prose about the SUBJECT, never a value.** A description is
+/// interpretation ("a site is a trading outlet; a market groups sites; a
+/// country groups markets"), not data. A figure belongs in a fact, where it
+/// is bitemporal, superseded when it changes and disclosure-classified; a
+/// value copied here is a claim nothing can supersede, on a compose-time
+/// declaration the disclosure gate never sees.
+///
+/// Generic substrate (GP 1): opaque text the declaring module supplies;
+/// nothing here parses or interprets it.
+type SubjectDescription = {
+    /// The described subject's `SubjectDefinition.Id`.
+    SubjectId: string
+    /// What the hierarchy is and how its levels nest.
+    Description: string
+    /// Per-level descriptions as `(level, description)`, each naming one of
+    /// the subject's `Levels`. A level left out is undescribed.
+    Levels: (string * string) list
+}
+
+/// One subject description paired with the module that registered it — the
+/// provenance the compose-time refusal names.
+type SubjectDescriptionRegistration = {
+    /// The `ServerModule.Name` that registered the description.
+    Module: string
+    /// The registered description.
+    Description: SubjectDescription
+}
+
+/// The optional capability of a metric registry that carries declared
+/// subject descriptions (`ServerModule.describeSubjects`). A capability
+/// beside `IMetricRegistry` rather than a member on it, so no external
+/// implementation breaks: a reader probes for it
+/// (`MetricRegistry.trySubjectDescription`), and a registry without it
+/// simply has no descriptions. The composed registry implements it.
+type IDescribesSubjects =
+    /// The description registered for a subject; `None` when the subject is
+    /// undescribed or unregistered.
+    abstract TryGetSubjectDescription: subjectId: string -> SubjectDescription option
+
 /// Read surface over the composed metric & subject registry, resolved
 /// from DI by server-side consumers (fact store, planner, discovery
 /// tooling). A compose-time immutable projection — every lookup is a
@@ -327,7 +374,8 @@ module MetricRegistry =
     /// The immutable registry implementation. Private — consumers hold
     /// the `IMetricRegistry` interface; construction is through `build`
     /// (or `tryBuild`) so the duplicate check is never bypassed.
-    type private Registry(metrics: MetricRegistration list, subjects: SubjectRegistration list) =
+    type private Registry
+        (metrics: MetricRegistration list, subjects: SubjectRegistration list, descriptions: SubjectDescription list) =
         // Deduplicated declaration-order projections. `build` has already
         // proven ids are unique, so `distinctBy` only guards against a
         // module declaring the SAME id twice itself (idempotent), which
@@ -339,6 +387,13 @@ module MetricRegistry =
         let metricById = metricDefs |> List.map (fun d -> d.Id, d) |> Map.ofList
 
         let subjectById = subjectDefs |> List.map (fun d -> d.Id, d) |> Map.ofList
+
+        let descriptionById =
+            descriptions |> List.map (fun d -> d.SubjectId, d) |> Map.ofList
+
+        interface IDescribesSubjects with
+            member _.TryGetSubjectDescription subjectId =
+                descriptionById |> Map.tryFind subjectId
 
         interface IMetricRegistry with
             member _.Metrics = metricDefs
@@ -355,14 +410,87 @@ module MetricRegistry =
             member _.MetricsByOperation operationId =
                 metricDefs |> List.filter (fun d -> d.ProducingOperation = Some operationId)
 
-    /// Fold accumulated registrations into an `IMetricRegistry`, or a
+    let private quoted (values: string list) : string =
+        match values |> List.distinct with
+        | [] -> "none"
+        | vs -> vs |> List.map (sprintf "'%s'") |> String.concat ", "
+
+    /// Every reason a subject description cannot stand beside the
+    /// declarations, each naming the describing module, the subject and
+    /// (where it applies) the level: a subject no module declares, a level
+    /// the subject does not carry, a subject described twice, a level
+    /// described twice.
+    let private descriptionProblems
+        (subjects: SubjectRegistration list)
+        (descriptions: SubjectDescriptionRegistration list)
+        : string list =
+        let declared =
+            subjects
+            |> List.distinctBy _.Definition.Id
+            |> List.map (fun r -> r.Definition.Id, r.Definition)
+            |> Map.ofList
+
+        let twice =
+            descriptions
+            |> List.groupBy _.Description.SubjectId
+            |> List.choose (fun (subjectId, group) ->
+                if List.length group > 1 then
+                    Some(
+                        sprintf
+                            "Subject '%s' is described more than once (by modules %s). Describe a subject once."
+                            subjectId
+                            (quoted (group |> List.map _.Module))
+                    )
+                else
+                    None)
+
+        let perDescription =
+            descriptions
+            |> List.collect (fun r ->
+                let d = r.Description
+
+                match declared |> Map.tryFind d.SubjectId with
+                | None -> [
+                    sprintf
+                        "Module '%s' describes subject '%s', which no module declares. Declared subjects: %s."
+                        r.Module
+                        d.SubjectId
+                        (quoted (declared |> Map.toList |> List.map fst))
+                  ]
+                | Some subject -> [
+                    for level, _ in d.Levels do
+                        if not (List.contains level subject.Levels) then
+                            sprintf
+                                "Module '%s' describes level '%s' of subject '%s', which the subject does not declare. Its levels: %s."
+                                r.Module
+                                level
+                                d.SubjectId
+                                (quoted subject.Levels)
+                    for level, count in d.Levels |> List.countBy fst do
+                        if count > 1 then
+                            sprintf
+                                "Module '%s' describes level '%s' of subject '%s' %d times. Describe a level once."
+                                r.Module
+                                level
+                                d.SubjectId
+                                count
+                  ])
+
+        twice @ perDescription
+
+    /// Fold accumulated registrations and subject descriptions into an
+    /// `IMetricRegistry` that also carries `IDescribesSubjects`, or a
     /// diagnostic naming both modules when a metric or subject id is
-    /// declared by two different modules. A single module re-declaring
-    /// the same id is not a conflict (idempotent — collapsed). The
-    /// diagnostic shape matches the SDK's duplicate-registration idiom.
-    let tryBuild
+    /// declared by two different modules, or every reason a description is
+    /// refused (a subject or level no module declares, a subject or level
+    /// described twice), each naming the module, the subject and the level.
+    /// A single module re-declaring the same id is not a conflict
+    /// (idempotent — collapsed). The diagnostic shape matches the SDK's
+    /// duplicate-registration idiom.
+    let tryBuildDescribed
         (metrics: MetricRegistration list)
         (subjects: SubjectRegistration list)
+        (descriptions: SubjectDescriptionRegistration list)
         : Result<IMetricRegistry, string> =
         // Group by id; a conflict is an id whose registrations span >1
         // distinct module.
@@ -395,14 +523,49 @@ module MetricRegistry =
                     id
                     (String.concat ", " mods)
             )
-        | None, None -> Ok(Registry(metrics, subjects) :> IMetricRegistry)
+        | None, None ->
+            match descriptionProblems subjects descriptions with
+            | [] -> Ok(Registry(metrics, subjects, descriptions |> List.map _.Description) :> IMetricRegistry)
+            | problems ->
+                Error(
+                    String.concat
+                        "
+"
+                        problems
+                )
+
+    /// Fold accumulated registrations into an `IMetricRegistry` with no
+    /// subject descriptions, or the duplicate-id diagnostic.
+    let tryBuild
+        (metrics: MetricRegistration list)
+        (subjects: SubjectRegistration list)
+        : Result<IMetricRegistry, string> =
+        tryBuildDescribed metrics subjects []
+
+    /// `tryBuildDescribed` that raises on a refusal — the compose-time call
+    /// site (structural enforcement: a collision, or a description of
+    /// nothing, fails startup rather than a request).
+    let buildDescribed
+        (metrics: MetricRegistration list)
+        (subjects: SubjectRegistration list)
+        (descriptions: SubjectDescriptionRegistration list)
+        : IMetricRegistry =
+        match tryBuildDescribed metrics subjects descriptions with
+        | Ok registry -> registry
+        | Error message -> failwith message
 
     /// `tryBuild` that raises on conflict — the compose-time call site
     /// (structural enforcement: a collision fails startup, not a request).
     let build (metrics: MetricRegistration list) (subjects: SubjectRegistration list) : IMetricRegistry =
-        match tryBuild metrics subjects with
-        | Ok registry -> registry
-        | Error message -> failwith message
+        buildDescribed metrics subjects []
+
+    /// The description a registry carries for a subject: `None` when the
+    /// subject is undescribed, or when the registry does not carry
+    /// descriptions (`IDescribesSubjects` is an optional capability).
+    let trySubjectDescription (registry: IMetricRegistry) (subjectId: string) : SubjectDescription option =
+        match registry with
+        | :? IDescribesSubjects as described -> described.TryGetSubjectDescription subjectId
+        | _ -> None
 
     /// The empty registry — what a composition that registered nothing
     /// projects to. `Metrics` / `Subjects` are empty; every lookup is

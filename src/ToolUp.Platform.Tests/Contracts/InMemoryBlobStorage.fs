@@ -100,11 +100,16 @@ type InMemoryBlobStorage() =
         }
 
         member _.List(container, prefix) = async {
+            // Sorted, as the cloud backends list (lexical order over the name).
+            // A dictionary-order listing reshuffled on resize, and a surface
+            // snapshot rebuilt from it came back in a different row order from
+            // one rebuild to the next.
             return
                 blobs.Keys
                 |> Seq.filter (fun (c, n) -> c = container && n.StartsWith prefix)
                 |> Seq.map snd
                 |> List.ofSeq
+                |> List.sort
         }
 
         member _.Exists(container, blobName) = async { return blobs.ContainsKey((container, blobName)) }

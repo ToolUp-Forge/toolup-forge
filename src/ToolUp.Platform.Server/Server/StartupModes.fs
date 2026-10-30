@@ -52,6 +52,14 @@ type StartupMode =
     /// door `toolup describe --json` drives; the same documents the
     /// reflection tools serve a running deployment.
     | Describe
+    /// Run one operator task a companion contributed (an `OperatorTask`
+    /// registration, chosen by `--operator-task <name>`) against the composed
+    /// services, and exit with its exit code, without binding a listener.
+    /// The door `toolup facts migrate` drives. The task runs inside the
+    /// deployment's own composition, so it reads the storage, the secrets
+    /// and the stores the deployment composed rather than a second
+    /// configuration of them.
+    | RunOperatorTask
 
 [<Literal>]
 let PrintConfigFlag = "--print-config"
@@ -84,6 +92,17 @@ let DescribePanelFlag = "--describe-panel"
 [<Literal>]
 let DescribeOutFlag = "--describe-out"
 
+/// `--operator-task <name> [task arguments…]`: run the named contributed
+/// task. Every argument after the name is the task's own.
+[<Literal>]
+let OperatorTaskFlag = "--operator-task"
+
+/// Modifier for `--operator-task`: write the task's report to this file
+/// rather than stdout, for the reason `--describe-out` gives. It is read
+/// from anywhere in argv and never handed to the task.
+[<Literal>]
+let OperatorTaskOutFlag = "--operator-task-out"
+
 /// The values following every occurrence of `flag` in `argv`.
 let private valuesOf (flag: string) (argv: string seq) : string list =
     argv
@@ -105,6 +124,44 @@ let describePanel (argv: string seq) : string option =
 /// The `--describe-out` value in this argv, if any (the last one wins).
 let describeOut (argv: string seq) : string option =
     valuesOf DescribeOutFlag argv |> List.tryLast
+
+/// The task `--operator-task` names, and the arguments that follow the
+/// name (with any `--operator-task-out <file>` pair removed). `None` when
+/// the flag is absent or carries no name.
+let operatorTask (argv: string seq) : (string * string list) option =
+    let rec dropOut (xs: string list) =
+        match xs with
+        | flag :: _ :: rest when String.Equals(flag, OperatorTaskOutFlag, StringComparison.OrdinalIgnoreCase) ->
+            dropOut rest
+        | x :: rest -> x :: dropOut rest
+        | [] -> []
+
+    let rec find (xs: string list) =
+        match xs with
+        | flag :: name :: rest when String.Equals(flag, OperatorTaskFlag, StringComparison.OrdinalIgnoreCase) ->
+            Some(name, dropOut rest)
+        | _ :: rest -> find rest
+        | [] -> None
+
+    find (List.ofSeq argv)
+
+/// The `--operator-task-out` value in this argv, if any (the last one wins).
+let operatorTaskOut (argv: string seq) : string option =
+    valuesOf OperatorTaskOutFlag argv |> List.tryLast
+
+/// One operator task a companion contributes to the `--operator-task`
+/// startup mode: a name, a one-line summary (listed when an unknown name is
+/// asked for), and the body. `Run` takes the built provider and the task's
+/// own arguments and returns the report text with the process exit code:
+/// `0` success, `1` the task ran and failed, `2` a usage error. A seam
+/// rather than a closed mode because the work belongs to the companion that
+/// owns the types it touches (GP 1): the platform knows only that a task
+/// exists and how to start it.
+[<Sealed>]
+type OperatorTask(name: string, summary: string, run: IServiceProvider -> string list -> Async<string * int>) =
+    member _.Name = name
+    member _.Summary = summary
+    member _.Run(services: IServiceProvider, args: string list) = run services args
 
 /// The actor recorded on a `--describe` read, for the reason
 /// `CliVerificationActor` gives.
@@ -153,7 +210,7 @@ let CliVerificationActor = "cli:--verify-deployment"
 
 /// Detect the mode from a process argv. Pure + testable. Precedence when
 /// more than one flag is somehow present: `--print-config`, then
-/// `--validate-config`, then `--verify-deployment`, then `--describe` — safest-and-never-
+/// `--validate-config`, then `--verify-deployment`, then `--describe`, then `--operator-task` — safest-and-never-
 /// fails first, so a confused invocation degrades toward the action that
 /// cannot report a false verdict. Any unrecognised argv ⇒ `NormalBoot`,
 /// so the flags an SDK consumer's own composition root may already parse
@@ -167,6 +224,7 @@ let detect (argv: string seq) : StartupMode =
     elif has ValidateConfigFlag then ValidateConfig
     elif has VerifyDeploymentFlag then VerifyDeployment
     elif has DescribeFlag then Describe
+    elif has OperatorTaskFlag then RunOperatorTask
     else NormalBoot
 
 /// The live process mode, read from `Environment.GetCommandLineArgs()`.

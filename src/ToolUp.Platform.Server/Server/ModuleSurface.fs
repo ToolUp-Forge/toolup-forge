@@ -280,6 +280,9 @@ module ModuleSurface =
             c (nameof m.ComponentId) ProvidesFacet
             c (nameof m.Metrics) ProvidesFacet
             c (nameof m.Subjects) ProvidesFacet
+            // What the module's declared subjects mean — declared prose beside the
+            // declarations, implying no substrate.
+            c (nameof m.SubjectDescriptions) ProvidesFacet
             // Phase 551 — the module's declared grant policy. `Provides`
             // rather than `Needs`, on the `DefaultSurfaceRequirement`
             // precedent two lines up: both are module-DECLARED access
