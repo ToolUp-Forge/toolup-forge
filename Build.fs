@@ -4283,7 +4283,7 @@ let main args =
             "VerifyUploadResults: OK — no unmarked discarded write or delete result (%d marked best-effort)."
             marked.Length)
 
-    // Phase 1060 — the scope grammar has ONE home.
+    // The scope grammar has ONE home.
     //
     // `ScopeKey` (src/ToolUp.Platform.Core/Shared/Types/ScopeKey.fs) renders a
     // scope's storage container (`team-{id}` / `user-{id}` / `session-{id}` /
@@ -4304,17 +4304,12 @@ let main args =
     // under `src/` — directories named `*.Tests` are fixtures and are
     // excluded, as are comment lines and `ScopeKey.fs` itself.
     //
-    // A RATCHET, draining to zero. Phase 1060 swept the files it owned to
-    // zero; the literals left in the rest of the tree are counted per package
-    // (the nearest `.fsproj`) in `scopeLiteralCeilings`, and a package above
-    // its ceiling — or a package absent from the table holding any literal at
-    // all — is red. A package BELOW its ceiling passes and prints the number
-    // to record, so a sibling change that removes a literal never reddens the
-    // gate; the commit that sweeps a package lowers its row (deleting it at
-    // zero). The ceiling is never raised to admit a literal: render the scope
+    // A ZERO, with named exceptions. Every scope under `src/` is rendered
     // through `ScopeKey.container` / `ScopeKey.scopeId` (the platform shard's
-    // string is `ScopeKey.PlatformContainer`), or read it through
-    // `ScopeKey.tryParseContainer` / `StorageScope.tryKey`.
+    // string is `ScopeKey.PlatformContainer`) and read back through
+    // `ScopeKey.tryParseContainer` / `StorageScope.tryKey`; a package holding
+    // a literal is red. The tree reached zero package by package under a
+    // per-package ratchet, retired once every package read zero.
     //
     // A literal that has the grammar's spelling but is NOT a scope container
     // — or one in a file another change holds — is a NAMED exception in
@@ -4326,11 +4321,6 @@ let main args =
     //        `… -- VerifyScopeLiterals --root <dir>` scans `<dir>/src` (how
     //        the check is shown red on a planted literal without touching
     //        the tree). Also a leg of `VerifyAll` in the fast and full lanes.
-    let scopeLiteralCeilings: Map<string, int> =
-        Map.ofList [
-            "WhisperTranscriptionProvider", 4
-        ]
-
     let scopeLiteralExceptions: (string * int * string) list = [
         "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fs",
         2,
@@ -4430,18 +4420,7 @@ let main args =
 
             let counts = sites |> List.countBy (fun (pkg, _, _, _) -> pkg) |> Map.ofList
 
-            let countOf pkg =
-                counts |> Map.tryFind pkg |> Option.defaultValue 0
-
-            let ceilingOf pkg =
-                scopeLiteralCeilings |> Map.tryFind pkg |> Option.defaultValue 0
-
-            let over = counts |> Map.toList |> List.filter (fun (pkg, n) -> n > ceilingOf pkg)
-
-            let under =
-                scopeLiteralCeilings
-                |> Map.toList
-                |> List.filter (fun (pkg, ceiling) -> countOf pkg < ceiling)
+            let over = counts |> Map.toList
 
             Trace.tracefn ""
             Trace.tracefn "VerifyScopeLiterals summary:"
@@ -4462,29 +4441,22 @@ let main args =
                         held
                         n
 
-            for pkg, ceiling in under do
-                Trace.tracefn
-                    "  ratchet        : %s holds %d against a ceiling of %d — lower its row in scopeLiteralCeilings"
-                    pkg
-                    (countOf pkg)
-                    ceiling
-
             if over.IsEmpty then
                 Trace.tracefn ""
-                Trace.tracefn "VerifyScopeLiterals: OK — no package holds a scope literal above its ceiling."
+                Trace.tracefn "VerifyScopeLiterals: OK — no scope literal outside ScopeKey and the named exceptions."
                 0
             else
                 Trace.tracefn ""
 
                 for pkg, n in over do
-                    Trace.traceError (sprintf "  %s: %d scope literal(s) against a ceiling of %d" pkg n (ceilingOf pkg))
+                    Trace.traceError (sprintf "  %s: %d scope literal(s)" pkg n)
 
                     for (_, rel, line, text) in sites |> List.filter (fun (p, _, _, _) -> p = pkg) do
                         Trace.traceError (sprintf "    %s:%d: %s" rel line text)
 
                 Trace.traceError (
                     sprintf
-                        "VerifyScopeLiterals: %d package(s) spell a scope container by hand. Render a scope through `ScopeKey.container` / `ScopeKey.scopeId` (or `ScopeKey.platform` for the reserved shard), and read a container at rest through `ScopeKey.tryParseContainer`, never a hand-written container literal. The ceiling is a ratchet: a sweep lowers it; it is never raised to admit a literal."
+                        "VerifyScopeLiterals: %d package(s) spell a scope container by hand. Render a scope through `ScopeKey.container` / `ScopeKey.scopeId` (`ScopeKey.PlatformContainer` for the reserved shard), and read a container back through `ScopeKey.tryParseContainer` or `StorageScope.tryKey`, never a hand-written container literal. A literal that is not a scope is a named exception in scopeLiteralExceptions, with its reason."
                         over.Length
                 )
 

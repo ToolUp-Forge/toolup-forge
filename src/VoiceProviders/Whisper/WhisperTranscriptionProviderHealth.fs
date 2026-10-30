@@ -1,6 +1,7 @@
 module WhisperTranscriptionProviderHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -21,7 +22,7 @@ type WhisperTranscriptionProviderHealthCheck(secretStore: ISecretStore) =
 
         member _.Check() = async {
             try
-                let! secret = secretStore.GetSecret("_platform", "openai-api-key")
+                let! secret = secretStore.GetSecret(ScopeKey.PlatformContainer, "openai-api-key")
 
                 match secret with
                 | Some value when not (String.IsNullOrWhiteSpace value) -> return Healthy

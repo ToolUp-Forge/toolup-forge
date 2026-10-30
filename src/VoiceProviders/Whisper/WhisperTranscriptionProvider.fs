@@ -4,6 +4,7 @@ open System
 open System.Net.Http
 open System.Net.Http.Headers
 open System.Text.Json
+open ToolUp.Platform
 open ToolUp.Voice
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
@@ -247,12 +248,18 @@ type private WhisperTranscriptionProviderImpl(apiKeyFetcher: unit -> Async<strin
 /// from the `_platform` secret scope on every call (BYOK; supports key
 /// rotation without reconstruction).
 let create (secretStore: ISecretStore) : ITranscriptionProvider =
-    WhisperTranscriptionProviderImpl((fun () -> secretStore.GetSecret("_platform", "openai-api-key")), DefaultModel)
+    WhisperTranscriptionProviderImpl(
+        (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, "openai-api-key")),
+        DefaultModel
+    )
 
 /// Create with an explicit model id (e.g. a newer Whisper family model),
 /// still reading the key from the secret store per call.
 let createWithModel (secretStore: ISecretStore) (model: string) : ITranscriptionProvider =
-    WhisperTranscriptionProviderImpl((fun () -> secretStore.GetSecret("_platform", "openai-api-key")), model)
+    WhisperTranscriptionProviderImpl(
+        (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, "openai-api-key")),
+        model
+    )
 
 /// Create from a directly-supplied API key (the key is captured once).
 let createWithApiKey (apiKey: string) : ITranscriptionProvider =
@@ -273,7 +280,7 @@ type WhisperConfigValidator(secretStore: ISecretStore, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let! keyOpt = secretStore.GetSecret("_platform", "openai-api-key")
+            let! keyOpt = secretStore.GetSecret(ScopeKey.PlatformContainer, "openai-api-key")
 
             match keyOpt with
             | Some k when not (String.IsNullOrWhiteSpace k) -> return ToolUp.Platform.ConfigValidation.Ok
