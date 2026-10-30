@@ -241,7 +241,7 @@ type AIBudgetEnforcer
         try
             let scope: StorageScope = {
                 ScopeId = scopeId
-                Container = "_platform"
+                Container = ScopeKey.PlatformContainer
                 Persist = true
             }
 
@@ -826,7 +826,7 @@ type AISpendEnforcer
         try
             let scope: StorageScope = {
                 ScopeId = scopeId
-                Container = "_platform"
+                Container = ScopeKey.PlatformContainer
                 Persist = true
             }
 

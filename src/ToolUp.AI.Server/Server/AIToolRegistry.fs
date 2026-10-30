@@ -402,10 +402,7 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
         | true, (:? StorageScope as s) -> Some s
         | _ -> None
 
-    let teamId =
-        match scopeOpt with
-        | Some s when s.Container.StartsWith "team-" -> Some s.ScopeId
-        | _ -> None
+    let teamId = scopeOpt |> Option.bind StorageScope.tryTeamId
 
     let modulePermissions =
         match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with

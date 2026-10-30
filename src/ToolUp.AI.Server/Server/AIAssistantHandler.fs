@@ -351,13 +351,9 @@ module ConversationRetention =
     /// scope id, not a container, so this is the same translation the
     /// Knowledge Base sweep performs.
     let containerOf (scopeId: string) : string =
-        if
-            scopeId.StartsWith("user-", StringComparison.Ordinal)
-            || scopeId.StartsWith("team-", StringComparison.Ordinal)
-        then
-            scopeId
-        else
-            "team-" + scopeId
+        match ScopeKey.tryParseContainer scopeId with
+        | Some(ScopeKey.User _) -> scopeId
+        | _ -> ScopeEnumeration.containerForTeam scopeId
 
     /// Enumerate the conversation ids in a container — every
     /// `ai-conversations/{guid}.json`. Sibling blobs strip to
@@ -1499,7 +1495,7 @@ let aiAssistantApi
 
             {
                 ScopeId = fallback
-                Container = $"user-{fallback}"
+                Container = ScopeKey.container (ScopeKey.User fallback)
                 Persist = true
             }
 

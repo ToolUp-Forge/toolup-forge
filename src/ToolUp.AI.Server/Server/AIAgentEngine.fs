@@ -611,7 +611,7 @@ module private Telemetry =
 
             {
                 ScopeId = fallback
-                Container = $"user-{fallback}"
+                Container = ScopeKey.container (ScopeKey.User fallback)
                 Persist = true
             }
 

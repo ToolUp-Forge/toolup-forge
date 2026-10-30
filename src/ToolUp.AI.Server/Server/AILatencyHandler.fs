@@ -141,7 +141,7 @@ let private resolveScope (ctx: HttpContext) : StorageScope =
 
         {
             ScopeId = fallback
-            Container = $"user-{fallback}"
+            Container = ScopeKey.container (ScopeKey.User fallback)
             Persist = true
         }
 

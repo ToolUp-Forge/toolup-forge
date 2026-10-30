@@ -107,8 +107,10 @@ module ConversationVisibility =
     let teamOf (access: AccessContext option) (container: string) : string option =
         match access |> Option.map _.Subject with
         | Some(TeamMember(_, teamId)) -> Some teamId
-        | _ when container.StartsWith("team-", StringComparison.Ordinal) -> Some(container.Substring 5)
-        | _ -> None
+        | _ ->
+            match ScopeKey.tryParseContainer container with
+            | Some(ScopeKey.Team containerTeamId) -> Some containerTeamId
+            | _ -> None
 
     /// The request's `AccessContext`: the DI one, else the items-backed
     /// reconstruction (never a silent unrestricted fallback).
