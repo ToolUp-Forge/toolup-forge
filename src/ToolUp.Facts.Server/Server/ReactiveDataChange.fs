@@ -371,7 +371,9 @@ module GroundedNarrativeTrigger =
     open System.Text.Json
     open ToolUp.Remoting.Json.SystemTextJson
 
-    /// The job handler name the data-arrival runs are scheduled under.
+    /// The job handler name a grounded run's job is scheduled under: a
+    /// data-arrival change's, or a cadence's (a cron job the deployment
+    /// registers with `payloadFor run Set.empty`).
     [<Literal>]
     let HandlerName = "_narratives.grounded-run"
 
@@ -381,6 +383,16 @@ module GroundedNarrativeTrigger =
     /// The `GroundedNarrativeRequest.Trigger` a data-arrival run records.
     [<Literal>]
     let TriggerName = "data-arrival"
+
+    /// The trigger a run of this handler records, named for what enqueued
+    /// its job: a job on a cron trigger is a cadence's (`"cadence"`, however
+    /// this attempt was fired — a tick, a retry, or an operator's run-now),
+    /// and every other job keeps the data-arrival name it always recorded.
+    let private triggerNameOf (job: Trigger) : string =
+        match job with
+        | Trigger.CronTrigger _ -> "cadence"
+        | Trigger.OnEvent _
+        | Trigger.Manual -> TriggerName
 
     /// What a narrative job carries: the run, and the invalidation set that
     /// caused it (so the job can tell whether a recompute is still pending).
@@ -607,7 +619,7 @@ module GroundedNarrativeTrigger =
                                     RunKey = definition.Key
                                     Scope = ctx.Scope
                                     Access = None
-                                    Trigger = TriggerName
+                                    Trigger = triggerNameOf ctx.Trigger
                                 }
 
                             return GroundedNarrativeOutcome.toJobResult outcome
