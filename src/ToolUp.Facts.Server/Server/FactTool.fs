@@ -141,6 +141,34 @@ module FactTool =
                         s
                 )
 
+    /// A subject path in the `>`-separated form the fact tools take: the
+    /// member ids from the hierarchy root, each trimmed, blank segments
+    /// dropped.
+    let internal pathSegments (raw: string) : string list =
+        raw.Split('>')
+        |> Array.map _.Trim()
+        |> Array.filter (fun seg -> seg <> "")
+        |> Array.toList
+
+    /// The optional `period_from` / `period_to` window: admit facts whose
+    /// valid-time period overlaps [period_from, period_to). Either bound may
+    /// be given alone for an open-ended window; an empty or inverted window
+    /// is refused.
+    let internal periodArg (root: JsonElement) : Result<TemporalExtent option, string> =
+        match instantArg root "period_from", instantArg root "period_to" with
+        | Error e, _
+        | _, Error e -> Error e
+        | Ok None, Ok None -> Ok None
+        | Ok(Some f), Ok(Some t) when f >= t -> Error "Argument 'period_from' must be strictly before 'period_to'."
+        | Ok f, Ok t ->
+            Ok(
+                Some {
+                    From = f |> Option.defaultValue DateTime.MinValue
+                    To = t |> Option.defaultValue DateTime.MaxValue
+                    Label = None
+                }
+            )
+
     // The scope is not read from the request items. `ScopeResolution.forRequest`
     // returns the `ResolvedScope` the scope-resolution middleware minted for
     // this request or the explicit anonymous scope, and nothing a caller can
