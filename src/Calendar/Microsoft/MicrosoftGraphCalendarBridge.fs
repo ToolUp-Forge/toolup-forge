@@ -1090,7 +1090,11 @@ type MicrosoftGraphCalendarBridge
                         WindowEnd = windowEnd
                     }
 
-                    let! _ = secretStore.SetSecret(link.ScopeId, deltaStateKey link, writeDeltaState state) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
+                    // A resumable cursor over ids already in hand: a refused
+                    // write leaves the previous cursor (or none) at rest, and
+                    // the next default pull follows it — a superset, or a
+                    // fresh round on a 410 — reconciled by value. No logger.
+                    let! _ = secretStore.SetSecret(link.ScopeId, deltaStateKey link, writeDeltaState state) // best-effort-write: resumable delta cursor — a refused write leaves the older cursor, whose next round reads a superset reconciled by value
                     ()
                 | _ -> ()
 
@@ -1113,7 +1117,11 @@ type MicrosoftGraphCalendarBridge
                 | Ok(Some(ids, deltaLink)) ->
                     match deltaLink with
                     | Some l when l <> state.DeltaLink ->
-                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
+                        // Advancing the same cursor: a refused write leaves
+                        // `state.DeltaLink`, which Graph still honours (or
+                        // answers 410 → a fresh round), so the next pull
+                        // re-reads these ids — a superset, reconciled by value.
+                        let! _ = // best-effort-write: resumable delta cursor — a refused advance re-follows the previous delta link next pull, a superset reconciled by value
                             secretStore.SetSecret(
                                 link.ScopeId,
                                 deltaStateKey link,
@@ -1178,8 +1186,30 @@ type MicrosoftGraphCalendarBridge
                         match tryStr "id" doc.RootElement with
                         | None -> return Error(MalformedPayload "Graph subscription response carried no id")
                         | Some id ->
-                            let! _ = secretStore.SetSecret(link.ScopeId, subscriptionKey link, id) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                            return Ok()
+                            // Phase 1105 — a subscription nobody recorded can
+                            // be neither renewed nor deleted: the next
+                            // `ensureSubscription` would open a second one and
+                            // `UnlinkResource` could not close either, so
+                            // notifications kept arriving until Graph expired
+                            // them. Close it again and report the refusal (the
+                            // Google bridge's watch-channel rule).
+                            match! secretStore.SetSecret(link.ScopeId, subscriptionKey link, id) with
+                            | Ok() -> return Ok()
+                            | Error e ->
+                                let! _ =
+                                    call
+                                        link
+                                        (jsonRequest
+                                            HttpMethod.Delete
+                                            (sprintf "%s/subscriptions/%s" apiBase (esc id))
+                                            None)
+
+                                return
+                                    Error(
+                                        Unreachable(
+                                            sprintf "could not record the change-notification subscription: %s" e
+                                        )
+                                    )
                     with :? JsonException as ex ->
                         return
                             Error(MalformedPayload(sprintf "Graph subscription response was not JSON: %s" ex.Message))

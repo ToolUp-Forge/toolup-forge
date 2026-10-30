@@ -23,6 +23,8 @@ let private registeredTests =
         // Phase 661 - the per-call model override, offline, per connector.
         ModelOverrideTests.tests
         ClaudeRetryFloorTests.tests
+        // Phase 1105 - a refused AI-settings revert is reported, never as "not saved".
+        AISettingsRevertTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

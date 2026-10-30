@@ -267,7 +267,7 @@ module ReactiveDataChange =
                 match scheduler () with
                 | None -> return ()
                 | Some jobs ->
-                    let! _outcomes =
+                    let! outcomes =
                         RecomputeJobHandler.reactToChange
                             (lineage ())
                             (factStore ())
@@ -276,7 +276,27 @@ module ReactiveDataChange =
                             changeScope
                             changedIds
 
-                    return ()
+                    // Phase 1105 — a recompute that did not start is not
+                    // dropped here. The reaction has no failure channel but
+                    // the raise, which the decorator logs at Warn beside the
+                    // object and scope (the write stands); `combine` still
+                    // runs the next reaction first.
+                    let failed =
+                        outcomes
+                        |> List.choose (function
+                            | ScheduleFailed(factId, error) -> Some(sprintf "%s: %s" factId error)
+                            | _ -> None)
+
+                    if not (List.isEmpty failed) then
+                        return
+                            raise (
+                                InvalidOperationException(
+                                    sprintf
+                                        "%d Eager recompute(s) did not start — %s"
+                                        failed.Length
+                                        (String.concat "; " failed)
+                                )
+                            )
         }
 
     /// The scope source a composed deployment hands the decorator (Phase
@@ -436,26 +456,26 @@ module GroundedNarrativeTrigger =
     let affectedRuns (registry: GroundedNarrativeRegistry) (heads: Fact list) : GroundedNarrativeDefinition list =
         registry.DependentOn(heads |> List.map _.Metric.Value |> List.distinct)
 
-    /// The data-arrival reaction: enqueue (schedule + fire) one job per run
-    /// whose metrics the change invalidated. Returns the run keys this change
-    /// enqueued; a run whose job it coalesced onto is not among them.
-    let enqueueFor
+    /// `enqueueFor`, with the runs whose job was scheduled but whose trigger
+    /// was refused beside the runs it enqueued (Phase 1105).
+    let private enqueueOutcomes
         (lineage: ILineageStore)
         (store: IFactStore)
         (scheduler: IJobScheduler)
         (registry: GroundedNarrativeRegistry)
         (changeScope: DataChangeScope)
         (changedIds: string list)
-        : Async<string list> =
+        : Async<string list * string list> =
         async {
             match changeScope with
-            | DataChangeScope.Carried _ -> return []
-            | DataChangeScope.Resolved _ when List.isEmpty changedIds || not (reacts registry) -> return []
+            | DataChangeScope.Carried _ -> return [], []
+            | DataChangeScope.Resolved _ when List.isEmpty changedIds || not (reacts registry) -> return [], []
             | DataChangeScope.Resolved resolved ->
                 let scopeId = resolved.ScopeId
                 let! invalidated = FactInvalidation.invalidationSet lineage scopeId changedIds
                 let! heads = FactInvalidation.invalidatedHeads store scopeId invalidated
                 let mutable enqueued = []
+                let mutable refused = []
 
                 for definition in affectedRuns registry heads do
                     let registration = registrationFor scopeId definition.Key invalidated
@@ -467,12 +487,37 @@ module GroundedNarrativeTrigger =
                     // the narrative runs once.
                     match scheduled with
                     | Ok(Scheduled jobId) ->
-                        let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
-                        enqueued <- definition.Key :: enqueued
+                        // Phase 1105 — a `Manual` job never fires on its own, so
+                        // a refused trigger is a run that did not start: never
+                        // reported as enqueued. The job stays scheduled, so an
+                        // operator can re-run it from the jobs admin.
+                        match! scheduler.TriggerOnce(scopeId, jobId, Actor) with
+                        | Ok() -> enqueued <- definition.Key :: enqueued
+                        | Error refusal ->
+                            refused <-
+                                sprintf "%s (job %O: %s)" definition.Key jobId (TriggerError.message refusal)
+                                :: refused
                     | Ok(Coalesced _)
                     | Error _ -> ()
 
-                return List.rev enqueued
+                return List.rev enqueued, List.rev refused
+        }
+
+    /// The data-arrival reaction: enqueue (schedule + fire) one job per run
+    /// whose metrics the change invalidated. Returns the run keys this change
+    /// enqueued; a run whose job it coalesced onto is not among them, and
+    /// neither is one whose trigger the scheduler refused (Phase 1105).
+    let enqueueFor
+        (lineage: ILineageStore)
+        (store: IFactStore)
+        (scheduler: IJobScheduler)
+        (registry: GroundedNarrativeRegistry)
+        (changeScope: DataChangeScope)
+        (changedIds: string list)
+        : Async<string list> =
+        async {
+            let! enqueued, _ = enqueueOutcomes lineage store scheduler registry changeScope changedIds
+            return enqueued
         }
 
     /// The reaction over the composed substrate, resolved lazily — the
@@ -486,8 +531,21 @@ module GroundedNarrativeTrigger =
         fun changeScope changedIds -> async {
             match scheduler (), registry () with
             | Some jobs, Some runs when reacts runs ->
-                let! _ = enqueueFor (lineage ()) (factStore ()) jobs runs changeScope changedIds
-                return ()
+                let! _, refused = enqueueOutcomes (lineage ()) (factStore ()) jobs runs changeScope changedIds
+
+                // Phase 1105 — every run was attempted first; a refused trigger
+                // then raises, the reaction's one failure channel, which the
+                // decorator logs at Warn beside the object and scope.
+                if not (List.isEmpty refused) then
+                    return
+                        raise (
+                            InvalidOperationException(
+                                sprintf
+                                    "%d grounded narrative run(s) were scheduled but not started — the trigger was refused: %s"
+                                    refused.Length
+                                    (String.concat "; " refused)
+                            )
+                        )
             | _ -> return ()
         }
 
@@ -588,10 +646,20 @@ module ReactiveDataChangeComposition =
     /// Two reactions as one, run in order — the recompute reaction first,
     /// so an `Eager` recompute is scheduled before a narrative job that
     /// depends on it.
+    ///
+    /// A reaction that raises (Phase 1105: a recompute or run that did not
+    /// start) does not stop the other: both run, and the failure is raised
+    /// after the second, for the decorator to log.
     let combine (first: FactDataChangeReaction) (second: FactDataChangeReaction) : FactDataChangeReaction =
         fun changeScope changedIds -> async {
-            do! first changeScope changedIds
-            do! second changeScope changedIds
+            let! firstOutcome = first changeScope changedIds |> Async.Catch
+            let! secondOutcome = second changeScope changedIds |> Async.Catch
+
+            match firstOutcome, secondOutcome with
+            | Choice1Of2(), Choice1Of2() -> return ()
+            | Choice2Of2 ex, Choice1Of2()
+            | Choice1Of2(), Choice2Of2 ex -> return raise ex
+            | Choice2Of2 a, Choice2Of2 b -> return raise (AggregateException(a.Message + " | " + b.Message, a, b))
         }
 
     /// Two arming checks as one: armed when either is.

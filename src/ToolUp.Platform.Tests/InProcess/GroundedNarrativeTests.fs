@@ -1263,6 +1263,16 @@ let triggerTests =
             let scheduler = DispatchingScheduler()
             let teamId = "team-" + Guid.NewGuid().ToString "N"
 
+            // A handler for the run's job, so the trigger is accepted: since
+            // Phase 1105 a run whose trigger is refused is not "enqueued".
+            (scheduler :> IJobScheduler)
+                .RegisterHandler(
+                    GroundedNarrativeTrigger.HandlerName,
+                    { new IJobHandler with
+                        member _.Execute(_) = async { return JobResult.Success }
+                    }
+                )
+
             let computed = {
                 assertedDraft "revenue" 1250m Surfaceable with
                     Method = Computed("rollup", "1", "p0")
@@ -2537,6 +2547,75 @@ let doubleRunTests =
 
             Expect.equal scheduler.Jobs 1 "the replayed change coalesced onto the pending job"
             Expect.equal scheduler.AllTriggers 1 "and that job was triggered once, not once per schedule call"
+        }
+
+        // Phase 1105 — a `Manual` narrative job never fires on its own, so a
+        // refused trigger is a run that did not start: not reported as
+        // enqueued, and raised by the reaction for the decorator to log.
+        testCaseAsync "1105: a refused narrative trigger is not enqueued, and the reaction raises it"
+        <| async {
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+            let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
+            let teamId = "team-" + Guid.NewGuid().ToString "N"
+
+            // A fresh scheduler per call: a second schedule on the same one
+            // would coalesce onto the first job and attempt no trigger at all.
+            let refusing () =
+                let inner = CoalescingScheduler() :> IJobScheduler
+
+                { new IJobScheduler with
+                    member _.RegisterHandler(n, h) = inner.RegisterHandler(n, h)
+                    member _.RegisterHandlerAsync(n, h) = inner.RegisterHandlerAsync(n, h)
+                    member _.Schedule(registration: JobRegistration) = inner.Schedule registration
+
+                    member _.Schedule(scope: ResolvedScope, registration: JobRegistration) =
+                        inner.Schedule(scope, registration)
+
+                    member _.Cancel(s, j) = inner.Cancel(s, j)
+                    member _.Disable(s, j) = inner.Disable(s, j)
+                    member _.Enable(s, j) = inner.Enable(s, j)
+                    member _.Get(s, j) = inner.Get(s, j)
+                    member _.ListJobs s = inner.ListJobs s
+                    member _.GetRecentRuns(s, j, n) = inner.GetRecentRuns(s, j, n)
+                    member _.TriggerOnce(_, _, _) = async { return Error TriggerError.SchedulerStopping }
+                    member _.NotifyEventWritten(s, e, t) = inner.NotifyEventWritten(s, e, t)
+                }
+
+            let computed = {
+                assertedDraft "revenue" 1250m Surfaceable with
+                    Method = Computed("rollup", "1", "p0")
+                    Evidence = {
+                        ResultRef = None
+                        InputHashes = [ "sales.rollup" ]
+                        TriggerRef = None
+                    }
+            }
+
+            assertOk store teamId computed |> ignore
+            let registry = GroundedNarrativeRegistry()
+            registry.Register summaryRun |> ignore
+
+            let scope =
+                DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))
+
+            let! enqueued =
+                GroundedNarrativeTrigger.enqueueFor lineage store (refusing ()) registry scope [ "sales.rollup" ]
+
+            Expect.isEmpty enqueued "a run whose trigger was refused is not reported as enqueued"
+
+            let react =
+                GroundedNarrativeTrigger.reaction
+                    (fun () -> store)
+                    (fun () -> lineage)
+                    (fun () -> Some(refusing ()))
+                    (fun () -> Some registry)
+
+            let! outcome = react scope [ "sales.rollup" ] |> Async.Catch
+
+            match outcome with
+            | Choice2Of2 ex -> Expect.stringContains ex.Message "not started" "the raise names the unstarted run"
+            | Choice1Of2() -> failtest "a refused narrative trigger must not be dropped by the reaction"
         }
     ]
 
