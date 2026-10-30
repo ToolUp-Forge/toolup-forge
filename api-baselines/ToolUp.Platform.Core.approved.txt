@@ -11350,6 +11350,7 @@ ToolUp.Platform.RequiresRoleAttribute..ctor(System.String)
 ToolUp.Platform.RequiresRoleAttribute.Role : System.String { get }
 ToolUp.Platform.ResolvedScope (class)
 ToolUp.Platform.ResolvedScope.IsAnonymous : System.Boolean { get }
+ToolUp.Platform.ResolvedScope.Key : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey] { get }
 ToolUp.Platform.ResolvedScope.ScopeId : System.String { get }
 ToolUp.Platform.ResolvedScope.Storage : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope] { get }
 ToolUp.Platform.ResolvedScopeModule (class)
@@ -12532,6 +12533,8 @@ ToolUp.Platform.StorageScope.Persist : System.Boolean { get }
 ToolUp.Platform.StorageScope.ScopeId : System.String { get }
 ToolUp.Platform.StorageScopeModule (class)
 ToolUp.Platform.StorageScopeModule.ofKey(System.Boolean, ToolUp.Platform.ScopeKey) : ToolUp.Platform.StorageScope
+ToolUp.Platform.StorageScopeModule.tryKey(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]
+ToolUp.Platform.StorageScopeModule.tryTeamId(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Subject (class)
 ToolUp.Platform.Subject.IsAnonymousSession : System.Boolean { get }
 ToolUp.Platform.Subject.IsAuthenticatedUser : System.Boolean { get }

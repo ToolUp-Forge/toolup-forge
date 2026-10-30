@@ -550,7 +550,7 @@ module NotificationKind =
     /// so "topic" here means "magic scopeId value the publisher and
     /// every subscriber agree on".
     [<Literal>]
-    let PlatformReservedScope = "_platform"
+    let PlatformReservedScope = ScopeKey.PlatformContainer
 
     /// Returns the kind string for a notification. Client code uses
     /// this to tag dispatched events; server code uses it to build

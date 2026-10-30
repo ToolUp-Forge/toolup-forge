@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── Phase 797 — scope as a choke point ────────────────────────────────
+// ─── Scope as a choke point ────────────────────────────────────────────
 //
 // `StorageScope` is the record the platform's scope resolution produces
 // once per request. It lived in StorageScope.fs beside the resolver's
@@ -11,7 +11,7 @@ namespace ToolUp.Platform
 // in the compile order, so the disclosure gate's contract can take the
 // `ResolvedScope` below. Its shape and namespace are unchanged.
 //
-// `ResolvedScope` is the value the fact tier keys on since Phase 797. Its
+// `ResolvedScope` is the value the fact tier keys on. Its
 // representation is PRIVATE: nothing outside this file can construct a
 // `Resolved` case, and the one minting function is `internal` — reachable
 // from `ToolUp.Platform.Server` (where the scope-resolution middleware runs)
@@ -24,7 +24,7 @@ namespace ToolUp.Platform
 /// Resolved storage scope for a request — determines where data is stored
 /// and whether it persists beyond the session.
 ///
-/// Phase 1060 — a projection of `ScopeKey`: `StorageScope.ofKey` renders
+/// A projection of `ScopeKey`: `StorageScope.ofKey` renders
 /// `ScopeId` and `Container` from a key, so a scope minted through it can
 /// never spell its container a second way. The record stays constructible
 /// for one minor as the wire of `ScopeResolutionRequest`'s resolvers
@@ -43,7 +43,7 @@ type StorageScope = {
     Persist: bool
 }
 
-/// The projection from `ScopeKey` (Phase 1060).
+/// The projection from `ScopeKey`.
 [<RequireQualifiedAccess>]
 module StorageScope =
 
@@ -57,8 +57,29 @@ module StorageScope =
         Persist = persist
     }
 
+    /// The key a storage scope was rendered from: `Some key`
+    /// when its `Container` reads back through `ScopeKey.tryParseContainer`
+    /// AND its `ScopeId` is that key's `ScopeKey.scopeId`, so
+    /// `tryKey (ofKey p key) = Some key` for every key a well-formed id
+    /// builds. `None` for a shape the grammar does not render: a claim
+    /// scope (its `ScopeId` is its container), a container outside the
+    /// grammar, a padded or empty id, or a `ScopeId` that disagrees with
+    /// its container. A pure function of the record, so it can never
+    /// disagree with the `ScopeId` and `Container` a store keys on.
+    let tryKey (scope: StorageScope) : ScopeKey option =
+        ScopeKey.tryParseContainer scope.Container
+        |> Option.filter (fun key -> ScopeKey.scopeId key = scope.ScopeId)
+
+    /// The team a storage scope belongs to: the id of a `ScopeKey.Team`
+    /// key (`tryKey`), `None` for every other scope. What a handler asks
+    /// of the request's scope before reading team-scoped configuration.
+    let tryTeamId (scope: StorageScope) : string option =
+        match tryKey scope with
+        | Some(ScopeKey.Team teamId) -> Some teamId
+        | _ -> None
+
 /// A storage scope the platform's scope resolution minted for the current
-/// request (Phase 797) — or the explicit anonymous scope when it minted
+/// request — or the explicit anonymous scope when it minted
 /// none. The representation is private and the mint is internal to the
 /// platform's server tier: a caller cannot construct one from a string, so
 /// a fact-store or disclosure-gate member that takes this type is
@@ -98,10 +119,25 @@ type ResolvedScope =
         | Resolved scope -> Some scope
         | AnonymousScope -> None
 
+    /// The `ScopeKey` the resolved scope renders from —
+    /// `StorageScope.tryKey` of `Storage`. Present for every scope minted
+    /// in the grammar (team, user, session, the platform shard); absent
+    /// for the anonymous scope, for a claim scope, and for a resolver- or
+    /// carrier-supplied shape no key renders. DERIVED from `Storage`
+    /// rather than carried beside it: the mints receive a `StorageScope`
+    /// (`IStorageScopeResolver.Resolve`'s output, a carried token at rest),
+    /// so a carried key would be absent exactly where the container is in
+    /// the grammar but the resolver did not say so, and could disagree
+    /// with the `Storage` every store keys on. Derived, it cannot.
+    member this.Key: ScopeKey option =
+        match this with
+        | Resolved scope -> StorageScope.tryKey scope
+        | AnonymousScope -> None
+
 /// Constructors and accessors for `ResolvedScope`. The only constructor a
 /// consumer can reach is `anonymous`; `ofStorageScope` is internal and is
 /// called by the scope-resolution middleware alone, and `ofCarried`
-/// (Phase 818) is internal and is called by the job scheduler alone.
+/// is internal and is called by the job scheduler alone.
 [<RequireQualifiedAccess>]
 module ResolvedScope =
 
@@ -134,14 +170,14 @@ module ResolvedScope =
 
     /// The shard key — see `ResolvedScope.ScopeId`.
     let scopeId (scope: ResolvedScope) : string = scope.ScopeId
-// ─── Phase 897 — the two-scope form ─────────────────────────────────
+// ─── The two-scope form ─────────────────────────────────────────────
 //
 // Every read and write in the fact tier holds ONE scope. The single place
 // that holds two is the team-to-team publication seam: a run written into a
 // target team's table on the strength of a grant the source team published
 // under. `ResolvedScopePair` is that pair, and it is built from two scopes
 // that were already minted — there is no constructor taking a string, so a
-// pair can name no scope the platform did not resolve (Phase 797's rule
+// pair can name no scope the platform did not resolve (the choke point's rule
 // carried one step further). The anonymous scope and a pair naming one scope
 // twice are refused: a publication moves rows between two resolved teams.
 //
@@ -150,8 +186,8 @@ module ResolvedScope =
 // guard pack pins that the fact tier's only holder of a pair is the one
 // sanctioned seam.
 
-/// Two minted scopes held together for the one sanctioned cross-scope write
-/// (Phase 897): the SOURCE a publication was read in and the TARGET its run
+/// Two minted scopes held together for the one sanctioned cross-scope write:
+/// the SOURCE a publication was read in and the TARGET its run
 /// is written into. Built only from two `ResolvedScope` values, so neither
 /// side can be a scope the platform did not resolve.
 type ResolvedScopePair = private {

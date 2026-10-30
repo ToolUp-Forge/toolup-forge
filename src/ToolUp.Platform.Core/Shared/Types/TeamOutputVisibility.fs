@@ -196,7 +196,8 @@ module TeamConversationPolicyRecord =
 
     /// The container a team's record lives in — the team's own container,
     /// read in the team's scope.
-    let containerOf (teamId: string) = "team-" + teamId
+    let containerOf (teamId: string) =
+        ScopeKey.container (ScopeKey.Team teamId)
 
     /// Whether the team has ever chosen a level.
     let isUnset (record: TeamConversationPolicyRecord) = List.isEmpty record.Changes

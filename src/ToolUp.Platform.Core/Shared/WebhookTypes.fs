@@ -99,7 +99,7 @@ type WebhookSubscription = {
 module WebhookSecretRef =
     /// The reserved scope every webhook secret is stored under.
     [<Literal>]
-    let Scope = "_platform"
+    let Scope = ScopeKey.PlatformContainer
 
     /// Persisted reference for a subscription's current signing secret.
     let current (subscriptionId: Guid) : string =

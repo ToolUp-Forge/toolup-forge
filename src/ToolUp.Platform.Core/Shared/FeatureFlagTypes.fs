@@ -53,9 +53,9 @@ module FlagScope =
     /// layouts stay consistent across stores.
     let slug =
         function
-        | FlagScope.User id -> $"user-{id}"
-        | FlagScope.Team id -> $"team-{id}"
-        | FlagScope.Platform -> "_platform"
+        | FlagScope.User id -> ScopeKey.container (ScopeKey.User id)
+        | FlagScope.Team id -> ScopeKey.container (ScopeKey.Team id)
+        | FlagScope.Platform -> ScopeKey.container ScopeKey.platform
 
 /// Discriminates between a flag being set and a flag being cleared in
 /// a `FlagChangedPayload`. `Set` carries the new value; `Cleared` has

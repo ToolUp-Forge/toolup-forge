@@ -400,7 +400,7 @@ module ProviderScope =
         Owner = ProviderProfileOwner.UserOwned userId
         Storage = {
             ScopeId = userId
-            Container = $"user-{userId}"
+            Container = ScopeKey.container (ScopeKey.User userId)
             Persist = true
         }
     }
@@ -412,7 +412,7 @@ module ProviderScope =
         Owner = ProviderProfileOwner.TeamOwned teamId
         Storage = {
             ScopeId = teamId
-            Container = $"team-{teamId}"
+            Container = ScopeKey.container (ScopeKey.Team teamId)
             Persist = true
         }
     }

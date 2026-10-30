@@ -311,7 +311,7 @@ module DatadogReadback =
     /// The `ISecretStore` scope every platform-level credential is read
     /// from — the same scope the write-side audit sink uses.
     [<Literal>]
-    let SecretScope = "_platform"
+    let SecretScope = ScopeKey.PlatformContainer
 
     /// The `ISecretStore` key holding the Datadog API key.
     [<Literal>]

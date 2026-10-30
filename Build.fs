@@ -4304,16 +4304,23 @@ let main args =
     // under `src/` — directories named `*.Tests` are fixtures and are
     // excluded, as are comment lines and `ScopeKey.fs` itself.
     //
-    // A RATCHET, not yet a zero. Phase 1060 swept the files it owned to zero;
-    // the literals left in the rest of the tree are counted per package (the
-    // nearest `.fsproj`) in `scopeLiteralCeilings`, and a package above its
-    // ceiling — or a package absent from the table holding any literal at
+    // A RATCHET, draining to zero. Phase 1060 swept the files it owned to
+    // zero; the literals left in the rest of the tree are counted per package
+    // (the nearest `.fsproj`) in `scopeLiteralCeilings`, and a package above
+    // its ceiling — or a package absent from the table holding any literal at
     // all — is red. A package BELOW its ceiling passes and prints the number
     // to record, so a sibling change that removes a literal never reddens the
     // gate; the commit that sweeps a package lowers its row (deleting it at
     // zero). The ceiling is never raised to admit a literal: render the scope
-    // through `ScopeKey.container` / `ScopeKey.scopeId`, or read it through
-    // `ScopeKey.tryParseContainer`.
+    // through `ScopeKey.container` / `ScopeKey.scopeId` (the platform shard's
+    // string is `ScopeKey.PlatformContainer`), or read it through
+    // `ScopeKey.tryParseContainer` / `StorageScope.tryKey`.
+    //
+    // A literal that has the grammar's spelling but is NOT a scope container
+    // — or one in a file another change holds — is a NAMED exception in
+    // `scopeLiteralExceptions`: its file, how many sites it excuses there,
+    // and why. Exactly that many sites in that file are excused, never more;
+    // an exception its file has outgrown prints the count to record.
     //
     // Usage: `dotnet run --project Build.fsproj -- VerifyScopeLiterals`
     //        `… -- VerifyScopeLiterals --root <dir>` scans `<dir>/src` (how
@@ -4343,8 +4350,6 @@ let main args =
             "ToolUp.AuditSinks.Cef", 2
             "ToolUp.AuditSinks.DatadogLogs", 1
             "ToolUp.AuditSinks.SplunkHec", 1
-            "ToolUp.Calendar.Google", 1
-            "ToolUp.Cli", 2
             "ToolUp.ExternalCompute.Http", 3
             "ToolUp.Facts.Server", 6
             "ToolUp.Forms.Server", 1
@@ -4356,7 +4361,6 @@ let main args =
             "ToolUp.NotificationChannels.WhatsApp.MetaCloud", 2
             "ToolUp.NotificationChannels.WhatsApp.Twilio", 3
             "ToolUp.Platform.Client", 1
-            "ToolUp.Platform.Core", 12
             "ToolUp.Platform.Server", 149
             "ToolUp.PublicRendering", 2
             "ToolUp.RAG.Benchmarks", 1
@@ -4365,6 +4369,33 @@ let main args =
             "ToolUp.Stripe.Server", 1
             "WhisperTranscriptionProvider", 4
         ]
+
+    let scopeLiteralExceptions: (string * int * string) list = [
+        "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fs",
+        2,
+        "the local embedder's persisted per-scope STATE key, built over an escaped id; not a storage container, and it must not move if the container grammar does"
+        "src/ToolUp.Cli/Commands/Users.fs",
+        1,
+        "the CLI depends on FSharp.Core alone and reads a deployment over its wire; it names the container the deployment stores a user under"
+        "src/ToolUp.Cli/Cli/MembershipsDoctorCommand.fs",
+        1,
+        "the CLI depends on FSharp.Core alone; it opens the platform container's directory under a file-storage data root"
+        "src/ToolUp.Platform.Core/Shared/ComponentRequirements.fs",
+        1,
+        "compiles ahead of ScopeKey.fs in the Core project; ScopeKeyTests pins it equal to ScopeKey.PlatformContainer"
+        "src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs",
+        1,
+        "the module key of the platform-defaults configuration SCHEMA, not a scope container"
+        "src/ToolUp.Platform.Core/Shared/Types/EgressPolicyTypes.fs",
+        1,
+        "a ComponentId (the platform as the component an outbound call is attributed to), not a scope; it compiles ahead of ScopeKey.fs"
+        "src/ToolUp.Facts.Server/Server/FactsCompose.fs",
+        1,
+        "held: a concurrent change owns this file; the one-token sweep onto ScopeKey.PlatformContainer follows its landing"
+        "src/Calendar/Google/GoogleCalendarBridge.fs",
+        1,
+        "held: a concurrent change owns this file; the one-token sweep onto ScopeKey.PlatformContainer follows its landing"
+    ]
 
     let runVerifyScopeLiterals (root: string) : int =
         let srcDir = Path.Combine(root, "src")
@@ -4422,6 +4453,20 @@ let main args =
                                     yield packageOf (Path.GetDirectoryName file), rel, i + 1, line.Trim()
             ]
 
+            let excusedIn =
+                scopeLiteralExceptions |> List.map (fun (file, n, _) -> file, n) |> Map.ofList
+
+            // The first `n` sites of an excepted file are excused; the rest
+            // count against its package like any other literal.
+            let sites, excused =
+                sites
+                |> List.groupBy (fun (_, rel, _, _) -> rel)
+                |> List.collect (fun (rel, fileSites) ->
+                    let n = excusedIn |> Map.tryFind rel |> Option.defaultValue 0
+                    fileSites |> List.mapi (fun i site -> i < n, site))
+                |> List.partition (fst >> not)
+                |> fun (counted, excused) -> List.map snd counted, List.map snd excused
+
             let counts = sites |> List.countBy (fun (pkg, _, _, _) -> pkg) |> Map.ofList
 
             let countOf pkg =
@@ -4440,6 +4485,21 @@ let main args =
             Trace.tracefn ""
             Trace.tracefn "VerifyScopeLiterals summary:"
             Trace.tracefn "  scope literals : %d in %d package(s)" sites.Length counts.Count
+
+            Trace.tracefn
+                "  excepted       : %d site(s) in %d named file(s)"
+                excused.Length
+                scopeLiteralExceptions.Length
+
+            for file, n, _ in scopeLiteralExceptions do
+                let held = excused |> List.filter (fun (_, rel, _, _) -> rel = file) |> List.length
+
+                if held < n then
+                    Trace.tracefn
+                        "  exception      : %s holds %d against an exception of %d — lower its row in scopeLiteralExceptions"
+                        file
+                        held
+                        n
 
             for pkg, ceiling in under do
                 Trace.tracefn

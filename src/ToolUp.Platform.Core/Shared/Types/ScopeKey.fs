@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── Phase 1060 — a scope is a value of a closed type ──────────────────
+// ─── A scope is a value of a closed type ───────────────────────────────
 //
 // Every store partitions by scope, and until this phase the grammar that
 // relates a scope to its storage container — `team-{id}`, `user-{id}`,
@@ -44,7 +44,7 @@ type PlatformShard =
     /// secrets, health probes and platform audit rows.
     | Platform
 
-/// The scope a store partitions by, as a closed value (Phase 1060). Its
+/// The scope a store partitions by, as a closed value. Its
 /// two renderings are `ScopeKey.container` (the storage container) and
 /// `ScopeKey.scopeId` (the bare store id); nothing else spells a scope.
 [<RequireQualifiedAccess>]
@@ -63,7 +63,7 @@ type ScopeKey =
     | Claim of claimScopeId: string
 
 /// How a scope persists under a deployment's declared `Surfaces`
-/// (Phase 246's rule). `Defaulted` is `true` when no `SurfaceProfile`
+/// (the surface-persistence rule). `Defaulted` is `true` when no `SurfaceProfile`
 /// matched the scope's kind and the fail-closed default (ephemeral) fired —
 /// the caller's signal to emit its one-time diagnostic.
 type ScopePersistence = { Persist: bool; Defaulted: bool }
@@ -72,9 +72,12 @@ type ScopePersistence = { Persist: bool; Defaulted: bool }
 [<RequireQualifiedAccess>]
 module ScopeKey =
 
-    /// The reserved platform container, as a compile-time constant for the
-    /// contexts that need one (another `[<Literal>]`, an attribute, a
-    /// pattern). Everywhere else render `ScopeKey.platform`.
+    /// The reserved platform container, as a compile-time constant:
+    /// `ScopeKey.container ScopeKey.platform`, spelled once. A site that
+    /// names the shard as a string — a store's container, a secret scope,
+    /// an audit stream, another `[<Literal>]`, a pattern — uses this
+    /// (the tree's hand-written `"_platform"` literals were swept onto it); a
+    /// site holding a `ScopeKey` renders it.
     [<Literal>]
     let PlatformContainer = "_platform"
 
@@ -156,7 +159,7 @@ module ScopeKey =
             | Some(id, case) when isWellFormedId id -> Some(case id)
             | _ -> None
 
-    /// The bare id a container written before Phase 1060 was read back to,
+    /// The bare id a container written before the grammar had a type was read back to,
     /// byte for byte: the prefix stripped whatever follows it (an empty or
     /// padded id included), any other container its own id. The encryption
     /// decorator derives a blob's key material from this, so it must stay
@@ -172,7 +175,7 @@ module ScopeKey =
             | Some(id, _) -> id
             | None -> container
 
-    /// Phase 246's rule, written once: whether a scope persists under the
+    /// The surface-persistence rule, written once: whether a scope persists under the
     /// declared `Surfaces`. A session reads the `Anonymous` profile, a user
     /// the `AuthenticatedUser` profile, a team the `Team` profile; no
     /// matching profile fails CLOSED (ephemeral) with `Defaulted = true`. A
@@ -204,7 +207,7 @@ module ScopeKey =
     /// `ScopeKey.persistence`.
     let persists (surfaces: SurfaceProfile list) (key: ScopeKey) : bool = (persistence surfaces key).Persist
 
-/// The scope an audit event is recorded under (Phase 1060): the platform's
+/// The scope an audit event is recorded under: the platform's
 /// own trail, or a principal's scope. Its one rendering is
 /// `AuditScope.streamKey`.
 [<RequireQualifiedAccess>]
@@ -221,7 +224,7 @@ module AuditScope =
 
     /// The audit stream key the event store keys a stream on: the scope's
     /// BARE id (`ScopeKey.scopeId`), never its container — what every event
-    /// already at rest carries (GP 11; Phase 1059 unified it). The platform
+    /// already at rest carries (GP 11). The platform
     /// trail is `_platform`.
     let streamKey (scope: AuditScope) : string =
         match scope with

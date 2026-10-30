@@ -1,8 +1,8 @@
 module ToolUp.Platform.Tests.InProcess.ScopeKeyTests
 
-// Phase 1060 — the scope grammar, pinned byte for byte.
+// The scope grammar, pinned byte for byte.
 //
-// Before this phase the grammar relating a scope to its storage container
+// Before `ScopeKey` existed the grammar relating a scope to its storage container
 // (`team-{id}`, `user-{id}`, `session-{id}`, the reserved `_platform` shard,
 // a claim's own scope id) was minted by string interpolation at five sites
 // and parsed back by prefix tests at six. `ScopeKey` is that grammar as a
@@ -85,6 +85,13 @@ let private renderingTests =
         <| fun _ ->
             Expect.equal ScopeKey.platform (ScopeKey.Platform PlatformShard.Platform) "the named value"
             Expect.equal (ScopeKey.container ScopeKey.platform) ScopeKey.PlatformContainer "the literal agrees"
+
+        testCase "the platform secret scope that compiles ahead of ScopeKey is the same shard"
+        <| fun _ ->
+            Expect.equal
+                ComponentRequirements.PlatformScope
+                ScopeKey.PlatformContainer
+                "ComponentRequirements.PlatformScope is a named exception of the literal gate only because of compile order"
     ]
 
 let private parseTests =
@@ -283,5 +290,73 @@ let private auditTests =
                 Expect.equal (AuditSubject.fromScopeId scopeId) expected $"%A{scopeId}"
     ]
 
+/// The key a scope renders from, read off the scope itself: present for
+/// every grammar case, absent for every shape no key renders — the claim,
+/// the anonymous scope, the arbitrary containers the fact-tier fixtures and
+/// carried tokens use, and a scope whose id disagrees with its container.
+let private keyTests =
+    testList "StorageScope.tryKey and ResolvedScope.Key — the key a scope renders from" [
+        let mint = StorageScopeResolver.ScopeResolution.ofStorageScope
+
+        for name, key, container, scopeId in fixture do
+            testCase name
+            <| fun _ ->
+                let scope = {
+                    ScopeId = scopeId
+                    Container = container
+                    Persist = true
+                }
+
+                let expected =
+                    match key with
+                    | ScopeKey.Claim _ -> None
+                    | _ -> Some key
+
+                Expect.equal (StorageScope.tryKey scope) expected "tryKey"
+                Expect.equal (StorageScope.tryKey (StorageScope.ofKey false key)) expected "tryKey round-trips ofKey"
+                Expect.equal (mint scope).Key expected "ResolvedScope.Key"
+                Expect.equal (mint scope).Storage (Some scope) "Storage is the minted record, byte for byte"
+
+                Expect.equal
+                    (StorageScope.tryTeamId scope)
+                    (match key with
+                     | ScopeKey.Team teamId -> Some teamId
+                     | _ -> None)
+                    "tryTeamId"
+
+        let absent = [
+            "an arbitrary fixture container", "t1", "container-t1"
+            "a claim whose scope id is its team-shaped container", "team-acme", "team-acme"
+            "a scope id that disagrees with its container", "other", "team-acme"
+            "an empty team id", "", "team-"
+            "a padded user id", " alice", "user- alice"
+            "an unknown prefix", "acme", "org-acme"
+        ]
+
+        for name, scopeId, container in absent do
+            testCase $"absent: {name}"
+            <| fun _ ->
+                let scope = {
+                    ScopeId = scopeId
+                    Container = container
+                    Persist = true
+                }
+
+                Expect.isNone (StorageScope.tryKey scope) "tryKey"
+                Expect.isNone (StorageScope.tryTeamId scope) "tryTeamId"
+                Expect.isNone (mint scope).Key "ResolvedScope.Key"
+                Expect.equal (mint scope).Storage (Some scope) "Storage is unchanged"
+
+        testCase "the anonymous scope has no key"
+        <| fun _ -> Expect.isNone ResolvedScope.anonymous.Key "anonymous"
+    ]
+
 let tests =
-    testList "Phase 1060 — ScopeKey" [ renderingTests; parseTests; mintTests; persistenceTests; auditTests ]
+    testList "Phase 1060 — ScopeKey" [
+        renderingTests
+        parseTests
+        mintTests
+        persistenceTests
+        auditTests
+        keyTests
+    ]
