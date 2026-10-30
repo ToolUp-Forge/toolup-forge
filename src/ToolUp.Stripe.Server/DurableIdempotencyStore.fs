@@ -2,6 +2,7 @@ namespace ToolUp.Stripe.Server
 
 open System.Text
 open System.Threading
+open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
 /// **Production-ready** durable webhook idempotency store backed by
@@ -61,7 +62,7 @@ type DurableIdempotencyStore(blobStorage: IBlobStorage, container: string) =
 
     /// Construct with the reserved `_platform` container — the common
     /// case for deployment-level webhook dedup.
-    new(blobStorage: IBlobStorage) = DurableIdempotencyStore(blobStorage, "_platform")
+    new(blobStorage: IBlobStorage) = DurableIdempotencyStore(blobStorage, ScopeKey.PlatformContainer)
 
     interface IWebhookIdempotencyStore with
         member _.TryClaim(eventId: string) : Async<bool> = async {
