@@ -21,6 +21,7 @@ namespace ToolUp.Platform
 // sibling items are separate jobs and never aborted.
 
 /// The batch-item job, bound to `_platform.modelfit.batchitem`.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ModelFitBatchItemJobHandler =
 
     /// The batch-item job: fit one item, then register the outcome with the

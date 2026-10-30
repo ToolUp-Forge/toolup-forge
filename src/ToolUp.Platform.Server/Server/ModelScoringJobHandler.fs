@@ -38,6 +38,7 @@ type ScoreJobRequest = {
 /// The batch-scoring job, bound to `_platform.modelscore.run`: parse a
 /// `ScoreJobRequest`, fetch the governed artifact from `IModelRegistry`, and
 /// run it through the scorer.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ModelScoringJobHandler =
     /// Reserved scheduler handler name for the batch-scoring job.
     [<Literal>]

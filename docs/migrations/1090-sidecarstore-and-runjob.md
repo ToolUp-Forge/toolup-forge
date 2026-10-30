@@ -40,8 +40,8 @@ nothing: every `create` keeps its signature and every handler name is byte-for-b
    `ModelPromotionJobHandler`, `DatasetRevintageJobHandler` and `RecomputeJobHandler` were each a class and a module
    of the same name; each is now the module alone, with `create` (unchanged) and a new `job` returning the
    `RunJob<'Req>` value `create` wraps. F# source that calls `X.create` / `X.HandlerName` compiles unchanged; code
-   that wrote `new X(...)` calls `X.create` instead. The compiled module name loses its `Module` suffix, so a
-   binary built against 0.37.0 must be rebuilt.
+   that wrote `new X(...)` calls `X.create` instead. Each module keeps its compiled `XModule` name
+   (`CompilationRepresentationFlags.ModuleSuffix`), so a binary that calls a module function still binds.
 4. **New:** `RunKind` (Core) with `label` and `handlerName`; `RunJob<'Req>`, `RunFailure`, `JobPayload` and
    `RunJob.handler` / `ofPayload` / `toJobResult`; `SidecarStore<'T>`, `SidecarStoreSpec<'T>` and the
    `SidecarStore` helpers; `ConditionalDataObjectStore.isAtomic`.

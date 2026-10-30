@@ -127,6 +127,7 @@ module private RecomputeUnder =
         }
 
 /// Construction + compose registration + the reactive orchestration.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RecomputeJobHandler =
 
     /// Logical handler name registered with the scheduler at compose time.

@@ -1183,6 +1183,7 @@ type PromotionEvaluationRequest = {
 /// "decide about this artifact" rather than call it inline. Consumer-wired,
 /// like the scoring and batch-item jobs.
 [<RequireQualifiedAccess>]
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ModelPromotionJobHandler =
 
     /// The scheduler handler name a promotion-evaluation job is enqueued

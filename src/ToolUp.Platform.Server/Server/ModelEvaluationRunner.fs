@@ -736,6 +736,7 @@ module ChampionChallengerGate =
 
 /// The evaluation job, bound to `_platform.modeleval.run` (runs are jobs):
 /// parse an `EvaluationRequest` and run it through the evaluation runner.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ModelEvaluationJobHandler =
     /// Reserved scheduler handler name for the evaluation job.
     [<Literal>]
@@ -800,6 +801,7 @@ type ReevaluationSweepRequest = {
 /// registration must not wedge the standing sweep; a *transient* failure
 /// fails the sweep as retryable, so the scheduler retries and the
 /// idempotent skip re-runs only what is still missing.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VintageReevaluationJobHandler =
     /// Reserved scheduler handler name for the standing re-evaluation sweep.
     [<Literal>]

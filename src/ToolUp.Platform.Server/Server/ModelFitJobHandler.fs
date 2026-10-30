@@ -120,6 +120,7 @@ module ModelFitEnvelope =
 
 /// The fit-run job, bound to `_platform.modelfit.run`: parse a `FitRequest`
 /// and run it through the envelope.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ModelFitJobHandler =
     /// Reserved scheduler handler name for the fit-run job.
     [<Literal>]

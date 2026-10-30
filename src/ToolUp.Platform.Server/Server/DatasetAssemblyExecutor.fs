@@ -1026,6 +1026,7 @@ module DatasetRevintage =
 /// The job bound to `_platform.dataset.revintage`: the cron-shaped recurring
 /// re-vintage ("weekly data refresh"). Consumer-wired, like the scoring and
 /// batch-item jobs.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DatasetRevintageJobHandler =
     /// Reserved scheduler handler name for the re-vintage job.
     [<Literal>]
