@@ -11,7 +11,7 @@ open System.Text.Json
 open System.Text.Json.Serialization
 open System.Text.Unicode
 open FSharp.Reflection
-// Phase 783 — the closed decode-refusal vocabulary (`DecodeError`), used
+// The closed decode-refusal vocabulary (`DecodeError`), used
 // by `FableConverters.tryDeserialiseElement` at the bottom of this file.
 open ToolUp.Remoting
 
@@ -157,7 +157,7 @@ module private TupleReflection =
         )
 
 // =============================================================================
-// Nested member reads (Phase 964)
+// Nested member reads
 // =============================================================================
 //
 // The record, union, tuple, collection and map converters below read each
@@ -1037,7 +1037,7 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K: comparison>() =
     // int/decimal/float (causing STJ to reject the quoted form) and did NOT
     // quote TimeOnly (causing STJ to see a number instead of a string). The
     // current list aligns the read-side quoting with each type's actual
-    // wire form. See Phase 10 in BYTE-COMPAT-MAP / INVESTIGATE-GAPS for the
+    // wire form.
     // root cause analysis.
     let isNonStringPrimitive (t: Type) =
         t = typeof<DateTimeOffset>
@@ -1143,14 +1143,14 @@ type FSharpMapNonStringKeyConverterFactory() =
 //
 // Wire: JSON string. Int64 has a leading '+' sign for non-negative; UInt64 does not.
 //
-// Phase 937 — the read accepts exactly the two forms `JsonDecode.asInt64` /
+// The read accepts exactly the two forms `JsonDecode.asInt64` /
 // `asUInt64` accept: a JSON number or the writer's string. The Fable/Long.js
 // runtime object `{"high","low","unsigned"}` — which these converters used to
 // rebuild from `high` and `low`, ignoring `unsigned` — is refused, as is any
 // other token, naming the type and both accepted forms. No SDK writer emits
-// the object form (Phase 911), and v0.23.0 refused it.
+// the object form, and v0.23.0 refused it.
 
-/// Phase 937 — the refusal both wide-integer converters raise, in the words
+/// The refusal both wide-integer converters raise, in the words
 /// the JSON algebra's `asInt64` / `asUInt64` use. A `JsonException` so the
 /// argument seam (`refusalOf`) carries STJ's path to the offending member.
 module private WideIntegerRefusal =
@@ -1602,7 +1602,34 @@ module FableConverters =
         addTo opts
         opts
 
-    /// Phase 783 — map a `JsonException` raised anywhere inside
+    /// Splits an STJ path on the `.` that separates members. A `.` inside a
+    /// quoted bracket (`['a.b']`) belongs to the name it is in, so a key STJ
+    /// brackets for its dot stays inside one segment. A path rooted at an index
+    /// (`$[1].Count`) keeps the index as its first segment.
+    let private pathSegments (path: string) : string list =
+        let segments = ResizeArray<string>()
+        let current = System.Text.StringBuilder()
+        let mutable quoted = false
+
+        path
+        |> Seq.iteri (fun i c ->
+            let next = if i + 1 < path.Length then path[i + 1] else '\000'
+
+            if quoted && c = '\'' && next = ']' then
+                quoted <- false
+            elif not quoted && c = '[' && next = '\'' then
+                quoted <- true
+
+            if c = '.' && not quoted then
+                segments.Add(current.ToString())
+                current.Clear() |> ignore
+            else
+                current.Append c |> ignore)
+
+        segments.Add(current.ToString())
+        List.ofSeq segments
+
+    /// Map a `JsonException` raised anywhere inside
     /// System.Text.Json (its own reader, or one of the converters above)
     /// onto the closed refusal vocabulary.
     ///
@@ -1623,24 +1650,21 @@ module FableConverters =
         match ex.Path with
         | null -> []
         | p ->
-            // Phase 964 — a path rooted at an index (`$[1].Count`) keeps the
-            // index as its first segment (`[1]`), as the algebra writes one.
-            p.Split('.')
-            |> Array.map (fun segment ->
+            pathSegments p
+            |> List.map (fun segment ->
                 if segment.StartsWith "$" then
                     segment.Substring 1
                 else
                     segment)
-            |> Array.filter (fun segment -> segment <> "")
-            |> Array.toList
+            |> List.filter (fun segment -> segment <> "")
 
-    /// Phase 783 — THE decode seam. Deserialise one `JsonElement` into
+    /// THE decode seam. Deserialise one `JsonElement` into
     /// `targetType`, returning a named refusal instead of throwing.
     ///
     /// This is the boundary move the phase is about, and it is
     /// deliberately the ONLY thing that moved on this wire: the converter
     /// set above still refuses internally by throwing, and rewriting
-    /// those interiors is [Phase 785]'s work. Catching here rather than
+    /// those interiors is separate work. Catching here rather than
     /// per-converter is what makes the guarantee total — a converter
     /// added later, or an exception raised by System.Text.Json's own
     /// reader before any converter is consulted, is covered by
@@ -1661,7 +1685,7 @@ module FableConverters =
         Found = sprintf "%s (%s)" (string element.ValueKind) ex.Message
     }
 
-    /// Phase 799 — the algebra arm of the seam. A type with a registered
+    /// The algebra arm of the seam. A type with a registered
     /// JSON decoder (`JsonDecoders`) decodes through it: the element is
     /// built into the closed value model in one bounded pass and the
     /// decoder — total, pure, reflection-free — accepts the declared
@@ -1669,7 +1693,7 @@ module FableConverters =
     /// path below, exactly as before; nothing about a type the algebra
     /// has not been asked about changes.
     ///
-    /// Phase 839 — `recordName` narrows the registry lookup to a
+    /// `recordName` narrows the registry lookup to a
     /// decoder scoped to that API record, falling back to an unscoped
     /// registration (`JsonDecoders.tryGet`). `None` here is exactly the
     /// pre-839 lookup.
@@ -1682,7 +1706,7 @@ module FableConverters =
         | None -> None
         | Some decoder -> Some(ToolUp.Remoting.Json.JsonRead.tryRead element |> Result.bind decoder)
 
-    /// Phase 839 — the erased seam, scoped to the API record
+    /// The erased seam, scoped to the API record
     /// `recordName` names. `None` is a caller with no record to name (a
     /// test, a non-dispatch path), which gets exactly the bare-type
     /// behaviour this seam always had.
@@ -1700,18 +1724,18 @@ module FableConverters =
             with ex ->
                 Error(refusalOf element targetType ex)
 
-    /// Phase 783 — the statically-typed twin of `tryDeserialiseElement`,
+    /// The statically-typed twin of `tryDeserialiseElement`,
     /// for the dispatcher's argument-parse stage where the target type is
     /// a type parameter. Same seam, same refusal mapping; the generic
     /// `Deserialize<'T>` overload is kept on the happy path so
     /// well-formed traffic is byte-identical to the pre-phase behaviour
     /// rather than routed through a boxing `unbox`.
     ///
-    /// Phase 799 — consults the JSON algebra first (see
+    /// Consults the JSON algebra first (see
     /// `tryDecodeThroughAlgebraFor`); the `unbox` on that arm is the same
     /// erased-decoder cast `RemotingDecoders` makes on the binary wire.
     ///
-    /// Phase 839 — `tryDeserialiseFor` is the record-scoped form: the
+    /// `tryDeserialiseFor` is the record-scoped form: the
     /// server's reflection dispatch proxy (`Proxy.fs`) passes
     /// `makeProps.RecordName` here for every argument it parses.
     /// `tryDeserialise` stays the bare two-argument seam the source
@@ -1753,7 +1777,7 @@ module FableConverters =
     /// touch reflection cost.
     let shared: JsonSerializerOptions = cached.Value
 
-    /// Phase 840 — the shipped converter set as the JSON wire's
+    /// The shipped converter set as the JSON wire's
     /// registration oracle (`ToolUp.Remoting.Json.JsonDecoderOracle`):
     /// `shared` writes each draw exactly as a client writes an argument,
     /// `JsonRead.tryParse` is the value-model pass the argument seam runs,
@@ -1783,9 +1807,9 @@ module FableConverters =
         ]
     }
 
-    /// Phase 840 — `JsonDecoders.verifyWith` against the shipped converter
+    /// `JsonDecoders.verifyWith` against the shipped converter
     /// set: draw `draws` values of `'T` from `seed` and refuse on the first
-    /// draw the candidate decodes differently from STJ. Phase 885 — over
+    /// draw the candidate decodes differently from STJ. It runs over
     /// BOTH writers (`JsonDecoders.verifyBothWith`): each draw written by
     /// the converter set AND by the browser's writer
     /// (`JsonDecoders.browserOracle decoderOracle`), since the text a server
@@ -1797,7 +1821,7 @@ module FableConverters =
         : Result<ToolUp.Remoting.Json.JsonDecoderVerification, DecoderRefusal> =
         ToolUp.Remoting.Json.JsonDecoders.verifyBothWith<'T> decoderOracle draws seed decoder
 
-    /// Phase 840 — register `decoder` UNSCOPED only if it agrees with the
+    /// Register `decoder` UNSCOPED only if it agrees with the
     /// shipped converter set (`JsonDecoders.registerVerifiedWith`); a
     /// refusal registers nothing and says why.
     let registerVerified<'T>
@@ -1805,7 +1829,7 @@ module FableConverters =
         : Result<ToolUp.Remoting.Json.JsonDecoderVerification, DecoderRefusal> =
         ToolUp.Remoting.Json.JsonDecoders.registerVerifiedWith<'T> decoderOracle decoder
 
-    /// Phase 840 — the record-scoped twin of `registerVerified`
+    /// The record-scoped twin of `registerVerified`
     /// (`JsonDecoders.registerVerifiedForWith`).
     let registerVerifiedFor<'T>
         (recordName: string)

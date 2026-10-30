@@ -205,6 +205,7 @@ let private registeredTests =
         IdempotencyTests.tests
         IdempotencyReplayAuditTests.tests
         IdempotencyStoreEvictionTests.tests
+        InMemoryJobDispatcherTests.tests
         AuditBodyDisposalTests.tests
         PostDispatchBodyReadTests.tests
         StreamingTests.tests

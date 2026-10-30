@@ -141,7 +141,7 @@ let rec private tree: Decoder<Tree> =
             value
 
 /// The go-red decoder: an `int` decoder that reads at 64 bits and casts
-/// down, which is exactly what `interpretIntegerAs` did before Phase
+/// down, which is exactly what `interpretIntegerAsFrom` did before Phase
 /// 786. Registered for nothing — it exists only so the differential
 /// harness can be shown to fail.
 let private silentlyWidening: Decoder<int> = Decode.asInt64 |> Decode.map int
@@ -157,7 +157,7 @@ let private entry<'T> (decoder: Decoder<'T>) : Type * (Value -> Result<obj, Deco
 ///
 /// **`DateOnly`, `TimeOnly` and the two records holding one are
 /// deliberately absent.** Phase 784 recorded that the Fable MsgPack
-/// reader refuses both types outright — its `interpretIntegerAs` carries
+/// reader refuses both types outright — its `interpretIntegerAsFrom` carries
 /// an EMPTY `#if NET6_0_OR_GREATER` block where the .NET arm handles
 /// them — so a primitive for them would decode on one host and not the
 /// other, and this file ships a cross-host algebra or it ships nothing.

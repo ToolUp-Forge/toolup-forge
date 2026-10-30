@@ -8,8 +8,8 @@ open Expecto
 // Closes Finding F4 from
 // application-plans/toolup-remoting-hot-path-perf.md.
 //
-// Pre-69n the Giraffe adapter's `fromContextAsync` arm called
-// `buildFromImplementation` per request, which rebuilt the entire
+// The Giraffe adapter's `fromContextAsync` arm used to build the table
+// per request, which rebuilt the entire
 // dispatcher substrate (TypeShape proxy + six attribute-driven
 // classifier maps + rmsManager + compose-time guards) every dispatch.
 // The async resolver runs per request as intended, but the substrate
@@ -20,9 +20,7 @@ open Expecto
 //   * `GiraffeUtil.buildDispatcherTable options` runs all the one-time
 //     setup once and returns a `(HttpContext -> 'impl) -> HttpHandler`
 //     function.
-//   * `buildFromImplementation implBuilder options` is a thin shim:
-//     `buildDispatcherTable options implBuilder`. Preserves the
-//     pre-69n signature for the `StaticValue` / `FromContext` paths.
+//   * The `StaticValue` / `FromContext` arms call it directly.
 //   * `buildHttpHandler`'s `FromContextAsync` arm calls
 //     `buildDispatcherTable` ONCE at compose time, stashes the
 //     returned `dispatch` function, and the per-request closure just
@@ -68,27 +66,6 @@ let tests =
                  the per-request substrate rebuild."
         }
 
-        test "buildFromImplementation is now a shim over buildDispatcherTable" {
-            let adapterPath =
-                Path.Combine(
-                    repoRoot (),
-                    "src",
-                    "ToolUp.Platform.Server",
-                    "Server",
-                    "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
-                )
-
-            let contents = File.ReadAllText adapterPath
-
-            Expect.stringContains
-                contents
-                "buildDispatcherTable options implBuilder"
-                "buildFromImplementation must delegate to buildDispatcherTable to preserve \
-                 the StaticValue / FromContext shape without duplicating the table-build code."
-        }
-
         test "FromContextAsync arm calls buildDispatcherTable ONCE at compose time" {
             let adapterPath =
                 Path.Combine(
@@ -116,7 +93,7 @@ let tests =
                  returns."
 
             // The per-request closure body must NOT contain another
-            // `buildDispatcherTable` or `buildFromImplementation` call.
+            // `buildDispatcherTable` call.
             // Locate the `FromContextAsync createImplementationFromAsync` arm
             // and assert the body doesn't re-trigger the rebuild.
             let asyncArmIdx =
@@ -125,15 +102,15 @@ let tests =
             Expect.isGreaterThan asyncArmIdx -1 "FromContextAsync arm must exist in buildHttpHandler"
 
             // From the arm header to the next `|` (next match arm) or end,
-            // confirm no per-request `buildFromImplementation` call hides
+            // confirm no per-request table build hides
             // inside. Look at the next 1500 chars (the arm body).
             let armScope =
                 contents.Substring(asyncArmIdx, min 1500 (contents.Length - asyncArmIdx))
 
             Expect.isFalse
-                (armScope.Contains "GiraffeUtil.buildFromImplementation (fun _ -> impl) options next ctx")
-                "FromContextAsync arm must NOT call buildFromImplementation per request — \
-                 that's the pre-69n per-request rebuild defect. The arm should call \
+                (armScope.Contains "GiraffeUtil.buildDispatcherTable options (fun _ -> impl)")
+                "FromContextAsync arm must NOT build the table per request — \
+                 that's the per-request rebuild defect. The arm should call \
                  `dispatch (fun _ -> impl) next ctx` instead."
         }
 
@@ -158,7 +135,7 @@ let tests =
                  This is the read-per-call half of build-once / read-per-call."
         }
 
-        test "StaticValue + FromContext arms continue to use buildFromImplementation shim" {
+        test "StaticValue + FromContext arms build the dispatcher table directly" {
             let adapterPath =
                 Path.Combine(
                     repoRoot (),
@@ -174,13 +151,13 @@ let tests =
 
             Expect.stringContains
                 contents
-                "| StaticValue impl -> GiraffeUtil.buildFromImplementation (fun _ -> impl) options"
-                "StaticValue arm must keep its existing call shape. The shim preserves it."
+                "| StaticValue impl -> GiraffeUtil.buildDispatcherTable options (fun _ -> impl)"
+                "StaticValue arm builds the table once at compose time."
 
             Expect.stringContains
                 contents
-                "| FromContext createImplementationFrom -> GiraffeUtil.buildFromImplementation createImplementationFrom options"
-                "FromContext arm must keep its existing call shape."
+                "| FromContext createImplementationFrom -> GiraffeUtil.buildDispatcherTable options createImplementationFrom"
+                "FromContext arm builds the table once at compose time."
         }
 
         test "fromContextAsync docstring retires the performance caveat" {

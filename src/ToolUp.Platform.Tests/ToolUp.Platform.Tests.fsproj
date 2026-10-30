@@ -750,6 +750,7 @@
         <Compile Include="InProcess\IdempotencyTests.fs" />
         <Compile Include="InProcess\IdempotencyReplayAuditTests.fs" />
         <Compile Include="InProcess\IdempotencyStoreEvictionTests.fs" />
+        <Compile Include="InProcess\InMemoryJobDispatcherTests.fs" />
         <Compile Include="InProcess\AuditBodyDisposalTests.fs" />
         <Compile Include="InProcess\PostDispatchBodyReadTests.fs" />
         <Compile Include="InProcess\StreamingTests.fs" />

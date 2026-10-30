@@ -170,6 +170,7 @@ let tests =
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
+                            "src/Server/RemotingLeftovers.fs"
                             "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
                         ]
@@ -245,7 +246,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 13 file(s) visited, 69 rewrite(s) in 11 file(s), 34 site(s) for review."
+                        "Codemod: 14 file(s) visited, 69 rewrite(s) in 11 file(s), 41 site(s) for review."
                         "summary")
         ]
 

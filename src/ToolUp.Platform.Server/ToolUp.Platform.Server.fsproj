@@ -4,10 +4,10 @@
         <TargetFramework>net10.0</TargetFramework>
         <Description>ToolUp.Platform Server — Giraffe-over-ASP.NET Core implementation surface: scope resolution, DI, default in-process implementations, ServerApp composition root, middleware. Depends on ToolUp.Platform.Core.</Description>
         <PackageTags>fsharp;sdk;server;giraffe;asp-net-core</PackageTags>
-        <!-- Phase 11.C.4 (2026-05-10): Server-tier source-layout symmetry
+        <!-- Server-tier source-layout symmetry
              pass — Server/, Auth/ source moved into this project's own
-             directory tree (was ../ToolUp.Platform/{Server,Auth}/ during
-             Phase 11.B + 11.C.2). Source paths below are now relative to
+             directory tree (was../ToolUp.Platform/{Server,Auth}/ during
+). Source paths below are now relative to
              the fsproj, matching the per-tier convention established by
              the Client-tier closure. -->
     </PropertyGroup>
@@ -15,19 +15,19 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <!-- Parent companion README packed into each tier's nupkg. -->
         <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
-        <!-- Phase 68 — the in-memory IGraphStore default (transitively pulls
+        <!-- The in-memory IGraphStore default (transitively pulls
              ToolUp.Graph.Core, which carries the IGraphStore contract). The
              GP-2 zero-dependency graph substrate; registered lazily by
              ComposeStores.registerGraphStore. -->
         <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Phase 11.B follow-up Tests fsproj migration (2026-05-08): the
+        <!-- The
              Tests project moved from <Compile Link> source-injection of SDK
              files to <ProjectReference> + DLL consumption. Two SDK helpers
              are still tested directly via internal access (the duplicate-
@@ -36,13 +36,13 @@
              preserves that surface for tests without exposing it on the
              public API. -->
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
-        <!-- Phase 1015: the data-source pack builds the platform's
+        <!-- The data-source pack builds the platform's
              DeclaredPrincipalResolver over a real team resolver, as the
-             Platform pack does for Phase 1005; its constructor is internal. -->
+             Platform pack does for; its constructor is internal. -->
         <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Phase 880 — what only a server can run, moved out of
+        <!-- What only a server can run, moved out of
              ToolUp.Platform.Core, where each file shipped to every Fable
              consumer behind a `#if !FABLE_COMPILER` guard. Namespaces and
              module paths are preserved: JwtCrypto and ConfigResolution moved
@@ -50,7 +50,7 @@
              Fable-safe half staying in Core and this tier declaring a module
              of the same name beside it, which F# resolves as one. First in
              the compile order, so every server file sees them. -->
-        <!-- Phase 128 — the one BCL HttpClient adapter for the portable
+        <!-- The one BCL HttpClient adapter for the portable
              ToolUp.Platform.Transport seam (moved here from ToolUp.AI.Server):
              this is the lowest .NET-only assembly that both the AI providers
              and the data-source connectors reference. No deps on other
@@ -58,7 +58,7 @@
         <Compile Include="Server\HttpClientTransport.fs" />
         <Compile Include="Server\JwtCrypto.fs" />
         <Compile Include="Server\Config\ConfigResolution.fs" />
-        <!-- Phase 1000 — the listen-address resolution and its preflight.
+        <!-- The listen-address resolution and its preflight.
              Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
              validates through it; ComposeBootstrap.fs applies the plan. -->
         <Compile Include="Server\ServerBinding.fs" />
@@ -67,9 +67,9 @@
         <Compile Include="Server\BlobStorageSignedUrl.fs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Phase 902 — the MessagePack reflection engine and the decoder
+        <!-- The MessagePack reflection engine and the decoder
              gates, moved out of ToolUp.Platform.Core with the same rule as
-             Phase 880: Fable never compiled them. TypeShape.fs and
+             Fable never compiled them. TypeShape.fs and
              TypeShapeUtils.fs moved whole (`module internal`, as before);
              `ToolUp.Remoting.MsgPack.Write` is split, the Fable writer
              staying in Core and the .NET writer declared here in a module
@@ -100,13 +100,14 @@
              Server/Proxy.fs) come in via ProjectReference to
              ToolUp.Platform.Core which carries the folded MsgPack
              source. -->
-        <!-- Phase 799 — the JsonElement-to-JsonValue pass, ahead of the
+        <!-- The JsonElement-to-JsonValue pass, ahead of the
              converter set whose decode seam consults the JSON algebra. -->
         <Compile Include="Server\Remoting\Json\JsonRead.fs" />
         <Compile Include="Server\Remoting\Json\SystemTextJsonConverter.fs" />
         <Compile Include="Server\Remoting\Types.fs" />
         <Compile Include="Server\Remoting\CallContext.fs" />
         <Compile Include="Server\Remoting\Auth.fs" />
+        <Compile Include="Server\Remoting\BoundedFifo.fs" />
         <Compile Include="Server\Remoting\RateLimit.fs" />
         <Compile Include="Server\Remoting\Audit.fs" />
         <Compile Include="Server\Remoting\Idempotency.fs" />
@@ -115,7 +116,7 @@
         <Compile Include="Server\Remoting\Streaming.fs" />
         <Compile Include="Server\Remoting\LongRunning.fs" />
         <Compile Include="Server\Remoting\SourceGenDispatch.fs" />
-        <!-- Phase 69j — the `X-Remoting-Schema` negotiation half: the
+        <!-- The `X-Remoting-Schema` negotiation half: the
              [<SupportsSchema>] / [<DeprecatedSchema>] attributes, the
              per-method version table and the pure routing decision both
              adapters read. After Types.fs (its only dependency) and before
@@ -129,22 +130,19 @@
         <Compile Include="Server\Remoting\Proxy.fs" />
         <Compile Include="Server\Remoting\DocsApp.fs" />
         <Compile Include="Server\Remoting\Remoting.fs" />
-        <Compile Include="Server\Remoting\Reader.fs" />
-        <Compile Include="Server\Remoting\ThreadSafeCell.fs" />
-        <Compile Include="Server\Remoting\Giraffe\SharedReader.fs" />
         <Compile Include="Server\Remoting\Giraffe\GiraffeAdapter.fs" />
         <Compile Include="Server\Remoting\AspNetCore\Middleware.fs" />
         <Compile Include="Server\Rag\IEmbeddingProvider.fs" />
         <Compile Include="Server\IEmbeddingCache.fs" />
         <Compile Include="Server\Rag\IVectorStore.fs" />
         <Compile Include="Server\ISparseIndex.fs" />
-        <!-- Phase 115 — unified index-lifecycle seam: delete/erase fan-out
+        <!-- Unified index-lifecycle seam: delete/erase fan-out
              across IVectorStore + ISparseIndex + IEmbeddingCache with
              per-target failure isolation, so producers (KB) cannot reach
              one index and miss another. -->
         <Compile Include="Server\IIndexLifecycle.fs" />
         <Compile Include="Server\IReranker.fs" />
-        <!-- Phase 506 - conversation-aware query-rewrite seam. Beside the
+        <!-- Conversation-aware query-rewrite seam. Beside the
              other retrieval-stage seams; no dependency on them, so its
              position here is by family, not by ordering constraint. -->
         <Compile Include="Server\IQueryRewriter.fs" />
@@ -158,25 +156,25 @@
         <Compile Include="Server\IMetricsSink.fs" />
         <Compile Include="Server\PrometheusMetricsSink.fs" />
         <Compile Include="Server\IActivitySink.fs" />
-        <!-- Phase 472 — the CDN / edge-cache invalidation seam
+        <!-- The CDN / edge-cache invalidation seam
              (purge-only; the CDN caches, the SDK invalidates) + the
              declared no-op + the `Cache-Control` declaration helper.
              Depends only on Core (`ILogger`), so it sits with the other
              interface-only seams ahead of any implementation. -->
         <Compile Include="Server\IEdgeCache.fs" />
-        <!-- Phase 9w - Datadog readback metric declarations. Ahead of
+        <!-- Datadog readback metric declarations. Ahead of
              MetricsMiddleware.fs so StandardMetrics.registrations can splice them. -->
         <Compile Include="Server\DatadogReadbackMetrics.fs" />
         <Compile Include="Server\Logger.fs" />
         <Compile Include="Server\LoggerScope.fs" />
-        <!-- Phase 696 — the deployment configuration manifest loader:
+        <!-- The deployment configuration manifest loader:
              discovery, strict JSON parse, unknown/secret-key refusals,
              SHA-256 over the raw bytes, and installation into Core's
              `ConfigResolution` seam. Server-side because Core ships its
              source for Fable consumers and cannot carry System.IO. Before
              ConsoleLogger.fs, which installs the manifest before building
              the logger — the log level is itself a bindable key. -->
-        <!-- Phase 700 — the configuration-profile registry + selector.
+        <!-- The configuration-profile registry + selector.
              Before ConfigResolver.fs, which selects the profile in the
              same pass that installs the manifest. Depends only on Core
              (the built-in bundles are registry data, the rung is the
@@ -190,16 +188,16 @@
         <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
         <Compile Include="Server\SseTraceContributor.fs" />
         <Compile Include="Server\Notifications\NotificationChannel.fs" />
-        <!-- Phase 241 — in-memory presence channel (single-instance default). -->
+        <!-- In-memory presence channel (single-instance default). -->
         <Compile Include="Server\Notifications\PresenceChannel.fs" />
-        <!-- Phase 442 — presence tracker + advisory soft-lock store
+        <!-- Presence tracker + advisory soft-lock store
              (interfaces + single-instance in-memory defaults). Publish
              join/move/leave + lock taken/released/expired events on the
-             reserved `_platform.*` keys via INotificationChannel (Phase 6a);
+             reserved `_platform.*` keys via INotificationChannel;
              no new transport. -->
         <Compile Include="Server\IPresenceTracker.fs" />
         <Compile Include="Server\IEntityLockStore.fs" />
-        <!-- Phase 535 — CRDT co-editing substrate: the append-only opaque
+        <!-- CRDT co-editing substrate: the append-only opaque
              update log (seam) plus the single-instance in-memory default
              and the INotificationChannel fan-out decorator. After
              IEntityLockStore.fs (the awareness floor it sits above) and
@@ -207,14 +205,14 @@
              library server-side — payloads are opaque bytes. -->
         <Compile Include="Server\ICrdtDocumentStore.fs" />
         <Compile Include="Server\InMemoryCrdtDocumentStore.fs" />
-        <!-- Phase 756 — the durable arm of the same seam: an IBlobStorage-backed
+        <!-- The durable arm of the same seam: an IBlobStorage-backed
              append log + snapshot fold, so a co-edited document survives a
              restart. After InMemoryCrdtDocumentStore.fs because it reuses the
              NotifyingCrdtDocumentStore relay declared there rather than
              re-implementing fan-out. Still no CRDT library server-side. -->
         <Compile Include="Server\BlobCrdtDocumentStore.fs" />
         <Compile Include="Server\INotificationSink.fs" />
-        <!-- Phase 6f.A - the external address book seam. Only the
+        <!-- The external address book seam. Only the
              INTERFACE sits here: it needs nothing but the Core types, and
              NotificationAddressBook.fs below takes it as an optional
              constructor argument to resolve the External recipient arm.
@@ -223,36 +221,36 @@
         <Compile Include="Server\IExternalContactStore.fs" />
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />
-        <!-- Phase 827 - the WhatsApp template registry seam + its blob-backed
+        <!-- The WhatsApp template registry seam + its blob-backed
              and no-op defaults. Needs only Core types and IBlobStorage;
              before WhatsAppSendPolicyFilter.fs, which consults it. -->
         <Compile Include="Server\IWhatsAppTemplateRegistry.fs" />
         <Compile Include="Server\WhatsAppTemplateRegistry.fs" />
-        <!-- Phase 869 - fire-and-forget starts that catch, log and are drained
-             at stop, and (Phase 1006 / 1024 / 1026) the observed start of a
+        <!-- Fire-and-forget starts that catch, log and are drained
+             at stop, and the observed start of a
              fire-and-forget write with its warning. Depends only on Core
              (ILogger, ProviderExceptions) and ASP.NET Core's HttpContext; before
-             its first user (Phase 1026: the SSE mismatch audit below). -->
+             its first user (the SSE mismatch audit below). -->
         <Compile Include="Server\Background.fs" />
-        <!-- Phase 117 — shared SSE scope resolution. One resolution path
+        <!-- Shared SSE scope resolution. One resolution path
              (principal-wins + SseAuthMode-gated fallback + mismatch audit)
              consumed by both NotificationHandler below and
              ToolUp.AI.Server's SSEHandler so the two cannot drift. -->
         <Compile Include="Server\Notifications\SseScopeResolution.fs" />
         <Compile Include="Server\Notifications\NotificationHandler.fs" />
-        <!-- Phase 112 — scope-isolated server-driven live-session host:
+        <!-- Scope-isolated server-driven live-session host:
              ILiveChannel / ILiveSessionHost (six-rule, GP 4 structural
              scope partition) + the in-process default. After the SSE
              substrate it rides; the compose hook + endpoint live in
              Server\Compose\LiveSessionsCompose.fs (after ServerApp). -->
         <Compile Include="Server\Notifications\LiveSessionHost.fs" />
-        <!-- Phase 271 — neutral tree-patch transport envelope: TreePatchEnvelope
+        <!-- Neutral tree-patch transport envelope: TreePatchEnvelope
              (monotonic seq / diff-base) + ITreePatchChannel (push / ack /
-             resync-on-gap) layered over the Phase 112 ILiveChannel. Opaque
+             resync-on-gap) layered over the ILiveChannel. Opaque
              payload (GP 1), scope isolation inherited from the wrapped channel
              (GP 4), six-rule (GP 12). After LiveSessionHost.fs it wraps. -->
         <Compile Include="Server\Notifications\TreePatchChannel.fs" />
-        <!-- Phase 11.C.5 Tier 3 — server-tier `RequestContext.ofHttpContext`
+        <!-- Server-tier `RequestContext.ofHttpContext`
              constructor for the Core-tier `RequestContext` newtype. Must
              precede every `IAuthProvider` impl so they can compile against
              the shared boxing path. -->
@@ -260,12 +258,12 @@
         <Compile Include="Auth\IdentitySanitiser.fs" />
         <Compile Include="Auth\HeaderAuthProvider.fs" />
         <Compile Include="Auth\StaticJwtAuthProvider.fs" />
-        <!-- Phase 11.G — `AuthProvider.fromEnv` (env-var-driven dispatch). -->
+        <!-- `AuthProvider.fromEnv` (env-var-driven dispatch). -->
         <Compile Include="Auth\AuthProviderFromEnv.fs" />
         <Compile Include="Server\Infra\LocalFileStorage.fs" />
-        <!-- Phase 161 — dev/test in-memory ITimeSeriesStore default. -->
+        <!-- Dev/test in-memory ITimeSeriesStore default. -->
         <Compile Include="Server\Infra\InMemoryTimeSeriesStore.fs" />
-        <!-- Phase 828 - the self-hosted log store: the SQLite default (and
+        <!-- The self-hosted log store: the SQLite default (and
              its retention sweep), the inert null object, and the ILogger
              decorator that feeds the store. After Server/LoggerScope.fs (the
              correlation context the decorator reads) and before
@@ -273,11 +271,11 @@
         <Compile Include="Server\Infra\SqliteLogStore.fs" />
         <Compile Include="Server\Infra\NoOpLogStore.fs" />
         <Compile Include="Server\LogStoreLogger.fs" />
-        <!-- Phase 11.G — `BlobStorage.fromEnv` (env-var-driven dispatch).
+        <!-- `BlobStorage.fromEnv` (env-var-driven dispatch).
              Module name is `BlobStorageEnv` because `BlobStorage` is
              reserved in Core for the interface module. -->
         <Compile Include="Server\Infra\BlobStorageFromEnv.fs" />
-        <!-- Phase 671 — `EmbeddingProviderEnv.fromEnv` (env-var-driven
+        <!-- `EmbeddingProviderEnv.fromEnv` (env-var-driven
              embedding-provider selection). Module name is
              `EmbeddingProviderEnv` because `IEmbeddingProvider` is
              reserved for the interface module compiled above. -->
@@ -289,7 +287,7 @@
         <!-- SidecarStore: records over IDataObjectStore with declared,
              indexed sidecar keys. -->
         <Compile Include="Server\SidecarStore.fs" />
-        <!-- Phase 482 — privacy-provenance label persistence (JSON sidecar +
+        <!-- Privacy-provenance label persistence (JSON sidecar +
              metadata carriage). Compiled before BlobDatasetStore, which reads
              and preserves the label sidecar. -->
         <Compile Include="Server\DataProvenanceLabels.fs" />
@@ -297,17 +295,17 @@
         <Compile Include="Server\BlobDatasetStore.fs" />
         <Compile Include="Server\IColumnMappingStore.fs" />
         <Compile Include="Server\ColumnMappingStore.fs" />
-        <!-- Phase 173 — per-file RAG ingestion-status store (seam +
+        <!-- Per-file RAG ingestion-status store (seam +
              IDataObjectStore-backed + in-memory default). Platform-tier so
              FileManagement can join status onto the file-list read; RAG owns
              the writes. -->
         <Compile Include="Server\IngestionStatusStore.fs" />
-        <!-- Phase 218 — mapping dry-run validation seam + default BCL-only
+        <!-- Mapping dry-run validation seam + default BCL-only
              validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
         <Compile Include="Server\IMappingDryRunValidator.fs" />
         <Compile Include="Server\MappingDryRunValidator.fs" />
         <Compile Include="Server\IEntityStore.fs" />
-        <!-- Phase 599 — write-ahead-intent outbox coupling entity saves to
+        <!-- Write-ahead-intent outbox coupling entity saves to
              event publication; after the store surface it wraps, before the
              relay service that drains it. -->
         <Compile Include="Server\EntityOutbox.fs" />
@@ -315,24 +313,24 @@
 
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
-        <!-- Phase 6f.A - the SDK-default IExternalContactStore, over
+        <!-- The SDK-default IExternalContactStore, over
              IEntityStore for the versioning, the dedupe indexes and the
              per-scope container. After EntityStore.fs; before
              ComposeStores.fs registers it. -->
         <Compile Include="Server\ExternalContactStore.fs" />
-        <!-- Phase 7b — user-authored schema store (substrate slice): the
+        <!-- User-authored schema store (substrate slice): the
              IUserSchemaStore seam + blob-backed default over IDataObjectStore
              (versioned schema definitions + typed migration execution).
-             After EntityStore.fs (rides the same Phase 7 versioned object
+             After EntityStore.fs (rides the same versioned object
              store); before ComposeStores.fs registers it. -->
         <Compile Include="Server\IUserSchemaStore.fs" />
         <Compile Include="Server\BlobUserSchemaStore.fs" />
-        <!-- Phase 26 — Tenant entity registration. Sits behind IEntityStore;
+        <!-- Tenant entity registration. Sits behind IEntityStore;
              consumed by EntityStoreTenantFleet (the ITenantFleet single-node
              default) and by the Compose pipeline (registers via
              ServerApp.withEntity<Tenant>). -->
         <Compile Include="Server\TenantEntity.fs" />
-        <!-- Phase 26 — four deploy-plane substrate interfaces. Server-only
+        <!-- Four deploy-plane substrate interfaces. Server-only
              (IContainerScheduler.StreamLogs returns IAsyncEnumerable which
              Fable cannot transpile). Supporting types are in Core's
              Shared/Types/DeployPlaneTypes.fs so a Fable admin UI can
@@ -341,20 +339,20 @@
         <Compile Include="Server\ITenantFleet.fs" />
         <Compile Include="Server\IDeployPipeline.fs" />
         <Compile Include="Server\IContainerScheduler.fs" />
-        <!-- Phase 185 — the deploy-plane dry-run: the default read-only
+        <!-- The deploy-plane dry-run: the default read-only
              plan/diff helper plus the `PlanDeploy` extension member every
              IDeployPipeline gets for free. Must follow IContainerScheduler
              (it reads observed state through it) and IDeployPipeline (it
              extends it). -->
         <Compile Include="Server\DeployPlanner.fs" />
-        <!-- Phase 318 — external-compute broker seam + its no-op default.
+        <!-- External-compute broker seam + its no-op default.
              Distinct from IContainerScheduler (which launches and owns a
              container's lifecycle): this hands work to a backend that owns
              its own execution and returns an opaque handle to poll. Value
              types live in Core's Shared/ExternalCompute.fs. -->
         <Compile Include="Server\IExternalComputeDispatcher.fs" />
-        <!-- Phase 484 — multi-backend compute fleet. The registry declares
-             what each backend serves (profiles DERIVED from the Phase 478
+        <!-- Multi-backend compute fleet. The registry declares
+             what each backend serves (profiles DERIVED from the
              posture, never separately claimed) and the routing decision is
              a pure function over it; the dispatcher applies it and feeds
              per-backend health / metrics / a /dev/inspect row. Entirely
@@ -363,8 +361,8 @@
              (GP 13). -->
         <Compile Include="Server\IComputeBackendRegistry.fs" />
         <Compile Include="Server\RoutingComputeDispatcher.fs" />
-        <!-- Phase 485 — compute-result memoization decorator. Wraps ANY
-             dispatcher (including the router above and Phase 451's budget
+        <!-- Compute-result memoization decorator. Wraps ANY
+             dispatcher (including the router above and budget
              decorator) and returns the cached terminal outcome of an
              identical idempotent spec instead of re-dispatching it;
              concurrent duplicates coalesce onto one submit. Opt-in by
@@ -372,16 +370,16 @@
              memoizable, and a deployment that never constructs the
              decorator is unchanged (GP 13). -->
         <Compile Include="Server\MemoizedComputeDispatcher.fs" />
-        <!-- Phase 451 — compute-budget governance. The store seam + its
+        <!-- Compute-budget governance. The store seam + its
              blob-backed default, then the shared admit/settle guard and the
              IExternalComputeDispatcher decorator built on it. Before
              ModelFitJobHandler.fs, because the fit-enqueue path is the
              SECOND enforcement point and calls the same guard — a federated
              peer's fit submission reaches only that one, never Submit. -->
-        <!-- Phase 689 — the platform budget seam's storage half: the
+        <!-- The platform budget seam's storage half: the
              IBudgetLedger seam + its blob layout, then the blob-backed and
              in-process ledgers and the once-per-period warning latch.
-             BEFORE the Phase 451 files, whose store is re-expressed as a
+             BEFORE the files, whose store is re-expressed as a
              budget blob plus a ledger and whose guard warns through the
              latch. Server-tier because a ledger needs a backend and the
              JSON codec is System.Text.Json. -->
@@ -390,42 +388,42 @@
         <Compile Include="Server\IComputeBudgetStore.fs" />
         <Compile Include="Server\ComputeBudgetStore.fs" />
         <Compile Include="Server\BudgetedComputeDispatcher.fs" />
-        <!-- Phase 320 — external-handle store: routing (handle to job
+        <!-- External-handle store: routing (handle to job
              run), authentication (the callback secret's hash) and the
              atomic MarkTerminal gate that makes callback-vs-poll
              exactly-once. Also the IExternalCompletionSink seam the
              callback ingress drives a run through, so it compiles before
              JobScheduler.fs (which implements it). -->
         <Compile Include="Server\IExternalHandleStore.fs" />
-        <!-- Phase 486 — per-worker signing keys behind the completion
+        <!-- Per-worker signing keys behind the completion
              callback: worker identity to public key, with an approval flow
              and sticky revocation. Before SignedOutcomeVerifier.fs (which
              resolves keys through it) and before ExternalComputeCallback.fs
              (which verifies with it). -->
         <Compile Include="Server\WorkerKeyRegistry.fs" />
-        <!-- Phase 486 — the signed-outcome gates: policy, envelope
+        <!-- The signed-outcome gates: policy, envelope
              verification (BCL es256; ed25519 behind the
              WorkerSignatureVerifier seam), and the typed rejection the
              callback ingress audits. -->
         <Compile Include="Server\SignedOutcomeVerifier.fs" />
-        <!-- Phase 26 — single-node default impl of ITenantFleet over
+        <!-- Single-node default impl of ITenantFleet over
              IEntityStore + IContainerScheduler + IDeployPipeline.
              Per-tenant SemaphoreSlim for serialised state mutations;
              (Region, Slug) compound index for O(1) slug uniqueness. -->
         <Compile Include="Server\EntityStoreTenantFleet.fs" />
         <Compile Include="Server\IDataCatalog.fs" />
-        <!-- Phase 30d — deterministic seeded generator for synthetic
+        <!-- Deterministic seeded generator for synthetic
              samples; powers IDataCatalog.GetSyntheticSample under the
              ModulePermission.SchemaOnly partner-sandbox role. -->
         <Compile Include="Server\SyntheticSampleGenerator.fs" />
         <Compile Include="Server\DataCatalog.fs" />
-        <!-- Phase 30d — canonical real-data-read guard for handlers.
+        <!-- Canonical real-data-read guard for handlers.
              Refuses SchemaOnly-only callers + emits
              SchemaOnlyAccessAttempted audit. Compiled after AuditLog
              so it can reference IAuditLog as the audit sink. -->
         <Compile Include="Server\SchemaOnlyGuard.fs" />
         <Compile Include="Server\IResultStore.fs" />
-        <!-- Phase 447 — declarative seed / fixture-data pack contract
+        <!-- Declarative seed / fixture-data pack contract
              (ISeedPack + SeedContext + SeedReport). Sits after the store
              interfaces it hands to a pack (IEntityStore / IDataObjectStore /
              IBlobStorage) and before ServerApp.fs (which accumulates packs). -->
@@ -433,17 +431,17 @@
         <Compile Include="Server\ILineageStore.fs" />
         <Compile Include="Server\ResultStore.fs" />
         <Compile Include="Server\LineageStore.fs" />
-        <!-- Phase 524 — read-only provenance chain traversal (grounding ledger v0). -->
+        <!-- Read-only provenance chain traversal (grounding ledger v0). -->
         <Compile Include="Server\IProvenanceGraph.fs" />
         <Compile Include="Server\ProvenanceGraph.fs" />
-        <!-- Phase 648 — the walk's read-only remoting handler: projects a
+        <!-- The walk's read-only remoting handler: projects a
              chain onto the Core-tier wire mirrors, routes fact nodes through
              the shipped IFactDisclosureGate at the FactExport surface, and
              refuses an over-cap request rather than truncating it. Directly
              after ProvenanceGraph.fs (its only server-tier dependency);
              consumer-wired, so nothing below composes it. -->
         <Compile Include="Server\ProvenanceApiHandler.fs" />
-        <!-- Phase 9i — SDK-wide cross-instance lease primitive
+        <!-- SDK-wide cross-instance lease primitive
              (IDistributedLock + Lease + the in-process default). Sits
              before every consumer: the job scheduler's per-JobId dispatch
              mutex, the blob-backed Platform-Admin store's read-modify-write
@@ -456,21 +454,21 @@
         <!-- RunJob: a platform job as a name, a parse and a run; the one
              handler shape and the one job-payload codec. -->
         <Compile Include="Server\RunJob.fs" />
-        <!-- Phase 935 — the platform-owned scope carrier. Before
+        <!-- The platform-owned scope carrier. Before
              IJobScheduler.fs, whose carried job scope redeems through it. -->
         <Compile Include="Server\CarriedScopeToken.fs" />
         <Compile Include="Server\IJobScheduler.fs" />
-        <!-- Phase 321 — the job-progress-checkpoint seam + its fan-out
+        <!-- The job-progress-checkpoint seam + its fan-out
              default, plus the ctx.Progress JobContext extension. Before
              JobScheduler.fs (which constructs the sink and pushes the
              ambient reporter around each handler dispatch) and after
              IJobHandler.fs, so a handler file can see ctx.Progress. Needs
              only INotificationChannel / IEventStore / ILogger from Core. -->
         <Compile Include="Server\IJobProgressSink.fs" />
-        <!-- Phase 437 — resource-envelope seam adapters: the concurrency
+        <!-- Resource-envelope seam adapters: the concurrency
              gate that decorates a budgeted component's IJobHandler, the
              RouteLimit projection that folds a component's declared
-             requests-per-minute into the Phase 56 middleware's own policy
+             requests-per-minute into the middleware's own policy
              list, and the typed queue-depth admission. Reads the Core
              EnvelopeSignature; adds no hosted service and no dependency.
              After IJobHandler/IJobScheduler (decorates the handler) and
@@ -478,37 +476,37 @@
              which applies the gate where a module's ComponentId is in
              scope. -->
         <Compile Include="Server\ResourceEnvelopeEnforcement.fs" />
-        <!-- Phase 7b — schema-migration IJobHandler binding: long-running
+        <!-- Schema-migration IJobHandler binding: long-running
              MigrationPlan executions run through IJobScheduler and survive
              restarts. After IJobHandler/IJobScheduler + IUserSchemaStore. -->
         <Compile Include="Server\SchemaMigrationJobHandler.fs" />
-        <!-- Phase 449 — model-fit envelope: core types, provider seam +
+        <!-- Model-fit envelope: core types, provider seam +
              registry, then the fit-run job handler (needs IJobHandler above +
              IAuditLog from Core). Composed by ComposeJobs.registerModelFitting. -->
         <Compile Include="Server\ModelFitTypes.fs" />
-        <!-- Phase 482 — dataset declassification (needs DatasetVersionRef from
+        <!-- Dataset declassification (needs DatasetVersionRef from
              ModelFitTypes + IDatasetStore + IAuditLog). The only label-removal
              path: an explicit, audited admin act producing a new unlabelled
              version. -->
         <Compile Include="Server\DatasetProvenanceOps.fs" />
         <Compile Include="Server\IModelFitProvider.fs" />
         <Compile Include="Server\ModelFitJobHandler.fs" />
-        <!-- Phase 450 — the EXTERNAL execution binding of the Phase 449 fit
+        <!-- The EXTERNAL execution binding of the fit
              envelope: the versioned `modelfit/v1` work-spec convention, the
-             completion rendezvous a Phase 320 callback resolves, and the
+             completion rendezvous a callback resolves, and the
              IModelFitProvider that submits through IExternalComputeDispatcher.
              Compiles after IModelFitProvider.fs (the seam it implements) and
              needs IDatasetStore + IExternalComputeDispatcher +
              IExternalHandleStore + IJobProgressSink, all above. Nothing
              composes it — a deployment wires the worker itself (GP 13). -->
         <Compile Include="Server\ExternalModelFitProvider.fs" />
-        <!-- Phase 453 — model registry: governed-artifact types, the seam,
+        <!-- Model registry: governed-artifact types, the seam,
              then the blob-backed default (rides IDataObjectStore + ILineageStore
-             above; carries the Phase 449 fit envelope's composite key). -->
+             above; carries the fit envelope's composite key). -->
         <Compile Include="Server\ModelRegistryTypes.fs" />
         <Compile Include="Server\IModelRegistry.fs" />
         <Compile Include="Server\BlobModelRegistry.fs" />
-        <!-- Phase 651 — the registration observer seam: an IModelRegistry
+        <!-- The registration observer seam: an IModelRegistry
              decorator that invokes declared observers on each successful,
              NON-REPLAY registration, so "a new artifact exists" is a seam
              rather than a moment each consumer has to remember. Compiles
@@ -519,9 +517,9 @@
              it was given, so an un-composed deployment is unchanged
              (GP 11) and allocates nothing (GP 13). -->
         <Compile Include="Server\ModelRegistrationObservers.fs" />
-        <!-- Phase 644 — the author-agnostic model-transition seam: one
+        <!-- The author-agnostic model-transition seam: one
              entry point serving local UI actions, peer invocations and
-             (Phase 645) policy verdicts, so the lifecycle graph, the
+              policy verdicts, so the lifecycle graph, the
              declared-authority check and the attributed record are written
              once. Compiles AFTER IModelRegistry.fs (it wraps that seam) and
              is deliberately independent of the blob default beneath it — it
@@ -530,14 +528,14 @@
              calls `ModelTransition.invoke` keeps the pre-644 path exactly
              (GP 11) and constructs none of this (GP 13). -->
         <Compile Include="Server\ModelTransitionSeam.fs" />
-        <!-- Phase 646 — promotion-time provenance transfer. The transfer
+        <!-- Promotion-time provenance transfer. The transfer
              seam lands a final artifact, its opaque spec payload and its
              provenance attachments as ONE recorded act, signs it on
              acceptance through the neutral IPromotedArtifactSigner seam
              (ToolUp.ArtefactSigning fills it — the dependency cannot run
              the other way, GP 1), and reaches the lifecycle graph through
              ModelTransitionSeam.fs rather than restating it. The adapter
-             beside it fills Phase 524's IArtifactProvenanceSource over the
+             beside it fills IArtifactProvenanceSource over the
              registry, so the provenance walk enumerates attachments as
              chain nodes without ProvenanceGraph.fs (which compiles far
              above) depending on the registry. Nothing composes either: a
@@ -545,19 +543,19 @@
              path exactly (GP 11) and constructs none of it (GP 13). -->
         <Compile Include="Server\ModelArtifactProvenance.fs" />
         <Compile Include="Server\ModelPromotionTransfer.fs" />
-        <!-- Phase 599 — batch item execution: the `_platform.modelfit.batchitem`
+        <!-- Batch item execution: the `_platform.modelfit.batchitem`
              IJobHandler (fit envelope + batch-annotated registry registration).
-             Consumer-wired like the Phase 454 scoring handler. -->
+             Consumer-wired like the scoring handler. -->
         <Compile Include="Server\ModelFitBatchItemJobHandler.fs" />
-        <!-- Phase 454 — model scoring: the IModelScorer seam + default
-             envelope (rides IDatasetStore for the output vintage, the Phase 449
-             ArtifactRef / DatasetVersionRef, and the Phase 453 ModelArtifact),
+        <!-- Model scoring: the IModelScorer seam + default
+             envelope (rides IDatasetStore for the output vintage, the
+             ArtifactRef / DatasetVersionRef, and the ModelArtifact),
              then the batch IJobHandler over IModelRegistry + IJobScheduler. -->
         <Compile Include="Server\IModelScorer.fs" />
         <Compile Include="Server\ModelScoringJobHandler.fs" />
-        <!-- Phase 728 — the opt-in model-execution compose leg (registers
+        <!-- The opt-in model-execution compose leg (registers
              IModelRegistry, and optionally the scorer / executor policy /
-             Phase 651 observers) plus the startup validator that names a
+             observers) plus the startup validator that names a
              mounted ModelExecutionApi with no registry composed. Placed
              here: it needs only the model seams above (BlobModelRegistry,
              ModelRegistrationObservers, IModelScorer) and must compile
@@ -567,26 +565,26 @@
         <Compile Include="Server\Compose\ServiceComposition.fs" />
         <Compile Include="Server\ComposeModelExecution.fs" />
         <Compile Include="Server\ModelExecutionDepsValidator.fs" />
-        <!-- Phase 452 — dataset assembly (transforms-as-data): the spec +
+        <!-- Dataset assembly (transforms-as-data): the spec +
              closed transform DU, then the executor (rides IDatasetStore for
-             output + ITimeSeriesStore for range sources; propagates Phase 482
+             output + ITimeSeriesStore for range sources; propagates
              labels). Algorithm-free plumbing; forge never computes a derived
              value outside the closed aggregate list. -->
         <Compile Include="Server\DatasetAssemblyTypes.fs" />
         <Compile Include="Server\DatasetAssemblyExecutor.fs" />
-        <!-- Phase 456 — model evaluation & champion-challenger harness: the
+        <!-- Model evaluation & champion-challenger harness: the
              evaluation types + provider-seam Evaluate extension member, then
-             the runner (rides Phase 449/453/454 + IDataObjectStore), the
+             the runner (rides + IDataObjectStore), the
              opt-in promotion gate, and the evaluation / re-vintage job
              handlers. Nothing composed by default (GP 13). -->
         <Compile Include="Server\ModelEvaluationTypes.fs" />
         <Compile Include="Server\ModelEvaluationRunner.fs" />
-        <!-- Phase 645 — declared promotion policies: tolerance predicates
+        <!-- Declared promotion policies: tolerance predicates
              over score / comparison output decide auto-promote vs queue for
              curation vs reject, and every verdict that moves an artifact is
-             executed through the Phase 644 transition seam as
+             executed through the transition seam as
              `PolicyVerdict` (no second state machine). Compiles AFTER
-             ModelEvaluationRunner.fs (it reads the Phase 456 track record as
+             ModelEvaluationRunner.fs (it reads the track record as
              one of its two metric sources) and after ModelTransitionSeam.fs
              (it drives that seam). Nothing composes it: a deployment that
              never constructs the evaluator keeps the pre-645 path exactly
@@ -594,46 +592,46 @@
         <Compile Include="Server\ModelPromotionPolicy.fs" />
         <Compile Include="Server\JobStore.fs" />
         <Compile Include="Server\CronExpression.fs" />
-        <!-- Phase 598 — persisted per-scope OnEvent trigger cursor; before the
+        <!-- Persisted per-scope OnEvent trigger cursor; before the
              scheduler (startup scan / sweep / flush) and the notify decorator
              (live advance), both of which consume it. -->
         <Compile Include="Server\JobTriggerWatermark.fs" />
         <Compile Include="Server\SchedulerPolicy.fs" />
         <Compile Include="Server\JobLifecycle.fs" />
         <Compile Include="Server\JobScheduler.fs" />
-        <!-- Phase 164 — opt-in TTL sweep for BlobIdempotencyStore. After the
+        <!-- Opt-in TTL sweep for BlobIdempotencyStore. After the
              job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;
              the shared layout stays in Remoting/Idempotency.fs. -->
         <Compile Include="Server\IdempotencySweepJob.fs" />
         <Compile Include="Server\JobSchedulerDiagnosticsContributor.fs" />
         <Compile Include="Server\JobNotifyEventStore.fs" />
-        <!-- Phase 26 — single-node default IBuildOrchestrator over IJobScheduler.
+        <!-- Single-node default IBuildOrchestrator over IJobScheduler.
              Registers handler "_platform.build" + dispatches builds via
              Schedule(Manual) + TriggerOnce; per-AppSlug SemaphoreSlim
              enforces no-cross-shard ordering at single-node scale. -->
         <Compile Include="Server\JobSchedulerBuildOrchestrator.fs" />
-        <!-- Phase 26 — single-node default IDeployPipeline. Composes
+        <!-- Single-node default IDeployPipeline. Composes
              IBuildOrchestrator + IContainerScheduler + IEventStore.
              State persisted as DeployStateChanged events under the
              _platform scope; reconstruction is scan + take latest. -->
-        <!-- Phase 656 — deploy-record digests + the verification walk an
+        <!-- Deploy-record digests + the verification walk an
              external checker runs. Server-tier because hashing needs
              System.Security.Cryptography; the canonical forms it hashes
              live in Platform.Core. -->
         <Compile Include="Server\DeployRecords.fs" />
-        <!-- Phase 659 — dependency-closure capture from the restore's own
+        <!-- Dependency-closure capture from the restore's own
              assets output: observed, never re-derived. Entries start
              honestly unattested; DependencyClosure.attest (Core) resolves
              the upstream references through IUpstreamReleaseProvider. -->
         <Compile Include="Server\RestoreClosures.fs" />
-        <!-- Phase 712 — the upstream work provenance seam: the read-only
+        <!-- The upstream work provenance seam: the read-only
              IWorkProvenanceSource, the NoWorkProvenanceSource default that
              composes nothing, the decorator that makes a source's declared
              caps binding, and the deploy-record reading that records an
              unattested deploy WITH its reason. Wire types live in
              Platform.Core; nothing below composes it. -->
         <Compile Include="Server\WorkProvenanceSource.fs" />
-        <!-- Phase 717 — the dependency SBOM as a PROJECTION of the recorded
+        <!-- The dependency SBOM as a PROJECTION of the recorded
              closure rather than a scan: SPDX 2.3 + CycloneDX 1.6 emitted
              from the build's own record, unattested entries present and
              marked, byte-identical for identical inputs, plus the opt-in
@@ -641,18 +639,18 @@
         <Compile Include="Server\SbomProjection.fs" />
         <Compile Include="Server\DefaultDeployPipeline.fs" />
         <Compile Include="Server\IDataSource.fs" />
-        <!-- Phase 487 — virtual (zero-copy) dataset bindings: read a dataset
+        <!-- Virtual (zero-copy) dataset bindings: read a dataset
              version through an IDataSource with no durable copy; ephemeral
              TTL-bounded audited spill for compute handoff. -->
         <Compile Include="Server\VirtualDatasetBinding.fs" />
         <Compile Include="Server\IOAuthCredentialFlow.fs" />
-        <!-- Phase 10g — OAuth 1.0a substrate core: RFC 5849 signer, flow
+        <!-- OAuth 1.0a substrate core: RFC 5849 signer, flow
              interface, request-token state store + in-memory default. -->
         <Compile Include="Server\OAuth1aSigner.fs" />
         <Compile Include="Server\IOAuth1aFlow.fs" />
         <Compile Include="Server\IOAuth1aStateStore.fs" />
         <Compile Include="Server\InMemoryOAuth1aStateStore.fs" />
-        <!-- Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate. -->
+        <!-- Generic OAuth 2.0 refresh-token lifecycle substrate. -->
         <Compile Include="Server\IOAuthTokenRefresher.fs" />
         <Compile Include="Server\IOAuthStateStore.fs" />
         <Compile Include="Server\OAuthStateStore.fs" />
@@ -660,27 +658,27 @@
         <Compile Include="Server\IDataIngestor.fs" />
         <Compile Include="Server\InMemoryDataSource.fs" />
         <Compile Include="Server\DataSourceConfigStore.fs" />
-        <!-- Phase 837 — native payload formats: the IPayloadReader /
+        <!-- Native payload formats: the IPayloadReader /
              IEmitsNativePayload seams (vendor readers live in companions). -->
         <Compile Include="Server\IPayloadReader.fs" />
         <Compile Include="Server\DataIngestor.fs" />
         <Compile Include="Server\DataIngestionJobHandler.fs" />
-        <!-- Phase 1042 - the delivery-completed hook: after IDataIngestor and
+        <!-- The delivery-completed hook: after IDataIngestor and
              IJobHandler (it decorates the one and wraps the other), before
              ComposeJobs (which applies both) and ServerApp (the compose surface). -->
         <Compile Include="Server\DeliveryCompleted.fs" />
         <Compile Include="Server\Infra\EnvironmentSecretStore.fs" />
-        <!-- Phase 10h — `IOAuthTokenRefresher` substrate (InProcessOAuthTokenRefresher
+        <!-- `IOAuthTokenRefresher` substrate (InProcessOAuthTokenRefresher
              uses ISecretStore + IRateLimiter; placed after the secret-store
              infra files so all transitive dependencies have already loaded). -->
         <Compile Include="Server\InProcessOAuthTokenRefresher.fs" />
         <Compile Include="Server\OAuthRefreshJobHandler.fs" />
         <Compile Include="Server\Infra\FileSecretStore.fs" />
         <Compile Include="Server\Infra\EncryptedSecretStore.fs" />
-        <!-- Phase 11.G — `SecretStore.fromEnv` (env-var-driven dispatch
+        <!-- `SecretStore.fromEnv` (env-var-driven dispatch
              with cloud-companion resolver list). -->
         <Compile Include="Server\Infra\SecretStoreFromEnv.fs" />
-        <!-- Phase 176 — transient-fault decorator substrate: the
+        <!-- Transient-fault decorator substrate: the
              TransientFaultPolicy record + shared runner (retry / breaker /
              per-call timeout), then the IBlobStorage / ISecretStore
              decorators that route every method through it. Before
@@ -693,11 +691,11 @@
         <Compile Include="Server\IBlobEncryptionKeyResolver.fs" />
         <Compile Include="Server\EncryptedBlobStorage.fs" />
         <Compile Include="Server\SingleKeyResolver.fs" />
-        <!-- Phase 9t — bounded local spill for DegradeToFile audit-write
+        <!-- Bounded local spill for DegradeToFile audit-write
              failure policy; before AuditLog.fs (the log spills into it) and
              the replay service (which drains it back into IEventStore). -->
         <Compile Include="Server\AuditFallbackStore.fs" />
-        <!-- Phase 553.A — the in-store permission-event hash chain: the
+        <!-- The in-store permission-event hash chain: the
              canonical form, the digest over it, the head reading and the
              pure verifier. After DeployRecords.fs (whose
              digestCanonicalForm it reuses rather than minting a second
@@ -706,18 +704,18 @@
         <Compile Include="Server\PermissionAuditChain.fs" />
         <Compile Include="Server\AuditLog.fs" />
         <Compile Include="Server\AuditFallbackReplayService.fs" />
-        <!-- Phase 856.C - drains the remoting audit queue (Api.fs) off the
+        <!-- Drains the remoting audit queue (Api.fs) off the
              response path. After AuditLog.fs (the failure counter it shares). -->
         <Compile Include="Server\RemotingAuditDrainService.fs" />
-        <!-- Phase 120 — default IAuthAuditHook (writes AuthorizationDenied
+        <!-- Default IAuthAuditHook (writes AuthorizationDenied
              via IAuditLog + per-(route,subject) flood guard). After
              AuditLog.fs (uses the audit registry); before the emission
              middlewares + the /dev/auth-denials read handler. -->
         <Compile Include="Server\AuthAuditHook.fs" />
-        <!-- Phase 30a — signed module artefact substrate (canonical-bytes
+        <!-- Signed module artefact substrate (canonical-bytes
              encoder, signer/verifier interfaces + Ed25519 defaults,
              blob-backed trusted-publisher key store). Crypto via
-             BouncyCastle.Cryptography (MIT) — .NET 10 BCL surfaces only
+             BouncyCastle.Cryptography (MIT) —.NET 10 BCL surfaces only
              post-quantum primitives, not Ed25519. -->
         <Compile Include="Server\ArtifactCanonical.fs" />
         <Compile Include="Server\IArtifactSigner.fs" />
@@ -726,7 +724,7 @@
         <Compile Include="Server\Ed25519ArtifactSigner.fs" />
         <Compile Include="Server\Ed25519ArtifactVerifier.fs" />
         <Compile Include="Server\BlobBackedPublisherKeyStore.fs" />
-        <!-- Phase 41 — data-classification substrate (server tier). After
+        <!-- Data-classification substrate (server tier). After
              AuditLog (gate emits ClassifiedField* audit) + Core's
              ClassificationTypes / AccessContext. -->
         <Compile Include="Server\Classification\IFieldClassifier.fs" />
@@ -736,7 +734,7 @@
         <Compile Include="Server\InProcessRateLimiter.fs" />
         <Compile Include="Server\IDataExporter.fs" />
         <Compile Include="Server\ErasurePipeline.fs" />
-        <!-- Phase 9h.A — IBackgroundExportStore interface ahead of the
+        <!-- IBackgroundExportStore interface ahead of the
              API handler: the async `RequestExportAsync` surface
              (DsrAsyncDeps) names it. The interface depends only on Core
              types (DataSubjectRequest + ExportTicket/ExportStatus). -->
@@ -757,12 +755,12 @@
              lives in ToolUp.ArtefactSigning, which references this
              project. -->
         <Compile Include="Server\KeyedByteSigning.fs" />
-        <!-- Wave 8 (Epoch 2) Phase 187 — compliance evidence-pack generator.
+        <!-- Compliance evidence-pack generator.
              Pure orchestration over IEventStore (audit) + IDataExporter
              (DSR) + IFieldClassifier (classification) + IExportEnvelopeSigner
              (manifest signing); needs all four declared first. -->
         <Compile Include="Server\EvidencePackGenerator.fs" />
-        <!-- Phase 713 — the evidence chain walker: IEvidenceChainWalker,
+        <!-- The evidence chain walker: IEvidenceChainWalker,
              the NoEvidenceChainWalker default that carries no
              implementation, and the shipped walk over the substrates a
              deployment already records. After DeployRecords.fs (whose
@@ -773,7 +771,7 @@
              because the chained ledger lives downstream of this assembly
              (GP 1). -->
         <Compile Include="Server\EvidenceChainWalker.fs" />
-        <!-- Phase 714 — the walked chain as a signed, offline-checkable
+        <!-- The walked chain as a signed, offline-checkable
              statement. After EvidenceChainWalker.fs (it packages that
              walk) and after DsseEnvelope.fs (it signs through that
              family). Carries no signing or verifying crypto of its own:
@@ -781,7 +779,7 @@
              signature check is a stock DSSE one. -->
         <Compile Include="Server\EvidenceBundleExport.fs" />
         <Compile Include="Server\DataSubjectRequestApiHandler.fs" />
-        <!-- Phase 9h.A — IJobScheduler-backed DSR export/erasure substrate.
+        <!-- IJobScheduler-backed DSR export/erasure substrate.
              After DataSubjectRequestApiHandler (reuses serialiseSegments +
              the AuditOnDsr seam) + ErasurePipeline + IDataExporter. -->
         <Compile Include="Server\BlobBackedBackgroundExportStore.fs" />
@@ -789,10 +787,10 @@
         <Compile Include="Server\DSRErasureJobHandler.fs" />
         <Compile Include="Server\EventStoreErasureHandler.fs" />
         <Compile Include="Server\DataObjectStoreErasureHandler.fs" />
-        <!-- Phase 7c — scheduled reclaim of content blobs stranded by a
+        <!-- Scheduled reclaim of content blobs stranded by a
              Save that died between its content write and its metadata
              write. Sits here because it needs DataObjectStore (the shared
-             orphan listing), IJobScheduler + the Phase 623 deferred
+             orphan listing), IJobScheduler + the deferred
              declaration, IAuditLog, and IConfigValidator — and must be
              before Compose/ComposeConfigValidators.fs, which registers its
              preflight validator into the first-party set. -->
@@ -807,20 +805,20 @@
         <Compile Include="Server\IPlatformRuntimeConfigStore.fs" />
         <Compile Include="Server\Infra\PlatformRuntimeConfigStore.fs" />
         <Compile Include="Server\PlatformAdminDevDiagnostics.fs" />
-        <!-- Phase 864 - the guarded read-modify-write helper over IBlobStorage /
+        <!-- The guarded read-modify-write helper over IBlobStorage /
              IConditionalBlobStorage (BlobMapStore). Before its adopters:
              ShareTokenStore.fs below, Teams/TeamManagement.fs, and the KB index. -->
         <Compile Include="Server\BlobMapStore.fs" />
         <Compile Include="Server\IShareTokenStore.fs" />
         <Compile Include="Server\ShareTokenStore.fs" />
-        <!-- Phase 527 — service accounts. Interface then blob-backed default,
+        <!-- Service accounts. Interface then blob-backed default,
              adjacent, mirroring the share-token pair above. -->
         <Compile Include="Server\IServiceAccountStore.fs" />
         <Compile Include="Server\ServiceAccountStore.fs" />
         <Compile Include="Server\IRateLimitStore.fs" />
         <Compile Include="Server\InMemoryRateLimitStore.fs" />
         <Compile Include="Server\Providers\BlobProviderProfile.fs" />
-        <!-- Phase 43.B/43.C — provider-profile OAuth connect + auto-refresh
+        <!-- Provider-profile OAuth connect + auto-refresh
              and the live-status probe seam. After IProviderProfile (Core)
              + IOAuthCredentialFlow + IJobHandler/IJobScheduler, and before
              OAuthFlowHandler (whose callback binds an entry through
@@ -840,13 +838,13 @@
         <Compile Include="Server\UsageLog.fs" />
         <Compile Include="Server\ITeamQuotaPolicy.fs" />
         <Compile Include="Server\PerScopeKeyResolver.fs" />
-        <!-- Phase 467 — the per-source-IP failed-token throttle, lifted out
+        <!-- The per-source-IP failed-token throttle, lifted out
              of EncryptionAdminHandler so the window transition is one
              atomic step against a single clock snapshot (and testable
              without a wall clock). Must precede its consumers. -->
         <Compile Include="Server\TokenAttemptThrottle.fs" />
         <Compile Include="Server\EncryptionAdminHandler.fs" />
-        <!-- Phase 320 — the external-compute completion-callback ingress.
+        <!-- The external-compute completion-callback ingress.
              After JobScheduler.fs (which implements the
              IExternalCompletionSink it resolves) and before
              BuildRouteHandlers (which mounts it, only when the deployment
@@ -857,7 +855,7 @@
         <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />
         <Compile Include="Server\KeyDestroyAckCoverageValidator.fs" />
         <Compile Include="Server\HealthCheck.fs" />
-        <!-- Phase 118 — degraded-capability registry + /dev/inspect
+        <!-- Degraded-capability registry + /dev/inspect
              contributor. Before HealthCheckResponseWriter (consumes the
              registry for the /health degraded section) and the compose
              files that register + adopt it. -->
@@ -873,18 +871,18 @@
         <Compile Include="Server\OidcClaimMappingAdvisoryValidator.fs" />
         <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
         <Compile Include="Server\InviteEmailCapabilityValidator.fs" />
-        <!-- Phase 549 — direct-add existence-proof preflight. Anywhere
+        <!-- Direct-add existence-proof preflight. Anywhere
              before Compose/ComposeConfigValidators.fs, which registers it. -->
         <Compile Include="Server\DirectAddIdentityProofValidator.fs" />
         <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
         <Compile Include="Server\UnknownConfigKeyValidator.fs" />
-        <!-- Phase 9m.C — the value-level companion to the name-level
+        <!-- The value-level companion to the name-level
              guard above: TOOLUP_TRACE_CATEGORIES values that no composed
              emission site declared. Anywhere after Server\Logger.fs
              (the registry it reads) and before
              Compose/ComposeConfigValidators.fs, which registers it. -->
         <Compile Include="Server\TraceCategoriesValidator.fs" />
-        <!-- Phase 9u — preflight guard + /dev/inspect panel over the
+        <!-- Preflight guard + /dev/inspect panel over the
              composed IEventStore decorator chain. Reads only Platform.Core's
              EventStoreChain (the position model) and ConfigValidation, never
              the concrete decorators, so its position is set only by its
@@ -900,7 +898,7 @@
         <Compile Include="Server\IUserClaims.fs" />
         <Compile Include="Server\Premium\PremiumGate.fs" />
         <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
-        <!-- Phase 763 — the shared request-body binding seam. Depends on
+        <!-- The shared request-body binding seam. Depends on
              nothing but HttpContext + System.Text.Json (it takes the
              caller's JsonSerializerOptions rather than owning one), and
              must precede every handler swept onto it: ConsentApiHandler,
@@ -908,18 +906,18 @@
              plus AuthProviders/Passkey in its own project. -->
         <Compile Include="Server\HttpBodyBinding.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
-        <!-- Phase 159 — durable per-subject consent persistence over
+        <!-- Durable per-subject consent persistence over
              IEntityStore (in-memory dev impl + entity-backed production
              impl + Custom: audit emission). -->
         <Compile Include="Server\Consent\ConsentStateStore.fs" />
-        <!-- Phase 61 — PlatformAdmin public-utility admin endpoints
+        <!-- PlatformAdmin public-utility admin endpoints
              (ad-unit CRUD + rate-limit decisions + premium-user list).
              Each handler gates server-side on Platform-Admin role. -->
         <Compile Include="Server\PlatformAdmin\AdUnitConfigApi.fs" />
         <!-- After AdUnitConfigApi: the ad-analytics slot sanity check
              reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
         <Compile Include="Server\AdAnalyticsApiHandler.fs" />
-        <!-- Phase 163 — end-user product-telemetry fan-out endpoint. Beside
+        <!-- End-user product-telemetry fan-out endpoint. Beside
              the other analytics sinks; needs only ITelemetrySink +
              AccessContext from Core, and must precede
              Compose/BuildRouteHandlers.fs, which mounts it via routesFor. -->
@@ -951,7 +949,7 @@
              ICspContributor.fs. -->
         <Compile Include="Server\GoogleIdentityCspValidator.fs" />
         <Compile Include="Server\SecurityHardening.fs" />
-        <!-- Phase 156 — SecurityHeadersValidator moved after SecurityHardening:
+        <!-- SecurityHeadersValidator moved after SecurityHardening:
              its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
         <Compile Include="Server\SecurityHeadersValidator.fs" />
         <Compile Include="Server\ForwardedHeadersTrustValidator.fs" />
@@ -960,15 +958,15 @@
         <Compile Include="Server\PeerRouteRegistry.fs" />
         <Compile Include="Server\PeerBearerAuthMiddleware.fs" />
         <Compile Include="Server\ShareTokenAuthMiddleware.fs" />
-        <!-- Phase 527 — service-account bearer-token middleware. AFTER
+        <!-- Service-account bearer-token middleware. AFTER
              ShareTokenAuthMiddleware.fs (it writes that module's
-             ShareTokenClaimItemsKey) and after IUsageLog.fs (Phase 9d
+             ShareTokenClaimItemsKey) and after IUsageLog.fs (
              per-account attribution). -->
         <Compile Include="Server\ServiceAccountTokenHandler.fs" />
         <Compile Include="Server\SurfaceEnforcementMiddleware.fs" />
         <Compile Include="Server\PeerBearerConfigValidator.fs" />
         <Compile Include="Server\MaxRequestBodyBytesValidator.fs" />
-        <!-- Phase 465 — the format/range gate over every registered
+        <!-- The format/range gate over every registered
              IntKey, and the unbounded-event-retention warning. Both read
              only the config registry and the resolution seam, so
              anywhere before Compose/ComposeConfigValidators.fs, which
@@ -979,7 +977,7 @@
         <Compile Include="Server\LocalSecretFilePermissionsValidator.fs" />
         <Compile Include="Server\OAuthFlowValidator.fs" />
         <Compile Include="Server\ConfigValidatorAggregator.fs" />
-        <!-- Phase 209 — internet-readiness secure-default scorecard: a
+        <!-- Internet-readiness secure-default scorecard: a
              read-side projection over the aggregated preflight outcomes
              (must compile after ConfigValidatorAggregator, which defines
              ValidatorOutcome). Introduces no new validation. -->
@@ -990,20 +988,20 @@
         <Compile Include="Server\SecurityHeadersMiddleware.fs" />
         <Compile Include="Server\CspMiddleware.fs" />
         <Compile Include="Server\CsrfMiddleware.fs" />
-        <!-- Phase 133 — BFF-style server-set auth-cookie reflection
+        <!-- BFF-style server-set auth-cookie reflection
              endpoint (POST / DELETE /api/auth/session). Validates the
              presented bearer via IAuthProvider, then reflects it into an
              HttpOnly; Secure; SameSite=Strict cookie so the JWT leaves
              JS-readable storage. Mounted by BuildRouteHandlers when
              ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance. -->
         <Compile Include="Server\AuthSessionHandler.fs" />
-        <!-- Phase 57 — prerendered-routes middleware. Maps GET /route to
+        <!-- Prerendered-routes middleware. Maps GET /route to
              PublicPath/route.html when the FAKE Prerender target wrote
              one; no-op when the file is absent. Composed ahead of
              UseStaticFiles so the rewrite short-circuits before the
              SPA index.html fallback. -->
         <Compile Include="Server\Static\PrerenderedRoutesHandler.fs" />
-        <!-- Phase 3b.D — SPA shell fallback. Runs after UseStaticFiles
+        <!-- SPA shell fallback. Runs after UseStaticFiles
              and serves PublicPath/index.html for any GET that didn't
              match a static file or prerendered route, so OIDC callback
              URLs and SPA deep links don't 404 server-side before the
@@ -1013,14 +1011,14 @@
         <Compile Include="Server\Teams\TeamManagement.fs" />
         <Compile Include="Server\Teams\MembershipDoctor.fs" />
         <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />
-        <!-- Phase 5h — the ETag-based multi-instance default over the Phase 600
+        <!-- The ETag-based multi-instance default over the
              IConditionalBlobStorage seam. After the InMemory store (shares its
              blob layout + codec + expiry hook), before the validator (which
              type-tests the resolved store). -->
         <Compile Include="Server\Teams\BlobPendingInviteStore.fs" />
         <Compile Include="Server\Teams\PendingInviteStoreInstanceValidator.fs" />
         <Compile Include="Server\Teams\TeamInvitationHandler.fs" />
-        <!-- Phase 936 — the per-team visibility policy record (both axes), its
+        <!-- The per-team visibility policy record (both axes), its
              guarded store, the output-visibility source, startup check and API.
              After TeamManagement (ITeamStore); before BuildRouteHandlers, which
              mounts TeamOutputVisibilityApi. -->
@@ -1029,7 +1027,7 @@
         <Compile Include="Server\TeamCreationPolicyValidator.fs" />
         <Compile Include="Server\BootstrapTeamValidator.fs" />
         <Compile Include="Server\JobApiHandler.fs" />
-        <!-- Phase 600 — the out-of-process model-execution submitter API
+        <!-- The out-of-process model-execution submitter API
              handler (fit submission via the 599 batch envelope, bulk
              outcome retrieval, dataset resolution, scoring; typed refusals
              throughout). Mounted by BuildRouteHandlers on the opt-in
@@ -1038,12 +1036,12 @@
         <Compile Include="Server\ModelExecutionApi.fs" />
         <Compile Include="Server\MaintenanceApiHandler.fs" />
         <Compile Include="Server\OAuthFlowHandler.fs" />
-        <!-- Phase 10g — OAuth 1.0a three-legged flow routes. Placed here
+        <!-- OAuth 1.0a three-legged flow routes. Placed here
              (not with the other OAuth1a substrate files) because it depends
              on the later Giraffe / TeamManagement / AccessContext surface. -->
         <Compile Include="Server\OAuth1aFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
-        <!-- Phase 10a — module data-migration substrate (server half):
+        <!-- Module data-migration substrate (server half):
              chain resolution + registry, the blob-backed status store, the
              runner + its startup sweep, and the IDataMigrationApi handler.
              Placed after Teams\TeamManagement.fs because the sweep enumerates
@@ -1055,20 +1053,20 @@
         <Compile Include="Server\MigrationRunner.fs" />
         <Compile Include="Server\MigrationApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
-        <!-- Phase 1107 — in-platform publication reader grants. -->
+        <!-- In-platform publication reader grants. -->
         <Compile Include="Server\Scope\PublicationReaderGrantStore.fs" />
-        <!-- Phase 551 — module-declared grant policy: the compose-time
+        <!-- Module-declared grant policy: the compose-time
              registry, the IPermissionStore write-guard decorator, and the
              dispatch predicate. After PermissionStore.fs (it decorates
              IPermissionStore) and before Middleware.fs (which stamps the
              per-request grant records), RemotingHelpers.fs (the dispatch
              gate), and ServerApp.fs (which builds the registry). -->
         <Compile Include="Server\GrantPolicyGuard.fs" />
-        <!-- Phase 552 — the consented-grant registry: IGrantConsentStore and
+        <!-- The consented-grant registry: IGrantConsentStore and
              its in-memory / blob-backed implementations, the signature
              verifier over a party's registered key material, the lifecycle
              (propose / approve / revoke — revocation is a record, never a
-             delete), and the dispatch guard that resolves Phase 551's
+             delete), and the dispatch guard that resolves
              RequiresCounterpartyApproval arm through it ON USE. After
              GrantPolicyGuard.fs (it implements that file's
              CounterpartyConsentOracle seam and extends its dispatch guard)
@@ -1078,7 +1076,7 @@
              payload live in Platform.Core, on the IModuleBindingVerifier
              precedent. -->
         <Compile Include="Server\GrantConsentStore.fs" />
-        <!-- Phase 555 — dual control (two-person rule) for sensitive admin
+        <!-- Dual control (two-person rule) for sensitive admin
              mutations: the pending-approval store, the propose / approve /
              reject / expire ceremony, and the IPermissionStore decorator that
              parks a gated write instead of applying it. After
@@ -1089,7 +1087,7 @@
              dependency on GrantPolicyGuard: the policy-bearing question
              arrives as a predicate from the composition root. -->
         <Compile Include="Server\Scope\AdminMutationApproval.fs" />
-        <!-- Phase 556 — grant-event notification to affected principals: the
+        <!-- Grant-event notification to affected principals: the
              pure write-delta classifier, the per-audience message shapes, and
              the IPermissionStore observer that bridges a landed grant to
              INotificationChannel. After GrantPolicyGuard.fs (it reads the
@@ -1099,12 +1097,12 @@
              declared AND a channel is resolvable. -->
         <Compile Include="Server\GrantNotificationObserver.fs" />
         <Compile Include="Server\Scope\StoreIdSanitising.fs" />
-        <!-- Phase 113 — IPermissionStore/tier-backed default for the
+        <!-- IPermissionStore/tier-backed default for the
              host-neutral IActionAuthorizer seam (default-deny; policy as
              data). After PermissionStore (the backing) + IUserClaims
              (the tier provider). -->
         <Compile Include="Server\Scope\PermissionStoreActionAuthorizer.fs" />
-        <!-- Phase 272 — hosted-tree action audit emission (GP 6): the
+        <!-- Hosted-tree action audit emission (GP 6): the
              IHostActionAuditHook + default IAuditLog-backed impl +
              authorize-then-audit helper. After PermissionStoreActionAuthorizer
              (composes beside it) + AuditLog.fs (the HostActionDispatched
@@ -1112,14 +1110,14 @@
         <Compile Include="Server\Scope\HostActionAuditHook.fs" />
         <Compile Include="Server\Config\IConfigStore.fs" />
         <Compile Include="Server\Config\ConfigStore.fs" />
-        <!-- Phase 10b — config schema-evolution server half: pure chain
+        <!-- Config schema-evolution server half: pure chain
              resolution, the declared registry, the per-process drift tracker,
              and the IConfigStore decorator that applies all three on the read
              path. After ConfigStore.fs (reuses its projectToRecord /
              tryProjectExact / toRawMap so the decorator projects a migrated
              map through exactly the same semantics). -->
         <Compile Include="Server\Config\ConfigMigrationRegistry.fs" />
-        <!-- Phase 10b — the "Pending Config Migrations" /dev/inspect panel
+        <!-- The "Pending Config Migrations" /dev/inspect panel
              (gap audit Gap 7). After ConfigMigrationRegistry.fs, whose
              support record it reads. -->
         <Compile Include="Server\Config\ConfigMigrationDevDiagnostics.fs" />
@@ -1127,7 +1125,7 @@
         <Compile Include="Server\TeamQuotaPolicy.fs" />
         <Compile Include="Server\UsageQueryApi.fs" />
         <Compile Include="Server\TransactionalDispatcher.fs" />
-        <!-- Phase 441 — notification preference + digest substrate: the
+        <!-- Notification preference + digest substrate: the
              INotificationPreferenceStore seam + blob-backed default, the
              NotificationPreferenceFilter INotificationChannel decorator (+ the
              ambient NotificationCategoryScope), and the DigestJobHandler.
@@ -1137,14 +1135,14 @@
         <Compile Include="Server\INotificationPreferenceStore.fs" />
         <Compile Include="Server\BlobNotificationPreferenceStore.fs" />
         <Compile Include="Server\NotificationPreferenceFilter.fs" />
-        <!-- Phase 6f.A - the OUTER consent gate. Composed AROUND the
-             Phase 441 preference filter, so consent is answered before
+        <!-- The OUTER consent gate. Composed AROUND the
+             preference filter, so consent is answered before
              preference is. After NotificationPreferenceFilter.fs, whose
              recipientsOf / narrowTo / hashRecipient it reuses rather
              than duplicating; before ComposeNotifications.fs wraps it
              onto the channel. -->
         <Compile Include="Server\ExternalContactConsentFilter.fs" />
-        <!-- Phase 827 - the WhatsApp send policy (24-hour window + template
+        <!-- The WhatsApp send policy (24-hour window + template
              checks), composed directly INSIDE the consent gate and outside
              the preference filter. After ExternalContactConsentFilter.fs and
              NotificationPreferenceFilter.fs (reuses narrowTo /
@@ -1155,7 +1153,7 @@
         <Compile Include="Server\IWebhookRegistry.fs" />
         <Compile Include="Server\WebhookRegistry.fs" />
         <Compile Include="Server\WebhookSecretMigration.fs" />
-        <!-- Phase 464 tail (tidy-drain 2026-08-26) — hard-Error gate on a
+        <!-- Hard-Error gate on a
              webhook secret rotation that cannot reach a sibling instance.
              After WebhookRegistry.fs (reads BlobWebhookRegistry.IsWiredToChannel)
              and after PerScopeKeyResolverDistributedValidator.fs (shares its
@@ -1168,44 +1166,44 @@
         <Compile Include="Server\WebhookDispatcher.fs" />
         <Compile Include="Server\HookedEventStore.fs" />
         <Compile Include="Server\WebhookApiHandler.fs" />
-        <!-- Phase 527 — the Owner/Admin-gated service-account management
+        <!-- The Owner/Admin-gated service-account management
              API behind ServiceAccountUI. Must follow Teams\TeamManagement.fs
              (ITeamStore + TeamRoles are the role gate), which is why it sits
              here rather than beside ServiceAccountTokenHandler.fs. -->
         <Compile Include="Server\ServiceAccountApiHandler.fs" />
-        <!-- Phase 1107 — the Owner/Admin-gated publication-reader API
+        <!-- The Owner/Admin-gated publication-reader API
              (same gate idiom as ServiceAccountApiHandler). -->
         <Compile Include="Server\PublicationReaderApiHandler.fs" />
-        <!-- Phase 441 — INotificationPreferenceApi handler (same AccessContext
+        <!-- INotificationPreferenceApi handler (same AccessContext
              gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
              mounts it on the NotificationPreferences opt-in. -->
         <Compile Include="Server\NotificationPreferenceApiHandler.fs" />
-        <!-- Phase 6f.A - the admin surface over IExternalContactStore.
+        <!-- The admin surface over IExternalContactStore.
              Mounted by Compose/BuildRouteHandlers.fs only when the
              ExternalContactStore mode opts in. -->
         <Compile Include="Server\ExternalContactApiHandler.fs" />
-        <!-- Phase 7b — IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
+        <!-- IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
              gated writes). After WebhookApiHandler (same handler shape) +
              TeamManagement (the role gate); before BuildRouteHandlers mounts
              it. -->
         <Compile Include="Server\UserSchemaApiHandler.fs" />
-        <!-- Phase 622 — IPresenceApi Remoting handler over the Phase 442
+        <!-- IPresenceApi Remoting handler over the
              substrate. After IPresenceTracker.fs / IEntityLockStore.fs (the
              services it resolves); before BuildRouteHandlers mounts it. -->
         <Compile Include="Server\PresenceApiHandler.fs" />
         <Compile Include="Server\IFeatureFlagStore.fs" />
-        <!-- Phase 239 — read-only external flag-resolution seam. -->
+        <!-- Read-only external flag-resolution seam. -->
         <Compile Include="Server\IFlagSource.fs" />
         <Compile Include="Server\FeatureFlagStore.fs" />
         <Compile Include="Server\FeatureFlagStoreErasureHandler.fs" />
         <Compile Include="Server\BlobStorageErasureHandler.fs" />
         <Compile Include="Server\VectorStoreErasureHandler.fs" />
-        <!-- Phase 62 — additive flag-source registry consumed by
+        <!-- Additive flag-source registry consumed by
              FlagEvaluator.createWithSources. -->
         <Compile Include="Server\FeatureFlagSources.fs" />
         <Compile Include="Server\FlagEvaluator.fs" />
         <Compile Include="Server\FeatureFlagHandler.fs" />
-        <!-- Phase 637 — server-authoritative module-visibility profiles.
+        <!-- Server-authoritative module-visibility profiles.
              Store + blob impl + the scope walk + the admin handler + the
              opt-in route-hardening middleware, in dependency order.
              Beside the feature-flag family because the two share the
@@ -1218,15 +1216,15 @@
         <Compile Include="Server\ModuleVisibilityResolver.fs" />
         <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
         <Compile Include="Server\ModuleVisibilityRouteMiddleware.fs" />
-        <!-- Phase 135 — anonymous-session ownership binding (the sealed
-             HttpOnly cookie). Phase 337 MOVED it ahead of the scope
+        <!-- Anonymous-session ownership binding (the sealed
+             HttpOnly cookie). MOVED it ahead of the scope
              resolvers and Middleware.fs: the binding is no longer only
              the migration gate, it is the source of the anonymous session
              id itself, so SubjectRequestExtractor / ScopeResolutionMiddleware
              both consume it. Depends on DataProtection + HttpContext only,
              so it sits safely this early. -->
         <Compile Include="Server\AnonymousSessionBinding.fs" />
-        <!-- Phase 528 — session registry. The interface + its blob-backed
+        <!-- Session registry. The interface + its blob-backed
              default sit here, after AnonymousSessionBinding.fs (whose
              sealed anonymous session id the derivation consumes) and
              before Middleware.fs / SessionRevocationMiddleware.fs, which
@@ -1235,18 +1233,18 @@
         <Compile Include="Server\ISessionRegistry.fs" />
         <Compile Include="Server\SessionRegistry.fs" />
         <Compile Include="Server\Scope\StorageScopeResolver.fs" />
-        <!-- Phase 896 — the ambient request viewer (who is asking, as scope
+        <!-- The ambient request viewer (who is asking, as scope
              resolution resolved it) the disclosure gate decides for. -->
         <Compile Include="Server\Scope\RequestViewer.fs" />
         <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
         <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
         <Compile Include="Server\Files\FileNameSanitiser.fs" />
-        <!-- Phase 817 — the server half of the ProcessedData summary envelope's codec. -->
+        <!-- The server half of the ProcessedData summary envelope's codec. -->
         <Compile Include="Server\Files\ProcessedDataCodec.fs" />
         <Compile Include="Server\Files\FileManagement.fs" />
         <Compile Include="Server\ColumnMappingApiHandler.fs" />
         <Compile Include="Server\INarrativeStore.fs" />
-        <!-- Phase 707 — the request-free door onto the narrative-ingestion
+        <!-- The request-free door onto the narrative-ingestion
              path, for a server-side producer that has a resolved scope and
              a document but no request. Declared here because the producing
              companion and the ingesting companion do not reference each
@@ -1255,35 +1253,35 @@
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
         <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />
         <Compile Include="Server\NotifyingNarrativeStore.fs" />
-        <!-- Phase 521.C — stale-narrative discovery (supersession walk). -->
+        <!-- Stale-narrative discovery (supersession walk). -->
         <Compile Include="Server\NarrativeSupersession.fs" />
-        <!-- Phase 985 — grounded narratives: the gate, run, reference-kind
+        <!-- Grounded narratives: the gate, run, reference-kind
              and registry seams the fact, AI and reporting tiers join through. -->
         <Compile Include="Server\GroundedNarrative.fs" />
-        <!-- Phase 495 — module API-factory helper: the per-module consumer
+        <!-- Module API-factory helper: the per-module consumer
              factory shape (scope-aware getFileContents + settings-key
              convention + narrative-provenance publish) captured once.
              After FileManagement + INarrativeStore (it delegates to both). -->
         <Compile Include="Server\ModuleApiFactory.fs" />
         <Compile Include="Server\ModuleQueryBus.fs" />
-        <!-- Phase 16 + 16a — centralised process-profile gating helper.
+        <!-- Centralised process-profile gating helper.
              Lives first in the Compose chain so every Compose helper
-             (ComposeJobs, ComposeNotifications, ComposeAudit, ...) can
+             (ComposeJobs, ComposeNotifications, ComposeAudit,...) can
              use it; positioned before `DevDiagnosticsHandler.fs` so the
-             Phase 16a tail's `/dev/inspect` panel can reference the
+             tail's `/dev/inspect` panel can reference the
              same matrix without duplicating it. -->
         <Compile Include="Server\Compose\ProcessProfileGate.fs" />
         <Compile Include="Server\DevDiagnosticsHandler.fs" />
         <Compile Include="Server\HealthMonitorApiHandler.fs" />
-        <!-- Phase 529 - audit-trail viewer handler. After AuditLog.fs
+        <!-- Audit-trail viewer handler. After AuditLog.fs
              (the substrate it pairs with) and Api.fs (makeApi). -->
         <Compile Include="Server\AuditViewApiHandler.fs" />
-        <!-- Phase 171 — Home / Overview landing aggregation handler. -->
+        <!-- Home / Overview landing aggregation handler. -->
         <Compile Include="Server\HomeOverviewApiHandler.fs" />
         <Compile Include="Server\ServiceStatusBoardApiHandler.fs" />
-        <!-- Phase 177 — deployment-readiness scorecard gatherer + handler. -->
+        <!-- Deployment-readiness scorecard gatherer + handler. -->
         <Compile Include="Server\DeploymentReadinessReport.fs" />
-        <!-- Phase 686 — one-command deployment verification report: the
+        <!-- One-command deployment verification report: the
              tier-neutral evidence mirrors, the five section gatherers, the
              not-proved statements, the verdict digest and the
              Platform-Admin-gated handler. After DeploymentReadinessReport
@@ -1293,68 +1291,68 @@
              which is why this compiles here rather than after the seal
              substrates it reports on (GP 1). -->
         <Compile Include="Server\DeploymentVerificationReport.fs" />
-        <!-- Phase 772 — server-side egress policy, the enforcing half: the DelegatingHandler,
+        <!-- Server-side egress policy, the enforcing half: the DelegatingHandler,
              the ambient component carrier, the process-wide install seam and the platform client
              factory. After the report (it produces the report's EgressIntegrity) and before
              Compose/ComposeRuntimeServices.fs (which registers the named client). -->
         <Compile Include="Server\EgressPolicyHandler.fs" />
         <Compile Include="Server\HealthStateTracker.fs" />
-        <!-- Phase 178 — alert-rule / threshold engine (pure evaluator +
+        <!-- Alert-rule / threshold engine (pure evaluator +
              BackgroundService). After HealthStateTracker (shares the tick
              shape) + PrometheusMetricsSink (the metric-read tap) +
              INotificationSink; before Compose/ (ComposeRuntimeServices
              hosts it). -->
         <Compile Include="Server\AlertRuleEngine.fs" />
-        <!-- Phase 829 — metrics history: the BackgroundService that samples the
+        <!-- Metrics history: the BackgroundService that samples the
              live metric registry into ITimeSeriesStore on a cadence. After
              PrometheusMetricsSink (the Snapshot read tap it reads through) and
              AlertRuleEngine (whose resolve-per-tick shape it mirrors); before
              Compose/ComposeObservability.fs, which registers it. -->
         <Compile Include="Server\MetricsHistoryFlusher.fs" />
-        <!-- Phase 9x - the self-hosted observability endpoints (sources / logs
+        <!-- The self-hosted observability endpoints (sources / logs
              / metrics / alerts). After AlertRuleEngine (the status board it
              reads) and MetricsHistoryFlusher (the series scope); before
              Compose/BuildRouteHandlers.fs, which mounts it. -->
         <Compile Include="Server\ObservabilityHandlers.fs" />
-        <!-- Phase 9n credential-suffix allowlist, extracted at the third
+        <!-- credential-suffix allowlist, extracted at the third
              consumer (ConfigDriftDetector, DiagnosticBundleHandler,
              ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
              only — so it can sit ahead of every surface that redacts. -->
         <Compile Include="Server\RedactionAllowlist.fs" />
         <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
-        <!-- Phase 120 — /dev/auth-denials rollup (reads AuthorizationDenied
+        <!-- /dev/auth-denials rollup (reads AuthorizationDenied
              via IAuditLog, caller-scope only; flushes the AuthAuditHook
              flood-guard tail). After AuthAuditHook.fs + DevDiagnosticsHandler;
              before BuildRouteHandlers (which mounts the route). -->
         <Compile Include="Server\AuthDenialsDiagnosticsHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
-        <!-- Phase 528 — revoked-session refusal + session recording.
+        <!-- Revoked-session refusal + session recording.
              After Middleware.fs, whose ScopeResolutionMiddleware stamps
              the Subject / StorageScope it reads; before
              BuildRouteHandlers (which mounts ISessionApi) and
              ConfigurePipeline (which registers the middleware). -->
         <Compile Include="Server\SessionRevocationMiddleware.fs" />
         <Compile Include="Server\SessionApiHandler.fs" />
-        <!-- Phase 132 — admin structural backstop. Path-prefix
+        <!-- Admin structural backstop. Path-prefix
              authorisation middleware over the raw `_platform` admin
              handlers; registered after ScopeResolutionMiddleware (which
              stamps `ToolUp.PlatformRole`). Depends only on PlatformRole
              (Core) + HttpContext. -->
         <Compile Include="Server\PlatformAdminAuthorizationMiddleware.fs" />
-        <!-- Phase 66 Stream C.1 (continuation) — anonymous→authenticated
+        <!-- Anonymous→authenticated
              session-migration trigger middleware. Registered in the
              pipeline after SurfaceEnforcementMiddleware; depends on
              NoOpAnonymousSessionMigrator (compiled earlier) and on
              AnonymousSessionBinding (moved ahead of Middleware.fs by
-             Phase 337). -->
+). -->
         <Compile Include="Server\AnonymousSessionMigrationMiddleware.fs" />
-        <!-- Phase 56 — inbound HTTP rate-limit middleware. Composes
+        <!-- Inbound HTTP rate-limit middleware. Composes
              against `IRateLimitStore` (registered earlier in the build
              order) and `ServerConfig.RateLimits`. -->
         <Compile Include="Server\RateLimitMiddleware.fs" />
         <Compile Include="Server\RemotingHelpers.fs" />
-        <!-- Phase 44 — the IProviderProfileApi handler, delegating to the
+        <!-- The IProviderProfileApi handler, delegating to the
              registered IProviderProfile, plus the `routeHandlers` gate compose
              calls. After Providers/BlobProviderProfile.fs (the default store it
              is composed over), the team/secret substrate it gates on, and
@@ -1362,9 +1360,9 @@
              appends its handlers only when a provider-profile store is
              registered (GP 13). -->
         <Compile Include="Server\ProviderProfileApiHandler.fs" />
-        <!-- Phase 44a — the team-scoped ISecretStore layer (scope pinned,
+        <!-- The team-scoped ISecretStore layer (scope pinned,
              keys team-prefixed) and the default ITeamProviderResolver over
-             the Phase 44a scope chain. After Providers/BlobProviderProfile.fs
+             the scope chain. After Providers/BlobProviderProfile.fs
              and Teams/TeamManagement.fs (the store and the role lookup the
              resolver composes); nothing in the compose path depends on
              either, so both are opt-in (GP 13). -->
@@ -1378,16 +1376,16 @@
              to Ok [] when no companion is wired. -->
         <Compile Include="Server\UserDirectoryApiHandler.fs" />
         <Compile Include="Server\BlobXmlRepository.fs" />
-        <!-- Phase 329 — DataProtection key-ring backend preflight. After
+        <!-- DataProtection key-ring backend preflight. After
              BlobXmlRepository.fs (shares its BlobDpKeyRing constants). -->
         <Compile Include="Server\DataProtectionBackendValidator.fs" />
         <Compile Include="Server\LocaleResolver.fs" />
-        <!-- Phase 11.G — reference-app probe + validator list helpers. -->
+        <!-- Reference-app probe + validator list helpers. -->
         <Compile Include="Server\HealthChecksFromEnv.fs" />
         <Compile Include="Server\ConfigValidatorsFromEnv.fs" />
         <Compile Include="Server\Compose\ComposeExtensions.fs" />
         <Compile Include="Server\Compose\ConfigurePipeline.fs" />
-        <!-- Phase 54 — tenant-lifecycle substrate (server tier). The
+        <!-- Tenant-lifecycle substrate (server tier). The
              ITenantLifecycle interface, the parallel-with-timeout
              aggregator, the four first-party hooks (wrapping shipped
              surfaces: PerScopeKeyResolver.DestroyKey, TeamScopeResolver
@@ -1397,11 +1395,11 @@
              StorageScopeResolver, TeamManagement, IJobScheduler,
              IDataExporter); before BuildRouteHandlers (mounts the API). -->
         <Compile Include="Server\ITenantLifecycle.fs" />
-        <!-- Phase 54c — optional preview capability. After ITenantLifecycle;
+        <!-- Optional preview capability. After ITenantLifecycle;
              before the aggregator (previewDeprovision) + the hooks that
              implement it. -->
         <Compile Include="Server\ITenantLifecyclePreview.fs" />
-        <!-- Phase 54h — cross-replica offboard exclusion lock + in-process
+        <!-- Cross-replica offboard exclusion lock + in-process
              default. Before the aggregator (runGuarded acquires via it). -->
         <Compile Include="Server\ILifecycleLock.fs" />
         <Compile Include="Server\TenantLifecycleAggregator.fs" />
@@ -1409,7 +1407,7 @@
         <Compile Include="Server\Lifecycle\MembershipCacheLifecycle.fs" />
         <Compile Include="Server\Lifecycle\JobSchedulerLifecycle.fs" />
         <Compile Include="Server\Lifecycle\DataSubjectRequestLifecycle.fs" />
-        <!-- Phase 54g — first-party provisioning hooks that do real work
+        <!-- First-party provisioning hooks that do real work
              (config seed / owner-team bootstrap / per-scope key pre-create).
              After the substrate they wrap (IConfigStore, ITeamStore,
              PerScopeKeyResolver — all compiled above); before
@@ -1417,36 +1415,36 @@
         <Compile Include="Server\Lifecycle\ConfigSeedLifecycle.fs" />
         <Compile Include="Server\Lifecycle\OwnerTeamBootstrapLifecycle.fs" />
         <Compile Include="Server\Lifecycle\EncryptionKeyProvisionLifecycle.fs" />
-        <!-- Phase 54d — conversation-store offboard purge (core-tier).
+        <!-- Conversation-store offboard purge (core-tier).
              After the aggregator; before ComposeTenantLifecycle registers it. -->
         <Compile Include="Server\Lifecycle\ConversationStoreLifecycle.fs" />
-        <!-- Phase 545 — user-scope membership teardown (PurgeUser symmetry).
+        <!-- User-scope membership teardown (PurgeUser symmetry).
              After ITeamStore (TeamManagement) + the aggregator; before
              ComposeTenantLifecycle registers it. -->
         <Compile Include="Server\Lifecycle\UserMembershipTeardownLifecycle.fs" />
-        <!-- Phase 54e — durable last-LifecycleSummary store (blob-backed
+        <!-- Durable last-LifecycleSummary store (blob-backed
              default). After the aggregator (consumes LifecycleSummary);
              before the handler that reads through it. -->
         <Compile Include="Server\ILifecycleSummaryStore.fs" />
-        <!-- Phase 54b — completed-step offboard ledger (blob-backed
+        <!-- Completed-step offboard ledger (blob-backed
              default). After the aggregator; consumed by the resumable
              sweep via LifecycleJobHandler. -->
         <Compile Include="Server\ILifecycleLedger.fs" />
-        <!-- Phase 543 — derived principal enumeration. After AuditLog
+        <!-- Derived principal enumeration. After AuditLog
              (payload wire shape) + the IEventStore/IBlobStorage
              substrate; before the tenant API handler that surfaces it. -->
         <Compile Include="Server\PrincipalRegistry.fs" />
         <Compile Include="Server\PlatformTenantApiHandler.fs" />
-        <!-- Phase 54a — background offboard IJobHandler. After
+        <!-- Background offboard IJobHandler. After
              PlatformTenantApiHandler (reads TenantLifecycleSnapshot) +
              the aggregator (drives runResumable); registered with the
              scheduler in ComposeTenantLifecycle. -->
         <Compile Include="Server\LifecycleJobHandler.fs" />
-        <!-- Phase 54f — scheduled / grace-period offboard poll IJobHandler.
+        <!-- Scheduled / grace-period offboard poll IJobHandler.
              After the aggregator (drives enqueue + the scheduled helpers);
              registered with the scheduler in ComposeTenantLifecycle. -->
         <Compile Include="Server\ScheduledDeprovisionJobHandler.fs" />
-        <!-- Phase 445 — platform backup / restore coordinator + restore
+        <!-- Platform backup / restore coordinator + restore
              drill. After DeployRecords.fs (digests), PersistentEventStore.fs
              (the drill replays through the real store), IJobHandler.fs and
              IBlobEncryptionKeyResolver.fs; before Compose/ComposeStores.fs
@@ -1456,7 +1454,7 @@
         <Compile Include="Server\BackupCoordinator.fs" />
         <Compile Include="Server\RestoreDrillVerifier.fs" />
         <Compile Include="Server\Compose\BuildRouteHandlers.fs" />
-        <!-- Phase 15e follow-up — per-concern compose-body subdivision.
+        <!-- Per-concern compose-body subdivision.
              Pure structural helpers consumed by `compose`; each takes
              the substrate values its inline definition captured and
              returns the same shape. -->
@@ -1467,83 +1465,83 @@
         <Compile Include="Server\Compose\ComposeJobs.fs" />
         <Compile Include="Server\Compose\ComposeDevDiagnostics.fs" />
         <Compile Include="Server\Compose\ComposeConfigValidators.fs" />
-        <!-- Phase 15e tail — runtime substrate registrations (usage
+        <!-- Runtime substrate registrations (usage
              metering, metrics + activity + locale, outbound rate
              limiter, health-state tracker, inbound rate-limit
              middleware, FileManagement runtime). -->
         <Compile Include="Server\Compose\ComposeRuntimeServices.fs" />
-        <!-- Phase 15e tail — domain state stores (entity, result,
+        <!-- Domain state stores (entity, result,
              lineage, conversation, config, module query bus,
              feature flags). -->
         <Compile Include="Server\Compose\ComposeStores.fs" />
         <Compile Include="Server\Compose\ComposeObservability.fs" />
-        <!-- Phase 15e tail — per-tenant team/invite/permission stores
+        <!-- Per-tenant team/invite/permission stores
              + post-bootstrap validators (TeamCreationPolicy,
              BootstrapTeam, PendingInviteStoreInstance,
              SurfaceCoherence) + BootstrapTeam runtime. -->
         <Compile Include="Server\Compose\ComposeTeamRuntime.fs" />
-        <!-- Phase 15e tail — health checks + smoke tests + first-party
+        <!-- Health checks + smoke tests + first-party
              CSP contributors. -->
         <Compile Include="Server\Compose\ComposeHealthSmoke.fs" />
-        <!-- Phase 15e tail — per-request scope/subject/surface
+        <!-- Per-request scope/subject/surface
              registration block (`IStorageScopeResolver`,
              `ISubjectResolver`, `SurfaceRequirementRegistry`,
              `IAnonymousSessionMigrator`, scoped `AccessContext`
              factory, `IHttpContextAccessor`, session). -->
         <Compile Include="Server\Compose\ComposeScopeResolver.fs" />
-        <!-- Phase 16 — host abstraction returned by `compose`. -->
+        <!-- Host abstraction returned by `compose`. -->
         <Compile Include="Server\IServerHost.fs" />
-        <!-- Phase 447 — idempotent, mode-gated seed-pack application.
+        <!-- Idempotent, mode-gated seed-pack application.
              Invoked from ComposeBootstrap.buildAndRunHost (below) after the
              DI container is built, so it compiles before ComposeBootstrap.fs. -->
         <Compile Include="Server\SeedDataLoader.fs" />
-        <!-- Phase 15e tail — bootstrap finalisation (preflight + CSP
+        <!-- Bootstrap finalisation (preflight + CSP
              aggregate) + Build branch returning `IServerHost`. Sits
              after `IServerHost.fs` because `buildAndRunHost` returns
              the interface defined there. -->
         <Compile Include="Server\Compose\ComposeBootstrap.fs" />
-        <!-- Phase 54 — registers the four first-party ITenantLifecycle
+        <!-- Registers the four first-party ITenantLifecycle
              hooks + snapshot when TenantLifecycle = EnabledTenantLifecycle.
              After the hooks + handler it references; before SDK.Server
              (which calls registerTenantLifecycle). -->
         <Compile Include="Server\Compose\ComposeTenantLifecycle.fs" />
-        <!-- Phase 214 — opt-in print-config / validate-config startup modes.
+        <!-- Opt-in print-config / validate-config startup modes.
              After ComposeBootstrap (returns IServerHost) + ConfigKeyDescriptor
              registry; consumed by SDK.Server.compose's tail. -->
         <Compile Include="Server\StartupModes.fs" />
         <Compile Include="Server\SDK.Server.fs" />
-        <!-- Phase 280 — introspectable composition manifest: generic
+        <!-- Introspectable composition manifest: generic
              read-only enumeration of the composed surface (modules,
              companion slots, datatypes, tools) by stable ComponentId.
              Types + element constructors only (depends on ComponentId);
              the ServerApp.compositionManifest projector lives in ServerApp
              (next), so this must compile before it. -->
         <Compile Include="Server\CompositionManifest.fs" />
-        <!-- Phase 286 — composition structural diff: CompositionDelta +
+        <!-- Composition structural diff: CompositionDelta +
              CompositionDiff.diff, an id-keyed / order-independent diff of two
              CompositionManifests (added / removed / changed modules, companion
              slots, datatypes, tools + config-knob value moves). Pure companion
-             to the Phase 280 manifest — depends only on CompositionManifest +
-             ComponentId. Feeds the Phase 287 golden-file CI gate. -->
+             to the manifest — depends only on CompositionManifest +
+             ComponentId. Feeds the golden-file CI gate. -->
         <Compile Include="Server\CompositionDiff.fs" />
-        <!-- Phase 300 — composition capability sandbox (runtime default-deny):
-             ICompositionCapabilityGate enforces the Phase 296 effect-join at
+        <!-- Composition capability sandbox (runtime default-deny):
+             ICompositionCapabilityGate enforces the effect-join at
              runtime — a component may only exercise capabilities at or below
              its declared CompanionCapability envelope (resolved from a
              CapabilitySignature keyed by ComponentId), default-deny anything
-             beyond, every deny observable. Generalises the Phase 266
+             beyond, every deny observable. Generalises the
              authorizer-gated Invoke to the whole composition (guardInvoke
              bridge). Opt-in — `disabled` passthrough is the byte-identical
              default (GP 11/13); depends only on Core CompanionCapability +
-             the Phase 266 registry types. -->
+             the registry types. -->
         <Compile Include="Server\CompositionCapabilityGate.fs" />
-        <!-- Phase 657 — boot verification preflight + the verified composition
+        <!-- Boot verification preflight + the verified composition
              profile: derives nothing itself, but asks at startup whether the
-             running CompositionManifest is the one the Phase 656 sealed deploy
+             running CompositionManifest is the one the sealed deploy
              record covers (seal, artifact digests, binding-belongs-to-record,
              component-by-component agreement), and carries the opt-in profile
-             under which that check is refuse-on-drift, the Phase 300 capability
-             gate is mandatory, and Phase 478's ExecutionProfileGate is applied.
+             under which that check is refuse-on-drift, the capability
+             gate is mandatory, and ExecutionProfileGate is applied.
              After CompositionManifest + CompositionCapabilityGate (reads both),
              after DeployRecords (reuses its verification) and AuditLog (emits
              verdicts + refusals through the audit seam); before ServerApp,
@@ -1551,7 +1549,7 @@
              CompositionProfile.Standard with the log-and-serve default is
              byte-for-byte the prior behaviour (GP 11/13). -->
         <Compile Include="Server\BootVerificationPreflight.fs" />
-        <!-- Phase 771 - the hardening baseline observed on the composed
+        <!-- The hardening baseline observed on the composed
              pipeline at boot (a probe through IServerHost.Invoke plus the
              container's reads), judged against a declared floor. AFTER
              BootVerificationPreflight (its policy names a CompositionProfile
@@ -1563,128 +1561,128 @@
              handler. Opt-in: nothing is probed unless the verification route
              is mounted or a policy is declared (GP 13). -->
         <Compile Include="Server\HostingBaseline.fs" />
-        <!-- Phase 684 — the grounding envelope sealed past boot: the enumerated
+        <!-- The grounding envelope sealed past boot: the enumerated
              grounding-relevant mutation surface (metric / subject registration,
              purpose declaration, canonical-method selection, disclosure policy),
              its digestible envelope projection, the single audited mutation
              choke point, and the continuity proof that boot seal + recorded
              mutation chain accounts for the live envelope. Closes the post-boot
-             gap Phase 657's own doc names, the op-stream way rather than the
+             gap own doc names, the op-stream way rather than the
              freeze way. After BootVerificationPreflight (reads CompositionProfile
              + the seal discipline), after CompositionManifest (projects it) and
              AuditLog (emits mutations + refusals through the audit seam); before
              ServerApp. Opt-in — a deployment that composes no mutator is
              byte-for-byte unchanged (GP 11/13). -->
         <Compile Include="Server\GroundingEnvelopeSeal.fs" />
-        <!-- Phase 297 — ComponentId-keyed hosted-tree usage telemetry export:
+        <!-- ComponentId-keyed hosted-tree usage telemetry export:
              IHostedTreeUsageExport (Record usage / Snapshot scope-isolated) +
-             NoOp default + in-memory reference. Widens the Phase 268 fault
-             signal to interaction/usage keyed by ComponentId (Phase 279/283);
+             NoOp default + in-memory reference. Widens the fault
+             signal to interaction/usage keyed by ComponentId;
              scope-isolated by construction (GP 4), zero-cost when unused
              (GP 13). Depends only on Core ComponentId; standalone. -->
         <Compile Include="Server\HostedTreeUsageExport.fs" />
-        <!-- Phase 281 / 294 — composition well-formedness preflight: pure
+        <!-- Composition well-formedness preflight: pure
              rules-as-data over the CompositionManifest (duplicate ComponentId,
              companion-slot legality, orphaned tool references) + the first-
              party IConfigValidator that runs them. After CompositionManifest
              (reads it); before ServerApp (run folds the validator into the
              extension ServiceConfig hook). -->
         <Compile Include="Server\CompositionValidator.fs" />
-        <!-- Phase 593 - composition-inspector handler + its compose-time
+        <!-- Composition-inspector handler + its compose-time
              snapshot. AFTER CompositionManifest.fs / GroundingEnvelopeSeal.fs
              / CompositionValidator.fs (it projects all three) and BEFORE
              ServerApp.fs (run takes the snapshot and appends the route). That
              ordering is why this route is not mounted by BuildRouteHandlers
              like every other admin surface - see the file header. -->
         <Compile Include="Server\CompositionInspectorHandler.fs" />
-        <!-- Phase 782 - the reflection tools + the describe renderer. AFTER
+        <!-- The reflection tools + the describe renderer. AFTER
              CompositionInspectorHandler.fs and DeploymentVerificationReport.fs
              (it serves both) and BEFORE ServerApp.fs (run registers the
              renderer beside the inspector snapshot). -->
         <Compile Include="Server\ReflectionTools.fs" />
         <Compile Include="Server\ServerApp.fs" />
-        <!-- Phase 166 — detachable module-binding manifest reader. After
+        <!-- Detachable module-binding manifest reader. After
              ServerApp (it applies stamps onto ServerModule). -->
         <Compile Include="Server\ModuleBindingManifest.fs" />
-        <!-- Phase 215 — module-binding revocation list (crypto-free format +
+        <!-- Module-binding revocation list (crypto-free format +
              parser + stampId) + file-backed transparency log. The signed
              loader lives in ToolUp.ArtefactSigning (reuses the JWS verify
              primitives). Core types only — order-independent. -->
         <Compile Include="Server\ModuleBindingRevocation.fs" />
-        <!-- Phase 112 — live-session compose surface: options + SSE
+        <!-- Live-session compose surface: options + SSE
              subscribe endpoint (scope-isolated, rate-limited) +
              LiveSessionsCompose.withLiveSessions. After ServerApp (the
              record it extends via ComposeExtensions). -->
         <Compile Include="Server\Compose\LiveSessionsCompose.fs" />
-        <!-- Phase 289 — component-scoped configuration resolution: merge a
+        <!-- Component-scoped configuration resolution: merge a
              declared ComponentConfig section with its id-scoped env override
              + the IConfigValidator that rejects a stray override at
-             preflight. After ServerApp (validators wire through the Phase 9m
+             preflight. After ServerApp (validators wire through the
              aggregator) + the Core ComponentConfig type. -->
         <Compile Include="Server\ComponentConfigResolver.fs" />
-        <!-- Phase 432 — component secret & config requirements: derive a
-             component's knob requirements from its Phase 289 config section,
+        <!-- Component secret & config requirements: derive a
+             component's knob requirements from its config section,
              merge the residual declared secret requirements on top, and check
              PRESENCE at preflight (required secrets resolve in ISecretStore —
              existence only, never a value; required knobs bind). Two
-             IConfigValidators, split on the Phase 585 class boundary: the knob
+             IConfigValidators, split on the class boundary: the knob
              check is structural-class (unbypassable), the secret probe is
              external-probe class (skippable — the store may be a remote
              vault). After ComponentConfigResolver.fs (reads the resolved
              sections) and CompositionValidator.fs (reuses its defect
              severity). -->
         <Compile Include="Server\ComponentRequirements.fs" />
-        <!-- Phase 293 — composable-surface descriptor: forge's AVAILABLE
+        <!-- Composable-surface descriptor: forge's AVAILABLE
              composition vocabulary (companion slots + substrate reqs + config
              knob schemas + module contract), derived by reflecting the live
              ServerApp / ServerConfig registry. After ServerApp (reflects its
-             record fields); complements the Phase 280 instance manifest. -->
+             record fields); complements the instance manifest. -->
         <Compile Include="Server\ComposableSurface.fs" />
-        <!-- Phase 581 — module-surface descriptor: what ONE module provides
+        <!-- Module-surface descriptor: what ONE module provides
              (data types + wire TypeNames, query keys, tools, routes, jobs,
              metrics, config fields, pages) and needs (implied substrate, flag
              keys, event topics), derived from its own registrations. After
-             ServerApp (reads / reflects ServerModule) and beside the Phase 293
+             ServerApp (reads / reflects ServerModule) and beside the
              platform-level ComposableSurface it mirrors one level down. -->
         <Compile Include="Server\ModuleSurface.fs" />
-        <!-- Phase 691 — the seam-authority gate's production call site: for
+        <!-- The seam-authority gate's production call site: for
              each composed module, the substrate seams its registrations imply
-             are checked through the Phase 688 ISeamAuthorityGate, with
-             refusals riding the Phase 657 audited observer onto the Phase 658
+             are checked through the ISeamAuthorityGate, with
+             refusals riding the audited observer onto the
              ledger. After ModuleSurface.fs (whose Needs projection IS the
              reach derivation, so the SDK carries one declaration-to-substrate
              map rather than two) and after BootVerificationPreflight.fs
              (whose VerifiedCompositionProfile builds the audited gate). -->
         <Compile Include="Server\SeamAuthorityEnforcement.fs" />
-        <!-- Phase 431 — event-topology manifest: the inter-module messaging
+        <!-- Event-topology manifest: the inter-module messaging
              graph as data (per-ComponentId Emits / SubscribesTo), derived from
              live registrations — OnEvent job triggers (IEventStore
              subscriptions), AIToolDefinition.EmitsActions (notification-channel
              module actions), and an opt-in ObservingEventStore decorator that
              records emissions off ModuleEvent.SourceModule. Plus the dead-topic
-             / orphan-subscription queries, an id-keyed diff for the Phase 287
+             / orphan-subscription queries, an id-keyed diff for the
              golden-file gate, and the opt-in structural-class preflight
              validator. After ServerApp (reads ServerModule) and
              CompositionValidator (reuses its defect / rule-descriptor types);
              beside ModuleSurface, whose per-module lens it aggregates. -->
         <Compile Include="Server\EventTopology.fs" />
-        <!-- Phase 433 — component data-footprint manifest: what each composed
+        <!-- Component data-footprint manifest: what each composed
              component stores and where, derived from the live registrations
              (registered DataTypes attributed to their producing module,
              composed audit sinks attributed to their own multi-impl id), with
              the residual companion footprint + the ContainsPii judgement
-             declared on top. Plus the composition join over the Phase 280
-             manifest (the Phase 296 effect-join shape applied to data-at-rest)
+             declared on top. Plus the composition join over the
+             manifest (the effect-join shape applied to data-at-rest)
              and the opt-in structural-class DSR/offboarding completeness
              preflight. After ServerApp (reads ServerModule / ServerApp
              accumulators), CompositionManifest (the join restricts to it) and
              CompositionValidator (reuses its defect / rule-descriptor types);
              beside EventTopology, the sibling derived lens. -->
         <Compile Include="Server\DataFootprint.fs" />
-        <!-- Phase 434 — composition scale-readiness planner: the Phase 282
+        <!-- Composition scale-readiness planner: the
              per-companion distributed-readiness declarations joined across a
-             Phase 280 manifest into a per-component scale finding + a
-             whole-composition verdict (the MEET of the parts), the Phase 293
+             manifest into a per-component scale finding + a
+             whole-composition verdict (the MEET of the parts), the
              vocabulary consulted for the companion swap that would lift a
              scale-limiting finding, and an opt-in structural-class preflight
              gate reading the topology intent a deployment already declares
@@ -1694,7 +1692,7 @@
              rule-descriptor types); beside EventTopology / DataFootprint, the
              sibling derived lenses. -->
         <Compile Include="Server\ScaleReadiness.fs" />
-        <!-- Phase 488.C — the operational-telemetry diode: a consent-gated
+        <!-- The operational-telemetry diode: a consent-gated
              (default off) outbound channel whose wire schema is CLOSED — no
              string field anywhere in OperationalTelemetryFrame's transitive
              closure, so it structurally cannot carry row data — plus the
@@ -1704,25 +1702,25 @@
              structural DiodeTransmit function seam, GP 1), so it sits before
              ApplianceProfile and depends on nothing above it. -->
         <Compile Include="Server\OperationalTelemetryDiode.fs" />
-        <!-- Phase 488.A/B/D — the appliance deployment profile: the declared
+        <!--.A/B/D — the appliance deployment profile: the declared
              offline boot posture (external-probe-class validators downgraded to
-             Warning via a decorator, so the Phase 9m aggregator's "any Error
-             aborts" contract is untouched and the Phase 585 security /
+             Warning via a decorator, so the aggregator's "any Error
+             aborts" contract is untouched and the security /
              structural markers still abort), signed upgrade verification
-             against Phase 182 provenance (both digests + the detached JWS,
+             against provenance (both digests + the detached JWS,
              through the structural VerifyDetachedJws seam) with the pre-flip
-             verify → migrate-preview → flip staging check over the Phase 432
-             requirements, and the data-class-aware Phase 9n bundle variant
-             masking against the Phase 41/188 classification vocabulary. After
-             ConfigValidatorAggregator (reads its Phase 585 classify),
+             verify → migrate-preview → flip staging check over the
+             requirements, and the data-class-aware bundle variant
+             masking against the classification vocabulary. After
+             ConfigValidatorAggregator (reads its classify),
              ComponentRequirements (the 432 join), CompositionManifest and
              CompositionValidator (reuses its defect / rule-descriptor types). -->
         <Compile Include="Server\ApplianceProfile.fs" />
-        <!-- Phase 492.A — offline entitlement verification: the signed
+        <!-- Offline entitlement verification: the signed
              capability-token model (capability set + capacity grants + validity
              window + holder id), its canonical signed byte form, and the
              offline resolve that establishes a lifecycle phase without a
-             network call in the path. Verification reuses Phase 488.B's
+             network call in the path. Verification reuses
              structural VerifyDetachedJws seam rather than inventing a second
              shape, so it comes after ApplianceProfile; it also reads that
              file's ApplianceProfile.ClockSkewTolerance through a one-line
@@ -1732,21 +1730,21 @@
              capabilities are refused by EntitlementGovernance.declare, so no
              representable configuration withholds a customer's own data. -->
         <Compile Include="Server\EntitlementToken.fs" />
-        <!-- Phase 492.B/C — the two places entitlement state has to reach: the
-             flag ceiling that caps governed Phase 5c keys at what the
+        <!--.B/C — the two places entitlement state has to reach: the
+             flag ceiling that caps governed keys at what the
              entitlement grants (a decorator OVER FlagEvaluator, not an
              IFlagSource — a source is consulted only when no scope set the key,
              so one Platform-scope override would lift the entitlement
              entirely), and the structural-class boot preflight that surfaces
              days-remaining / grace / lapse loudly and NEVER returns Error,
-             because a Phase 9m Error aborts the boot and a boot that will not
+             because a Error aborts the boot and a boot that will not
              start is the most complete way to withhold a customer's own data.
              After EntitlementToken (its types) and FlagEvaluator (the record it
              decorates). -->
         <Compile Include="Server\EntitlementValidator.fs" />
-        <!-- Phase 597 — the prover's own lifecycle: a manifest version +
-             per-rule semver over every rule family that exports in the Phase
-             294 CompositionRuleDescriptor vocabulary, preflight-result
+        <!-- The prover's own lifecycle: a manifest version +
+             per-rule semver over every rule family that exports in the
+             CompositionRuleDescriptor vocabulary, preflight-result
              stamping (what a conclusion was proven under), and the errata
              channel (published data answering "was this stamped result
              evaluated under an erratum-affected rule version?"). After
@@ -1755,21 +1753,21 @@
              ConfigValidatorAggregator (stamps a ValidatorOutcome run). Pure:
              registers nothing, decorates nothing. -->
         <Compile Include="Server\CompositionRuleVersioning.fs" />
-        <!-- Phase 438 — authorization-surface manifest: every externally
+        <!-- Authorization-surface manifest: every externally
              reachable thing a component contributes (route prefixes + exact
-             route overrides under their Phase 66 admit sets, remoting API
-             record fields through the Phase 69d classifier, AI-drivable tools,
+             route overrides under their admit sets, remoting API
+             record fields through the classifier, AI-drivable tools,
              OnEvent job handlers) with its resolved default-deny
              classification — explicit requirement / inherited default-deny /
-             anonymous-reachable. Plus the Phase 113 ActionPolicy resolution
+             anonymous-reachable. Plus the ActionPolicy resolution
              over the floor entries, and a severity-bearing id-keyed diff for
-             the Phase 287 golden-file gate. After ServerApp (reads
+             the golden-file gate. After ServerApp (reads
              ServerModule) and Remoting\Auth.fs (reads the dispatcher's own
              AuthClassifier, so the manifest cannot drift from what is
              enforced); beside EventTopology / DataFootprint, the sibling
              derived lenses. -->
         <Compile Include="Server\AuthorizationSurface.fs" />
-        <!-- Phase 557 — module-access attestation certificate: a signed,
+        <!-- Module-access attestation certificate: a signed,
              third-party-verifiable statement of a module's declared grant
              policy, the consent records live at an instant, and the
              grant-authority manifest hash, carried as a DSSE-wrapped in-toto
@@ -1779,20 +1777,20 @@
              envelope it emits) and AuthorizationSurface.fs (the 554 surface
              it hashes). On demand only — nothing composes it. -->
         <Compile Include="Server\AccessAttestation.fs" />
-        <!-- Phase 627.E in-handler gate declarations for the platform-tier
+        <!-- in-handler gate declarations for the platform-tier
              API records (JobApi / ModelExecutionApi / IModuleQueryBusApi).
              After AuthorizationSurface.fs, which declares the record they
              are expressed in. IFormApi's live in ToolUp.Forms.Server,
              beside its own handler. -->
         <Compile Include="Server\PlatformInHandlerGates.fs" />
-        <!-- Phase 288 — component provenance: which package/assembly+version
+        <!-- Component provenance: which package/assembly+version
              a composed companion came from, keyed by the same ComponentId the
              manifest carries (id-join, no manifest-shape change). After
              ServerApp (walks the composed companion set). -->
         <Compile Include="Server\ComponentProvenance.fs" />
-        <!-- Phase 588 — host-envelope descriptor: what THIS deployment offers
+        <!-- Host-envelope descriptor: what THIS deployment offers
              a module — composed capability layers, every companion slot marked
-             filled or open, each composed module's Phase 581 ModuleSurface, the
+             filled or open, each composed module's ModuleSurface, the
              config-knob schemas with the values this deployment resolved, the
              occupied route prefixes, and the platform build — plus canonical
              JSON + a SHA-256 stamp so an external authoring tool pins a
@@ -1802,45 +1800,45 @@
              surfaces it aggregates) and ComponentProvenance.fs (the platform
              version). Pure — registers nothing, decorates nothing (GP 11/13). -->
         <Compile Include="Server\HostEnvelope.fs" />
-        <!-- Phase 290 — component health rollup: IHealthCheck results keyed by
+        <!-- Component health rollup: IHealthCheck results keyed by
              ComponentId into a per-component rollup (+ an Unkeyed bucket).
              After ServerApp (reads app.HealthChecks). -->
         <Compile Include="Server\ComponentHealthRollup.fs" />
-        <!-- Phase 291 — component lifecycle ordering: a declarative
+        <!-- Component lifecycle ordering: a declarative
              init-before partial order over ComponentIds + a stable
              topological init/dispose driver (dispose = reverse); a cycle is
              rejected at compose. Standalone (ComponentId only). -->
         <Compile Include="Server\ComponentLifecycle.fs" />
-        <!-- Phase 301 — live composition hot-swap: swap a declared companion
-             impl on a running app by ComponentId, driven by the Phase 291
+        <!-- Live composition hot-swap: swap a declared companion
+             impl on a running app by ComponentId, driven by the
              lifecycle order (init new, atomic re-point, dispose old), atomic
              with rollback. Opt-in (HotSwapMode, default off). After
              ComponentLifecycle. -->
         <Compile Include="Server\CompositionHotSwap.fs" />
-        <!-- Phase 284 — declarative composition descriptor: the serializable
-             inverse of the Phase 280 manifest (component selection by
+        <!-- Declarative composition descriptor: the serializable
+             inverse of the manifest (component selection by
              ComponentId + ServerConfig) + RegistrationCatalogue +
              CompositionDescriptor.ofManifest / ServerApp.ofManifest. After
              ServerApp (folds addModule / with* builders). -->
         <Compile Include="Server\CompositionDescriptor.fs" />
-        <!-- Phase 292 — descriptor schema-version + forward migration: an
+        <!-- Descriptor schema-version + forward migration: an
              older CompositionDescriptor migrates to the current shape before
              ServerApp.ofManifest composes it; a too-new version fails
              readably. Hosts the versioned ServerApp.ofManifest (runs migrate
              first). After CompositionDescriptor.fs. -->
         <Compile Include="Server\CompositionDescriptorVersion.fs" />
-        <!-- Phase 302 — per-tenant composition presets: resolve a tenant to a
+        <!-- Per-tenant composition presets: resolve a tenant to a
              base preset descriptor + per-tenant hole bindings + per-tenant
-             component config (Phase 289), composed via ofManifest;
+             component config, composed via ofManifest;
              scope-isolated by construction. After CompositionDescriptor.fs
-             (holes/apply) + ComponentConfigResolver.fs (Phase 289). -->
+             (holes/apply) + ComponentConfigResolver.fs. -->
         <Compile Include="Server\TenantCompositionPreset.fs" />
-        <!-- Phase 436 — null-composition dry-run harness: rebind every
+        <!-- Null-composition dry-run harness: rebind every
              companion slot to the in-process default the slot already
-             declares (derived from the Phase 293 reflected slot set — leaving
-             a slot None IS selecting its default), rebuild through the Phase
-             284 / 292 versioned ofManifest, run the Phase 281 / 294
-             structural-class well-formedness rules, drive the Phase 291
+             declares (derived from the reflected slot set — leaving
+             a slot None IS selecting its default), rebuild through the
+             versioned ofManifest, run the
+             structural-class well-formedness rules, drive the
              init/dispose order, and return a typed DryRunReport — zero
              external services, defects as findings rather than exceptions.
              Plus the Expecto-shaped (Expecto-free) DryRun.shouldCompose
@@ -1852,14 +1850,14 @@
              registers into DI — a consumer that never calls it composes
              byte-for-byte what it did before (GP 11 / GP 13). -->
         <Compile Include="Server\CompositionDryRun.fs" />
-        <!-- Phase 435 — cross-version composition upgrade planner: given this
-             instance's Phase 280 manifest + Phase 288 provenance and the Phase
-             293 ComposableSurface of a NEWER version set (data, so no new
+        <!-- Cross-version composition upgrade planner: given this
+             instance's manifest + provenance and the
+             ComposableSurface of a NEWER version set (data, so no new
              binaries need loading), compute a typed CompositionUpgradePlan —
              which composed slots' contracts widened / changed / vanished, which
-             Phase 292 descriptor schema hops the jump crosses in what order,
+             descriptor schema hops the jump crosses in what order,
              and the convention-derived docs/migrations/<slug>.md pointer per
-             step. Phase 286's structural diff applied across versions rather
+             step. structural diff applied across versions rather
              than across instances: both sides' slots are projected into the
              ComponentEntry shape (contract fingerprinted into Impl) so
              CompositionDiff.diff does the id-keyed pairing. After
@@ -1868,9 +1866,9 @@
              CompositionDryRun.fs (its slotInterface parser). Pure — nothing
              registers into DI, nothing runs at compose (GP 11 / GP 13). -->
         <Compile Include="Server\CompositionUpgradePlan.fs" />
-        <!-- Phase 675 — the cumulative privacy-budget ledger, MOVED here
+        <!-- The cumulative privacy-budget ledger, MOVED here
              from the federation companion (it was
-             InterPlatform/Server/PrivacyBudgetLedger.fs, Phase 190). Two
+             InterPlatform/Server/PrivacyBudgetLedger.fs,). Two
              tiers now meter against it — the clean-room gate and the
              grounding tier's declassification routines — and a second
              implementation of a privacy control is how a path that
@@ -1880,7 +1878,7 @@
              IConditionalBlobStorage (Core) and the FableConverters set
              (Server/Remoting/Json/), and nothing above it needs it. -->
         <Compile Include="Server\PrivacyBudgetLedger.fs" />
-        <!-- Phase 723 — the scope-enumeration seam (IScopeEnumerator + its
+        <!-- The scope-enumeration seam (IScopeEnumerator + its
              ITeamStore-backed default) and the converged restart-recovery
              sweep (IIngestionRecoverySurface + IngestionRecoverySweep) the
              RAG and KnowledgeBase companions now share. After
@@ -1891,7 +1889,7 @@
              deployment that composes no enumerator and no sweep is
              byte-for-byte unchanged (GP 11 / GP 13). -->
         <Compile Include="Server\ScopeEnumeration.fs" />
-        <!-- Phase 676 — the N-party countersignature registry: a signed
+        <!-- The N-party countersignature registry: a signed
              propose / review / approve / revoke lifecycle over arbitrary
              content-hashed subjects, with approval live only under every
              enrolled party's signature over the exact subject hash. Placed
@@ -1909,11 +1907,11 @@
          was a transitive dep of ToolUp.Remoting.Server / Giraffe /
          AspNetCore — now declared explicitly. -->
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
-    <!-- Phase 828 - the self-hosted log store's default backend. MIT,
+    <!-- The self-hosted log store's default backend. MIT,
          freely available, no paid tier (GP 2); the version is pinned
          centrally in Directory.Packages.props. -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
-    <!-- Phase 30a — Ed25519 signing / verification for
+    <!-- Ed25519 signing / verification for
          IArtifactSigner / IArtifactVerifier defaults. MIT-licensed
          (GP 2 — no paid deps). Version pinned centrally in
          Directory.Packages.props. -->

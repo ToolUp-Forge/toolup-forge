@@ -251,7 +251,7 @@ let tests =
 
             let authIdx = adapter.IndexOf "AuthClassifier.evaluate methodCls"
             let replayIdx = adapter.IndexOf "x-idempotency-replay"
-            let rateLimitIdx = adapter.IndexOf "Phase 69g — rate-limit pre-flight"
+            let rateLimitIdx = adapter.IndexOf "// Rate-limit pre-flight."
 
             Expect.isGreaterThan authIdx -1 "the auth evaluation must exist"
             Expect.isGreaterThan replayIdx -1 "the idempotency replay path must exist"

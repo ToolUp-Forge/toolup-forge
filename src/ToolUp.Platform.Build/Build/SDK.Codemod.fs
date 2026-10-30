@@ -11,28 +11,30 @@ open System.Text.RegularExpressions
 /// The migration a codemod rule implements — cited on every rewrite and finding.
 [<RequireQualifiedAccess>]
 type CodemodMigration =
-    /// Phase 73 — `Fable.Remoting.*` → `ToolUp.Remoting.*`, `Elmish` → `ToolUp.Elmish`.
+    /// `Fable.Remoting.*` → `ToolUp.Remoting.*`, `Elmish` → `ToolUp.Elmish`.
     | Remoting
-    /// Phase 66 — `PlatformMode` → `Subject` / `SurfaceProfile` / `SurfaceRequirement`.
+    /// `PlatformMode` → `Subject` / `SurfaceProfile` / `SurfaceRequirement`.
     | Surfaces
-    /// Phase 11.C.5 — package-id renames (Tier 2) and interface-shape renames (Tier 3).
+    /// Package-id renames (Tier 2) and interface-shape renames (Tier 3).
     | ApiStability
-    /// Phase 815 — the seven 0.x deprecations removed at the 1.0 cut.
+    /// The seven 0.x deprecations removed at the 1.0 cut.
     | Deprecations
-    /// Phase 879 — the per-built-in client mode types become one
+    /// The per-built-in client mode types become one
     /// `SlotFill`, and `ClientConfig`'s per-built-in fields become the
     /// `Slots` map.
     | ShellSlots
-    /// Phase 1077 — the string-shaped agent-loop entry is removed, and the
+    /// The string-shaped agent-loop entry is removed, and the
     /// history window moves into the loop's limits.
     | AgentLoop
-    /// Phase 1095 — `IDataSource` declares what a connector can do as a
+    /// `IDataSource` declares what a connector can do as a
     /// `Capabilities` record.
     | Capabilities
     /// `IModelFitProvider`, `IModelRegistry` and `IExternalComputeDispatcher`
     /// declare what an implementation can do as a `Capabilities` record.
     | ModelCapabilities
-    /// Phase 1066 — `IJobScheduler.Schedule` answers `ScheduleOutcome`
+    /// The caller-less remoting members removed with no mechanical replacement.
+    | RemotingLeftovers
+    /// `IJobScheduler.Schedule` answers `ScheduleOutcome`
     /// (`Scheduled` / `Coalesced`) and `TriggerOnce` refuses with a typed
     /// `TriggerError`.
     | JobOutcomes
@@ -49,6 +51,7 @@ module CodemodMigration =
         | CodemodMigration.ShellSlots -> "docs/migrations/879-shell-slots.md"
         | CodemodMigration.AgentLoop -> "docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md"
         | CodemodMigration.Capabilities -> "docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md"
+        | CodemodMigration.RemotingLeftovers -> "docs/migrations/1053-redesign-b-defects-remoting.md"
         | CodemodMigration.JobOutcomes ->
             "docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md"
         | CodemodMigration.ModelCapabilities ->
@@ -66,6 +69,7 @@ module CodemodMigration =
         | CodemodMigration.Capabilities -> "Phase 1095"
         | CodemodMigration.JobOutcomes -> "Phase 1066"
         | CodemodMigration.ModelCapabilities -> "Phase 1094"
+        | CodemodMigration.RemotingLeftovers -> "Phase 1053"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -185,7 +189,7 @@ type CodemodPlan = {
         this.Files
         |> List.collect (fun f -> f.Findings |> List.map (fun x -> f.RelativePath, x))
 
-/// Phase 183 — the consumer codemod for the Epoch-1 `0.x` breaking renames.
+/// The consumer codemod for the Epoch-1 `0.x` breaking renames.
 ///
 /// Three rename clusters shipped as prose migration docs only, so every
 /// consumer hand-applied the same `open` / symbol edits: Phase 73's
@@ -266,7 +270,7 @@ module Codemod =
         | "MultiTeam" -> "Surfaces.multiTeam"
         | other -> failwithf "Codemod: no Surfaces mapping for PlatformMode case %s" other
 
-    // ── Phase 879 — the shell-slot tables ─────────────────────────────
+    // ── The shell-slot tables ─────────────────────────────
 
     /// The twenty `ClientConfig` fields that became `ClientConfig.Slots`
     /// fields of the same name. The mode cases of each are the field's
@@ -293,7 +297,7 @@ module Codemod =
     /// anchors on `open`, the other excludes it via its lookbehind on
     /// whitespace-only prefixes), and no rule's output is another's input.
     let rewriteRules: CodemodRewriteRule list = [
-        // Phase 73 — Remoting. The five namespaces the fork carries. Any
+        // Remoting. The five namespaces the fork carries. Any
         // OTHER `Fable.Remoting.X` (AspNetCore, DotnetClient, Suave, …)
         // has no ToolUp counterpart and is a review finding below.
         rewrite
@@ -303,7 +307,7 @@ module Codemod =
             @"\bFable\.Remoting\.(Server|Client|Json|Giraffe|MsgPack)\b"
             "ToolUp.Remoting.$1"
             "`Fable.Remoting.{Server,Client,Json,Giraffe,MsgPack}` → `ToolUp.Remoting.*` (opens and fully-qualified references)"
-        // Phase 73 — Elmish opens. Exactly the three the runtime carries
+        // Elmish opens. Exactly the three the runtime carries
         // (`Elmish`, `Elmish.React`, `Elmish.HMR`); `open Elmish.Navigation`
         // and the other upstream sub-packages are review findings.
         rewrite
@@ -313,7 +317,7 @@ module Codemod =
             @"^(\s*open\s+)Elmish(\.React|\.HMR)?(?![\w.])"
             "${1}ToolUp.Elmish$2"
             "`open Elmish` / `open Elmish.React` / `open Elmish.HMR` → `open ToolUp.Elmish` / `.React` / `.HMR`"
-        // Phase 73 — Elmish qualified access (`Elmish.Program.mkProgram`,
+        // Elmish qualified access (`Elmish.Program.mkProgram`,
         // `Elmish.Cmd.none`, `Elmish.React.Program.run`). The lookbehind
         // leaves `ToolUp.Elmish.` (already migrated), `Fable.Elmish` (the
         // upstream package name in prose) and string-literal mentions
@@ -337,7 +341,7 @@ module Codemod =
             @"\bAccept(HeaderAuth|PlaintextSecrets|NoRateLimit|QueryParamSseAuth|UnboundAudience)InAuthenticatedMode\b"
             "Accept$1WhenAuthRequired"
             "`Accept{HeaderAuth,PlaintextSecrets,NoRateLimit,QueryParamSseAuth,UnboundAudience}InAuthenticatedMode` → `Accept…WhenAuthRequired`"
-        // Phase 66 — env var + Vite define. `TOOLUP_PLATFORM_MODE` inside
+        // Env var + Vite define. `TOOLUP_PLATFORM_MODE` inside
         // `__TOOLUP_PLATFORM_MODE__` is followed by `_`, which the
         // negative lookahead admits, so one rule covers both spellings.
         rewrite
@@ -433,7 +437,7 @@ module Codemod =
             @"\bToolUp\.AuthProviders\.OidcClient\b"
             "ToolUp.AuthProviders.Oidc.Client"
             "`ToolUp.AuthProviders.OidcClient` → `ToolUp.AuthProviders.Oidc.Client`"
-        // Phase 815 — the AG Grid / AG Charts compat re-exports. The
+        // The AG Grid / AG Charts compat re-exports. The
         // module names are gone; every member they forwarded lives under
         // the standalone binding's module with the same name, so an
         // `open` or a qualified access moves 1:1. `\b` keeps
@@ -453,7 +457,7 @@ module Codemod =
             @"\bToolUp\.Platform\.AgChart\b"
             "Feliz.AgCharts"
             "`ToolUp.Platform.AgChart` (the compat re-export) → `Feliz.AgCharts` (opens and qualified references)"
-        // Phase 815 — `Program.withErrorHandler onError` in its pipeline
+        // `Program.withErrorHandler onError` in its pipeline
         // form (a named callback, nothing after it but the next `|>` or
         // the line end). The upstream-shape callback composes onto the
         // structured reporter exactly as the removed shim did internally,
@@ -467,7 +471,7 @@ module Codemod =
             @"\bProgram\.withErrorHandler\s+([A-Za-z_][\w'.]*)(?=\s*(\|>|$))"
             "Program.withErrorReporter (fun ctx -> $1 (ctx.Message, ctx.Exception))"
             "`Program.withErrorHandler onError` → `Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))`"
-        // Phase 815 — `Program.withConsoleTrace` took nothing but the
+        // `Program.withConsoleTrace` took nothing but the
         // program, so its replacement is a fixed expression: the
         // upstream `withTrace` hook, logging the same bounded reprs the
         // shim logged (`safeMsgRepr` — never the live msg/model object).
@@ -478,7 +482,7 @@ module Codemod =
             @"\bProgram\.withConsoleTrace\b"
             "Program.withTrace (fun msg model _ -> printfn \"New message: %s -> updated state: %s\" (Program.safeMsgRepr msg) (Program.safeMsgRepr model))"
             "`Program.withConsoleTrace` → `Program.withTrace` with a console-logging callback over `Program.safeMsgRepr`"
-        // Phase 879 — a `ClientConfig` field set to one of its own mode
+        // A `ClientConfig` field set to one of its own mode
         // cases moves under `Slots` (a nested copy-and-update). The
         // lookahead ties the field to ITS cases, so a consumer-owned
         // field of the same name holding anything else — and the
@@ -540,7 +544,7 @@ module Codemod =
             (@"(?<![\w])(?:" + labelRecords + @")Config\b")
             "ModuleLabel"
             "`TeamManagerConfig` (and the nineteen other `{ Name; Icon }` records) → `ModuleLabel`"
-        // Phase 1077 — the history window moved into the loop's limits. A
+        // The history window moved into the loop's limits. A
         // literal window maps 1:1; any other expression is reported below.
         rewrite
             "1077-history-window-default"
@@ -563,7 +567,7 @@ module Codemod =
             @"\bAIAssistantServerConfig\.DefaultMaxHistoryMessages\b"
             "AgentLoopLimits.DefaultHistoryWindow"
             "`AIAssistantServerConfig.DefaultMaxHistoryMessages` → `AgentLoopLimits.DefaultHistoryWindow`"
-        // Phase 1095 — the watch seam moved beside `IDataSource`, so a
+        // The watch seam moved beside `IDataSource`, so a
         // fully-qualified reference names its new namespace.
         rewrite
             "1095-watch-seam-namespace"
@@ -761,7 +765,7 @@ module Codemod =
             CodemodFileClass.Source
             (@"^\s*(?:" + slotFields + @")\s*=\s*$")
             "if this is a `ClientConfig` field, it is `Slots.<field> =` now (a nested copy-and-update) — the codemod moves the field only when its mode case is on the same line; a message-catalog field of the same name stays as it is"
-        // Phase 1077 — the string-shaped loop entry is removed. Its twelfth
+        // The string-shaped loop entry is removed. Its twelfth
         // argument changes type, so the call is reshaped by hand.
         review
             "1077-run-agent-loop"
@@ -775,7 +779,7 @@ module Codemod =
             CodemodFileClass.Source
             @"\b(?:MaxHistoryMessages|effectiveMaxHistory)\b"
             "the history window is `AIAssistantServerConfig.Limits.HistoryWindow` now: set `Limits = { AgentLoopLimits.defaults with HistoryWindow = <n> }`, and read it as `AIAssistantServerConfig.limits cfg |> AgentLoopLimits.historyWindow`"
-        // Phase 1095 — a capability is read from the declared record, never
+        // A capability is read from the declared record, never
         // probed off the connector's type (a decorator's type hides it).
         review
             "1095-capability-probe"
@@ -817,6 +821,48 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmember\s+\w+\.(?:Schedule|TriggerOnce)\b"
             "an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy"
+        review
+            "1053-thread-safe-cell"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bThreadSafeCell\.(?:create|set|get|computeOnce)\b"
+            "`ThreadSafeCell` is removed with no replacement; a `Lazy<'T>` covers `computeOnce`"
+        review
+            "1053-reader"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\b(?:ReaderBuilder\b|Reader\.(?:run|returnM|bindM)\b|Remoting\.fromReader\b)"
+            "`Reader`, `ReaderBuilder` and `Remoting.fromReader` are removed: use `Remoting.fromContext` and read services from the context"
+        review
+            "1053-get-service"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\b(?:getService|resolve)<"
+            "the global `Extensions` module is removed: `getService<'T>` is Giraffe's `ctx.GetService<'T>()`, and `resolve<'T>` goes with `Reader`. A local function of this name is not affected"
+        review
+            "1053-stackalloc"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bWrite\.stackalloc\b"
+            "`Write.stackalloc` is removed: it returned a span over a popped frame. Allocate the buffer with `NativePtr.stackalloc` in the function that reads it"
+        review
+            "1053-parsing-arguments-error"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bParsingArgumentsError\b"
+            "`ParsingArgumentsError` is removed: `DecodeError.render` is the sentence it carried"
+        review
+            "1053-interpret-integer-as"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\binterpretIntegerAs\b"
+            "`Read.interpretIntegerAs typ n` is removed: it was `Read.interpretIntegerAsFrom typ 64 n`, and a caller that knows the source width should say it"
+        review
+            "1053-write-fable"
+            CodemodMigration.RemotingLeftovers
+            CodemodFileClass.Source
+            @"\bWrite\.Fable\b"
+            "`Write.Fable` no longer ships: no browser path writes MessagePack. Copy `src/ToolUp.AI.Client.Tests/Remoting/MsgPackWrite.fs` if you need the writer"
     ]
 
 
@@ -1183,7 +1229,7 @@ module Codemod =
                     sb.AppendLine(sprintf "@@ L%d [%s]" r.Line r.RuleId) |> ignore
                     sb.AppendLine("-" + r.Before) |> ignore
 
-                    // A rewrite that inserts a line (Phase 1095) carries it
+                    // A rewrite that inserts a line carries it
                     // after a terminator: each line gets its own `+`.
                     for line in lineSplitter.Split r.After |> Array.chunkBySize 2 |> Array.map Array.head do
                         sb.AppendLine("+" + line) |> ignore

@@ -5,14 +5,14 @@
         <Description>ToolUp.Platform Core — shared types and interfaces (ILogger, IBlobStorage, IAuthProvider, IAIProvider, INotificationChannel, IHealthCheck, IConfigValidator, etc.). No server or client deps; the "minimum viable module" floor for downstream packages.</Description>
         <PackageTags>fsharp;sdk;types;interfaces</PackageTags>
     </PropertyGroup>
-    <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+    <!-- Pack source for Fable consumers
          under fable/. Core types are shared between server-tier (consumes
          the DLL) and Fable client-tier (consumes the source) — both ship
          in the same nupkg. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <!-- The same .fsproj is packed into fable/ and Fable compiles every
+        <!-- The same.fsproj is packed into fable/ and Fable compiles every
              <Compile> item it lists, so a source file listed here is a file
-             every Fable consumer transpiles. Phase 880: what only a server
+             every Fable consumer transpiles. What only a server
              can run (the env binder, the manifest seam, the JWT crypto, the
              vocabulary hash / loader, the signed-URL probe) moved to
              ToolUp.Platform.Server, namespaces preserved, rather than
@@ -22,7 +22,7 @@
              unless it is a pinned, named exception. -->
         <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
-    <!-- Phase 11.C.2 closure: pack the parent companion's README. All
+    <!-- Pack the parent companion's README. All
          four ToolUp.Platform tiers (Core / Server / Client / Build) ship
          the same parent README; tier-specific detail lives in <Description>. -->
     <ItemGroup>
@@ -36,7 +36,7 @@
          patterns — and needs visibility into Core's internals. Mirrors
          the original ToolUp.Remoting.MsgPack -> ToolUp.Remoting.Server
          InternalsVisibleTo from the pre-fold layout.
-         Phase 902 — TypeShape now lives in Platform.Server itself; the
+         TypeShape now lives in Platform.Server itself; the
          friendship stays for the internal scope conversions Server still
          reads (e.g. `ofCarried`, `ofStorageScope`). -->
     <ItemGroup>
@@ -46,42 +46,42 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\LogLevel.fs" />
-        <!-- Phase 279 — stable component identity (ComponentId): a
+        <!-- Stable component identity (ComponentId): a
              value-typed string wrapper + deterministic per-kind
              derivation + duplicate detection. Standalone (string-only),
              placed early so module / companion / datatype / tool
              registration surfaces in every later tier can reference it. -->
         <Compile Include="Shared\ComponentId.fs" />
-        <!-- Phase 580 — tier-shared module identity: the name→id
+        <!-- Tier-shared module identity: the name→id
              derivation both tiers apply, derived-vs-explicit
              classification, and the compose-time duplicate-id gate the
              client shell was missing (the server has run
-             ComponentId.ensureUnique since Phase 279). Pure + Fable-safe;
+             ComponentId.ensureUnique). Pure + Fable-safe;
              immediately after ComponentId.fs, whose ofModule derivation
              it lifts ids through. -->
         <Compile Include="Shared\ModuleIdentity.fs" />
-        <!-- Phase 289 — component-scoped configuration section addressable
+        <!-- Component-scoped configuration section addressable
              by ComponentId + the pure, deterministic env-var-name
              derivation (TOOLUP_COMPONENT__<id>__<key>). Fable-safe (string
              only); after ComponentId.fs (keys the section) so the Server-tier
              resolver + the both-tier scaffolding tooling agree on the
              override name. -->
         <Compile Include="Shared\ComponentConfig.fs" />
-        <!-- Phase 282 — typed companion capability descriptors: a
+        <!-- Typed companion capability descriptors: a
              machine-queryable EffectClass / DeterminismSource / Readiness
              posture a companion declares, keyed against the same
              ComponentId the manifest + preflight correlate against. Three
-             join-semilattices (Phase 296 joins them componentwise); the
+             join-semilattices (joins them componentwise); the
              bottom of each axis is the identity an undeclared companion
              contributes, so a pre-282 deployment is byte-for-byte
              unchanged (GP 11). Fable-safe (DUs + Set only); after
              ComponentId.fs so it can key on the stable identity. -->
         <Compile Include="Shared\CompanionCapability.fs" />
-        <!-- Phase 772 — server-side egress policy, the pure half: origin-only destinations,
+        <!-- Server-side egress policy, the pure half: origin-only destinations,
              the IEgressPolicy seam, permit-all + declared-destinations policies and the
              per-component EgressGrant signature. Needs only ComponentId; Fable-safe. -->
         <Compile Include="Shared\Types\EgressPolicyTypes.fs" />
-        <!-- Phase 432 — component secret & config requirement types: what a
+        <!-- Component secret & config requirement types: what a
              composed component NEEDS (credential names + classes, config knob
              paths + types), keyed by the same ComponentId. Names and classes
              only — no field here can hold a secret value. Fable-safe (DUs +
@@ -91,54 +91,54 @@
              derivation + presence preflight live Server-side in
              ComponentRequirementsPreflight. -->
         <Compile Include="Shared\ComponentRequirements.fs" />
-        <!-- Phase 433 — component data-footprint types: what a composed
+        <!-- Component data-footprint types: what a composed
              component STORES and where (data classes × store seam × a
              declared ContainsPii marker), keyed by the same ComponentId in a
              FootprintSignature — the third parallel projection beside
              CapabilitySignature (282) and RequirementsSignature (432). Carries
-             the componentwise join (the Phase 296 shape applied to
+             the componentwise join (the shape applied to
              data-at-rest), the composed-surface queries, the id-keyed diff and
              wire projection, and the pure DSR-coverage evaluation. Fable-safe
              (DUs + records + Set/Map); after ComponentId.fs. The derivation
              from live registrations + the preflight rules live Server-side in
              DataFootprintDerivation / DataFootprintPreflight. -->
         <Compile Include="Shared\DataFootprint.fs" />
-        <!-- Phase 437 — per-component resource envelopes: an opt-in budget
+        <!-- Per-component resource envelopes: an opt-in budget
              (job concurrency, request rate, queue depth, an advisory memory
              hint) keyed by the same ComponentId in an EnvelopeSignature —
              the fourth parallel projection beside CapabilitySignature (282),
              RequirementsSignature (432) and FootprintSignature (433).
              Carries the pure admission arithmetic every enforcement seam
-             shares and the Phase 290 pressure reading. Fable-safe (DUs +
+             shares and the pressure reading. Fable-safe (DUs +
              records + Map, System.String only); after ComponentId.fs. The
-             seam adapters (Phase 9b scheduler / rate-limit / queue) live
+             seam adapters (scheduler / rate-limit / queue) live
              Server-side in ResourceEnvelopeEnforcement. -->
         <Compile Include="Shared\ResourceEnvelope.fs" />
         <!-- 0.4.1 — forge-native authorisation attributes (mirrors of the
-             Phase 69d markers in ToolUp.Remoting.Server). Placed early so
+             markers in ToolUp.Remoting.Server). Placed early so
              every later API record file can annotate its fields. The SDK's
              Api.make consumes them via the AuthAttributeBridge at
              composition time. -->
         <Compile Include="Shared\AuthAttributes.fs" />
         <!-- Wave 19 TIDY-UP — the Fable-safe base64url codec shared by every
              token site. Its HS256/HMAC twin, JwtCrypto, is BCL crypto and
-             lives in ToolUp.Platform.Server since Phase 880. Placed early —
+             lives in ToolUp.Platform.Server. Placed early —
              every later token/auth file references it. -->
         <Compile Include="Shared\Base64Url.fs" />
-        <!-- Phase 972 - the one shared unwrap for a provider exception that
+        <!-- The one shared unwrap for a provider exception that
              crossed Async.AwaitTask (AggregateException) or reflection
              (TargetInvocationException). Server-only body behind a small
              FABLE_COMPILER guard; every companion opens it. -->
         <Compile Include="Shared\ProviderExceptions.fs" />
         <Compile Include="Shared\Interfaces\ILogger.fs" />
-        <!-- Phase 57 — static-prerender substrate types lifted out of
+        <!-- Static-prerender substrate types lifted out of
              Client/SDK.ClientTypes.fs so ToolUp.Platform.Build can
              consume them in the FAKE Prerender target factory without
              a Build → Client dep that would re-introduce a Fable-tier
              pull into the .NET-only build package. -->
         <Compile Include="Shared\Types\PrerenderTypes.fs" />
         <Compile Include="Shared\Types\DataManagementTypes.fs" />
-        <!-- Phase 7b — schema-first user authoring (substrate slice):
+        <!-- Schema-first user authoring (substrate slice):
              UserAuthoredSchema / BIFriendlyType / SchemaMigration /
              FieldSensitivity / AuthoredBy + the IUserSchemaApi remoting
              contract. After DataManagementTypes.fs (extends DataTypeSchema)
@@ -151,31 +151,31 @@
         <Compile Include="Shared\Types\ColumnMappingApi.fs" />
         <Compile Include="Shared\Visualisation.fs" />
         <Compile Include="Shared\TimeManagement.fs" />
-        <!-- Phase 10a — module data-migration substrate (Fable-safe half):
+        <!-- Module data-migration substrate (Fable-safe half):
              the version stamp, the IDataMigrator seam, the chain-error DU,
              and the per-team status record the admin UI renders. Before
              IFileProcessor.fs, whose DataType carries SchemaVersion +
              Migrations. BCL-only, no server coupling. -->
         <Compile Include="Shared\MigrationTypes.fs" />
         <Compile Include="Shared\Interfaces\IFileProcessor.fs" />
-        <!-- Phase 1060 — the closed scope type. SurfaceProfile.fs moved up from
+        <!-- The closed scope type. SurfaceProfile.fs moved up from
              beside Subject.fs (it depends on nothing) so ScopeKey.persistence
              can read the declared Surfaces; ScopeKey.fs precedes ResolvedScope.fs,
              whose StorageScope.ofKey projects it. -->
         <Compile Include="Shared\Types\SurfaceProfile.fs" />
         <Compile Include="Shared\Types\ScopeKey.fs" />
-        <!-- Phase 797 —`StorageScope` + the resolver-minted `ResolvedScope`,
+        <!-- `StorageScope` + the resolver-minted `ResolvedScope`,
              ahead of VectorKnowledgeTypes.fs so IFactDisclosureGate can take
              the typed scope. StorageScope.fs below keeps the resolver's
              request and error types (they need AuthenticatedUser). -->
         <Compile Include="Shared\Types\ResolvedScope.fs" />
-        <!-- Phase 1029 - the one declared-principal record every kind of
+        <!-- The one declared-principal record every kind of
              declared work runs as (standing report subscriptions, declared
              data delivery). Three strings, Fable-safe; the server-tier
              readings stay with the resolver in ToolUp.Platform.Server. -->
         <Compile Include="Shared\DeclaredPrincipal.fs" />
         <Compile Include="Shared\Types\VectorKnowledgeTypes.fs" />
-        <!-- Phase 648 — the provenance walk's read-only wire contract: the
+        <!-- The provenance walk's read-only wire contract: the
              Fable-safe mirrors of the server-tier node / edge / ref records,
              the chain-page + withheld-marker shapes, the declared caps, and
              IProvenanceQueryApi over them. After AuthAttributes.fs (the API
@@ -189,13 +189,13 @@
         <Compile Include="Shared\Auth\AuthMetrics.fs" />
         <Compile Include="Shared\Types\DataSubjectTypes.fs" />
         <Compile Include="Shared\Types\DataSubjectApiTypes.fs" />
-        <!-- Wave 8 (Epoch 2) Phase 187 — compliance evidence-pack request /
+        <!-- Compliance evidence-pack request /
              manifest / result + the IEvidencePackGenerator seam. After
              DataSubjectTypes.fs (uses ExportSegment + ExportSignature). -->
         <Compile Include="Shared\Types\EvidencePackTypes.fs" />
         <Compile Include="Shared\Interfaces\IBlobStorage.fs" />
         <Compile Include="Shared\Interfaces\ITimeSeriesStore.fs" />
-        <!-- Phase 828 - ILogStore: the self-hosted log store seam. After
+        <!-- ILogStore: the self-hosted log store seam. After
              LogLevel.fs (LogRecord.Level) and before SDK.Shared.fs, which
              carries the ServerConfig field. Fable-safe (records, primitives,
              option, the LogLevel DU) so a client renders the same type the
@@ -203,33 +203,33 @@
         <Compile Include="Shared\Interfaces\ILogStore.fs" />
         <Compile Include="Shared\Interfaces\ITelemetrySink.fs" />
         <Compile Include="Shared\Interfaces\ISecretStore.fs" />
-        <!-- Phase 11.C.5 Tier 3 — unified RetryPolicy (replaces the
+        <!-- Unified RetryPolicy (replaces the
              AI-side `{ MaxRetries; BackoffMs; TimeoutMs }` and
-             audit-side `AuditReplicatorRetryPolicy` shapes). Phase 251
+             audit-side `AuditReplicatorRetryPolicy` shapes).
              relocated it DOWN into the Fable-safe ToolUp.AI.Wire tier, and
-             Phase 128 moved it once more, into the lowest tier
+             moved it once more, into the lowest tier
              (ToolUp.Platform.Transport, namespace ToolUp.Platform.Transport),
              which Core references directly. -->
         <Compile Include="Shared\Interfaces\IAIProvider.fs" />
         <Compile Include="Shared\Types\StorageScope.fs" />
-        <!-- Phase 264 — neutral host-state binding-source namespace
+        <!-- Neutral host-state binding-source namespace
              (HostBindingSources). Shared floor (not client-side-only)
              because the CSR projection (Platform.Client) and the SSR
              projection (PublicRendering) produce the same type; GP 10. -->
         <Compile Include="Shared\HostBindingSources.fs" />
-        <!-- Phase 276 — neutral hosted-route declaration (HostRoute /
+        <!-- Neutral hosted-route declaration (HostRoute /
              HostRouteParams). Shared floor (not client-side-only) because
              the client deep-link mapping (Platform.Client) and the SSR route
              registration (PublicRendering) consume the same route type; GP 10.
              After HostBindingSources.fs (paramsToBindingSources projects into
-             the State namespace for the Phase 264 param round-trip). -->
+             the State namespace for the param round-trip). -->
         <Compile Include="Shared\HostRoutes.fs" />
         <Compile Include="Shared\EncryptionTypes.fs" />
         <Compile Include="Shared\EntityTypes.fs" />
         <Compile Include="Shared\EntityQueryTypes.fs" />
         <Compile Include="Shared\EntityQuery.fs" />
         <Compile Include="Shared\FeatureFlagTypes.fs" />
-        <!-- Phase 637 — server-authoritative module-visibility profiles
+        <!-- Server-authoritative module-visibility profiles
              (ModuleVisibilityRule / Profile / Resolution + the pure
              narrowing walk). After FeatureFlagTypes.fs (a profile is keyed
              by FlagScope and resolved along the same scope walk); BEFORE
@@ -240,7 +240,7 @@
         <Compile Include="Shared\Types\ModuleVisibilityTypes.fs" />
         <Compile Include="Shared\Types\RoleTypes.fs" />
         <Compile Include="Shared\Types\PermissionTypes.fs" />
-        <!-- Phase 555 — dual control (two-person rule) for sensitive admin
+        <!-- Dual control (two-person rule) for sensitive admin
              mutations: the AdminMutationPolicy / DualControlSettings opt-in,
              the captured-mutation value and its pending record, and the typed
              refusals. After PermissionTypes.fs (the captured mutation embeds
@@ -249,7 +249,7 @@
              (values + BCL only) so an approval queue can render server-side
              and client-side from one type. -->
         <Compile Include="Shared\Types\AdminMutationTypes.fs" />
-        <!-- Phase 552 — the consented-grant registry's wire types: the signed
+        <!-- The consented-grant registry's wire types: the signed
              consent record, its lifecycle, the canonical payload a
              counterparty signs, and the typed denials. After
              PermissionTypes.fs (the record carries a PartyRef and the
@@ -260,7 +260,7 @@
              them lives server-side behind IGrantConsentVerifier, on the
              IModuleBindingVerifier precedent. -->
         <Compile Include="Shared\Types\GrantConsentTypes.fs" />
-        <!-- Phase 66 Stream A.1 — Subject / SurfaceProfile / SurfaceRequirement
+        <!-- Subject / SurfaceProfile / SurfaceRequirement
              types compiled before AccessContext (which now carries a Subject
              field). ShareTokenTypes hoisted alongside because Subject.ClaimBearer
              references ShareTokenClaim. -->
@@ -268,19 +268,19 @@
         <Compile Include="Shared\Types\Subject.fs" />
         <Compile Include="Shared\Types\SurfaceRequirement.fs" />
         <Compile Include="Shared\Types\AccessContext.fs" />
-        <!-- Phase 896 — the team visibility level both team axes share
-             (conversation visibility, Phase 859; output visibility), the
+        <!-- The team visibility level both team axes share
+             (conversation visibility, output visibility), the
              output rule, the policy-change check and the source seam the
              disclosure gate reads a team's level through. After RoleTypes.fs
              (carries TeamRole). Fable-safe. -->
         <Compile Include="Shared\Types\TeamOutputVisibility.fs" />
-        <!-- Phase 113 — host-neutral default-deny action authorization:
+        <!-- Host-neutral default-deny action authorization:
              ActionDescriptor / AuthorizationDecision / IActionAuthorizer +
              policy-as-data (ActionRule / ActionPolicy). After AccessContext
              (the Authorize parameter) + PermissionTypes (ModulePermission
              in ActionRequirement). -->
         <Compile Include="Shared\Types\ActionAuthorization.fs" />
-        <!-- Phase 266 — extensible host-capability registry: CapabilityId /
+        <!-- Extensible host-capability registry: CapabilityId /
              HostCapabilityArgs / HostCapabilityOutcome / IHostCapabilityRegistry
              + the authorizer-gated default `create` + forge-public built-in
              capabilities (clipboard-write / file-read). After
@@ -289,23 +289,23 @@
              parameter). Fable-safe (plain Dictionary, injected side-effects)
              so it ships under fable/ for the client host bridge. -->
         <Compile Include="Shared\Types\HostCapabilityRegistry.fs" />
-        <!-- Phase 268 — neutral hosted-tree render-fault contract:
+        <!-- Neutral hosted-tree render-fault contract:
              HostRenderFault(Kind) + IHostRenderTelemetrySink +
              NoOpHostRenderTelemetrySink. In Core (not Client) so the SSR
-             boundary (Phase 273, in ToolUp.PublicRendering which references
+             boundary (, in ToolUp.PublicRendering which references
              Core not Client) reports through the SAME sink — the shape
              ITelemetrySink / NoOpTelemetrySink already use. No deps beyond
              primitives; Fable-safe so it ships under fable/ for the client
              render path. -->
         <Compile Include="Shared\Types\HostRenderFault.fs" />
-        <!-- Phase 274 — hosted-tree content sanitization seam (CSP-aligned):
+        <!-- Hosted-tree content sanitization seam (CSP-aligned):
              HostContentKind / SanitizedContent / HostSanitizePolicy /
              IHostContentSanitizer + the default-deny default sanitizer. In
              Core (shared floor) + BCL-only (hand-rolled scanner, no regex/
-             Feliz) so the client (Phase 110) + SSR (Phase 111) legs sanitize
+             Feliz) so the client + SSR legs sanitize
              byte-identically. Ships under fable/ for the client render path. -->
         <Compile Include="Shared\Types\HostContentSanitizer.fs" />
-        <!-- Phase 41 — data-classification shared types (ClassificationLevel
+        <!-- Data-classification shared types (ClassificationLevel
              / FieldClassification / FieldHit). Standalone; no deps. -->
         <Compile Include="Shared\Types\ClassificationTypes.fs" />
         <Compile Include="Shared\Types\TeamTypes.fs" />
@@ -313,11 +313,11 @@
         <Compile Include="Shared\Types\ModuleAITypes.fs" />
         <Compile Include="Shared\Types\ConversationTypes.fs" />
         <Compile Include="Shared\FeatureFlagApi.fs" />
-        <!-- Phase 637 — module-visibility admin contract. After
+        <!-- Module-visibility admin contract. After
              ModuleVisibilityTypes.fs (its payloads) and beside
              FeatureFlagApi.fs, whose gating attributes it mirrors. -->
         <Compile Include="Shared\ModuleVisibilityApi.fs" />
-        <!-- Phase 528 — session-registry wire types + ISessionApi. After
+        <!-- Session-registry wire types + ISessionApi. After
              AuthAttributes.fs (its gating markers) and before SDK.Shared.fs,
              which carries the SessionRegistryMode opt-in and the
              ServerConfig field. Fable-safe (values + BCL only) so the
@@ -325,15 +325,15 @@
         <Compile Include="Shared\SessionTypes.fs" />
         <Compile Include="Shared\IModuleQueryBus.fs" />
         <Compile Include="Shared\Types\ConfigTypes.fs" />
-        <!-- Phase 10b — config schema-evolution substrate (Fable-safe half):
+        <!-- Config schema-evolution substrate (Fable-safe half):
              the reserved _schema_version stamp, the IConfigMigrator seam, the
              chain-error DU, and the failure / drift event payloads. After
              MigrationTypes.fs (reuses its SchemaVersion alias, deliberately —
-             one mental model with Phase 10a) and ConfigTypes.fs (the schema it
+             one mental model with) and ConfigTypes.fs (the schema it
              versions); before SDK.Shared.fs, which carries the
              ServerConfig.ConfigMigrations field. BCL-only, no server coupling. -->
         <Compile Include="Shared\ConfigMigrationTypes.fs" />
-        <!-- Phase 214 / 689 — the ConfigKeys module: reserved config-subsystem
+        <!-- The ConfigKeys module: reserved config-subsystem
              identifiers plus the central env-var config-key registry (name /
              type / default / description / secret flag). Lives in Core, not
              Server, so `ServerConfig.fromEnv` (the largest reader) can cite
@@ -345,7 +345,7 @@
         <Compile Include="Shared\Types\ConfigApi.fs" />
         <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />
-        <!-- Phase 6f.A — external contacts: the ExternalContact entity,
+        <!-- External contacts: the ExternalContact entity,
              ContactOwner, OptInRecord, the typed store error and the
              IExternalContactApi remoting contract. After NotificationTypes.fs,
              whose NotificationKind.SinkKind keys the per-channel consent map
@@ -353,7 +353,7 @@
              SDK.Shared.fs, which carries the ServerConfig field. Fable-safe
              (records, DUs and BCL primitives only). -->
         <Compile Include="Shared\Types\ExternalContactTypes.fs" />
-        <!-- Phase 441 — notification preference + digest value types
+        <!-- Notification preference + digest value types
              (DigestFrequency / DeliveryPreference / PreferenceChannel /
              QuietHours / UserNotificationPreferences / NotificationCategory /
              PendingNotification / INotificationPreferenceApi) + the
@@ -364,15 +364,15 @@
              lookup stays server-side). -->
         <Compile Include="Shared\NotificationPreferenceTypes.fs" />
         <Compile Include="Shared\INotificationChannel.fs" />
-        <!-- Phase 241 — presence substrate. -->
+        <!-- Presence substrate. -->
         <Compile Include="Shared\IPresenceChannel.fs" />
-        <!-- Phase 442 — presence + soft-lock collaboration value types
+        <!-- Presence + soft-lock collaboration value types
              (PresenceLocation / PresencePeer / PresenceEvent / EntityLockRef /
              LockLease / LockEvent) + the PresenceMode opt-in DU. Before
              SDK.Shared.fs so ServerConfig can carry a `Presence` field. Pure /
              Fable-safe (BCL primitives + EntityId). -->
         <Compile Include="Shared\PresenceTypes.fs" />
-        <!-- Phase 535 — CRDT co-editing value types (CrdtDocRef /
+        <!-- CRDT co-editing value types (CrdtDocRef /
              StateVector / CrdtUpdate / CrdtSnapshot / CrdtUpdateEvent) +
              the CrdtDocumentMode opt-in DU. After PresenceTypes.fs
              (CrdtAwareness projects a co-editing position into a
@@ -381,7 +381,7 @@
              byte[] payloads, no CRDT library on either tier. -->
         <Compile Include="Shared\CrdtTypes.fs" />
         <Compile Include="Shared\IHealthCheck.fs" />
-        <!-- Phase 178 — declarative alert-rule / threshold data (AlertSource
+        <!-- Declarative alert-rule / threshold data (AlertSource
              / ThresholdCondition / AlertDelivery / AlertRule). After
              NotificationTypes (uses SystemMessageLevel + NotificationKind.SinkKind)
              and before SDK.Shared.fs so ServerConfig can carry an
@@ -389,7 +389,7 @@
         <Compile Include="Shared\AlertRule.fs" />
         <Compile Include="Shared\ISmokeTest.fs" />
         <Compile Include="Shared\IConfigValidator.fs" />
-        <!-- Phase 165 — opt-in module-binding gate contract (pure types +
+        <!-- Opt-in module-binding gate contract (pure types +
              abstract interface; BCL-pure so it ships in the Fable-packed
              source). The default verifier with the crypto lives server-side
              in the ToolUp.ArtefactSigning companion. -->
@@ -398,12 +398,12 @@
         <Compile Include="Shared\IJobSchedulerTelemetry.fs" />
         <Compile Include="Shared\ServiceStatusTypes.fs" />
         <Compile Include="Shared\ServiceStatusBoardApi.fs" />
-        <!-- Phase 177 — deployment-readiness scorecard: report record +
+        <!-- Deployment-readiness scorecard: report record +
              verdict DU + pure `summarise`, plus the opt-in
              `IDeploymentReadinessApi` read surface. Pure / BCL-only so it
              ships in the Fable-packed source. -->
         <Compile Include="Shared\DeploymentReadiness.fs" />
-        <!-- Phase 686 — deployment verification report: the five-section
+        <!-- Deployment verification report: the five-section
              wire shape + the typed per-section verdict union + the pure
              outcome / exit-code / canonical-form folds, plus the opt-in
              `IDeploymentVerificationApi` read surface. Pure / BCL-only (the
@@ -412,13 +412,13 @@
         <Compile Include="Shared\DeploymentVerification.fs" />
         <Compile Include="Shared\Types\TrustBoundaryTypes.fs" />
         <Compile Include="Shared\IDevDiagnosticsContributor.fs" />
-        <!-- Phase 9a follow-up: the DI-registered version record `/dev/version`
+        <!-- The DI-registered version record `/dev/version`
              appends to its assembly-derived list. Fable-safe (a two-string
              record), so it ships with the packed source beside the
              contributor seam. -->
         <Compile Include="Shared\ComponentVersion.fs" />
         <Compile Include="Shared\NarrativeTypes.fs" />
-        <!-- Phase 521 — pure fact-reference walk over narrative spans. -->
+        <!-- Pure fact-reference walk over narrative spans. -->
         <Compile Include="Shared\NarrativeFacts.fs" />
         <Compile Include="Shared\NarrativePlaintext.fs" />
         <Compile Include="Shared\NarrativeMarkdown.fs" />
@@ -427,12 +427,12 @@
         <Compile Include="Shared\NarrativeBuilder.fs" />
         <Compile Include="Shared\INarrativeRenderer.fs" />
         <Compile Include="Shared\NarrativeRenderers.fs" />
-        <!-- Phase 66 Stream C.2 — AuditSubjectKind + AuditSamplingPolicy
+        <!-- AuditSubjectKind + AuditSamplingPolicy
              compiled before SDK.Shared.fs so ServerConfig can carry an
              AuditSamplingPolicy field. Depends only on Guid; Audit\AuditSubject.fs
              (after SDK.Shared.fs) references it back. -->
         <Compile Include="Shared\Types\AuditSampling.fs" />
-        <!-- Phase 179 — locale + translation primitives (LocaleCode /
+        <!-- Locale + translation primitives (LocaleCode /
              TranslationKey / Translations) + the I18nCoverageMode policy DU,
              split out of I18nTypes.fs so they compile before SDK.Shared.fs and
              ServerConfig can carry `RegisteredLocales` + `I18nCoverageMode`
@@ -440,20 +440,19 @@
              envelope stays in I18nTypes.fs (needs RateLimitedError, defined in
              SDK.Shared.fs). -->
         <Compile Include="Shared\Types\LocaleTypes.fs" />
-        <!-- Phase 594 — pinned data-vocabulary packs: versioned, immutable
+        <!-- Pinned data-vocabulary packs: versioned, immutable
              TypeName → schema documents + governance / drift / canonical-JSON
              helpers. Before SDK.Shared.fs so ServerConfig can carry the
              pinned-pack + declared-schema fields. Fable-safe types + pure
-             helpers; the SHA-256 hash, STJ loader and pin are server-tier
-             (Phase 880). -->
+             helpers; the SHA-256 hash, STJ loader and pin are server-tier -->
         <Compile Include="Shared\DataVocabulary.fs" />
-        <!-- Phase 318 — external-compute value types (ExternalHandle /
+        <!-- External-compute value types (ExternalHandle /
              ExternalWorkSpec / ExternalOutcome / ExternalComputeError) + the
              ExternalComputeMode opt-in DU. Before SDK.Shared.fs so
              ServerConfig can carry an `ExternalCompute` field. Pure /
              Fable-safe (BCL primitives only — no backend SDK type), so a
              Client can hold an ExternalHandle opaquely. -->
-        <!-- Phase 451 — compute-budget value types (SubmitterClass /
+        <!-- Compute-budget value types (SubmitterClass /
              ComputeBudget / ComputeBudgetDenial / ComputeBudgetUsage) + the
              pure admission policy + the ComputeBudgetMode opt-in DU. BEFORE
              ExternalCompute.fs, because ExternalWorkSpec carries a
@@ -464,19 +463,19 @@
              two audit payloads) and ModelExecutionWire.fs (it rides the typed
              peer refusal, plan decision D6). Pure / Fable-safe — the cost
              model and the store are Server-tier. -->
-        <!-- Phase 689 — the platform budget seam: the declare/check/account
+        <!-- The platform budget seam: the declare/check/account
              vocabulary (BudgetPeriod / BudgetSubject / BudgetClaim /
              BudgetDenial / BudgetWarning / BudgetVerdict / BudgetUsage /
              BudgetAccount) plus the pure BudgetPolicy every budget domain
              decides with. BEFORE ComputeBudget.fs, which re-expresses
-             Phase 451's three ceilings as claims and its admission check
+             three ceilings as claims and its admission check
              as BudgetPolicy.check. Depends on nothing but the BCL, so its
              position is set only by its consumers. Pure / Fable-safe — the
              ledger, the JSON codec and the enforcement decorators are
              Server tier. -->
         <Compile Include="Shared\Budget.fs" />
         <Compile Include="Shared\ComputeBudget.fs" />
-        <!-- Phase 654 — the signed-shape separator registry: the closed
+        <!-- The signed-shape separator registry: the closed
              `SignedShape` DU, its typed `SignedShapeSeparator` parts, and
              the exhaustively-matched `separator` function every canonical
              encoder in the SDK now opens with. Depends on NOTHING but the
@@ -489,7 +488,7 @@
              in the Fable-packed source with the rest of Shared/. -->
         <Compile Include="Shared\SignedShapeSeparator.fs" />
         <Compile Include="Shared\ExternalCompute.fs" />
-        <!-- Phase 347 — the SDK.Shared.fs monolith carved into cohesive units in
+        <!-- The SDK.Shared.fs monolith carved into cohesive units in
              its original declaration order (behaviour-preserving: same namespace,
              same names — only file boundaries moved). ModuleEvents.fs holds the
              inter-module event envelope + IEventStore; Config\ holds the *Mode
@@ -501,11 +500,11 @@
              Fable-safe exactly as the monolith was and ships under fable/ via
              the **\*.fs glob. -->
         <Compile Include="Shared\ModuleEvents.fs" />
-        <!-- Phase 9w — the Datadog readback contract (Fable-safe records +
+        <!-- The Datadog readback contract (Fable-safe records +
              IDatadogReadbackApi). Ahead of StoreModes.fs because
              DatadogReadbackMode carries DatadogReadbackConfig. -->
         <Compile Include="Shared\DatadogReadbackTypes.fs" />
-        <!-- Phase 9x - the self-hosted observability readback shapes
+        <!-- The self-hosted observability readback shapes
              (sources, log / metric / alert responses) the Observability
              admin module renders. After ILogStore.fs (LogRecord) and
              AlertRule.fs; Fable-safe. -->
@@ -517,26 +516,26 @@
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\Config\ServerConfigOverrides.fs" />
         <Compile Include="Shared\Config\DeploymentConfig.fs" />
-        <!-- Phase 880 — `ServerConfig.defaults` only; the env binder
+        <!-- `ServerConfig.defaults` only; the env binder
              (`ServerConfig.fromEnv`) is in ToolUp.Platform.Server. -->
         <Compile Include="Shared\Config\ServerConfigDefaults.fs" />
-        <!-- Phase 9u — the event-store decorator chain's position model
+        <!-- The event-store decorator chain's position model
              (IEventStoreDecorator + the EventStoreChain walk/check). After
              ModuleEvents.fs, which declares the IEventStore it decorates;
              before Server\EventStoreChainValidator.fs in Platform.Server,
              which is the preflight guard over it. Pure / Fable-safe
              (interface + records + list folds, no reflection beyond
-             GetType().Name). -->
+             GetType.Name). -->
         <Compile Include="Shared\IEventStoreDecorator.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
         <Compile Include="Shared\RateLimitDescriptor.fs" />
-        <!-- Phase 30a — signed module artefact format (ArtifactManifest,
+        <!-- Signed module artefact format (ArtifactManifest,
              SignedArtifact, ArtifactValidation, PublisherKeyId). Compiled
              before the Shared\Audit lane files so audit payload types can reference the
              publisher-key-id shape via string projections without circular
              dependencies. -->
         <Compile Include="Shared\Types\ArtifactTypes.fs" />
-        <!-- Phase 347 — the AuditTypes.fs monolith carved by subsystem lane in its
+        <!-- The AuditTypes.fs monolith carved by subsystem lane in its
              original declaration order (behaviour-preserving: same namespace,
              same names — only file boundaries moved). Audit\AuditSubject.fs holds
              the reserved source-module name + the AuditSubject attribution DU;
@@ -577,36 +576,36 @@
         <Compile Include="Shared\WebhookApi.fs" />
         <Compile Include="Shared\DataObjectTypes.fs" />
         <Compile Include="Shared\DatasetTypes.fs" />
-        <!-- Phase 527 — service-account principals + scoped API token model.
+        <!-- Service-account principals + scoped API token model.
              After PermissionTypes.fs (the declared authority set is a
              ModulePermission map); Fable-safe (records, DUs and pure
              functions only — the hashing lives server-side). -->
         <Compile Include="Shared\ServiceAccountTypes.fs" />
-        <!-- Phase 1107 — the in-platform publication reader admin API. -->
+        <!-- The in-platform publication reader admin API. -->
         <Compile Include="Shared\PublicationReaderTypes.fs" />
         <Compile Include="Shared\ResultTypes.fs" />
         <Compile Include="Shared\LineageTypes.fs" />
         <Compile Include="Shared\JobTypes.fs" />
         <Compile Include="Shared\JobApi.fs" />
-        <!-- Phase 600 — model-execution submitter wire surface (Fable-safe
+        <!-- Model-execution submitter wire surface (Fable-safe
              records + closed typed-refusal DU + the ModelExecutionApi
              remoting record). -->
         <Compile Include="Shared\ModelExecutionWire.fs" />
-        <!-- Phase 10h — OAuth token refresh substrate types (descriptor + result DU). -->
+        <!-- OAuth token refresh substrate types (descriptor + result DU). -->
         <Compile Include="Shared\Types\OAuthRefreshTypes.fs" />
-        <!-- Phase 10g — OAuth 1.0a substrate value types (RFC 5849). -->
+        <!-- OAuth 1.0a substrate value types (RFC 5849). -->
         <Compile Include="Shared\OAuth1aTypes.fs" />
-        <!-- Phase 26 — typed deploy-manifest schema (format-neutral; the
+        <!-- Typed deploy-manifest schema (format-neutral; the
              operator's CLI serialises to TOML/YAML/JSON). Pure data; no
              async surface; six-rule audit applies to the four substrate
              interfaces (Server-tier), not this file. -->
-        <!-- Phase 656 — build transcript + deploy provenance. Records +
+        <!-- Build transcript + deploy provenance. Records +
              pure string building only: the canonical forms are shared so
              producer and verifier can never disagree about what was
              covered, and the SHA-256 over them lives server-side (crypto
              does not compile under Fable). -->
         <Compile Include="Shared\Types\BuildTranscriptTypes.fs" />
-        <!-- Phase 1089 — `Sha256.hex` and `CanonicalFrame`: the one digest
+        <!-- `Sha256.hex` and `CanonicalFrame`: the one digest
              helper and the one length-prefixed frame every content id is
              taken over. After BuildTranscriptTypes.fs, whose
              `ProvenanceFraming.frame` is the frame's field writer. The
@@ -617,33 +616,33 @@
              handler name. Pure data, Fable-compatible. -->
         <Compile Include="Shared\RunTypes.fs" />
         <Compile Include="Shared\Types\DeployManifestTypes.fs" />
-        <!-- Phase 26 — supporting types for the four deploy-plane substrate
+        <!-- Supporting types for the four deploy-plane substrate
              interfaces (BuildRequest/BuildSummary, ProvisioningRequest,
              DeployState, ContainerSpec, LogRecord, etc.). Fable-compatible
              (Async-free, no streams); the interfaces themselves are
              server-only because IContainerScheduler.StreamLogs returns
              IAsyncEnumerable. -->
         <Compile Include="Shared\Types\DeployPlaneTypes.fs" />
-        <!-- Phase 712 — the upstream work record as wire data: refs,
+        <!-- The upstream work record as wire data: refs,
              records, the withheld marker, declared caps, typed cap
              refusals, and the coverage / unattested vocabulary the deploy
              companion is written in. Before DeployRecordTypes.fs, whose
              structured work companion references WorkRecordRef. Fable-safe
              (records + unions + string handling only). -->
         <Compile Include="Shared\Types\WorkProvenanceWireTypes.fs" />
-        <!-- Phase 656 — the deploy record (manifest as deployed +
+        <!-- The deploy record (manifest as deployed +
              provenance) and the byte-level sealing seam. After
              DeployPlaneTypes.fs because it uses the DeployId / TenantId /
              BuildId aliases. -->
         <Compile Include="Shared\Types\DeployRecordTypes.fs" />
-        <!-- Phase 678 — the deploy-record retirement reference: the
+        <!-- The deploy-record retirement reference: the
              companion binding one sealed deploy record to the terminal op
              that closed its audit ledger. After DeployRecordTypes.fs,
              whose SealedDeployRecord it embeds; it references the ledger
              only by opaque digest, so nothing here depends on the
              chained-ledger companion (GP 1). Fable-safe. -->
         <Compile Include="Shared\Types\DeployRetirementTypes.fs" />
-        <!-- Phase 713 — the evidence chain as data: the ordered hop model,
+        <!-- The evidence chain as data: the ordered hop model,
              the four-case link verdict, the declared caps + typed refusals,
              and the canonical form the verdict digest is taken over. Pure
              projection with no dependency on the substrates it describes
@@ -652,23 +651,23 @@
              record. Fable-safe — the SHA-256 over the canonical form is
              computed server-side, as it is for the verification report. -->
         <Compile Include="Shared\Types\EvidenceChainTypes.fs" />
-        <!-- Phase 54 — tenant-lifecycle substrate shared types
+        <!-- Tenant-lifecycle substrate shared types
              (TenantLifecyclePhase / LifecycleHookResult / LifecycleSummary
              / TenantLifecycleEvent). Async-free + Fable-compatible; the
              ITenantLifecycle interface + aggregator are server-tier. -->
         <Compile Include="Shared\Types\TenantLifecycleTypes.fs" />
-        <!-- Phase 543 — derived principal-enumeration shared types
+        <!-- Derived principal-enumeration shared types
              (PrincipalSummary). After RoleTypes (carries TeamRole);
              before PlatformTenantApi (ListPrincipals returns it).
              Async-free + Fable-compatible. -->
         <Compile Include="Shared\Types\PrincipalRegistryTypes.fs" />
-        <!-- Phase 54 — IPlatformTenantApi ToolUp.Remoting contract. After
+        <!-- IPlatformTenantApi ToolUp.Remoting contract. After
              TenantLifecycleTypes (returns LifecycleSummary) + DeployPlaneTypes
              (ProvisionTenant carries ProvisioningRequest). -->
         <Compile Include="Shared\PlatformTenantApi.fs" />
         <Compile Include="Shared\DataIngestionTypes.fs" />
         <Compile Include="Shared\DataIngestionApi.fs" />
-        <!-- Phase 10a — IDataMigrationApi ToolUp.Remoting contract. After
+        <!-- IDataMigrationApi ToolUp.Remoting contract. After
              MigrationTypes.fs (returns MigrationStatus) and after
              AuthAttributes.fs (carries the classifier markers). -->
         <Compile Include="Shared\MigrationApi.fs" />
@@ -676,54 +675,54 @@
         <Compile Include="Shared\PlatformAdminApi.fs" />
         <Compile Include="Shared\UsageTypes.fs" />
         <Compile Include="Shared\UsageQueryApi.fs" />
-        <!-- Phase 529 - audit-trail viewer surface (wire records + the
+        <!-- Audit-trail viewer surface (wire records + the
              IAuditViewApi remoting contract + the payload-projection
              constants). After AuthAttributes.fs (RequiresClaim / Audit /
              PiiSafe markers) and after AuditTypes.fs, whose
              AuditEvent.eventTypeName strings are what EventType carries. -->
         <Compile Include="Shared\AuditViewApi.fs" />
-        <!-- Phase 593 - composition-inspector surface (the five panel view
+        <!-- Composition-inspector surface (the five panel view
              projections + the ICompositionInspectorApi remoting contract).
              After AuthAttributes.fs (RequiresClaim / Audit / PiiSafe
              markers). Projections only - the server-tier composition types
              they mirror are not visible to the Fable client. -->
         <Compile Include="Shared\CompositionInspectorApi.fs" />
-        <!-- Phase 171 — Home / Overview landing API (contract + view
+        <!-- Home / Overview landing API (contract + view
              types + optional IActiveAiProbe DI seam). -->
         <Compile Include="Shared\HomeOverviewApi.fs" />
         <Compile Include="Shared\MetricsTypes.fs" />
-        <!-- Phase 519 — grounding metric & subject registry (business-quantity
+        <!-- Grounding metric & subject registry (business-quantity
              vocabulary + IMetricRegistry read surface). Distinct from
              MetricsTypes.fs (observability). Depends only on System. -->
         <Compile Include="Shared\MetricRegistryTypes.fs" />
-        <!-- Phase 887 — declared fact tables: the declaration, bindings,
+        <!-- Declared fact tables: the declaration, bindings,
              IFactTableRegistry and the run / watermark / change-summary
              records. After MetricRegistryTypes.fs (reads SubjectDefinition). -->
         <Compile Include="Shared\FactTableTypes.fs" />
-        <!-- Phase 43.B — neutral OAuth correlation identifier. Before
+        <!-- Neutral OAuth correlation identifier. Before
              ProviderProfileTypes.fs (ProviderOAuthBinding embeds it) and
              before the Server tier's IOAuthCredentialFlow / IOAuthStateStore,
              which correlate on it. Depends only on System. -->
         <Compile Include="Shared\Types\OAuthCorrelationTypes.fs" />
         <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
         <Compile Include="Shared\Interfaces\IProviderProfile.fs" />
-        <!-- Phase 44a — per-subject resolution over the Phase 44a team-scope
+        <!-- Per-subject resolution over the team-scope
              binding in ProviderProfileTypes.fs. After that file (it returns
              ProviderResolution / ProviderScope) and after Subject.fs. -->
         <Compile Include="Shared\Interfaces\ITeamProviderResolver.fs" />
-        <!-- Phase 44 — the ToolUp.Remoting transport over that store, for
+        <!-- The ToolUp.Remoting transport over that store, for
              the reusable client-tier BYOK component. After
              ProviderProfileTypes.fs (it projects ProviderEntry and carries
              RoutingRule / FallbackChain / ProviderHealth verbatim) and after
              AuthAttributes.fs (RequiresClaim / Audit / PiiSafe / NotEmpty
              markers). Fable-safe: System + Platform.Core value types only. -->
         <Compile Include="Shared\ProviderProfileApi.fs" />
-        <!-- Phase 240 — IPaymentProvider direct-billing substrate. -->
+        <!-- IPaymentProvider direct-billing substrate. -->
         <Compile Include="Shared\Payments\PaymentTypes.fs" />
         <Compile Include="Shared\Types\I18nTypes.fs" />
         <Compile Include="Shared\I18nDefaults.fs" />
         <Compile Include="Shared\Interfaces\ILocaleResolver.fs" />
-        <!-- Phase 179 — translation-coverage gate + pseudo-localisation.
+        <!-- Translation-coverage gate + pseudo-localisation.
              Pure / BCL-only / Fable-safe so both tiers compile them.
              I18nCoverage.fs after I18nDefaults.fs (audits sdkTranslations +
              messageKeyFor) and IConfigValidator.fs (validator factory);
@@ -731,13 +730,13 @@
         <Compile Include="Shared\PseudoLocale.fs" />
         <Compile Include="Shared\I18nCoverage.fs" />
         <Compile Include="Shared\Api.fs" />
-        <!-- Phase 515 — upload-boundary content-scanning seam. FSharp.Core
+        <!-- Upload-boundary content-scanning seam. FSharp.Core
              only (byte[] / string / Async), so it sits anywhere in the
              order; placed here rather than beside the other Interfaces\
              entries to keep the insertion off the contended mid-file
              region. Ships under fable/ with the rest of Core. -->
         <Compile Include="Shared\Interfaces\IContentScanner.fs" />
-        <!-- Phase 783 — the remoting decode-refusal vocabulary
+        <!-- The remoting decode-refusal vocabulary
              (`DecodeError` + the `DecodeException` carrier). MUST precede
              the MsgPack block below: Read.fs refuses with it. Also
              consumed by Platform.Server's argument-parse stage and
@@ -751,40 +750,39 @@
              so both tiers compile against the same source rather than
              duplicating the converters. Compile order matches the
              original ToolUp.Remoting.MsgPack package order.
-             Phase 902 — the TypeShape reflection engine and the .NET writer
+             The TypeShape reflection engine and the .NET writer
              it backs (TypeShape.fs, TypeShapeUtils.fs, the .NET half of
              Write.fs) and the registries' verify arms moved to
              Platform.Server, namespaces preserved. What stays compiles
              under Fable. -->
         <Compile Include="Shared\Remoting\MsgPack\Format.fs" />
-        <!-- Phase 785 — the closed value model the one-pass reader
+        <!-- The closed value model the one-pass reader
              produces. After Format.fs (it names no format constants but
              documents against them) and BEFORE Read.fs, which produces
              it. -->
         <Compile Include="Shared\Remoting\MsgPack\Value.fs" />
-        <Compile Include="Shared\Remoting\MsgPack\Write.fs" />
         <Compile Include="Shared\Remoting\MsgPack\Read.fs" />
-        <!-- Phase 785 — the total combinators over that model, the
+        <!-- The total combinators over that model, the
              opt-in registry, and the platform's own hand-written
              decoders. LAST in Core: PlatformDecoders.fs composes
              decoders for wire records declared throughout the tier
              above, so it must see all of them. -->
         <Compile Include="Shared\Remoting\Decode.fs" />
         <Compile Include="Shared\Remoting\DecoderRegistry.fs" />
-        <!-- Phase 799 — the JSON wire joins the algebra: the lexical value
+        <!-- The JSON wire joins the algebra: the lexical value
              model, the combinators over it, the argument-seam registry,
              and (after PlatformDecoders, beside it) the platform's own
              hand-written argument decoders. -->
         <Compile Include="Shared\Remoting\Json\JsonValue.fs" />
         <Compile Include="Shared\Remoting\Json\JsonDecode.fs" />
-        <!-- Phase 853 - the writing half: the encoders a generated client
+        <!-- The writing half: the encoders a generated client
              proxy builds a request's argument array through. -->
         <Compile Include="Shared\Remoting\Json\JsonEncode.fs" />
         <Compile Include="Shared\Remoting\Json\JsonDecoderRegistry.fs" />
         <Compile Include="Shared\Remoting\PlatformDecoders.fs" />
         <Compile Include="Shared\Remoting\Json\PlatformJsonDecoders.fs" />
     </ItemGroup>
-    <!-- Phase 250 — the connector contract value types (AIProviderMessage,
+    <!-- The connector contract value types (AIProviderMessage,
          AIProviderError, AIContentPart, …) relocated to the Fable-safe
          ToolUp.AI.Wire tier under the unchanged ToolUp.Platform.AI namespace.
          IAIProvider.fs (the interface, which references the server-tier
@@ -796,7 +794,7 @@
          fable/ alongside Core's. -->
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
-        <!-- Phase 128 — RetryPolicy and the HTTP seam live in the lowest
+        <!-- RetryPolicy and the HTTP seam live in the lowest
              tier, ToolUp.Platform.Transport (FSharp.Core only); Core uses
              RetryPolicy directly, so it references the tier directly rather
              than only through ToolUp.AI.Wire. -->

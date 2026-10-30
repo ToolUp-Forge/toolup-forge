@@ -4,7 +4,7 @@ open System
 open System.Collections.Concurrent
 
 // =============================================================================
-// Phase 69g — per-method rate-limit attribution
+// Per-method rate-limit attribution
 // =============================================================================
 //
 // API record fields can carry one or more `[<RateLimit>]` attributes; the
@@ -17,7 +17,7 @@ open System.Collections.Concurrent
 // must pass BOTH budgets — short bursts and sustained traffic are
 // independently capped.
 
-/// Phase 69g — per-method rate-limit budget. `count` requests are
+/// Per-method rate-limit budget. `count` requests are
 /// allowed per `windowSeconds` window per subject (per the IAuthContext's
 /// `SubjectId`); when no auth context resolver is composed, the per-IP
 /// remote address is used as the subject key fallback.
@@ -33,7 +33,7 @@ type RateLimitAttribute(count: int, windowSeconds: int) =
     /// `TimeSpan` view of the window for use in `IRateLimitStore.TryAcquire`.
     member this.Window = TimeSpan.FromSeconds(float windowSeconds)
 
-/// Phase 69g — named window-size constants for the
+/// Named window-size constants for the
 /// `[<RateLimit(count, window)>]` attribute. Use as
 /// `[<RateLimit(30, RateLimitWindow.perMinute)>]`.
 module RateLimitWindow =
@@ -51,69 +51,42 @@ module RateLimitWindow =
 
 // -----------------------------------------------------------------------------
 
-/// Phase 69g — default in-memory implementation of `IRateLimitStore`.
+/// Default in-memory implementation of `IRateLimitStore`.
 /// Sliding-window counter via a per-key timestamp queue. Suitable for
 /// single-instance deployments; distributed deployments wire Redis or
 /// equivalent against the `IRateLimitStore` contract.
 ///
-/// Admission is atomic per key (Phase 870): N callers released together
-/// against one remaining slot admit exactly one.
+/// Admission is atomic per key: N callers released together against one
+/// remaining slot admit exactly one.
 ///
-/// Bounded by `maxBuckets` (default 100_000). Once the cap is reached,
-/// the oldest bucket (by first-insertion time) is evicted on next
-/// `TryAcquire`. Cardinality-bounded so a deployment hit by many
-/// distinct IPs (or subject ids) can't OOM the host.
+/// Bounded by `maxBuckets` (default 100_000) through `BoundedFifo`: a new key
+/// at the cap evicts the oldest bucket (by first insertion), so a deployment
+/// hit by many distinct IPs or subject ids cannot OOM the host.
 type InMemoryRateLimitStore(?maxBuckets: int) =
     let cap = defaultArg maxBuckets 100_000
     let buckets = ConcurrentDictionary<string, ConcurrentQueue<DateTimeOffset>>()
-    let order = ConcurrentQueue<string>()
 
-    /// Opportunistically drain stale heads from `order` — keys that were
-    /// already removed from `buckets` (e.g. by a prior eviction whose
-    /// victim got re-added later). Keeps `order.Count` close to
-    /// `buckets.Count` so subsequent eviction work doesn't scan
-    /// through ghost entries.
-    let compactStaleHeads () =
-        let mutable peeked = Unchecked.defaultof<string>
-        let mutable keepCompacting = true
-
-        while keepCompacting && order.TryPeek(&peeked) do
-            if buckets.ContainsKey peeked then
-                keepCompacting <- false
-            else
-                let mutable _ignored = Unchecked.defaultof<string>
-                order.TryDequeue(&_ignored) |> ignore
-
-    let evictOldestIfFull () =
-        compactStaleHeads ()
-
-        while buckets.Count >= cap do
-            let mutable victim = Unchecked.defaultof<string>
-
-            if order.TryDequeue(&victim) then
-                buckets.TryRemove victim |> ignore
-            else if buckets.Count >= cap then
-                buckets.Clear()
+    let fifo =
+        BoundedFifo(
+            cap,
+            (fun () -> buckets.Count),
+            buckets.ContainsKey,
+            (fun key -> buckets.TryRemove key |> ignore),
+            BoundedFifoPolicy.oldestFirst ignore
+        )
 
     interface IRateLimitStore with
         member _.TryAcquire(key, count, window) = async {
             let now = DateTimeOffset.UtcNow
             let cutoff = now - window
-            let mutable createdNew = false
 
             let queue =
-                buckets.GetOrAdd(
-                    key,
-                    fun _ ->
-                        createdNew <- true
-                        ConcurrentQueue<DateTimeOffset>()
-                )
+                match buckets.TryGetValue key with
+                | true, existing -> existing
+                | false, _ ->
+                    fifo.Admit(key, fun () -> buckets.GetOrAdd(key, fun _ -> ConcurrentQueue<DateTimeOffset>()))
 
-            if createdNew then
-                evictOldestIfFull ()
-                order.Enqueue key
-
-            // Phase 870 — evict, check and admit under ONE per-key lock.
+            // Evict, check and admit under ONE per-key lock.
             // `ConcurrentQueue` makes each operation safe, not their
             // composition: `Count < count` then `Enqueue` is
             // check-then-act, so N callers arriving together at
@@ -177,16 +150,16 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
 
 module internal RateLimit =
 
-    // Phase 69d.tail parity — reflect over both public AND non-public
+    // Reflect over both public AND non-public
     // record types so internal / private API records arm the rate-limit
     // classifier exactly like public ones. A bare `FSharpType.IsRecord`
     // reports false for a non-public record and would silently skip
-    // budget enforcement (the same fail-open hole 69d closed for auth).
+    // budget enforcement (the same fail-open hole the auth classifier closes).
     let private reflectionFlags =
         System.Reflection.BindingFlags.Public
         ||| System.Reflection.BindingFlags.NonPublic
 
-    // ── Phase 727 severity assessment — the rate-limit family ─────────
+    // ── Severity assessment — the rate-limit family ─────────
     //
     // What a forgery buys, in each direction:
     //
@@ -217,8 +190,8 @@ module internal RateLimit =
     /// `ToolUp.Remoting.Server.RateLimitAttribute` or the tier-shared
     /// `ToolUp.Platform.RateLimitAttribute` mirror (which Fable-compiled
     /// Core API records carry) — into the server-tier budget shape the
-    /// evaluator consumes. Family membership is CLR TYPE IDENTITY (Phase
-    /// 727); the reflective `Count` / `WindowSeconds` read decodes the
+    /// evaluator consumes. Family membership is CLR TYPE IDENTITY;
+    /// the reflective `Count` / `WindowSeconds` read decodes the
     /// mirror only after identity has established that it IS the mirror.
     let private tryBudget (a: obj) : RateLimitAttribute option =
         let t = a.GetType()
@@ -237,7 +210,7 @@ module internal RateLimit =
                     | (:? int as c), (:? int as w) -> Some(RateLimitAttribute(c, w))
                     | _ -> None
 
-    /// Phase 727 — marker-name collisions on the API record, for the
+    /// Marker-name collisions on the API record, for the
     /// dispatcher's startup refusal.
     let foreignMarkers (apiType: Type) : (string * string * string) list =
         markers.Collisions(apiType, reflectionFlags)

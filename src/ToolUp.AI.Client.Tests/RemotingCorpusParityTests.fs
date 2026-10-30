@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 784.C — the Fable half of the remoting wire differential corpus.
+/// The Fable half of the remoting wire differential corpus.
 ///
 /// The .NET suites in `ToolUp.Platform.Tests/Remoting/` assert that the
 /// committed `tests/remoting-corpus/*.msgpack` fixtures decode to their
@@ -50,7 +50,9 @@ module ToolUp.AI.Client.Tests.RemotingCorpusParityTests
 open Fable.Core
 open Fable.Core.JsInterop
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.Remoting
 open ToolUp.Platform.Tests.Remoting
+open ToolUp.Remoting.MsgPack
 
 [<Import("readFileSync", from = "node:fs")>]
 let private readFileSync (path: obj) : obj = jsNative
@@ -59,7 +61,7 @@ let private readFileSync (path: obj) : obj = jsNative
 let private existsSync (path: obj) : bool = jsNative
 
 /// Resolve a path relative to THIS MODULE rather than to the process cwd
-/// — the Phase 613 precedent in `SidebarRailShapeSnapshotTests`. The
+/// — the precedent in `SidebarRailShapeSnapshotTests`. The
 /// transpiled module sits in `output/`, so the repository root is three
 /// levels up. A cwd-relative path would silently read nothing when the
 /// harness is invoked from elsewhere, and "the corpus was empty" is the
@@ -83,6 +85,16 @@ let private cases = WireCorpus.crossHostCases
 
 let tests =
     testList "Remoting wire corpus — Fable parity" [
+        testCase "the Fable writer's bytes read back through the Fable reader"
+        <| fun () ->
+            let written = ResizeArray<byte>()
+            MsgPackWrite.Fable.writeType "parity" written
+
+            Expect.equal
+                (Read.Reader(written.ToArray()).Read typeof<string> |> unbox<string>)
+                "parity"
+                "one format, written and read on this host"
+
         testCase "the corpus directory resolved and is not empty"
         <| fun () ->
             // The non-vacuity floor. Every case below would pass by
@@ -113,7 +125,7 @@ let tests =
             for name, reason in WireCorpus.recordedDivergences do
                 printfn "cross-host divergence — %s: %s" name reason
 
-        // ─── Phase 803.B — the binary frames the corpus does not pin ──
+        // ─── The binary frames the corpus does not pin ──
         //
         // `binary-past-bin8` pins the `bin16` frame from a committed
         // fixture. The `bin32` frame needs a payload past 65,535 bytes,
@@ -121,7 +133,7 @@ let tests =
         // wrong trade — so it is built here, in memory, from the same
         // format bytes the writer would emit, and decoded through the
         // same reader entry the corpus cases use. The two refusals
-        // beside it are Phase 786's length-vs-remaining guard, asserted
+        // beside it are the length-vs-remaining guard, asserted
         // under Fable for the two wide frames: a header that claims more
         // than the bytes present is refused BEFORE anything is allocated
         // from it, on this host as on .NET.
@@ -162,9 +174,9 @@ let tests =
                     (refusal.Found.Contains "65536")
                     (sprintf "the refusal should name the 65536 elements claimed; it said `%s`" refusal.Found)
 
-        // ─── Phase 802 — the 16-bit arms, which the corpus no longer pins ──
+        // ─── The 16-bit arms, which the corpus no longer pins ──
         //
-        // The first parity run over the Phase 802 re-pin found that this
+        // The first parity run over the re-pinned corpus found that this
         // reader did not sign-extend `Int16`: `d1 80 00` decoded as 32768.
         // The writers now avoid `Int16` (an old client would still misread
         // it), so no fixture carries the format; these cases hold the
@@ -198,7 +210,7 @@ let tests =
                     // of one, `.byteOffset` of another). It held only while all
                     // three landed in one pool slab; one more module in the
                     // harness moved the slab boundary onto `binary-empty`
-                    // (Phase 69c.D, 2026-09-15).
+                    // (2026-09-15).
                     let buffer = readFileSync (fixturePath c.Name)
                     let bytes = toBytes buffer
 

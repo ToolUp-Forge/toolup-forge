@@ -650,11 +650,6 @@ and ReadOnlyMember<'DeclaringType, 'MemberType> internal (label: string, memberI
     /// Gets the current value from the given declaring type instance
     member _.Get(instance: 'DeclaringType) : 'MemberType = project path instance
 
-    /// Gets the current value from the given declaring type instance
-    [<Obsolete("Deprecated, please use the 'Get' method instead")>]
-    member m.Project(instance: 'DeclaringType) : 'MemberType = m.Get instance
-
-
     interface IShapeReadOnlyMember<'DeclaringType> with
         member s.Label = label
         member s.Member = shapeof<'MemberType> :> _
@@ -686,11 +681,6 @@ and [<Sealed>] ShapeMember<'DeclaringType, 'MemberType>
     /// Assigns value to the provided instance. NB this is a mutating operation
     member _.Set (instance: 'DeclaringType) (field: 'MemberType) : 'DeclaringType =
         inject isStructMember path instance field
-
-    /// Assigns value to the provided instance. NB this is a mutating operation
-    [<Obsolete("Deprecated, please use the 'Set' method instead")>]
-    member m.Inject (instance: 'DeclaringType) (field: 'MemberType) : 'DeclaringType = m.Set instance field
-
 
     interface IShapeMember<'DeclaringType> with
         member s.Accept(v: IMemberVisitor<'DeclaringType, 'R>) = v.Visit s

@@ -294,7 +294,7 @@ let tests =
 
             Expect.stringContains
                 adapter
-                "Phase 69h — audit emission after successful invocation"
+                "Audit emission after successful invocation"
                 "audit emission must stay anchored to the successful-invocation branch; \
                  moving it upstream would make idempotency replays double-audit"
         }

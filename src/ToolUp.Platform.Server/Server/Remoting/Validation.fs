@@ -8,7 +8,7 @@ open System.Text.RegularExpressions
 open Microsoft.FSharp.Reflection
 
 // =============================================================================
-// Phase 69e — typed validation on input records
+// Typed validation on input records
 // =============================================================================
 //
 // Validation attributes decorate FIELDS of input record types. The dispatcher
@@ -35,7 +35,7 @@ type ValidationAttribute() =
     /// path it was evaluated on.
     abstract Validate: value: obj -> string option
 
-/// Phase 69e — shared numeric coercion for the range / min / max
+/// Shared numeric coercion for the range / min / max
 /// attributes. Boxes `int` / `int64` / `float` / `decimal` to `float`;
 /// anything else is `None` (the attribute passes — strong typing or a
 /// dedicated attribute covers non-numeric shapes).
@@ -48,7 +48,7 @@ module internal Numeric =
         | :? decimal as d -> Some(float d)
         | _ -> None
 
-/// Phase 69e — value's string length must be at least `n` characters.
+/// Value's string length must be at least `n` characters.
 /// Null strings always fail. For non-string values the attribute passes
 /// (use `[<NotNull>]` or strong typing instead).
 type MinLengthAttribute(n: int) =
@@ -61,7 +61,7 @@ type MinLengthAttribute(n: int) =
         | :? string as s when s.Length < n -> Some(sprintf "string length %d below minimum %d" s.Length n)
         | _ -> None
 
-/// Phase 69e — value's string length must be at most `n` characters.
+/// Value's string length must be at most `n` characters.
 type MaxLengthAttribute(n: int) =
     inherit ValidationAttribute()
     member _.MaxLength = n
@@ -72,7 +72,7 @@ type MaxLengthAttribute(n: int) =
             Some(sprintf "string length %d above maximum %d" s.Length n)
         | _ -> None
 
-/// Phase 69e — string must be non-empty (length > 0 after trim).
+/// String must be non-empty (length > 0 after trim).
 type NotEmptyAttribute() =
     inherit ValidationAttribute()
 
@@ -81,7 +81,7 @@ type NotEmptyAttribute() =
         | :? string as s when isNull s || String.IsNullOrWhiteSpace s -> Some "value is required (non-empty after trim)"
         | _ -> None
 
-/// Phase 69e — string must match the given regex anchored or not, as
+/// String must match the given regex anchored or not, as
 /// supplied by the consumer. Pattern is compiled once at attribute
 /// construction (cached on the attribute instance).
 type RegexAttribute(pattern: string) =
@@ -98,7 +98,7 @@ type RegexAttribute(pattern: string) =
                 Some(sprintf "value did not match pattern '%s'" pattern)
         | _ -> None
 
-/// Phase 69e — convenience attribute for an RFC-5322-shaped email.
+/// Convenience attribute for an RFC-5322-shaped email.
 /// Uses a permissive but useful pattern; consumers needing stricter
 /// validation use `[<Regex>]` with their own pattern.
 type EmailAttribute() =
@@ -114,7 +114,7 @@ type EmailAttribute() =
                 Some "value is not a syntactically valid email"
         | _ -> None
 
-/// Phase 69e — numeric value must be in the inclusive range [min, max].
+/// Numeric value must be in the inclusive range [min, max].
 /// Accepts `int`, `int64`, `float`, `decimal` via boxed comparisons.
 type RangeAttribute(min: float, max: float) =
     inherit ValidationAttribute()
@@ -135,7 +135,7 @@ type RangeAttribute(min: float, max: float) =
         | Some v when v < min || v > max -> Some(sprintf "value %g outside allowed range [%g, %g]" v min max)
         | Some _ -> None
 
-/// Phase 69e — numeric value must be >= `n`. Accepts `int` / `int64` /
+/// Numeric value must be >= `n`. Accepts `int` / `int64` /
 /// `float` / `decimal` via boxed comparison; non-numeric values pass.
 type MinValueAttribute(n: float) =
     inherit ValidationAttribute()
@@ -146,7 +146,7 @@ type MinValueAttribute(n: float) =
         | Some v when v < n -> Some(sprintf "value %g below minimum %g" v n)
         | _ -> None
 
-/// Phase 69e — numeric value must be <= `n`.
+/// Numeric value must be <= `n`.
 type MaxValueAttribute(n: float) =
     inherit ValidationAttribute()
     member _.MaxValue = n
@@ -156,7 +156,7 @@ type MaxValueAttribute(n: float) =
         | Some v when v > n -> Some(sprintf "value %g above maximum %g" v n)
         | _ -> None
 
-/// Phase 69e — string value must parse as an absolute URI.
+/// String value must parse as an absolute URI.
 type UriAttribute() =
     inherit ValidationAttribute()
 
@@ -170,8 +170,8 @@ type UriAttribute() =
 
 // -----------------------------------------------------------------------------
 
-/// Phase 69e — per-request validation context handed to an
-/// `IFieldValidator`. Carries the Phase 69b request context (subject id
+/// Per-request validation context handed to an
+/// `IFieldValidator`. Carries the request context (subject id
 /// + correlation id) so a custom validator can make a context-dependent
 /// decision (e.g. "unique within this tenant"). Async resolution is a
 /// future extension; v0 validators are synchronous.
@@ -179,7 +179,7 @@ type IValidationContext =
     abstract SubjectId: string
     abstract CorrelationId: string option
 
-/// Phase 69e — custom field-validator escape hatch. The single method
+/// Custom field-validator escape hatch. The single method
 /// returns `None` on pass, `Some message` on fail — same convention as
 /// the built-in attributes, but with the per-request context available.
 /// Implementations must have a parameterless constructor (the engine
@@ -187,7 +187,7 @@ type IValidationContext =
 type IFieldValidator =
     abstract Validate: value: obj * context: IValidationContext -> string option
 
-/// Phase 69e — wires a consumer-supplied `IFieldValidator` onto a field.
+/// Wires a consumer-supplied `IFieldValidator` onto a field.
 /// `[<Custom(typeof<MyValidator>)>]` where `MyValidator :> IFieldValidator`.
 /// The base `Validate` is a no-op (the engine dispatches the custom
 /// validator with the request context, which the attribute can't see).
@@ -198,7 +198,7 @@ type CustomAttribute(validatorType: Type) =
 
 // -----------------------------------------------------------------------------
 
-/// Phase 69e — per-field violation surfaced in the categorised envelope.
+/// Per-field violation surfaced in the categorised envelope.
 /// `Path` is the dotted/indexed field path: `Address.Postcode` for a
 /// nested record field, `Lines[2].Sku` for a list element. `Code` is the
 /// attribute name minus the `Attribute` suffix (`MinLength`, `Custom`, …).
@@ -210,8 +210,8 @@ type FieldViolation = {
 
 // -----------------------------------------------------------------------------
 
-/// Phase 69e — empty/anonymous validation context. The dispatcher
-/// supplies a real one (subject id + correlation id from the Phase 69b
+/// Empty/anonymous validation context. The dispatcher
+/// supplies a real one (subject id + correlation id from the request
 /// request context); tests and non-dispatcher callers use this.
 [<RequireQualifiedAccess>]
 module ValidationContext =
@@ -223,7 +223,7 @@ module ValidationContext =
 
 // -----------------------------------------------------------------------------
 
-/// Phase 69e.C — message-catalogue helpers. The built-in English message
+/// Message-catalogue helpers. The built-in English message
 /// already lives on each attribute; this module turns a `ViolationCode ->
 /// template` map into an `IValidationMessages` so a deployment can supply
 /// localised templates (or override the wording) without writing an
@@ -275,24 +275,24 @@ module internal Validation =
 
     // Reflect over public AND non-public records — input DTOs are usually
     // public, but a consumer may declare an internal input record; the
-    // engine must see its fields either way (Phase 69d.tail parity).
+    // engine must see its fields either way.
     let private reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
 
-    // Phase 69e — family-agnostic attribute recognition. forge API records
+    // Family-agnostic attribute recognition. forge API records
     // sit in Platform.Core (Fable-compiled) and carry the tier-shared
     // `ToolUp.Platform.*` validation mirrors, which are pure-metadata
     // attributes that DON'T inherit the server-tier `ValidationAttribute`
     // (they can't — the Core tier has no server dependency). Without this
     // bridge those mirrors are invisible to the engine — validation on a
     // Fable API record silently never fires (the same defect class the
-    // 69d.tail auth classifier closed). `tryNormalise` maps either family
+    // auth classifier closes). `tryNormalise` maps either family
     // to the server-tier attribute whose `Validate` carries the logic,
     // reading the mirror's properties reflectively by simple type name.
     //
-    // ── Phase 727 severity assessment — the validation family ─────────
+    // ── Severity assessment — the validation family ─────────
     //
     // VERDICT: KEEP simple-name matching. This is the one family of the
-    // four that Phase 335's CLR-identity mechanism should NOT be extended
+    // four that the CLR-identity mechanism should NOT be extended
     // to, and the reasoning is recorded here so the next sweep does not
     // re-derive it and reach the opposite conclusion from consistency
     // alone. Three arguments, in order of weight.
@@ -465,33 +465,90 @@ module internal Validation =
                     | Some nested -> recordHasValidations visited nested
                     | None -> false))
 
+    /// Build an `IFieldValidator` by type (parameterless ctor), or say why it
+    /// cannot be built.
+    let private instantiateValidator (validatorType: Type) : Result<IFieldValidator, string> =
+        try
+            match Activator.CreateInstance validatorType with
+            | :? IFieldValidator as v -> Ok v
+            | _ -> Error "it does not implement IFieldValidator"
+        with ex ->
+            Error(ex.GetBaseException().Message)
+
+    /// Every `[<Custom>]` declaration reachable from `recordType` whose
+    /// validator cannot be built, as (field path, validator type, reason).
+    /// `visited` guards against cyclic types.
+    let rec private unbuildableValidators
+        (visited: HashSet<Type>)
+        (prefix: string)
+        (recordType: Type)
+        : (string * Type * string) list =
+        if
+            not (FSharpType.IsRecord(recordType, reflectionFlags))
+            || not (visited.Add recordType)
+        then
+            []
+        else
+            [
+                for pi in FSharpType.GetRecordFields(recordType, reflectionFlags) do
+                    let path = if prefix = "" then pi.Name else prefix + "." + pi.Name
+
+                    for a in pi.GetCustomAttributes(true) do
+                        match tryNormalise a with
+                        | Some(:? CustomAttribute as c) ->
+                            match instantiateValidator c.ValidatorType with
+                            | Ok _ -> ()
+                            | Error reason -> yield path, c.ValidatorType, reason
+                        | _ -> ()
+
+                    match nestedRecordType pi.PropertyType with
+                    | Some nested -> yield! unbuildableValidators visited path nested
+                    | None -> ()
+            ]
+
+    /// The one rendering of a validator the engine cannot build. A declared
+    /// validator that never runs is a guard failing open, so the table build
+    /// refuses it rather than skipping it per request.
+    let private refuseUnbuildableValidators (apiType: Type) (inputs: (string * Type) list) =
+        let refusals = [
+            for methodName, inputType in inputs do
+                for path, validatorType, reason in unbuildableValidators (HashSet<Type>()) "" inputType do
+                    sprintf
+                        "%s %s: [<Custom>] validator %s cannot be built (%s)"
+                        methodName
+                        path
+                        validatorType.FullName
+                        reason
+        ]
+
+        if not (List.isEmpty refusals) then
+            invalidOp (
+                sprintf
+                    "ToolUp.Remoting refused to start: API record %s declares validators that cannot run: %s"
+                    apiType.Name
+                    (String.concat "; " refusals)
+            )
+
     /// Cache per-method: input type ONLY when the method's input record
     /// (or a record nested within it) carries at least one validation
     /// attribute. Methods with non-record inputs (or records without
     /// validators anywhere in the tree) are absent from the map, so
-    /// per-request lookup is a fast `Map.tryFind` miss.
+    /// per-request lookup is a fast `Map.tryFind` miss. Refuses, by name, a
+    /// `[<Custom>]` validator that cannot be built.
     let classify (apiType: Type) : Map<string, Type> =
         if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
             Map.empty
         else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun apiField ->
-                match firstInputType apiField with
-                | Some inputT when recordHasValidations (HashSet<Type>()) inputT -> Some(apiField.Name, inputT)
-                | _ -> None)
-            |> Map.ofArray
+            let inputs =
+                FSharpType.GetRecordFields(apiType, reflectionFlags)
+                |> Array.choose (fun apiField ->
+                    match firstInputType apiField with
+                    | Some inputT when recordHasValidations (HashSet<Type>()) inputT -> Some(apiField.Name, inputT)
+                    | _ -> None)
+                |> List.ofArray
 
-    /// Instantiate an `IFieldValidator` by type (parameterless ctor).
-    /// Returns `None` if the type doesn't implement the interface or
-    /// can't be constructed — a misconfigured custom validator must not
-    /// crash the request path (it just doesn't run).
-    let private instantiateValidator (validatorType: Type) : IFieldValidator option =
-        try
-            match Activator.CreateInstance validatorType with
-            | :? IFieldValidator as v -> Some v
-            | _ -> None
-        with _ ->
-            None
+            refuseUnbuildableValidators apiType inputs
+            Map.ofList inputs
 
     /// Unwrap an F# `option` value reflectively — `Some inner` → `Some
     /// inner`, `None` → `None`.
@@ -502,7 +559,7 @@ module internal Validation =
             let case, fields = FSharpValue.GetUnionFields(value, optionType)
             if case.Name = "Some" then Some fields[0] else None
 
-    /// Phase 69e.C — structured args for a built-in attribute violation,
+    /// Structured args for a built-in attribute violation,
     /// so an `IValidationMessages` resolver can rebuild a localised message
     /// without parsing the English default. Keys mirror the `{token}`
     /// placeholders the default templates use (`min`, `max`, `actual`,
@@ -535,7 +592,7 @@ module internal Validation =
         | :? MaxValueAttribute as a -> Map.ofList (withActualNum [ "max", sprintf "%g" a.MaxValue ])
         | _ -> Map.empty // NotEmpty / Email / Uri carry no structured params
 
-    /// Phase 69e.C — apply the optional message resolver to one violation.
+    /// Apply the optional message resolver to one violation.
     /// `None` (no seam composed) or a resolver returning `None` falls back
     /// to the attribute's built-in English message, so the wire shape is
     /// unchanged by default (GP 11 / GP 13).
@@ -566,7 +623,7 @@ module internal Validation =
     /// indexed path (`Address.Postcode`, `Lines[2].Sku`). Collect-then-
     /// emit: every violation from one bad input is reported in a single
     /// pass (no short-circuit). `context` is handed to any `[<Custom>]`
-    /// `IFieldValidator`. `messages` (Phase 69e.C) optionally localises /
+    /// `IFieldValidator`. `messages` optionally localises /
     /// overrides each violation's message; `None` keeps the built-in
     /// English text.
     let evaluate
@@ -590,7 +647,7 @@ module internal Validation =
                         match tryNormalise a with
                         | Some(:? CustomAttribute as c) ->
                             match instantiateValidator c.ValidatorType with
-                            | Some v ->
+                            | Ok v ->
                                 match v.Validate(value, context) with
                                 | Some message ->
                                     violations.Add {
@@ -599,7 +656,14 @@ module internal Validation =
                                         Message = resolveMessage messages "Custom" path Map.empty message
                                     }
                                 | None -> ()
-                            | None -> ()
+                            | Error reason ->
+                                invalidOp (
+                                    sprintf
+                                        "[<Custom>] validator %s on %s cannot be built (%s)"
+                                        c.ValidatorType.FullName
+                                        path
+                                        reason
+                                )
                         | Some attr ->
                             match attr.Validate value with
                             | Some message ->
@@ -652,8 +716,8 @@ module internal Validation =
     /// array with at least one element (defensive — the proxy handles
     /// these cases too).
     ///
-    /// Not on the Giraffe adapter's request path since Phase 905: the
-    /// validation stage (Phase 856.B) and the audit payload (Phase 905)
+    /// Not on the Giraffe adapter's request path: the
+    /// validation stage and the audit payload
     /// both read the argument the dispatch path decodes, once. Kept for a
     /// host that validates a body outside that dispatcher; note it is a
     /// plain `JsonSerializer.Deserialize` by `Type`, not the dispatch

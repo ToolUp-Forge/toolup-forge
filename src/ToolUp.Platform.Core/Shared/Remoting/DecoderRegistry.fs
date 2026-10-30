@@ -7,16 +7,15 @@ open System
 open System.IO
 open ToolUp.Remoting.MsgPack
 
-// ─── Phase 785 — the opt-in seam ─────────────────────────────────────
+// ─── The opt-in seam ─────────────────────────────────────
 //
 // The algebra is an OPT-IN path, never a replacement. A type with a
 // registered decoder decodes through `Decode`'s total combinators; a
 // type without one decodes through the reflection reader exactly as it
-// did before (GP 11) — so adopting the SDK version carrying this phase
+// did before (GP 11) — so adopting the SDK version carrying this
 // changes no deployment's behaviour until it registers something.
 //
-// **Why this is not `GeneratedDispatchRegistry`, which Phase 785's
-// shard proposed.** That registry is keyed by API-RECORD type and holds
+// **Why this is not `GeneratedDispatchRegistry`.** That registry is keyed by API-RECORD type and holds
 // `('TContext -> 'TImpl -> Task) list` route handlers for the server
 // dispatcher; this one is keyed by WIRE type and holds a decoder. They
 // are a different key and a different payload. More decisively, the
@@ -27,7 +26,7 @@ open ToolUp.Remoting.MsgPack
 // through System.Text.Json. A MsgPack decoder registered for a server
 // dispatch branch would never be consulted. The opt-in branch is
 // therefore wired where the bytes actually are, and
-// `GeneratedDispatchRegistry` is left exactly as Phase 69k shipped it.
+// `GeneratedDispatchRegistry` stays as it is.
 //
 // **Keyed by `Type.FullName`, and the failure mode is the safe one.**
 // The client's response serializer holds a `System.Type` and nothing
@@ -38,17 +37,13 @@ open ToolUp.Remoting.MsgPack
 // `None`, which is the reflection path: a miss costs the algebra, never
 // correctness.
 
-/// Phase 785 — a registered decoder, erased to `obj` so one table holds
-/// decoders for many types.
-///
-/// The erasure is the eighth boundary of the kind `CLAUDE.md`
-/// enumerates, and it is symmetric in the same way as the others: the
-/// only way to put a decoder in is `register<'T>`, which boxes the
-/// result of a `Decoder<'T>`, and the only way to get one out is a
-/// lookup by that same `'T`'s identity. Nothing casts blind.
+/// A registered decoder, erased to `obj` so one table holds decoders for many
+/// types. The erasure is symmetric: the only way to put a decoder in is
+/// `register<'T>`, which boxes the result of a `Decoder<'T>`, and the only way
+/// to get one out is a lookup by that same `'T`'s identity. Nothing casts blind.
 type RegisteredDecoder = Value -> Result<obj, DecodeError>
 
-// ─── Phase 801 — the differential gate ───────────────────────────────
+// ─── The differential gate ───────────────────────────────
 //
 // A registered decoder WINS over reflection, so a wrong one is worse
 // than none: it decodes differently from what every deployment ran
@@ -57,7 +52,7 @@ type RegisteredDecoder = Value -> Result<obj, DecodeError>
 // the reflection reader over draws of the record's own shape BEFORE it
 // is registered, and refusing by name on the first disagreement.
 //
-// Phase 902 — the gate RUNS on .NET only, and structurally so: drawing a
+// The gate RUNS on .NET only, and structurally so: drawing a
 // value of an arbitrary type and encoding it with the shipped writer both
 // need `FSharp.Reflection` and the TypeShape-backed writer, neither of
 // which the Fable host has. So the gate itself lives in
@@ -68,7 +63,7 @@ type RegisteredDecoder = Value -> Result<obj, DecodeError>
 // decoders do, in a project that references this assembly alone, and the
 // browser registers decoders a server-side build gate verified.
 
-/// Phase 801 — how one draw diverged. `Candidate` and `Reflection` are
+/// How one draw diverged. `Candidate` and `Reflection` are
 /// the two decodes rendered the way `ProofOracleTests` renders them:
 /// outcome class, value and runtime type at once, so a width narrowed on
 /// the way back — equal-looking at every representation but its type —
@@ -82,7 +77,7 @@ type DecoderDivergence = {
     Reflection: string
 }
 
-/// Phase 801 — the record of one verification: which type, how many
+/// The record of one verification: which type, how many
 /// draws, under which seed, and the first divergence if there was one.
 type DecoderVerification = {
     /// `RemotingDecoders.keyFor` of the verified type.
@@ -95,7 +90,7 @@ type DecoderVerification = {
     Divergence: DecoderDivergence option
 }
 
-/// Phase 801 — a typed refusal: the registration did not happen, and
+/// A typed refusal: the registration did not happen, and
 /// this is why, naming the record and the first diverging draw.
 type DecoderRefusal =
     /// The candidate and the reflection reader disagreed.
@@ -128,7 +123,7 @@ module DecoderRefusal =
             sprintf "decoder for %s refused: no draw of the type could be produced — %s" wireType reason
 
 
-/// Phase 902 — the MessagePack differential gate, as a value: what a
+/// The MessagePack differential gate, as a value: what a
 /// generated module's `verifyAll` runs each of its decoders through.
 ///
 /// The gate draws values of a type and encodes them with the shipped
@@ -146,7 +141,7 @@ module DecoderRefusal =
 type DecoderGate = int -> int -> Type -> RegisteredDecoder -> Result<DecoderVerification, DecoderRefusal>
 
 
-/// Phase 785 — the process-wide table of algebra decoders.
+/// The process-wide table of algebra decoders.
 ///
 /// **Module-level mutable state, justified.** The table is written once
 /// per process during composition and read on every response decode
@@ -203,8 +198,8 @@ module RemotingDecoders =
     /// Whether `wireType` decodes through the algebra in this process.
     let isRegistered (wireType: Type) : bool = Map.containsKey (keyFor wireType) table
 
-    /// Every registered type's key, ordered. The enumeration the Phase
-    /// 785 composition-profile facet classifies an API record against.
+    /// Every registered type's key, ordered. The enumeration the
+    /// composition-profile facet classifies an API record against.
     let registered () : string list = table |> Map.toList |> List.map fst
 
     /// How many types decode through the algebra in this process.
@@ -222,7 +217,7 @@ module RemotingDecoders =
     let resetForTests () : unit = table <- Map.empty
 
 
-    /// Phase 902 — run `gate` over `'T`'s decoder: `draws` draws of `'T`
+    /// Run `gate` over `'T`'s decoder: `draws` draws of `'T`
     /// from `seed`, compared with the reflection reader. The typed form a
     /// generated module's `verifyAll` emits, one call per decoder. `inline`
     /// for `register`'s reason: Fable erases generics, so `typeof<'T>` must

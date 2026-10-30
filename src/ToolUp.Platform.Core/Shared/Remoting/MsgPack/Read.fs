@@ -10,7 +10,7 @@ open System.Collections
 open System.Collections.Concurrent
 open System.Collections.Generic
 open FSharp.Reflection
-// Phase 783 — the decode-refusal vocabulary. Every `failwithf` that used
+// The decode-refusal vocabulary. Every `failwithf` that used
 // to describe a decode failure in prose now refuses with a `DecodeError`
 // naming Expected / Found / Path, carried out through `DecodeException`
 // and converted back to a `Result` at `Reader.TryRead`.
@@ -24,7 +24,7 @@ open System.Buffers.Binary
 #nowarn "9"
 #nowarn "51"
 
-/// Phase 786 — can this wire value reach the target type without losing
+/// Can this wire value reach the target type without losing
 /// what the wire actually carried?
 ///
 /// `sourceBits` is the width of the WIRE FORMAT the value arrived in and
@@ -48,7 +48,7 @@ open System.Buffers.Binary
 ///     a SIGNED target a negative source always fits, because a narrower
 ///     signed range is contained in a wider one.
 ///   * A source NO WIDER than the target always survives — including the
-///     signed/unsigned reinterpretation writers before Phase 802 depend
+///     signed/unsigned reinterpretation older writers depend
 ///     on. That is not a loophole, it is the format as those writers
 ///     emit it: their `writeSByte` puts `-128y` on the wire as `uint8
 ///     128`, and their `writeDecimal`'s four words go through
@@ -56,8 +56,8 @@ open System.Buffers.Binary
 ///     0xFFFFFFFF`. The target type is what recovers the sign, and no bit
 ///     is lost either way. Refusing these would refuse well-formed
 ///     traffic from every peer still on such a writer — the corpus pins
-///     those older bytes in `preEmitterDisciplinePayloads`. Since Phase
-///     802 this repository's own writers no longer emit the form at all
+///     those older bytes in `preEmitterDisciplinePayloads`. This
+///     repository's own writers no longer emit the form at all
 ///     (see `Format.fs`), which is what lets this rule refuse a value
 ///     that is genuinely too wide: it now always arrives wider.
 ///   * A source WIDER than the target is the genuine narrowing, and it is
@@ -76,13 +76,13 @@ let inline private integerFits (sourceBits: int) (targetBits: int) (lo: int64) (
     else
         uint64 n <= hi
 
-/// Phase 786 — the refusal a failed width check raises. `Expected` names
+/// The refusal a failed width check raises. `Expected` names
 /// the target type, so the rendered sentence reads
 /// `expected Int32, got out-of-range integer 4294967296`.
 let inline private refuseWidth (typ: Type) n : obj =
     DecodeError.failWith typ.Name (sprintf "out-of-range integer %A" n)
 
-/// Phase 786 — how many elements a collection is allowed to reserve room
+/// How many elements a collection is allowed to reserve room
 /// for on the strength of a length prefix alone, before it has to earn
 /// the rest by actually decoding elements.
 ///
@@ -112,7 +112,7 @@ let interpretStringAs (typ: Type) (str: string) =
         FSharpValue.MakeUnion(case, [||])
 #endif
 
-// Phase 786 — every arm decodes at the width its TARGET TYPE declares
+// Every arm decodes at the width its TARGET TYPE declares
 // and refuses a wire value that does not fit, rather than casting it
 // down. The two `#if` branches are kept arm-for-arm identical in this
 // respect: under Fable the same `integerFits` test runs over the JS
@@ -237,7 +237,7 @@ let inline interpretIntegerAsFrom (typ: Type) (sourceBits: int) n =
                 TimeSpan(int64 n) |> box
             else
                 refuseWidth typ n
-        // Phase 803 — the two arms this block was EMPTY for. Fable's
+        // The two arms this block was EMPTY for. Fable's
         // library carries both types (`DateOnly` as a UTC-midnight
         // `Date`, `TimeOnly` as a millisecond count), so the same
         // day-number / tick encoding the .NET arm decodes — and the
@@ -297,18 +297,6 @@ let inline interpretIntegerAsFrom (typ: Type) (sourceBits: int) n =
             DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #endif
 
-/// The pre-786 entry, kept at its original shape so existing callers
-/// compile and link unchanged (GP 11).
-///
-/// A caller who arrives here has not said what width the value came from,
-/// and there is no way to recover it, so this assumes the widest source
-/// the format has. That is the SAFE assumption rather than the compatible
-/// one: it refuses a narrowing this function used to perform silently,
-/// and it refuses a same-width reinterpretation it cannot know is one.
-/// `Reader` does not come through here — every arm of `Read` knows its
-/// format's width and calls `interpretIntegerAsFrom` with it.
-let inline interpretIntegerAs (typ: Type) n = interpretIntegerAsFrom typ 64 n
-
 let inline interpretFloatAs (typ: Type) n =
 #if FABLE_COMPILER
     box n
@@ -324,7 +312,7 @@ type DictionaryDeserializer<'k, 'v when 'k: equality and 'k: comparison>() =
     static let valueType = typeof<'v>
 
     static member Deserialize(len: int, isDictionary, read: Type -> obj) =
-        // Phase 786 — seed at a bounded capacity and let the collection
+        // Seed at a bounded capacity and let the collection
         // grow as entries are actually decoded, rather than reserving
         // `len` slots on the wire's say-so.
         if isDictionary then
@@ -361,20 +349,20 @@ type SetDeserializer<'a when 'a: comparison>() =
 #endif
 
 /// Reads MessagePack off `data`, refusing anything that nests deeper than
-/// `maxDepth` (Phase 786 — see `Format.fs`'s header for the three bounds
+/// `maxDepth` (see `Format.fs`'s header for the three bounds
 /// and why each is a refusal). The single-argument constructor applies
 /// `Format.DefaultMaxDepth`, so every existing call site keeps its
 /// behaviour for every payload that was already well-formed (GP 11).
 type Reader(data: byte[], maxDepth: int) =
     let mutable pos = 0
 
-    /// Phase 786 — how many containers deep the reader currently is.
+    /// How many containers deep the reader currently is.
     /// An instance counter rather than a threaded parameter: the decode
     /// recursion runs through `Type -> obj` delegate caches and three
     /// public `*Deserializer` types whose `Deserialize` takes
     /// `read: Type -> obj`, so a parameter would retype five public
-    /// generic types across two tiers — the interior rewrite Phase 785
-    /// owns. A `Reader` is single-threaded and reads one value, so the
+    /// generic types across two tiers — an interior rewrite this
+    /// reader does not do. A `Reader` is single-threaded and reads one value, so the
     /// counter is sound; on the refusal path the reader is finished and
     /// the count is never unwound (`TryRead` documents the same about
     /// `pos`).
@@ -401,7 +389,7 @@ type Reader(data: byte[], maxDepth: int) =
             bytesInterpretation (data, pos - len)
 #endif
 
-    /// Phase 786 — the pre-786 shape, at the default nesting bound. An
+    /// The pre-786 shape, at the default nesting bound. An
     /// explicit secondary constructor rather than an optional argument:
     /// an optional parameter folds both into one widened constructor, so
     /// the existing one-argument token would disappear from the public
@@ -443,7 +431,7 @@ type Reader(data: byte[], maxDepth: int) =
 #if !FABLE_COMPILER && NETCOREAPP2_1_OR_GREATER
         BinaryPrimitives.ReadInt16BigEndian(data.AsSpan(pos - 2, 2))
 #else
-        // Phase 802 — sign-extend explicitly. The old `int16 hi <<< 8 |||
+        // Sign-extend explicitly. The old `int16 hi <<< 8 |||
         // int16 lo` was computed on a JS number that never wraps at 16
         // bits, so `d1 80 00` came back as 32768 rather than -32768. Our
         // own writers no longer emit `Int16` (see `Format.fs`), but any
@@ -549,7 +537,7 @@ type Reader(data: byte[], maxDepth: int) =
         if args.Length <> 2 then
             DecodeError.failWith t.Name "a map"
 
-        // Phase 786 — seeded at a bounded capacity and grown as entries
+        // Seeded at a bounded capacity and grown as entries
         // are decoded, rather than reserving `len` slots up front.
         let pairs = ResizeArray(min len InitialCollectionCapacity)
 
@@ -599,7 +587,7 @@ type Reader(data: byte[], maxDepth: int) =
         box set
 #endif
 
-    /// Phase 786 — the array is seeded at `min len
+    /// The array is seeded at `min len
     /// InitialCollectionCapacity` and doubled, capped at `len`, as
     /// elements are actually decoded. A `len` at or below the ceiling
     /// therefore allocates exactly once at exactly the right size, as
@@ -804,7 +792,7 @@ type Reader(data: byte[], maxDepth: int) =
         else
             DecodeError.failAt [ sprintf "byte %d" pos ] t.Name "bin"
 
-    /// Phase 786 — refuse a length prefix that claims more than the bytes
+    /// Refuse a length prefix that claims more than the bytes
     /// remaining can possibly hold, BEFORE anything is allocated from it.
     ///
     /// `minBytesPerElement` is the smallest number of bytes one element
@@ -828,7 +816,7 @@ type Reader(data: byte[], maxDepth: int) =
                 (sprintf "%s of at most %d element(s)" what affordable)
                 (sprintf "%s of %d element(s), with %d byte(s) remaining" what len remaining)
 
-    /// Phase 786 — descend into a container, refusing past the bound.
+    /// Descend into a container, refusing past the bound.
     member private _.EnterContainer() =
         depth <- depth + 1
 
@@ -840,7 +828,7 @@ type Reader(data: byte[], maxDepth: int) =
 
     member private _.ExitContainer() = depth <- depth - 1
 
-    /// Phase 786 — the guarded forms the format arms dispatch through:
+    /// The guarded forms the format arms dispatch through:
     /// length checked against the bytes present, then (for the two
     /// recursive shapes) the depth bound, then the read itself.
     member private x.ReadCheckedString(len: int) =
@@ -917,11 +905,11 @@ type Reader(data: byte[], maxDepth: int) =
             x.ReadCheckedBin(len, t)
         | b -> DecodeError.failAt [ sprintf "byte %d" pos ] t.Name (sprintf "format byte %d" b)
 
-    // ─── Phase 785 — the one bytes-to-`Value` pass ───────────────────
+    // ─── The one bytes-to-`Value` pass ───────────────────
     //
     // The same format dispatch as `Read` below, producing the CLOSED
     // value model instead of a reflection-directed `obj`. It inherits
-    // every Phase 786 bound unchanged — it calls the identical guarded
+    // every bound unchanged — it calls the identical guarded
     // helpers (`RequireAvailable`, `EnterContainer`) rather than
     // re-deriving them — so nothing here can be weaker than the path
     // beside it, and a bound added to one is added to both.
@@ -932,13 +920,13 @@ type Reader(data: byte[], maxDepth: int) =
     // decision "does this integer fit the target" moves out of the byte
     // reader and into a total combinator the caller composes.
     //
-    // Phase 787's boundary runs exactly here: the totality of this pass
+    // The proof boundary runs exactly here: the totality of this pass
     // is BOUNDED (length against bytes remaining, nesting against
     // `maxDepth`) and not proved, because it advances a mutable cursor
     // over a byte array. Everything above it — `Decode` — is proved
     // territory, because it is a pure function over an immutable term.
 
-    /// Phase 785 — the `bin` payload as a `byte[]` on both hosts.
+    /// The `bin` payload as a `byte[]` on both hosts.
     member private x.ReadBinValue(len: int) : byte[] =
         x.RequireAvailable(len, 1, "bin")
 #if NETCOREAPP2_1_OR_GREATER && !FABLE_COMPILER
@@ -947,7 +935,7 @@ type Reader(data: byte[], maxDepth: int) =
         x.ReadRawBin len
 #endif
 
-    /// Phase 785 — an array term. Seeded at a bounded capacity and grown
+    /// An array term. Seeded at a bounded capacity and grown
     /// as elements are actually decoded, exactly as `ReadRawArray` is,
     /// so a length prefix the guard admits still buys only a small
     /// allocation up front.
@@ -962,9 +950,9 @@ type Reader(data: byte[], maxDepth: int) =
         x.ExitContainer()
         Value.Arr(elements.ToArray())
 
-    /// Phase 785 — a map term. Entries stay in WIRE ORDER: sorting here
+    /// A map term. Entries stay in WIRE ORDER: sorting here
     /// would make the value model lossy about the bytes it came from,
-    /// and the round-trip law Phase 785 states is over those bytes.
+    /// and the round-trip law is over those bytes.
     member private x.ReadMapValue(len: int) : Value =
         x.RequireAvailable(len, 2, "map")
         x.EnterContainer()
@@ -978,31 +966,31 @@ type Reader(data: byte[], maxDepth: int) =
         x.ExitContainer()
         Value.Map(List.ofSeq pairs)
 
-    /// Phase 785 — read one `Value` from the current position.
+    /// Read one `Value` from the current position.
     ///
     /// Refuses through `DecodeException` exactly as `Read` does, so
     /// `TryReadValue` converts it back to a `Result` at the same seam
     /// and the two paths share one refusal vocabulary. There is no
     /// `ext` arm because this transport has none — see `Format.fs`'s
     /// header and `Value.fs`'s.
-    /// Phase 785 — refuse a FORMAT BYTE read past the end of the
+    /// Refuse a FORMAT BYTE read past the end of the
     /// payload.
     ///
-    /// Phase 786 bounded every length prefix against the bytes
+    /// Every length prefix is bounded against the bytes
     /// remaining, which is the bound that matters once a value has
     /// started. The byte that STARTS a value was still unguarded, so an
     /// empty payload — and the exhausted tail of a container whose
     /// header promised more elements than the bytes hold — reached
     /// `ReadByte` and escaped as an `IndexOutOfRangeException`, which is
-    /// not a named refusal and is what Phase 784's
+    /// not a named refusal and is what the
     /// `truncated-empty-payload` mutation measured.
     ///
     /// Guarded HERE rather than in `ReadByte`, and that is a scope
     /// decision rather than an oversight: `ReadByte` is on the
     /// reflection reader's hot path too, and moving its behaviour is
-    /// Phase 786's cross-section, not this phase's. The algebra path
+    /// a separate decision. The algebra path
     /// claims totality and so pays for the check; the reflection path
-    /// keeps the behaviour Phase 784 recorded, and the difference is
+    /// keeps its behaviour, and the difference is
     /// exactly what "the algebra refuses strictly more" means.
     member private _.RequireByte() =
         if pos >= data.Length then
@@ -1050,7 +1038,7 @@ type Reader(data: byte[], maxDepth: int) =
         | Format.Bin32 -> Value.Bin(x.ReadBinValue(x.ReadUInt32() |> int))
         | b -> DecodeError.failAt [ sprintf "byte %d" pos ] "a MessagePack value" (sprintf "format byte %d" b)
 
-    /// Phase 785 — the total entry to the one-pass reader. The same
+    /// The total entry to the one-pass reader. The same
     /// contract `TryRead` carries, including that the reader is LEFT
     /// WHERE THE REFUSAL HAPPENED: read one value per `Reader` on the
     /// refusal path, and do not resume.
@@ -1060,16 +1048,16 @@ type Reader(data: byte[], maxDepth: int) =
         with DecodeException error ->
             Error error
 
-    /// Phase 783 — the named-refusal entry. Decodes `t` from the current
+    /// The named-refusal entry. Decodes `t` from the current
     /// position and returns either the value or a `DecodeError` naming
     /// what was expected, what the bytes held, and the byte offset it was
     /// at. Nothing here throws for a malformed payload.
     ///
-    /// **Composition direction.** Phase 783's task text proposed the
+    /// **Composition direction.** The obvious arrangement is the
     /// opposite arrangement — `TryRead` primary, `Read` derived as
     /// `TryRead |> Result.defaultWith raise`. That is not reachable
     /// without rewriting this reader's interior, which is the work
-    /// [Phase 785] owns: the decode recursion runs through static
+    /// this reader does not do: the decode recursion runs through static
     /// `ConcurrentDictionary` caches whose values are `Type -> obj`
     /// delegates (`arrayReaderCache`, `mapReaderCache`, `setReaderCache`)
     /// and through `DictionaryDeserializer` / `ListDeserializer` /

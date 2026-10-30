@@ -1,31 +1,36 @@
 namespace ToolUp.Remoting.Analyzers
 
 // =============================================================================
-// Phase 195 — compile-time analyzer recognition core
+// Compile-time analyzer recognition core
 // =============================================================================
 //
-// PURE, dependency-free (FSharp.Core only) recognition logic that mirrors the
-// runtime classifiers the dispatcher refuses to start without:
+// PURE, dependency-free (FSharp.Core only) recognition logic for the classes the
+// dispatcher refuses to start without:
 //
-//   * `AuthClassifier` in ToolUp.Platform.Server/Server/Remoting/Auth.fs — the
-//     by-simple-name auth-attribute recognition that, at startup, raises
-//     "ToolUp.Remoting refused to start: API record … unclassified" for any
-//     field carrying none of the five Phase 69d classifications.
-//   * the `[<Audit>]` / `[<PiiSafe>]` recognition in Audit.fs (Phase 69h).
+//   * the auth classification `AuthClassifier` applies at startup in
+//     ToolUp.Platform.Server/Server/Remoting/Auth.fs, raising "ToolUp.Remoting
+//     refused to start: API record … unclassified" for any field carrying none
+//     of the five classifications.
+//   * the `[<Audit>]` / `[<PiiSafe>]` recognition in Audit.fs.
+//
+// THE ANALYZER CLASSIFIES BY SIMPLE NAME; THE RUNTIME MATCHES BY CLR IDENTITY.
+// The analyzer sees syntax, so `simpleName` reduces a source name
+// (`[<RequiresRole "...">]`) or a CLR name (`RequiresRoleAttribute`) to one key.
+// `AuthClassifier` instead compares the attribute's type with the platform's own.
+// The two agree on every platform attribute, and they part on one case: a
+// foreign attribute carrying a platform marker's simple name is a runtime
+// refusal that this analyzer reads as classified. That gap is a known finding,
+// not a parity this file provides.
 //
 // This file is SOURCE-LINKED into ToolUp.Platform.Tests (a `<Compile Include>`
-// link, NOT a project reference — so the lean test pack never drags FCS in via
+// link, NOT a project reference, so the lean test pack never drags FCS in via
 // the analyzer's FSharp.Analyzers.SDK dependency). The parity test runs THIS
-// decision code against the real internal `AuthClassifier` over identical
-// fixture record types, proving the analyzer's "unclassified" verdict is the
-// exact set the runtime refuses on (the Phase 195 acceptance criterion).
+// decision code against the real internal `AuthClassifier` over fixture record
+// types declared with the platform's own attributes, which is the set the two
+// agree on.
 //
-// The analyzer (`Analyzer.fs`) extracts a normalised `FieldAttributes` list
-// from the syntax tree and feeds it here; the runtime reflects the same data
-// off the CLR type. The only representational difference is the attribute name
-// form — source writes `[<RequiresRole "...">]` (simple name `RequiresRole`)
-// while reflection sees the CLR type name `RequiresRoleAttribute`. `simpleName`
-// normalises both to the same key, so the two paths classify identically.
+// The analyzer (`Analyzer.fs`) extracts a normalised `FieldAttributes` list from
+// the syntax tree and feeds it here.
 
 module Recognition =
 
@@ -34,14 +39,14 @@ module Recognition =
     /// Names may be in either source form (`RequiresRole`) or CLR form
     /// (`RequiresRoleAttribute`) — `simpleName` reconciles them — and may be
     /// dotted (`ToolUp.Platform.RequiresRole`); only the trailing segment
-    /// matters, exactly as the runtime matches on `a.GetType().Name`.
+    /// matters here, where the runtime compares the attribute's CLR type.
     type FieldAttributes = {
         FieldName: string
         AttributeNames: string list
     }
 
     /// An API method paired with the audit-relevant facts about its input
-    /// record (Phase 69h / TUR0002). `InputRecordHasPiiSafeField` is true when
+    /// record (TUR0002). `InputRecordHasPiiSafeField` is true when
     /// the method's first-argument record carries at least one `[<PiiSafe>]`
     /// field — the signal that PII flows through the method.
     type ApiMethod = {
@@ -86,7 +91,7 @@ module Recognition =
         else
             trimmed
 
-    /// The five Phase 69d classifications — the exact set `AuthClassifier`
+    /// The five classifications — the exact set `AuthClassifier`
     /// recognises (RequiresRole / RequiresClaim → requirements; TenantScoped →
     /// TenantRequired; AllowAnonymous → Anonymous; PublicEndpoint → Public). A
     /// field carrying any one of these is classified; carrying none is the

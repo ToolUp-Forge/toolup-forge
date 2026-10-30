@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 784.B / 784.C — the System.Text.Json half of the remoting wire
+/// The System.Text.Json half of the remoting wire
 /// differential corpus.
 ///
 /// The SAME population as the MsgPack half, through the SAME comparison,
@@ -243,7 +243,7 @@ let private fixturePin =
 ///   3. every one of the same values is exact through MsgPack — the
 ///      control, without which "JSON loses ticks" could equally be "our
 ///      corpus mis-declares TimeSpans";
-///   4. (Phase 799) every one is exact through the JSON ALGEBRA, which
+///   4. every one is exact through the JSON ALGEBRA, which
 ///      reads the same millisecond text as a decimal — so the loss is
 ///      now a property of the converter, not of the wire, and a served
 ///      record with a registered decoder does not see it.
@@ -268,7 +268,7 @@ let private timeSpanTickLoss =
             lossy
             "no drawn TimeSpan lost precision through the STJ CONVERTER. Either the converter has been fixed — in which case retire this measurement and widen the whole-millisecond restriction on the generated draws in `WireCorpus.randomEnvelope` — or this probe has stopped measuring the wire."
 
-        // Phase 799 — CLOSED on the served path. The same 2,000 texts,
+        // CLOSED on the served path. The same 2,000 texts,
         // through the JSON algebra's `asTimeSpan` (the token as a decimal,
         // scaled to ticks in decimal arithmetic, nearest tick): every one
         // comes back exact. The converter's loss above is now a fact about
@@ -336,8 +336,41 @@ let private timeSpanTickLoss =
 /// well-formed JSON never reaches it and is classified as `ThrewUnnamed`
 /// at the parse. That is not a cheat: it is the honest description of
 /// where a dispatcher's refusal actually comes from on this wire, and
-/// writing it down is what will make it visible if Phase 785 moves the
+/// writing it down is what will make it visible if a later change moves the
 /// boundary.
+/// The path a refusal reports for `payload` read as `'T`.
+let private refusalPath<'T> (payload: string) =
+    use document = JsonDocument.Parse payload
+
+    match
+        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+            None
+            document.RootElement
+            typeof<'T>
+            jsonOptions
+    with
+    | Ok value -> failtestf "the payload must refuse, it decoded to %A" value
+    | Error refusal -> refusal.Path
+
+/// A refusal raised under a map key: the key's dots are not path separators.
+let private dottedMapKey =
+    testList "refusal paths under a dotted map key" [
+        testCase "a root-level dotted key is one segment"
+        <| fun () ->
+            Expect.equal
+                (refusalPath<Map<string, int>> """{"a.b": "not an int"}""")
+                [ "['a.b']" ]
+                "the key is one segment"
+
+        testCase "a dotted key beneath a member stays one segment"
+        <| fun () ->
+            Expect.equal
+                (refusalPath<Map<string, Map<string, Map<string, int>>>>
+                    """{"Holds": {"a.b": {"Count": "not an int"}}}""")
+                [ "Holds['a.b']"; "Count" ]
+                "the indexer stays inside its member's segment; its dot is not a separator"
+    ]
+
 let private refusals =
     testList "refuse-path mutations" [
         yield! [
@@ -396,7 +429,7 @@ let private refusals =
                 "the two wires now agree on every mutation. Either both decoders converged — in which case say so here — or one of the two mutation populations has stopped being exercised."
     ]
 
-// ─── Generated shape mutations (Phase 844) ───────────────────────────
+// ─── Generated shape mutations ───────────────────────────
 
 /// The same per-shape GENERATED population the JSON algebra suite runs
 /// (`WireCorpus.generatedMutations`), measured here against the STJ
@@ -407,7 +440,7 @@ let private refusals =
 /// so nothing here needs the algebra's narrower "has a decoder in that
 /// file" filter.
 ///
-/// Where STJ THROWS rather than refusing by name, that is Phase 783's own
+/// Where STJ THROWS rather than refusing by name, that is the seam's own
 /// declared boundary (a `ThrewUnnamed` class, not a `Refused` one) and is
 /// recorded as exactly that — never treated as a failure in its own
 /// right. `sameOutcomeClass` is what makes that true: a generated
@@ -472,6 +505,7 @@ let tests =
         narrowingFalsifier
         fixturePin
         refusals
+        dottedMapKey
         timeSpanTickLoss
         generatedShapeMutations
         differentialShape
