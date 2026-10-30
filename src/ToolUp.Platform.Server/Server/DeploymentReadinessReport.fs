@@ -211,6 +211,53 @@ let private gatherHealth (ctx: HttpContext) : Async<DeploymentReadiness.HealthSu
         }
 }
 
+/// Phase 860 — the note on a live-interface posture read from the
+/// composition manifest rather than reported by a RAG composition.
+[<Literal>]
+let ManifestPostureNote =
+    "Live-interface posture read from the composition manifest: no RAG composition reported one. Tool-aware framing is a RAG composition fact, so it is reported inactive here."
+
+/// Phase 860 — the live-interface posture a deployment WITHOUT a RAG
+/// composition reports, from the composition manifest's
+/// `LiveInterfaceTools` (the names the manifest projection derived through
+/// `CompositionManifest.isLiveInterfaceTool`). Grounding mode and framing
+/// eligibility are RAG facts, so they stay empty / inactive; a RAG
+/// composition's own registered summary replaces this one whenever it is
+/// present. Registered once by `ServerApp.run`, from the manifest it
+/// already projects, so the gatherer below keeps its one container read.
+let liveInterfaceFromManifest (liveInterfaceTools: string list) : DeploymentReadiness.LiveInterfaceSummary =
+    let tools =
+        (if isNull (box liveInterfaceTools) then
+             []
+         else
+             liveInterfaceTools)
+        |> List.distinct
+        |> List.sort
+
+    {
+        Composed = true
+        HasLiveInterfaceTools = not tools.IsEmpty
+        LiveInterfaceTools = tools
+        GroundingMode = ""
+        ToolAwareFramingActive = false
+        Note = Some ManifestPostureNote
+    }
+
+/// Phase 860 — register `liveInterfaceFromManifest` as the deployment's
+/// posture. `TryAdd`, so a RAG composition's own summary wins in either
+/// order: registered before this it makes this a no-op, and registered
+/// after it is the one the container resolves.
+let registerManifestLiveInterface
+    (liveInterfaceTools: string list)
+    (services: IServiceCollection)
+    : IServiceCollection =
+    Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<DeploymentReadiness.LiveInterfaceSummary>(
+        services,
+        liveInterfaceFromManifest liveInterfaceTools
+    )
+
+    services
+
 /// Gather the four signals and fold them into a verdict via the pure
 /// `DeploymentReadiness.summarise`.
 let buildReport (config: ServerConfig) (ctx: HttpContext) : Async<DeploymentReadiness.DeploymentReadinessReport> = async {
@@ -220,8 +267,10 @@ let buildReport (config: ServerConfig) (ctx: HttpContext) : Async<DeploymentRead
     let! health = gatherHealth ctx
 
     // Phase 541 — informational live-interface posture, registered by a
-    // composition that owns the tool-aware framing (RAG). Absent ⇒
-    // `notComposed`; never feeds the verdict.
+    // composition that owns the tool-aware framing (RAG). Phase 860 — a
+    // deployment composed through `ServerApp.run` without RAG registers
+    // `liveInterfaceFromManifest` instead. Absent ⇒ `notComposed`; never
+    // feeds the verdict.
     let liveInterface =
         match ctx.RequestServices.GetService(typeof<DeploymentReadiness.LiveInterfaceSummary>) with
         | :? DeploymentReadiness.LiveInterfaceSummary as summary -> summary

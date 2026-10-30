@@ -253,6 +253,7 @@ Microsoft.Extensions.Hosting.IHostedService	Singleton
 ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot	Singleton
 ToolUp.Platform.StartupModes+DescribeRenderer	Singleton
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary	Singleton
 Giraffe.Json+ISerializer	Singleton
 Microsoft.IO.RecyclableMemoryStreamManager	Singleton
 Giraffe.Xml+ISerializer	Singleton

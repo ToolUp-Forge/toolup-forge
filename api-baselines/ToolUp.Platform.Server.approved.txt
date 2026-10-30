@@ -2051,11 +2051,12 @@ ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.o
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.rules(ToolUp.Platform.CompositionManifest, ToolUp.Platform.CompositionReferences, System.DateTime) : ToolUp.Platform.RulesView
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.surfaces : ToolUp.Platform.SurfacesView { get }
 ToolUp.Platform.CompositionManifest (class)
-ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod])
+ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.CompositionManifest.CanonicalMethods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod] { get }
 ToolUp.Platform.CompositionManifest.CompanionSlots : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifest.ConfigKnobs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob] { get }
 ToolUp.Platform.CompositionManifest.DataTypes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
+ToolUp.Platform.CompositionManifest.LiveInterfaceTools : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionManifest.Metrics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifest.Modules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifest.Purposes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
@@ -2064,6 +2065,7 @@ ToolUp.Platform.CompositionManifest.Subjects : Microsoft.FSharp.Collections.FSha
 ToolUp.Platform.CompositionManifest.Tools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifestModule (class)
 ToolUp.Platform.CompositionManifestModule.CanonicalMethodSchemaVersion : System.Int32 (literal)
+ToolUp.Platform.CompositionManifestModule.LiveInterfaceSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.CompositionManifestModule.PreCanonicalMethodSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.CompositionManifestModule.SchemaVersion : System.Int32 (literal)
 ToolUp.Platform.CompositionManifestModule.TeamOutputVisibilityKnobPrefix : System.String (literal)
@@ -2079,16 +2081,21 @@ ToolUp.Platform.CompositionManifestModule.companionSlotEntry(System.String) : To
 ToolUp.Platform.CompositionManifestModule.dataTypeEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.effectiveSchemaVersion(ToolUp.Platform.CompositionManifest) : System.Int32
 ToolUp.Platform.CompositionManifestModule.empty : ToolUp.Platform.CompositionManifest { get }
+ToolUp.Platform.CompositionManifestModule.isLiveInterfaceTool(ToolUp.Platform.AIToolDefinition) : System.Boolean
 ToolUp.Platform.CompositionManifestModule.knob(System.String, System.String) : ToolUp.Platform.ConfigKnob
+ToolUp.Platform.CompositionManifestModule.liveInterfaceTools(ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.CompositionManifestModule.liveInterfaceToolsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.CompositionManifestModule.metricEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.moduleEntry(System.String, ToolUp.Platform.ComponentId) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.purposeEntry(ToolUp.Platform.RegisteredPurpose) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.recordsCanonicalMethods(ToolUp.Platform.CompositionManifest) : System.Boolean
+ToolUp.Platform.CompositionManifestModule.recordsLiveInterfaceTools(ToolUp.Platform.CompositionManifest) : System.Boolean
 ToolUp.Platform.CompositionManifestModule.subjectEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.teamOutputVisibilityKnobs(ToolUp.Platform.TeamOutputVisibilitySettings) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob]
 ToolUp.Platform.CompositionManifestModule.toolEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.withCanonicalMethods(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionManifestModule.withGrounding(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
+ToolUp.Platform.CompositionManifestModule.withLiveInterfaceTools(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionManifestModule.withPurposes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionProfile (class)
 ToolUp.Platform.CompositionProfile.IsStandard : System.Boolean { get }
@@ -3408,8 +3415,11 @@ ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure+TranscriptDigestMi
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailureModule (class)
 ToolUp.Platform.DeployRecords+DeployRecordVerificationFailureModule.describe(ToolUp.Platform.DeployRecords+DeployRecordVerificationFailure) : System.String
 ToolUp.Platform.DeploymentReadinessReport (class)
+ToolUp.Platform.DeploymentReadinessReport.ManifestPostureNote : System.String (literal)
 ToolUp.Platform.DeploymentReadinessReport.buildReport(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport]
 ToolUp.Platform.DeploymentReadinessReport.deploymentReadinessApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentReadinessApi
+ToolUp.Platform.DeploymentReadinessReport.liveInterfaceFromManifest(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary
+ToolUp.Platform.DeploymentReadinessReport.registerManifestLiveInterface(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Platform.DeploymentVerificationEvidence (class)
 ToolUp.Platform.DeploymentVerificationEvidence.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSealIntegrity], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertificateIssuanceIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AnswerJoinIntegrity, System.String]]]]) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.egressOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity]

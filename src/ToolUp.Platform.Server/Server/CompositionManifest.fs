@@ -157,6 +157,22 @@ type CompositionManifest = {
     /// recorded number MEANS without changing anything else the manifest
     /// enumerates, which is why the boot seal was blind to exactly it.
     CanonicalMethods: MetricCanonicalMethod list
+    /// Phase 860 — the names of the composed tools that are live-interface
+    /// tools (Phase 538: the definition declares `IsLiveInterface`, or its
+    /// `Location` is `ClientResident`), sorted and distinct. `Tools` lists
+    /// names only, so this posture could not be recovered from it.
+    ///
+    /// Read it through `CompositionManifest.liveInterfaceTools`, and only
+    /// when `recordsLiveInterfaceTools` holds: empty at `SchemaVersion` 3+
+    /// means *no composed tool is a live-interface tool*; below it, the
+    /// manifest never carried the field.
+    ///
+    /// **Not sealed.** `BootVerificationPreflight.compositionCanonicalForm`
+    /// does not frame it and `compare` does not read it: the posture is
+    /// derived from tool definitions the manifest already enumerates by
+    /// name, so sealing it would move every existing seal's bytes for no
+    /// new evidence.
+    LiveInterfaceTools: string list
 }
 
 /// Element constructors + assembly for `CompositionManifest`. Each
@@ -170,7 +186,7 @@ module CompositionManifest =
 
     /// The schema every manifest this binary projects is stamped with.
     [<Literal>]
-    let SchemaVersion = 2
+    let SchemaVersion = 3
 
     /// The schema of every manifest projected before Phase 694 — the
     /// shape that carried no version field at all, and therefore
@@ -185,6 +201,12 @@ module CompositionManifest =
     /// as silent about selectors it did in fact record.
     [<Literal>]
     let CanonicalMethodSchemaVersion = 2
+
+    /// Phase 860 — the schema at which the live-interface tool names began
+    /// to be recorded. Like `CanonicalMethodSchemaVersion`, a later schema
+    /// step must not move it.
+    [<Literal>]
+    let LiveInterfaceSchemaVersion = 3
 
     /// The schema a manifest was projected under, reading an absent or
     /// non-positive field as the pre-694 shape.
@@ -238,6 +260,41 @@ module CompositionManifest =
             }))
         |> List.distinct
         |> List.sortBy _.MetricId
+
+    // ─── Live-interface tools (Phase 860) ────────────────────────────
+
+    /// Whether this manifest is new enough for its `LiveInterfaceTools` to
+    /// be evidence. `false` means the manifest is SILENT on the posture.
+    let recordsLiveInterfaceTools (manifest: CompositionManifest) : bool =
+        effectiveSchemaVersion manifest >= LiveInterfaceSchemaVersion
+
+    /// The recorded live-interface tool names, sorted and distinct, with
+    /// the null-list coercion a manifest deserialised from a document
+    /// predating the field needs.
+    let liveInterfaceTools (manifest: CompositionManifest) : string list =
+        (if isNull (box manifest.LiveInterfaceTools) then
+             []
+         else
+             manifest.LiveInterfaceTools)
+        |> List.distinct
+        |> List.sort
+
+    /// **THE predicate** for a live-interface tool (Phase 538): the
+    /// definition declares `IsLiveInterface`, or it runs `ClientResident`
+    /// against live UI state. No name is inspected. The tool-aware RAG
+    /// framing (`RAGPromptBuilder.ToolFraming`) delegates to this, so the
+    /// manifest and the framing cannot disagree about which tool is one.
+    let isLiveInterfaceTool (def: AIToolDefinition) : bool =
+        def.IsLiveInterface || def.Location = ClientResident
+
+    /// The names of the live-interface tools among `tools`, sorted and
+    /// distinct — the derivation `ServerApp.compositionManifest` records.
+    let liveInterfaceToolsOf (tools: AIToolDefinition list) : string list =
+        (if isNull (box tools) then [] else tools)
+        |> List.filter isLiveInterfaceTool
+        |> List.map _.Name
+        |> List.distinct
+        |> List.sort
 
     /// A registered module, identified by the resolved id `addModule`
     /// accumulated onto `ServerApp.ModuleComponentIds` (explicit when
@@ -373,6 +430,7 @@ module CompositionManifest =
             Purposes = []
             ConfigKnobs = configKnobs
             CanonicalMethods = []
+            LiveInterfaceTools = []
         }
 
     /// Phase 526 — attach registered grounding metric / subject entries to
@@ -412,6 +470,16 @@ module CompositionManifest =
         m with
             SchemaVersion = SchemaVersion
             CanonicalMethods = methods
+    }
+
+    /// Phase 860 — record the live-interface tool names, the same way
+    /// `withCanonicalMethods` records selectors: it stamps `SchemaVersion`
+    /// as well as the list, so a manifest that went through it with an
+    /// empty list claims "no composed tool is a live-interface tool".
+    let withLiveInterfaceTools (toolNames: string list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            SchemaVersion = SchemaVersion
+            LiveInterfaceTools = (if isNull (box toolNames) then [] else toolNames) |> List.distinct |> List.sort
     }
 
     /// The empty manifest — what a pipeline that composed nothing (or was
