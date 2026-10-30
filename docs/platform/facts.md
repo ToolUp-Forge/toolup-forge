@@ -1170,14 +1170,35 @@ never types a figure into the result, and the result's figures never reach the m
   restated in prose would carry no fact id, so the numeric-fidelity gate would treat it as
   unverified. The tool's description says so: present the result, retype nothing.
 
-**Not composed yet.** A result is meant to reach the user as a block part on the assistant
-turn (Phase 1131). That needs two things outside the fact tier. The first is the record
-form a tool answers, which lives with the AI composition, as the render tools' does. The
-second is a conversation panel that can re-run a pipeline block under the reader's own
-gate. Until both land, no composition registers `evaluate_pipeline`, and a deployment's
-tool list is unchanged. What ships is the executor, its types (`PipelineToolRequest`,
-`PipelineToolResult`, `PipelineRefusal` in `ToolUp.Facts.Core`) and the gate it reads
-through. Migration note: [`docs/migrations/1145-pipeline-tool.md`](../migrations/1145-pipeline-tool.md).
+**Composed in the answering form, beside the render tools.** `PresentationCompose.withPipelineTool`
+(in `ToolUp.Facts.Presentation.Server`) registers `evaluate_pipeline` through the record-form funnel
+the render tools use. It is opt-in, idempotent, and arms only with the fact store and the AI
+companion; a deployment that does not call it registers no pipeline tool and mounts no endpoint:
+
+```fsharp skip=fragment
+AIServerApp.createFrom factory providerProfile app
+|> PresentationCompose.withRenderTools
+|> PresentationCompose.withPipelineTool
+|> composeAI
+```
+
+The executor runs unchanged. The model reads its summary, and the assistant message carries one
+**pipeline block** part (`PipelineBlock.Kind`, `"pipeline"`). The part persists the request and never
+a row: its provenance carries the slice spec and the canonical pipeline in the tool's own argument
+shape, plus the pipeline's hash and the run stamp, the fact ids the lineage read and the withheld
+report. Its node is the grid's frame, the title and column names with no row. No cell value is
+persisted, and none reaches the model.
+
+**A reader's panel computes the block again.** The conversation panel sends the part's request to
+`IPipelineBlockApi.Evaluate` (`/api/_facts/pipeline-block/*`, mounted by the same compose call). The
+server runs the same executor over the same slice read for the signed-in reader, judged at
+`FactBrowse`, the door every other fact a reader is shown passes. The panel draws the result as a
+static grid. A withheld column's cells are empty and the column is named with its count by policy.
+Where the reader's result differs from the recorded one, the panel says how: a run committed since,
+more or less withheld, different facts read. A reader the policy denies every cell to gets a
+refusal, never an empty grid. Migration notes: [`docs/migrations/1145-pipeline-tool.md`](../migrations/1145-pipeline-tool.md)
+(the executor) and [`docs/migrations/1156-pipeline-tool-composed.md`](../migrations/1156-pipeline-tool-composed.md)
+(the composition).
 
 #### The question compiler (Phase 986)
 
