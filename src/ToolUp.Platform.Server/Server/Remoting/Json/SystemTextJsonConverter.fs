@@ -1602,6 +1602,33 @@ module FableConverters =
         addTo opts
         opts
 
+    /// Splits an STJ path on the `.` that separates members. A `.` inside a
+    /// quoted bracket (`['a.b']`) belongs to the name it is in, so a key STJ
+    /// brackets for its dot stays inside one segment. A path rooted at an index
+    /// (`$[1].Count`) keeps the index as its first segment.
+    let private pathSegments (path: string) : string list =
+        let segments = ResizeArray<string>()
+        let current = System.Text.StringBuilder()
+        let mutable quoted = false
+
+        path
+        |> Seq.iteri (fun i c ->
+            let next = if i + 1 < path.Length then path[i + 1] else '\000'
+
+            if quoted && c = '\'' && next = ']' then
+                quoted <- false
+            elif not quoted && c = '[' && next = '\'' then
+                quoted <- true
+
+            if c = '.' && not quoted then
+                segments.Add(current.ToString())
+                current.Clear() |> ignore
+            else
+                current.Append c |> ignore)
+
+        segments.Add(current.ToString())
+        List.ofSeq segments
+
     /// Phase 783 — map a `JsonException` raised anywhere inside
     /// System.Text.Json (its own reader, or one of the converters above)
     /// onto the closed refusal vocabulary.
@@ -1623,16 +1650,13 @@ module FableConverters =
         match ex.Path with
         | null -> []
         | p ->
-            // Phase 964 — a path rooted at an index (`$[1].Count`) keeps the
-            // index as its first segment (`[1]`), as the algebra writes one.
-            p.Split('.')
-            |> Array.map (fun segment ->
+            pathSegments p
+            |> List.map (fun segment ->
                 if segment.StartsWith "$" then
                     segment.Substring 1
                 else
                     segment)
-            |> Array.filter (fun segment -> segment <> "")
-            |> Array.toList
+            |> List.filter (fun segment -> segment <> "")
 
     /// Phase 783 — THE decode seam. Deserialise one `JsonElement` into
     /// `targetType`, returning a named refusal instead of throwing.

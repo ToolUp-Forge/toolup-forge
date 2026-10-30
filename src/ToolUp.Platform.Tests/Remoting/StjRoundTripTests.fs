@@ -338,6 +338,39 @@ let private timeSpanTickLoss =
 /// where a dispatcher's refusal actually comes from on this wire, and
 /// writing it down is what will make it visible if Phase 785 moves the
 /// boundary.
+/// The path a refusal reports for `payload` read as `'T`.
+let private refusalPath<'T> (payload: string) =
+    use document = JsonDocument.Parse payload
+
+    match
+        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+            None
+            document.RootElement
+            typeof<'T>
+            jsonOptions
+    with
+    | Ok value -> failtestf "the payload must refuse, it decoded to %A" value
+    | Error refusal -> refusal.Path
+
+/// A refusal raised under a map key: the key's dots are not path separators.
+let private dottedMapKey =
+    testList "refusal paths under a dotted map key" [
+        testCase "a root-level dotted key is one segment"
+        <| fun () ->
+            Expect.equal
+                (refusalPath<Map<string, int>> """{"a.b": "not an int"}""")
+                [ "['a.b']" ]
+                "the key is one segment"
+
+        testCase "a dotted key beneath a member stays one segment"
+        <| fun () ->
+            Expect.equal
+                (refusalPath<Map<string, Map<string, Map<string, int>>>>
+                    """{"Holds": {"a.b": {"Count": "not an int"}}}""")
+                [ "Holds['a.b']"; "Count" ]
+                "the indexer stays inside its member's segment; its dot is not a separator"
+    ]
+
 let private refusals =
     testList "refuse-path mutations" [
         yield! [
@@ -472,6 +505,7 @@ let tests =
         narrowingFalsifier
         fixturePin
         refusals
+        dottedMapKey
         timeSpanTickLoss
         generatedShapeMutations
         differentialShape
