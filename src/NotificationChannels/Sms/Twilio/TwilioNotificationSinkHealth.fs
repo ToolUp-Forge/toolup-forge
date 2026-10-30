@@ -1,6 +1,7 @@
 module ToolUp.Platform.NotificationChannels.Sms.TwilioHealth
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 
@@ -12,7 +13,7 @@ open ToolUp.Platform.Secrets
 // catch the secret-rotation failure mode.
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKey = "TWILIO_AUTH_TOKEN"

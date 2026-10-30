@@ -32,7 +32,7 @@ open ToolUp.Platform.ProviderExceptions
 let private ProviderName = "Twilio"
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKey = "TWILIO_AUTH_TOKEN"
