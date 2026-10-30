@@ -9,14 +9,14 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
-// ─── PopulationQueryTool (Phase 703) ─────────────────────────────────
+// ─── PopulationQueryTool ─────────────────────────────────────────────
 //
 // The ServerResident `query_metric_population` AI tool — *population*
-// questions go conversational. Phase 559's `query_facts` hard-requires a
+// questions go conversational. `query_facts` hard-requires a
 // subject, so the model can ask about one subject and structurally cannot
 // ask "which subject is highest on M?", "how many exceed T?", or "what
 // does the distribution look like?" — the questions a high-cardinality
-// population exists to answer. This tool is Phase 701's typed
+// population exists to answer. This tool is the typed
 // `IFactStore.QueryPopulation` at the model's door.
 //
 // **The ceiling is the contract, not a courtesy.** A population read
@@ -26,8 +26,8 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // alongside `effectiveTopK` and a `topKCapped` flag, so a model that
 // asked for more is *told* its k was capped instead of inferring it from
 // a short list — and `truncated` says whether ranked members exist below
-// the ceiling. That reporting is the whole reason Phase 701 put
-// `EffectiveTopK` / `Truncated` on `PopulationResult`.
+// the ceiling. That reporting is the whole reason `PopulationResult`
+// carries `EffectiveTopK` / `Truncated`.
 //
 // **Ordering is declared, never guessed (GP 9).** `best_first` resolves
 // through the metric registry's `DirectionOfBetter`; a metric that is
@@ -36,25 +36,25 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // no better direction" lead a caller different places. `ascending` /
 // `descending` are the caller's own explicit choice and need no registry.
 //
-// **Disclosure at the door (Phase 525 / task 703.B).** Every ranked fact
+// **Disclosure at the door.** Every ranked fact
 // passes the `IFactDisclosureGate` at the `FactToolResult` surface before
 // projection, and the gate re-resolves each id through the scope-filtered
 // store — so a store implementation that leaked a cross-scope fact into a
-// ranking is still caught at the door. What is different from 559 is the
-// *shape* of the refusal, and deliberately so: 559 returns one typed
+// ranking is still caught at the door. What is different from `query_facts` is the
+// *shape* of the refusal, and deliberately so: `query_facts` returns one typed
 // marker per withheld fact, which at population scale would be up to
 // `MaxTopK` markers — a subject-by-subject listing, i.e. a second
 // disclosure channel wearing a refusal's clothes. Here withheld members
 // fold into a **count grouped by policy ref**: existence disclosed,
-// identity and value never (the 559.B posture at the scale a population
-// forces).
+// identity and value never (the point read's posture at the scale a
+// population forces).
 //
 // Ranks are the ranking's TRUE positions, so a withheld member leaves a
 // visible gap rather than silently promoting the member below it. A
 // contiguous renumbering would have the model report the third-best as
 // the second-best — a correctness defect dressed as tidiness.
 //
-// **The value statistics are gated with the members (task 703.B).**
+// **The value statistics are gated with the members.**
 // `minimum` and `maximum` are individual members' values wearing an
 // aggregate's clothes: reporting them over a population whose members are
 // partly restricted can round-trip exactly the value the gate refused. So
@@ -68,7 +68,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // a floor, not a proof; a whole-population disclosure probe is a different
 // (and, at 10^5 members, a differently-priced) capability.
 //
-// **Freshness costs no extra read.** 559 walks each fact's supersession
+// **Freshness costs no extra read.** `query_facts` walks each fact's supersession
 // chain because it can return superseded facts; a population read cannot
 // (there is deliberately no `IncludeSuperseded` — a ranking that mixes a
 // value with the value that replaced it is not a population), so freshness
@@ -76,6 +76,18 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // `Freshness.deriveAt` the store's own histogram uses. The per-member
 // freshness and the summary histogram therefore agree by construction
 // rather than by coincidence.
+//
+// **Companions are point reads after the gate.** A population is one
+// metric; `with_metrics` names further registered metrics read for each
+// ranked member that crossed the door, for its subject and its ranked
+// fact's period, so "the top subjects by revenue, with their shoppers" is
+// one call. The ranking, its order and its statistics are the ranked
+// metric's alone and are identical with or without companions. A member
+// withheld from the ranking gets no companion read at all: its existence
+// is disclosed once, as the count above. Each companion fact passes the
+// gate at `FactToolResult` on its own, and a withheld one is the point
+// read's typed marker in its cell, never its value. No fact for that
+// subject and period is reported absent, never zero.
 //
 // **Registration (GP 13).** `FactsCompose.withFactStore` declares this
 // tool on `ServerApp.AITools` beside `query_facts`; the declaration
@@ -88,7 +100,17 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// call this module directly.
 module PopulationQueryTool =
 
-    // ── Tool definition (703.A / 703.C) ───────────────────────────
+    /// The most companion metrics one call may name in `with_metrics`.
+    [<Literal>]
+    let MaxCompanionMetrics = 5
+
+    /// The largest `top_k` a call naming companions may ask for. Each
+    /// companion is a point read per ranked member, so the ceiling bounds
+    /// the reads one call can cost at `MaxCompanionMetrics` times this.
+    [<Literal>]
+    let MaxCompanionTopK = 100
+
+    // ── Tool definition ───────────────────────────────────────────
 
     /// The `query_metric_population` tool declaration. `SourceModule` is
     /// the fact store's reserved `_facts` platform source; `Surface =
@@ -203,6 +225,11 @@ module PopulationQueryTool =
                 Required = false
                 Default = Some "canonical"
             }
+            ToolSchema.parameter
+                "with_metrics"
+                $"Optional companion metrics — up to {MaxCompanionMetrics} registered metric ids read for EACH ranked subject, for the same subject and the same period as its ranked fact (e.g. [\"shoppers\"] beside a ranking by revenue), so a table of several metrics per subject takes one call instead of a `query_facts` call per subject. The ranking, its order and the population statistics are those of `metric` alone, exactly as without companions. Each ranked entry then carries `companions`: per metric its facts (id, method and canonical rendering — quote it exactly), `absent: true` where the subject has no such fact for that period (never a zero), and a `withheld` marker naming the policy where you may not see the value. A companion is read under its metric's canonical method where one is declared. With companions, `top_k` may be at most {MaxCompanionTopK}. Every id must be registered; an unknown one is refused by name before anything is read."
+                false
+                (ToolSchema.arrayOf ToolSchema.text)
         ]
         SourceModule = FactEvents.SourceModule
         EmitsActions = None
@@ -213,7 +240,7 @@ module PopulationQueryTool =
         Effects = ToolEffectDeclaration.readFacts
     }
 
-    // ── Argument parsing + validation (703.A / 703.D) ──────────────
+    // ── Argument parsing + validation ─────────────────────────────
 
     type private PopulationArgs = {
         Metric: string
@@ -228,13 +255,66 @@ module PopulationQueryTool =
         RequestedTopK: int
         AsOf: DateTime option
         Methods: PopulationMethodSelection
+        /// The companion metric ids, in the order asked; empty when none.
+        WithMetrics: string list
     }
 
-    let private pathSegments (raw: string) : string list =
-        raw.Split('>')
-        |> Array.map _.Trim()
-        |> Array.filter (fun seg -> seg <> "")
-        |> Array.toList
+    /// The optional `with_metrics` list. Refused by name when it is not an
+    /// array, is empty (omitting it is the way to read no companion), names
+    /// more than `MaxCompanionMetrics`, carries an entry that is not a
+    /// non-blank string, names a metric twice, or names the ranked metric
+    /// itself (its value is already each entry's rendering).
+    let private companionsArg (root: JsonElement) (ranked: string) : Result<string list, string> =
+        match FactTool.tryProperty root "with_metrics" with
+        | None -> Ok []
+        | Some v when v.ValueKind <> JsonValueKind.Array ->
+            Error "Argument 'with_metrics' must be an array of registered metric ids."
+        | Some v ->
+            let entries = v.EnumerateArray() |> List.ofSeq
+
+            let ids =
+                entries
+                |> List.mapi (fun i e ->
+                    if
+                        e.ValueKind = JsonValueKind.String
+                        && not (String.IsNullOrWhiteSpace(e.GetString()))
+                    then
+                        Ok(e.GetString().Trim())
+                    else
+                        Error(sprintf "Argument 'with_metrics' entry %d is not a metric id." i))
+
+            match
+                ids
+                |> List.tryPick (function
+                    | Error e -> Some e
+                    | Ok _ -> None)
+            with
+            | Some refused -> Error refused
+            | None ->
+                let ids = ids |> List.choose Result.toOption
+
+                let repeated =
+                    ids |> List.countBy id |> List.filter (fun (_, n) -> n > 1) |> List.map fst
+
+                if List.isEmpty ids then
+                    Error "Argument 'with_metrics' is an empty array; omit it to read no companion metric."
+                elif List.length ids > MaxCompanionMetrics then
+                    Error(
+                        sprintf
+                            "Argument 'with_metrics' names %d metrics; at most %d companions may be read in one call."
+                            (List.length ids)
+                            MaxCompanionMetrics
+                    )
+                elif not (List.isEmpty repeated) then
+                    Error(sprintf "Argument 'with_metrics' names '%s' more than once." (String.concat "', '" repeated))
+                elif List.contains ranked ids then
+                    Error(
+                        sprintf
+                            "Argument 'with_metrics' names the ranked metric '%s'; its value is already each ranked entry's rendering."
+                            ranked
+                    )
+                else
+                    Ok ids
 
     /// An optional list of subject paths, each in `path_prefix`'s `>`-separated
     /// form. Refused by name when the member is not an array, when it is empty
@@ -260,7 +340,7 @@ module PopulationQueryTool =
                         if e.ValueKind <> JsonValueKind.String then
                             Error(sprintf "Argument '%s' entry %d is not a string; it must be %s." name i form)
                         else
-                            match pathSegments (e.GetString()) with
+                            match FactTool.pathSegments (e.GetString()) with
                             | [] ->
                                 Error(sprintf "Argument '%s' entry %d names no member id; it must be %s." name i form)
                             | segments -> Ok segments)
@@ -301,21 +381,7 @@ module PopulationQueryTool =
                     [ "canonical", CanonicalMethodOnly; "all_competing", AllCompetingMethods ]
                     CanonicalMethodOnly
 
-            let period =
-                match FactTool.instantArg root "period_from", FactTool.instantArg root "period_to" with
-                | Error e, _
-                | _, Error e -> Error e
-                | Ok None, Ok None -> Ok None
-                | Ok(Some f), Ok(Some t) when f >= t ->
-                    Error "Argument 'period_from' must be strictly before 'period_to'."
-                | Ok f, Ok t ->
-                    Ok(
-                        Some {
-                            From = f |> Option.defaultValue DateTime.MinValue
-                            To = t |> Option.defaultValue DateTime.MaxValue
-                            Label = None
-                        }
-                    )
+            let period = FactTool.periodArg root
 
             let threshold =
                 match FactTool.numberArg root "value_at_least", FactTool.numberArg root "value_at_most" with
@@ -360,26 +426,101 @@ module PopulationQueryTool =
                         | _, _, _, Error e, _
                         | _, _, _, _, Error e -> Error e
                         | Ok topK, Ok asOf, Ok prefix, Ok anyOf, Ok exclude ->
-                            Ok {
-                                Metric = metric
-                                Hierarchy = hierarchy
-                                Level = level
-                                PathPrefix = prefix |> Option.map pathSegments |> Option.filter (List.isEmpty >> not)
-                                PathAnyOf = anyOf
-                                PathExclude = exclude
-                                PeriodOverlaps = period
-                                Threshold = threshold
-                                Ordering = ordering
-                                RequestedTopK = topK |> Option.defaultValue 10
-                                AsOf = asOf
-                                Methods = methods
-                            }
+                            let requestedTopK = topK |> Option.defaultValue 10
 
-    // ── Execution (703.A + 703.B) ─────────────────────────────────
+                            match companionsArg root metric with
+                            | Error e -> Error e
+                            | Ok(_ :: _) when requestedTopK > MaxCompanionTopK ->
+                                Error(
+                                    sprintf
+                                        "Argument 'top_k' is %d; with 'with_metrics' it may be at most %d, because each companion is read for each ranked subject."
+                                        requestedTopK
+                                        MaxCompanionTopK
+                                )
+                            | Ok withMetrics ->
+                                Ok {
+                                    Metric = metric
+                                    Hierarchy = hierarchy
+                                    Level = level
+                                    PathPrefix =
+                                        prefix
+                                        |> Option.map FactTool.pathSegments
+                                        |> Option.filter (List.isEmpty >> not)
+                                    PathAnyOf = anyOf
+                                    PathExclude = exclude
+                                    PeriodOverlaps = period
+                                    Threshold = threshold
+                                    Ordering = ordering
+                                    RequestedTopK = requestedTopK
+                                    AsOf = asOf
+                                    Methods = methods
+                                    WithMetrics = withMetrics
+                                }
+
+    /// Every companion must be a registered metric: one that is not is
+    /// refused by name before anything is read, and with no registry
+    /// composed none is registered.
+    let private companionsRegistered
+        (registry: Grounding.IMetricRegistry option)
+        (args: PopulationArgs)
+        : Result<PopulationArgs, string> =
+        match
+            args.WithMetrics
+            |> List.filter (fun m -> registry |> Option.bind (fun r -> r.TryGetMetric m) |> Option.isNone)
+        with
+        | [] -> Ok args
+        | unknown ->
+            Error(
+                sprintf
+                    "Argument 'with_metrics' names metrics the deployment's grounding registry does not register: %s. Companion ids, like the ranked metric's, come from the registry."
+                    (String.concat ", " unknown)
+            )
+
+    // ── Companions ────────────────────────────────────────────────
+
+    /// The companion facts of one ranked fact: for each companion metric,
+    /// the current heads for the ranked fact's subject whose period is the
+    /// ranked fact's period, read at the request's `as_of`. A point read per
+    /// (member, metric): the store offers no read of many named subjects, and
+    /// a branch-wide read would cost the population the ranking exists to
+    /// avoid. The read takes the store's default method selection, so a
+    /// metric with a declared canonical method answers that lineage.
+    let private readCompanions
+        (store: IFactStore)
+        (scope: ResolvedScope)
+        (asOf: DateTime option)
+        (metrics: string list)
+        (ranked: Fact)
+        : Async<(string * Fact list) list> =
+        let readOne (metric: string) = async {
+            let! found =
+                store.Query(
+                    scope,
+                    {
+                        FactQuery.forSubjectMetric ranked.Subject (MetricRef metric) with
+                            PeriodOverlaps = Some ranked.Period
+                            AsOf = asOf
+                    }
+                )
+
+            let samePeriod =
+                found
+                |> List.filter (fun c -> c.Period.From = ranked.Period.From && c.Period.To = ranked.Period.To)
+                |> List.sortBy (fun c -> Fact.methodIdentity c.Method, c.FactId)
+
+            return metric, samePeriod
+        }
+
+        async {
+            let! read = metrics |> List.map readOne |> Async.Sequential
+            return List.ofArray read
+        }
+
+    // ── Execution ─────────────────────────────────────────────────
 
     /// The executor over explicit dependencies — the testable core
     /// `execute` adapts `HttpContext` onto. `registry` supplies the
-    /// metric's display format + staleness policy (Phase 519); the
+    /// metric's display format + staleness policy; the
     /// *ordering* is resolved by the store against the same registry, so
     /// a `best_first` request refuses identically wherever it is asked
     /// from. Every ranked fact passes `gate` at the `FactToolResult`
@@ -395,7 +536,7 @@ module PopulationQueryTool =
         (argsJson: string)
         : Async<string> =
         async {
-            match parseArgs argsJson with
+            match parseArgs argsJson |> Result.bind (companionsRegistered registry) with
             | Error message -> return FactTool.serialize {| error = message |}
             | Ok args ->
                 let query: PopulationQuery = {
@@ -416,12 +557,12 @@ module PopulationQueryTool =
                 let! outcome = store.QueryPopulation(scope, query)
 
                 match outcome with
-                // Phase 701's `Error` is a typed REFUSAL — an unregistered
+                // The store's `Error` is a typed REFUSAL — an unregistered
                 // metric, or one declared `Neutral` — never a failure. It
                 // names its own remedy, so it reaches the model verbatim.
                 | Error refusal -> return FactTool.serialize {| error = refusal |}
                 | Ok result ->
-                    // Disclosure at the door (703.B): one gate check over
+                    // Disclosure at the door: one gate check over
                     // the ranked ids at the FactToolResult surface. The
                     // gate audits each deny (GP 6) and re-resolves ids
                     // through the scope-filtered store.
@@ -434,8 +575,7 @@ module PopulationQueryTool =
                         |> Map.tryFind factId
                         |> Option.defaultValue (FactNotDisclosable "unknown-fact")
 
-                    // The shared population disclosure fold (Phase 706
-                    // lifted it out of this executor): true ranks kept
+                    // The shared population disclosure fold: true ranks kept
                     // through the gate so a withheld member leaves a gap
                     // rather than promoting the member below it, and
                     // withheld members folded into a COUNT grouped by
@@ -493,6 +633,68 @@ module PopulationQueryTool =
                                 method = Fact.methodIdentity fact.Method
                             |})
 
+                    // Companions: read only for the members that crossed the
+                    // door, then gated together in one check at the same
+                    // surface; an id with no verdict is denied, as above.
+                    let! read =
+                        disclosable
+                        |> List.map (fun (_, fact) -> readCompanions store scope args.AsOf args.WithMetrics fact)
+                        |> Async.Sequential
+
+                    let companionReads = List.ofArray read
+
+                    let companionIds =
+                        companionReads
+                        |> Seq.collect (List.collect snd)
+                        |> Seq.map _.FactId
+                        |> Seq.distinct
+                        |> List.ofSeq
+
+                    let! companionVerdicts =
+                        if List.isEmpty companionIds then
+                            async.Return Map.empty
+                        else
+                            gate.Check(scope, principal, FactToolResult, companionIds)
+
+                    let companionVerdict (factId: string) =
+                        companionVerdicts
+                        |> Map.tryFind factId
+                        |> Option.defaultValue (FactNotDisclosable "unknown-fact")
+
+                    let companionCells (read: (string * Fact list) list) =
+                        read
+                        |> List.map (fun (metric, found) ->
+                            let companionDef = registry |> Option.bind (fun r -> r.TryGetMetric metric)
+
+                            let shown, withheld =
+                                found |> List.partition (fun c -> companionVerdict c.FactId = FactDisclosable)
+
+                            {|
+                                metric = metric
+                                absent = List.isEmpty found
+                                facts =
+                                    shown
+                                    |> List.map (fun c -> {|
+                                        factId = c.FactId
+                                        metric = metric
+                                        rendering = FactRendering.renderFor companionDef c.Value
+                                        method = Fact.methodIdentity c.Method
+                                    |})
+                                withheld =
+                                    withheld
+                                    |> List.map (fun c ->
+                                        let policyRef =
+                                            match companionVerdict c.FactId with
+                                            | FactNotDisclosable policyRef -> policyRef
+                                            | FactDisclosable -> "unknown-fact"
+
+                                        {|
+                                            factId = c.FactId
+                                            policyRef = policyRef
+                                            status = FactDisclosureVerdict.refusalText policyRef
+                                        |})
+                            |})
+
                     // The magnitude block is gated with the members: a
                     // minimum or a maximum IS some member's value, so over
                     // a partly-restricted population it can round-trip
@@ -519,71 +721,89 @@ module PopulationQueryTool =
                         else
                             None
 
-                    return
-                        FactTool.serialize {|
-                            metric = args.Metric
-                            // Phase 705 — the metric family's declared
-                            // interpretation, carried beside the numbers
-                            // it explains. An answer that quotes a
-                            // rendering verbatim (which this tool exists
-                            // to make possible) still needs the reader to
-                            // know what the quantity IS, and the
-                            // alternative is the model supplying that
-                            // sentence from its own priors. `None` where
-                            // the deployment declared none, exactly as
-                            // before.
-                            metricContext = metricDef |> Option.bind _.Context
-                            hierarchy = args.Hierarchy
-                            // The subject filters the store applied, echoed
-                            // in the form they were asked in, so an answer
-                            // can say which population it ranked.
-                            filters = {|
-                                level = args.Level
-                                pathPrefix = args.PathPrefix |> Option.map renderPath
-                                pathAnyOf = args.PathAnyOf |> Option.map (List.map renderPath)
-                                pathExclude = args.PathExclude |> Option.map (List.map renderPath)
-                            |}
-                            direction = directionLabel
-                            requestedTopK = args.RequestedTopK
-                            effectiveTopK = result.EffectiveTopK
-                            topKCapped = args.RequestedTopK > result.EffectiveTopK
-                            truncated = result.Truncated
-                            ranked = projected
-                            withheldCount = disclosure.WithheldCount
-                            withheld = withheldByPolicy
-                            population = {|
-                                subjectCount = stats.SubjectCount
-                                factCount = stats.FactCount
-                                comparableCount = stats.ComparableCount
-                                nonComparableCount = stats.NonComparableCount
-                                periodFrom = stats.PeriodFrom |> Option.map (fun t -> t.ToUniversalTime().ToString "o")
-                                periodTo = stats.PeriodTo |> Option.map (fun t -> t.ToUniversalTime().ToString "o")
-                                freshCount = stats.Freshness.FreshCount
-                                staleCount = stats.Freshness.StaleCount
-                                // Phase 705 — how the population was
-                                // computed, counted by method identity.
-                                // Existence-level like the counts beside
-                                // it (a method identity names a procedure,
-                                // never a value), so it rides regardless
-                                // of the magnitude suppression below: one
-                                // estimator over the whole population and
-                                // three competing ones are different
-                                // answers to "how much should I trust the
-                                // spread", and both are answerable without
-                                // disclosing a number.
-                                methods =
-                                    stats.MethodMix
-                                    |> List.map (fun (identity, count) -> {|
-                                        method = identity
-                                        factCount = count
-                                    |})
-                                minimum = renderStat stats.Minimum
-                                maximum = renderStat stats.Maximum
-                                mean = renderStat stats.Mean
-                                valueStatisticsWithheld = valuesWithheld
-                                valueStatisticsWithheldReason = withheldReason
-                            |}
+                    let answer = {|
+                        metric = args.Metric
+                        // The metric family's declared
+                        // interpretation, carried beside the numbers
+                        // it explains. An answer that quotes a
+                        // rendering verbatim (which this tool exists
+                        // to make possible) still needs the reader to
+                        // know what the quantity IS, and the
+                        // alternative is the model supplying that
+                        // sentence from its own priors. `None` where
+                        // the deployment declared none, exactly as
+                        // before.
+                        metricContext = metricDef |> Option.bind _.Context
+                        hierarchy = args.Hierarchy
+                        // The subject filters the store applied, echoed
+                        // in the form they were asked in, so an answer
+                        // can say which population it ranked.
+                        filters = {|
+                            level = args.Level
+                            pathPrefix = args.PathPrefix |> Option.map renderPath
+                            pathAnyOf = args.PathAnyOf |> Option.map (List.map renderPath)
+                            pathExclude = args.PathExclude |> Option.map (List.map renderPath)
                         |}
+                        direction = directionLabel
+                        requestedTopK = args.RequestedTopK
+                        effectiveTopK = result.EffectiveTopK
+                        topKCapped = args.RequestedTopK > result.EffectiveTopK
+                        truncated = result.Truncated
+                        withheldCount = disclosure.WithheldCount
+                        withheld = withheldByPolicy
+                        population = {|
+                            subjectCount = stats.SubjectCount
+                            factCount = stats.FactCount
+                            comparableCount = stats.ComparableCount
+                            nonComparableCount = stats.NonComparableCount
+                            periodFrom = stats.PeriodFrom |> Option.map (fun t -> t.ToUniversalTime().ToString "o")
+                            periodTo = stats.PeriodTo |> Option.map (fun t -> t.ToUniversalTime().ToString "o")
+                            freshCount = stats.Freshness.FreshCount
+                            staleCount = stats.Freshness.StaleCount
+                            // How the population was
+                            // computed, counted by method identity.
+                            // Existence-level like the counts beside
+                            // it (a method identity names a procedure,
+                            // never a value), so it rides regardless
+                            // of the magnitude suppression below: one
+                            // estimator over the whole population and
+                            // three competing ones are different
+                            // answers to "how much should I trust the
+                            // spread", and both are answerable without
+                            // disclosing a number.
+                            methods =
+                                stats.MethodMix
+                                |> List.map (fun (identity, count) -> {|
+                                    method = identity
+                                    factCount = count
+                                |})
+                            minimum = renderStat stats.Minimum
+                            maximum = renderStat stats.Maximum
+                            mean = renderStat stats.Mean
+                            valueStatisticsWithheld = valuesWithheld
+                            valueStatisticsWithheldReason = withheldReason
+                        |}
+                    |}
+
+                    // Without companions the answer is exactly what it was
+                    // before they existed; with them each ranked entry gains
+                    // its cells and the answer names the companions read.
+                    if List.isEmpty args.WithMetrics then
+                        return FactTool.serialize {| answer with ranked = projected |}
+                    else
+                        let ranked =
+                            List.zip projected companionReads
+                            |> List.map (fun (entry, read) -> {|
+                                entry with
+                                    companions = companionCells read
+                            |})
+
+                        return
+                            FactTool.serialize {|
+                                answer with
+                                    ranked = ranked
+                                    withMetrics = args.WithMetrics
+                            |}
         }
 
     // ── HttpContext adapter ───────────────────────────────────────
