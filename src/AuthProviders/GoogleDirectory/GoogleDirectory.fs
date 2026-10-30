@@ -161,7 +161,7 @@ module GoogleDirectoryConfig =
         Domain = ""
         ImpersonatedAdmin = ""
         SenderUserId = None
-        CredentialScopeId = "_platform"
+        CredentialScopeId = ScopeKey.PlatformContainer
         CredentialSecretKey = "google_directory_service_account"
     }
 
