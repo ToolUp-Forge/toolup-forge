@@ -12,6 +12,7 @@ open Npgsql
 open NpgsqlTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.ProviderExceptions
 open ToolUp.Facts
 
 // ─── Migrating a BlobFactStore into the Postgres store ──
@@ -1080,11 +1081,7 @@ module FactStoreMigration =
     let private tryReadProgress (target: PostgresFactStore) (scope: string) = async {
         let undefinedTable (ex: exn) =
             match ex with
-            | :? PostgresException as p -> p.SqlState = PostgresErrorCodes.UndefinedTable
-            | :? AggregateException as a ->
-                match a.InnerException with
-                | :? PostgresException as p -> p.SqlState = PostgresErrorCodes.UndefinedTable
-                | _ -> false
+            | ProviderException(p: PostgresException) -> p.SqlState = PostgresErrorCodes.UndefinedTable
             | _ -> false
 
         try
