@@ -1299,6 +1299,41 @@ table runs over 200 SKUs, two months; each read warm):
 | `GetRunMovers` | 32 | 52 | 32 |
 | `GetFact`, with its chain | 4 | 6 | 4 |
 
+## What the fact browse lets a resolver set (Phase 1162)
+
+The browse (`FactBrowseView`, module `FactBrowseLinks.ModuleId`) is the client module every grounded deployment
+composes, so the instructions a user types about it, such as "open the category table", are the first worth resolving
+without a model turn. What a browser fast path can set is what the module's Elmish loop accepts as a message. A
+selection no message sets cannot be set by anything, whatever a declaration says about it.
+
+| Selection | Held in | Set by | Values |
+|---|---|---|---|
+| The table | `Model.SelectedTable` | `OpenTable tableId`, or the `FactBrowseLinks.OpenTableTopic` event | the ids in `Model.Tables`, the listing the server returned |
+| The metric filter | `Model.MetricFilter` | `FilterByMetric metric`, `ClearMetricFilter` | the listed tables' metrics |
+| The ranking | `Model.RowQuery` | `RowsRequested query` | the selected table's metrics, `TopOfRanking` or `BottomOfRanking`, a subject prefix, a page |
+| The run history page | `Model.Runs` | `RunsPageRequested page` | a page index |
+| The opened fact | `Model.Fact` | `OpenFact factId`, `CloseFact` | a fact id from a page of rows |
+| The page | the shell's route | `NavigationRequest.request (FactBrowseLinks.sidebarId route)` | `TablesRoute`, `TableRoute`, `RowsRoute` |
+
+Three things an instruction might name are not selections here:
+
+- **A day.** The browse reads each table's current run. Neither the model nor the read contract (`FactRowQuery`)
+  carries a day or an as-of; a row shows its period and nothing chooses one. A day control would be a read-contract
+  change before it could be a control.
+- **A level.** A table sits at one declared level (`FactTableListing.Level`), which the tables page and the table page
+  show. It is a property of the table, not a choice. The nearest selection is the ranking's subject prefix.
+- **A table's description as its name.** A description (see
+  [What a declared table is for](#what-a-declared-table-is-for-its-description)) reaches the client on the selected
+  table's detail (`FactTableDetail.Description`), not on the listing, so the browse holds no description for a table it
+  has not opened.
+
+The browse declares no fast-path fields. The field declarations a browser fast path reads belong to the resolver a host
+installs through `FastPathBridge.setResolver`, which builds on `ClientModule`, so no package in this SDK can depend on
+them. A declaration of that kind also composes the module's action decoder, so it needs the typed
+`ClientModule<Model, Msg>` before `ClientModule.register`, and `FactBrowseView.create` registers it internally and
+returns an `ErasedModule`. What would have to change, and why it is interim work until the browse moves off Feliz:
+[`1162-the-fact-browse-declares-its-controls.md`](../migrations/1162-the-fact-browse-declares-its-controls.md).
+
 ## Composition
 
 `ServerConfig.FactStore` (default `NoFactStore`) is the introspectable
