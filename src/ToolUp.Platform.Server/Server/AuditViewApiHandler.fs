@@ -74,7 +74,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 let private callerScopeId (accessContext: AccessContext) : string =
     match AccessContext.configScope accessContext with
     | Some scope -> scope.ScopeId
-    | None -> "_platform"
+    | None -> ScopeKey.PlatformContainer
 
 // ─── Cursor ───────────────────────────────────────────────────────────
 //

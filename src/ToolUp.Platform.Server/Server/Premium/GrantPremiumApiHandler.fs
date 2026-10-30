@@ -23,7 +23,7 @@ open ToolUp.Platform
 
 let private jsonOptions = FableConverters.create ()
 
-let private PlatformScope = "_platform"
+let private PlatformScope = ScopeKey.PlatformContainer
 
 let private resolveUserClaims (ctx: HttpContext) : IUserClaims =
     match ctx.RequestServices.GetService(typeof<IUserClaims>) with

@@ -1048,7 +1048,7 @@ module EvidenceChainWalker =
     /// Scope the audited-read row is recorded under. The chain is
     /// deployment-wide and belongs to no tenant (GP 4).
     [<Literal>]
-    let PlatformScopeId = "_platform"
+    let PlatformScopeId = ScopeKey.PlatformContainer
 
     /// The walker a mode carries, if any. `NoEvidenceChainWalker` has
     /// none — there is no implementation behind the default case, which

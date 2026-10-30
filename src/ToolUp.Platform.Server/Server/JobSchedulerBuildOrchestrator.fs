@@ -43,7 +43,7 @@ open ToolUp.Platform
 let BuildHandlerName = "_platform.build"
 
 [<Literal>]
-let BuildScopeId = "_platform"
+let BuildScopeId = ScopeKey.PlatformContainer
 
 // ─── JSON helper ─────────────────────────────────────────────────
 

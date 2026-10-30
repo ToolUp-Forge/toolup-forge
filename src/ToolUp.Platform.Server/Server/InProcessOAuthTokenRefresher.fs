@@ -500,7 +500,7 @@ module InProcessOAuthTokenRefresher =
             let key = OAuthRefreshDescriptor.key descriptor
 
             let registration: JobRegistration = {
-                ScopeId = "_platform"
+                ScopeId = ScopeKey.PlatformContainer
                 Handler = HandlerName
                 Payload = serializeDescriptor descriptor
                 Trigger = CronTrigger RefreshCronExpression
@@ -527,7 +527,7 @@ module InProcessOAuthTokenRefresher =
         /// Best-effort — failures are logged at `Warn`.
         let cancelRefreshJob (descriptorKey: string) : Async<unit> = async {
             try
-                let! jobs = jobScheduler.ListJobs "_platform"
+                let! jobs = jobScheduler.ListJobs ScopeKey.PlatformContainer
 
                 let matching =
                     jobs
@@ -536,7 +536,7 @@ module InProcessOAuthTokenRefresher =
                         && (j.Idempotency |> Option.exists (fun i -> i.Key = descriptorKey)))
 
                 for job in matching do
-                    do! jobScheduler.Cancel("_platform", job.JobId)
+                    do! jobScheduler.Cancel(ScopeKey.PlatformContainer, job.JobId)
             with ex ->
                 logger.Warn(sprintf "[OAuthTokenRefresher] cancel failed for %s: %s" descriptorKey ex.Message)
         }
@@ -548,7 +548,7 @@ module InProcessOAuthTokenRefresher =
         /// the new process.
         member _.Recover() : Async<unit> = async {
             try
-                let! jobs = jobScheduler.ListJobs "_platform"
+                let! jobs = jobScheduler.ListJobs ScopeKey.PlatformContainer
 
                 let recovered =
                     jobs

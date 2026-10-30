@@ -49,17 +49,15 @@ open ToolUp.Platform.TeamManagement
 
 /// Resolve the subject set whose data the offboard must erase.
 let private subjectsFor (services: IServiceProvider) (scopeId: string) : Async<Result<string list, string>> = async {
-    if scopeId.StartsWith("team-", StringComparison.Ordinal) then
+    match ScopeKey.tryParseContainer scopeId with
+    | Some(ScopeKey.Team teamId) ->
         match services.GetService(typeof<ITeamStore>) with
         | :? ITeamStore as store ->
-            let teamId = scopeId.Substring 5
             let! members = store.GetTeamMembers teamId
             return Ok(members |> List.map _.UserId)
         | _ -> return Error "team scope offboard requires an ITeamStore to enumerate member subjects"
-    elif scopeId.StartsWith("user-", StringComparison.Ordinal) then
-        return Ok [ scopeId.Substring 5 ]
-    else
-        return Ok [ scopeId ]
+    | Some(ScopeKey.User userId) -> return Ok [ userId ]
+    | _ -> return Ok [ scopeId ]
 }
 
 type DataSubjectRequestLifecycle(services: IServiceProvider) =
@@ -204,11 +202,11 @@ let exportArchive (services: IServiceProvider) (scopeId: string) : Async<Result<
                 let hash = Convert.ToHexString(SHA256.HashData bytes).ToLowerInvariant()
                 let path = sprintf "tenant-export/%s/export-%s.json" scopeId hash
 
-                match! blob.Upload("_platform", path, bytes) with
+                match! blob.Upload(ScopeKey.PlatformContainer, path, bytes) with
                 | Ok _ ->
                     return
                         Ok {
-                            Container = "_platform"
+                            Container = ScopeKey.PlatformContainer
                             BlobPath = path
                             ContentHash = hash
                             SegmentCount = ordered.Length

@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Text.Json
 open System.Threading
+open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
 /// Secret store with scoped file lookup and env-var fallback.
@@ -108,7 +109,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
         scopeId.Replace('-', '_').ToUpperInvariant()
 
     let envVarName scopeId key =
-        if scopeId = "_platform" then
+        if scopeId = ScopeKey.PlatformContainer then
             key
         else
             $"TOOLUP_{sanitiseScope scopeId}_{key}"
@@ -124,7 +125,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
         | None ->
             let! secrets =
                 match path with
-                | Some p when scopeId = "_platform" ->
+                | Some p when scopeId = ScopeKey.PlatformContainer ->
                     // Override path: applies only to platform scope
                     loadFileAsync ct p
                 | Some _ ->
@@ -141,19 +142,19 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                         let dir = resolvedBaseDir ()
 
                         let! platformFile =
-                            if scopeId = "_platform" then
+                            if scopeId = ScopeKey.PlatformContainer then
                                 loadFileAsync ct (Path.Combine(dir, "secrets.json"))
                             else
                                 emptyMap
 
                         let! scopedFile =
-                            if scopeId = "_platform" then
+                            if scopeId = ScopeKey.PlatformContainer then
                                 emptyMap
                             else
                                 loadFileAsync ct (Path.Combine(dir, $"secrets-{scopeId}.json"))
 
                         let! userFile =
-                            if scopeId = "_platform" then
+                            if scopeId = ScopeKey.PlatformContainer then
                                 let home = Environment.GetFolderPath Environment.SpecialFolder.UserProfile
 
                                 loadFileAsync ct (Path.Combine(home, ".toolup", "secrets.json"))
@@ -162,7 +163,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
 
                         // Precedence for _platform: app file > user file.
                         // For scoped lookups: only the scope file contributes.
-                        if scopeId = "_platform" then
+                        if scopeId = ScopeKey.PlatformContainer then
                             return
                                 userFile
                                 |> Map.fold (fun acc k v -> acc |> Map.add k v) Map.empty
@@ -170,7 +171,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                         else
                             return scopedFile
                       }
-                    | Some p when scopeId = "_platform" -> loadFileAsync ct p
+                    | Some p when scopeId = ScopeKey.PlatformContainer -> loadFileAsync ct p
                     | Some _ -> emptyMap
 
             // Serialise the cache mutation against concurrent loads and
@@ -195,9 +196,9 @@ type FileSecretStore(?baseDir: string, ?path: string) =
         let dir = resolvedBaseDir ()
 
         match path, ToolUp.Platform.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath with
-        | Some p, _ when scopeId = "_platform" -> Some p
-        | _, Some p when scopeId = "_platform" && not (String.IsNullOrEmpty p) -> Some p
-        | _ when scopeId = "_platform" -> Some(Path.Combine(dir, "secrets.json"))
+        | Some p, _ when scopeId = ScopeKey.PlatformContainer -> Some p
+        | _, Some p when scopeId = ScopeKey.PlatformContainer && not (String.IsNullOrEmpty p) -> Some p
+        | _ when scopeId = ScopeKey.PlatformContainer -> Some(Path.Combine(dir, "secrets.json"))
         | _, _ -> Some(Path.Combine(dir, $"secrets-{scopeId}.json"))
 
     // Phase 6l.J — local secret-file permissions. On Unix-like systems

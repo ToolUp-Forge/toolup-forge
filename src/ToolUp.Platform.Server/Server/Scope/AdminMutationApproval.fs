@@ -184,7 +184,7 @@ type IAdminMutationApprovalStore =
     abstract Remove: teamId: string * requestId: string -> Async<Result<unit, string>>
 
 [<Literal>]
-let private PlatformContainer = "_platform"
+let private PlatformContainer = ScopeKey.PlatformContainer
 
 let private pendingPrefix (teamId: string) = $"admin-mutations/{teamId}/"
 

@@ -85,7 +85,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 let private callerScopeId (accessContext: AccessContext) : string =
     match AccessContext.configScope accessContext with
     | Some scope -> scope.ScopeId
-    | None -> "_platform"
+    | None -> ScopeKey.PlatformContainer
 
 let private groupBySum (selector: AuthorizationDeniedPayload -> string) (rows: AuthorizationDeniedPayload list) =
     rows
@@ -146,7 +146,9 @@ let private buildRollup (ctx: HttpContext) : Async<AuthDenialsRollup> = async {
         rowCount = denials.Length
         byRoute = denials |> groupBySum _.Route
         byRequirement = denials |> groupBySum _.Requirement
-        byScope = denials |> groupBySum (fun p -> p.ScopeId |> Option.defaultValue "_platform")
+        byScope =
+            denials
+            |> groupBySum (fun p -> p.ScopeId |> Option.defaultValue ScopeKey.PlatformContainer)
         recentReasons = recent
     }
 }

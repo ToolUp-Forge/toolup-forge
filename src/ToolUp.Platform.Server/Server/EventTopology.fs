@@ -246,7 +246,7 @@ module EventTopology =
     /// the SDK already uses for events that belong to no consumer module
     /// (`CompositionValidator`'s reserved-source rule exempts exactly
     /// these names).
-    let platformComponent: ComponentId = ComponentId.ofModule "_platform"
+    let platformComponent: ComponentId = EgressPolicy.platformComponent
 
     /// The topology of a composition with no event participation at all —
     /// what a deployment that registers no event-driven job and declares

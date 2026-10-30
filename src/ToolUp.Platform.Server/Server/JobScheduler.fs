@@ -1314,7 +1314,7 @@ type InProcessJobScheduler
             let allBackfill = perScope |> Array.collect (snd >> List.toArray) |> Array.toList
 
             do!
-                emitEvent "_platform" "JobSchedulerTickMissed" {
+                emitEvent ScopeKey.PlatformContainer "JobSchedulerTickMissed" {
                     ExpectedTickAt = expectedTick
                     ObservedTickAt = observedTick
                     DriftMs = int64 drift.TotalMilliseconds
@@ -1473,7 +1473,7 @@ type InProcessJobScheduler
 
                 if triggersDispatched > 0 then
                     do!
-                        emitEvent "_platform" "JobTriggerCatchUp" {
+                        emitEvent ScopeKey.PlatformContainer "JobTriggerCatchUp" {
                             Startup = startup
                             ScopesScanned = scopesScanned
                             EventsReplayed = eventsReplayed

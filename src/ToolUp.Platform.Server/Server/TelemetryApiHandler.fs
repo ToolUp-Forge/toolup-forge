@@ -49,7 +49,7 @@ let private jsonOptions = FableConverters.create ()
 /// subject with no config scope). Matches the ad / consent sinks'
 /// deployment-wide bucket.
 [<Literal>]
-let private PlatformScope = "_platform"
+let private PlatformScope = ScopeKey.PlatformContainer
 
 /// Body cap. A `TelemetryEvent` is a name plus a small property bag — a
 /// generous 8 KB admits any legitimate payload while refusing bulk junk

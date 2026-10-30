@@ -12,7 +12,7 @@ open ToolUp.Platform.BlobStorage
 // `internal`, not `private` — `MembershipDoctor` (Phase 546) walks the
 // same layout and must not mirror the literals.
 
-let internal platformContainer = "_platform"
+let internal platformContainer = ScopeKey.PlatformContainer
 let internal teamBlobName teamId = $"teams/{teamId}.json"
 let internal membershipBlobName userId = $"memberships/{userId}.json"
 let internal activeTeamBlobName userId = $"active-team/{userId}.txt"

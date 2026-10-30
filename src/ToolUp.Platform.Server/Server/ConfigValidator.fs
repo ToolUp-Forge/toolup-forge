@@ -18,7 +18,7 @@ open ToolUp.Platform.Secrets
 /// for the preflight sentinel avoids polluting any tenant scope and
 /// runs against a container the SDK already creates at startup.
 [<Literal>]
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private blobSentinelKey = "preflight/sentinel.bin"

@@ -41,7 +41,7 @@ open ToolUp.Platform.BlobStorage
 // isolation the rest of the layout buys (GP 4).
 
 [<Literal>]
-let platformContainer = "_platform"
+let platformContainer = ScopeKey.PlatformContainer
 
 let private accountBlob (scopeId: string) (accountId: string) =
     $"service-accounts/{scopeId}/accounts/{accountId}.json"

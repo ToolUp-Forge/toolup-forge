@@ -28,7 +28,7 @@ module private Json =
 
 // ─── Blob layout ─────────────────────────────────────────────────
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 /// One blob per scope. `FlagScope.slug` encodes the scope kind
 /// (`user-` / `team-` / `_platform`) into the path, so a user id and a

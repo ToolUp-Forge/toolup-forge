@@ -44,7 +44,7 @@ open ToolUp.Platform.Metrics
 
 let private jsonOptions = FableConverters.create ()
 
-let private PlatformScope = "_platform"
+let private PlatformScope = ScopeKey.PlatformContainer
 
 /// Body cap. `AdImpression` / `AdClick` are small flat records — a
 /// generous 8 KB admits any legitimate payload (long SPA paths

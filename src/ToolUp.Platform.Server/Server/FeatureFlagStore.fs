@@ -28,7 +28,7 @@ module private Json =
 
 // ─── Blob layout ─────────────────────────────────────────────────
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 /// One blob per scope — the whole flag map for a scope lives in one
 /// document. Hot reads (the three-layer walk in `FlagEvaluator`) are

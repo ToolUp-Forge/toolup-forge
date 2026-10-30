@@ -138,7 +138,7 @@ module internal BlobCrdtLayout =
     /// job stores. Never a scope-derived container: the scope lives in
     /// the blob path, which is what keeps a `List` per-document.
     [<Literal>]
-    let PlatformContainer = "_platform"
+    let PlatformContainer = ScopeKey.PlatformContainer
 
     [<Literal>]
     let private SnapshotLeaf = "snapshot.json"

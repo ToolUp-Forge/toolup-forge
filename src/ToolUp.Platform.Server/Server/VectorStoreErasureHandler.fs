@@ -34,16 +34,15 @@ let private HandlerName = "vector-store"
 /// vector scope — mapping it to `Team` would scan the wrong namespace and
 /// silently leave the subject's chunks at rest.
 let scopeOf (scopeId: string) : VectorScope =
-    if scopeId = "platform" || scopeId = "_platform" then
+    if scopeId = "platform" || scopeId = ScopeKey.PlatformContainer then
         Platform
     elif scopeId = "deployment" || scopeId = "_deployment" then
         Deployment
-    elif scopeId.StartsWith "team-" then
-        Team(scopeId.Substring "team-".Length)
-    elif scopeId.StartsWith "user-" then
-        User(scopeId.Substring "user-".Length)
     else
-        Team scopeId
+        match ScopeKey.tryParseContainer scopeId with
+        | Some(ScopeKey.Team teamId) -> Team teamId
+        | Some(ScopeKey.User userId) -> User userId
+        | _ -> Team scopeId
 
 type VectorStoreErasureHandler
     (vectorStore: IVectorStore, embeddingCache: IEmbeddingCache, ?sparseIndex: ToolUp.Platform.ISparseIndex.ISparseIndex)

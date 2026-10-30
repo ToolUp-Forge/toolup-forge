@@ -91,7 +91,7 @@ type JobTriggerCursorLoad =
     | Unreadable of error: string
 
 [<Literal>]
-let private CursorContainer = "_platform"
+let private CursorContainer = ScopeKey.PlatformContainer
 
 let private cursorBlobName (scopeId: string) = $"job-triggers/{scopeId}.cursor"
 

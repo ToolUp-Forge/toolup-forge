@@ -758,7 +758,7 @@ module GroundingEnvelopeMutator =
     /// the platform scope, since the grounding envelope belongs to the
     /// deployment rather than to any tenant.
     [<Literal>]
-    let PlatformScopeId = "_platform"
+    let PlatformScopeId = ScopeKey.PlatformContainer
 
     /// The audit payload for a landed mutation.
     let mutatedPayload

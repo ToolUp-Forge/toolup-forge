@@ -299,7 +299,7 @@ let toRawMap<'T> (value: 'T) : Result<Map<string, string>, string> =
 
 // ─── Blob layout ─────────────────────────────────────────────────
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 /// Blob name within the reserved `_platform` container. The scope's
 /// container is encoded into the path — one folder per scope —

@@ -243,7 +243,7 @@ type InMemoryIdempotencyStore(?maxEntries: int, ?logger: ToolUp.Platform.ILogger
 module BlobIdempotencyLayout =
     /// Reserved SDK-level container the idempotency envelopes live under.
     [<Literal>]
-    let DefaultContainer = "_platform"
+    let DefaultContainer = ToolUp.Platform.ScopeKey.PlatformContainer
 
     /// Blob-name prefix shared by every idempotency envelope (the `List`
     /// argument the sweep enumerates).

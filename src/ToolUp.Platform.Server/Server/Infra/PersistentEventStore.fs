@@ -41,7 +41,7 @@ open ToolUp.Platform.SecondaryIndex
 [<Literal>]
 let private MaintenanceSourceModule = "_platform.maintenance"
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private scopePrefix (scopeId: string) = $"events/{scopeId}/"
 

@@ -90,7 +90,7 @@ module PendingInviteStore =
     /// `private`) since Phase 5h's blob default: `BlobPendingInviteStore`
     /// reads and writes the SAME blob with the SAME codec, so the two
     /// stores are migration-compatible in both directions.
-    let internal platformContainer = "_platform"
+    let internal platformContainer = ScopeKey.PlatformContainer
     let internal blobName = "pending-invites.json"
 
     let internal encodeMap (map: Map<string, PendingInviteByEmail>) : byte[] =

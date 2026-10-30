@@ -132,7 +132,7 @@ let PeerBearerSourceModule = "_platform.peer.bearer"
 let PeerNameHeader = "X-Peer-Name"
 
 [<Literal>]
-let SecretStoreScope = "_platform"
+let SecretStoreScope = ScopeKey.PlatformContainer
 
 /// Build the `ISecretStore` key for a given peer's bearer token.
 /// `peers/{peerName}/bearer` — `peerName` is the value the caller

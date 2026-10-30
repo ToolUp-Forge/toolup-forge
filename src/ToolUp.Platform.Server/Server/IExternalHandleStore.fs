@@ -326,7 +326,7 @@ type InMemoryExternalHandleStore() =
 /// callback, on the `BlobPeerReplayGuard` / `BlobPrivacyBudgetLedger`
 /// precedent.
 type BlobExternalHandleStore(blobs: IBlobStorage, now: unit -> DateTime) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let recordPrefix = "external-compute/handles/"
     let indexPrefix = "external-compute/handle-index/"
 

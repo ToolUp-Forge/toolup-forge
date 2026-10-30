@@ -197,7 +197,7 @@ module EgressEnforcement =
     /// gate uses. A denial happens outside any request's config scope;
     /// the payload's component carries attribution.
     [<Literal>]
-    let AuditScope = "_platform"
+    let AuditScope = ScopeKey.PlatformContainer
 
     /// How many refusals the in-process ledger retains. The since-boot
     /// COUNT is kept separately and never truncates, so a long-running

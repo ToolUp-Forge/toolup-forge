@@ -43,7 +43,7 @@ open ToolUp.Platform.BlobEncryption
 let private SingleKeyId = "_platform/master/v1"
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKey = "encryption/master.key"

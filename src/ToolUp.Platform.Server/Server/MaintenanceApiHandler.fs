@@ -38,7 +38,7 @@ let maintenanceApi
 
             let teamId =
                 match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
+                | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
                 | _ -> None
 
             AccessContext.unrestricted (AnonymousSession userId)

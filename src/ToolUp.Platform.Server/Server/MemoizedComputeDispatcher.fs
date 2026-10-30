@@ -201,7 +201,7 @@ module ComputeMemoKey =
 module ComputeMemoLayout =
     /// Reserved SDK-level container the entries live under.
     [<Literal>]
-    let DefaultContainer = "_platform"
+    let DefaultContainer = ScopeKey.PlatformContainer
 
     /// Blob-name prefix shared by every memo entry (the `List` argument a
     /// sweep would enumerate).

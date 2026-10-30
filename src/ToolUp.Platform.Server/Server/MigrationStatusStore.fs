@@ -51,7 +51,7 @@ type IMigrationStatusStore =
 module MigrationStatusStore =
 
     [<Literal>]
-    let private platformContainer = "_platform"
+    let private platformContainer = ScopeKey.PlatformContainer
 
     [<Literal>]
     let private rootPrefix = "migrations/"

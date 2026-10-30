@@ -36,7 +36,7 @@ open ToolUp.Platform.BlobStorage
 // Watermarks (`digest/{user}.json`) are written by the digest job
 // alone, so a plain overwrite is safe.
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 let private root = "notification-preferences"
 
 let private jsonOptions = FableConverters.create ()

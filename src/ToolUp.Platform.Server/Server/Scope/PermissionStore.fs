@@ -321,7 +321,7 @@ let private mergeEffective
 
 // ─── Blob-backed implementation ──────────────────────────────────────
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 let private teamBlobName teamId = $"permissions/{teamId}.json"
 
 /// Blob-backed `IPermissionStore`. Reads and writes one JSON

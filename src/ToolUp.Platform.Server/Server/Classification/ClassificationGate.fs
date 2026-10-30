@@ -69,7 +69,7 @@ module ClassificationGate =
     let private auditScope (ctx: AccessContext) : string =
         AccessContext.configScope ctx
         |> Option.map AuditStreamKey.ofScope
-        |> Option.defaultValue "_platform"
+        |> Option.defaultValue ScopeKey.PlatformContainer
 
     let private recordRead (audit: IAuditLog) (ctx: AccessContext) (c: FieldClassification) (redacted: bool) = async {
         if c.AuditOnRead then
@@ -326,7 +326,7 @@ module EgressGate =
     /// per-request config scope; the `Actor` + `Destination` on the
     /// payload carry attribution.
     [<Literal>]
-    let private auditScope = "_platform"
+    let private auditScope = ScopeKey.PlatformContainer
 
     let private recordEgress (audit: IAuditLog) (ctx: EgressContext) (c: FieldClassification) (decisionLabel: string) = async {
         try

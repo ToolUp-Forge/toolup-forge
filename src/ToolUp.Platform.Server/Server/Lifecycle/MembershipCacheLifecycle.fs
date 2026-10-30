@@ -27,10 +27,9 @@ open ToolUp.Platform.TeamManagement
 /// either the bare team id or the `team-{id}` container form as the
 /// scope identifier.
 let private teamIdOf (scopeId: string) =
-    if scopeId.StartsWith("team-", StringComparison.Ordinal) then
-        scopeId.Substring 5
-    else
-        scopeId
+    match ScopeKey.tryParseContainer scopeId with
+    | Some(ScopeKey.Team teamId) -> teamId
+    | _ -> scopeId
 
 type MembershipCacheLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with

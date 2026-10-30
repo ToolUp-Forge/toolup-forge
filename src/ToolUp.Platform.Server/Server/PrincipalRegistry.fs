@@ -45,9 +45,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 // precedent. GP 13: pure per-call cost — no hosted service, no cache,
 // zero cost when never invoked.
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 let private membershipsPrefix = "memberships/"
-let private userScopePrefix = "user-"
 
 /// Default `UserLoggedIn` look-back window. Bounds how far the audit
 /// sweep reaches when deriving `LastSeenAt` — a login older than this
@@ -119,10 +118,9 @@ let listPrincipalsWith
         let userScopeIds =
             scopes
             |> List.choose (fun s ->
-                if s.StartsWith(userScopePrefix, StringComparison.Ordinal) then
-                    Some(s.Substring userScopePrefix.Length)
-                else
-                    None)
+                match ScopeKey.tryParseContainer s with
+                | Some(ScopeKey.User userId) -> Some userId
+                | _ -> None)
             |> Set.ofList
 
         // (c) distinct UserLoggedIn subjects within the look-back
@@ -173,7 +171,7 @@ let listPrincipalsWith
                 if Set.contains userId userScopeIds then
                     return userId, true
                 else
-                    let! blobs = storage.List(userScopePrefix + userId, "")
+                    let! blobs = storage.List(ScopeKey.container (ScopeKey.User userId), "")
                     return userId, not (List.isEmpty blobs)
             })
             |> bounded

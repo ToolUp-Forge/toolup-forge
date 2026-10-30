@@ -56,7 +56,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 
         let teamId =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
+            | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
             | _ -> None
 
         AccessContext.unrestricted (AnonymousSession userId)
@@ -199,7 +199,7 @@ let private buildDrift (ctx: HttpContext) (mode: ConfigDriftDetectionMode) : Asy
             let now = DateTime.UtcNow
             let lookback = now.AddHours -24.0
 
-            let! drifts = auditLog.GetAuditTrail("_platform", Some(lookback, now), Some "ConfigDrift")
+            let! drifts = auditLog.GetAuditTrail(ScopeKey.PlatformContainer, Some(lookback, now), Some "ConfigDrift")
 
             if drifts.IsEmpty then
                 return {
@@ -240,7 +240,8 @@ let private buildRateLimit (ctx: HttpContext) (mode: RateLimiterMode) : Async<Ra
             let now = DateTime.UtcNow
             let lookback = now.AddHours -24.0
 
-            let! rows = auditLog.GetAuditTrail("_platform", Some(lookback, now), Some "RemotingMethodAudited")
+            let! rows =
+                auditLog.GetAuditTrail(ScopeKey.PlatformContainer, Some(lookback, now), Some "RemotingMethodAudited")
 
             let denials =
                 rows
@@ -379,7 +380,7 @@ let private buildSmokeTest (ctx: HttpContext) (mode: SmokeTestMode) : Async<Smok
     | EnabledSmokeTest ->
         match ctx.RequestServices.GetService(typeof<IEventStore>) with
         | :? IEventStore as store ->
-            let! events = store.ReadBySource("_platform", SmokeTest.AuditSourceModule)
+            let! events = store.ReadBySource(ScopeKey.PlatformContainer, SmokeTest.AuditSourceModule)
 
             let smokeRuns =
                 events

@@ -614,7 +614,7 @@ module BootVerificationPreflight =
     /// the platform scope, since a boot verdict belongs to the
     /// deployment rather than to any tenant.
     [<Literal>]
-    let PlatformScopeId = "_platform"
+    let PlatformScopeId = ScopeKey.PlatformContainer
 
     /// Framing version for the composition binding's canonical form.
     [<Literal>]

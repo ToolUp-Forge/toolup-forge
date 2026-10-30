@@ -390,7 +390,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
 
                 if not allowed then
                     audit
-                        "_platform"
+                        ScopeKey.PlatformContainer
                         (TeamCreationDenied {
                             UserId = userId
                             AttemptedName = trimmedName
@@ -399,7 +399,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     return Error "Team creation requires Platform Admin"
                 elif quotaError.IsSome then
                     audit
-                        "_platform"
+                        ScopeKey.PlatformContainer
                         (TeamCreationDenied {
                             UserId = userId
                             AttemptedName = trimmedName

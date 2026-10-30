@@ -43,7 +43,7 @@ open ToolUp.Platform.Usage
 // the record (with a logged + counted event under
 // `_platform.usage`).
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private scopePrefix (scopeId: string) = $"usage/{scopeId}/"
 

@@ -38,7 +38,7 @@ open ToolUp.Platform.SecondaryIndex
 [<Literal>]
 let MaintenanceSourceModule = "_platform.maintenance"
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private definitionBlob (scopeId: string) (jobId: JobId) =
     $"jobs/{scopeId}/definitions/{jobId:N}.json"

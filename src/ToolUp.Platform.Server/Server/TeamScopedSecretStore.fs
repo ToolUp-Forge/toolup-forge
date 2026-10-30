@@ -59,7 +59,8 @@ module TeamSecretKey =
     /// The scope container a team's secrets live under — the same
     /// `team-{teamId}` shape `AccessContext.configScope` and the
     /// `ISecretStore` doc comment both name.
-    let container (teamId: string) = $"team-{teamId}"
+    let container (teamId: string) =
+        ScopeKey.container (ScopeKey.Team teamId)
 
     /// The at-rest key for `key` under `teamId`. Length-tagged so no
     /// two `(teamId, key)` pairs can produce the same string — see the

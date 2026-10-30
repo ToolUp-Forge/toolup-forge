@@ -155,7 +155,7 @@ let private gatherDrift (config: ServerConfig) (ctx: HttpContext) : Async<Deploy
             let now = DateTime.UtcNow
             let lookback = now.AddHours -24.0
 
-            let! drifts = auditLog.GetAuditTrail("_platform", Some(lookback, now), Some "ConfigDrift")
+            let! drifts = auditLog.GetAuditTrail(ScopeKey.PlatformContainer, Some(lookback, now), Some "ConfigDrift")
 
             let status =
                 if drifts.IsEmpty then

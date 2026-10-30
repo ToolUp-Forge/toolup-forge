@@ -95,7 +95,7 @@ type IGrantConsentStore =
     abstract ListForSubject: subject: ConsentSubject -> Async<Result<GrantConsentRecord list, string>>
 
 [<Literal>]
-let private PlatformContainer = "_platform"
+let private PlatformContainer = ScopeKey.PlatformContainer
 
 let private teamPrefix (teamId: string) = $"grant-consent/{teamId}/"
 

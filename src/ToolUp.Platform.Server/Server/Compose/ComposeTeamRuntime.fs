@@ -95,7 +95,7 @@ let registerTeamPermissionStores
 
                     do!
                         resolvedNotificationChannel.Publish(
-                            $"team-{entry.TeamId}",
+                            ScopeKey.container (ScopeKey.Team entry.TeamId),
                             TransactionalEmail {
                                 Recipients = [ RecipientId.User entry.InviterUserId ]
                                 Content = InlineEmail(subject, body, None)

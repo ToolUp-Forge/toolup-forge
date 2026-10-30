@@ -31,7 +31,7 @@ open ToolUp.Platform.Secrets
 // same container / secret-name without duplicating the constants
 // (single source of truth — no drift).
 [<Literal>]
-let platformContainer = "_platform"
+let platformContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let signingKeySecretName = "share_token_signing_key"

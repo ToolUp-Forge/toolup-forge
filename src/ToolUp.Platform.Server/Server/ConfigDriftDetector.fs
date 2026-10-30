@@ -36,7 +36,7 @@ open ToolUp.Platform.BlobStorage
 // are not part of the comparison surface — they change on every
 // restart and would drown the signal.
 
-let private deployContainer = "_platform"
+let private deployContainer = ScopeKey.PlatformContainer
 let private snapshotBlobName = "_deploy/last-config.json"
 
 [<Literal>]
@@ -327,7 +327,7 @@ let run
 
                         do!
                             auditLog.Record(
-                                "_platform",
+                                ScopeKey.PlatformContainer,
                                 ConfigDrift {
                                     Changes = changes
                                     CompanionSetFrom = prevHash

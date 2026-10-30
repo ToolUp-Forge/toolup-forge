@@ -29,7 +29,7 @@ open ToolUp.Platform.BlobStorage
 // OccurredAt` if a sink needs both.
 
 [<Literal>]
-let private PlatformContainer = "_platform"
+let private PlatformContainer = ScopeKey.PlatformContainer
 
 /// Reserved source module for the seed-application operational event
 /// stream (see the file header).

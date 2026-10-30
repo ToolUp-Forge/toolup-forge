@@ -86,7 +86,7 @@ type AuthAuditHook(auditLog: IAuditLog, logger: ILogger, ?dedupWindow: TimeSpan,
     let emit (denial: AuthDenial) (dedupCount: int) : Async<unit> = async {
         try
             let subjectKind, subjectId = sanitiseSubject denial.Subject
-            let scopeId = denial.ScopeId |> Option.defaultValue "_platform"
+            let scopeId = denial.ScopeId |> Option.defaultValue ScopeKey.PlatformContainer
 
             do!
                 auditLog.Record(

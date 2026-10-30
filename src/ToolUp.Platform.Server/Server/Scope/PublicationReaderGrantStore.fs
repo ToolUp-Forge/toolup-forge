@@ -66,7 +66,7 @@ module PublicationReaderGrants =
 
 /// The SDK default `IPublicationReaderGrantStore` over `IBlobStorage`.
 type BlobPublicationReaderGrantStore(storage: IBlobStorage, logger: ILogger option) =
-    static let container = "_platform"
+    static let container = ScopeKey.PlatformContainer
     static let root = "publication-readers"
     static let seg (value: string) = Uri.EscapeDataString value
     static let userPrefix (userId: string) = $"{root}/{seg userId}/"

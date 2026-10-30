@@ -44,7 +44,7 @@ open ToolUp.Platform.BlobStorage
 // distributed deployments. Phase 9c half 2's distributed lock will
 // promote one replicator to leader.
 
-let private cursorContainer = "_platform"
+let private cursorContainer = ScopeKey.PlatformContainer
 
 let private cursorJsonOptions = FableConverters.create ()
 
@@ -275,7 +275,7 @@ type AuditReplicator
         // anti-recursion guard in the hook decorator prevents this
         // event from re-entering the replicator pipeline.
         // Emitted under `_platform` for operator-level visibility.
-        do! auditLog.Record("_platform", AuditSinkDelivered payload)
+        do! auditLog.Record(ScopeKey.PlatformContainer, AuditSinkDelivered payload)
     }
 
     let emitFailed (sinkName: string) (scopeId: string) (batchSize: int) (attempt: int) (error: string) = async {
@@ -288,7 +288,7 @@ type AuditReplicator
             FailedAt = DateTime.UtcNow
         }
 
-        do! auditLog.Record("_platform", AuditSinkFailed payload)
+        do! auditLog.Record(ScopeKey.PlatformContainer, AuditSinkFailed payload)
     }
 
     let emitDeadLettered (sinkName: string) (scopeId: string) (batchSize: int) (attempts: int) (lastError: string) = async {
@@ -301,7 +301,7 @@ type AuditReplicator
             DeadLetteredAt = DateTime.UtcNow
         }
 
-        do! auditLog.Record("_platform", AuditSinkDeadLettered payload)
+        do! auditLog.Record(ScopeKey.PlatformContainer, AuditSinkDeadLettered payload)
     }
 
     // ─── Per-batch delivery ─────────────────────────────────────────
@@ -399,7 +399,7 @@ type AuditReplicator
                         FailedAt = DateTime.UtcNow
                     }
 
-                    do! auditLog.Record("_platform", AuditEventDecodeFailed payload)
+                    do! auditLog.Record(ScopeKey.PlatformContainer, AuditEventDecodeFailed payload)
 
                 if List.isEmpty decodedPairs then
                     // Every event failed to decode — advance cursor anyway

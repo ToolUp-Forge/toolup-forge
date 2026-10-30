@@ -40,7 +40,7 @@ open ToolUp.Platform.BlobStorage
 [<RequireQualifiedAccess>]
 module BlobDpKeyRing =
     [<Literal>]
-    let Container = "_platform"
+    let Container = ScopeKey.PlatformContainer
 
     [<Literal>]
     let Prefix = "dataprotection/"

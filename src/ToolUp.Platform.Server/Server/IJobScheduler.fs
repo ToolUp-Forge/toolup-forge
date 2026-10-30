@@ -576,7 +576,7 @@ module ScheduledJobDeclaration =
 
         let scopes =
             if List.isEmpty declaration.Scopes then
-                [ "_platform" ]
+                [ ScopeKey.PlatformContainer ]
             else
                 declaration.Scopes
 
@@ -599,7 +599,7 @@ module ScheduledJobDeclaration =
                 RetryPolicy = declaration.RetryPolicy
                 ShardKey = declaration.ShardKey
                 Precision = declaration.Precision
-                CreatedBy = "_platform"
+                CreatedBy = AuditSubject.PlatformSentinelUserId
                 Tags = declaration.Tags |> Map.add "source" "compose-time"
             }
 

@@ -4361,7 +4361,6 @@ let main args =
             "ToolUp.NotificationChannels.WhatsApp.MetaCloud", 2
             "ToolUp.NotificationChannels.WhatsApp.Twilio", 3
             "ToolUp.Platform.Client", 1
-            "ToolUp.Platform.Server", 149
             "ToolUp.PublicRendering", 2
             "ToolUp.RAG.Benchmarks", 1
             "ToolUp.RAG.Server", 5

@@ -48,10 +48,9 @@ open ToolUp.Platform.TeamManagement
 /// `MembershipCacheLifecycle.teamIdOf`). Returns `None` for a non-team
 /// scope, which the hook treats as "nothing to bootstrap".
 let private teamIdOf (scopeId: string) : string option =
-    if scopeId.StartsWith("team-", StringComparison.Ordinal) then
-        Some(scopeId.Substring 5)
-    else
-        None
+    match ScopeKey.tryParseContainer scopeId with
+    | Some(ScopeKey.Team teamId) -> Some teamId
+    | _ -> None
 
 /// Attach `actorUserId` as the team `Owner` if they are not already a
 /// member (idempotent). A blank actor is left unattached — the team row

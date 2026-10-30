@@ -51,7 +51,7 @@ open ToolUp.Platform.TeamManagement
 let private RedirectBaseEnvVar = ConfigKeys.Names.oauthRedirectBase
 
 [<Literal>]
-let private PlatformContainer = "_platform"
+let private PlatformContainer = ScopeKey.PlatformContainer
 
 /// Compute the base URL for the deployment from the active request.
 /// Honours `TrustForwardedHeaders` because the `UseForwardedHeaders`
@@ -96,7 +96,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 
         let teamId =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
+            | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
             | _ -> None
 
         AccessContext.unrestricted (AnonymousSession userId)

@@ -29,7 +29,7 @@ open ToolUp.Platform.BlobStorage
 /// The reserved platform container every `_platform/...` artefact lives
 /// in. Matches `AuditReplicator` / `ConfigValidator`.
 [<Literal>]
-let Container = "_platform"
+let Container = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private Prefix = "sessions/"

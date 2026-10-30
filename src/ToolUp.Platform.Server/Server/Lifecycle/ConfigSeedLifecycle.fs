@@ -106,7 +106,10 @@ let private clampToKind (kind: ConfigFieldKind) (value: string) : string =
 /// Empty on the base path (no request / blank display name / non-team
 /// scope), so the seed stays byte-identical to the schema-defaults write.
 let private platformOverrides (context: TenantProvisioningContext) : Map<string, string> =
-    let isTeamScope = context.ScopeId.StartsWith("team-", StringComparison.Ordinal)
+    let isTeamScope =
+        match ScopeKey.tryParseContainer context.ScopeId with
+        | Some(ScopeKey.Team _) -> true
+        | _ -> false
 
     match context.Request with
     | Some req when isTeamScope && not (String.IsNullOrWhiteSpace req.DisplayName) ->

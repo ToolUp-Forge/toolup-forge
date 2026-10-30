@@ -574,7 +574,7 @@ type ICountersignatureRegistry =
 /// the blob store, so two instances of a deployment see the same records
 /// without coordination.
 type BlobCountersignatureRegistry(blobs: IBlobStorage, signer: ICountersignatureSigner, skew: TimeSpan) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let root = "countersignatures/"
 
     /// A kind and a subject id both reach a BLOB NAME, so both go through

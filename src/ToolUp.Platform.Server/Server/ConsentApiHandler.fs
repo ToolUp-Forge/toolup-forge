@@ -24,7 +24,7 @@ open ToolUp.Platform
 // `ToolUp.Platform.ConsentEvent` verbatim — the wire is the same
 // record type the client serialises.
 
-let private PlatformScope = "_platform"
+let private PlatformScope = ScopeKey.PlatformContainer
 
 let private jsonOptions = FableConverters.create ()
 

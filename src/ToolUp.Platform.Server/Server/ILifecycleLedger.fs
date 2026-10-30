@@ -81,7 +81,7 @@ module private BlobBackedLifecycleLedgerInternal =
     /// tenant data, so it lives under `_platform`, never a tenant scope
     /// (and is therefore never swept by the offboard's own data-erasure
     /// hook). Mirrors `ILifecycleSummaryStore`'s container choice.
-    let ledgerContainer = "_platform"
+    let ledgerContainer = ScopeKey.PlatformContainer
 
     /// `scopeId` + phase form a blob name. Reject path separators (they
     /// would escape the container prefix); coerce other non-safe chars to

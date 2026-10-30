@@ -451,8 +451,8 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
         | None -> None, Some "scope resolver threw — see server logs"
 
     let teamId =
-        match scopeSummary with
-        | Some s when s.Container.StartsWith "team-" -> Some s.ScopeId
+        match scopeResult with
+        | Some(Ok scope) -> StorageScope.tryTeamId scope
         | _ -> None
 
     // AccessContext is a Scoped DI service, but its factory reads from

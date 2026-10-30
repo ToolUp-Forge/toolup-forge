@@ -29,7 +29,7 @@ let private maxRunsPerSource = 50
 // (`data-sources/{scopeId}/configs/{sourceId}.json`) so operators see
 // one consistent shape under `_platform/data-sources/`.
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private runBlob (run: IngestionRun) =
     let ts = run.StartedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH-mm-ss-fffffffZ")

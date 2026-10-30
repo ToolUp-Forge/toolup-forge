@@ -469,7 +469,8 @@ type GrantNotificationObserver
 
     let jsonOptions = FableConverters.create ()
 
-    let scopeOf (teamId: string) = $"team-{teamId}"
+    let scopeOf (teamId: string) =
+        ScopeKey.container (ScopeKey.Team teamId)
 
     /// Publish one notice. Swallow-and-log: a notification outage must
     /// never fail the grant write, and it has already succeeded by the

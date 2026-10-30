@@ -80,7 +80,7 @@ type BlobBackedTeamQuotaPolicy(configStore: IConfigStore, usageLog: IUsageLog) =
         // persistence are wrong for shared infra config).
         let scope: StorageScope = {
             ScopeId = scopeId
-            Container = "_platform"
+            Container = ScopeKey.PlatformContainer
             Persist = true
         }
 

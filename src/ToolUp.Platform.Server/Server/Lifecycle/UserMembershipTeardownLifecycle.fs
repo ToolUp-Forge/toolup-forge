@@ -68,15 +68,10 @@ type UserMembershipTeardownLifecycle(services: IServiceProvider) =
         }
 
         member _.OnDeprovisioned(scopeId, actorUserId) = async {
-            if not (scopeId.StartsWith("user-", StringComparison.Ordinal)) then
-                return
-                    LifecycleHookResult.Skipped
-                        "not a user scope — membership teardown applies to user-{id} offboards only"
-            else
+            match ScopeKey.tryParseContainer scopeId with
+            | Some(ScopeKey.User userId) ->
                 match services.GetService(typeof<ITeamStore>) with
                 | :? ITeamStore as store ->
-                    let userId = scopeId.Substring 5
-
                     // Snapshot the affected teams BEFORE the purge — the
                     // audit trail records one MemberRemoved per stripped
                     // team, and the membership rows are gone afterwards.
@@ -121,22 +116,20 @@ type UserMembershipTeardownLifecycle(services: IServiceProvider) =
                                             "membership purged, but the pending-invite sweep hit a concurrency conflict"
                             | _ -> return LifecycleHookResult.Completed
                 | _ -> return LifecycleHookResult.Skipped "no ITeamStore resolvable — membership teardown not wired"
+            | _ ->
+                return
+                    LifecycleHookResult.Skipped
+                        "not a user scope — membership teardown applies to user-{id} offboards only"
         }
 
     // Phase 54c — mutation-free preview: count the membership rows a
     // user-scope offboard WOULD strip, via the read-only GetTeamsForUser.
     interface ITenantLifecyclePreview with
         member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
-            if not (scopeId.StartsWith("user-", StringComparison.Ordinal)) then
-                return
-                    LifecyclePreviewItem.affecting
-                        "user-membership-teardown"
-                        0
-                        "not a user scope — nothing to tear down"
-            else
+            match ScopeKey.tryParseContainer scopeId with
+            | Some(ScopeKey.User userId) ->
                 match services.GetService(typeof<ITeamStore>) with
                 | :? ITeamStore as store ->
-                    let userId = scopeId.Substring 5
                     let! teams = store.GetTeamsForUser userId
 
                     return
@@ -150,6 +143,12 @@ type UserMembershipTeardownLifecycle(services: IServiceProvider) =
                             "user-membership-teardown"
                             0
                             "no ITeamStore resolvable — nothing to tear down"
+            | _ ->
+                return
+                    LifecyclePreviewItem.affecting
+                        "user-membership-teardown"
+                        0
+                        "not a user scope — nothing to tear down"
         }
 
 /// Construct the first-party user-membership-teardown lifecycle hook.

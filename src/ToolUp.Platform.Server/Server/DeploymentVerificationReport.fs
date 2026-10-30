@@ -1061,7 +1061,7 @@ module DeploymentVerificationReport =
     /// Scope the report's audited-read row is recorded under. The report is
     /// deployment-wide and belongs to no tenant (GP 4).
     [<Literal>]
-    let PlatformScopeId = "_platform"
+    let PlatformScopeId = ScopeKey.PlatformContainer
 
     /// How many recent issuance identifiers the certificate section carries.
     [<Literal>]

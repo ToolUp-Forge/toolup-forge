@@ -73,7 +73,7 @@ let private auditTailMaxEvents = 1000
 let private bundleSchema = 1
 
 [<Literal>]
-let private platformScopeId = "_platform"
+let private platformScopeId = ScopeKey.PlatformContainer
 
 let private anonymousSentinel = "_anonymous"
 

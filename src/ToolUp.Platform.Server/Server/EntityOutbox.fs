@@ -65,7 +65,7 @@ type OutboxIntent = {
 }
 
 [<Literal>]
-let private IntentContainer = "_platform"
+let private IntentContainer = ScopeKey.PlatformContainer
 
 let private intentPrefix = "entity-outbox/"
 

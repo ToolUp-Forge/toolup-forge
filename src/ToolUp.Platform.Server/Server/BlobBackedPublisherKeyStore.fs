@@ -26,7 +26,7 @@ open ToolUp.Platform.BlobStorage
 
 [<AutoOpen>]
 module private BlobBackedPublisherKeyStoreInternal =
-    let trustedPublishersContainer = "_platform"
+    let trustedPublishersContainer = ScopeKey.PlatformContainer
     let trustedPublishersPrefix = "trusted-publishers/"
 
     let sanitiseKeyId (keyId: PublisherKeyId) : string =

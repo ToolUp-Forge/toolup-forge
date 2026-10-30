@@ -104,7 +104,7 @@ let private maxRefusals = 20
 let private throttleWindowMinutes = 5.0
 
 [<Literal>]
-let private platformScope = "_platform"
+let private platformScope = ScopeKey.PlatformContainer
 
 // Documented mutable-state exception to GP 5, and the same one
 // `EncryptionAdminHandler` takes: a refusal counter IS state, and these

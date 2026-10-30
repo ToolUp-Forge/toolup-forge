@@ -45,7 +45,7 @@ open ToolUp.Platform.BlobStorage
 // exists, subsequent restarts no-op even if the env var is still set.
 // Wipe + re-bootstrap is the documented disaster-recovery path.
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 let private blobName = "platform-admins.json"
 let private bootstrapActor = "_bootstrap"
 

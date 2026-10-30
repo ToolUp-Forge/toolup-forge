@@ -22,7 +22,7 @@ open ToolUp.Platform.BlobStorage
 // outlive the SDK version that wrote it; round-tripping through
 // strings is more robust than DU case-name reflection.
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 let private blobName = "runtime-config.json"
 
 [<Literal>]

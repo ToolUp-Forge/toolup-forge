@@ -112,7 +112,7 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
 
         let scopeId =
             accessCtx.TeamId
-            |> Option.map (fun t -> $"team-{t}")
+            |> Option.map (ScopeKey.Team >> ScopeKey.container)
             |> Option.defaultValue accessCtx.UserId
 
         // Phase 552 — the same control, extended by exactly one arm:

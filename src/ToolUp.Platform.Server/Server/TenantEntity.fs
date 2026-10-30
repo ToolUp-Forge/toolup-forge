@@ -133,7 +133,7 @@ module Tenant =
     /// audit events use. Per-tenant data uses the tenant's own id
     /// as `scopeId`; the catalog itself is `_platform`-scoped.
     [<Literal>]
-    let CatalogScope = "_platform"
+    let CatalogScope = ScopeKey.PlatformContainer
 
     /// Index names. Re-declared as `[<Literal>]` so query call
     /// sites can use them in pattern matches without stringly-typed

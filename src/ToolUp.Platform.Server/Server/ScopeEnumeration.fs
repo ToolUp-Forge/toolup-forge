@@ -86,7 +86,7 @@ module ScopeEnumeration =
     /// The platform-wide container (`ITeamStore` metadata, platform
     /// config, platform-scoped documents).
     [<Literal>]
-    let PlatformContainer = "_platform"
+    let PlatformContainer = ScopeKey.PlatformContainer
 
     /// The deployment-wide container used by deployment-scoped
     /// substrate.
@@ -106,10 +106,9 @@ module ScopeEnumeration =
     /// a store whose ids are already container-shaped is not
     /// double-prefixed.
     let containerForTeam (teamId: string) : string =
-        if teamId.StartsWith("team-", StringComparison.Ordinal) then
-            teamId
-        else
-            "team-" + teamId
+        match ScopeKey.tryParseContainer teamId with
+        | Some(ScopeKey.Team _) -> teamId
+        | _ -> ScopeKey.container (ScopeKey.Team teamId)
 
     /// A fixed enumeration. The escape hatch for a deployment whose
     /// scopes are genuinely static (a single-tenant appliance, a test),

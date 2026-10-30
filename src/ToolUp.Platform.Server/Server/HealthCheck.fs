@@ -24,7 +24,7 @@ open ToolUp.Platform.HealthChecks
 /// for the health probe avoids polluting any tenant scope and ensures
 /// the probe runs against a container the SDK already creates.
 [<Literal>]
-let private healthContainer = "_platform"
+let private healthContainer = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private healthProbeBlobName = "health/probe"

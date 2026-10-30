@@ -131,7 +131,7 @@ type IComputeBudgetStore =
 module ComputeBudgetLayout =
     /// Reserved SDK-level container, alongside every other platform store.
     [<Literal>]
-    let DefaultContainer = "_platform"
+    let DefaultContainer = ScopeKey.PlatformContainer
 
     /// Blob-name prefix shared by everything this store writes.
     [<Literal>]

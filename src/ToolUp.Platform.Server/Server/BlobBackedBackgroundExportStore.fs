@@ -32,7 +32,7 @@ open ToolUp.Platform.BlobStorage
 type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
 
     [<Literal>]
-    static let Container = "_platform"
+    static let Container = ScopeKey.PlatformContainer
 
     [<Literal>]
     static let TicketPrefix = "dsr."

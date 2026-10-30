@@ -68,7 +68,7 @@ module private BlobBackedLifecycleSummaryStoreInternal =
     /// Reserved SDK-level container (see `IBlobStorage` scope-discipline
     /// docs). Tenant-lifecycle summaries are platform metadata, not
     /// tenant data, so they live under `_platform`, not a tenant scope.
-    let lifecycleContainer = "_platform"
+    let lifecycleContainer = ScopeKey.PlatformContainer
 
     /// Blob-name prefix under the container. Mirrors the
     /// `_platform/trusted-publishers/` convention.

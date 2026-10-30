@@ -566,7 +566,7 @@ type BlobPrivacyBudgetLedger(blobs: IBlobStorage, now: unit -> DateTimeOffset) =
     /// documents are read back byte-for-byte.
     static let jsonOptions = FableConverters.create ()
 
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
 
     /// Retained verbatim across the Phase 675 move. It reads as a
     /// federation-tier name and is now the home of every tier's budget

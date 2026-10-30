@@ -160,7 +160,7 @@ type IBudgetLedger =
 module BudgetLedgerLayout =
     /// Reserved SDK-level container, alongside every other platform store.
     [<Literal>]
-    let DefaultContainer = "_platform"
+    let DefaultContainer = ScopeKey.PlatformContainer
 
     /// Blob-name prefix for one budget domain — the whole of what that
     /// domain writes.

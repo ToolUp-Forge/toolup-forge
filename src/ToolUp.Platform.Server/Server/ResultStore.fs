@@ -362,7 +362,7 @@ module LineageOutboxDefaults =
     }
 
 [<Literal>]
-let private OutboxContainer = "_platform"
+let private OutboxContainer = ScopeKey.PlatformContainer
 
 let private stagedPrefix = "lineage-outbox/"
 let private deadPrefix = "lineage-outbox-dead/"

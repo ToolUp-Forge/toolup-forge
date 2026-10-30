@@ -21,7 +21,7 @@ open ToolUp.Platform.HealthChecks
 // polluted by probe noise).
 
 let private probeSourceModule = "_platform.audit_health"
-let private probeScopeId = "_platform"
+let private probeScopeId = ScopeKey.PlatformContainer
 
 /// Phase 6l.B — `IHealthCheck` that writes a marker through
 /// `IEventStore`, reads it back, and verifies. Reports `Healthy` for

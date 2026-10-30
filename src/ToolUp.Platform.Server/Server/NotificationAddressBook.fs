@@ -45,7 +45,7 @@ open ToolUp.Platform.BlobStorage
 /// reaches for via `BlobStorage` hard-coded paths; literalised here
 /// to keep the file self-contained.
 [<Literal>]
-let private PlatformContainer = "_platform"
+let private PlatformContainer = ScopeKey.PlatformContainer
 
 let private contactJsonOptions = FableConverters.create ()
 

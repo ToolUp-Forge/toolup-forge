@@ -101,7 +101,7 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
         let warn = Background.writeFailureWarner "SseScopeResolution" logger ctx
 
         try
-            auditLog.Record("_platform", row)
+            auditLog.Record(ScopeKey.PlatformContainer, row)
             |> Background.startAudit warn "SurfaceDenied audit"
         with ex ->
             warn "SurfaceDenied audit" ex

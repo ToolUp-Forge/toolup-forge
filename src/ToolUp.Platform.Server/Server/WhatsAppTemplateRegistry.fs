@@ -25,7 +25,7 @@ open ToolUp.Platform.BlobStorage
 
 /// Reserved container for SDK-platform blobs.
 [<Literal>]
-let private PlatformContainer = "_platform"
+let private PlatformContainer = ScopeKey.PlatformContainer
 
 let private jsonOptions = FableConverters.create ()
 

@@ -22,7 +22,7 @@ open ToolUp.Platform.Secrets
 // path that lists `webhooks/` directly; it's server-internal (not on
 // `IWebhookApi`) and only the dispatcher calls it.
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private subscriptionBlob (scopeId: string) (subscriptionId: Guid) =
     $"webhooks/{scopeId}/subscriptions/{subscriptionId:N}.json"

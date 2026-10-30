@@ -36,7 +36,7 @@ open ToolUp.Platform
 // expected to be gated upstream.
 
 [<Literal>]
-let DeployScopeId = "_platform"
+let DeployScopeId = ScopeKey.PlatformContainer
 
 [<Literal>]
 let DeploySourceModule = "_platform.deploy"

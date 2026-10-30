@@ -161,7 +161,7 @@ let private emitAudit (eventStore: IEventStore) (logger: ILogger) (response: Smo
 
         let evt =
             Events.create
-                "_platform"
+                ScopeKey.PlatformContainer
                 SmokeTest.AuditSourceModule
                 SmokeTest.AuditEventType
                 (JsonSerializer.Serialize(payload, auditJsonOptions))

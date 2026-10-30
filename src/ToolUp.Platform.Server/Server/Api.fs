@@ -383,7 +383,7 @@ module internal ApiSeams =
                         let scopeId =
                             match requestScopeId.Value with
                             | null
-                            | "" -> "_platform"
+                            | "" -> ScopeKey.PlatformContainer
                             | s -> s
 
                         let kindName =
@@ -537,7 +537,7 @@ type Api =
                     |> AccessContext.configScope
                     |> Option.map _.ScopeId
                     |> Option.defaultValue ac.UserId
-                | _ -> "_platform"
+                | _ -> ScopeKey.PlatformContainer
 
             api ctx
 

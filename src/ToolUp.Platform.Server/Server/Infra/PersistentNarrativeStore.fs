@@ -32,7 +32,7 @@ open ToolUp.Platform.Narrative
 // CLAUDE.md "Consumer dependency contract").
 
 [<Literal>]
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private scopePrefix (scopeId: string) = $"narratives/{scopeId}/"
 

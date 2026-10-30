@@ -108,7 +108,7 @@ open ToolUp.Platform.BlobEncryption
 // otherwise still be silent, and the count needs no logger to be true.
 
 [<Literal>]
-let private SecretScope = "_platform"
+let private SecretScope = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private SecretKeyPrefix = "encryption/scopes/"

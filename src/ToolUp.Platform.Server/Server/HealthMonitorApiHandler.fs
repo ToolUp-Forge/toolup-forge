@@ -49,7 +49,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 
         let teamId =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
+            | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
             | _ -> None
 
         AccessContext.unrestricted (AnonymousSession userId)
@@ -194,7 +194,7 @@ let healthMonitorApi (ctx: HttpContext) : IHealthMonitorApi =
                         let scopeId =
                             match AccessContext.configScope accessContext with
                             | Some scope -> scope.ScopeId
-                            | None -> "_platform"
+                            | None -> ScopeKey.PlatformContainer
 
                         let! rollup = probe.Rollup scopeId
                         return Ok(Some rollup)

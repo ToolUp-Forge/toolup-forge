@@ -70,7 +70,7 @@ type HostActionAuditHook(auditLog: IAuditLog, logger: ILogger, ?now: unit -> Dat
             async {
                 try
                     let kind, subjectId = subjectFields principal
-                    let scopeId = action.Scope |> Option.defaultValue "_platform"
+                    let scopeId = action.Scope |> Option.defaultValue ScopeKey.PlatformContainer
 
                     let allowed, reason =
                         match decision with

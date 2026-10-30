@@ -18,7 +18,7 @@ open ToolUp.Platform.BlobStorage
 // `_platform/`. Cross-scope reads are structurally impossible — the
 // store never widens the prefix during a scoped operation.
 
-let private platformContainer = "_platform"
+let private platformContainer = ScopeKey.PlatformContainer
 
 let private configBlob (scopeId: string) (sourceId: DataSourceId) =
     $"data-sources/{scopeId}/configs/{sourceId}.json"

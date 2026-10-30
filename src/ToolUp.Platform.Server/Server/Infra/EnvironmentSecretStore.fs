@@ -1,6 +1,7 @@
 module EnvironmentSecretStore
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
 /// Secret store that reads from environment variables, scoped by caller.
@@ -19,7 +20,7 @@ type EnvironmentSecretStore() =
         scopeId.Replace('-', '_').ToUpperInvariant()
 
     let envVarName scopeId key =
-        if scopeId = "_platform" then
+        if scopeId = ScopeKey.PlatformContainer then
             key
         else
             $"TOOLUP_{sanitiseScope scopeId}_{key}"

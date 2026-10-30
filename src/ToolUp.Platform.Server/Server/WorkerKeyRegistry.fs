@@ -573,7 +573,7 @@ type InMemoryWorkerKeyRegistry() =
 /// loudly at compose time rather than at the first race, on the
 /// `BlobExternalHandleStore` precedent.
 type BlobWorkerKeyRegistry(blobs: IBlobStorage, now: unit -> DateTime) =
-    let container = "_platform"
+    let container = ScopeKey.PlatformContainer
     let prefix = "external-compute/worker-keys/"
 
     let cas =

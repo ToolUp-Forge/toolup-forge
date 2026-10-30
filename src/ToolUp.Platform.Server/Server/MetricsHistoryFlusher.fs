@@ -89,7 +89,7 @@ open ToolUp.Platform.Metrics
 /// have (GP 4 — the partition is structural, and this data belongs
 /// outside every tenant's).
 [<Literal>]
-let ScopeId = "_platform"
+let ScopeId = ScopeKey.PlatformContainer
 
 /// Render a series id: the metric name followed by its tag set in
 /// Prometheus label syntax, or the bare name when the series is

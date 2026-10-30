@@ -64,7 +64,7 @@ type BackupScope =
 module BackupScope =
     /// The reserved platform container's name.
     [<Literal>]
-    let PlatformContainer = "_platform"
+    let PlatformContainer = ScopeKey.PlatformContainer
 
     /// The distinct container list a scope resolves to.
     let containers (scope: BackupScope) : string list =
