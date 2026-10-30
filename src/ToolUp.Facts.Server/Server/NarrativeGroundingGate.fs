@@ -453,13 +453,16 @@ module NarrativeGrounding =
     /// The Fact ids a verdict cites — what a certificate is issued over.
     let citedFactIds (citations: NarrativeCitation list) : string list = NarrativeCitation.factIds citations
 
-    /// The fact tools a grounded run gives the model — and the only ones
-    /// from the fact tier. The same three the fact store declares on
-    /// `ServerApp.AITools`; the run adds the declared reference tools.
+    /// The fact tools: the ones the fact store declares on `ServerApp.AITools`
+    /// (`FactsCompose.withFactStore` reads this list), and the only ones a
+    /// grounded run gives the model from the fact tier — the run adds the
+    /// declared reference tools. The two reads, then the two discovery
+    /// surfaces: coverage by metric, the table listing by table.
     let factTools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list = [
         FactQueryTool.definition, FactQueryTool.execute
         PopulationQueryTool.definition, PopulationQueryTool.execute
         CoverageTool.definition, CoverageTool.execute
+        FactTablesTool.definition, FactTablesTool.execute
     ]
 
 /// The fact tier's `INarrativeGroundingGate` (validator:NarrativeGroundingGate):

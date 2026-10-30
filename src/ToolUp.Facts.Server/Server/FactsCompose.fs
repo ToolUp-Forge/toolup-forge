@@ -809,39 +809,31 @@ module FactsCompose =
 
             {
                 app with
-                    // Phase 559 — declare the `query_facts` AI tool with
-                    // the store (one compose knob, never two). The
-                    // declaration rides `ServerApp.AITools`, which only
-                    // the AI companion's compose reads into the live AI
-                    // tool registry — so the tool arms exactly when both
-                    // the fact store AND the AI companion are composed
-                    // (GP 13): no fact store ⇒ never declared; no AI ⇒
-                    // never registered, no route, no runtime cost.
+                    // The fact tools are declared with the store (one
+                    // compose knob, never two). The declaration rides
+                    // `ServerApp.AITools`, which only the AI companion's
+                    // compose reads into the live AI tool registry — so the
+                    // tools arm exactly when both the fact store AND the AI
+                    // companion are composed (GP 13): no fact store ⇒ never
+                    // declared; no AI ⇒ never registered, no route, no
+                    // runtime cost.
                     //
-                    // Phase 703 — `query_metric_population` rides the same
-                    // double gate beside it. The two are siblings, not
-                    // alternatives: `query_facts` answers about a subject,
-                    // `query_metric_population` ranks a metric across a
-                    // population and summarises what it ranked over. One
-                    // knob declares both, so no deployment can arm the
-                    // point read and miss the population read.
-                    //
-                    // Phase 705 — and `list_metric_coverage` beside them,
-                    // for a sharper version of the same argument. Both
-                    // read tools take ids and neither can list them, so a
-                    // deployment that armed the reads WITHOUT the
-                    // discovery surface would leave the model guessing
-                    // metric ids — and a guessed id is refused, not
+                    // They are siblings, not alternatives, and one knob
+                    // declares them all. `query_facts` answers about a
+                    // subject; `query_metric_population` ranks a metric
+                    // across a population and summarises what it ranked
+                    // over. Both take ids and neither can list them, so the
+                    // discovery surfaces ride the same knob:
+                    // `list_metric_coverage` lists by metric and
+                    // `list_fact_tables` by table. A deployment that armed
+                    // the reads without discovery would leave the model
+                    // guessing ids — and a guessed id is refused, not
                     // approximated. Arming discovery separately would make
                     // that misconfiguration possible; one knob makes it
-                    // unreachable.
-                    AITools =
-                        app.AITools
-                        @ [
-                            FactQueryTool.definition, FactQueryTool.execute
-                            PopulationQueryTool.definition, PopulationQueryTool.execute
-                            CoverageTool.definition, CoverageTool.execute
-                        ]
+                    // unreachable. The list is the grounded narrative's
+                    // (`NarrativeGrounding.factTools`), so the two cannot
+                    // drift apart.
+                    AITools = app.AITools @ NarrativeGrounding.factTools
             }
             |> contribute register
 

@@ -216,7 +216,12 @@ let registrationTests =
 
             Expect.equal
                 (app.AITools |> List.map (fun (def, _) -> def.Name))
-                [ "query_facts"; "query_metric_population"; "list_metric_coverage" ]
+                [
+                    "query_facts"
+                    "query_metric_population"
+                    "list_metric_coverage"
+                    "list_fact_tables"
+                ]
                 "the point read, the population read and (Phase 705) the discovery surface arrive together"
 
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "the store rides the same knob"

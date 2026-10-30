@@ -1558,6 +1558,127 @@ let pipelineToolTests =
         }
     ]
 
+// ── The tool-result door for a table listing ─────────────────────
+//
+// `list_fact_tables` samples each table's facts at the `FactToolResult`
+// surface (its own pack pins the surface); here, what crosses it. A table
+// whose sampled facts the policy denies is named with its policy and nothing
+// else, and no listing carries a value.
+
+let tableListingTests =
+    testList "the tool-result door for a table listing" [
+        test "a denied table is named with its policy, and nothing else" {
+            let w = FactTablesToolTests.TableFixtures.world ()
+
+            let answer =
+                FactTablesToolTests.TableFixtures.answerJson w """{"table":"daily-margin"}"""
+
+            let row = FactTablesToolTests.TableFixtures.tableRow answer "daily-margin"
+
+            Expect.equal
+                (FactTablesToolTests.TableFixtures.propertyNames row |> List.sort)
+                [ "id"; "reason"; "restrictedUnderPolicies"; "withheld" ]
+                "its id, that it is withheld, the policy and why: no description, column, level or standing"
+
+            Expect.equal
+                (row.GetProperty("restrictedUnderPolicies").EnumerateArray()
+                 |> Seq.map _.GetString()
+                 |> List.ofSeq)
+                [ "trade-figures" ]
+                "the restricting policy"
+
+            Expect.isFalse
+                ((string row).Contains "Margin per site per day.")
+                "the denied table's description does not cross"
+        }
+
+        test "no value appears in any listing" {
+            let w = FactTablesToolTests.TableFixtures.world ()
+            w.Gate.Deny [ FactRenderToolTests.RenderFixtures.revenueFactId w "s1" 2 ]
+
+            for args in [ "{}"; """{"table":"daily-trade"}""" ] do
+                let text = FactTablesToolTests.TableFixtures.answer w args
+
+                for figure in FactTablesToolTests.TableFixtures.figures do
+                    Expect.isFalse (text.Contains figure) (sprintf "%s: '%s' crosses no listing" args figure)
+        }
+    ]
+
+// ── The browse door for a reader's pipeline block ────────────────
+//
+// A pipeline block a model's turn attached is drawn for its reader by
+// evaluating its persisted request again under the READER's gate
+// (`PipelineAnsweringTool.rerunWith`, served as `IPipelineBlockApi`). That
+// re-run is a second egress, at the `FactBrowse` door, beside the model's read
+// at `FactToolResult`; a reader the policy denies every cell is refused, never
+// drawn an empty grid, and no value crosses in the refusal.
+
+let pipelineBlockTests =
+    testList "the browse door for a reader's pipeline block" [
+        test "the model's read crosses the tool-result door and the reader's re-run the browse door" {
+            let w = FactRenderToolTests.RenderFixtures.world ()
+
+            let written =
+                PipelineAnsweringTool.answerWith
+                    w.Deps
+                    w.Scope
+                    "u"
+                    (PipelineToolTests.PipelineFixtures.revenueArgs PipelineToolTests.PipelineFixtures.perSubject)
+                |> Async.RunSynchronously
+
+            let _, provenance = FactRenderToolTests.RenderFixtures.blockOf written
+            let asked = List.length w.Gate.Surfaces
+            Expect.isGreaterThan asked 0 "the model's read was judged"
+            Expect.all w.Gate.Surfaces (fun s -> s = FactToolResult) "at FactToolResult"
+
+            match
+                PipelineAnsweringTool.rerunWith w.Deps w.Scope "reader" provenance.Request
+                |> Async.RunSynchronously
+            with
+            | Error e -> failtestf "expected the reader's re-run, got %s" e
+            | Ok _ -> ()
+
+            let reread = w.Gate.Surfaces |> List.skip asked
+            Expect.isNonEmpty reread "the re-run was judged"
+            Expect.all reread (fun s -> s = FactBrowse) "at FactBrowse"
+        }
+
+        test "a reader the policy denies every cell gets a refusal from the re-run, never an empty grid" {
+            let w = FactRenderToolTests.RenderFixtures.world ()
+
+            let written =
+                PipelineAnsweringTool.answerWith
+                    w.Deps
+                    w.Scope
+                    "u"
+                    (PipelineToolTests.PipelineFixtures.revenueArgs PipelineToolTests.PipelineFixtures.perSubject)
+                |> Async.RunSynchronously
+
+            let _, provenance = FactRenderToolTests.RenderFixtures.blockOf written
+
+            w.Gate.Deny [
+                for site in [ "s1"; "s2" ] do
+                    for offset in 0..2 do
+                        FactRenderToolTests.RenderFixtures.revenueFactId w site offset
+            ]
+
+            match
+                PipelineAnsweringTool.rerunWith w.Deps w.Scope "reader" provenance.Request
+                |> Async.RunSynchronously
+            with
+            | Ok result -> failtestf "expected a refusal, got %d column(s)" (List.length result.Columns)
+            | Error refusal ->
+                Expect.equal
+                    refusal
+                    "no cell of the slice carries a value you may be shown: 6 cell(s) read, 6 withheld under trade-figures"
+                    "the refusal counts what was withheld"
+
+                Expect.isFalse
+                    (refusal.Contains FactRenderToolTests.RenderFixtures.DistinctiveDigits)
+                    "and names no value"
+        }
+    ]
+
 let tests =
     testList "Phase 525 disclosure egress" [
         predicateTests
@@ -1570,4 +1691,6 @@ let tests =
         heldFormTests
         renderToolTests
         pipelineToolTests
+        tableListingTests
+        pipelineBlockTests
     ]

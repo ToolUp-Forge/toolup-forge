@@ -196,7 +196,12 @@ let registrationTests =
             // together, so no deployment can arm one and miss the other.
             Expect.equal
                 (app.AITools |> List.map (fun (def, _) -> def.Name))
-                [ "query_facts"; "query_metric_population"; "list_metric_coverage" ]
+                [
+                    "query_facts"
+                    "query_metric_population"
+                    "list_metric_coverage"
+                    "list_fact_tables"
+                ]
                 "the fact tier's tool declarations, in compose order"
 
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "the store rides the same knob"
