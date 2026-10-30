@@ -762,8 +762,8 @@ ToolUp.Facts.FactPublicationJobs.PublishHandler : System.String (literal)
 ToolUp.Facts.FactPublicationJobs.RefreshHandler : System.String (literal)
 ToolUp.Facts.FactPublicationJobs.publishHandler(ToolUp.Facts.IFactPublication) : ToolUp.Platform.IJobHandler
 ToolUp.Facts.FactPublicationJobs.refreshHandler(ToolUp.Facts.IFactPublication) : ToolUp.Platform.IJobHandler
-ToolUp.Facts.FactPublicationJobs.schedulePublication(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
-ToolUp.Facts.FactPublicationJobs.scheduleRefresh(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
+ToolUp.Facts.FactPublicationJobs.schedulePublication(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
+ToolUp.Facts.FactPublicationJobs.scheduleRefresh(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
 ToolUp.Facts.FactPurposeContext (class)
 ToolUp.Facts.FactPurposeContext.claim(System.String) : System.Void
 ToolUp.Facts.FactPurposeContext.clear() : System.Void
@@ -1297,8 +1297,8 @@ ToolUp.Facts.RecomputeJobHandlerModule.payloadFor(System.String) : System.String
 ToolUp.Facts.RecomputeJobHandlerModule.reactToChange(ToolUp.Platform.ILineageStore, ToolUp.Facts.IFactStore, ToolUp.Platform.IJobScheduler, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.DataChangeScope, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.InvalidationOutcome]]
 ToolUp.Facts.RecomputeJobHandlerModule.reactToDataChange(ToolUp.Platform.ILineageStore, ToolUp.Facts.IFactStore, ToolUp.Platform.IJobScheduler, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.InvalidationOutcome]]
 ToolUp.Facts.RecomputeJobHandlerModule.reactToResolvedChange(ToolUp.Platform.ILineageStore, ToolUp.Facts.IFactStore, ToolUp.Platform.IJobScheduler, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.InvalidationOutcome]]
-ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecompute(ToolUp.Platform.IJobScheduler, System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
-ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecomputeUnder(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
+ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecompute(ToolUp.Platform.IJobScheduler, System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
+ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecomputeUnder(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
 ToolUp.Facts.RecomputeJobPayload (class)
 ToolUp.Facts.RecomputeJobPayload..ctor(System.String)
 ToolUp.Facts.RecomputeJobPayload.factId : System.String { get }
