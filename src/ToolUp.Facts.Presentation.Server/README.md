@@ -1,6 +1,6 @@
 # ToolUp.Facts.Presentation.Server
 
-The `render_chart` and `render_table` AI tools. The model writes a *presentation request* (the
+The `render_chart`, `render_table` and `evaluate_pipeline` AI tools in the answering form. The model writes a *presentation request* (the
 `ToolUp.Facts.Presentation` vocabulary: a kind, a fact table, its metric(s), the subjects and a
 period) and never a row. The server reads the series the request names through the fact browse's
 series read, under the disclosure gate at the tool-result door. It draws the block with the
@@ -21,12 +21,19 @@ message carries.
   policy. A withheld point is a count there and is never drawn. A caller the policy denies every
   point gets a refusal, not an empty chart.
 
+- **`PresentationCompose.withPipelineTool`** composes `evaluate_pipeline` in the same answering
+  form and mounts `IPipelineBlockApi`. The model reads the executor's summary, and the message
+  carries a pipeline block that persists the request and never a row. A reader's panel sends that
+  request to the endpoint, which evaluates it again for the reader under the disclosure gate at the
+  browse door.
+
 ```fsharp skip=fragment
 open ToolUp.AI.AICompose
 open ToolUp.Facts.Presentation
 
 AIServerApp.createFrom factory providerProfile app
 |> PresentationCompose.withRenderTools
+|> PresentationCompose.withPipelineTool
 |> composeAI
 ```
 

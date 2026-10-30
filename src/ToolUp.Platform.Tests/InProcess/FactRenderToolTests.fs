@@ -25,6 +25,11 @@ module ToolUp.Platform.Tests.InProcess.FactRenderToolTests
 //   6. **End to end.** A scripted turn calls `render_chart` through the
 //      composed fact tier and the final message carries the block.
 //
+// Phase 1156 adds `evaluate_pipeline` in the same answering form: its
+// composition (`withPipelineTool`, opt-in, idempotent, with the re-run
+// endpoint mounted once), and a scripted turn whose final message carries the
+// pipeline block, re-run for the reader to the reference evaluator's grid.
+//
 // The egress instances (a withheld point, a denied principal) live in the
 // disclosure egress pack beside every other door, over the fixtures below.
 
@@ -284,6 +289,17 @@ module RenderFixtures =
         Title = Some "Revenue per day by site"
         Annotations = []
     }
+
+    /// `evaluate_pipeline`'s arguments: `metric` of `tableId` over `days` days
+    /// from the first, and `pipeline`.
+    let pipelineArgs (tableId: string) (metric: string) (days: int) (pipeline: Fuaran.Compute.Transform list) : string =
+        sprintf
+            """{"table":"%s","period_from":"%s","period_to":"%s","metrics":["%s"],"pipeline":%s}"""
+            tableId
+            (day1.ToString "yyyy-MM-dd")
+            ((day1.AddDays(float days)).ToString "yyyy-MM-dd")
+            metric
+            (Fuaran.Compute.DataFrameCodec.encodePipeline pipeline)
 
     /// A tool's answer to `args` in `w`, for principal `u`.
     let answer (tool: RenderTool) (w: World) (args: string) : ToolHelpers.ToolAnswer =
@@ -588,6 +604,51 @@ let private compositionTests =
                 Expect.stringContains ex.Message "query_facts" "the collision names the tool")
         }
 
+        test "withPipelineTool composes evaluate_pipeline and mounts its re-run once, however often it is called" {
+            let before = aiApp EnabledFactStore
+            let once = before |> PresentationCompose.withPipelineTool
+            Expect.equal (answeringNames once) [ PipelineTool.Name ] "the tool"
+
+            Expect.equal
+                (List.length once.Base.Extensions.Handlers)
+                (List.length before.Base.Extensions.Handlers + 1)
+                "one handler: the re-run a reader's panel draws the block from"
+
+            let twice = once |> PresentationCompose.withPipelineTool
+            Expect.isTrue (obj.ReferenceEquals(once, twice)) "idempotent: the app itself, unchanged"
+
+            let beside =
+                before
+                |> PresentationCompose.withRenderTools
+                |> PresentationCompose.withPipelineTool
+
+            Expect.equal
+                (answeringNames beside)
+                [ "render_chart"; "render_table"; PipelineTool.Name ]
+                "beside the render tools"
+        }
+
+        test "without the fact store withPipelineTool changes nothing" {
+            let before = aiApp NoFactStore
+            let after = before |> PresentationCompose.withPipelineTool
+            Expect.isTrue (obj.ReferenceEquals(before, after)) "the app itself, unchanged"
+        }
+
+        test "composeAI registers evaluate_pipeline in the record form only when it is composed" {
+            let registry =
+                composedRegistry (aiApp EnabledFactStore |> PresentationCompose.withPipelineTool)
+
+            match registry.FindByName PipelineTool.Name with
+            | Some tool ->
+                Expect.isSome tool.Answer "it answers the record form"
+                Expect.equal tool.Definition PipelineTool.definition "with the executor's own definition"
+            | None -> failtest "evaluate_pipeline did not reach the AI tool registry"
+
+            Expect.isNone
+                ((composedRegistry (aiApp EnabledFactStore)).FindByName PipelineTool.Name)
+                "absent unless composed"
+        }
+
         test "the fact tier stays free of the Fuaran-UI dependency" {
             for assembly in [ typeof<IFactStore>.Assembly; typeof<AIToolRegistry.RegisteredTool>.Assembly ] do
                 let references = assembly.GetReferencedAssemblies() |> Array.map _.Name
@@ -677,6 +738,115 @@ let private composedContext () : HttpContext =
     seed (built.GetRequiredService<IFactTableWriter>()) resolved trade "revenue"
     ctx :> HttpContext
 
+/// One scripted turn over the composed answering tools of `app`: the model asks
+/// `question`, calls `toolName` with `args`, then replies `reply`. The tool
+/// results the model read, and the loop state.
+let private scriptedTurn
+    (ctx: HttpContext)
+    (app: AIServerApp)
+    (question: string)
+    (toolName: string)
+    (args: string)
+    (reply: string)
+    : Async<string list * AIAgentEngine.LoopState> =
+    async {
+        let provider =
+            ScriptedProvider(fun n ->
+                if n = 1 then
+                    {
+                        Content = ""
+                        ToolCalls = [
+                            {
+                                Id = "call-1"
+                                Name = toolName
+                                Arguments = args
+                            }
+                        ]
+                        StopReason = "tool_use"
+                        Usage = None
+                    }
+                else
+                    {
+                        Content = reply
+                        ToolCalls = []
+                        StopReason = "end_turn"
+                        Usage = None
+                    })
+
+        let registry = AIToolRegistry.AIToolRegistry()
+
+        registry.RegisterAll(
+            app.AIAnsweringTools
+            |> List.map (fun (definition, answer) -> AIToolRegistry.createAnsweringTool definition answer)
+        )
+
+        let events = ResizeArray<AIStreamEvent>()
+
+        let turn =
+            AIAgentEngine.TurnContext.create
+                provider
+                registry
+                (ClientToolDispatch.ClientToolDispatchRegistry())
+                ctx
+                (Guid.NewGuid())
+                (Guid.NewGuid())
+                AISurface.FullPage
+                None
+                None
+                ModelInput.empty
+                AIAgentEngine.AgentCallBudget.interactive
+                SystemPromptBuilder.AgentLoopLimits.defaults
+                (fun evt -> lock events (fun () -> events.Add evt))
+                CancellationToken.None
+
+        let! result = AIAgentEngine.run turn AIAgentEngine.TurnPlan.RunLoop [ AIProviderMessage.text "user" question ]
+
+        match result with
+        | Error stop -> return failtestf "the turn was expected to answer, and stopped: %A" stop
+        | Ok state ->
+            let modelRead =
+                lock events (fun () -> List.ofSeq events)
+                |> List.choose (function
+                    | ToolCallCompleted(_, _, content) -> Some content
+                    | _ -> None)
+
+            return modelRead, state
+    }
+
+/// The grouped, filtered and ranked question of the pipeline turn: days above
+/// a threshold, revenue per site, the largest first, the top one.
+module private TopSite =
+    open Fuaran.Core
+    open Fuaran.Compute
+
+    let pipeline: Transform list = [
+        Filter(Binary(Gt, Col "revenue", Lit(Decimal "1000")))
+        GroupBy(
+            [ FactBrowseSlice.SubjectColumn ],
+            [
+                {
+                    Name = "total"
+                    Fn = Sum
+                    Of = "revenue"
+                }
+            ]
+        )
+        Transform.sortBy [ "total", Desc ]
+        Transform.limit 1 0
+    ]
+
+    /// The reference evaluator's answer over `slice`, as grid text.
+    let expectedGrid (slice: Table) : string list list =
+        match DataFrame.evalPipeline pipeline slice with
+        | Error e -> failtestf "the reference evaluator refused: %s" (DataFrame.errorString e)
+        | Ok table ->
+            let columns =
+                Table.columnNames table
+                |> List.map (fun name -> (Table.tryColumn name table).Value |> Column.toCells)
+
+            [ 0 .. Table.rowCount table - 1 ]
+            |> List.map (fun i -> columns |> List.map (fun cells -> PipelineBlock.cellText cells.[i]))
+
 let private endToEndTests =
     testList "end to end" [
         testCaseAsync
@@ -685,91 +855,111 @@ let private endToEndTests =
             let ctx = composedContext ()
             let args = PresentationRequest.toJson trendRequest
 
-            let provider =
-                ScriptedProvider(fun n ->
-                    if n = 1 then
-                        {
-                            Content = ""
-                            ToolCalls = [
-                                {
-                                    Id = "call-1"
-                                    Name = RenderTools.ChartToolName
-                                    Arguments = args
-                                }
-                            ]
-                            StopReason = "tool_use"
-                            Usage = None
-                        }
-                    else
-                        {
-                            Content = "Here is daily revenue by site."
-                            ToolCalls = []
-                            StopReason = "end_turn"
-                            Usage = None
-                        })
-
-            let registry = AIToolRegistry.AIToolRegistry()
-
-            registry.RegisterAll(
-                (aiApp EnabledFactStore |> PresentationCompose.withRenderTools).AIAnsweringTools
-                |> List.map (fun (definition, answer) -> AIToolRegistry.createAnsweringTool definition answer)
-            )
-
-            let events = ResizeArray<AIStreamEvent>()
-
-            let turn =
-                AIAgentEngine.TurnContext.create
-                    provider
-                    registry
-                    (ClientToolDispatch.ClientToolDispatchRegistry())
+            let! modelRead, state =
+                scriptedTurn
                     ctx
-                    (Guid.NewGuid())
-                    (Guid.NewGuid())
-                    AISurface.FullPage
-                    None
-                    None
-                    ModelInput.empty
-                    AIAgentEngine.AgentCallBudget.interactive
-                    SystemPromptBuilder.AgentLoopLimits.defaults
-                    (fun evt -> lock events (fun () -> events.Add evt))
-                    CancellationToken.None
+                    (aiApp EnabledFactStore |> PresentationCompose.withRenderTools)
+                    "Show me daily revenue by site."
+                    RenderTools.ChartToolName
+                    args
+                    "Here is daily revenue by site."
 
-            let! result =
-                AIAgentEngine.run turn AIAgentEngine.TurnPlan.RunLoop [
-                    AIProviderMessage.text "user" "Show me daily revenue by site."
-                ]
+            match modelRead with
+            | [ summary ] ->
+                Expect.stringStarts
+                    summary
+                    "Drew a trend of revenue from fact table 'daily-trade' over 2026-10-01/2026-10-04"
+                    "the model read the summary"
 
-            match result with
-            | Error stop -> failtestf "the turn was expected to answer, and stopped: %A" stop
-            | Ok state ->
-                let streamed = lock events (fun () -> List.ofSeq events)
+                Expect.isFalse (summary.Contains "1100.25") "and no value"
+            | other -> failtestf "expected one tool result, got %A" other
 
-                let modelRead =
-                    streamed
-                    |> List.choose (function
-                        | ToolCallCompleted(_, _, content) -> Some content
-                        | _ -> None)
+            match state.Attached with
+            | [ BlockPart(node, provenance) ] ->
+                Expect.equal provenance.Request args "the block carries the request the model wrote"
+                Expect.stringContains node "1100.25" "and the gated values, drawn"
 
+                Expect.equal
+                    (AIAgentEngine.LoopState.messageParts "Here is daily revenue by site." state)
+                    [ TextPart "Here is daily revenue by site."; BlockPart(node, provenance) ]
+                    "the final message carries its text, then the block"
+            | other -> failtestf "expected one attached block, got %A" other
+        }
+
+        testCaseAsync
+            "a scripted turn calls evaluate_pipeline, the final message carries the pipeline block, and the reader's re-run draws the reference evaluator's grid"
+        <| async {
+            let ctx = composedContext ()
+            let args = pipelineArgs trade.Id "revenue" 3 TopSite.pipeline
+            let reply = "The top site by revenue on its busy days is in the block."
+
+            let! modelRead, state =
+                scriptedTurn
+                    ctx
+                    (aiApp EnabledFactStore |> PresentationCompose.withPipelineTool)
+                    "Which site took the most revenue on days above 1000?"
+                    PipelineTool.Name
+                    args
+                    reply
+
+            let summary =
                 match modelRead with
-                | [ summary ] ->
-                    Expect.stringStarts
-                        summary
-                        "Drew a trend of revenue from fact table 'daily-trade' over 2026-10-01/2026-10-04"
-                        "the model read the summary"
-
-                    Expect.isFalse (summary.Contains "1100.25") "and no value"
+                | [ summary ] -> summary
                 | other -> failtestf "expected one tool result, got %A" other
 
-                match state.Attached with
-                | [ BlockPart(node, provenance) ] ->
-                    Expect.equal provenance.Request args "the block carries the request the model wrote"
-                    Expect.stringContains node "1100.25" "and the gated values, drawn"
+            Expect.stringStarts
+                summary
+                "Evaluated the pipeline over fact table 'daily-trade' for 2026-10-01..2026-10-04 (6 cell(s) read): the result has 1 row(s) and 2 column(s): 'subject', 'total'."
+                "the model read the summary"
 
-                    Expect.equal
-                        (AIAgentEngine.LoopState.messageParts "Here is daily revenue by site." state)
-                        [ TextPart "Here is daily revenue by site."; BlockPart(node, provenance) ]
-                        "the final message carries its text, then the block"
-                | other -> failtestf "expected one attached block, got %A" other
+            match state.Attached with
+            | [ BlockPart(node, provenance) as part ] ->
+                Expect.equal provenance.Kind PipelineBlock.Kind "a pipeline block"
+
+                Expect.equal
+                    (AIAgentEngine.LoopState.messageParts reply state)
+                    [ TextPart reply; part ]
+                    "the final message carries its text, then the block"
+
+                let! rerun = (PipelineAnsweringTool.api ctx).Evaluate provenance.Request
+
+                let result =
+                    match rerun with
+                    | Ok result -> result
+                    | Error e -> failtestf "the reader's re-run refused: %s" e
+
+                let deps = (FactBrowseHandler.factBrowseDeps ctx).Value
+
+                let! slice =
+                    FactBrowseHandler.querySlice deps (ScopeResolution.forRequest ctx) "u" {
+                        TableId = trade.Id
+                        PeriodFrom = day1
+                        PeriodTo = day1.AddDays 3.0
+                        SubjectPrefix = []
+                        Metrics = [ "revenue" ]
+                    }
+
+                let expected =
+                    match slice |> Result.bind FactBrowseSlice.decode with
+                    | Ok table -> TopSite.expectedGrid table
+                    | Error e -> failtestf "the slice did not read: %s" e
+
+                match PipelineBlock.redraw<unit> provenance result with
+                | Error defect -> failtestf "the block did not draw: %s" (PresentationDefect.describe defect)
+                | Ok block ->
+                    Expect.equal (PipelineBlock.rowsOf result) (Ok expected) "the grid is the reference evaluator's"
+                    Expect.isEmpty (PipelineBlock.differences provenance result) "the writer reads what was recorded"
+
+                    let value = expected.Head.[1]
+
+                    for text in [ summary; node; provenance.Request ] do
+                        Expect.isFalse (text.Contains value) "no cell value in the model's text or the persisted block"
+
+                    Expect.stringContains
+                        (Fuaran.UI.Generated.encodeNode block.Node)
+                        value
+                        "and the reader's grid draws it"
+            | other -> failtestf "expected one attached block, got %A" other
         }
     ]
 

@@ -3,6 +3,49 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Facts.Presentation.IPipelineBlockApi (class)
+ToolUp.Facts.Presentation.IPipelineBlockApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]])
+ToolUp.Facts.Presentation.IPipelineBlockApi.Evaluate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]] { get }
+ToolUp.Facts.Presentation.PipelineBlock (class)
+ToolUp.Facts.Presentation.PipelineBlock.Kind : System.String (literal)
+ToolUp.Facts.Presentation.PipelineBlock.cellText(Fuaran.Core.Cell) : System.String
+ToolUp.Facts.Presentation.PipelineBlock.differences(ToolUp.Platform.AI.BlockProvenance, ToolUp.Facts.Presentation.PipelineBlockResult) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.Presentation.PipelineBlock.frame`1(ToolUp.Facts.Presentation.PipelineBlockRequest, ToolUp.Facts.Presentation.PipelineBlockResult) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationBlock`1[Msg], ToolUp.Facts.Presentation.PresentationDefect]
+ToolUp.Facts.Presentation.PipelineBlock.isPipeline(ToolUp.Platform.AI.BlockProvenance) : System.Boolean
+ToolUp.Facts.Presentation.PipelineBlock.periodText(ToolUp.Facts.Presentation.PipelineBlockRequest) : System.String
+ToolUp.Facts.Presentation.PipelineBlock.provenance(ToolUp.Facts.Presentation.PipelineBlockRequest, ToolUp.Facts.Presentation.PipelineBlockResult) : ToolUp.Platform.AI.BlockProvenance
+ToolUp.Facts.Presentation.PipelineBlock.recordedRunStamp(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Facts.Presentation.PipelineBlock.redraw`1(ToolUp.Platform.AI.BlockProvenance, ToolUp.Facts.Presentation.PipelineBlockResult) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationBlock`1[Msg], ToolUp.Facts.Presentation.PresentationDefect]
+ToolUp.Facts.Presentation.PipelineBlock.routeBuilder(System.String, System.String) : System.String
+ToolUp.Facts.Presentation.PipelineBlock.rowsOf(ToolUp.Facts.Presentation.PipelineBlockResult) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String]
+ToolUp.Facts.Presentation.PipelineBlock.toJson(ToolUp.Facts.Presentation.PipelineBlockRequest) : System.String
+ToolUp.Facts.Presentation.PipelineBlock.withheldByPolicy(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.PipelineBlockColumn]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld]
+ToolUp.Facts.Presentation.PipelineBlock.withheldText(ToolUp.Facts.Presentation.PipelineBlockColumn) : System.String
+ToolUp.Facts.Presentation.PipelineBlockColumn (class)
+ToolUp.Facts.Presentation.PipelineBlockColumn..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld])
+ToolUp.Facts.Presentation.PipelineBlockColumn.Column : System.String { get }
+ToolUp.Facts.Presentation.PipelineBlockColumn.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PipelineBlockColumn.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld] { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest (class)
+ToolUp.Facts.Presentation.PipelineBlockRequest..ctor(System.String, System.DateTime, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.Presentation.PipelineBlockRequest.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest.PathPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest.PeriodTo : System.DateTime { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest.Pipeline : System.String { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest.PipelineHash : System.String { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest.RunStamp : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.Presentation.PipelineBlockRequest.TableId : System.String { get }
+ToolUp.Facts.Presentation.PipelineBlockResult (class)
+ToolUp.Facts.Presentation.PipelineBlockResult..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.PipelineBlockColumn], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32)
+ToolUp.Facts.Presentation.PipelineBlockResult.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PipelineBlockResult.FactIdCount : System.Int32 { get }
+ToolUp.Facts.Presentation.PipelineBlockResult.FactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PipelineBlockResult.PipelineHash : System.String { get }
+ToolUp.Facts.Presentation.PipelineBlockResult.Rows : System.Int32 { get }
+ToolUp.Facts.Presentation.PipelineBlockResult.RunStamp : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.Presentation.PipelineBlockResult.Table : System.String { get }
+ToolUp.Facts.Presentation.PipelineBlockResult.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.PipelineBlockColumn] { get }
 ToolUp.Facts.Presentation.Presentation (class)
 ToolUp.Facts.Presentation.Presentation.build`1(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.SeriesAnswer]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationBlock`1[Msg], ToolUp.Facts.Presentation.PresentationDefect]
 ToolUp.Facts.Presentation.Presentation.findings`1(Fuaran.UI.Generated+Node`1[Msg]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
