@@ -1,4 +1,4 @@
-Codemod: 34 site(s) in 10 file(s) need human review (not rewritten):
+Codemod: 41 site(s) in 11 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -62,6 +62,21 @@ Codemod: 34 site(s) in 10 file(s) need human review (not rewritten):
       -> Phase 66: `PlatformMode` is retired: `ServerConfig.Mode` / `ClientConfig.Mode` became `Surfaces: SurfaceProfile list`, `AccessContext.Mode` became `Subject: Subject`, and a handler-factory `mode: PlatformMode` parameter drops (§6 — read the subject from `HttpContext.Items["ToolUp.Subject"]`)
     L36 [66-anonymous-route-prefix] |> ServerApp.withAnonymousRoute "/api/forms/public/"
       -> Phase 66: §5 — anonymous route prefixes are deleted; declare a per-route `SurfaceRequirement.claimBearerOnly` / `.anonymousOnly` / `.public_` via `ServerModule.withRouteSurfaceRequirement`
+  src/Server/RemotingLeftovers.fs
+    L3 [1053-thread-safe-cell] let summary = ThreadSafeCell.computeOnce expensive
+      -> Phase 1053: `ThreadSafeCell` is removed with no replacement; a `Lazy<'T>` covers `computeOnce`
+    L4 [1053-reader] let resolved = Reader.run context pipeline
+      -> Phase 1053: `Reader`, `ReaderBuilder` and `Remoting.fromReader` are removed: use `Remoting.fromContext` and read services from the context
+    L5 [1053-get-service] let clock = getService<IClock> context
+      -> Phase 1053: the global `Extensions` module is removed: `getService<'T>` is Giraffe's `ctx.GetService<'T>()`, and `resolve<'T>` goes with `Reader`. A local function of this name is not affected
+    L6 [1053-stackalloc] let buffer = Write.stackalloc<byte> 16
+      -> Phase 1053: `Write.stackalloc` is removed: it returned a span over a popped frame. Allocate the buffer with `NativePtr.stackalloc` in the function that reads it
+    L7 [1053-parsing-arguments-error] let refusal: ParsingArgumentsError = legacy
+      -> Phase 1053: `ParsingArgumentsError` is removed: `DecodeError.render` is the sentence it carried
+    L8 [1053-interpret-integer-as] let width = Read.interpretIntegerAs typeof<int> 1L
+      -> Phase 1053: `Read.interpretIntegerAs typ n` is removed: it was `Read.interpretIntegerAsFrom typ 64 n`, and a caller that knows the source width should say it
+    L9 [1053-write-fable] let written = Write.Fable.writeType 1 out
+      -> Phase 1053: `Write.Fable` no longer ships: no browser path writes MessagePack. Copy `src/ToolUp.AI.Client.Tests/Remoting/MsgPackWrite.fs` if you need the writer
   src/Server/Sinks.fs
     L15 [11c5-sink-kind-push] member _.Kind = NotificationKind.SinkKind.Push
       -> Phase 11.C.5: T3.3 — `INotificationSink.Kind` is the `SinkKind` DU: `SinkKind.Email` / `SinkKind.Sms` / `SinkKind.Push PushVariant.WebPush` (or `Fcm` / `Apns` / `Other name`) — choose the push variant
@@ -78,6 +93,7 @@ Codemod: 34 site(s) in 10 file(s) need human review (not rewritten):
     L41 [73-fable-json-converter] let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
       -> Phase 73: the Newtonsoft-backed `FableJsonConverter` was retired in the STJ migration — use `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()` and `System.Text.Json.JsonSerializer` (see the Phase 73 doc's Remoting note)
   Read:
+    Phase 1053 — docs/migrations/1053-redesign-b-defects-remoting.md
     Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md

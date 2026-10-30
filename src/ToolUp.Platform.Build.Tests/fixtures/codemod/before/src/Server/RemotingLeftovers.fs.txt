@@ -1,0 +1,9 @@
+module Consumer.RemotingLeftovers
+
+let summary = ThreadSafeCell.computeOnce expensive
+let resolved = Reader.run context pipeline
+let clock = getService<IClock> context
+let buffer = Write.stackalloc<byte> 16
+let refusal: ParsingArgumentsError = legacy
+let width = Read.interpretIntegerAs typeof<int> 1L
+let written = Write.Fable.writeType 1 out

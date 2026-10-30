@@ -130,6 +130,7 @@ let tests =
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
+                            "src/Server/RemotingLeftovers.fs"
                             "src/Server/Sinks.fs"
                         ]
                         "apply writes exactly the changed files, in plan order")
@@ -171,6 +172,7 @@ let tests =
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
+                            "src/Server/RemotingLeftovers.fs"
                             "src/Server/Sinks.fs"
                         ]
                         "the walk is the eligible files in ordinal relative-path order")
@@ -245,7 +247,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 13 file(s) visited, 69 rewrite(s) in 11 file(s), 34 site(s) for review."
+                        "Codemod: 14 file(s) visited, 69 rewrite(s) in 11 file(s), 41 site(s) for review."
                         "summary")
         ]
 
