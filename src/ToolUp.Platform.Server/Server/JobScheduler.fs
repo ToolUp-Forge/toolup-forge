@@ -503,8 +503,8 @@ type InProcessJobScheduler
 
                 // Only a backend that DECLARED the capability is handed a
                 // secret; one that did not is reconciled by polling.
-                match externalDispatcher |> Option.map box with
-                | Some(:? IExternalCallbackCapableBackend as capable) ->
+                match externalDispatcher |> Option.bind _.Capabilities.Callback with
+                | Some capable ->
                     try
                         do!
                             capable.AcceptCallbackCredential(

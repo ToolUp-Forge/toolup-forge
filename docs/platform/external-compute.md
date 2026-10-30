@@ -143,11 +143,13 @@ It is a field on the spec rather than an argument beside it because the requirem
 
 ### The isolation posture contract
 
-`Isolated` is a **requirement on the backend**, not a hint it may ignore. A backend states what it guarantees by implementing `IIsolatedComputeBackend` alongside `IExternalComputeDispatcher`:
+`Isolated` is a **requirement on the backend**, not a hint it may ignore. A backend states what it guarantees in the capability record it declares as `IExternalComputeDispatcher.Capabilities`:
 
 ```fsharp skip=signature
-type IIsolatedComputeBackend =
-    abstract IsolationPosture: IsolationPosture
+type BackendCapabilities = {
+    Isolated: IsolationPosture option
+    Callback: IExternalCallbackCapableBackend option
+}
 ```
 
 `IsolationPosture` has three clauses, and a backend must assert **all three** to be handed `Isolated` work:
@@ -160,7 +162,7 @@ type IIsolatedComputeBackend =
 
 `Enforcement` names the concrete mechanism as free text — a network policy, a sandbox profile, a VM boundary. It is recorded and echoed for audit, never parsed, for the same portability reason `ResourceHints` is a string map: a typed shape would encode one scheduler's vocabulary.
 
-Two of three is not a weaker clean room, so a partial posture is refused rather than downgraded. A dispatcher that does **not** implement `IIsolatedComputeBackend` reads as `IsolationPosture.standardOnly` — claiming nothing — so forgetting to declare is never mistaken for declaring.
+Two of three is not a weaker clean room, so a partial posture is refused rather than downgraded. A dispatcher that declares `Isolated = None` reads as `IsolationPosture.standardOnly` — claiming nothing — so forgetting to declare is never mistaken for declaring.
 
 **What the substrate can and cannot check.** A posture is an assertion forge cannot verify from inside the process. What it *does* do is refuse to submit `Isolated` work to a backend that has not made the assertion at all, and route the output through the clean-room gate regardless of it. The posture narrows who may be asked; the gate decides what may be seen.
 
@@ -406,8 +408,9 @@ type MyDispatcher() =
         member _.Submit(scopeId, spec) = submitToBackend scopeId spec
         member _.Poll(handle) = pollBackend handle
         member _.Cancel(handle) = cancelBackend handle
+        // Opt in to the push path by declaring the hand-off.
+        member this.Capabilities = { BackendCapabilities.none with Callback = Some(this :> IExternalCallbackCapableBackend) }
 
-    // Opt in to the push path by ALSO implementing this.
     interface IExternalCallbackCapableBackend with
         member _.AcceptCallbackCredential(handle, credential) = async {
             // Make the credential reachable by whatever will POST the
@@ -416,7 +419,7 @@ type MyDispatcher() =
         }
 ```
 
-A second interface a backend *also* implements, exactly like `IIsolatedComputeBackend` above, and for the same reason: F# cannot author a default interface member, so a new member on the dispatcher seam would break every implementation that exists — including shipped consumer ones — for a capability most backends do not have. **A backend that does not implement it is never handed a secret and is reconciled by polling, exactly as before (GP 11).**
+The hand-off is declared in the backend's `Capabilities`, never discovered by a type test, so a decorator states which of its inner backend's capabilities it carries: `ExecutionProfileGate.enforce` carries the callback, while the budget, memo and routing decorators declare `BackendCapabilities.none` and are reconciled by polling. **A backend that declares no `Callback` is never handed a secret and is reconciled by polling.**
 
 One ordering property, stated because it is real rather than hidden: the credential is keyed by `ExternalHandle.HandleId`, which does not exist until `Submit` has returned it, so the credential necessarily arrives *after* the backend accepted the work. A backend fast enough to finish before that call lands cannot call back — and that run resolves by poll on the next tick. The window is one blob write wide, and correctness never depends on the credential arriving; only latency does.
 

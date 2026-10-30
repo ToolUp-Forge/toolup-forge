@@ -119,16 +119,20 @@ let private planBlindFitProvider () : IModelFitProvider =
     let inner = ReferenceModelFitProvider.create ()
 
     { new IModelFitProvider with
+        member this.Capabilities = {
+            ModelFitProviderCapabilities.none with
+                Metrics = Some(this :?> IModelEvaluationMetrics)
+        }
+
         member _.Kind = ReferenceModelFitProvider.Kind
         member _.ProviderVersion = ReferenceModelFitProvider.Version
         member _.DeclareGates() = inner.DeclareGates()
         member _.Fit(request) = inner.Fit request
       interface IModelEvaluationMetrics with
           member _.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals) =
-              match inner with
-              | :? IModelEvaluationMetrics as metrics ->
-                  metrics.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals)
-              | _ -> async { return Error "the reference provider must implement IModelEvaluationMetrics" }
+              match inner.Capabilities.Metrics with
+              | Some metrics -> metrics.EvaluateMetrics(predictionsSchema, predictions, actualsSchema, actuals)
+              | None -> async { return Error "the reference provider must declare its metrics" }
     }
 
 /// A small panel schema: unit / period / one plain feature / one target.
@@ -351,6 +355,11 @@ type private ResolvingProvider(dataObjects: IDataObjectStore) =
         | _ -> None
 
     interface IModelFitProvider with
+        member this.Capabilities = {
+            ModelFitProviderCapabilities.none with
+                Metrics = Some(this :> IModelEvaluationMetrics)
+        }
+
         member _.Kind = ResolvingKind
         member _.ProviderVersion = ResolvingVersion
         member _.DeclareGates() = []
@@ -846,6 +855,7 @@ let tests =
             // computes a fallback metric.
             let bare =
                 { new IModelFitProvider with
+                    member _.Capabilities = ModelFitProviderCapabilities.none
                     member _.Kind = "bare"
                     member _.ProviderVersion = "1.0.0"
                     member _.DeclareGates() = []

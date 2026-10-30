@@ -29,6 +29,9 @@ type CodemodMigration =
     /// Phase 1095 — `IDataSource` declares what a connector can do as a
     /// `Capabilities` record.
     | Capabilities
+    /// `IModelFitProvider`, `IModelRegistry` and `IExternalComputeDispatcher`
+    /// declare what an implementation can do as a `Capabilities` record.
+    | ModelCapabilities
     /// Phase 1066 — `IJobScheduler.Schedule` answers `ScheduleOutcome`
     /// (`Scheduled` / `Coalesced`) and `TriggerOnce` refuses with a typed
     /// `TriggerError`.
@@ -48,6 +51,8 @@ module CodemodMigration =
         | CodemodMigration.Capabilities -> "docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md"
         | CodemodMigration.JobOutcomes ->
             "docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md"
+        | CodemodMigration.ModelCapabilities ->
+            "docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -60,6 +65,7 @@ module CodemodMigration =
         | CodemodMigration.AgentLoop -> "Phase 1077"
         | CodemodMigration.Capabilities -> "Phase 1095"
         | CodemodMigration.JobOutcomes -> "Phase 1066"
+        | CodemodMigration.ModelCapabilities -> "Phase 1094"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -777,6 +783,20 @@ module Codemod =
             CodemodFileClass.Source
             @":\?\s*(?:[\w.]+\.)?(?:IWatchableFileSource|IEmitsNativePayload)\b"
             "a connector's capabilities are its declared `Capabilities` record now: read `ConnectorCapabilities.watchable` / `ConnectorCapabilities.native` (or `source.Capabilities`), never the type — a decorator forwards its inner connector's record"
+        // A model or compute capability is read from the declared record,
+        // never probed off the implementation's type.
+        review
+            "1094-capability-probe"
+            CodemodMigration.ModelCapabilities
+            CodemodFileClass.Source
+            @":\?\s*(?:[\w.]+\.)?(?:IModelEvaluationMetrics|IModelEvaluationPlanMetrics|IModelRegistrationNovelty|IExternalCallbackCapableBackend|IIsolatedComputeBackend)\b"
+            "a model or compute capability is the implementation's declared `Capabilities` record now: read `provider.Capabilities.Metrics` / `.PlanMetrics`, `registry.Capabilities.Novelty`, `dispatcher.Capabilities.Callback` / `.Isolated`, never the type; a decorator answers with its inner implementation's record"
+        review
+            "1094-isolated-backend"
+            CodemodMigration.ModelCapabilities
+            CodemodFileClass.Source
+            @"\binterface\s+(?:[\w.]+\.)?IIsolatedComputeBackend\s+with\b"
+            "`IIsolatedComputeBackend` is removed: move the posture into the backend's `Capabilities` (`{ BackendCapabilities.none with Isolated = Some <posture> }`) and delete this interface block; the codemod declared `BackendCapabilities.none`, which reads as standard-only until you do"
         // A `Schedule` call site: whether it reads the job id, and whether
         // it should act on a coalesced job, is the site's decision.
         review
@@ -800,19 +820,70 @@ module Codemod =
     ]
 
 
-    // ── Phase 1095 — the Capabilities member ──────────────────────────
+    // ── The Capabilities member ───────────────────────────────────────
     //
-    // `IDataSource` gained an abstract `Capabilities` member, so every
-    // implementer needs one line. Which line depends on the type it sits in
-    // — `ConnectorCapabilities.none`, or the record naming the capability
-    // interfaces the same type (or object expression) already implements —
-    // so this pass reads the implementer's whole block rather than one line.
+    // A seam that gained an abstract `Capabilities` member needs one line in
+    // every implementer. Which line depends on the type it sits in — the
+    // record's `none`, or the record naming the capability interfaces the
+    // same type (or object expression) already implements — so this pass
+    // reads the implementer's whole block rather than one line. A seam is
+    // data: its interface, its record, and its capability interfaces with the
+    // field each one fills.
 
-    let private implementerLine =
-        rx @"^\s*(?<head>interface\s+(?:[\w.]+\.)?IDataSource|\{\s*new\s+(?:[\w.]+\.)?IDataSource)\s+with\s*$"
+    type private CapabilitySeam = {
+        Rule: string
+        Seam: string
+        Record: string
+        /// Capability interface name and the record field it fills, in
+        /// record-field order.
+        Fields: (string * string) list
+    }
 
-    let private capabilityInterface =
-        rx @"\binterface\s+(?:[\w.]+\.)?(?<name>IWatchableFileSource|IEmitsNativePayload)\s+with\b"
+    let private capabilitySeams: CapabilitySeam list = [
+        {
+            Rule = "1095-capabilities-member"
+            Seam = "IDataSource"
+            Record = "ConnectorCapabilities"
+            Fields = [ "IWatchableFileSource", "Watchable"; "IEmitsNativePayload", "Native" ]
+        }
+        {
+            Rule = "1094-fit-provider-capabilities-member"
+            Seam = "IModelFitProvider"
+            Record = "ModelFitProviderCapabilities"
+            Fields = [
+                "IModelEvaluationMetrics", "Metrics"
+                "IModelEvaluationPlanMetrics", "PlanMetrics"
+            ]
+        }
+        {
+            Rule = "1094-registry-capabilities-member"
+            Seam = "IModelRegistry"
+            Record = "RegistryCapabilities"
+            Fields = [ "IModelRegistrationNovelty", "Novelty" ]
+        }
+        {
+            Rule = "1094-backend-capabilities-member"
+            Seam = "IExternalComputeDispatcher"
+            Record = "BackendCapabilities"
+            Fields = [ "IExternalCallbackCapableBackend", "Callback" ]
+        }
+    ]
+
+    let private implementerLine (seam: CapabilitySeam) =
+        rx (
+            @"^\s*(?<head>interface\s+(?:[\w.]+\.)?"
+            + seam.Seam
+            + @"|\{\s*new\s+(?:[\w.]+\.)?"
+            + seam.Seam
+            + @")\s+with\s*$"
+        )
+
+    let private capabilityInterface (seam: CapabilitySeam) =
+        rx (
+            @"\binterface\s+(?:[\w.]+\.)?(?<name>"
+            + (seam.Fields |> List.map fst |> String.concat "|")
+            + @")\s+with\b"
+        )
 
     let private declaresCapabilities = rx @"\bmember\s+\w+\.Capabilities\b"
     let private typeHeader = rx @"^\s*(?:type|and)\s"
@@ -844,21 +915,23 @@ module Codemod =
         | Some h -> h, endOf h (indentOf lines[h])
         | None -> at, endOf at k
 
-    /// The member a block declaring `capabilities` (interface names, in
-    /// record-field order) gains.
-    let private capabilitiesMember (capabilities: string list) =
+    /// The member a block of `seam` declaring `capabilities` (interface
+    /// names, in record-field order) gains. In an object expression `this` is
+    /// the seam's interface, so its other interfaces are reached by a
+    /// downcast; in a type it is the type itself, and an upcast suffices.
+    let private capabilitiesMember (seam: CapabilitySeam) (isObjectExpression: bool) (capabilities: string list) =
         match capabilities with
-        | [] -> "member _.Capabilities = ConnectorCapabilities.none"
+        | [] -> $"member _.Capabilities = {seam.Record}.none"
         | names ->
             let field name =
-                match name with
-                | "IWatchableFileSource" -> "Watchable = Some(this :> IWatchableFileSource)"
-                | _ -> "Native = Some(this :> IEmitsNativePayload)"
+                let fieldName = seam.Fields |> List.find (fun (i, _) -> i = name) |> snd
+                let cast = if isObjectExpression then ":?>" else ":>"
+                $"{fieldName} = Some(this {cast} {name})"
 
-            $"""member this.Capabilities = {{ ConnectorCapabilities.none with {names |> List.map field |> String.concat "; "} }}"""
+            $"""member this.Capabilities = {{ {seam.Record}.none with {names |> List.map field |> String.concat "; "} }}"""
 
-    /// Adds the `Capabilities` member after every `IDataSource`
-    /// implementation that does not declare one. `segments` alternate
+    /// Adds the `Capabilities` member after every implementation of a
+    /// capability seam that does not declare one. `segments` alternate
     /// content and terminator (see `lineSplitter`); the member line takes
     /// the implementation line's own terminator.
     let private addCapabilitiesMembers (segments: string[]) : string[] * CodemodRewrite list =
@@ -866,52 +939,58 @@ module Codemod =
         let out = Array.copy segments
         let rewrites = ResizeArray<CodemodRewrite>()
 
-        for at in 0 .. lines.Length - 1 do
-            let m = implementerLine.Match lines[at]
+        for seam in capabilitySeams do
+            let implementer = implementerLine seam
+            let capability = capabilityInterface seam
 
-            if m.Success then
-                let first, last = implementerBlock lines at (m.Groups["head"].Value.StartsWith "{")
+            for at in 0 .. lines.Length - 1 do
+                let m = implementer.Match lines[at]
 
-                let block = lines[first .. last - 1]
+                if m.Success then
+                    let isObjectExpression = m.Groups["head"].Value.StartsWith "{"
+                    let first, last = implementerBlock lines at isObjectExpression
 
-                if not (block |> Array.exists declaresCapabilities.IsMatch) then
-                    let implemented =
-                        block
-                        |> Array.choose (fun l ->
-                            let c = capabilityInterface.Match l
-                            if c.Success then Some c.Groups["name"].Value else None)
+                    let block = lines[first .. last - 1]
 
-                    let capabilities =
-                        [ "IWatchableFileSource"; "IEmitsNativePayload" ]
-                        |> List.filter (fun name -> Array.contains name implemented)
+                    if not (block |> Array.exists declaresCapabilities.IsMatch) then
+                        let implemented =
+                            block
+                            |> Array.choose (fun l ->
+                                let c = capability.Match l
+                                if c.Success then Some c.Groups["name"].Value else None)
 
-                    let memberIndent =
-                        lines[at + 1 ..]
-                        |> Array.tryFind (isBlank >> not)
-                        |> Option.map indentOf
-                        |> Option.filter (fun i -> i > indentOf lines[at])
-                        |> Option.defaultValue (indentOf lines[at] + 4)
+                        let capabilities =
+                            seam.Fields
+                            |> List.map fst
+                            |> List.filter (fun name -> Array.contains name implemented)
 
-                    let terminator =
-                        if 2 * at + 1 < segments.Length then
-                            segments[2 * at + 1]
-                        else
-                            "\n"
+                        let memberIndent =
+                            lines[at + 1 ..]
+                            |> Array.tryFind (isBlank >> not)
+                            |> Option.map indentOf
+                            |> Option.filter (fun i -> i > indentOf lines[at])
+                            |> Option.defaultValue (indentOf lines[at] + 4)
 
-                    let after =
-                        lines[at]
-                        + terminator
-                        + String(' ', memberIndent)
-                        + capabilitiesMember capabilities
+                        let terminator =
+                            if 2 * at + 1 < segments.Length then
+                                segments[2 * at + 1]
+                            else
+                                "\n"
 
-                    out[2 * at] <- after
+                        let after =
+                            lines[at]
+                            + terminator
+                            + String(' ', memberIndent)
+                            + capabilitiesMember seam isObjectExpression capabilities
 
-                    rewrites.Add {
-                        RuleId = "1095-capabilities-member"
-                        Line = at + 1
-                        Before = lines[at]
-                        After = after
-                    }
+                        out[2 * at] <- after
+
+                        rewrites.Add {
+                            RuleId = seam.Rule
+                            Line = at + 1
+                            Before = lines[at]
+                            After = after
+                        }
 
         out, List.ofSeq rewrites
 

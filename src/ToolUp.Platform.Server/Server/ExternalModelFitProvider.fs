@@ -1036,8 +1036,8 @@ type ExternalModelFitProvider
     /// hand-off that failed after the payload left must not be turned into
     /// a lost fit by the reporting of it.
     let deliverCredential (handle: ExternalHandle) (fitCorrelationId: Guid) = async {
-        match handles, box dispatcher with
-        | Some store, (:? IExternalCallbackCapableBackend as backend) ->
+        match handles, dispatcher.Capabilities.Callback with
+        | Some store, Some backend ->
             try
                 let secret, secretHash = ExternalCallbackSecret.mint ()
                 // The fit's own correlation id stands where a job run id
@@ -1284,6 +1284,7 @@ type ExternalModelFitProvider
     }
 
     interface IModelFitProvider with
+        member _.Capabilities = ModelFitProviderCapabilities.none
         member _.Kind = options.Kind
         member _.ProviderVersion = options.ProviderVersion
         member _.DeclareGates() = options.DeclaredGates

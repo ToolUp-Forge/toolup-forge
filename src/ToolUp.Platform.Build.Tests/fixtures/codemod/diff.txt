@@ -147,7 +147,7 @@
 @@ L29 [1095-capabilities-member]
 -    { new IDataSource with
 +    { new IDataSource with
-+        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :> IEmitsNativePayload) }
++        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :?> IEmitsNativePayload) }
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -162,6 +162,28 @@
 @@ L22 [1066-trigger-error-disabled]
 -            | Some job when job.Status = Disabled -> return Error "Cannot trigger a disabled job; enable it first"
 +            | Some job when job.Status = Disabled -> return Error TriggerError.JobDisabled
+--- a/src/Server/Models.fs
++++ b/src/Server/Models.fs
+@@ L7 [1094-fit-provider-capabilities-member]
+-    interface IModelFitProvider with
++    interface IModelFitProvider with
++        member _.Capabilities = ModelFitProviderCapabilities.none
+@@ L18 [1094-fit-provider-capabilities-member]
+-    interface IModelFitProvider with
++    interface IModelFitProvider with
++        member this.Capabilities = { ModelFitProviderCapabilities.none with Metrics = Some(this :> IModelEvaluationMetrics) }
+@@ L29 [1094-registry-capabilities-member]
+-    interface IModelRegistry with
++    interface IModelRegistry with
++        member this.Capabilities = { RegistryCapabilities.none with Novelty = Some(this :> IModelRegistrationNovelty) }
+@@ L36 [1094-backend-capabilities-member]
+-    { new IExternalComputeDispatcher with
++    { new IExternalComputeDispatcher with
++        member this.Capabilities = { BackendCapabilities.none with Callback = Some(this :?> IExternalCallbackCapableBackend) }
+@@ L47 [1094-backend-capabilities-member]
+-    interface IExternalComputeDispatcher with
++    interface IExternalComputeDispatcher with
++        member _.Capabilities = BackendCapabilities.none
 --- a/src/Server/Program.fs
 +++ b/src/Server/Program.fs
 @@ L5 [73-remoting-namespace]
@@ -213,4 +235,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 64 rewrite(s) across 10 file(s) pending.
+Codemod: 69 rewrite(s) across 11 file(s) pending.

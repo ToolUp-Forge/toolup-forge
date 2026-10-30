@@ -169,6 +169,7 @@ type private ScriptedDispatcher(outcomes: ExternalOutcome list, ?submitResult: R
     member _.Cancelled = cancelled |> Seq.toList
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "scripted"
 
         member _.Submit(scopeId, spec) = async {
@@ -1165,6 +1166,11 @@ let private failureMapTests =
 
             let backend =
                 { new IExternalComputeDispatcher with
+                    member this.Capabilities = {
+                        BackendCapabilities.none with
+                            Callback = Some(this :?> IExternalCallbackCapableBackend)
+                    }
+
                     member _.Backend = "scripted"
 
                     member _.Submit(scopeId, spec) =

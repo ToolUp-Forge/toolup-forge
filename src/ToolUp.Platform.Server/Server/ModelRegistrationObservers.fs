@@ -65,12 +65,8 @@ type ModelRegistrationObserverDeps = {
 type ObservedModelRegistry
     (inner: IModelRegistry, observers: IModelRegistrationObserver list, deps: ModelRegistrationObserverDeps) =
 
-    /// The inner registry's novelty capability, resolved ONCE rather than
-    /// per call — the answer cannot change over an instance's life.
-    let novelty =
-        match box inner with
-        | :? IModelRegistrationNovelty as source -> Some source
-        | _ -> None
+    /// The inner registry's declared novelty capability.
+    let novelty = inner.Capabilities.Novelty
 
     /// Run every observer, isolating each.
     ///
@@ -162,10 +158,15 @@ type ObservedModelRegistry
 
     /// Declared so the capability survives decoration. A decorator that hid
     /// its inner registry's novelty reporting would silently degrade
-    /// anything wrapped outside it to the probe path above.
-    interface IModelRegistrationNovelty with
-        member _.RegisterReporting(scopeId, outcome, registeredBy, annotations, notes) =
-            registerReporting scopeId outcome registeredBy annotations notes
+    /// anything wrapped outside it to the read-before-register path above.
+    let capabilities: RegistryCapabilities = {
+        Novelty =
+            Some
+                { new IModelRegistrationNovelty with
+                    member _.RegisterReporting(scopeId, outcome, registeredBy, annotations, notes) =
+                        registerReporting scopeId outcome registeredBy annotations notes
+                }
+    }
 
     interface IModelRegistry with
         member _.Register(scopeId, outcome, registeredBy, annotations, notes) = async {
@@ -194,6 +195,8 @@ type ObservedModelRegistry
             inner.AttachProvenance(scopeId, keyHash, attachments, signature)
 
         member _.AttachmentLimits = inner.AttachmentLimits
+
+        member _.Capabilities = capabilities
 
 [<RequireQualifiedAccess>]
 module ModelRegistrationObservers =

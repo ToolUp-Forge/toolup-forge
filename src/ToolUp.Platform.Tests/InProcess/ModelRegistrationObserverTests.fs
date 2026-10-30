@@ -67,6 +67,8 @@ type private ThrowingEvaluationRunner() =
 /// decorator's documented fallback: still observed, still not on a replay.
 type private OpaqueRegistry(inner: IModelRegistry) =
     interface IModelRegistry with
+        member _.Capabilities = RegistryCapabilities.none
+
         member _.Register(scopeId, outcome, registeredBy, annotations, notes) =
             inner.Register(scopeId, outcome, registeredBy, annotations, notes)
 

@@ -1,4 +1,4 @@
-Codemod: 32 site(s) in 9 file(s) need human review (not rewritten):
+Codemod: 34 site(s) in 10 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -42,6 +42,11 @@ Codemod: 32 site(s) in 9 file(s) need human review (not rewritten):
       -> Phase 1066: an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy
     L23 [1066-trigger-once-call] | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
       -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
+  src/Server/Models.fs
+    L58 [1094-isolated-backend] interface IIsolatedComputeBackend with
+      -> Phase 1094: `IIsolatedComputeBackend` is removed: move the posture into the backend's `Capabilities` (`{ BackendCapabilities.none with Isolated = Some <posture> }`) and delete this interface block; the codemod declared `BackendCapabilities.none`, which reads as standard-only until you do
+    L64 [1094-capability-probe] | :? IModelEvaluationMetrics -> true
+      -> Phase 1094: a model or compute capability is the implementation's declared `Capabilities` record now: read `provider.Capabilities.Metrics` / `.PlanMetrics`, `registry.Capabilities.Novelty`, `dispatcher.Capabilities.Callback` / `.Isolated`, never the type; a decorator answers with its inner implementation's record
   src/Server/Program.fs
     L7 [73-remoting-unknown-namespace] open Fable.Remoting.AspNetCore
       -> Phase 73: a `Fable.Remoting` namespace the ToolUp fork does not carry (only Server / Client / Json / Giraffe / MsgPack moved) — check the `ToolUp.Remoting.*` surface for the equivalent, or keep the upstream package
@@ -75,6 +80,7 @@ Codemod: 32 site(s) in 9 file(s) need human review (not rewritten):
   Read:
     Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
+    Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md
     Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md

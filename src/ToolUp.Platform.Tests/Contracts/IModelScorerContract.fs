@@ -60,6 +60,7 @@ type private StubModelRegistry(artifacts: (string * ModelArtifact) list) =
         |> Map.ofList
 
     interface IModelRegistry with
+        member _.Capabilities = RegistryCapabilities.none
         member _.Register(_, _, _, _, _) = async { return Error(ModelRegistryError.StorageFailure "not used") }
 
         member _.Get(scopeId, keyHash) = async {

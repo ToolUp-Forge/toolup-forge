@@ -408,6 +408,7 @@ type private FakeExternalDispatcher(backend: string) =
     member _.SetOutcome(o: ExternalOutcome) = outcome <- o
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = backend
 
         member _.Submit(_scopeId: string, spec: ExternalWorkSpec) = async {
@@ -443,6 +444,7 @@ type private DedupingExternalDispatcher() =
     member _.DistinctHandles = byKey.Count
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "deduping"
 
         member _.Submit(scopeId: string, spec: ExternalWorkSpec) = async {

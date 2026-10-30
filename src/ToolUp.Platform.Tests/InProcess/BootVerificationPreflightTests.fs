@@ -78,6 +78,7 @@ type private PlainDispatcher() =
     member _.Submitted = List.ofSeq submitted
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = "plain-backend"
 
         member _.Submit(_scopeId, spec) = async {

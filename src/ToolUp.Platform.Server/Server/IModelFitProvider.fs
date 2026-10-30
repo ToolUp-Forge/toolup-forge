@@ -53,6 +53,11 @@ type IModelFitProvider =
     /// any requested gate whose diagnostic is absent at run time.
     abstract DeclareGates: unit -> string list
 
+    /// What this provider can do beyond fitting, declared once. A provider
+    /// that only fits answers `ModelFitProviderCapabilities.none`; a
+    /// decorator answers with the provider it wraps.
+    abstract Capabilities: ModelFitProviderCapabilities
+
     /// Fit against the request's vintage + opaque spec, seeded by
     /// `request.Seed`. Returns the raw outcome — artifact reference +
     /// diagnostics + the provider's own (deterministic) `DurationMs` /

@@ -71,6 +71,11 @@ type private RecordingBackend(label: string, posture: IsolationPosture option, ?
     member _.CancelCount = cancelled.Count
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = {
+            BackendCapabilities.none with
+                Isolated = posture
+        }
+
         member _.Backend = label
 
         member _.Submit(scopeId, spec) = async {
@@ -97,26 +102,25 @@ type private RecordingBackend(label: string, posture: IsolationPosture option, ?
 
         member _.Cancel(handle) = async { cancelled.Add handle }
 
-    interface IIsolatedComputeBackend with
-        member _.IsolationPosture =
-            posture |> Option.defaultValue IsolationPosture.standardOnly
 
 /// A backend that refuses every submission with the supplied error — the
 /// fixture behind the health-probe cases.
 type private RefusingBackend(label: string, error: ExternalComputeError) =
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = label
         member _.Submit(_scopeId, _spec) = async { return Error error }
         member _.Poll(_handle) = async { return ExternalOutcome.Failed error }
         member _.Cancel(_handle) = async { return () }
 
-/// A dispatcher that does NOT implement `IIsolatedComputeBackend` at all —
+/// A dispatcher that declares no posture at all (`BackendCapabilities.none`) —
 /// the shape every pre-478 companion has. It must read as `standardOnly`.
 type private UndeclaringBackend(label: string) =
     let submitted = ResizeArray<ExternalWorkSpec>()
     member _.SubmitCount = submitted.Count
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = label
 
         member _.Submit(scopeId, spec) = async {
@@ -210,7 +214,7 @@ let registryTests =
                 "a backend declaring standardOnly supports Standard alone — it cannot overclaim, because the registration has no field to overclaim WITH"
         }
 
-        test "a dispatcher that never implements IIsolatedComputeBackend reads as standardOnly" {
+        test "a dispatcher that never declares a posture reads as standardOnly" {
             // The pre-478 companion shape. Claiming nothing must never be
             // read as claiming everything.
             let registration =
@@ -1272,7 +1276,7 @@ let gp13Tests =
 let structuralTests =
     testList "Phase 484 — the router's isolation posture is deliberately undeclared" [
 
-        test "the router does not implement IIsolatedComputeBackend, so it claims nothing" {
+        test "the router declares no posture, so it claims nothing" {
             let registry =
                 ComputeBackendRegistry [
                     ComputeBackendRegistration.create "iso" (RecordingBackend("iso", Some isolatedPosture))
@@ -1282,7 +1286,8 @@ let structuralTests =
                 RoutingComputeDispatcher(registry, ComputeFleetTelemetry(), NoOpMetricsSink())
 
             Expect.isFalse
-                (box dispatcher :? IIsolatedComputeBackend)
+                ((dispatcher :> IExternalComputeDispatcher).Capabilities.Isolated
+                 |> Option.isSome)
                 "a single posture for a fan-out router would be a false claim in one direction or the other — declaring the clauses would have the Phase 478 gate wave through an Isolated spec the router might place on a non-isolating backend"
 
             Expect.equal

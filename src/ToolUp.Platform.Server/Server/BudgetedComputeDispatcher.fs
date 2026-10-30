@@ -39,8 +39,8 @@ open ToolUp.Platform.Usage
 // spends no allowance and holds no concurrency slot. The reverse order
 // charges for every cache hit, which is the feature not working.
 //
-// **This decorator does NOT implement `IIsolatedComputeBackend`, and must
-// not.** It is not a backend and has no posture of its own; Phase 485's
+// **This decorator declares `BackendCapabilities.none`, and must claim no
+// posture.** It is not a backend and has no posture of its own; Phase 485's
 // header sets out why re-declaring the inner posture is wrong in both
 // directions. Claiming nothing is the honest reading.
 //
@@ -460,6 +460,7 @@ type BudgetedComputeDispatcher(inner: IExternalComputeDispatcher, guard: Compute
                 draining <- false
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         /// The inner dispatcher's label, unchanged. The budget mints no
         /// handles of its own, and a handle must poll against a
         /// dispatcher that answers to the name it carries.

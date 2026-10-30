@@ -1022,6 +1022,39 @@ let lawScopeIsolation conformance (backend: ExternalComputeBackendUnderTest) = a
             "and the scope is a field on the handle rather than backend-internal state, which is what makes enforcement at the layer above possible at all"
 }
 
+/// A declared capability is honoured and an undeclared one is refused by
+/// name: the posture the profile gate reads is exactly the one the backend
+/// declares, an `Isolated` spec is admitted only when that posture honours
+/// it (and is otherwise refused naming the backend), and the gate, as a
+/// decorator, carries both declarations through unchanged.
+let lawDeclaredCapabilitiesHonoured _conformance (backend: ExternalComputeBackendUnderTest) = async {
+    let dispatcher = backend.Dispatcher
+    let declared = dispatcher.Capabilities
+
+    let posture = declared.Isolated |> Option.defaultValue IsolationPosture.standardOnly
+
+    Expect.equal (ExecutionProfileGate.postureOf dispatcher) posture "the gate reads the declared posture"
+
+    let isolated = {
+        freshSpec "capability-probe" with
+            Profile = ExecutionProfile.Isolated
+    }
+
+    match ExecutionProfileGate.check dispatcher isolated with
+    | Ok() -> Expect.isTrue (IsolationPosture.honours ExecutionProfile.Isolated posture) "admitted only when declared"
+    | Error e ->
+        Expect.isFalse (IsolationPosture.honours ExecutionProfile.Isolated posture) "refused only when undeclared"
+        Expect.stringContains e.Message dispatcher.Backend "and the refusal names the backend"
+
+    let gated = (ExecutionProfileGate.enforce dispatcher).Capabilities
+    Expect.equal gated.Isolated (Some posture) "the gate re-declares the posture it enforces"
+
+    Expect.equal
+        (gated.Callback |> Option.isSome)
+        (declared.Callback |> Option.isSome)
+        "and carries the callback hand-off the backend declared"
+}
+
 /// Every 324.A–C law, in reading order.
 let laws: (string * (ExternalComputeConformance -> ExternalComputeBackendUnderTest -> Async<unit>)) list = [
     // 324.A
@@ -1041,6 +1074,7 @@ let laws: (string * (ExternalComputeConformance -> ExternalComputeBackendUnderTe
     "324.B — Cancel is idempotent", lawCancelIsIdempotent
     // 324.C
     "324.C / GP 4 — a re-scoped handle is not answered as the other scope's", lawScopeIsolation
+    "a declared capability is honoured; an undeclared one is refused by name", lawDeclaredCapabilitiesHonoured
 ]
 
 /// Bind any `IExternalComputeDispatcher` factory against the full bar.
@@ -1112,6 +1146,7 @@ type ReferenceComputeBackend(label: string) =
         | _ -> None
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = label
 
         member _.Submit(scopeId: string, spec: ExternalWorkSpec) = async {
@@ -1274,6 +1309,7 @@ type private DefectiveBackend(defect: Defect) =
         | _ -> handle
 
     interface IExternalComputeDispatcher with
+        member _.Capabilities = BackendCapabilities.none
         member _.Backend = dispatcher.Backend
 
         member _.Submit(scopeId: string, spec: ExternalWorkSpec) = async {
