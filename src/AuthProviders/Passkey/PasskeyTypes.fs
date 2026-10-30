@@ -4,6 +4,7 @@
 module ToolUp.AuthProviders.Passkey.PasskeyTypes
 
 open System
+open ToolUp.Platform
 
 // ─── Phase 443 — WebAuthn / passkey server companion types ───────────
 //
@@ -72,7 +73,7 @@ module PasskeyConfig =
     /// (scope-derived; see `IBlobStorage` scope discipline). Blob names
     /// are prefixed `auth/passkeys/`.
     [<Literal>]
-    let PlatformContainer = "_platform"
+    let PlatformContainer = ScopeKey.PlatformContainer
 
     [<Literal>]
     let CredentialBlobPrefix = "auth/passkeys/"
