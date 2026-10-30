@@ -393,44 +393,54 @@ module CoherenceCheck =
 
     let private absoluteSpread (a: DateTime) (b: DateTime) : TimeSpan = (a - b).Duration()
 
-    /// One delegated comparison — a parent value against its children's
-    /// total — as a finding when it exceeds the metric's tolerance.
+    /// One delegated comparison: a parent value against its children's total.
+    [<RequireQualifiedAccess>]
+    type private DelegatedComparison = {
+        Subject: SubjectRef
+        Metric: MetricRef
+        Period: TemporalExtent
+        /// The parent's value.
+        Found: decimal
+        /// The children's total.
+        Expected: decimal
+        /// Whether any child is an absence.
+        HasAbsent: bool
+        /// The widest gap between the two sides' record times.
+        Spread: TimeSpan
+        ChildCount: int
+    }
+
+    /// A delegated comparison as a finding when it exceeds the metric's
+    /// tolerance.
     let private delegatedFinding
         (registry: Grounding.IMetricRegistry option)
         (config: CoherenceConfig)
         (tolerance: decimal)
-        (subject: SubjectRef)
-        (metric: MetricRef)
-        (period: TemporalExtent)
-        (found: decimal)
-        (expected: decimal)
-        (hasAbsent: bool)
-        (spread: TimeSpan)
-        (childCount: int)
+        (c: DelegatedComparison)
         : CoherenceFinding option =
-        let discrepancy = found - expected
+        let discrepancy = c.Found - c.Expected
 
-        if childCount = 0 || abs discrepancy <= tolerance then
+        if c.ChildCount = 0 || abs discrepancy <= tolerance then
             None
         else
             Some {
-                Subject = subject
-                Metric = metric
-                Period = period
-                Expected = expected
-                Found = found
+                Subject = c.Subject
+                Metric = c.Metric
+                Period = c.Period
+                Expected = c.Expected
+                Found = c.Found
                 Discrepancy = discrepancy
                 Tolerance = tolerance
                 Cause =
                     classifyOn
                         config
-                        (vintageWindowFor registry config metric)
+                        (vintageWindowFor registry config c.Metric)
                         tolerance
-                        found
-                        expected
-                        hasAbsent
-                        spread
-                ChildCount = childCount
+                        c.Found
+                        c.Expected
+                        c.HasAbsent
+                        c.Spread
+                ChildCount = c.ChildCount
             }
 
     /// The table holds the CHILDREN: its per-parent totals against the
@@ -453,18 +463,16 @@ module CoherenceCheck =
             |> Option.bind (fun parent ->
                 scalarOf parent.Value
                 |> Option.bind (fun found ->
-                    delegatedFinding
-                        (Some reg)
-                        config
-                        tolerance
-                        parent.Subject
-                        d.Metric
-                        parent.Period
-                        found
-                        total.Total
-                        (total.AbsentCount > 0)
-                        (absoluteSpread parent.AsOf committedAt)
-                        total.ChildCount)))
+                    delegatedFinding (Some reg) config tolerance {
+                        DelegatedComparison.Subject = parent.Subject
+                        DelegatedComparison.Metric = d.Metric
+                        DelegatedComparison.Period = parent.Period
+                        DelegatedComparison.Found = found
+                        DelegatedComparison.Expected = total.Total
+                        DelegatedComparison.HasAbsent = total.AbsentCount > 0
+                        DelegatedComparison.Spread = absoluteSpread parent.AsOf committedAt
+                        DelegatedComparison.ChildCount = total.ChildCount
+                    })))
 
     /// The table holds the PARENTS: the children the fact tier holds, summed
     /// per parent, against point reads of exactly those parents.
@@ -499,21 +507,19 @@ module CoherenceCheck =
                         |> List.map (fun c -> absoluteSpread c.AsOf committedAt)
                         |> List.fold max TimeSpan.Zero
 
-                    delegatedFinding
-                        (Some reg)
-                        config
-                        tolerance
-                        {
+                    delegatedFinding (Some reg) config tolerance {
+                        DelegatedComparison.Subject = {
                             Hierarchy = d.Query.Hierarchy
                             Path = path
                         }
-                        d.Metric
-                        row.Period
-                        found
-                        expected
-                        (representatives |> List.exists (fun c -> isAbsent c.Value))
-                        spread
-                        (List.length representatives))))
+                        DelegatedComparison.Metric = d.Metric
+                        DelegatedComparison.Period = row.Period
+                        DelegatedComparison.Found = found
+                        DelegatedComparison.Expected = expected
+                        DelegatedComparison.HasAbsent = representatives |> List.exists (fun c -> isAbsent c.Value)
+                        DelegatedComparison.Spread = spread
+                        DelegatedComparison.ChildCount = List.length representatives
+                    })))
 
     /// The findings for every delegated metric, asked of the tables. `heads`
     /// are the current heads the fact tier holds with every delegate-owned

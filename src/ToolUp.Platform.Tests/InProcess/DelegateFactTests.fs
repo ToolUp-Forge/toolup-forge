@@ -1550,6 +1550,200 @@ let private boundedCacheTests =
         }
     ]
 
+// ─── Run options on the delegate (Phase 1092) ────────────────────────
+
+let private inputOf (c: char) = "sha256:" + String(c, 64)
+
+/// Open with options, stage and commit.
+let private commitWith (w: World) (options: FactTableRunOptions) (rows: FactTableRow list) =
+    match
+        w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", options = options)
+        |> Async.RunSynchronously
+    with
+    | Error e -> Error e
+    | Ok opened ->
+        match
+            w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)
+            |> Async.RunSynchronously
+        with
+        | Error e -> Error e
+        | Ok _ -> w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously
+
+let private runOptionsTests =
+    testList "run options ride the run record (Phase 1092)" [
+
+        test
+            "a run's declared inputs reach every row the delegate mints from it — Phase 997's gap, closed for a whole-table run" {
+            let w = delegatedWorld FactTableHistoryMode.Replace
+
+            let options =
+                FactTableRunOptions.none
+                |> FactTableRunOptions.withInputs [ inputOf 'a' ]
+                |> FactTableRunOptions.withMethod (DeclaredMethod.create "sales.derive" "v1")
+
+            match commitWith w options [ row "acme" "a1" 10m; row "zeta" "z1" 5m ] with
+            | Error e -> failtestf "the delegate took the run's inputs: %s" (FactTableWriteError.describe e)
+            | Ok _ -> ()
+
+            for path in [ [ "acme"; "a1" ]; [ "zeta"; "z1" ] ] do
+                let fact = point w "revenue" path |> List.exactlyOne
+                Expect.contains (InputHash.named fact.Evidence) (inputOf 'a') $"{path} names the run's input"
+
+                Expect.equal
+                    (DeclaredMethod.ofEvidence fact.Evidence)
+                    (Some(DeclaredMethod.create "sales.derive" "v1"))
+                    $"{path} names the run's method"
+
+            // The next run declares another input: its rows are minted under
+            // it, and the earlier run's input is no longer on the current head.
+            match
+                commitWith w (FactTableRunOptions.none |> FactTableRunOptions.withInputs [ inputOf 'b' ]) [
+                    row "acme" "a1" 11m
+                ]
+            with
+            | Error e -> failtestf "second run: %s" (FactTableWriteError.describe e)
+            | Ok _ -> ()
+
+            let current = point w "revenue" [ "acme"; "a1" ] |> List.exactlyOne
+            Expect.equal (valueOf current) 11m "the current run's value"
+            Expect.contains (InputHash.named current.Evidence) (inputOf 'b') "under the current run's input"
+
+            Expect.isFalse (List.contains (inputOf 'a') (InputHash.named current.Evidence)) "and not the earlier run's"
+        }
+
+        test "the delegate still refuses a period slice, by name, and holds nothing" {
+            let w = delegatedWorld FactTableHistoryMode.Replace
+
+            let sliced = FactTableRunOptions.none |> FactTableRunOptions.forSlice september
+
+            match
+                w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", options = sliced)
+                |> Async.RunSynchronously
+            with
+            | Error(FactTableRunOptionsRefused(tableId, reason)) ->
+                Expect.equal tableId "sku-sales" "names the table"
+                Expect.stringContains reason "period slice" "and says what it does not take"
+            | other -> failtestf "expected FactTableRunOptionsRefused, got %A" other
+
+            match w.Writer.Runs(w.Scope.ScopeId, "sku-sales") |> Async.RunSynchronously with
+            | Ok runs -> Expect.isEmpty runs "no run was opened"
+            | Error e -> failtestf "runs: %s" (FactTableWriteError.describe e)
+        }
+
+        test "a run recorded before the record kept its options mints under the method kept beside it" {
+            // No refresh at commit, so nothing reads the run's options before
+            // the record is rewritten below.
+            let w = delegatedWorldWith FactTableHistoryMode.Replace false
+            let method = DeclaredMethod.create "sales.derive" "v1"
+
+            match
+                commitWith w (FactTableRunOptions.none |> FactTableRunOptions.withMethod method) [ row "acme" "a1" 10m ]
+            with
+            | Ok _ -> ()
+            | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
+
+            // Rewrite the committed record in the pre-options shape (no
+            // Options, no RecordVersion) and keep its method beside it, as a
+            // run committed by an earlier release left them.
+            let scope = w.Scope.ScopeId
+
+            let records =
+                w.Storage.List(scope, "_delegate-tables/runs/") |> Async.RunSynchronously
+
+            let name = records |> List.exactlyOne
+
+            let record =
+                match w.Storage.Download(scope, name) |> Async.RunSynchronously with
+                | Ok bytes -> Text.Encoding.UTF8.GetString bytes
+                | Error e -> failtestf "download: %s" e
+
+            let doc = Text.Json.Nodes.JsonNode.Parse(record).AsObject()
+            doc.Remove "Options" |> ignore
+            doc.Remove "RecordVersion" |> ignore
+            let id = doc["RunId"].GetValue<string>()
+
+            w.Storage.Upload(scope, name, Text.Encoding.UTF8.GetBytes(doc.ToJsonString()))
+            |> Async.RunSynchronously
+            |> ignore
+
+            w.Storage.Upload(
+                scope,
+                sprintf "_delegate-tables/methods/%s.json" id,
+                Text.Encoding.UTF8.GetBytes(
+                    Text.Json.JsonSerializer.Serialize(
+                        method,
+                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    )
+                )
+            )
+            |> Async.RunSynchronously
+            |> ignore
+
+            match w.Writer.Runs(scope, "sku-sales") |> Async.RunSynchronously with
+            | Ok [ legacy ] ->
+                Expect.equal legacy.Options RunOptions.empty "the old record reads with no options"
+                Expect.equal legacy.RecordVersion 0 "and says it predates them"
+            | other -> failtestf "expected the one run, got %A" other
+
+            let fact = point w "revenue" [ "acme"; "a1" ] |> List.exactlyOne
+
+            Expect.equal
+                (DeclaredMethod.ofEvidence fact.Evidence)
+                (Some method)
+                "its rows are minted under the kept method"
+        }
+    ]
+
+// ─── The disclosure-taint index through the delegate ─────────────────
+
+/// The 1093 index law over the delegated store: a check composed with the
+/// delegate reads the index, and the index is the one rebuilt from the
+/// delegate's own whole-scope listing.
+let private taintIndexContractTests =
+    ToolUp.Platform.Tests.Contracts.IDisclosureTaintIndexSourceContract.tests "DelegatedFactStore" (fun () ->
+        let w = delegatedWorld FactTableHistoryMode.AppendByRun
+
+        {
+            Source = w.Store :?> IDisclosureTaintIndexSource
+            Store = w.Store
+            ScopeA = newScope ()
+            ScopeB = newScope ()
+            Rebuilds = None
+        })
+
+let private taintIndexTests =
+    testList "the disclosure-taint index passes through the delegate" [
+
+        test "the composed delegate offers the index, so the disclosure gate never lists the scope through it" {
+            let w = delegatedWorld FactTableHistoryMode.Replace
+
+            Expect.isTrue
+                (box w.Store :? IDisclosureTaintIndexSource)
+                "the gate's type test finds the index on the composed store"
+        }
+
+        testCaseAsync "a fact the delegate mints is a node of the index, which equals the index rebuilt from the store"
+        <| async {
+            let w = delegatedWorld FactTableHistoryMode.Replace
+            commit w [ row "acme" "a1" 10m ] |> ignore
+            let minted = point w "revenue" [ "acme"; "a1" ] |> List.exactlyOne
+
+            let! index = (w.Store :?> IDisclosureTaintIndexSource).ReadTaintIndex w.Scope
+
+            let! all =
+                w.Store.Query(
+                    w.Scope,
+                    {
+                        FactQuery.all with
+                            IncludeSuperseded = true
+                    }
+                )
+
+            Expect.equal index (DisclosureTaintIndex.ofFacts all) "the index is the store's own"
+            Expect.isSome (DisclosureTaintIndex.tryNode minted.FactId index) "and holds the minted fact"
+        }
+    ]
+
 /// Every Phase 889 case.
 /// The `IFactStore` contract pack, its write-plan law among it, over the
 /// delegated store: a write through the decorator is the inner store's plan.
@@ -1572,4 +1766,7 @@ let tests =
         importedMethodTests
         orphanSweepTests
         boundedCacheTests
+        runOptionsTests
+        taintIndexContractTests
+        taintIndexTests
     ]

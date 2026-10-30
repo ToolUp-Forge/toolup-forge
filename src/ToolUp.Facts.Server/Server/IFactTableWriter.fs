@@ -120,6 +120,11 @@ module FactTableWriteError =
             shown
 
     /// A one-line, operator-readable account of the refusal.
+    /// A refused run transition (`FactTableRun.tryOpen`) as the writer's
+    /// error: the run is no longer open.
+    let ofTransition (refused: FactTableRunTransitionError) : FactTableWriteError =
+        FactTableRunClosed(refused.RunId, refused.Status)
+
     let describe (error: FactTableWriteError) : string =
         match error with
         | FactTableUndeclared tableId -> sprintf "fact table '%s' is not declared in this composition" tableId
@@ -314,6 +319,42 @@ module FactTableRunOptions =
                     Slice = slice
                     Method = options.Method
                 }
+
+    /// The options as the run record keeps them.
+    let toRun (options: FactTableRunOptions) : RunOptions = {
+        RunOptions.Inputs = options.Inputs
+        RunOptions.Slice =
+            options.Slice
+            |> Option.map (fun slice -> {
+                RunSlice.From = slice.From
+                RunSlice.To = slice.To
+                RunSlice.Label = slice.Label
+            })
+        RunOptions.Method =
+            options.Method
+            |> Option.map (fun m -> {
+                RunMethod.MethodId = m.MethodId
+                RunMethod.MethodVersion = m.MethodVersion
+            })
+    }
+
+    /// The options a run record keeps, as a writer honours them.
+    let ofRun (options: RunOptions) : FactTableRunOptions = {
+        Inputs = options.Inputs
+        Slice =
+            options.Slice
+            |> Option.map (fun slice -> {
+                From = slice.From
+                To = slice.To
+                Label = slice.Label
+            })
+        Method =
+            options.Method
+            |> Option.map (fun m -> {
+                MethodId = m.MethodId
+                MethodVersion = m.MethodVersion
+            })
+    }
 
     /// Whether a period lies inside a slice.
     let contains (slice: TemporalExtent) (from: DateTime) (``to``: DateTime) : bool =
@@ -793,6 +834,21 @@ module internal FactTableBlobIo =
                 | Error e -> return Error(FactTableStorageFailure(sprintf "read of '%s' failed: %s" name e))
         }
 
+/// Run-record reads: every reader of a stored run record goes
+/// through here, so a record written before the options were kept reads with
+/// `Options = RunOptions.empty` wherever it is read.
+module internal FactTableRunRecordIo =
+
+    let tryGet
+        (storage: IBlobStorage)
+        (scopeId: string)
+        (name: string)
+        : Async<Result<FactTableRunRecord option, FactTableWriteError>> =
+        async {
+            let! read = FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId name
+            return read |> Result.map (Option.map FactTableRunRecord.ofStored)
+        }
+
 /// The pointer a committed run swaps in: the table's current commit.
 type FactTableHead = {
     /// The table's current commit sequence.
@@ -1223,7 +1279,7 @@ module FactTableOrphanSweep =
                 match remaining with
                 | [] -> return report
                 | runId :: rest ->
-                    match! FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId (layout.RecordName runId) with
+                    match! FactTableRunRecordIo.tryGet storage scopeId (layout.RecordName runId) with
                     | Error e ->
                         let why = sprintf "%s (%s)" runId (FactTableWriteError.describe e)
 
@@ -1356,27 +1412,33 @@ type DefaultFactTableWriter
             | boundTo -> Error(FactTableNotBoundHere(tableId, boundTo, destination))
 
     let loadRun (scopeId: string) (runId: string) : Async<Result<FactTableRunRecord, FactTableWriteError>> = async {
-        match! FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId (recordName runId) with
+        match! FactTableRunRecordIo.tryGet storage scopeId (recordName runId) with
         | Ok(Some run) -> return Ok run
         | Ok None -> return Error(FactTableRunUnknown runId)
         | Error e -> return Error e
     }
 
-    let statusName (status: FactTableRunStatus) : string =
-        match status with
-        | FactTableRunStatus.Open -> "open"
-        | FactTableRunStatus.Committed _ -> "committed"
-        | FactTableRunStatus.Rejected _ -> "rejected"
-        | FactTableRunStatus.Abandoned _ -> "abandoned"
-
-    let openRun (scopeId: string) (runId: string) : Async<Result<FactTableRunRecord, FactTableWriteError>> = async {
+    let openRun (scopeId: string) (runId: string) : Async<Result<OpenFactTableRun, FactTableWriteError>> = async {
         match! loadRun scopeId runId with
         | Error e -> return Error e
-        | Ok run ->
-            match run.Status with
-            | FactTableRunStatus.Open -> return Ok run
-            | other -> return Error(FactTableRunClosed(runId, statusName other))
+        | Ok run -> return FactTableRun.tryOpen run |> Result.mapError FactTableWriteError.ofTransition
     }
+
+    // What a run declared, from its record. A run opened by a replica of an
+    // earlier release (`RecordVersion` 0, during a rolling upgrade) has none on
+    // its record and kept them beside its staged rows.
+    let optionsOf
+        (scopeId: string)
+        (run: FactTableRunRecord)
+        : Async<Result<FactTableRunOptions, FactTableWriteError>> =
+        async {
+            if run.RecordVersion >= FactTableRunRecord.CurrentVersion then
+                return Ok(FactTableRunOptions.ofRun run.Options)
+            else
+                match! FactTableBlobIo.tryGet<FactTableRunOptions> storage scopeId (optionsName run.RunId) with
+                | Error e -> return Error e
+                | Ok options -> return Ok(options |> Option.defaultValue FactTableRunOptions.none)
+        }
 
     let currentSequence
         (scopeId: string)
@@ -1534,18 +1596,14 @@ type DefaultFactTableWriter
     let reject
         (scopeId: string)
         (table: FactTableDefinition)
-        (run: FactTableRunRecord)
+        (run: OpenFactTableRun)
         (error: FactTableWriteError)
         : Async<Result<FactTableCommit, FactTableWriteError>> =
         async {
             let reason = FactTableWriteError.describe error
+            let closed = FactTableRun.reject reason run
 
-            let closed = {
-                run with
-                    Status = FactTableRunStatus.Rejected reason
-            }
-
-            match! FactTableBlobIo.put storage scopeId (recordName run.RunId) closed with
+            match! FactTableBlobIo.put storage scopeId (recordName closed.RunId) closed with
             | Error e -> return Error e
             | Ok() ->
                 do! endRun scopeId
@@ -1574,7 +1632,7 @@ type DefaultFactTableWriter
                             (claimName table.Id)
                             table
                             openedAt
-                            (fun id -> FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId (recordName id))
+                            (fun id -> FactTableRunRecordIo.tryGet storage scopeId (recordName id))
                             runId
                     with
                     | Error e -> return Error e
@@ -1583,20 +1641,25 @@ type DefaultFactTableWriter
                             match! currentSequence scopeId tableId with
                             | Error e -> return Error e
                             | Ok(sequence, _) ->
-                                let run: FactTableRunRecord = {
-                                    TableId = table.Id
-                                    RunId = runId
-                                    SchemaVersion = table.SchemaVersion
-                                    OpenedAt = openedAt
-                                    BaseSequence = sequence
-                                    StagedRows = 0
-                                    Status = FactTableRunStatus.Open
-                                }
+                                // The run's options ride its record.
+                                let run =
+                                    FactTableRun.opened
+                                        table.Id
+                                        runId
+                                        table.SchemaVersion
+                                        openedAt
+                                        sequence
+                                        (FactTableRunOptions.toRun options)
 
-                                // The provenance and the options first: a run
-                                // whose record exists is a run, so it is never
-                                // visible without what it was opened with. No
-                                // options, nothing kept (GP 11).
+                                // The provenance first: a run whose record
+                                // exists is a run, so it is never visible
+                                // without what it was opened with. The
+                                // options are also kept beside the staged
+                                // rows, where a replica of an earlier release
+                                // (one that reads no options from the record)
+                                // looks for them when it commits the run
+                                // during a rolling upgrade. No options,
+                                // nothing kept.
                                 match!
                                     FactTableRunProvenance.keep
                                         storage
@@ -1630,17 +1693,14 @@ type DefaultFactTableWriter
         member _.WriteRows(scopeId, runId, rows) = async {
             match! openRun scopeId runId with
             | Error e -> return Error e
-            | Ok run ->
+            | Ok opened ->
                 if List.isEmpty rows then
-                    return Ok run
+                    return Ok opened.Record
                 else
-                    match! FactTableBlobIo.put storage scopeId (batchName runId run.StagedRows) rows with
+                    match! FactTableBlobIo.put storage scopeId (batchName runId opened.Record.StagedRows) rows with
                     | Error e -> return Error e
                     | Ok() ->
-                        let staged = {
-                            run with
-                                StagedRows = run.StagedRows + rows.Length
-                        }
+                        let staged = FactTableRun.stage rows.Length opened
 
                         match! FactTableBlobIo.put storage scopeId (recordName runId) staged with
                         | Error e -> return Error e
@@ -1650,7 +1710,9 @@ type DefaultFactTableWriter
         member _.Commit(scopeId, runId) = async {
             match! openRun scopeId runId with
             | Error e -> return Error e
-            | Ok run ->
+            | Ok opened ->
+                let run = opened.Record
+
                 match declared run.TableId with
                 | Error e -> return Error e
                 | Ok table ->
@@ -1659,7 +1721,7 @@ type DefaultFactTableWriter
                     | Ok(sequence, head) ->
                         if sequence <> run.BaseSequence then
                             return!
-                                reject scopeId table run (FactTableCommitConflict(runId, run.BaseSequence, sequence))
+                                reject scopeId table opened (FactTableCommitConflict(runId, run.BaseSequence, sequence))
                         else
                             let! staged = async {
                                 match! stagedRows scopeId runId with
@@ -1673,20 +1735,9 @@ type DefaultFactTableWriter
                                     with
                                     | Error e -> return Error e
                                     | Ok provenance ->
-                                        match!
-                                            FactTableBlobIo.tryGet<FactTableRunOptions>
-                                                storage
-                                                scopeId
-                                                (optionsName runId)
-                                        with
+                                        match! optionsOf scopeId run with
                                         | Error e -> return Error e
-                                        | Ok options ->
-                                            return
-                                                Ok(
-                                                    rows,
-                                                    provenance,
-                                                    options |> Option.defaultValue FactTableRunOptions.none
-                                                )
+                                        | Ok options -> return Ok(rows, provenance, options)
                             }
 
                             match staged with
@@ -1699,7 +1750,7 @@ type DefaultFactTableWriter
 
                                 match defects with
                                 | _ :: _ as defects ->
-                                    return! reject scopeId table run (FactTableRowsRejected(runId, defects))
+                                    return! reject scopeId table opened (FactTableRowsRejected(runId, defects))
                                 | [] ->
                                     let! previous = async {
                                         match head with
@@ -1759,7 +1810,11 @@ type DefaultFactTableWriter
                                                     (FactTableSnapshot.periodText first)
 
                                             return!
-                                                reject scopeId table run (FactTableRunOptionsRefused(table.Id, reason))
+                                                reject
+                                                    scopeId
+                                                    table
+                                                    opened
+                                                    (FactTableRunOptionsRefused(table.Id, reason))
                                         | [] ->
                                             let replaced =
                                                 previous
@@ -1812,10 +1867,7 @@ type DefaultFactTableWriter
                                                     BatchDigest = receipt.Digest
                                                 }
 
-                                                let committed = {
-                                                    run with
-                                                        Status = FactTableRunStatus.Committed commit
-                                                }
+                                                let committed = FactTableRun.commit commit opened
 
                                                 let newHead: FactTableHead = {
                                                     Sequence = next
@@ -1878,11 +1930,9 @@ type DefaultFactTableWriter
         member _.Abandon(scopeId, runId, reason) = async {
             match! openRun scopeId runId with
             | Error e -> return Error e
-            | Ok run ->
-                let closed = {
-                    run with
-                        Status = FactTableRunStatus.Abandoned reason
-                }
+            | Ok opened ->
+                let run = opened.Record
+                let closed = FactTableRun.abandon reason opened
 
                 match! FactTableBlobIo.put storage scopeId (recordName runId) closed with
                 | Error e -> return Error e
@@ -1907,7 +1957,7 @@ type DefaultFactTableWriter
                     match remaining with
                     | [] -> return Ok acc
                     | name :: rest ->
-                        match! FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId name with
+                        match! FactTableRunRecordIo.tryGet storage scopeId name with
                         | Ok(Some run) when run.TableId = table.Id -> return! load rest (run :: acc)
                         | Ok _ -> return! load rest acc
                         | Error e -> return Error e

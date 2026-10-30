@@ -85,9 +85,11 @@ type internal DelegateTableAnswer =
     | Totals of DelegateChildTotal list
 
 /// What a committed run mints its rows with: the provenance it was opened
-/// with (Phase 938) and the method it declared (Phase 1040).
+/// with, and the inputs and method it
+/// declared.
 type internal DelegateRunMinting = {
     Provenance: FactTableRunProvenance
+    Inputs: string list
     Method: DeclaredMethod option
 }
 
@@ -142,19 +144,20 @@ module DelegateMint =
             Disclosure = delegateFact.Disclosure
         }
 
-    /// The method stamp a run's declared method implies — the default
+    /// The stamp a run's declared inputs and method imply — the default
     /// writer's own rewrite, so a row reads the same through either writer.
-    /// Identity when the run declared none.
-    let private stamp (method: DeclaredMethod option) : FactDraft -> FactDraft =
+    /// Identity when the run declared neither.
+    let private stamp (minting: DelegateRunMinting) : FactDraft -> FactDraft =
         FactTableRunOptions.rewrite {
             FactTableRunOptions.none with
-                Method = method
+                Inputs = minting.Inputs
+                Method = minting.Method
         }
 
     /// The one draft a delegate mints, for a row its run carries or for the
     /// absence that supersedes a quoted fact whose row the run no longer
     /// carries. Rewritten as the run's provenance says (identical for a
-    /// computed run) and stamped with its declared method. A removal is
+    /// computed run) and stamped with its declared inputs and method. A removal is
     /// always in the QUOTED fact's own lineage, naming an origin's withdrawal
     /// where the provenance records one, so it supersedes that fact whichever
     /// lineage the run would have minted the row into.
@@ -181,7 +184,7 @@ module DelegateMint =
                 removal
             else
                 { removal with Method = fact.Method }
-        |> stamp minting.Method
+        |> stamp minting
 
     /// The delegate's record: one fact per delegate, at the hierarchy root,
     /// whose value points at the run (`Series` of the watermark token). A
@@ -274,8 +277,8 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     let lineageCache =
         BoundedMemoIndex<string * string * int64 * string, string list>(CacheCap, ignore)
 
-    let methodCache =
-        BoundedMemoIndex<string * string * int64 * string, DeclaredMethod option>(CacheCap, ignore)
+    let optionsCache =
+        BoundedMemoIndex<string * string * int64 * string, FactTableRunOptions>(CacheCap, ignore)
 
     /// How many row images the row cache holds now — never more than its
     /// cap, and never emptied by reaching it.
@@ -388,32 +391,53 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                 return Ok provenance
     }
 
-    /// The method a committed run declared: `None` when it kept none.
-    member this.Method(scopeId: string, run: DelegateRun) : Async<Result<DeclaredMethod option, string>> = async {
+    /// What a committed run declared, read from its record. A
+    /// run recorded before the record kept its options declared no inputs (a
+    /// delegated table refused them) and kept its method, if any, beside the
+    /// record.
+    member this.Options(scopeId: string, run: DelegateRun) : Async<Result<FactTableRunOptions, string>> = async {
         let key = scopeId, run.TableId, run.Watermark.Sequence, run.Watermark.ContentDigest
 
-        match methodCache.TryGet key with
-        | Some method -> return Ok method
+        match optionsCache.TryGet key with
+        | Some options -> return Ok options
         | None ->
-            match! FactTableBlobIo.tryGet<DeclaredMethod> storage scopeId (this.MethodName run.RunId) with
+            let! read = async {
+                match! FactTableRunRecordIo.tryGet storage scopeId (this.RecordName run.RunId) with
+                | Error e -> return Error e
+                | Ok(Some record) when record.RecordVersion >= FactTableRunRecord.CurrentVersion ->
+                    return Ok(FactTableRunOptions.ofRun record.Options)
+                | Ok _ ->
+                    match! FactTableBlobIo.tryGet<DeclaredMethod> storage scopeId (this.MethodName run.RunId) with
+                    | Error e -> return Error e
+                    | Ok method ->
+                        return
+                            Ok {
+                                FactTableRunOptions.none with
+                                    Method = method
+                            }
+            }
+
+            match read with
             | Error e -> return Error(FactTableWriteError.describe e)
-            | Ok method ->
-                methodCache.Set(key, method)
-                return Ok method
+            | Ok options ->
+                optionsCache.Set(key, options)
+                return Ok options
     }
 
-    /// What a committed run mints its rows with: its provenance and method.
+    /// What a committed run mints its rows with: its provenance, and the
+    /// inputs and method it declared.
     member this.Minting(scopeId: string, run: DelegateRun) : Async<Result<DelegateRunMinting, string>> = async {
         match! this.Provenance(scopeId, run) with
         | Error e -> return Error e
         | Ok provenance ->
-            match! this.Method(scopeId, run) with
+            match! this.Options(scopeId, run) with
             | Error e -> return Error e
-            | Ok method ->
+            | Ok options ->
                 return
                     Ok {
                         Provenance = provenance
-                        Method = method
+                        Inputs = options.Inputs
+                        Method = options.Method
                     }
     }
 
@@ -1292,6 +1316,45 @@ type DelegatedFactStore
                     | Error e -> return Error(refusal d e)
         }
 
+    // The disclosure-taint index is the inner store's. Every fact a delegate
+    // mints is asserted through the inner store, and a read naming no metric
+    // (the whole-scope listing the index is rebuilt from) is never delegated,
+    // so the index rebuilt from this store is exactly the inner store's. An
+    // inner store that keeps no index is listed, as the gate would list this
+    // one.
+    interface IDisclosureTaintIndexSource with
+        member _.ReadTaintIndex(scopeId: string) =
+            match inner with
+            | :? IDisclosureTaintIndexSource as source -> source.ReadTaintIndex scopeId
+            | _ -> async {
+                let! all =
+                    inner.Query(
+                        scopeId,
+                        {
+                            FactQuery.all with
+                                IncludeSuperseded = true
+                        }
+                    )
+
+                return DisclosureTaintIndex.ofFacts all
+              }
+
+        member _.ReadTaintIndex(scope: ResolvedScope) =
+            match inner with
+            | :? IDisclosureTaintIndexSource as source -> source.ReadTaintIndex scope
+            | _ -> async {
+                let! all =
+                    inner.Query(
+                        scope,
+                        {
+                            FactQuery.all with
+                                IncludeSuperseded = true
+                        }
+                    )
+
+                return DisclosureTaintIndex.ofFacts all
+              }
+
     interface IFactStore with
         // Writes are the inner store's: a delegate never intercepts an
         // assertion (a hand assertion of a delegated metric is the "two
@@ -1474,18 +1537,11 @@ type DelegateTableWriter
         Error(FactTableNotBoundHere(tableId, registrations.DestinationOf tableId, DelegateFact.Destination))
 
     let loadRun (scopeId: string) (runId: string) = async {
-        match! FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId (tables.RecordName runId) with
+        match! FactTableRunRecordIo.tryGet storage scopeId (tables.RecordName runId) with
         | Ok(Some run) -> return Ok(Some run)
         | Ok None -> return Ok None
         | Error e -> return Error e
     }
-
-    let statusName (status: FactTableRunStatus) =
-        match status with
-        | FactTableRunStatus.Open -> "open"
-        | FactTableRunStatus.Committed _ -> "committed"
-        | FactTableRunStatus.Rejected _ -> "rejected"
-        | FactTableRunStatus.Abandoned _ -> "abandoned"
 
     let audit
         (scopeId: string)
@@ -1589,15 +1645,11 @@ type DelegateTableWriter
         | Error e -> return Error e
     }
 
-    let reject (scopeId: string) (table: FactTableDefinition) (run: FactTableRunRecord) (error: FactTableWriteError) = async {
+    let reject (scopeId: string) (table: FactTableDefinition) (run: OpenFactTableRun) (error: FactTableWriteError) = async {
         let reason = FactTableWriteError.describe error
+        let closed = FactTableRun.reject reason run
 
-        let closed = {
-            run with
-                Status = FactTableRunStatus.Rejected reason
-        }
-
-        match! FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) closed with
+        match! FactTableBlobIo.put storage scopeId (tables.RecordName closed.RunId) closed with
         | Error e -> return Error e
         | Ok() ->
             do! endRun scopeId
@@ -1642,7 +1694,9 @@ type DelegateTableWriter
                     Some(rows |> List.map _.Period.To |> List.max)
         }
 
-    let commit (scopeId: string) (run: FactTableRunRecord) (table: FactTableDefinition) = async {
+    let commit (scopeId: string) (opened: OpenFactTableRun) (table: FactTableDefinition) = async {
+        let run = opened.Record
+
         match! loadHead scopeId table.Id with
         | Error e -> return Error e
         | Ok head ->
@@ -1652,13 +1706,14 @@ type DelegateTableWriter
                 current |> Option.map _.Run.Watermark.Sequence |> Option.defaultValue 0L
 
             if sequence <> run.BaseSequence then
-                return! reject scopeId table run (FactTableCommitConflict(run.RunId, run.BaseSequence, sequence))
+                return! reject scopeId table opened (FactTableCommitConflict(run.RunId, run.BaseSequence, sequence))
             else
                 match! stagedRows scopeId run.RunId with
                 | Error e -> return Error e
                 | Ok rows ->
                     match FactTableValidation.defects table (hierarchyOf table) (List.indexed rows) with
-                    | _ :: _ as defects -> return! reject scopeId table run (FactTableRowsRejected(run.RunId, defects))
+                    | _ :: _ as defects ->
+                        return! reject scopeId table opened (FactTableRowsRejected(run.RunId, defects))
                     | [] ->
                         let! previous = async {
                             match current with
@@ -1706,10 +1761,7 @@ type DelegateTableWriter
 
                             let reach = reachOf table run.RunId watermark rows
 
-                            let committed = {
-                                run with
-                                    Status = FactTableRunStatus.Committed result
-                            }
+                            let committed = FactTableRun.commit result opened
 
                             // The run's imported lineages are recorded before
                             // it becomes current, so every walk that reads
@@ -1784,22 +1836,24 @@ type DelegateTableWriter
                 match registrations.TryGetTable tableId with
                 | None -> return Error(FactTableUndeclared tableId)
                 | Some table ->
-                    // Phase 994 — a delegated table holds ONE row image per
-                    // committed run and mints every row under the current
-                    // run, so it can neither keep an earlier slice's rows
-                    // under the run that wrote them nor name a run's inputs
-                    // on the rows it carries. It refuses those run options
-                    // rather than mint evidence that would be wrong. A
-                    // declared method (Phase 1040) is the run's own, so every
-                    // row the run carries is minted under it: kept, not refused.
+                    // A delegated table holds ONE row image per committed run
+                    // and mints every row under the run that image belongs
+                    // to. A run without a slice writes the whole image, so
+                    // every row it carries is its own: its declared inputs
+                    // and method ride its record
+                    // and every row is minted under them. A period slice
+                    // would carry an earlier run's rows into the image, and
+                    // those would be minted under this run's watermark and
+                    // inputs: refused rather than mint evidence that would be
+                    // wrong.
                     match FactTableRunOptions.normalise (defaultArg options FactTableRunOptions.none) with
                     | Error reason -> return Error(FactTableRunOptionsRefused(table.Id, reason))
-                    | Ok o when not (List.isEmpty o.Inputs) || o.Slice.IsSome ->
+                    | Ok o when o.Slice.IsSome ->
                         return
                             Error(
                                 FactTableRunOptionsRefused(
                                     table.Id,
-                                    "a delegated table does not take run inputs or a period slice; bind the table to the default writer to use them"
+                                    "a delegated table does not take a period slice; bind the table to the default writer to use one"
                                 )
                             )
                     | Ok declared ->
@@ -1822,19 +1876,20 @@ type DelegateTableWriter
                                 match! loadHead scopeId tableId with
                                 | Error e -> return Error e
                                 | Ok head ->
-                                    let run: FactTableRunRecord = {
-                                        TableId = table.Id
-                                        RunId = runId
-                                        SchemaVersion = table.SchemaVersion
-                                        OpenedAt = openedAt
-                                        BaseSequence =
-                                            head.Commits
-                                            |> List.tryLast
-                                            |> Option.map _.Run.Watermark.Sequence
-                                            |> Option.defaultValue 0L
-                                        StagedRows = 0
-                                        Status = FactTableRunStatus.Open
-                                    }
+                                    // What the run declared rides its record
+                                    //, so every row it carries is
+                                    // minted under its inputs and method.
+                                    let run =
+                                        FactTableRun.opened
+                                            table.Id
+                                            runId
+                                            table.SchemaVersion
+                                            openedAt
+                                            (head.Commits
+                                             |> List.tryLast
+                                             |> Option.map _.Run.Watermark.Sequence
+                                             |> Option.defaultValue 0L)
+                                            (FactTableRunOptions.toRun declared)
 
                                     // The provenance first, as the default writer keeps it:
                                     // a run whose record exists never lacks it.
@@ -1847,8 +1902,10 @@ type DelegateTableWriter
                                     with
                                     | Error e -> return Error e
                                     | Ok() ->
-                                        // The method beside it, kept only when
-                                        // declared (GP 11).
+                                        // The method also beside it, where a
+                                        // replica of an earlier release looks
+                                        // for it when it mints the run's rows
+                                        // during a rolling upgrade.
                                         let! kept =
                                             match declared.Method with
                                             | None -> async { return Ok() }
@@ -1880,23 +1937,20 @@ type DelegateTableWriter
                 | Some w -> return! w.WriteRows(scopeId, runId, rows)
                 | None -> return Error(FactTableRunUnknown runId)
             | Ok(Some run) ->
-                match run.Status with
-                | FactTableRunStatus.Open ->
+                match FactTableRun.tryOpen run with
+                | Error refused -> return Error(FactTableWriteError.ofTransition refused)
+                | Ok opened ->
                     if List.isEmpty rows then
                         return Ok run
                     else
                         match! FactTableBlobIo.put storage scopeId (tables.StagedName runId run.StagedRows) rows with
                         | Error e -> return Error e
                         | Ok() ->
-                            let staged = {
-                                run with
-                                    StagedRows = run.StagedRows + rows.Length
-                            }
+                            let staged = FactTableRun.stage rows.Length opened
 
                             match! FactTableBlobIo.put storage scopeId (tables.RecordName runId) staged with
                             | Error e -> return Error e
                             | Ok() -> return Ok staged
-                | other -> return Error(FactTableRunClosed(runId, statusName other))
         }
 
         member _.Commit(scopeId, runId) = async {
@@ -1907,16 +1961,16 @@ type DelegateTableWriter
                 | Some w -> return! w.Commit(scopeId, runId)
                 | None -> return Error(FactTableRunUnknown runId)
             | Ok(Some run) ->
-                match run.Status with
-                | FactTableRunStatus.Open ->
+                match FactTableRun.tryOpen run with
+                | Error refused -> return Error(FactTableWriteError.ofTransition refused)
+                | Ok opened ->
                     match registrations.TryGetTable run.TableId with
                     | None -> return Error(FactTableUndeclared run.TableId)
                     | Some table ->
                         if not (isDelegated table.Id) then
                             return passOn table.Id
                         else
-                            return! commit scopeId run table
-                | other -> return Error(FactTableRunClosed(runId, statusName other))
+                            return! commit scopeId opened table
         }
 
         member _.Abandon(scopeId, runId, reason) = async {
@@ -1927,12 +1981,10 @@ type DelegateTableWriter
                 | Some w -> return! w.Abandon(scopeId, runId, reason)
                 | None -> return Error(FactTableRunUnknown runId)
             | Ok(Some run) ->
-                match run.Status with
-                | FactTableRunStatus.Open ->
-                    let closed = {
-                        run with
-                            Status = FactTableRunStatus.Abandoned reason
-                    }
+                match FactTableRun.tryOpen run with
+                | Error refused -> return Error(FactTableWriteError.ofTransition refused)
+                | Ok opened ->
+                    let closed = FactTableRun.abandon reason opened
 
                     match! FactTableBlobIo.put storage scopeId (tables.RecordName runId) closed with
                     | Error e -> return Error e
@@ -1953,7 +2005,6 @@ type DelegateTableWriter
                         | None -> ()
 
                         return Ok closed
-                | other -> return Error(FactTableRunClosed(runId, statusName other))
         }
 
         member _.Runs(scopeId, tableId) = async {
@@ -1971,7 +2022,7 @@ type DelegateTableWriter
                     match remaining with
                     | [] -> return Ok acc
                     | name :: rest ->
-                        match! FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId name with
+                        match! FactTableRunRecordIo.tryGet storage scopeId name with
                         | Ok(Some run) when run.TableId = tableId -> return! load rest (run :: acc)
                         | Ok _ -> return! load rest acc
                         | Error e -> return Error e

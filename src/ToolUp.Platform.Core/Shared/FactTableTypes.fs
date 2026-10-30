@@ -4,6 +4,7 @@
 namespace ToolUp.Platform.Grounding
 
 open System
+open ToolUp.Platform
 
 // ─── Declared fact tables (Phase 887) ────────────────────────────────
 //
@@ -582,7 +583,32 @@ type FactTableRunRecord = {
     StagedRows: int
     /// Where the run stands.
     Status: FactTableRunStatus
+    /// What the run declared when it was opened: its inputs,
+    /// the period slice it replaces and its method. Kept on the record, so a
+    /// commit observer reads them from the record alone. A record written
+    /// before the options were kept reads as `RunOptions.empty`.
+    Options: RunOptions
+    /// The record's own format version: `FactTableRunRecord.CurrentVersion`
+    /// for a record written with its options, 0 for one written before.
+    RecordVersion: int
 }
+
+/// The run record's stored form.
+[<RequireQualifiedAccess>]
+module FactTableRunRecord =
+
+    /// The format a record is written in: version 2 carries the run's
+    /// options. A record without the member, written before the options
+    /// were kept, reads as version 0.
+    [<Literal>]
+    let CurrentVersion = 2
+
+    /// A record as read from storage: a record written before the options
+    /// were kept reads with `Options = RunOptions.empty`.
+    let ofStored (run: FactTableRunRecord) : FactTableRunRecord = {
+        run with
+            Options = RunOptions.ofStored run.Options
+    }
 
 /// A run's outcome as the declaration reads it.
 [<RequireQualifiedAccess>]
@@ -597,9 +623,110 @@ type FactTableRunOutcome =
     /// An `Optional` table's run that ended without a commit. Not a failure.
     | Discarded of reason: string
 
-/// Derivations over run records.
+/// Why a run-record transition was refused.
+[<RequireQualifiedAccess>]
+type FactTableRunTransitionError = {
+    /// The run the transition was asked of.
+    RunId: string
+    /// The run's status when it was asked, by name.
+    Status: string
+}
+
+/// A run record proven `Open`: what every run transition takes,
+/// so only an open run can be staged on, committed, rejected or abandoned.
+/// Obtained through `FactTableRun.tryOpen`.
+type OpenFactTableRun = private {
+    Run: FactTableRunRecord
+} with
+
+    /// The open run's record.
+    member this.Record = this.Run
+
+/// The run lifecycle as one pure state machine over the record,
+/// and derivations over run records.
+///
+/// A run is `Open` from the moment it is opened until exactly one of
+/// `commit`, `reject` or `abandon` ends it; an ended run never moves again
+/// (GP 5: the record moves forward only). Every writer executes these
+/// transitions rather than restating them, so "what may happen to a run"
+/// has one definition. Where the record is kept, the open-run claim that
+/// serialises opens, and the commit's writes are the executing writer's;
+/// which transition a writer applies, and whether it may, are not.
 [<RequireQualifiedAccess>]
 module FactTableRun =
+
+    /// The status's name, as a refusal and an audit row render it.
+    let statusName (status: FactTableRunStatus) : string =
+        match status with
+        | FactTableRunStatus.Open -> "open"
+        | FactTableRunStatus.Committed _ -> "committed"
+        | FactTableRunStatus.Rejected _ -> "rejected"
+        | FactTableRunStatus.Abandoned _ -> "abandoned"
+
+    /// Whether the run has ended (committed, rejected or abandoned). An
+    /// ended run takes no transition, and only an ended run's leftovers are
+    /// ever reclaimed by an orphan sweep.
+    let hasEnded (run: FactTableRunRecord) : bool =
+        match run.Status with
+        | FactTableRunStatus.Open -> false
+        | _ -> true
+
+    /// A newly opened run: `Open`, nothing staged, carrying what it declared.
+    let opened
+        (tableId: string)
+        (runId: string)
+        (schemaVersion: int)
+        (openedAt: DateTime)
+        (baseSequence: int64)
+        (options: RunOptions)
+        : FactTableRunRecord =
+        {
+            TableId = tableId
+            RunId = runId
+            SchemaVersion = schemaVersion
+            OpenedAt = openedAt
+            BaseSequence = baseSequence
+            StagedRows = 0
+            Status = FactTableRunStatus.Open
+            Options = options
+            RecordVersion = FactTableRunRecord.CurrentVersion
+        }
+
+    /// The run, if it is still open: the one door to every transition below,
+    /// so a transition out of an ended run cannot be written. An ended run is
+    /// refused naming its status.
+    let tryOpen (run: FactTableRunRecord) : Result<OpenFactTableRun, FactTableRunTransitionError> =
+        match run.Status with
+        | FactTableRunStatus.Open -> Ok { Run = run }
+        | status ->
+            Error {
+                FactTableRunTransitionError.RunId = run.RunId
+                Status = statusName status
+            }
+
+    /// Stage `count` more rows on an open run; it stays open.
+    let stage (count: int) (run: OpenFactTableRun) : FactTableRunRecord = {
+        run.Record with
+            StagedRows = run.Record.StagedRows + count
+    }
+
+    /// Commit an open run.
+    let commit (commit: FactTableCommit) (run: OpenFactTableRun) : FactTableRunRecord = {
+        run.Record with
+            Status = FactTableRunStatus.Committed commit
+    }
+
+    /// Refuse an open run at commit; nothing was written.
+    let reject (reason: string) (run: OpenFactTableRun) : FactTableRunRecord = {
+        run.Record with
+            Status = FactTableRunStatus.Rejected reason
+    }
+
+    /// End an open run without a commit.
+    let abandon (reason: string) (run: OpenFactTableRun) : FactTableRunRecord = {
+        run.Record with
+            Status = FactTableRunStatus.Abandoned reason
+    }
 
     /// The outcome of a run under its table's declaration at instant `now`.
     /// Derived, never stored: an open run becomes overdue by the clock, not

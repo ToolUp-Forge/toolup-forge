@@ -6996,7 +6996,15 @@ ToolUp.Platform.Grounding.FactTableRequirement+Tags (class)
 ToolUp.Platform.Grounding.FactTableRequirement+Tags.Optional : System.Int32 (literal)
 ToolUp.Platform.Grounding.FactTableRequirement+Tags.Required : System.Int32 (literal)
 ToolUp.Platform.Grounding.FactTableRun (class)
+ToolUp.Platform.Grounding.FactTableRun.abandon(System.String, ToolUp.Platform.Grounding.OpenFactTableRun) : ToolUp.Platform.Grounding.FactTableRunRecord
+ToolUp.Platform.Grounding.FactTableRun.commit(ToolUp.Platform.Grounding.FactTableCommit, ToolUp.Platform.Grounding.OpenFactTableRun) : ToolUp.Platform.Grounding.FactTableRunRecord
+ToolUp.Platform.Grounding.FactTableRun.hasEnded(ToolUp.Platform.Grounding.FactTableRunRecord) : System.Boolean
+ToolUp.Platform.Grounding.FactTableRun.opened(System.String, System.String, System.Int32, System.DateTime, System.Int64, ToolUp.Platform.RunOptions) : ToolUp.Platform.Grounding.FactTableRunRecord
 ToolUp.Platform.Grounding.FactTableRun.outcome(ToolUp.Platform.Grounding.FactTableDefinition, System.DateTime, ToolUp.Platform.Grounding.FactTableRunRecord) : ToolUp.Platform.Grounding.FactTableRunOutcome
+ToolUp.Platform.Grounding.FactTableRun.reject(System.String, ToolUp.Platform.Grounding.OpenFactTableRun) : ToolUp.Platform.Grounding.FactTableRunRecord
+ToolUp.Platform.Grounding.FactTableRun.stage(System.Int32, ToolUp.Platform.Grounding.OpenFactTableRun) : ToolUp.Platform.Grounding.FactTableRunRecord
+ToolUp.Platform.Grounding.FactTableRun.statusName(ToolUp.Platform.Grounding.FactTableRunStatus) : System.String
+ToolUp.Platform.Grounding.FactTableRun.tryOpen(ToolUp.Platform.Grounding.FactTableRunRecord) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.OpenFactTableRun, ToolUp.Platform.Grounding.FactTableRunTransitionError]
 ToolUp.Platform.Grounding.FactTableRunOutcome (class)
 ToolUp.Platform.Grounding.FactTableRunOutcome.InProgress : ToolUp.Platform.Grounding.FactTableRunOutcome { get }
 ToolUp.Platform.Grounding.FactTableRunOutcome.IsDiscarded : System.Boolean { get }
@@ -7015,14 +7023,19 @@ ToolUp.Platform.Grounding.FactTableRunOutcome+Tags.Failed : System.Int32 (litera
 ToolUp.Platform.Grounding.FactTableRunOutcome+Tags.InProgress : System.Int32 (literal)
 ToolUp.Platform.Grounding.FactTableRunOutcome+Tags.Succeeded : System.Int32 (literal)
 ToolUp.Platform.Grounding.FactTableRunRecord (class)
-ToolUp.Platform.Grounding.FactTableRunRecord..ctor(System.String, System.String, System.Int32, System.DateTime, System.Int64, System.Int32, ToolUp.Platform.Grounding.FactTableRunStatus)
+ToolUp.Platform.Grounding.FactTableRunRecord..ctor(System.String, System.String, System.Int32, System.DateTime, System.Int64, System.Int32, ToolUp.Platform.Grounding.FactTableRunStatus, ToolUp.Platform.RunOptions, System.Int32)
 ToolUp.Platform.Grounding.FactTableRunRecord.BaseSequence : System.Int64 { get }
 ToolUp.Platform.Grounding.FactTableRunRecord.OpenedAt : System.DateTime { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.Options : ToolUp.Platform.RunOptions { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.RecordVersion : System.Int32 { get }
 ToolUp.Platform.Grounding.FactTableRunRecord.RunId : System.String { get }
 ToolUp.Platform.Grounding.FactTableRunRecord.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.Grounding.FactTableRunRecord.StagedRows : System.Int32 { get }
 ToolUp.Platform.Grounding.FactTableRunRecord.Status : ToolUp.Platform.Grounding.FactTableRunStatus { get }
 ToolUp.Platform.Grounding.FactTableRunRecord.TableId : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunRecordModule (class)
+ToolUp.Platform.Grounding.FactTableRunRecordModule.CurrentVersion : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunRecordModule.ofStored(ToolUp.Platform.Grounding.FactTableRunRecord) : ToolUp.Platform.Grounding.FactTableRunRecord
 ToolUp.Platform.Grounding.FactTableRunStatus (class)
 ToolUp.Platform.Grounding.FactTableRunStatus.IsAbandoned : System.Boolean { get }
 ToolUp.Platform.Grounding.FactTableRunStatus.IsCommitted : System.Boolean { get }
@@ -7041,6 +7054,10 @@ ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Abandoned : System.Int32 (lite
 ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Committed : System.Int32 (literal)
 ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Open : System.Int32 (literal)
 ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Rejected : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunTransitionError (class)
+ToolUp.Platform.Grounding.FactTableRunTransitionError..ctor(System.String, System.String)
+ToolUp.Platform.Grounding.FactTableRunTransitionError.RunId : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunTransitionError.Status : System.String { get }
 ToolUp.Platform.Grounding.FactTableStatus (class)
 ToolUp.Platform.Grounding.FactTableStatus..ctor(System.String, ToolUp.Platform.Grounding.FactTableFreshness, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableCommit], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableRunRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableRunOutcome])
 ToolUp.Platform.Grounding.FactTableStatus.Freshness : ToolUp.Platform.Grounding.FactTableFreshness { get }
@@ -7120,6 +7137,8 @@ ToolUp.Platform.Grounding.MetricRegistry.tryBuild(Microsoft.FSharp.Collections.F
 ToolUp.Platform.Grounding.MetricRegistry.tryBuildDescribed(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDescriptionRegistration]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.IMetricRegistry, System.String]
 ToolUp.Platform.Grounding.MetricRegistry.tryRegistrations(ToolUp.Platform.Grounding.IMetricRegistry) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration]]]
 ToolUp.Platform.Grounding.MetricRegistry.trySubjectDescription(ToolUp.Platform.Grounding.IMetricRegistry, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDescription]
+ToolUp.Platform.Grounding.OpenFactTableRun (class)
+ToolUp.Platform.Grounding.OpenFactTableRun.Record : ToolUp.Platform.Grounding.FactTableRunRecord { get }
 ToolUp.Platform.Grounding.RecomputePolicy (class)
 ToolUp.Platform.Grounding.RecomputePolicy.Eager : ToolUp.Platform.Grounding.RecomputePolicy { get }
 ToolUp.Platform.Grounding.RecomputePolicy.IsEager : System.Boolean { get }
@@ -11499,6 +11518,23 @@ ToolUp.Platform.RunKindModule (class)
 ToolUp.Platform.RunKindModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RunKind] { get }
 ToolUp.Platform.RunKindModule.handlerName(ToolUp.Platform.RunKind) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.RunKindModule.label(ToolUp.Platform.RunKind) : System.String
+ToolUp.Platform.RunMethod (class)
+ToolUp.Platform.RunMethod..ctor(System.String, System.String)
+ToolUp.Platform.RunMethod.MethodId : System.String { get }
+ToolUp.Platform.RunMethod.MethodVersion : System.String { get }
+ToolUp.Platform.RunOptions (class)
+ToolUp.Platform.RunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RunSlice], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RunMethod])
+ToolUp.Platform.RunOptions.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.RunOptions.Method : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RunMethod] { get }
+ToolUp.Platform.RunOptions.Slice : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RunSlice] { get }
+ToolUp.Platform.RunOptionsModule (class)
+ToolUp.Platform.RunOptionsModule.empty : ToolUp.Platform.RunOptions { get }
+ToolUp.Platform.RunOptionsModule.ofStored(ToolUp.Platform.RunOptions) : ToolUp.Platform.RunOptions
+ToolUp.Platform.RunSlice (class)
+ToolUp.Platform.RunSlice..ctor(System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.RunSlice.From : System.DateTime { get }
+ToolUp.Platform.RunSlice.Label : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.RunSlice.To : System.DateTime { get }
 ToolUp.Platform.RuntimeAttestor (class)
 ToolUp.Platform.RuntimeAttestor.UnattestedName : System.String (literal)
 ToolUp.Platform.RuntimeAttestor.unattested : ToolUp.Platform.IRuntimeAttestor { get }

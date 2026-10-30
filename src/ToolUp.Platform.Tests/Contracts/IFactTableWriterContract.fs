@@ -1495,6 +1495,113 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
         }
     ]
 
+/// The run-record pack (Phase 1092): what a run declared when it was opened
+/// rides its RECORD, so a commit observer reads a run's inputs and method
+/// from `Runs` or `Status` alone. Bound to every writer, the delegate
+/// writer included: the options here are inputs and a method, which every
+/// writer takes (a period slice is the default writer's, pinned in
+/// `runOptionsTests`).
+let runRecordTests (name: string) (factory: FactTableWriterFactory) =
+    let declared =
+        FactTableRunOptions.none
+        |> FactTableRunOptions.withInputs [ inputHash 'b'; inputHash 'a'; inputHash 'b' ]
+        |> FactTableRunOptions.withMethod (DeclaredMethod.create "sales.derive" "v1")
+
+    // What the record keeps: the inputs once each, in ordinal order.
+    let kept: RunOptions = {
+        RunOptions.Inputs = [ inputHash 'a'; inputHash 'b' ]
+        RunOptions.Slice = None
+        RunOptions.Method =
+            Some {
+                RunMethod.MethodId = "sales.derive"
+                RunMethod.MethodVersion = "v1"
+            }
+    }
+
+    testList $"IFactTableWriter run record carries its options — {name}" [
+
+        test "OpenRun, Runs and Status return the options the run was opened with, before and after the commit" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
+            let f = factory (fun () -> t0) [ table ] registry
+
+            let opened = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = declared))
+            Expect.equal opened.Options kept "OpenRun returns the record with its options"
+            Expect.equal opened.RecordVersion FactTableRunRecord.CurrentVersion "in the current record format"
+
+            let open' =
+                ok "runs while open" (f.Writer.Runs(f.ScopeA, table.Id)) |> List.exactlyOne
+
+            Expect.equal open'.Options kept "the open run's record carries them"
+
+            ok "write" (f.Writer.WriteRows(f.ScopeA, opened.RunId, [ dayRow 1 "acme" "a1" 10m ]))
+            |> ignore
+
+            ok "commit" (f.Writer.Commit(f.ScopeA, opened.RunId)) |> ignore
+
+            let committedRun = ok "runs" (f.Writer.Runs(f.ScopeA, table.Id)) |> List.exactlyOne
+
+            match committedRun.Status with
+            | FactTableRunStatus.Committed _ -> ()
+            | other -> failtestf "expected a committed run, got %A" other
+
+            Expect.equal committedRun.Options kept "a commit observer reads the options from the record"
+
+            let status = ok "status" (f.Writer.Status(f.ScopeA, table.Id))
+
+            Expect.equal
+                (status.LatestRun |> Option.map _.Options)
+                (Some kept)
+                "and the table's status carries them on its latest run"
+        }
+
+        test "a run opened with no options records RunOptions.empty" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
+            let f = factory (fun () -> t0) [ table ] registry
+
+            let opened = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            Expect.equal opened.Options RunOptions.empty "no options"
+
+            let recorded = ok "runs" (f.Writer.Runs(f.ScopeA, table.Id)) |> List.exactlyOne
+            Expect.equal recorded.Options RunOptions.empty "and the record says so"
+        }
+
+        test "every fact the run commits names the inputs and the method its record carries" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
+            let f = factory (fun () -> t0) [ table ] registry
+
+            let opened = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = declared))
+
+            ok "write" (f.Writer.WriteRows(f.ScopeA, opened.RunId, [ dayRow 1 "acme" "a1" 10m ]))
+            |> ignore
+
+            ok "commit" (f.Writer.Commit(f.ScopeA, opened.RunId)) |> ignore
+
+            let fact =
+                f.Facts.Query(
+                    f.ScopeA,
+                    {
+                        FactQuery.all with
+                            Metric = Some(MetricRef "revenue")
+                            Subject =
+                                Some {
+                                    Hierarchy = "products"
+                                    Path = [ "acme"; "a1" ]
+                                }
+                    }
+                )
+                |> Async.RunSynchronously
+                |> List.exactlyOne
+
+            for input in kept.Inputs do
+                Expect.contains (InputHash.named fact.Evidence) input "the fact names every declared input"
+
+            Expect.equal
+                (DeclaredMethod.ofEvidence fact.Evidence)
+                (Some(DeclaredMethod.create "sales.derive" "v1"))
+                "the fact names the declared method"
+        }
+    ]
+
 /// What a writer that does not take run options does with them: refuses the
 /// run, by name, before anything is held or written.
 let runOptionsRefusedTests (name: string) (factory: FactTableWriterFactory) =
@@ -1538,16 +1645,7 @@ type private RecordingWriter() =
             seen.Enqueue provenance
             seenOptions.Enqueue options
 
-            return
-                Ok {
-                    TableId = tableId
-                    RunId = "recorded"
-                    SchemaVersion = 1
-                    OpenedAt = t0
-                    BaseSequence = 0L
-                    StagedRows = 0
-                    Status = FactTableRunStatus.Open
-                }
+            return Ok(FactTableRun.opened tableId "recorded" 1 t0 0L RunOptions.empty)
         }
 
         member _.WriteRows(_, _, _) = unused ()

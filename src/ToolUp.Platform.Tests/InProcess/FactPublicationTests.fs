@@ -571,6 +571,32 @@ let private consolidationTests =
             Expect.isNonEmpty (groupRows w) "the target holds the published row"
         }
 
+        test "the publication's run is an ordinary run record of the target table: committed, and declaring no options" {
+            let w = world ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            published w north grant.GrantId |> ignore
+
+            let run =
+                match w.Writer.Runs(group, "group-sales") |> Async.RunSynchronously with
+                | Ok [ run ] -> run
+                | other -> failtestf "expected the one publication run, got %A" other
+
+            let status =
+                w.Writer.Status(group, "group-sales")
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failtestf "status: %s" (FactTableWriteError.describe e))
+
+            match run.Status with
+            | FactTableRunStatus.Committed commit ->
+                Expect.equal (Some commit) status.LastCommit "the run's record carries the table's current commit"
+            | other -> failtestf "expected a committed run, got %A" other
+
+            Expect.isTrue (FactTableRun.hasEnded run) "the run has ended"
+            Expect.equal run.Options RunOptions.empty "a consolidation declares no inputs, slice or method"
+            Expect.equal run.RecordVersion FactTableRunRecord.CurrentVersion "in the current record format"
+        }
+
         test "a republished row stays in one lineage: a changed value supersedes, an unchanged one is idempotent" {
             let w = world ()
             commitSource w north [ row "sku-1" 100m 10m; row "sku-2" 50m 5m ]

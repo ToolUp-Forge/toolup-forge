@@ -941,8 +941,10 @@ ToolUp.Facts.FactTableRunOptionsModule.forSlice(ToolUp.Facts.TemporalExtent, Too
 ToolUp.Facts.FactTableRunOptionsModule.isNone(ToolUp.Facts.FactTableRunOptions) : System.Boolean
 ToolUp.Facts.FactTableRunOptionsModule.none : ToolUp.Facts.FactTableRunOptions { get }
 ToolUp.Facts.FactTableRunOptionsModule.normalise(ToolUp.Facts.FactTableRunOptions) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableRunOptions, System.String]
+ToolUp.Facts.FactTableRunOptionsModule.ofRun(ToolUp.Platform.RunOptions) : ToolUp.Facts.FactTableRunOptions
 ToolUp.Facts.FactTableRunOptionsModule.rewrite(ToolUp.Facts.FactTableRunOptions) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactDraft, ToolUp.Facts.FactDraft]
 ToolUp.Facts.FactTableRunOptionsModule.splits(ToolUp.Facts.TemporalExtent, System.DateTime, System.DateTime) : System.Boolean
+ToolUp.Facts.FactTableRunOptionsModule.toRun(ToolUp.Facts.FactTableRunOptions) : ToolUp.Platform.RunOptions
 ToolUp.Facts.FactTableRunOptionsModule.withInputs(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions
 ToolUp.Facts.FactTableRunOptionsModule.withMethod(ToolUp.Facts.DeclaredMethod, ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions
 ToolUp.Facts.FactTableRunProvenance (class)
@@ -1070,6 +1072,7 @@ ToolUp.Facts.FactTableWriteError+Tags.FactTableUndeclared : System.Int32 (litera
 ToolUp.Facts.FactTableWriteErrorModule (class)
 ToolUp.Facts.FactTableWriteErrorModule.RenderedDefectCap : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteErrorModule.describe(ToolUp.Facts.FactTableWriteError) : System.String
+ToolUp.Facts.FactTableWriteErrorModule.ofTransition(ToolUp.Platform.Grounding.FactTableRunTransitionError) : ToolUp.Facts.FactTableWriteError
 ToolUp.Facts.FactTablesOptions (class)
 ToolUp.Facts.FactTablesOptions..ctor(System.Int32)
 ToolUp.Facts.FactTablesOptions.MemberCap : System.Int32 { get }

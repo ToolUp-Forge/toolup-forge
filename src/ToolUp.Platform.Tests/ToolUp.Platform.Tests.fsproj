@@ -872,6 +872,7 @@
         <Compile Include="InProcess\DelegateFactTests.fs" />
         <Compile Include="InProcess\TeamOutputVisibilityTests.fs" />
         <Compile Include="InProcess\FactPublicationTests.fs" />
+        <Compile Include="InProcess\FactTableRunTests.fs" />
         <Compile Include="InProcess\Phase971InterPlatformTests.fs" />
         <Compile Include="InProcess\Phase971KnowledgeBaseTests.fs" />
         <Compile Include="InProcess\Phase971PlatformTeamsTests.fs" />

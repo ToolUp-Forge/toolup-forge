@@ -108,6 +108,12 @@ let private registeredTests =
             IFactTableWriterContract.delegateWriterFactory
         IFactTableOrphanSweepContract.tests "DefaultFactTableWriter" IFactTableOrphanSweepContract.defaultWriterFactory
         IFactTableOrphanSweepContract.tests "DelegateTableWriter" IFactTableOrphanSweepContract.delegateWriterFactory
+        IFactTableWriterContract.runRecordTests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
+        IFactTableWriterContract.runRecordTests "DelegateTableWriter" IFactTableWriterContract.delegateWriterFactory
+        IFactTableWriterContract.runRecordTests
+            "notifying decorator over DefaultFactTableWriter"
+            IFactTableWriterContract.notifyingWriterFactory
+        FactTableRunTests.tests
         IFactTableOrphanSweepContract.tests
             "notifying decorator over DefaultFactTableWriter"
             IFactTableOrphanSweepContract.notifyingWriterFactory
