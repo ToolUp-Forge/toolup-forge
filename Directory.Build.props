@@ -980,6 +980,7 @@
       `FactTableRegistry.tryDescription`. Migration recipe:
       `docs/migrations/1150-fact-table-descriptions.md`.
     -->
+    <!-- Phase 1135 rides the 0.38.0 draft, breaking: `StartupModes.StartupMode` gains `RunOperatorTask` (an exhaustive match adds the case), `ScopeMigrationReport` gains `Skipped` and `AuditId` (a full record literal adds both) and `ScopeMigrationOutcome` gains `WouldMigrate` (an exhaustive match adds the case); additive otherwise: the operator-task startup mode's seam (`StartupModes.OperatorTask`, `operatorTask`, `operatorTaskOut`), `FactStoreMigration.preview`, `FactsMigrateTask`, `FactStoreMigrationCompose.withFactsMigrateTask`, and the `toolup facts migrate` verb. -->
     <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

@@ -17,6 +17,7 @@ let private registeredTests =
         MembershipsDoctorTests.tests
         TenantUserVerbsTests.tests
         DescribeCommandTests.tests
+        FactsMigrateTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

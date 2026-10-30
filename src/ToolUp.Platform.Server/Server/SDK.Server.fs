@@ -1445,6 +1445,61 @@ let compose
             Console.Out.Flush()
             exit 1
 
+    | StartupModes.RunOperatorTask ->
+        // One contributed operator task, run against the composed services
+        // with no listener bound: the door `toolup facts migrate` drives. A
+        // provider is built here for the reason the `VerifyDeployment` arm
+        // gives, and disposed on the way out so the task's audit rows flush.
+        //
+        // Exit codes: the task's own; 2 when no task of that name was
+        // composed (the composed names are listed) or the flag carries no
+        // name; 1 when the task raised.
+        let argv = Environment.GetCommandLineArgs()
+
+        let emit (text: string) =
+            match StartupModes.operatorTaskOut argv with
+            | Some path -> IO.File.WriteAllText(path, text)
+            | None ->
+                Console.Out.Write text
+                Console.Out.Flush()
+
+        match StartupModes.operatorTask argv with
+        | None ->
+            Console.Error.WriteLine "--operator-task: name the task to run (--operator-task <name> [arguments])."
+            exit 2
+        | Some(name, args) ->
+            try
+                use provider = services.BuildServiceProvider()
+
+                let tasks = provider.GetServices<StartupModes.OperatorTask>() |> List.ofSeq
+
+                match
+                    tasks
+                    |> List.tryFind (fun t -> String.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))
+                with
+                | Some task ->
+                    let text, code = task.Run(provider, args) |> Async.RunSynchronously
+                    emit text
+                    exit code
+                | None ->
+                    let composed =
+                        match tasks with
+                        | [] -> "none - a companion contributes its tasks when it is composed"
+                        | _ ->
+                            tasks
+                            |> List.map (fun t -> sprintf "%s (%s)" t.Name t.Summary)
+                            |> String.concat "; "
+
+                    Console.Error.WriteLine(
+                        sprintf "--operator-task: this host composed no task named '%s'. Composed: %s" name composed
+                    )
+
+                    exit 2
+            with ex ->
+                resolvedLogger.Error(sprintf "--operator-task %s could not run: %s" name ex.Message, Some ex)
+                Console.Out.Flush()
+                exit 1
+
     | StartupModes.NormalBoot ->
         // Phase 9m — companion config preflight (extracted to
         // `ComposeBootstrap.runConfigPreflight`). Runs every registered

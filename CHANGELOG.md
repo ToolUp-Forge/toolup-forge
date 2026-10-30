@@ -27,7 +27,7 @@ Migration notes:
 - [1145-pipeline-tool](docs/migrations/1145-pipeline-tool.md)
 - [1150-fact-table-descriptions](docs/migrations/1150-fact-table-descriptions.md)
 
-_Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added, 16 members changed, 66 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 14 packages moved; 660 members added, 17 members changed, 66 members removed; 1 package new._
 
 ### Added
 
@@ -36,6 +36,20 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.AI.AICompose+AIServerAppModule.withAIAnsweringTools(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp`
 - `ToolUp.AuthProviders.ClerkUI` — 1 member:
   - `ToolUp.AuthProviders.ClerkAuthUI.userButton() : Fable.React.ReactElement`
+- `ToolUp.Cli` — 13 members:
+  - `ToolUp.Cli.FactsMigrateCommand (class)`
+  - `ToolUp.Cli.FactsMigrateCommand+Options (class)`
+  - `ToolUp.Cli.FactsMigrateCommand+Options..ctor(Microsoft.FSharp.Core.FSharpChoice`2[System.String, System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String])`
+  - `ToolUp.Cli.FactsMigrateCommand+Options.Root : Microsoft.FSharp.Core.FSharpChoice`2[System.String, System.String] { get }`
+  - `ToolUp.Cli.FactsMigrateCommand+Options.TaskArgs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.Cli.FactsMigrateCommand+Options.TimeoutSeconds : System.Int32 { get }`
+  - `ToolUp.Cli.FactsMigrateCommand.TaskName : System.String (literal)`
+  - `ToolUp.Cli.FactsMigrateCommand.command : ToolUp.Cli.Dispatch+Command { get }`
+  - `ToolUp.Cli.FactsMigrateCommand.defaultOptions : ToolUp.Cli.FactsMigrateCommand+Options { get }`
+  - `ToolUp.Cli.FactsMigrateCommand.help : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.Cli.FactsMigrateCommand.invocation(ToolUp.Cli.FactsMigrateCommand+Options, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]`
+  - `ToolUp.Cli.FactsMigrateCommand.parse(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Cli.FactsMigrateCommand+Options, System.String]`
+  - `ToolUp.Cli.FactsMigrateCommand.run(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32]]]], System.IO.TextWriter, ToolUp.Cli.FactsMigrateCommand+Options) : System.Int32`
 - `ToolUp.DataSources.Common` — 60 members:
   - `ToolUp.DataSources.Common.DeclaredDelivery.execute(ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.DataSources.Common.DeliveryPlan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredSeedReport, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal]]]`
   - `ToolUp.DataSources.Common.DeclaredDelivery.idempotencyKey(System.String, System.String, System.String) : System.String`
@@ -58,10 +72,28 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.DataSources.Common.DeliveryCancel.SourceId : System.String { get }`
   - `ToolUp.DataSources.Common.DeliveryObservation (class)`
   - … and 40 more — `git diff v0.37.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
-- `ToolUp.FactStores.Postgres` — 3 members:
+- `ToolUp.FactStores.Postgres` — 50 members:
   - `ToolUp.FactStores.Postgres.FactStoreMigration.migrateIds(ToolUp.FactStores.Postgres.PostgresFactStore, System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]`
-  - `ToolUp.FactStores.Postgres.MigrationSql.deleteRow(System.String) : System.String`
-  - `ToolUp.FactStores.Postgres.MigrationSql.rekeyRow(System.String) : System.String`
+  - `ToolUp.FactStores.Postgres.FactStoreMigration.preview(ToolUp.Facts.BlobFactStore, ToolUp.FactStores.Postgres.PostgresFactStore, ToolUp.FactStores.Postgres.FactStoreMigrationOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.FactStores.Postgres.FactStoreMigrationReport]`
+  - `ToolUp.FactStores.Postgres.FactStoreMigrationCompose (class)`
+  - `ToolUp.FactStores.Postgres.FactStoreMigrationCompose.withFactsMigrateTask(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode (class)`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode+Ids (class)`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode+Ids.dryRun : System.Boolean { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode+Tags (class)`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode+Tags.DryRun : System.Int32 (literal)`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode+Tags.Ids : System.Int32 (literal)`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode+Tags.Migrate : System.Int32 (literal)`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode+Tags.Verify : System.Int32 (literal)`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.DryRun : ToolUp.FactStores.Postgres.FactsMigrateMode { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.IsDryRun : System.Boolean { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.IsIds : System.Boolean { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.IsMigrate : System.Boolean { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.IsVerify : System.Boolean { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.Migrate : ToolUp.FactStores.Postgres.FactsMigrateMode { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.Tag : System.Int32 { get }`
+  - `ToolUp.FactStores.Postgres.FactsMigrateMode.Verify : ToolUp.FactStores.Postgres.FactsMigrateMode { get }`
+  - … and 30 more — `git diff v0.37.0 -- api-baselines/ToolUp.FactStores.Postgres.approved.txt`
 - `ToolUp.Facts.Core` — 93 members:
   - `ToolUp.Facts.FactModule.IdLabel : System.String (literal)`
   - `ToolUp.Facts.PipelineRefusal (class)`
@@ -149,7 +181,7 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Platform.Grounding.FactTableDescription.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }`
   - `ToolUp.Platform.Grounding.FactTableDescription.Description : System.String { get }`
   - … and 53 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 310 members:
+- `ToolUp.Platform.Server` — 322 members:
   - `ToolUp.Platform.Background.tryStart(ToolUp.Platform.Background+DrainSet, ToolUp.Platform.ILogger, System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]) : System.Boolean`
   - `ToolUp.Platform.CapabilityNotDeclared (class)`
   - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
@@ -170,7 +202,7 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.Platform.ConnectorCapabilities.Watchable : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource] { get }`
   - `ToolUp.Platform.ConnectorCapabilitiesModule (class)`
   - `ToolUp.Platform.ConnectorCapabilitiesModule.declared(ToolUp.Platform.ConnectorCapabilities) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConnectorCapability]`
-  - … and 290 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 302 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — 1 member:
   - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
 
@@ -180,6 +212,8 @@ _Surface since `v0.37.0`: **breaking** — 13 packages moved; 588 members added,
   - `ToolUp.AI.AICompose+AIServerApp..ctor` — `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])` → `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]])`
 - `ToolUp.DataSources.Common` — 1 member:
   - `ToolUp.DataSources.Common.Files.listObjects` — `ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.WatchedObject], ToolUp.Platform.IngestionError]]` → `ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WatchedObject], ToolUp.Platform.IngestionError]]`
+- `ToolUp.FactStores.Postgres` — 1 member:
+  - `ToolUp.FactStores.Postgres.ScopeMigrationReport..ctor` — `ToolUp.FactStores.Postgres.ScopeMigrationReport..ctor(System.String, ToolUp.FactStores.Postgres.ScopeMigrationOutcome, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference])` → `ToolUp.FactStores.Postgres.ScopeMigrationReport..ctor(System.String, ToolUp.FactStores.Postgres.ScopeMigrationOutcome, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference], Microsoft.FSharp.Core.FSharpOption`1[System.Guid])`
 - `ToolUp.Facts.Server` — 4 members:
   - `ToolUp.Facts.FactPublicationJobs.schedulePublication` — `ToolUp.Facts.FactPublicationJobs.schedulePublication(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]` → `ToolUp.Facts.FactPublicationJobs.schedulePublication(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduleOutcome, ToolUp.Platform.ScheduleError]]`
   - `ToolUp.Facts.FactPublicationJobs.scheduleRefresh` — `ToolUp.Facts.FactPublicationJobs.scheduleRefresh(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]` → `ToolUp.Facts.FactPublicationJobs.scheduleRefresh(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScheduleOutcome, ToolUp.Platform.ScheduleError]]`
