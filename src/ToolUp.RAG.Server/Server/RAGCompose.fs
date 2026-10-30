@@ -404,12 +404,10 @@ let internal makeVectorisationHook
                 // chunks stay in that caller's `User` scope. Routing them
                 // to `Deployment` served one caller's file to every other.
                 let vectorScope =
-                    if scope.Container.StartsWith "team-" then
-                        Team(scope.ScopeId)
-                    elif scope.Container = ScopeEnumeration.DeploymentContainer then
-                        Deployment
-                    else
-                        VectorScope.User scope.ScopeId
+                    match StorageScope.tryTeamId scope with
+                    | Some teamId -> Team teamId
+                    | None when scope.Container = ScopeEnumeration.DeploymentContainer -> Deployment
+                    | None -> VectorScope.User scope.ScopeId
 
                 let basePairs =
                     chunks |> List.mapi (fun i chunk -> $"{entry.FileName}:chunk:{i}", chunk)
@@ -2046,7 +2044,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                                     )
 
                                     let registration: JobRegistration = {
-                                        ScopeId = "_platform"
+                                        ScopeId = ScopeKey.PlatformContainer
                                         Handler = ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName
                                         Payload = ""
                                         Trigger = CronTrigger cron
@@ -2058,7 +2056,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                                         RetryPolicy = JobRetryPolicy.defaults
                                         ShardKey = None
                                         Precision = JobPrecision.Minute
-                                        CreatedBy = "_platform"
+                                        CreatedBy = AuditSubject.PlatformSentinelUserId
                                         Tags = Map.ofList [ "source", "rag-compose"; "purpose", "tombstone-vacuum" ]
                                     }
 

@@ -247,7 +247,10 @@ type ReembeddingBackgroundService
                         "Lazy-loading vector stores enumerate only scopes touched this process; cold team scopes are not re-embedded until first accessed."
                 |}
 
-            do! eventStore.Write(Events.create "_platform" "ToolUp.RAG" "ReembeddingScanStarted" scanPayload)
+            do!
+                eventStore.Write(
+                    Events.create ScopeKey.PlatformContainer "ToolUp.RAG" "ReembeddingScanStarted" scanPayload
+                )
         with ex ->
             logger.Error("[ReembeddingService] Initial scope drain failed", Some ex)
 

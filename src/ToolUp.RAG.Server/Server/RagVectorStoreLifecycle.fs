@@ -39,10 +39,9 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// Strip the `team-` container prefix if present so the hook accepts
 /// either the bare team id or the `team-{id}` container form.
 let private teamIdOf (scopeId: string) =
-    if scopeId.StartsWith("team-", StringComparison.Ordinal) then
-        scopeId.Substring 5
-    else
-        scopeId
+    match ScopeKey.tryParseContainer scopeId with
+    | Some(ScopeKey.Team teamId) -> teamId
+    | _ -> scopeId
 
 type RagVectorStoreLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with
