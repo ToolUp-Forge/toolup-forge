@@ -6,7 +6,6 @@ namespace ToolUp.Facts
 open System
 open System.Text.Json
 open Microsoft.AspNetCore.Http
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -99,11 +98,6 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// `IFactDisclosureGate`. Declared by `FactsCompose.withFactStore`;
 /// consumers normally never call this module directly.
 module CoverageTool =
-
-    let private jsonOptions = FableConverters.shared
-
-    let private serialize (value: obj) : string =
-        JsonSerializer.Serialize(value, jsonOptions)
 
     /// How many ranked heads per (metric, hierarchy) pair are checked
     /// through the disclosure gate to decide whether that pair's coverage
@@ -428,7 +422,7 @@ module CoverageTool =
         : Async<string> =
         async {
             match parseMetricFilter argsJson with
-            | Error message -> return serialize {| error = message |}
+            | Error message -> return FactTool.serialize {| error = message |}
             | Ok filter ->
                 // No declarations means no registry singleton at all
                 // (Phase 519): the deployment may store facts, but it has
@@ -462,7 +456,7 @@ module CoverageTool =
                             )
 
                 match selected with
-                | Error refusal -> return serialize {| error = refusal |}
+                | Error refusal -> return FactTool.serialize {| error = refusal |}
                 | Ok metrics ->
                     let subjects = resolved.Subjects
 
@@ -508,7 +502,7 @@ module CoverageTool =
                         |> Async.Sequential
 
                     return
-                        serialize {|
+                        FactTool.serialize {|
                             metricCount = List.length metrics
                             metrics = rows |> Array.toList
 
@@ -518,45 +512,12 @@ module CoverageTool =
                         |}
         }
 
-    // ── HttpContext adapter (the registered executor) ─────────────
+    // ── HttpContext adapter ───────────────────────────────────────
 
-    // Phase 797 — the scope is not read from the request items here. The
-    // door asks `ScopeResolution.forRequest`, which returns the
-    // `ResolvedScope` the scope-resolution middleware minted for this
-    // request or the explicit anonymous scope, and nothing a caller can
-    // fabricate. There is no user-id rung and no literal fallback: an
-    // unresolved request reads the anonymous shard, which holds only what
-    // was asserted anonymously.
-
-    let private userIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
-    let private serviceOf<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
-        match ctx.RequestServices.GetService(typeof<'T>) with
-        | :? 'T as service -> Some service
-        | _ -> None
-
-    /// The registered `HttpContext` executor. Resolves the fact store,
-    /// the disclosure gate, and the optional metric registry from DI —
-    /// all registered by the same `FactsCompose.withFactStore` knob that
-    /// declares this tool, so a composed deployment always finds them.
+    /// The registered `HttpContext` executor.
     let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
-        match serviceOf<IFactStore> ctx, serviceOf<IFactDisclosureGate> ctx with
-        | Some store, Some gate ->
-            let registry = serviceOf<Grounding.IMetricRegistry> ctx
-
-            executeWith
-                store
-                gate
-                registry
-                (StorageScopeResolver.ScopeResolution.forRequest ctx)
-                (userIdOf ctx)
-                argsJson
-        | _ -> async {
-            return
-                serialize {|
-                    error = "The fact store is not composed in this deployment — `list_metric_coverage` is unavailable."
-                |}
-          }
+        FactTool.define
+            "list_metric_coverage"
+            (fun c argsJson -> executeWith c.Store c.Gate c.Registry c.Scope c.UserId argsJson)
+            ctx
+            argsJson

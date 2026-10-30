@@ -245,6 +245,11 @@ let registrationTests =
             let el = (JsonDocument.Parse result).RootElement
 
             Expect.stringContains (str el "error") "not composed" "the defensive arm names the missing substrate"
+
+            Expect.equal
+                result
+                """{"error":"The fact store is not composed in this deployment — `query_facts` is unavailable."}"""
+                "the shared tool shell answers byte for byte as the tool's own shell did"
         }
     ]
 

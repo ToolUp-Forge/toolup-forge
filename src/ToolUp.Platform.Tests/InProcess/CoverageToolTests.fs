@@ -312,6 +312,11 @@ let registrationTests =
             Expect.stringContains (str el "error") "not composed" "the defensive arm names the missing substrate"
 
             Expect.stringContains (str el "error") "list_metric_coverage" "and names THIS tool, not a sibling"
+
+            Expect.equal
+                result
+                """{"error":"The fact store is not composed in this deployment — `list_metric_coverage` is unavailable."}"""
+                "the shared tool shell answers byte for byte as the tool's own shell did"
         }
     ]
 
