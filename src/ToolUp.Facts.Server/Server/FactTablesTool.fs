@@ -51,6 +51,49 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // The sample is a floor, not a proof, for the reason coverage's probe is:
 // a table whose sampled heads are disclosable may hold restricted rows below
 // them. What it gates is a declaration and a count, never a figure.
+//
+// **Members of a small level.** The level a table's rows sit at lists its
+// members' names when it holds at most a declared cap of distinct members
+// (`FactTablesOptions.MemberCap`, default 20, 0 turns it off). A name is a
+// subject identity and never a figure, but it is an egress of its own, so it
+// is read the way a drill-down is: each metric column's ranking, paged under
+// the request's scope, judged by the gate fixed at `FactToolResult`. A member
+// is listed when some fact of it was admitted; the rest are counted, with the
+// policies facts were withheld under, and never named. A level above the cap
+// reports its count and nothing more, and so does one whose ranking could not
+// be read to its end. A wholly withheld table is described by nothing, so no
+// member read is made for it.
+
+/// The members of a level whose names were listed: those the caller may be
+/// told, and a count of the rest.
+type FactLevelMemberList = {
+    /// The members' names, ordinal-sorted. Names only, never a value.
+    Names: string list
+    /// Members not listed: withheld by the disclosure gate, or carrying no
+    /// rankable value. Counted, never named.
+    Unlisted: int
+    /// The policies facts of this level were withheld under.
+    RestrictedUnderPolicies: string list
+}
+
+/// A level whose members are counted and not named.
+type FactLevelMemberCount = {
+    /// The level's distinct members in the table, as far as the read could
+    /// tell.
+    Count: int
+    /// The declared cap.
+    Cap: int
+    /// Why no name is listed.
+    Reason: string
+}
+
+/// What the table listing says of a level's members.
+[<RequireQualifiedAccess>]
+type FactLevelMembers =
+    /// At most the cap: the visible names, and a count of the rest.
+    | Listed of FactLevelMemberList
+    /// Above the cap, or not readable to its end: the count only.
+    | CountOnly of FactLevelMemberCount
 
 /// One level on the path from a hierarchy's root to a table's level.
 type FactTableLevelView = {
@@ -58,7 +101,31 @@ type FactTableLevelView = {
     Level: string
     /// What the level holds, where the declaring module described it.
     Description: string option
+    /// The level's members: set on the level the table's rows sit at, and
+    /// only while member listing is on; `None` elsewhere.
+    Members: FactLevelMembers option
 }
+
+/// What a deployment declares of the table listing, handed to
+/// `FactsCompose.withFactTablesOptions`; undeclared means
+/// `FactTablesOptions.defaults`.
+type FactTablesOptions = {
+    /// The most distinct members a level may hold and still be listed by
+    /// name. `0` turns member listing off.
+    MemberCap: int
+}
+
+[<RequireQualifiedAccess>]
+module FactTablesOptions =
+    /// The cap a deployment gets when it declares none.
+    [<Literal>]
+    let DefaultMemberCap = 20
+
+    /// Members listed up to `DefaultMemberCap`.
+    let defaults: FactTablesOptions = { MemberCap = DefaultMemberCap }
+
+    /// Member listing off.
+    let membersOff: FactTablesOptions = { MemberCap = 0 }
 
 /// One metric column of a table, as the assistant is told about it.
 type FactTableMetricView = {
@@ -201,6 +268,148 @@ module FactTablesTool =
                 | _, policies -> return Disclosed policies
         }
 
+    // ── The member read ───────────────────────────────────────────
+
+    /// The reason a level above the cap gives.
+    [<Literal>]
+    let OverCapReason =
+        "This level holds more members than the table listing names, so only their count is given. Use query_metric_population to find a member by ranking."
+
+    /// The reason a level whose ranking could not be read to its end gives.
+    [<Literal>]
+    let UnenumeratedReason =
+        "This level's members could not be read to the end within the ranking ceiling, so only their count is given."
+
+    /// What one metric column's ranking showed of the level's members.
+    type private ColumnMembers = {
+        /// Names of members with at least one fact the gate admitted.
+        Names: string list
+        /// The distinct members the column's population matched, admitted or
+        /// not — an existence-level count.
+        Total: int
+        /// The policies facts of the column were withheld under.
+        Policies: string list
+        /// Whether the ranking was read to its end.
+        Complete: bool
+    }
+
+    /// The most pages one column's member read takes: the ranking ceiling
+    /// over the page size.
+    let private maxMemberPages = PopulationQuery.MaxTopK / FactBrowseApi.MaxPageSize + 1
+
+    /// One column's members at the table's level, read page by page through
+    /// the drill-down, and stopped as soon as the level is known to exceed
+    /// `cap`. `None` when the store refused the read.
+    let private columnMembers
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (tableId: string)
+        (metric: string)
+        (cap: int)
+        : Async<ColumnMembers option> =
+        let rec loop (page: int) (names: string list) (policies: string list) = async {
+            let! read =
+                FactBrowseHandler.queryRows deps scope principal {
+                    TableId = tableId
+                    Metric = metric
+                    Direction = TopOfRanking
+                    SubjectPrefix = []
+                    Page = page
+                    PageSize = FactBrowseApi.MaxPageSize
+                }
+
+            match read with
+            | Error _ -> return None
+            | Ok read ->
+                let names =
+                    read.Rows
+                    |> List.choose (fun r -> List.tryLast r.SubjectPath)
+                    |> List.append names
+                    |> List.distinct
+
+                let policies = read.Withheld |> List.map _.PolicyRef |> List.append policies
+                let total = read.Population.SubjectCount
+
+                let result complete = {
+                    Names = names
+                    Total = total
+                    Policies = sorted policies
+                    Complete = complete
+                }
+
+                if total > cap then
+                    return Some(result true)
+                elif read.HasMore && page + 1 < maxMemberPages then
+                    return! loop (page + 1) names policies
+                else
+                    return Some(result (not read.HasMore && not read.ReachedRankCeiling))
+        }
+
+        loop 0 [] []
+
+    /// The members of the level a shown table's rows sit at, as `principal`
+    /// may be told them: each column's ranking is read under the gate fixed
+    /// at `FactToolResult`, and a name is listed when some fact of the member
+    /// was admitted. `None` when listing is off, the table holds no committed
+    /// row, or nothing could be read.
+    let private members
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (cap: int)
+        (detail: FactTableDetail)
+        : Async<FactLevelMembers option> =
+        async {
+            let committed = detail.Listing.RowCount |> Option.exists (fun n -> n > 0)
+
+            if cap <= 0 || not committed then
+                return None
+            else
+                let! reads =
+                    detail.Columns
+                    |> List.map (fun c -> columnMembers deps scope principal detail.Listing.TableId c.Metric cap)
+                    |> Async.Sequential
+
+                match reads |> Array.choose id |> List.ofArray with
+                | [] -> return None
+                | columns ->
+                    let names = columns |> List.collect _.Names |> List.distinct
+                    let total = columns |> List.map _.Total |> List.max
+
+                    let count = max total (List.length names)
+
+                    if count = 0 then
+                        return None
+                    elif count > cap then
+                        return
+                            Some(
+                                FactLevelMembers.CountOnly {
+                                    Count = count
+                                    Cap = cap
+                                    Reason = OverCapReason
+                                }
+                            )
+                    elif columns |> List.exists (fun c -> not c.Complete) then
+                        return
+                            Some(
+                                FactLevelMembers.CountOnly {
+                                    Count = count
+                                    Cap = cap
+                                    Reason = UnenumeratedReason
+                                }
+                            )
+                    else
+                        return
+                            Some(
+                                FactLevelMembers.Listed {
+                                    Names = names |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+                                    Unlisted = count - List.length names
+                                    RestrictedUnderPolicies = columns |> List.collect _.Policies |> sorted
+                                }
+                            )
+        }
+
     // ── The projection ────────────────────────────────────────────
 
     let private someText (text: string) =
@@ -232,6 +441,7 @@ module FactTablesTool =
         (registry: IMetricRegistry option)
         (detail: FactTableDetail)
         (samples: ColumnSample list)
+        (members: FactLevelMembers option)
         : FactTableShown =
         let listing = detail.Listing
         let subject = registry |> Option.bind (fun r -> r.TryGetSubject listing.Hierarchy)
@@ -266,6 +476,7 @@ module FactTablesTool =
                 |> List.map (fun level -> {
                     Level = level
                     Description = levelDescription level
+                    Members = if level = listing.Level then members else None
                 })
             Columns = List.map2 (column registry) samples detail.Columns
             PeriodGrain = listing.PeriodGrain
@@ -300,6 +511,7 @@ module FactTablesTool =
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
+        (cap: int)
         (detail: FactTableDetail)
         : Async<FactTableView> =
         async {
@@ -326,7 +538,8 @@ module FactTablesTool =
             let committedRows = detail.Listing.RowCount |> Option.exists (fun n -> n > 0)
 
             if disclosed then
-                return FactTableView.Shown(shown deps.Registry detail samples)
+                let! listed = members deps scope principal cap detail
+                return FactTableView.Shown(shown deps.Registry detail samples listed)
             elif not (List.isEmpty restricted) then
                 return
                     FactTableView.Withheld {
@@ -342,14 +555,16 @@ module FactTablesTool =
                         Reason = UnsampledReason
                     }
             else
-                return FactTableView.Shown(shown deps.Registry detail samples)
+                return FactTableView.Shown(shown deps.Registry detail samples None)
         }
 
     /// Every declared table, ordered by id, or the one named by `table`, as
-    /// `principal` may be told about it in `scope`. The disclosure sample is
-    /// asked at `FactToolResult` whichever gate `deps` carries. An unknown
-    /// table id is refused by name.
-    let project
+    /// `principal` may be told about it in `scope`, its level listing at most
+    /// `memberCap` members by name (`0` lists none). The disclosure sample
+    /// and the member read are asked at `FactToolResult` whichever gate
+    /// `deps` carries. An unknown table id is refused by name.
+    let projectWith
+        (memberCap: int)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
@@ -384,10 +599,23 @@ module FactTablesTool =
             match details with
             | Error e -> return Error e
             | Ok details ->
-                let! views = details |> List.map (view atToolResult scope principal) |> Async.Sequential
+                let! views =
+                    details
+                    |> List.map (view atToolResult scope principal (max 0 memberCap))
+                    |> Async.Sequential
 
                 return Ok(List.ofArray views)
         }
+
+    /// `projectWith` with member listing off: the table projection that
+    /// names no member.
+    let project
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (table: string option)
+        : Async<Result<FactTableView list, string>> =
+        projectWith 0 deps scope principal table
 
     // ── The tool ──────────────────────────────────────────────────
 
@@ -395,7 +623,7 @@ module FactTablesTool =
     let definition: AIToolDefinition = {
         Name = Name
         Description =
-            "List THE FACT TABLES THIS DEPLOYMENT HOLDS — call this before you plan a fact question that names a level, a grain or a set of metrics together (\"top four countries for orders\", \"weekly revenue by site\"), so you know whether any table holds that metric at that level before you query. For every declared table it returns: its id (the token the render and pipeline tools take) and what it is for; the subject hierarchy it sits in, the LEVEL its rows sit at, and the path of levels from the hierarchy's root to that level with what each level holds; each metric column with its id, name, unit, display format, the analyst's context and what the column holds; and the table's period grain, refresh cadence, history mode, row count, last committed run and freshness. A metric at a level no table lists is NOT HELD at that level: say so rather than querying. It reports DECLARATIONS AND COUNTS ONLY and never a value — ask the query tools for values. Where you are not permitted to see a table, it is listed as existing with the restricting policy and nothing more. Pass `table` to describe one table by id. Results are scoped to the current user/team."
+            "List THE FACT TABLES THIS DEPLOYMENT HOLDS — call this before you plan a fact question that names a level, a grain or a set of metrics together (\"top four countries for orders\", \"weekly revenue by site\"), so you know whether any table holds that metric at that level before you query. For every declared table it returns: its id (the token the render and pipeline tools take) and what it is for; the subject hierarchy it sits in, the LEVEL its rows sit at, and the path of levels from the hierarchy's root to that level with what each level holds, and, on the level its rows sit at, the NAMES of its members when it has only a few (use those names as they are; `members.unlisted` counts those you may not see, and a level with `members.listed = false` has more members than are named, so find one by ranking); each metric column with its id, name, unit, display format, the analyst's context and what the column holds; and the table's period grain, refresh cadence, history mode, row count, last committed run and freshness. A metric at a level no table lists is NOT HELD at that level: say so rather than querying. It reports DECLARATIONS AND COUNTS ONLY and never a value — ask the query tools for values. Where you are not permitted to see a table, it is listed as existing with the restricting policy and nothing more. Pass `table` to describe one table by id. Results are scoped to the current user/team."
         Parameters = [
             {
                 Name = "table"
@@ -423,10 +651,41 @@ module FactTablesTool =
             |> Result.bind (fun root -> FactTool.stringArg root "table")
             |> Result.map (Option.filter (String.IsNullOrWhiteSpace >> not) >> Option.map _.Trim())
 
+    /// A level's members as the tool carries them: the names and a count of
+    /// the rest, or the count alone.
+    let private membersRow (m: FactLevelMembers) : obj =
+        match m with
+        | FactLevelMembers.Listed l ->
+            box {|
+                listed = true
+                count = List.length l.Names + l.Unlisted
+                names = l.Names
+                unlisted = l.Unlisted
+                restrictedUnderPolicies = l.RestrictedUnderPolicies
+            |}
+        | FactLevelMembers.CountOnly c ->
+            box {|
+                listed = false
+                count = c.Count
+                cap = c.Cap
+                reason = c.Reason
+            |}
+
     let private levelRow (l: FactTableLevelView) : obj =
-        match l.Description with
-        | Some d -> box {| level = l.Level; description = d |}
-        | None -> box {| level = l.Level |}
+        match l.Description, l.Members with
+        | Some d, Some m ->
+            box {|
+                level = l.Level
+                description = d
+                members = membersRow m
+            |}
+        | Some d, None -> box {| level = l.Level; description = d |}
+        | None, Some m ->
+            box {|
+                level = l.Level
+                members = membersRow m
+            |}
+        | None, None -> box {| level = l.Level |}
 
     let private columnRow (c: FactTableMetricView) = {|
         metric = c.Metric
@@ -473,9 +732,10 @@ module FactTablesTool =
                 restrictedUnderPolicies = s.RestrictedUnderPolicies
             |}
 
-    /// The executor over explicit dependencies — the testable core `execute`
-    /// adapts `HttpContext` onto.
-    let executeWith
+    /// The executor over explicit dependencies and options — the testable
+    /// core `execute` adapts `HttpContext` onto.
+    let executeWithOptions
+        (options: FactTablesOptions)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
@@ -485,7 +745,7 @@ module FactTablesTool =
             match parseTable argsJson with
             | Error message -> return FactTool.serialize {| error = message |}
             | Ok table ->
-                match! project deps scope principal table with
+                match! projectWith options.MemberCap deps scope principal table with
                 | Error refusal ->
                     return
                         FactTool.serialize {|
@@ -499,16 +759,28 @@ module FactTablesTool =
                         |}
         }
 
-    /// The registered `HttpContext` executor: the fact tool shell's scope and
-    /// caller, over the fact browse's dependencies for this request.
-    let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
+    /// `executeWithOptions` under `FactTablesOptions.defaults`.
+    let executeWith
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<string> =
+        executeWithOptions FactTablesOptions.defaults deps scope principal argsJson
+
+    /// The `HttpContext` executor under `options`: the fact tool shell's scope
+    /// and caller, over the fact browse's dependencies for this request. The
+    /// options are a value handed in at composition
+    /// (`FactsCompose.withFactTablesOptions`); nothing here reads the container
+    /// for them.
+    let executeFor (options: FactTablesOptions) (ctx: HttpContext) (argsJson: string) : Async<string> =
         FactTool.define
             Name
             (fun c argsJson ->
                 // The shell found the store and the gate, which are exactly
                 // what the browse dependencies need.
                 match FactBrowseHandler.factBrowseDeps ctx with
-                | Some deps -> executeWith deps c.Scope c.UserId argsJson
+                | Some deps -> executeWithOptions options deps c.Scope c.UserId argsJson
                 | None ->
                     async.Return(
                         FactTool.serialize {|
@@ -517,3 +789,7 @@ module FactTablesTool =
                     ))
             ctx
             argsJson
+
+    /// The registered `HttpContext` executor under `FactTablesOptions.defaults`.
+    let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
+        executeFor FactTablesOptions.defaults ctx argsJson

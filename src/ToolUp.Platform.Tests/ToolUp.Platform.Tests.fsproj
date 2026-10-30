@@ -612,6 +612,7 @@
         <Compile Include="InProcess\FactRenderToolTests.fs" />
         <Compile Include="InProcess\PipelineToolTests.fs" />
         <Compile Include="InProcess\FactTablesToolTests.fs" />
+        <Compile Include="InProcess\AggregateMetricToolTests.fs" />
         <Compile Include="InProcess\DisclosureEgressTests.fs" />
         <Compile Include="InProcess\DisclosureExportWebhookTests.fs" />
         <Compile Include="InProcess\DisclosureTaintTests.fs" />

@@ -456,13 +456,16 @@ module NarrativeGrounding =
     /// The fact tools: the ones the fact store declares on `ServerApp.AITools`
     /// (`FactsCompose.withFactStore` reads this list), and the only ones a
     /// grounded run gives the model from the fact tier — the run adds the
-    /// declared reference tools. The two reads, then the two discovery
-    /// surfaces: coverage by metric, the table listing by table.
+    /// declared reference tools. The two reads, the two discovery surfaces
+    /// (coverage by metric, the table listing by table), then the roll-up:
+    /// a total over the population read, summed by the server so the model
+    /// never adds figures itself.
     let factTools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list = [
         FactQueryTool.definition, FactQueryTool.execute
         PopulationQueryTool.definition, PopulationQueryTool.execute
         CoverageTool.definition, CoverageTool.execute
         FactTablesTool.definition, FactTablesTool.execute
+        AggregateMetricTool.definition, AggregateMetricTool.execute
     ]
 
 /// The fact tier's `INarrativeGroundingGate` (validator:NarrativeGroundingGate):

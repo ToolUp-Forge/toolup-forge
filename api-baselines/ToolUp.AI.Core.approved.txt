@@ -821,8 +821,9 @@ ToolUp.AI.ToolResult.Content : System.String { get }
 ToolUp.AI.ToolResult.ToolCallId : System.String { get }
 ToolUp.AI.ToolResult.ToolName : System.String { get }
 ToolUp.AI.VerifiedNumber (class)
-ToolUp.AI.VerifiedNumber..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.NumericVerdict, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AI.VerifiedNumber..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.NumericVerdict, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.AI.VerifiedNumber.Canonical : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.VerifiedNumber.DerivedFrom : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.AI.VerifiedNumber.MatchedFactId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.VerifiedNumber.Token : System.String { get }
 ToolUp.AI.VerifiedNumber.Verdict : ToolUp.AI.NumericVerdict { get }

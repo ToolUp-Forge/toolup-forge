@@ -8,6 +8,45 @@ ToolUp.Facts.AddressedDraft..ctor(ToolUp.Facts.FactDraft, System.String, System.
 ToolUp.Facts.AddressedDraft.Draft : ToolUp.Facts.FactDraft { get }
 ToolUp.Facts.AddressedDraft.FactId : System.String { get }
 ToolUp.Facts.AddressedDraft.Lineage : System.String { get }
+ToolUp.Facts.AggregateCeiling (class)
+ToolUp.Facts.AggregateCeiling..ctor(System.Int32, System.Int32, System.Boolean)
+ToolUp.Facts.AggregateCeiling.EffectiveTopK : System.Int32 { get }
+ToolUp.Facts.AggregateCeiling.RequestedTopK : System.Int32 { get }
+ToolUp.Facts.AggregateCeiling.Truncated : System.Boolean { get }
+ToolUp.Facts.AggregateGroup (class)
+ToolUp.Facts.AggregateGroup.IsGroupRefused : System.Boolean { get }
+ToolUp.Facts.AggregateGroup.IsGroupTotal : System.Boolean { get }
+ToolUp.Facts.AggregateGroup.IsGroupWithheld : System.Boolean { get }
+ToolUp.Facts.AggregateGroup.Tag : System.Int32 { get }
+ToolUp.Facts.AggregateGroup+GroupRefused (class)
+ToolUp.Facts.AggregateGroup+GroupRefused.group : System.String { get }
+ToolUp.Facts.AggregateGroup+GroupRefused.memberCount : System.Int32 { get }
+ToolUp.Facts.AggregateGroup+GroupRefused.reason : ToolUp.Facts.AggregateGroupRefusal { get }
+ToolUp.Facts.AggregateGroup+GroupTotal (class)
+ToolUp.Facts.AggregateGroup+GroupTotal.Item : ToolUp.Facts.AggregateTotal { get }
+ToolUp.Facts.AggregateGroup+GroupWithheld (class)
+ToolUp.Facts.AggregateGroup+GroupWithheld.group : System.String { get }
+ToolUp.Facts.AggregateGroup+GroupWithheld.memberCount : System.Int32 { get }
+ToolUp.Facts.AggregateGroup+Tags (class)
+ToolUp.Facts.AggregateGroup+Tags.GroupRefused : System.Int32 (literal)
+ToolUp.Facts.AggregateGroup+Tags.GroupTotal : System.Int32 (literal)
+ToolUp.Facts.AggregateGroup+Tags.GroupWithheld : System.Int32 (literal)
+ToolUp.Facts.AggregateGroupRefusal (class)
+ToolUp.Facts.AggregateGroupRefusal.IsCompetingMethods : System.Boolean { get }
+ToolUp.Facts.AggregateGroupRefusal.IsPeriodsDisagree : System.Boolean { get }
+ToolUp.Facts.AggregateGroupRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.AggregateGroupRefusal+CompetingMethods (class)
+ToolUp.Facts.AggregateGroupRefusal+CompetingMethods.subject : System.String { get }
+ToolUp.Facts.AggregateGroupRefusal+PeriodsDisagree (class)
+ToolUp.Facts.AggregateGroupRefusal+PeriodsDisagree.periods : System.Int32 { get }
+ToolUp.Facts.AggregateGroupRefusal+Tags (class)
+ToolUp.Facts.AggregateGroupRefusal+Tags.CompetingMethods : System.Int32 (literal)
+ToolUp.Facts.AggregateGroupRefusal+Tags.PeriodsDisagree : System.Int32 (literal)
+ToolUp.Facts.AggregateInput (class)
+ToolUp.Facts.AggregateInput..ctor(System.String, ToolUp.Facts.SubjectRef, System.String)
+ToolUp.Facts.AggregateInput.FactId : System.String { get }
+ToolUp.Facts.AggregateInput.Rendering : System.String { get }
+ToolUp.Facts.AggregateInput.Subject : ToolUp.Facts.SubjectRef { get }
 ToolUp.Facts.AggregatePlan (class)
 ToolUp.Facts.AggregatePlan..ctor(ToolUp.Facts.PopulationTriple, ToolUp.Facts.RankDirection, System.Int32, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RankedFactRef], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]], ToolUp.Facts.PopulationStats, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.AggregateRefresh], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.AggregatePlan.Direction : ToolUp.Facts.RankDirection { get }
@@ -22,10 +61,75 @@ ToolUp.Facts.AggregatePlan.Truncated : System.Boolean { get }
 ToolUp.Facts.AggregatePlan.ValueStatisticsWithheld : System.Boolean { get }
 ToolUp.Facts.AggregatePlan.WithheldByPolicy : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
 ToolUp.Facts.AggregatePlan.WithheldCount : System.Int32 { get }
+ToolUp.Facts.AggregateQuery (class)
+ToolUp.Facts.AggregateQuery..ctor(ToolUp.Facts.MetricRef, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Facts.AggregateQuery.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Facts.AggregateQuery.GroupByLevel : System.String { get }
+ToolUp.Facts.AggregateQuery.Hierarchy : System.String { get }
+ToolUp.Facts.AggregateQuery.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.AggregateQuery.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Facts.AggregateQuery.PeriodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
 ToolUp.Facts.AggregateRefresh (class)
 ToolUp.Facts.AggregateRefresh..ctor(System.String, System.DateTime)
 ToolUp.Facts.AggregateRefresh.FactId : System.String { get }
 ToolUp.Facts.AggregateRefresh.StaleSince : System.DateTime { get }
+ToolUp.Facts.AggregateRefusal (class)
+ToolUp.Facts.AggregateRefusal.IsNoRegistry : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.IsNonComparableMembers : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.IsNotAdditive : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.IsPopulationTruncated : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.IsStoreRefused : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.IsUnknownHierarchy : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.IsUnknownLevel : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.IsUnknownMetric : System.Boolean { get }
+ToolUp.Facts.AggregateRefusal.NoRegistry : ToolUp.Facts.AggregateRefusal { get }
+ToolUp.Facts.AggregateRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.AggregateRefusal+NonComparableMembers (class)
+ToolUp.Facts.AggregateRefusal+NonComparableMembers.count : System.Int32 { get }
+ToolUp.Facts.AggregateRefusal+NotAdditive (class)
+ToolUp.Facts.AggregateRefusal+NotAdditive.declared : System.String { get }
+ToolUp.Facts.AggregateRefusal+NotAdditive.metric : System.String { get }
+ToolUp.Facts.AggregateRefusal+PopulationTruncated (class)
+ToolUp.Facts.AggregateRefusal+PopulationTruncated.ceiling : ToolUp.Facts.AggregateCeiling { get }
+ToolUp.Facts.AggregateRefusal+PopulationTruncated.comparable : System.Int32 { get }
+ToolUp.Facts.AggregateRefusal+StoreRefused (class)
+ToolUp.Facts.AggregateRefusal+StoreRefused.reason : System.String { get }
+ToolUp.Facts.AggregateRefusal+Tags (class)
+ToolUp.Facts.AggregateRefusal+Tags.NoRegistry : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+Tags.NonComparableMembers : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+Tags.NotAdditive : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+Tags.PopulationTruncated : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+Tags.StoreRefused : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+Tags.UnknownHierarchy : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+Tags.UnknownLevel : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+Tags.UnknownMetric : System.Int32 (literal)
+ToolUp.Facts.AggregateRefusal+UnknownHierarchy (class)
+ToolUp.Facts.AggregateRefusal+UnknownHierarchy.hierarchy : System.String { get }
+ToolUp.Facts.AggregateRefusal+UnknownLevel (class)
+ToolUp.Facts.AggregateRefusal+UnknownLevel.declared : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.AggregateRefusal+UnknownLevel.level : System.String { get }
+ToolUp.Facts.AggregateRefusal+UnknownMetric (class)
+ToolUp.Facts.AggregateRefusal+UnknownMetric.metric : System.String { get }
+ToolUp.Facts.AggregateRefusalModule (class)
+ToolUp.Facts.AggregateRefusalModule.describe(ToolUp.Facts.AggregateRefusal) : System.String
+ToolUp.Facts.AggregateRefusalModule.describeGroup(ToolUp.Facts.AggregateGroupRefusal) : System.String
+ToolUp.Facts.AggregateResult (class)
+ToolUp.Facts.AggregateResult..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AggregateGroup], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]], ToolUp.Facts.AggregateCeiling)
+ToolUp.Facts.AggregateResult.Ceiling : ToolUp.Facts.AggregateCeiling { get }
+ToolUp.Facts.AggregateResult.GroupByLevel : System.String { get }
+ToolUp.Facts.AggregateResult.Groups : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AggregateGroup] { get }
+ToolUp.Facts.AggregateResult.HiddenGroupCount : System.Int32 { get }
+ToolUp.Facts.AggregateResult.Hierarchy : System.String { get }
+ToolUp.Facts.AggregateResult.Metric : System.String { get }
+ToolUp.Facts.AggregateResult.WithheldByPolicy : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
+ToolUp.Facts.AggregateTotal (class)
+ToolUp.Facts.AggregateTotal..ctor(System.String, System.String, System.Decimal, ToolUp.Facts.TemporalExtent, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AggregateInput])
+ToolUp.Facts.AggregateTotal.Group : System.String { get }
+ToolUp.Facts.AggregateTotal.Inputs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AggregateInput] { get }
+ToolUp.Facts.AggregateTotal.MemberCount : System.Int32 { get }
+ToolUp.Facts.AggregateTotal.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.AggregateTotal.Rendering : System.String { get }
+ToolUp.Facts.AggregateTotal.Value : System.Decimal { get }
 ToolUp.Facts.AnswerPlan (class)
 ToolUp.Facts.AnswerPlan..ctor(System.String, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PlannedTriple], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PlanRefusalReason])
 ToolUp.Facts.AnswerPlan.CompiledAt : System.DateTime { get }

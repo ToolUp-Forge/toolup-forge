@@ -1862,15 +1862,55 @@ let aiAssistantApi
         | _ -> return content
     }
 
+    /// The facts the turn's fact tools put in front of the model: every
+    /// result, in this turn, of a tool that declares it reads facts, read by
+    /// `AnswerVerifier.toolResultFacts`. The turn starts at its user message
+    /// (the last user-role message carrying no tool results); a result from
+    /// an earlier turn is not this turn's evidence.
+    let turnToolFacts (registry: AIToolRegistry) (messages: AIProviderMessage list) : AnswerVerifier.ScopedFact list =
+        let turnMessages =
+            match
+                messages
+                |> List.tryFindIndexBack (fun m -> m.Role = "user" && List.isEmpty m.ToolResults)
+            with
+            | Some index -> List.skip (index + 1) messages
+            | None -> messages
+
+        let toolNames =
+            turnMessages
+            |> List.collect _.ToolCalls
+            |> List.map (fun call -> call.Id, call.Name)
+            |> Map.ofList
+
+        let readsFacts (name: string) =
+            match
+                registry.FindByName name
+                |> Option.map (_.Definition >> AIToolEffects.declaredOf)
+            with
+            | Some(DeclaredEffects effects) -> Set.contains ReadFacts effects
+            | _ -> false
+
+        turnMessages
+        |> List.collect _.ToolResults
+        |> List.filter (fun result -> toolNames |> Map.tryFind result.ToolCallId |> Option.exists readsFacts)
+        |> List.collect (fun result -> AnswerVerifier.toolResultFacts result.Content)
+
     /// The numeric-fidelity answer gate. Absent (the default) it returns the
     /// content verbatim with no verdict, event, audit or metric (GP 11 /
     /// GP 13); in `Annotate` / `Strict` it verifies every number against the
-    /// turn's retrieved facts and returns the verdict the message carries.
-    let verifyAnswer (turn: TurnRequest) (services: TurnServices) (provider: IAIProvider) (content: string) =
-        AnswerVerifier.runVerificationStageWithJoin
+    /// turn's retrieved facts and the facts its fact tools returned, and
+    /// returns the verdict the message carries.
+    let verifyAnswer
+        (turn: TurnRequest)
+        (services: TurnServices)
+        (provider: IAIProvider)
+        (toolFacts: AnswerVerifier.ScopedFact list)
+        (content: string)
+        =
+        AnswerVerifier.runVerificationStageWithScope
             services.AnswerGate
             services.MetricRegistry
-            turn.Contribution.RetrievedSources
+            (AnswerVerifier.scopedFacts turn.Contribution.RetrievedSources @ toolFacts)
             content
             services.MetricsSink
             services.EventStore
@@ -1900,7 +1940,9 @@ let aiAssistantApi
 
         let emitted = lastAssistant |> Option.map _.Content |> Option.defaultValue ""
         let! normalised = normaliseCitations turn context.Services provider emitted
-        let! content, verification = verifyAnswer turn context.Services provider normalised
+
+        let! content, verification =
+            verifyAnswer turn context.Services provider (turnToolFacts context.Registry finalMessages) normalised
 
         verification
         |> Option.iter (fun v -> turn.Emit(AnswerVerified(conversationId, v)))

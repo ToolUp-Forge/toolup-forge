@@ -91,7 +91,49 @@ let private scoped (factId: string) (rendering: string) (metric: string) : Scope
     FactId = factId
     Rendering = rendering
     Metric = metric
+    Inputs = []
 }
+
+/// A metric that sums across subjects, within one unit.
+let private revenueMetric: MetricDefinition = {
+    shareMetric with
+        Id = "revenue"
+        Name = "Revenue"
+        Unit = "GBP"
+        Dimensionality = "currency"
+        DisplayFormat = "N0"
+        RollUp = Some(Additive 1m)
+}
+
+let private derivedRegistry: IMetricRegistry =
+    MetricRegistry.build [
+        {
+            Module = "test"
+            Definition = revenueMetric
+        }
+        {
+            Module = "test"
+            Definition = {
+                shareMetric with
+                    RollUp = Some NonAdditive
+            }
+        }
+    ] []
+
+/// A total a fact tool computed from `inputs`.
+let private derivedTotal (rendering: string) (metric: string) (inputs: string list) : ScopedFact = {
+    FactId = ""
+    Rendering = rendering
+    Metric = metric
+    Inputs = inputs
+}
+
+/// Two sites' figures and the total a fact tool summed from them.
+let private twoSites = [
+    scoped "site-a" "1,200" "revenue"
+    scoped "site-b" "800" "revenue"
+    derivedTotal "2,000" "revenue" [ "site-a"; "site-b" ]
+]
 
 let tests =
     testList "Phase 523 numeric-fidelity answer gate" [
@@ -205,6 +247,110 @@ let tests =
 
                 Expect.equal (facts |> List.map _.FactId) [ "f1" ] "only the fact-origin source projects"
                 Expect.equal (facts |> List.map _.Rendering) [ "£21,800" ] "rendering carried"
+        ]
+
+        // ── A derived total, checked against the facts it was summed from ──
+        testList "derived-value match" [
+            testCase "a two-site total verifies, and its verdict names both inputs"
+            <| fun _ ->
+                let v =
+                    NumericFidelity.verify "Both sites together took £2,000." twoSites (Some derivedRegistry) "Strict"
+
+                Expect.equal v.Verified 1 "the total verifies"
+                Expect.equal v.Unmatched 0 "nothing unmatched"
+                let number = List.exactlyOne v.Numbers
+                Expect.equal number.DerivedFrom (Some [ "site-a"; "site-b" ]) "the verdict names the facts"
+                Expect.isNone number.MatchedFactId "and no tool, and no single fact"
+
+            testCase "a total within the declared tolerance verifies"
+            <| fun _ ->
+                let v =
+                    NumericFidelity.verify "Together: 2,001." twoSites (Some derivedRegistry) "Strict"
+
+                Expect.equal v.Verified 1 "one unit of slack is the metric's declared tolerance"
+
+            testCase "a total off by more than the tolerance does not verify"
+            <| fun _ ->
+                let v =
+                    NumericFidelity.verify "Together: 2,005." twoSites (Some derivedRegistry) "Strict"
+
+                Expect.equal v.Unmatched 1 "five units out is a different number"
+                Expect.isNone (List.exactlyOne v.Numbers).DerivedFrom "and names no inputs"
+
+            testCase "a total quoted when one input is out of scope does not verify"
+            <| fun _ ->
+                let facts = [
+                    scoped "site-a" "1,200" "revenue"
+                    derivedTotal "2,000" "revenue" [ "site-a"; "site-b" ]
+                ]
+
+                let v =
+                    NumericFidelity.verify "Together: 2,000." facts (Some derivedRegistry) "Strict"
+
+                Expect.equal v.Unmatched 1 "site-b is not in scope, so the total stands on nothing"
+
+            testCase "a non-additive metric's total never verifies"
+            <| fun _ ->
+                let facts = [
+                    scoped "a" "10.0%" "share"
+                    scoped "b" "20.0%" "share"
+                    derivedTotal "30.0%" "share" [ "a"; "b" ]
+                ]
+
+                let v =
+                    NumericFidelity.verify "Combined share 30.0%." facts (Some derivedRegistry) "Strict"
+
+                Expect.equal v.Unmatched 1 "a share does not add up, whatever a tool printed"
+
+            testCase "without a registry no total verifies"
+            <| fun _ ->
+                let v = NumericFidelity.verify "Together: 2,000." twoSites None "Strict"
+                Expect.equal v.Unmatched 1 "no declaration, no tolerance, no match"
+
+            testCase "the inputs' own figures still verify as facts"
+            <| fun _ ->
+                let v =
+                    NumericFidelity.verify "Site A took 1,200 and B 800." twoSites (Some derivedRegistry) "Strict"
+
+                Expect.equal v.Verified 2 "each site's figure is a fact in scope"
+                Expect.isTrue (v.Numbers |> List.forall (fun n -> n.DerivedFrom.IsNone)) "matched as facts"
+        ]
+
+        // ── The facts a fact tool's result put in front of the model ───
+        testList "toolResultFacts" [
+            testCase "a fact entry carries its id, rendering and metric"
+            <| fun _ ->
+                let facts =
+                    toolResultFacts
+                        """{"ranked":[{"rank":1,"factId":"f1","metric":"revenue","rendering":"1,200"}],"withheldCount":0}"""
+
+                Expect.equal facts [ scoped "f1" "1,200" "revenue" ] "one fact"
+
+            testCase "a withheld marker contributes nothing"
+            <| fun _ ->
+                let facts =
+                    toolResultFacts
+                        """{"facts":[],"withheld":[{"factId":"f9","policyRef":"licence-x","status":"withheld"}]}"""
+
+                Expect.isEmpty facts "an id and a policy are not a value"
+
+            testCase "a derived total and its inputs"
+            <| fun _ ->
+                let facts =
+                    toolResultFacts
+                        """{"totals":[{"group":"bakery","metric":"revenue","rendering":"2,000","inputFactIds":["a","b"],"inputs":[{"factId":"a","metric":"revenue","rendering":"1,200"},{"factId":"b","metric":"revenue","rendering":"800"}]}]}"""
+
+                Expect.equal
+                    facts
+                    [
+                        derivedTotal "2,000" "revenue" [ "a"; "b" ]
+                        scoped "a" "1,200" "revenue"
+                        scoped "b" "800" "revenue"
+                    ]
+                    "the total, then each input"
+
+            testCase "a result that is not JSON contributes nothing"
+            <| fun _ -> Expect.isEmpty (toolResultFacts "The tool was cancelled.") "no facts"
         ]
 
         // ── 523.C — gate modes ────────────────────────────────────────

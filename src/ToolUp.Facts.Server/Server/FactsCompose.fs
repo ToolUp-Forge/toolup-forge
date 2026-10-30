@@ -822,7 +822,10 @@ module FactsCompose =
                     // declares them all. `query_facts` answers about a
                     // subject; `query_metric_population` ranks a metric
                     // across a population and summarises what it ranked
-                    // over. Both take ids and neither can list them, so the
+                    // over; `aggregate_metric` sums a metric the registry
+                    // declares additive by group, so a total is the
+                    // server's arithmetic over gated facts, never the
+                    // model's. They take ids and none can list them, so the
                     // discovery surfaces ride the same knob:
                     // `list_metric_coverage` lists by metric and
                     // `list_fact_tables` by table. A deployment that armed
@@ -836,6 +839,38 @@ module FactsCompose =
                     AITools = app.AITools @ NarrativeGrounding.factTools
             }
             |> contribute register
+
+    /// Declare what `list_fact_tables` lists: the cap on the distinct members
+    /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
+    /// turns member listing off). Call it after `withFactStore`, which declares
+    /// the tool; the options are captured here as a value and the executor
+    /// reads the container for nothing. With no fact store composed it changes
+    /// nothing, and calling it before `withFactStore` is refused.
+    let withFactTablesOptions (options: FactTablesOptions) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let declared (definition: AIToolDefinition, _) = definition.Name = FactTablesTool.Name
+
+            if not (List.exists declared app.AITools) then
+                ServiceComposition.refuse (
+                    CompositionRefusal.MissingDependency(
+                        "FactsCompose.withFactTablesOptions",
+                        FactTablesTool.Name,
+                        "call FactsCompose.withFactStore first, which declares it"
+                    )
+                )
+            else
+                {
+                    app with
+                        AITools =
+                            app.AITools
+                            |> List.map (fun (definition, executor) ->
+                                if declared (definition, executor) then
+                                    definition, FactTablesTool.executeFor options
+                                else
+                                    definition, executor)
+                }
 
     // ─── Phase 592 — purpose-bound disclosure (opt-in) ────────────────
     //
