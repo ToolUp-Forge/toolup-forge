@@ -2823,18 +2823,28 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Justification" 2 Decode.asString)
         |> Decode.apply (Decode.field "ConsentedBy" 3 (Decode.option Decode.asString))
 
+    /// Generated decoder for `PageGrant` — one combinator per field or case, read off the type's own shape.
+    let pageGrant: Decoder<PageGrant> =
+        Decode.union "PageGrant" (function
+            | 0 -> Some(Decode.case0 PageGrant.SavePlatform)
+            | 1 -> Some(Decode.case0 PageGrant.SaveTeam)
+            | 2 -> Some(Decode.case0 PageGrant.SaveOwn)
+            | _ -> None)
+
     /// Generated decoder for `TeamPermissions` — one combinator per field or case, read off the type's own shape.
     let teamPermissions: Decoder<TeamPermissions> =
-        Decode.succeed (fun defaults members exposure grants -> ({
+        Decode.succeed (fun defaults members exposure grants pages -> ({
             Defaults = defaults
             Members = members
             Exposure = exposure
             Grants = grants
+            Pages = pages
         }: TeamPermissions))
         |> Decode.apply (Decode.field "Defaults" 0 (Decode.asMap Decode.asString (Decode.list modulePermission)))
         |> Decode.apply (Decode.field "Members" 1 (Decode.asMap Decode.asString (Decode.asMap Decode.asString (Decode.list modulePermission))))
         |> Decode.apply (Decode.field "Exposure" 2 (Decode.asMap Decode.asString moduleExposure))
         |> Decode.apply (Decode.field "Grants" 3 (Decode.asMap Decode.asString (Decode.asMap Decode.asString moduleGrantRecord)))
+        |> Decode.apply (Decode.field "Pages" 4 (Decode.asMap Decode.asString (Decode.list pageGrant)))
 
     /// Generated decoder for `PlatformKnowledgeBaseMode` — one combinator per field or case, read off the type's own shape.
     let platformKnowledgeBaseMode: Decoder<PlatformKnowledgeBaseMode> =
@@ -3163,6 +3173,7 @@ module PlatformDecoders =
         typeof<PartyRef>.FullName
         typeof<GrantPolicy>.FullName
         typeof<ModuleGrantRecord>.FullName
+        typeof<PageGrant>.FullName
         typeof<TeamPermissions>.FullName
         typeof<PlatformKnowledgeBaseMode>.FullName
         typeof<PlatformInfo>.FullName
@@ -3496,6 +3507,7 @@ module PlatformDecoders =
         RemotingDecoders.register<PartyRef> partyRef
         RemotingDecoders.register<GrantPolicy> grantPolicy
         RemotingDecoders.register<ModuleGrantRecord> moduleGrantRecord
+        RemotingDecoders.register<PageGrant> pageGrant
         RemotingDecoders.register<TeamPermissions> teamPermissions
         RemotingDecoders.register<PlatformKnowledgeBaseMode> platformKnowledgeBaseMode
         RemotingDecoders.register<PlatformInfo> platformInfo
@@ -3830,6 +3842,7 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<PartyRef> gate draws seed partyRef
         RemotingDecoders.verifyThrough<GrantPolicy> gate draws seed grantPolicy
         RemotingDecoders.verifyThrough<ModuleGrantRecord> gate draws seed moduleGrantRecord
+        RemotingDecoders.verifyThrough<PageGrant> gate draws seed pageGrant
         RemotingDecoders.verifyThrough<TeamPermissions> gate draws seed teamPermissions
         RemotingDecoders.verifyThrough<PlatformKnowledgeBaseMode> gate draws seed platformKnowledgeBaseMode
         RemotingDecoders.verifyThrough<PlatformInfo> gate draws seed platformInfo
