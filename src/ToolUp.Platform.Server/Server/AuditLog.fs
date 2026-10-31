@@ -2021,6 +2021,39 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> PublicationReaderRevoked(fromAuditJson<PublicationReaderGrantChangedPayload> j)
     }
+    // The page store's writes and refusals (append-only registration).
+    {
+        EventType = "PageSaved"
+        TryEncode =
+            (function
+            | PageSaved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageSaved(fromAuditJson<PageSavedPayload> j)
+    }
+    {
+        EventType = "PageReseeded"
+        TryEncode =
+            (function
+            | PageReseeded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageReseeded(fromAuditJson<PageReseededPayload> j)
+    }
+    {
+        EventType = "PageDetached"
+        TryEncode =
+            (function
+            | PageDetached p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageDetached(fromAuditJson<PageDetachedPayload> j)
+    }
+    {
+        EventType = "PageWriteRefused"
+        TryEncode =
+            (function
+            | PageWriteRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageWriteRefused(fromAuditJson<PageWriteRefusedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

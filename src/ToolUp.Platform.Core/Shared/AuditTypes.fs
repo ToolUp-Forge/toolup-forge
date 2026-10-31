@@ -829,6 +829,18 @@ type AuditEvent =
     /// Phase 1107 — an in-platform publication reader grant revoked,
     /// recorded under the publishing scope.
     | PublicationReaderRevoked of PublicationReaderGrantChangedPayload
+    /// A module page's layer was saved or reset in the page store,
+    /// recorded under the scope the layer lives in.
+    | PageSaved of PageSavedPayload
+    /// A module page's platform layer took a new seed (its first, or an
+    /// operator's re-seed), recorded on the platform trail.
+    | PageReseeded of PageReseededPayload
+    /// A module page was detached from its compiled default, recorded on
+    /// the platform trail.
+    | PageDetached of PageDetachedPayload
+    /// A write to the page store was refused, recorded under the caller's
+    /// own scope.
+    | PageWriteRefused of PageWriteRefusedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1050,3 +1062,7 @@ module AuditEvent =
         | PublicationReaderSignedIn _ -> "PublicationReaderSignedIn"
         | PublicationReaderGranted _ -> "PublicationReaderGranted"
         | PublicationReaderRevoked _ -> "PublicationReaderRevoked"
+        | PageSaved _ -> "PageSaved"
+        | PageReseeded _ -> "PageReseeded"
+        | PageDetached _ -> "PageDetached"
+        | PageWriteRefused _ -> "PageWriteRefused"
