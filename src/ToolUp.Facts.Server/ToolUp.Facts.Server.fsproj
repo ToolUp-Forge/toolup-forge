@@ -144,6 +144,11 @@
              reads. Before the narrative grounding gate and the compose root,
              which both declare it beside the other fact tools. -->
         <Compile Include="Server\FactTablesTool.fs" />
+        <!-- Authorised narrative calculations: the declarations, the calculate
+             tool (through Fuaran.Compute) and the independent re-derivation the
+             gate resolves a calc reference through. After the certificate
+             files (it builds a calculation admission), before the gate. -->
+        <Compile Include="Server\NarrativeCalculations.fs" />
         <!-- The narrative grounding gate: every number in a model-written
              narrative must be a current, disclosable Fact reference stating
              its value. After the certificate files (it certifies a published

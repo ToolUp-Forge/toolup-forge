@@ -60,6 +60,25 @@ type ICitableReferenceKind =
     /// `principal`.
     abstract Resolve: scopeId: string * principal: string * referenceId: string -> Async<CitableReferenceResolution>
 
+/// The names an authorised calculation is known by on both
+/// sides of the seam. The fact tier declares the calculations, computes them
+/// (the `calculate` tool) and re-derives every `calc:` reference at its gate;
+/// the grounded run gives the model the tool and tells it to request a
+/// derived figure rather than compute one. Neither package references the
+/// other, so the two names live here.
+[<RequireQualifiedAccess>]
+module AuthorisedCalculation =
+    /// The reference kind of an authorised calculation: a narrative cites one
+    /// as `calc:<declaration>@<version>/<input fact id>/…/<content address>`.
+    /// The fact tier resolves it itself, so a deployment never registers an
+    /// `ICitableReferenceKind` of this name.
+    [<Literal>]
+    let ReferenceKind = "calc"
+
+    /// The narrative tool the model requests a calculation with.
+    [<Literal>]
+    let ToolName = "calculate"
+
 /// A grounding certificate issued over a published grounded narrative: the
 /// narrative id at its root and a `CitesFact` edge to every Fact it cites.
 type NarrativeGroundingCertificate = {
