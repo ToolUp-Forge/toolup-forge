@@ -22,7 +22,7 @@ open ToolUp.AI
 
 // ─── The layout tools ──────────────────────────────────────────────
 //
-// Eight server-resident tools that edit a stored page (Phase 1165) the way an
+// Eight server-resident tools that edit a stored page the way an
 // analyst asks for it — "compare against a longer period", "add revenue by
 // site under the breakdowns" — and a ninth that saves what they proposed.
 //
@@ -32,7 +32,7 @@ open ToolUp.AI
 // (`Fuaran.UI.Ops.Apply.apply`), and saved through the page store, which
 // folds the same ops with the same engine.
 //
-// **Proposing is open; saving is gated (plan D3).** Each of the eight tools
+// **Proposing is open; saving is gated.** Each of the eight tools
 // reads the caller's folded page, computes ops, applies them to a copy,
 // validates the copy and answers with a preview block marked `proposed` and a
 // proposal id. Nothing is written. `layout_save` takes that id and a layer and
@@ -48,14 +48,14 @@ open ToolUp.AI
 //      language profile is registered yet, so the base rules are the grammar;
 //   3. every chart the edit touched types against its request's resolved
 //      schema (`QueryBinding.check`), resolved under the caller's gate
-//      through the page request resolver (Phase 1166);
+//      through the page request resolver;
 //   4. no chart or grid on the page draws inline rows: each names, by a
 //      `Binding.Query`, a request the page holds;
 //   5. the page's read-set — derived from its requests — names only tables,
 //      metrics and subject levels the composition declares.
 //
 // **A tool can never type a number.** A data-bearing node a tool adds or
-// changes names a request key; the request is a Phase 1166 `PageRequest`; the
+// changes names a request key; the request is a `PageRequest`; the
 // rows arrive at render, under the reader's gate. A request that changes is
 // minted a new key and the nodes bound to it are rebound (`ReplaceBinding`),
 // so one key always names one request and every request change is an op.
