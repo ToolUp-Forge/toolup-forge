@@ -123,6 +123,9 @@ module ReportSubscriptionJobHandler =
         Version: int
         Delivered: int
         Skipped: int
+        /// Phase 1181 — the warning the producer reported beside its
+        /// render request (`ReportProducerWarning`), if any.
+        Warning: string option
     }
 
     /// A run that did not. `Terminal` is the handler's own judgement —
@@ -393,7 +396,8 @@ module ReportSubscriptionJobHandler =
                         Reason = SubscriptionError.toMessage (UnknownProducer subscription.ProducerKey)
                     }
             | Some producer ->
-                let! resolved = producer.Resolve subscription.ScopeId subscription.Parameters
+                let! resolved, warning =
+                    ReportProducerWarning.collect (producer.Resolve subscription.ScopeId subscription.Parameters)
 
                 match resolved with
                 | Error reason ->
@@ -432,6 +436,7 @@ module ReportSubscriptionJobHandler =
                                         Version = artefact.Version
                                         Delivered = delivered
                                         Skipped = skipped
+                                        Warning = warning
                                     }
         }
 
@@ -531,7 +536,11 @@ module ReportSubscriptionJobHandler =
                                     Terminal = false
                                 }
 
-                            return Success
+                            // Phase 1181 — a producer's warning rides to the
+                            // run row as 1175's narrative job carries its own.
+                            match success.Warning with
+                            | Some warning -> return SuccessWithWarning warning
+                            | None -> return Success
 
                         | Error failure ->
                             let failure =

@@ -1218,6 +1218,54 @@ let triggerTests =
             | Ok _ -> failtest "a producer with no carried scope must not run"
         }
 
+        test "as a report producer: a narrative published with claims withheld reports the job's warning (Phase 1181)" {
+            let offence = {
+                Location = "section 'summary' › element 1 › span 1"
+                Claim = "40 units"
+                Reason = UnreferencedNumber
+            }
+
+            let resolveOver (repair: GroundedRepairSummary) =
+                let producer =
+                    GroundedNarrativeProducer.create
+                        "grounded-monthly"
+                        "Monthly"
+                        (stubRun
+                            (GroundedNarrativePublished(
+                                Guid.NewGuid(),
+                                documentFor "Monthly",
+                                [],
+                                None,
+                                Error "no signer",
+                                repair
+                            ))
+                            (ConcurrentQueue()))
+                        "monthly-brand-summary"
+                        "monthly-template"
+                        "body"
+
+                ReportProducerScope.within
+                    (ScopeResolution.ofStorageScope (storageFor "team-producer"))
+                    (ReportProducerWarning.collect (producer.Resolve "team-producer" Map.empty))
+                |> Async.RunSynchronously
+
+            let withheld = { Rounds = 2; Withheld = [ offence ] }
+
+            match resolveOver withheld with
+            | Ok _, Some warning ->
+                Expect.equal
+                    warning
+                    (GroundedRepairSummary.warning withheld)
+                    "the same warning the narrative's own job carries"
+
+                Expect.stringContains warning "40 units" "naming the claim"
+            | other -> failtestf "expected a render request with a warning, got %A" other
+
+            match resolveOver (GroundedRepairSummary.complete 1) with
+            | Ok _, None -> ()
+            | other -> failtestf "a narrative published whole reports no warning, got %A" other
+        }
+
         test "on data arrival: a resolved write enqueues the runs that depend on the changed metric, end to end" {
             let deployment =
                 deploy (fun id rendering -> answer $"Acme revenue was [[Revenue|{rendering}|{id}]] in September.")

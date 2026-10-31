@@ -192,6 +192,51 @@ module ReportProducerScope =
             current.Value <- previous
     }
 
+/// Phase 1181 — a warning a report producer reports beside its render
+/// request: the producer did its work, and something about the result is
+/// worth an admin's attention (a grounded narrative published with claims
+/// withheld). The subscription job collects it around `Resolve` and returns
+/// `JobResult.SuccessWithWarning`, so the run row reads `Succeeded` with the
+/// warning beside it, exactly as a grounded narrative's own job does.
+///
+/// **A companion seam, not a field.** `ReportRenderRequest` and
+/// `ReportProducer` are records consumers construct in full, and a new field
+/// on either would break every one of those literals. Like
+/// `ReportProducerScope`, the collector rides the async chain (GP 7): the job
+/// places it for the duration of the resolve, and a producer that has nothing
+/// to say never touches it — so every existing producer is unchanged.
+module ReportProducerWarning =
+    let private current = System.Threading.AsyncLocal<ConcurrentQueue<string> option>()
+
+    /// Report a warning for the run this resolve belongs to. Outside a
+    /// collecting run (a direct `Resolve` call, an interactive render) it is
+    /// dropped: there is no job row to carry it.
+    let report (warning: string) : unit =
+        match current.Value with
+        | Some warnings when not (System.String.IsNullOrWhiteSpace warning) -> warnings.Enqueue warning
+        | _ -> ()
+
+    /// Run `work` collecting the warnings producers report inside it. `None`
+    /// when none was reported; several are joined in the order reported.
+    let collect (work: Async<'T>) : Async<'T * string option> = async {
+        let previous = current.Value
+        let warnings = ConcurrentQueue<string>()
+        current.Value <- Some warnings
+
+        try
+            let! result = work
+
+            let warning =
+                if warnings.IsEmpty then
+                    None
+                else
+                    Some(String.concat "; " warnings)
+
+            return result, warning
+        finally
+            current.Value <- previous
+    }
+
 module GroundedNarrativeProducer =
     open ToolUp.Platform
 
@@ -227,6 +272,12 @@ module GroundedNarrativeProducer =
 
                 match outcome with
                 | GroundedNarrativePublished(document = document) ->
+                    // Published with claims withheld: the narrative job's own
+                    // warning (Phase 1175), carried to the subscription's job.
+                    match GroundedNarrativeOutcome.toJobResult outcome with
+                    | SuccessWithWarning warning -> ReportProducerWarning.report warning
+                    | _ -> ()
+
                     return
                         Ok {
                             TemplateId = templateId

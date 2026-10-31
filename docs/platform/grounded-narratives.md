@@ -497,7 +497,11 @@ also recorded `data-arrival`).
 
 **Scheduled report.** Register a producer over the run; the narrative fills a template placeholder
 as a `NarrativeValue`, so the render goes through the ordinary pipeline and its export door. A
-refused narrative is the producer's `Error`, recorded on the subscription's last-run outcome.
+refused narrative is the producer's `Error`, recorded on the subscription's last-run outcome. A narrative
+published with claims withheld is a success with a warning: the producer reports it through
+`ReportProducerWarning`, and the subscription's job row reads `Succeeded` with the warning beside it,
+exactly as the narrative's own job does (Phase 1181). Any producer may report one the same way; one
+that reports none is unchanged.
 
 ```fsharp skip=fragment
 GroundedNarrativeProducer.create

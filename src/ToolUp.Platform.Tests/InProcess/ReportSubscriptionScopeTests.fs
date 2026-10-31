@@ -1575,6 +1575,123 @@ let standingSubscriptionTests =
         }
     ]
 
+// ── Phase 1181 — a producer's warning reaches the subscription's run row ─
+
+/// The subscription job's first completed run row and its definition once
+/// the scheduler has written both. Bounded, so a run never recorded fails.
+let private completedRun (world: World) (scopeId: string) : JobRun * JobDefinition =
+    let scheduler = world.Scheduler :> IJobScheduler
+    let deadline = DateTime.UtcNow.AddSeconds 60.0
+    let mutable found = None
+
+    while found.IsNone && DateTime.UtcNow < deadline do
+        let job =
+            scheduler.ListJobs scopeId
+            |> Async.RunSynchronously
+            |> List.tryFind (fun job -> job.Handler = ReportSubscription.JobHandlerName)
+
+        match job with
+        | Some job when job.LastRunStatus.IsSome ->
+            let row =
+                scheduler.GetRecentRuns(scopeId, job.JobId, 10)
+                |> Async.RunSynchronously
+                |> List.tryFind (fun run -> run.Status <> JobRunStatus.Running)
+
+            match row with
+            | Some row -> found <- Some(row, job)
+            | None -> Thread.Sleep 25
+        | _ -> Thread.Sleep 25
+
+    match found with
+    | Some run -> run
+    | None -> failtest "the subscription job's run row was never recorded"
+
+/// A grounded narrative run that publishes with `repair`, whatever it is asked.
+let private publishing (repair: GroundedRepairSummary) =
+    { new IGroundedNarrativeRun with
+        member _.Run _ = async {
+            let document: NarrativeDocument = {
+                Title = "Monthly"
+                Subtitle = None
+                Sections = []
+                Provenance = None
+                Lang = None
+                CanonicalUrl = None
+            }
+
+            return GroundedNarrativePublished(Guid.NewGuid(), document, [], None, Error "no signer", repair)
+        }
+    }
+
+let private groundedOver (repair: GroundedRepairSummary) =
+    GroundedNarrativeProducer.create "test.grounded" "Grounded" (publishing repair) "monthly" templateId "body"
+
+let private withheldClaim = {
+    Location = "part of a paragraph in the section \"Summary\""
+    Claim = "40 units"
+    Reason = UnreferencedNumber
+}
+
+let producerWarningTests =
+    testList "Phase 1181 — a subscription job carries its report's withheld-claims warning" [
+
+        test "a report that withheld a claim leaves a Succeeded run row with the warning naming the claim" {
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+
+            let world =
+                worldWith (
+                    groundedOver {
+                        Rounds = 2
+                        Withheld = [ withheldClaim ]
+                    }
+                )
+
+            createAndRun world (world.ApiUnder scope team) team "test.grounded"
+            |> expectSucceeded
+
+            let row, job = completedRun world team
+            Expect.equal row.Status JobRunStatus.Succeeded "the run row is Succeeded, not failed"
+
+            match row.Warning with
+            | Some warning ->
+                Expect.stringContains warning "40 units" "the warning names the withheld claim"
+                Expect.stringContains warning "1 claim(s) withheld" "and counts it"
+            | None -> failtest "expected the run row to carry the withheld-claims warning"
+
+            Expect.equal job.LastRunWarning row.Warning "the definition carries it too"
+            Expect.equal (world.Sink.Sent |> List.map fst) [ team ] "and the grounded remainder was delivered"
+        }
+
+        test "a clean grounded report leaves no warning" {
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+            let world = worldWith (groundedOver (GroundedRepairSummary.complete 0))
+
+            createAndRun world (world.ApiUnder scope team) team "test.grounded"
+            |> expectSucceeded
+
+            let row, job = completedRun world team
+            Expect.equal row.Status JobRunStatus.Succeeded "Succeeded"
+            Expect.isNone row.Warning "no warning on the run row"
+            Expect.isNone job.LastRunWarning "nor on the definition"
+        }
+
+        test "a producer that reports no warning is unchanged" {
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+            let world = worldWith (probe (ConcurrentQueue()))
+
+            createAndRun world (world.ApiUnder scope team) team "test.scope-probe"
+            |> expectSucceeded
+
+            let row, job = completedRun world team
+            Expect.equal row.Status JobRunStatus.Succeeded "Succeeded"
+            Expect.isNone row.Warning "no warning on the run row"
+            Expect.isNone job.LastRunWarning "nor on the definition"
+        }
+    ]
+
 let tests =
     testList "Phase 990 — report subscriptions run under the scope that created them" [
         carriedScopeTests
@@ -1583,4 +1700,5 @@ let tests =
         groundedRestampTests
         reissueTests
         standingSubscriptionTests
+        producerWarningTests
     ]
