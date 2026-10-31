@@ -903,6 +903,7 @@
         <Compile Include="InProcess\DeliveryCompletedTests.fs" />
         <Compile Include="InProcess\FactPresentationTests.fs" />
         <Compile Include="InProcess\PageRequestResolverTests.fs" />
+        <Compile Include="InProcess\LayoutToolsTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

@@ -8953,6 +8953,7 @@ ToolUp.Platform.PageAuthority (class)
 ToolUp.Platform.PageAuthority.needed(ToolUp.Platform.PageLayer) : ToolUp.Platform.PageGrant
 ToolUp.Platform.PageAuthority.permits(ToolUp.Platform.PageStoreOptions, ToolUp.Platform.PageLayer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PageStoreError]
 ToolUp.Platform.PageDocumentStoreCompose (class)
+ToolUp.Platform.PageDocumentStoreCompose.componentId : ToolUp.Platform.ComponentId { get }
 ToolUp.Platform.PageDocumentStoreCompose.withPageDocumentStore(ToolUp.Platform.PageStoreOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.PageLayer (class)
 ToolUp.Platform.PageLayer.Individual : ToolUp.Platform.PageLayer { get }

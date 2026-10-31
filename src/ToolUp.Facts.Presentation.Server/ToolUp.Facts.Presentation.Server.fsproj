@@ -23,6 +23,7 @@
         <Compile Include="Server\RenderTools.fs" />
         <Compile Include="Server\PipelineAnsweringTool.fs" />
         <Compile Include="Server\PageRequestResolver.fs" />
+        <Compile Include="Server\LayoutTools.fs" />
         <Compile Include="Server\PresentationCompose.fs" />
     </ItemGroup>
 </Project>

@@ -6,7 +6,8 @@ namespace ToolUp.Facts.Presentation
 open ToolUp.Platform
 open ToolUp.AI.AICompose
 
-/// Composing the render tools and the pipeline tool.
+/// Composing the render tools, the pipeline tool, the page request
+/// resolvers and the layout tools.
 [<RequireQualifiedAccess>]
 module PresentationCompose =
 
@@ -90,7 +91,7 @@ module PresentationCompose =
     /// fact-table change signal the cache is invalidated by. Only under
     /// `EnabledFactStore`; under `NoFactStore` the app is returned unchanged
     /// and nothing is registered. Call it after `FactsCompose.withFactStore`,
-    /// which composes the signal. **Adds** its registrations.
+    /// which composes the signal. Idempotent. **Adds** its registrations.
     ///
     /// ```fsharp skip=fragment
     /// ServerApp.empty
@@ -101,7 +102,54 @@ module PresentationCompose =
     let withPageRequests (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
+        | EnabledFactStore when app.Contributions |> List.exists (fun c -> c.Owner = owner) -> app
         | EnabledFactStore -> ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register) app
+
+    /// The layout tools' runtime is contributed under its own slot, so that
+    /// composing it never reads as composing the page requests.
+    let private layoutOwner: ComponentId =
+        ComponentId.forCompanionSlot (nameof LayoutToolsRuntime)
+
+    /// Compose the eight `layout_*` tools and `layout_save` onto the AI
+    /// composition, beside the render tools: the eight propose an edit of a
+    /// stored page as ops over the caller's folded page, validated and
+    /// previewed, and `layout_save` lands a proposal on a layer under the page
+    /// store's gate and audit. Registers the tools' runtime (the page store,
+    /// the page request resolvers and the proposals, resolved in its
+    /// registration factory) and composes the page request resolvers
+    /// (`withPageRequests`) when they are not composed.
+    ///
+    /// Only under `EnabledFactStore`, and only when the page store is composed
+    /// (`PageDocumentStoreCompose.withPageDocumentStore`, called before this):
+    /// otherwise the app is returned unchanged and no tool is registered, so
+    /// a deployment that composes neither has the tool list it had before.
+    /// A page store registered by hand, rather than through its compose
+    /// builder, is not seen. Idempotent. **Adds** nine answering tools and one
+    /// registration.
+    ///
+    /// ```fsharp skip=fragment
+    /// AIServerApp.createFrom factory providerProfile (app |> PageDocumentStoreCompose.withPageDocumentStore PageStoreOptions.defaults)
+    /// |> PresentationCompose.withLayoutTools
+    /// |> composeAI
+    /// ```
+    let withLayoutTools (app: AIServerApp) : AIServerApp =
+        let pageStore =
+            app.Base.Contributions
+            |> List.exists (fun c -> c.Owner = PageDocumentStoreCompose.componentId)
+
+        let composed =
+            app.AIAnsweringTools
+            |> List.exists (fun (definition, _) -> definition.Name = LayoutTools.name LayoutTool.Save)
+
+        match app.Base.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore when not pageStore || composed -> app
+        | EnabledFactStore ->
+            let base' =
+                withPageRequests app.Base
+                |> ServerApp.addContribution (Contribution.service layoutOwner LayoutTools.register)
+
+            AIServerApp.withAIAnsweringTools LayoutTools.tools { app with Base = base' }
 
     /// Let `evaluate_pipeline` assert a result column as facts of a registered
     /// derived metric: the tool gains the `assert` argument, and the write it

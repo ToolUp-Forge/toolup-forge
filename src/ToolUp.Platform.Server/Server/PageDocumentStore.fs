@@ -1131,6 +1131,12 @@ type BlobPageDocumentStore
 [<RequireQualifiedAccess>]
 module PageDocumentStoreCompose =
 
+    /// The identity the page store's registration is contributed under: its
+    /// companion slot, named by the interface. A composition that asks whether
+    /// the page store is composed (the layout tools do) reads this, so the two
+    /// sides cannot name different slots.
+    let componentId: ComponentId = ComponentId.forCompanionSlot "IPageDocumentStore"
+
     /// Adds `IPageDocumentStore` (the `BlobPageDocumentStore` default) under
     /// `options`, over the registered `IDataObjectStore`, `IPermissionStore`
     /// and `IAuditLog`, and the team roles of the registered `ITeamStore`
@@ -1156,5 +1162,4 @@ module PageDocumentStoreCompose =
                 )
                 :> IPageDocumentStore)
 
-        app
-        |> ServerApp.addContribution (Contribution.service (ComponentId.forCompanionSlot "IPageDocumentStore") register)
+        app |> ServerApp.addContribution (Contribution.service componentId register)

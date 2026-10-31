@@ -4,8 +4,13 @@ open System
 open System.Text.Json
 open Expecto
 open ToolUp.Platform
+open Microsoft.Extensions.DependencyInjection
+open ToolUp.Platform.Providers
+open ToolUp.AI
+open ToolUp.AI.AICompose
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.ToolHelpers
+open ToolUp.Facts.Presentation
 
 // ─── Phase 508 — rich AI tool parameter schemas ──────────────────────
 //
@@ -527,6 +532,160 @@ let private decodeTests =
         }
     ]
 
+// ─── The layout tools in the census ──────────────────────────────────
+//
+// Nine rich declarations join the census: each renders a JSON Schema the
+// provider definition carries intact, the eight proposing tools take the page
+// they edit and no save argument, and only the save declares a write. And a
+// deployment that composes no layout tools — or composes them without a page
+// store — registers exactly the tool list it registered before, byte for byte.
+
+/// The composition fixture: an AI composition with or without the fact store
+/// and the page store, over a provider factory and profile that answer nothing.
+module LayoutCensus =
+
+    let private factory =
+        { new IAIProviderFactory with
+            member _.Available = []
+            member _.PlatformDescriptors = []
+            member _.PlatformDescriptor = None
+            member _.Resolve _ = async { return Error NoProviderConfigured }
+            member _.TryResolveByLabel(_, _) = async { return Error NoProviderConfigured }
+            member _.BuildPlatform(_, _, _) = None
+        }
+
+    let private profile =
+        { new IProviderProfile with
+            member _.Get _ = async { return None }
+            member _.Set(_, _) = async { return Ok() }
+            member _.Clear _ = async { return () }
+            member _.ResolveEntry(_, _, _) = async { return None }
+            member _.SetEntryHealth(_, _, _) = async { return Ok() }
+        }
+
+    /// An AI composition with or without the fact store and the page store.
+    let aiApp (factStore: FactStoreMode) (pageStore: bool) : AIServerApp =
+        let app = {
+            ServerApp.empty with
+                Config = {
+                    ServerConfig.defaults with
+                        FactStore = factStore
+                }
+        }
+
+        AIServerApp.createFrom
+            factory
+            profile
+            (if pageStore then
+                 PageDocumentStoreCompose.withPageDocumentStore PageStoreOptions.defaults app
+             else
+                 app)
+
+    /// Every provider definition the composed registry lists, as the text a
+    /// provider receives, in order.
+    let providerDefinitions (app: AIServerApp) : string list =
+        let services = ServiceCollection() :> IServiceCollection
+
+        match ServerApp.serviceConfig (composeAI app) with
+        | Some configure -> configure services |> ignore
+        | None -> failtest "composeAI registers its services"
+
+        let registry =
+            services
+            |> Seq.pick (fun d ->
+                match d.ImplementationInstance with
+                | :? AIToolRegistry as r when d.ServiceType = typeof<AIToolRegistry> -> Some r
+                | _ -> None)
+
+        registry.GetAll()
+        |> List.map (fun tool ->
+            let def = toProviderDef tool.Definition
+            def.Name + "\n" + def.Description + "\n" + def.InputSchema)
+
+let private layoutCensusTests =
+    testList "the layout tools" [
+
+        test "nine definitions, each rendering a schema the provider definition carries intact" {
+            Expect.equal
+                (LayoutTools.all |> List.map LayoutTools.name)
+                [
+                    "layout_add_block"
+                    "layout_remove_block"
+                    "layout_move_block"
+                    "layout_set_request"
+                    "layout_retitle"
+                    "layout_set_section"
+                    "layout_set_default"
+                    "layout_reset"
+                    "layout_save"
+                ]
+                "the eight verbs and the save"
+
+            for tool in LayoutTools.all do
+                let def = LayoutTools.definition tool
+                use doc = JsonDocument.Parse (toProviderDef def).InputSchema
+                let properties = doc.RootElement.GetProperty "properties"
+
+                let named = properties.EnumerateObject() |> Seq.map _.Name |> Set.ofSeq
+
+                Expect.equal
+                    named
+                    (def.Parameters |> List.map _.Name |> Set.ofList)
+                    (sprintf "%s: every parameter" def.Name)
+
+                for required in doc.RootElement.GetProperty("required").EnumerateArray() do
+                    Expect.isTrue (named.Contains(required.GetString())) (sprintf "%s: required is declared" def.Name)
+
+                Expect.equal def.Location ServerResident (sprintf "%s is server-resident" def.Name)
+
+                match tool with
+                | LayoutTool.Save ->
+                    Expect.isTrue
+                        (ToolEffectDeclaration.classes def.Effects
+                         |> Set.contains ToolEffectClass.WriteState)
+                        "the save declares its write"
+                | _ ->
+                    Expect.isTrue
+                        (named.Contains "module" && named.Contains "page")
+                        (sprintf "%s names its page" def.Name)
+
+                    Expect.isFalse
+                        (named.Contains "layer" && tool <> LayoutTool.Reset)
+                        (sprintf "%s carries no save argument" def.Name)
+
+                    Expect.isFalse
+                        (ToolEffectDeclaration.classes def.Effects
+                         |> Set.contains ToolEffectClass.WriteState)
+                        (sprintf "%s writes nothing" def.Name)
+        }
+
+        test
+            "a deployment composing no layout tools, or composing them without a page store, lists the same tools byte for byte" {
+            let without =
+                LayoutCensus.providerDefinitions (LayoutCensus.aiApp EnabledFactStore false)
+
+            let withoutPageStore =
+                LayoutCensus.providerDefinitions (
+                    LayoutCensus.aiApp EnabledFactStore false |> PresentationCompose.withLayoutTools
+                )
+
+            Expect.equal withoutPageStore without "no page store: the same list"
+
+            let pageStoreOnly =
+                LayoutCensus.providerDefinitions (LayoutCensus.aiApp EnabledFactStore true)
+
+            Expect.equal pageStoreOnly without "a page store alone adds no tool"
+
+            let composed =
+                LayoutCensus.providerDefinitions (
+                    LayoutCensus.aiApp EnabledFactStore true |> PresentationCompose.withLayoutTools
+                )
+
+            Expect.equal (List.length composed) (List.length without + 9) "composed: nine more"
+            Expect.equal (composed |> List.take (List.length without)) without "and the rest unchanged"
+        }
+    ]
+
 let tests =
     testList "Phase 508 rich AI tool parameter schemas" [
         flatUnchangedTests
@@ -534,4 +693,5 @@ let tests =
         escapingTests
         malformedTests
         decodeTests
+        layoutCensusTests
     ]
