@@ -1269,9 +1269,6 @@ ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.runOffences(Microso
 ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.tryClassifyDescribed(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[ToolUp.AI.NarrativeOffenceClass, System.String, System.String]]
 ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearning (class)
 ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearning.compose(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
-ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearning.decorate(System.IServiceProvider, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, ToolUp.Platform.IGroundedNarrativeRun) : ToolUp.Platform.IGroundedNarrativeRun
-ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearningRun (class)
-ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearningRun..ctor(ToolUp.Platform.IGroundedNarrativeRun, System.IServiceProvider, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy)
 ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting (class)
 ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting.request(ToolUp.AI.NarrativeOffenceClass, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting.sentenceOf(System.Int32, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]

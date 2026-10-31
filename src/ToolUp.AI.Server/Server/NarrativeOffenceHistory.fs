@@ -570,16 +570,31 @@ module NarrativeProposalDrafting =
 
 // ─── The run, learning ───────────────────────────────────────────
 
-let private tryService<'T> (sp: IServiceProvider) : 'T option =
-    match sp.GetService(typeof<'T>) with
-    | :? 'T as service -> Some service
+/// What the learning run reads, resolved once by its registration factory
+/// (`NarrativeOffenceLearning.compose`) and handed in as values.
+type internal NarrativeLearningServices = {
+    Logger: ILogger option
+    Events: IEventStore option
+    Storage: IBlobStorage option
+    Registry: GroundedNarrativeRegistry option
+    Gate: INarrativeGroundingGate option
+    Provider: IAIProvider option
+    ProviderFactory: IAIProviderFactory option
+}
+
+/// A service the container answered with, typed; `None` when it answered
+/// nothing (or something else).
+let private typed<'T> (service: obj) : 'T option =
+    match service with
+    | :? 'T as typedService -> Some typedService
     | _ -> None
 
 /// A grounded run that records what the gate refused after every run and
 /// drafts a proposal for a class that recurs. The run's outcome is the inner
 /// run's, untouched: a failure to learn is logged, never raised.
-type NarrativeOffenceLearningRun(inner: IGroundedNarrativeRun, services: IServiceProvider, policy) =
-    let logger = tryService<ILogger> services
+type internal NarrativeOffenceLearningRun
+    (inner: IGroundedNarrativeRun, services: NarrativeLearningServices, policy: NarrativeLearningPolicy) =
+    let logger = services.Logger
 
     let warn (message: string) =
         logger |> Option.iter (fun l -> l.Warn message)
@@ -664,10 +679,10 @@ type NarrativeOffenceLearningRun(inner: IGroundedNarrativeRun, services: IServic
         }
 
     let resolveProvider (request: GroundedNarrativeRequest) (definition: GroundedNarrativeDefinition) scope = async {
-        match tryService<IAIProvider> services with
+        match services.Provider with
         | Some provider -> return Some provider
         | None ->
-            match tryService<IAIProviderFactory> services with
+            match services.ProviderFactory with
             | None -> return None
             | Some factory ->
                 let access =
@@ -699,12 +714,13 @@ type NarrativeOffenceLearningRun(inner: IGroundedNarrativeRun, services: IServic
         (cls: NarrativeOffenceClass)
         =
         async {
-            match tryService<GroundedNarrativeRegistry> services, tryService<INarrativeGroundingGate> services with
+            match services.Registry, services.Gate with
             | Some registry, Some gate ->
                 match registry.TryResolve request.RunKey with
                 | None -> ()
                 | Some declared ->
-                    let! wording = NarrativeWording.resolve (NarrativeWording.storeOf services) scope declared
+                    let! wording =
+                        NarrativeWording.resolve (NarrativeWording.storeOver services.Storage logger) scope declared
 
                     // The wording moved since the run: the evidence no longer
                     // describes it, and the next run counts afresh.
@@ -782,12 +798,7 @@ type NarrativeOffenceLearningRun(inner: IGroundedNarrativeRun, services: IServic
             | GroundedNarrativeRefused offences -> Some offences, None
             | _ -> None, None
 
-        match
-            final,
-            request.Scope.Storage,
-            tryService<IEventStore> services,
-            NarrativeLearningStore.Over(tryService<IBlobStorage> services, logger)
-        with
+        match final, request.Scope.Storage, services.Events, NarrativeLearningStore.Over(services.Storage, logger) with
         | Some final, Some scope, Some events, Some store ->
             match! fromTrail events request scope.ScopeId started narrativeId with
             | None -> warn (sprintf "narrative learning: no outcome row on the trail for '%s'" request.RunKey)
@@ -831,14 +842,6 @@ type NarrativeOffenceLearningRun(inner: IGroundedNarrativeRun, services: IServic
 
 /// Composition.
 module NarrativeOffenceLearning =
-    /// `inner`, learning under `policy` over `services`.
-    let decorate
-        (services: IServiceProvider)
-        (policy: NarrativeLearningPolicy)
-        (inner: IGroundedNarrativeRun)
-        : IGroundedNarrativeRun =
-        NarrativeOffenceLearningRun(inner, services, policy) :> IGroundedNarrativeRun
-
     /// Compose the learning loop onto an app that composed grounded
     /// narratives (`GroundedNarratives.compose`), after that call: the
     /// composed run is wrapped so every run is recorded, and `policy` is
@@ -866,7 +869,19 @@ module NarrativeOffenceLearning =
                 s.AddSingleton<NarrativeLearningPolicy>(policy) |> ignore
 
                 s.AddSingleton<IGroundedNarrativeRun>(
-                    Func<IServiceProvider, IGroundedNarrativeRun>(fun sp -> decorate sp policy (innerOf sp))
+                    Func<IServiceProvider, IGroundedNarrativeRun>(fun sp ->
+                        let services = {
+                            Logger = typed<ILogger> (sp.GetService typeof<ILogger>)
+                            Events = typed<IEventStore> (sp.GetService typeof<IEventStore>)
+                            Storage = typed<IBlobStorage> (sp.GetService typeof<IBlobStorage>)
+                            Registry =
+                                typed<GroundedNarrativeRegistry> (sp.GetService typeof<GroundedNarrativeRegistry>)
+                            Gate = typed<INarrativeGroundingGate> (sp.GetService typeof<INarrativeGroundingGate>)
+                            Provider = typed<IAIProvider> (sp.GetService typeof<IAIProvider>)
+                            ProviderFactory = typed<IAIProviderFactory> (sp.GetService typeof<IAIProviderFactory>)
+                        }
+
+                        NarrativeOffenceLearningRun(innerOf sp, services, policy) :> IGroundedNarrativeRun)
                 )
                 |> ignore
 
