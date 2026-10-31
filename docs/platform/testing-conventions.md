@@ -172,6 +172,82 @@ A binding that genuinely must not run in the .NET pack — the standing case is 
 
 Three packs (`ToolUp.Stripe.Tests`, `ToolUp.Voice.Tests`, `ToolUp.Cloud.Parity.Tests`) call `runTestsInAssemblyWithCLIArgs` instead — real auto-discovery, where `[<Tests>]` **is** sufficient and this whole class cannot arise. They carry no guard, deliberately. The client-tier Fable harness is a different runner again; its floor lives in `VerifyFable`.
 
+## The `affected` lane: run the lists a change can reach
+
+`TOOLUP_TEST_LANE=affected` with `TOOLUP_TEST_LISTS=<file>` runs the Platform pack's lists named in the file and
+every other pack whole. The file is written by `Select`. The measurement the lane was cut from is in
+[`docs/migrations/1121-affected-lane-v0.md`](../migrations/1121-affected-lane-v0.md).
+
+```powershell
+dotnet run --project Build.fsproj -- Select --base origin/main --head HEAD --declared tests.txt --out .affected/selection.json
+$env:TOOLUP_TEST_LANE = 'affected'; $env:TOOLUP_TEST_LISTS = "$PWD/.affected/selection.lists"; pwsh ./verify.ps1
+```
+
+**When it may be used.** It is a worker's fail-fast lane: run it on your own change, before the merge, to learn in
+minutes whether the lists that change reaches are green. It is **not citable**. A ship cites the full lane, run on the
+folded tree. A selected run becomes citable only once the gate runner accepts a selected record under a declared
+selection policy for this repository, and until then nothing reads its manifest but a person. **A release always runs
+`full`**, whatever any policy says.
+
+**What `Select` selects.** It unions three sources and records which source admitted each unit:
+
+- **declared** — the lists the change is known to reach, from `--declared` (one per line: `<pack>/<list>`, or a bare
+  Platform list by its label or by the binding `Program.fs` registers). A list in another pack runs anyway, because
+  that pack runs whole.
+- **diffed** — every Platform list whose defining test file is in the diff, read off `Program.fs`'s registration and
+  the module the file defines. A new test file's lists are in by construction. An edited test file re-runs whole.
+- **always** — the registration guard, `Phase 175 — Public-API approval baseline`, every other pack (the `pure` packs
+  among them) and the Analyzers leg.
+
+There is no coverage map yet, so there is no derived source, and every manifest says `map: none`.
+
+**Forcing paths run the full lane, and the manifest names the rule that fired:**
+
+| Rule | Paths |
+|---|---|
+| `msbuild-import` | any `*.props` or `*.targets` |
+| `solution` | `*.sln`, `*.slnx` |
+| `build-script` | `Build.fs`, `Build.fsproj`, the repo-root sources the build script compiles, `verify.ps1` |
+| `toolchain` | `global.json`, `nuget.config` |
+| `composition-root` | `ToolUp.Platform.Server`'s `Compose/`, `ServerApp.fs`, `SDK.Server.fs` |
+| `server-client-config` | `ServerConfig` (`SDK.Shared.fs`, `Shared/Config/`) and `ClientConfig` (`SDK.ClientTypes.fs`) |
+| `module-registry` | a module's `*Compose.fs`, the client's `RegisteredModules.fs` |
+| `test-support` | the Platform pack's `Support/`, `ToolUp.Platform.Testing`, a non-source file in the Platform pack |
+| `test-project` | a `*.Tests.fsproj` |
+| `unpinned-test-source` | a Platform test file whose lists cannot be named. Either it is registered only through an applied, argument-taking entry (a contract pack), or it defines no registered list at all (a helper other lists share). |
+
+Under a forcing rule the lists file holds `*`, so the Platform pack keeps every list and every leg runs. Each rule is
+pinned in both directions in `ToolUp.Platform.Build.Tests/AffectedLaneTests.fs`. A rule added without a pinned row
+fails that pack.
+
+**The Platform pack's `Program.fs` is deliberately NOT a forcing path.** Every change that adds a list touches it,
+and the registration guard runs in every lane. The cost: a registration added without its test file changing is not
+diffed. Declare it.
+
+**The legs follow the diff.** The Fable leg runs only when client-tier code moved. Samples builds every sample in every
+lane, and transpiles the Fable ones only when client-tier code moved. Analyzers always runs. "Client-tier" is decided
+conservatively: anything under `samples/`, and any `src/` project not named as server-only, build-only or
+.NET-test-only. A guess can only add minutes, never skip a leg that mattered. A lists file written by hand, with no
+manifest beside it, runs every leg.
+
+**What the run says about itself.** `Select` writes the manifest (`--out`) and the lists file beside it (`.lists`),
+which points back at the manifest. Under `affected`, `VerifyAll` prints the manifest summary before anything runs:
+units by source, every skipped list, the forcing rules checked and any that fired, the legs, `map: none`. The Platform
+pack then prints each list it kept (with the line that kept it) and each it skipped, with case counts. A log cannot be
+mistaken for a full run.
+
+**The keep is the one name-keyed selection, and it fails closed.** Every other lane selects by physical identity.
+`affected` reads names from a file, so it resolves each line to the registered lists it names: by label, or by
+binding through reflection. A line that names no registered list makes the pack exit non-zero before running
+anything, and so does a missing or empty lists file. This is the `--filter` lesson: a mistyped name must never become
+a green run of nothing. The manifest's skipped list is exact when every declared Platform name is a binding. A declared
+label is resolved only by the pack, so the manifest marks its skipped list `skippedExact: false` and the pack's own
+print is the exact account.
+
+**What it does not protect against.** A selected run is unsound by construction. A regression in a list nobody
+declared, no diff touched and no forcing rule covers will pass it. Two things keep that cost bounded. The full lane is
+still the gate, and the lane says what it skipped.
+
 ## Testing client-tier MVU update functions
 
 Client-tier modules (`ToolUp.Platform.Client`, `ToolUp.AI.Client`, etc.) cannot be exercised by the `.NET` Expecto runners. The blocker is module-level construction of ToolUp.Remoting proxies:
