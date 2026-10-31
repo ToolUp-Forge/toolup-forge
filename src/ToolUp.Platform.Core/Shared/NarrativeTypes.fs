@@ -436,3 +436,35 @@ module NarrativeCitation =
         citations
         |> List.filter (fun c -> c.ReferenceKind = FactKind)
         |> List.map _.Reference
+
+    /// The `ReferenceKind` of a number admitted because the wording in force
+    /// asked for it ("report on the top three categories", then "the top
+    /// three categories"). Written `instruction:<wording version>#<section id>`.
+    [<Literal>]
+    let InstructionKind = "instruction"
+
+    /// The `ReferenceKind` of a number admitted because it counts what the
+    /// document itself lists — the subjects its own spans cite, or the items
+    /// of the list or rows of the table that follow it. Admitted only at the
+    /// repair loop's late stage. Written `structural-count:<location>`.
+    [<Literal>]
+    let StructuralCountKind = "structural-count"
+
+    /// The citation of a number the wording in force asked for.
+    let instruction (wordingVersion: int) (sectionId: string) : NarrativeCitation = {
+        ReferenceKind = InstructionKind
+        Reference = sprintf "%s:%d#%s" InstructionKind wordingVersion sectionId
+    }
+
+    /// The citation of a number that counts what the document lists at
+    /// `location`.
+    let structuralCount (location: string) : NarrativeCitation = {
+        ReferenceKind = StructuralCountKind
+        Reference = sprintf "%s:%s" StructuralCountKind location
+    }
+
+    /// The citations among `citations` that admit a number without a Fact
+    /// (an instruction echo or a structural count), in order.
+    let admissions (citations: NarrativeCitation list) : NarrativeCitation list =
+        citations
+        |> List.filter (fun c -> c.ReferenceKind = InstructionKind || c.ReferenceKind = StructuralCountKind)

@@ -1272,6 +1272,14 @@ type private RunMarks = {
     ProjectionRefusals: string list
 }
 
+/// What the gate is asked to admit for a run under `wording`: the numbers
+/// the wording in force asks for, always; at the late stage, the numbers
+/// that count what the document itself lists.
+let private checkOptions (wording: ResolvedWording) (lateStage: bool) : GroundingCheckOptions = {
+    Instruction = Some(GroundingInstruction.ofDefinition wording.Version wording.Definition)
+    LateStage = lateStage
+}
+
 type GroundedNarrativeRunner
     (services: IServiceProvider, registry: GroundedNarrativeRegistry, options: GroundedNarrativeRunOptions) =
 
@@ -1598,7 +1606,7 @@ type GroundedNarrativeRunner
     /// in the conversation as it now stands.
     let repair
         (request: GroundedNarrativeRequest)
-        (gate: INarrativeGroundingGate)
+        (check: NarrativeDocument -> Async<NarrativeGroundingVerdict>)
         (definition: GroundedNarrativeDefinition)
         (scope: StorageScope)
         (tally: TokenTally)
@@ -1647,7 +1655,7 @@ type GroundedNarrativeRunner
                             | Ok repairs -> GroundedRepair.splice repairs document, None
                             | Error why -> document, Some why
 
-                        let! verdict = gate.Check(request.Scope, definition.Principal, definition.Surface, repaired)
+                        let! verdict = check repaired
 
                         let after =
                             match verdict with
@@ -1709,13 +1717,22 @@ type GroundedNarrativeRunner
                         return Some outcome
                 }
 
-                let! certificate =
-                    gate.Certify(
-                        request.Scope,
-                        definition.Principal,
-                        string narrativeId,
-                        NarrativeCitation.factIds citations
-                    )
+                let! certificate = async {
+                    let! issued =
+                        gate.Certify(
+                            request.Scope,
+                            definition.Principal,
+                            string narrativeId,
+                            NarrativeCitation.factIds citations
+                        )
+
+                    return
+                        issued
+                        |> Result.map (fun c -> {
+                            c with
+                                Admissions = NarrativeCitation.admissions citations
+                        })
+                }
 
                 do!
                     record request.Scope.ScopeId GroundedNarrativeEvents.PublishedType {
@@ -1808,8 +1825,26 @@ type GroundedNarrativeRunner
                 else
                     Some(sprintf "repair stopped after %d round(s): %s" rounds (GroundedRepair.Stop.describe stop))
 
+            // The late stage: the model has been asked to cite or rephrase at
+            // least once, so a number counting what the document itself lists
+            // may now pass (`GroundingCheckOptions.LateStage`). Never on a
+            // first draft: a run that repaired nothing has no late stage.
+            let late = rounds > 0
+
             let check document =
-                gate.Check(request.Scope, definition.Principal, definition.Surface, document)
+                GroundingCheck.run
+                    gate
+                    request.Scope
+                    definition.Principal
+                    definition.Surface
+                    (checkOptions wording late)
+                    document
+
+            let! verdict = async {
+                match verdict with
+                | Ungrounded _ when late -> return! check document
+                | settled -> return settled
+            }
 
             match verdict with
             | Grounded citations ->
@@ -1940,9 +1975,15 @@ type GroundedNarrativeRunner
                                 match assemble definition drafts projections requested provenance with
                                 | Error reason -> return! failed request reason
                                 | Ok document ->
-                                    match!
-                                        gate.Check(request.Scope, definition.Principal, definition.Surface, document)
-                                    with
+                                    let draftCheck =
+                                        GroundingCheck.run
+                                            gate
+                                            request.Scope
+                                            definition.Principal
+                                            definition.Surface
+                                            (checkOptions wording false)
+
+                                    match! draftCheck document with
                                     | Grounded citations ->
                                         return!
                                             publish
@@ -1956,7 +1997,15 @@ type GroundedNarrativeRunner
                                                 (GroundedRepairSummary.complete 0)
                                     | Ungrounded offences ->
                                         let! best, verdict, rounds, stop =
-                                            repair request gate definition scope tally document offences conversation
+                                            repair
+                                                request
+                                                draftCheck
+                                                definition
+                                                scope
+                                                tally
+                                                document
+                                                offences
+                                                conversation
 
                                         return! settle request wording gate scope marks best verdict rounds stop
     }
