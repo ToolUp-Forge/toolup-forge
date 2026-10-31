@@ -194,7 +194,7 @@ baseline, minimum samples, the `min` statistic, and a note per ceiling:
 | Block | Measured by | Metrics |
 |---|---|---|
 | top level (server, Phase 192) | `dev-scripts/perf-budget-gate.ps1` booting `samples/MinimalApp` | `coldStartMs`, `hotPathMs`, plus the absent-assembly rule |
-| `client` (Phase 849, 909) | the same script running `ClientBench` in `src/ToolUp.AI.Client.Tests` under Node, after two production `vite build`s of `samples/MinimalClient` | `bootMs`, `decodePerResponseUs`, `viewPerDispatchUs`; `minimalBundleKiB`, `shellBundleKiB` |
+| `client` (Phase 849, 909) | the same script running `ClientBench` in `src/ToolUp.AI.Client.Tests` under Node, after two production `vite build`s of `samples/MinimalClient` | `bootMs`, `decodePerResponseUs`, `viewPerDispatchUs`; `minimalBundleKiB`, `shellBundleKiB`, `shellFirstLoadKiB` |
 | `load` (Phase 886) | the same script running `load gate` in `src/ToolUp.RAG.Benchmarks` | retrieval p95 and blob reads per query; fact point read, population read, assert and batch assert p95, and blob reads per point read |
 
 All three are decided by `ToolUp.Platform.Build`'s `PerfBudgetGate` (`VerifyPerfBudget` /
@@ -217,6 +217,40 @@ gate and is raised in review, rather than growing every consumer's bundle unseen
 builds both into fresh directories under `artifacts/perf-budget/bundles/`, so a failed build is an
 unobserved bundle rather than the last run's size, and its `-TeethCheck` decides the sizes against a
 bundle-only 1 KiB block so they are shown red on their own.
+
+**The shell's first load (Phase 1168).** `shellBundleKiB` sums every file, so it cannot see a split. `shellFirstLoadKiB`
+sums what a browser fetches before anything runs: the entry chunk and its static imports, walked through the
+`.vite/manifest.json` the shell build writes. AG Grid and AG Charts sit behind dynamic imports, in
+`AgGridRuntime` and `AgChartRuntime`. The gate script refuses a build where either stopped being on demand, and
+its `-TeethCheck` feeds that refusal a collapsed manifest. The binding files import `ag-grid-react` and
+`ag-charts-react` only through `[<Import>]`, because neither package declares `sideEffects`: one unused import
+at the top of a file keeps the whole library in the entry.
+
+The split points came from the bundle, by package (rendered bytes, before minifying):
+
+| Candidate | KiB | Decision |
+|---|---|---|
+| `ag-charts-community` + `ag-charts-core` | 2,142 | on demand: only two surfaces draw a chart |
+| `ag-grid-community` + `ag-grid-react` | 1,858 | on demand: only three surfaces show a grid |
+| `ToolUp.Platform.Client`, of which the built-in admin surfaces about 700 | 1,651 | stays: a surface's definition (name, icon, route, visibility) and its `update` are read at boot, so a split needs a deferred module form; a change to every surface for under a fifth of what remains |
+| `ToolUp.Platform.Core` (decoders, wire types) | 499 | stays: the shell's boot calls reach it |
+| `react-dom`, `react`, `scheduler` | 475 | stays: a first screen needs them |
+| `fable-library`, `Fable.SimpleJson`, `Fable.Parsimmon` | 298 | stays: everything above uses them |
+| `@dnd-kit/*` | 111 | stays: the sidebar's reordering, on every screen |
+
+Real Edge, the same page in both arms, 15 alternating loads per cell, median milliseconds from `import()` to
+resolved (2026-10-31, 16 logical cores). Transfer on a cold load is 1,024,774 bytes before and 366,326 after;
+warm is 0 in both, which is what confirms each cell did what it says. The last column loads every chunk too, which
+is what a page with a grid and a chart costs.
+
+| Profile | Cache | Before | After | Change | After, all chunks |
+|---|---|---|---|---|---|
+| desktop, no throttle | cold | 201 | 73 | -64% | 151 |
+| desktop, no throttle | warm | 200 | 71 | -65% | 144 |
+| mid laptop: 4x CPU, 10 Mbps, 40 ms | cold | 1,514 | 566 | -63% | 1,384 |
+| mid laptop: 4x CPU, 10 Mbps, 40 ms | warm | 660 | 233 | -65% | 463 |
+| low phone: 6x CPU, 1.6 Mbps, 150 ms | cold | 6,354 | 2,335 | -63% | 6,141 |
+| low phone: 6x CPU, 1.6 Mbps, 150 ms | warm | 1,079 | 393 | -64% | 777 |
 
 Measured 2026-09-29 against Phase 884's tree: the minimal sample 2,727,355 bytes (790,119 gzipped),
 the SDK shell 3,944,367 bytes (1,058,664 gzipped). The same phase measured building the generated

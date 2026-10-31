@@ -655,7 +655,7 @@ let private logGrid (msgs: ObservabilityMessages) (records: LogRecord list) (dis
         prop.style [ style.height 420 ]
         prop.children [
             AgGrid.grid [
-                AgGrid.theme Theme.themeBalham
+                AgGrid.baseTheme BaseTheme.themeBalham
                 AgGrid.onRowClicked (fun (_: obj) (record: LogRecord) -> dispatch (SelectRecord record))
                 AgGrid.columnDefs [
                     ColumnDef.create [

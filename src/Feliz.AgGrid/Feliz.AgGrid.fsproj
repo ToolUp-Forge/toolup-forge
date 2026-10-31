@@ -41,6 +41,7 @@
     <PackageTags>fsharp;fable;feliz;react;ag-grid;datagrid;bindings</PackageTags>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AgGridRuntime.fs" />
     <Compile Include="AgGrid.fs" />
     <Content Include="package.json" />
     <!-- Phase 852: the Fable pack pins the grid props compare. -->

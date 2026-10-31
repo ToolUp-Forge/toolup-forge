@@ -561,7 +561,7 @@ let private FileManagerOutputPanel (displays: DataTypeDisplay list) (model: Mode
                         // `ag-theme-balham` CSS class + `theme = "legacy"`
                         // pair; the theme is self-contained, no stylesheet
                         // import required.
-                        AgGrid.theme Theme.themeBalham
+                        AgGrid.baseTheme BaseTheme.themeBalham
                         AgGrid.domLayout AutoHeight
                         AgGrid.columnDefs [
                             ColumnDef.create [
