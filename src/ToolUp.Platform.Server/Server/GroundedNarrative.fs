@@ -75,15 +75,10 @@ type NarrativeGroundingCertificate = {
     CitedFactIds: string list
     /// The sealed certificate itself, in its open interchange JSON form, so
     /// a holder can verify it offline against the deployment's public key.
-    CertificateJson: string
     /// The numbers the narrative states without a Fact, and why each was
-    /// admitted: an `instruction` citation (the wording in force asked for
-    /// that number) or a `structural-count` citation (it counts what the
-    /// document itself lists). Listed beside the signed chain, not inside
-    /// it: the signed body is the Fact chain, and an admission is checked
-    /// against the wording and the document, which the fact store does not
-    /// hold. Empty when the narrative states no such number.
-    Admissions: NarrativeCitation list
+    /// admitted, are inside its signed body (`grounding-certificate/v2`),
+    /// which is the one place they are recorded.
+    CertificateJson: string
 }
 
 /// The fact tier's face toward narratives: the grounding gate and the
@@ -160,6 +155,23 @@ type IInstructedNarrativeGroundingGate =
         options: GroundingCheckOptions ->
             Async<NarrativeGroundingVerdict>
 
+    /// Issue a grounding certificate over a published narrative whose
+    /// verdict, under `options`, was `Grounded citations`. The gate checks
+    /// `document` again under `options` and seals every number it admits
+    /// without a Fact into the signed body, in document order, with where it
+    /// sits. `Error` when the document no longer passes, when the admissions
+    /// it finds are not the ones `citations` records, or when no certificate
+    /// can be issued.
+    abstract CertifyWith:
+        scope: ResolvedScope *
+        principal: string *
+        surface: FactEgressSurface *
+        narrativeId: string *
+        document: NarrativeDocument *
+        options: GroundingCheckOptions *
+        citations: NarrativeCitation list ->
+            Async<Result<NarrativeGroundingCertificate, string>>
+
 module GroundingCheck =
     /// Check `document` through `gate` under `options`: through `CheckWith`
     /// when the gate offers it, else through `Check`, which admits no number
@@ -176,6 +188,40 @@ module GroundingCheck =
         | :? IInstructedNarrativeGroundingGate as instructed ->
             instructed.CheckWith(scope, principal, surface, document, options)
         | _ -> gate.Check(scope, principal, surface, document)
+
+module GroundingCertification =
+    /// Certify `document`, published as `narrativeId` after `gate` returned
+    /// `Grounded citations` under `options`: through `CertifyWith` when the
+    /// gate offers it, so every admission is sealed into the signed body.
+    /// A gate that does not offer it checked through `Check`, which admits
+    /// nothing without a Fact, so it certifies the Fact ids alone; handed
+    /// admissions it could not have made, it refuses rather than seal a
+    /// certificate that leaves them out.
+    let run
+        (gate: INarrativeGroundingGate)
+        (scope: ResolvedScope)
+        (principal: string)
+        (surface: FactEgressSurface)
+        (options: GroundingCheckOptions)
+        (narrativeId: string)
+        (document: NarrativeDocument)
+        (citations: NarrativeCitation list)
+        : Async<Result<NarrativeGroundingCertificate, string>> =
+        match gate with
+        | :? IInstructedNarrativeGroundingGate as instructed ->
+            instructed.CertifyWith(scope, principal, surface, narrativeId, document, options, citations)
+        | _ ->
+            match NarrativeCitation.admissions citations with
+            | [] -> gate.Certify(scope, principal, narrativeId, NarrativeCitation.factIds citations)
+            | admitted -> async {
+                return
+                    Error(
+                        sprintf
+                            "the gate cannot sign admissions, and the narrative cites %d (%s)"
+                            (List.length admitted)
+                            (admitted |> List.map _.Reference |> String.concat ", ")
+                    )
+              }
 
 /// One section of a grounded narrative's shape. The heading is the
 /// deployment's, never the model's; `Guidance` tells the model what the

@@ -148,7 +148,7 @@ let verifyAndRead
             match JsonSerializer.Deserialize<GroundingCertificate>(predicate, jsonOptions) with
             | certificate when obj.ReferenceEquals(certificate.Body.Format, null) ->
                 Error(EnvelopeMalformed "predicate is not a grounding certificate (no format discriminator)")
-            | certificate when certificate.Body.Format <> GroundingCertificate.Format ->
+            | certificate when not (GroundingCertificate.isKnownFormat certificate.Body.Format) ->
                 Error(EnvelopeMalformed $"unsupported certificate format: {certificate.Body.Format}")
             | certificate -> Ok certificate
         with ex ->
@@ -298,7 +298,7 @@ let private readAttestedPredicate (predicate: string) : Result<AttestedGrounding
 
             if obj.ReferenceEquals(certificate.Body.Format, null) then
                 Error(EnvelopeMalformed "predicate is not an attested grounding certificate (no format discriminator)")
-            elif certificate.Body.Format <> GroundingCertificate.Format then
+            elif not (GroundingCertificate.isKnownFormat certificate.Body.Format) then
                 Error(EnvelopeMalformed $"unsupported certificate format: {certificate.Body.Format}")
             else
                 let surfaced (field: string) =

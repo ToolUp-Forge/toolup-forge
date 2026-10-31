@@ -78,9 +78,8 @@ the count. `Check` is `CheckWith` under `GroundingCheckOptions.none` and admits 
 `GroundingCheck.run` falls back to it for a gate that does not offer `CheckWith`. The pure form is
 `NarrativeGrounding.checkWith`, beside the matcher it uses (`NarrativeGrounding.mentions`,
 `NarrativeGrounding.echoes`). Both admissions are recorded beside the Fact citations on the
-verdict and the audit row. The published certificate lists them as `Admissions`, beside the signed
-chain rather than inside it: the signed body is the Fact chain, and an admission is checked
-against the wording and the document, which the fact store does not hold.
+verdict and the audit row, and the published certificate seals each one inside its signed body
+([the certificate](#the-grounding-certificate)).
 
 A refusal is `Ungrounded` with **every** offending claim, in document order:
 
@@ -167,8 +166,9 @@ Then:
 - **Grounded** — published through `NarrativePublisher.publishForScope` (tagged `grounded`), indexed
   into the knowledge base through `INarrativeIngestor` when one is composed, and certified: the
   gate issues a grounding certificate rooted at the narrative (a `NarrativeDocument` node) with a
-  `CitesFact` edge to every cited Fact, verifiable offline. Because the narrative's spans carry
-  their Fact ids, superseding a cited Fact flags it stale through
+  `CitesFact` edge to every cited Fact, and every number admitted without a Fact sealed beside the
+  chain, verifiable offline ([the certificate](#the-grounding-certificate)). Because the narrative's
+  spans carry their Fact ids, superseding a cited Fact flags it stale through
   `NarrativeSupersession.findStaleNarratives` (the Phase 521 join).
 - **Ungrounded** — the run repairs the draft (below). What it cannot repair is withheld, and the
   grounded remainder is published as above, with a note naming what was withheld. Only when the
@@ -181,6 +181,41 @@ Every outcome writes one audit row, source `_narratives` (a repaired run also wr
 below): `GroundedNarrativePublished`,
 `GroundedNarrativeRefused` (naming each offence) or `GroundedNarrativeFailed` (whose outcome field
 also tells `unfunded` and `over-budget` apart).
+
+### The grounding certificate
+
+A published narrative's certificate is a `grounding-certificate/v2`: a canonical JSON body sealed by
+a detached JWS over its exact bytes, checkable with the deployment's public key alone
+(`GroundingCertificate.verify`). The body is the v1 body — the chain rooted at the narrative, a
+`CitesFact` edge to each cited Fact, withheld Facts reduced to id and policy — plus an `Admissions`
+array: every number the narrative states without a Fact, in document order. Each entry carries:
+
+| Field | Holds |
+|---|---|
+| `Kind` | `instruction` or `structural-count` |
+| `Reference` | the reference as the gate cited it (`instruction:2#summary`, `structural-count:<location>`) |
+| `Location` | where the number sits (`section 'summary' › element 1 › span 1`) |
+| `Attributes` | the kind's own details, ordered by name: an instruction echo's `section` and `wordingVersion` |
+
+The admissions are under the signature, so editing, adding, removing or reordering one fails
+verification exactly as editing the chain does. The run hands the verdict's citations to the gate
+through `GroundingCertification.run`; the gate (`IInstructedNarrativeGroundingGate.CertifyWith`)
+checks the document again under the same options, derives the admissions with their locations
+(`NarrativeGrounding.admissionsWith`), refuses when they are not the ones the verdict recorded, and
+issues. A gate that offers only `Certify` certifies the Facts alone, and refuses a narrative that
+cites an admission it could not have made.
+
+**Both versions verify.** The canonical rules are v1's. A body with no admissions signs v1's shape,
+so an empty array is omitted and a v2 body that admitted nothing differs from v1's only in its format
+string; a v1 certificate verifies under v1's rules, unchanged, and is never re-issued. Admissions
+added to a v1 certificate change the signed bytes and fail. `GroundingCertificate.Formats` lists the
+formats a verifier reads; the envelope reader (`CertificateEnvelope`) accepts both. The attested
+path's signing purpose stays `grounding-certificate/v1`: it names the kind of payload, and the version
+is inside the body. Migration: [`docs/migrations/1179-grounding-certificate-v2-signs-admissions.md`](../migrations/1179-grounding-certificate-v2-signs-admissions.md).
+
+**A new kind of admission is a new entry, not a new field.** Every kind uses the four fields above,
+and anything kind-specific goes in `Attributes`. A field added to the entry would change the signed
+bytes of every certificate already issued.
 
 ### The repair loop and the publication rule
 

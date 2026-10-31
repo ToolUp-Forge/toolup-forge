@@ -108,6 +108,7 @@ let private body: GroundingCertificateBody = {
         }
     ]
     PolicyRefs = [ withheldPolicy ]
+    Admissions = None
 }
 
 /// Issue a certificate through the ordinary Phase 40 signing path, so the
