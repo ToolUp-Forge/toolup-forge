@@ -997,6 +997,8 @@ ToolUp.Platform.BlobNotificationPreferenceStore (class)
 ToolUp.Platform.BlobNotificationPreferenceStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationPreferenceStore
 ToolUp.Platform.BlobNotificationPreferenceStore+BlobNotificationPreferenceStore (class)
 ToolUp.Platform.BlobNotificationPreferenceStore+BlobNotificationPreferenceStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.BlobPageDocumentStore (class)
+ToolUp.Platform.BlobPageDocumentStore..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.PermissionStore+IPermissionStore, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]], ToolUp.Platform.IAuditLog, ToolUp.Platform.PageStoreOptions)
 ToolUp.Platform.BlobPrivacyBudgetLedger (class)
 ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
@@ -2666,6 +2668,22 @@ ToolUp.Platform.ConfigValidators.fromEnv(Microsoft.FSharp.Core.FSharpOption`1[Mi
 ToolUp.Platform.ConfigurePipeline (class)
 ToolUp.Platform.ConfigurePipeline.buildForwardedHeadersOptions(ToolUp.Platform.ServerConfig) : Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
 ToolUp.Platform.ConfigurePipeline.configurePipeline(Microsoft.AspNetCore.Builder.WebApplication, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.ComposeExtensions, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]) : System.Void
+ToolUp.Platform.ConflictCause (class)
+ToolUp.Platform.ConflictCause.IsNotInDocument : System.Boolean { get }
+ToolUp.Platform.ConflictCause.IsRefused : System.Boolean { get }
+ToolUp.Platform.ConflictCause.IsRemoved : System.Boolean { get }
+ToolUp.Platform.ConflictCause.Tag : System.Int32 { get }
+ToolUp.Platform.ConflictCause+NotInDocument (class)
+ToolUp.Platform.ConflictCause+NotInDocument.target : Fuaran.UI.Types+NodeId { get }
+ToolUp.Platform.ConflictCause+Refused (class)
+ToolUp.Platform.ConflictCause+Refused.Item : Fuaran.UI.Ops.Types+ApplyError { get }
+ToolUp.Platform.ConflictCause+Removed (class)
+ToolUp.Platform.ConflictCause+Removed.removedBy : ToolUp.Platform.LayerAct { get }
+ToolUp.Platform.ConflictCause+Removed.target : Fuaran.UI.Types+NodeId { get }
+ToolUp.Platform.ConflictCause+Tags (class)
+ToolUp.Platform.ConflictCause+Tags.NotInDocument : System.Int32 (literal)
+ToolUp.Platform.ConflictCause+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.ConflictCause+Tags.Removed : System.Int32 (literal)
 ToolUp.Platform.ConnectorCapabilities (class)
 ToolUp.Platform.ConnectorCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IWatchableFileSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload])
 ToolUp.Platform.ConnectorCapabilities.Native : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmitsNativePayload] { get }
@@ -3532,6 +3550,10 @@ ToolUp.Platform.DescriptorMigrationError+Tags.DescriptorTooNew : System.Int32 (l
 ToolUp.Platform.DescriptorMigrationError+Tags.UnknownDescriptorVersion : System.Int32 (literal)
 ToolUp.Platform.DescriptorMigrationError+UnknownDescriptorVersion (class)
 ToolUp.Platform.DescriptorMigrationError+UnknownDescriptorVersion.found : System.Int32 { get }
+ToolUp.Platform.DetachReceipt (class)
+ToolUp.Platform.DetachReceipt..ctor(System.Int32, System.String)
+ToolUp.Platform.DetachReceipt.SeedHash : System.String { get }
+ToolUp.Platform.DetachReceipt.Version : System.Int32 { get }
 ToolUp.Platform.DevDiagnosticsHandler (class)
 ToolUp.Platform.DevDiagnosticsHandler.buildIdentityRoute : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
 ToolUp.Platform.DevDiagnosticsHandler.buildReport(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsReport]
@@ -5089,6 +5111,15 @@ ToolUp.Platform.FoldWindow+TrainTestWindow.trainEnd : System.Int32 { get }
 ToolUp.Platform.FoldWindow+TrainTestWindow.trainStart : System.Int32 { get }
 ToolUp.Platform.FoldWindowModule (class)
 ToolUp.Platform.FoldWindowModule.describe(ToolUp.Platform.FoldWindow) : System.String
+ToolUp.Platform.FoldedPage (class)
+ToolUp.Platform.FoldedPage..ctor(ToolUp.Platform.PageRef, System.Byte[], System.String, Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LayerConflict], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.StoredLayer], System.Boolean)
+ToolUp.Platform.FoldedPage.Conflicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LayerConflict] { get }
+ToolUp.Platform.FoldedPage.ContentHash : System.String { get }
+ToolUp.Platform.FoldedPage.Detached : System.Boolean { get }
+ToolUp.Platform.FoldedPage.Document : System.Byte[] { get }
+ToolUp.Platform.FoldedPage.Layers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.StoredLayer] { get }
+ToolUp.Platform.FoldedPage.Page : ToolUp.Platform.PageRef { get }
+ToolUp.Platform.FoldedPage.Tree : Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit] { get }
 ToolUp.Platform.ForgeAuthContext (interface)
 ToolUp.Platform.ForgeAuthContext.HasClaim(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
 ToolUp.Platform.ForgeAuthContext.HasRole(System.String) : System.Boolean
@@ -6598,6 +6629,14 @@ ToolUp.Platform.IOcrProvider+OcrPage (class)
 ToolUp.Platform.IOcrProvider+OcrPage..ctor(System.Int32, System.String)
 ToolUp.Platform.IOcrProvider+OcrPage.PageNumber : System.Int32 { get }
 ToolUp.Platform.IOcrProvider+OcrPage.Text : System.String { get }
+ToolUp.Platform.IPageDocumentStore (interface)
+ToolUp.Platform.IPageDocumentStore.AppendOps(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Platform.PageRef, ToolUp.Platform.PageLayer, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PageSaveReceipt, ToolUp.Platform.PageStoreError]]
+ToolUp.Platform.IPageDocumentStore.Detach(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Platform.PageRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DetachReceipt, ToolUp.Platform.PageStoreError]]
+ToolUp.Platform.IPageDocumentStore.ReadFolded(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Platform.PageRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FoldedPage, ToolUp.Platform.PageStoreError]]
+ToolUp.Platform.IPageDocumentStore.ReadLayer(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Platform.PageRef, ToolUp.Platform.PageLayer) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StoredLayer], ToolUp.Platform.PageStoreError]]
+ToolUp.Platform.IPageDocumentStore.Reseed(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Platform.PageRef, ToolUp.Platform.PageSeed) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ReseedReceipt, ToolUp.Platform.PageStoreError]]
+ToolUp.Platform.IPageDocumentStore.ResetLayer(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Platform.PageRef, ToolUp.Platform.PageLayer) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PageSaveReceipt, ToolUp.Platform.PageStoreError]]
+ToolUp.Platform.IPageDocumentStore.Seed(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Platform.PageRef, ToolUp.Platform.PageSeed) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SeedOutcome, ToolUp.Platform.PageStoreError]]
 ToolUp.Platform.IPayloadReader (interface)
 ToolUp.Platform.IPayloadReader.Format : ToolUp.Platform.PayloadFormat { get }
 ToolUp.Platform.IPayloadReader.Read(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], System.String]
@@ -7036,6 +7075,18 @@ ToolUp.Platform.InTotoSubject (class)
 ToolUp.Platform.InTotoSubject..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.InTotoSubject.Digest : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.InTotoSubject.Name : System.String { get }
+ToolUp.Platform.IndividualLayer (class)
+ToolUp.Platform.IndividualLayer.Disabled : ToolUp.Platform.IndividualLayer { get }
+ToolUp.Platform.IndividualLayer.EveryViewer : ToolUp.Platform.IndividualLayer { get }
+ToolUp.Platform.IndividualLayer.GrantedOnly : ToolUp.Platform.IndividualLayer { get }
+ToolUp.Platform.IndividualLayer.IsDisabled : System.Boolean { get }
+ToolUp.Platform.IndividualLayer.IsEveryViewer : System.Boolean { get }
+ToolUp.Platform.IndividualLayer.IsGrantedOnly : System.Boolean { get }
+ToolUp.Platform.IndividualLayer.Tag : System.Int32 { get }
+ToolUp.Platform.IndividualLayer+Tags (class)
+ToolUp.Platform.IndividualLayer+Tags.Disabled : System.Int32 (literal)
+ToolUp.Platform.IndividualLayer+Tags.EveryViewer : System.Int32 (literal)
+ToolUp.Platform.IndividualLayer+Tags.GrantedOnly : System.Int32 (literal)
 ToolUp.Platform.IngestedPayload (class)
 ToolUp.Platform.IngestedPayload.ContentFormatKey : System.String (literal)
 ToolUp.Platform.IngestedPayload.CurrentPayloadFormat : System.String (literal)
@@ -7520,6 +7571,25 @@ ToolUp.Platform.LabelledTransform`1..ctor(ToolUp.Platform.AssemblyTransform, Lab
 ToolUp.Platform.LabelledTransform`1.Contributed : Label { get }
 ToolUp.Platform.LabelledTransform`1.Label : Label { get }
 ToolUp.Platform.LabelledTransform`1.Transform : ToolUp.Platform.AssemblyTransform { get }
+ToolUp.Platform.LayerAct (class)
+ToolUp.Platform.LayerAct..ctor(ToolUp.Platform.PageLayer, System.String, System.Int32)
+ToolUp.Platform.LayerAct.Layer : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.LayerAct.Principal : System.String { get }
+ToolUp.Platform.LayerAct.Seq : System.Int32 { get }
+ToolUp.Platform.LayerConflict (class)
+ToolUp.Platform.LayerConflict..ctor(ToolUp.Platform.LayerAct, Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit], ToolUp.Platform.ConflictCause)
+ToolUp.Platform.LayerConflict.Act : ToolUp.Platform.LayerAct { get }
+ToolUp.Platform.LayerConflict.Cause : ToolUp.Platform.ConflictCause { get }
+ToolUp.Platform.LayerConflict.Op : Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.LayerFold (class)
+ToolUp.Platform.LayerFold..ctor(Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LayerConflict])
+ToolUp.Platform.LayerFold.Conflicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LayerConflict] { get }
+ToolUp.Platform.LayerFold.Document : Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.LayerStream (class)
+ToolUp.Platform.LayerStream..ctor(ToolUp.Platform.PageLayer, System.String, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Core.OpRecord`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]]])
+ToolUp.Platform.LayerStream.Layer : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.LayerStream.Principal : System.String { get }
+ToolUp.Platform.LayerStream.Records : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Core.OpRecord`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]]] { get }
 ToolUp.Platform.Lease (class)
 ToolUp.Platform.Lease..ctor(System.String, System.Int64, System.DateTime, System.DateTime)
 ToolUp.Platform.Lease.AcquiredAt : System.DateTime { get }
@@ -8600,6 +8670,21 @@ ToolUp.Platform.NoopEdgeCache..ctor()
 ToolUp.Platform.NoopEdgeCacheModule (class)
 ToolUp.Platform.NoopEdgeCacheModule.create() : ToolUp.Platform.IEdgeCache
 ToolUp.Platform.NoopEdgeCacheModule.instance : ToolUp.Platform.IEdgeCache { get }
+ToolUp.Platform.NotInvertible (class)
+ToolUp.Platform.NotInvertible.IsDoesNotApply : System.Boolean { get }
+ToolUp.Platform.NotInvertible.IsOutsideVocabulary : System.Boolean { get }
+ToolUp.Platform.NotInvertible.IsRejected : System.Boolean { get }
+ToolUp.Platform.NotInvertible.Tag : System.Int32 { get }
+ToolUp.Platform.NotInvertible+DoesNotApply (class)
+ToolUp.Platform.NotInvertible+DoesNotApply.Item : Fuaran.UI.Ops.Types+ApplyError { get }
+ToolUp.Platform.NotInvertible+OutsideVocabulary (class)
+ToolUp.Platform.NotInvertible+OutsideVocabulary.opKind : System.String { get }
+ToolUp.Platform.NotInvertible+Rejected (class)
+ToolUp.Platform.NotInvertible+Rejected.code : System.String { get }
+ToolUp.Platform.NotInvertible+Tags (class)
+ToolUp.Platform.NotInvertible+Tags.DoesNotApply : System.Int32 (literal)
+ToolUp.Platform.NotInvertible+Tags.OutsideVocabulary : System.Int32 (literal)
+ToolUp.Platform.NotInvertible+Tags.Rejected : System.Int32 (literal)
 ToolUp.Platform.NotificationAddressBook (class)
 ToolUp.Platform.NotificationAddressBook.saveContact(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.Platform.UserContact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.NotificationAddressBook+BlobBackedNotificationAddressBook (class)
@@ -8839,6 +8924,123 @@ ToolUp.Platform.OwnerTeamBootstrapLifecycle (class)
 ToolUp.Platform.OwnerTeamBootstrapLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.OwnerTeamBootstrapLifecycle+OwnerTeamBootstrapLifecycle (class)
 ToolUp.Platform.OwnerTeamBootstrapLifecycle+OwnerTeamBootstrapLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.PageAuthority (class)
+ToolUp.Platform.PageAuthority.needed(ToolUp.Platform.PageLayer) : ToolUp.Platform.PageGrant
+ToolUp.Platform.PageAuthority.permits(ToolUp.Platform.PageStoreOptions, ToolUp.Platform.PageLayer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PageStoreError]
+ToolUp.Platform.PageDocumentStoreCompose (class)
+ToolUp.Platform.PageDocumentStoreCompose.withPageDocumentStore(ToolUp.Platform.PageStoreOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.PageLayer (class)
+ToolUp.Platform.PageLayer.Individual : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.PageLayer.IsIndividual : System.Boolean { get }
+ToolUp.Platform.PageLayer.IsPlatform : System.Boolean { get }
+ToolUp.Platform.PageLayer.IsTeam : System.Boolean { get }
+ToolUp.Platform.PageLayer.Platform : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.PageLayer.Tag : System.Int32 { get }
+ToolUp.Platform.PageLayer.Team : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.PageLayer+Tags (class)
+ToolUp.Platform.PageLayer+Tags.Individual : System.Int32 (literal)
+ToolUp.Platform.PageLayer+Tags.Platform : System.Int32 (literal)
+ToolUp.Platform.PageLayer+Tags.Team : System.Int32 (literal)
+ToolUp.Platform.PageLayerKey (class)
+ToolUp.Platform.PageLayerKey..ctor(ToolUp.Platform.PageRef, ToolUp.Platform.PageLayer, System.String)
+ToolUp.Platform.PageLayerKey.Layer : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.PageLayerKey.Page : ToolUp.Platform.PageRef { get }
+ToolUp.Platform.PageLayerKey.Principal : System.String { get }
+ToolUp.Platform.PageLayerModule (class)
+ToolUp.Platform.PageLayerModule.rank(ToolUp.Platform.PageLayer) : System.Int32
+ToolUp.Platform.PageLayerModule.toToken(ToolUp.Platform.PageLayer) : System.String
+ToolUp.Platform.PageLayers (class)
+ToolUp.Platform.PageLayers.decodeDocument(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], System.String]
+ToolUp.Platform.PageLayers.decodeOp(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit], System.String]
+ToolUp.Platform.PageLayers.digest(System.String) : System.String
+ToolUp.Platform.PageLayers.encodeDocument(Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit]) : System.String
+ToolUp.Platform.PageLayers.encodeOp(Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]) : System.String
+ToolUp.Platform.PageLayers.fold(Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LayerStream]) : ToolUp.Platform.LayerFold
+ToolUp.Platform.PageLayers.foldThen(Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LayerStream], ToolUp.Platform.PageLayer, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]]) : System.Tuple`2[ToolUp.Platform.LayerFold, ToolUp.Platform.LayerFold]
+ToolUp.Platform.PageLayers.invert(Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit], Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit], ToolUp.Platform.NotInvertible]
+ToolUp.Platform.PageLayers.invertAll(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]], Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]], System.Tuple`2[System.Int32, ToolUp.Platform.NotInvertible]]
+ToolUp.Platform.PageLayers.opsHash(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]]) : System.String
+ToolUp.Platform.PageLayers.outsideVocabulary`1(Fuaran.UI.Ops.Types+TreeOp`1[Msg]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.PageLayers.stream : Fuaran.Core.Stream`3[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit], Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Fuaran.UI.Ops.Types+ApplyError] { get }
+ToolUp.Platform.PageRef (class)
+ToolUp.Platform.PageRef..ctor(System.String, System.String)
+ToolUp.Platform.PageRef.Module : System.String { get }
+ToolUp.Platform.PageRef.Page : System.String { get }
+ToolUp.Platform.PageSaveReceipt (class)
+ToolUp.Platform.PageSaveReceipt..ctor(ToolUp.Platform.PageLayerKey, System.Int32, System.String, System.String, System.String)
+ToolUp.Platform.PageSaveReceipt.ChainHead : System.String { get }
+ToolUp.Platform.PageSaveReceipt.DocumentHash : System.String { get }
+ToolUp.Platform.PageSaveReceipt.Key : ToolUp.Platform.PageLayerKey { get }
+ToolUp.Platform.PageSaveReceipt.OpsHash : System.String { get }
+ToolUp.Platform.PageSaveReceipt.Version : System.Int32 { get }
+ToolUp.Platform.PageSeed (class)
+ToolUp.Platform.PageSeed..ctor(System.Byte[], Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]])
+ToolUp.Platform.PageSeed.Document : System.Byte[] { get }
+ToolUp.Platform.PageSeed.Sidecar : Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]] { get }
+ToolUp.Platform.PageStoreError (class)
+ToolUp.Platform.PageStoreError.IsDocumentUndecodable : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsGrantMissing : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsInvalidPageRef : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsLayerDisabled : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsNoOps : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsNotSeeded : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsOpOutsideVocabulary : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsOpsDoNotApply : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsPermissionsUnavailable : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsScopeRefused : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsStaleWrite : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsStorage : System.Boolean { get }
+ToolUp.Platform.PageStoreError.IsStoredLayerUnreadable : System.Boolean { get }
+ToolUp.Platform.PageStoreError.NoOps : ToolUp.Platform.PageStoreError { get }
+ToolUp.Platform.PageStoreError.NotSeeded : ToolUp.Platform.PageStoreError { get }
+ToolUp.Platform.PageStoreError.Tag : System.Int32 { get }
+ToolUp.Platform.PageStoreError+DocumentUndecodable (class)
+ToolUp.Platform.PageStoreError+DocumentUndecodable.reason : System.String { get }
+ToolUp.Platform.PageStoreError+GrantMissing (class)
+ToolUp.Platform.PageStoreError+GrantMissing.grant : ToolUp.Platform.PageGrant { get }
+ToolUp.Platform.PageStoreError+GrantMissing.layer : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.PageStoreError+InvalidPageRef (class)
+ToolUp.Platform.PageStoreError+InvalidPageRef.reason : System.String { get }
+ToolUp.Platform.PageStoreError+LayerDisabled (class)
+ToolUp.Platform.PageStoreError+LayerDisabled.Item : ToolUp.Platform.PageLayer { get }
+ToolUp.Platform.PageStoreError+OpOutsideVocabulary (class)
+ToolUp.Platform.PageStoreError+OpOutsideVocabulary.opKind : System.String { get }
+ToolUp.Platform.PageStoreError+OpsDoNotApply (class)
+ToolUp.Platform.PageStoreError+OpsDoNotApply.conflicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LayerConflict] { get }
+ToolUp.Platform.PageStoreError+PermissionsUnavailable (class)
+ToolUp.Platform.PageStoreError+PermissionsUnavailable.reason : System.String { get }
+ToolUp.Platform.PageStoreError+ScopeRefused (class)
+ToolUp.Platform.PageStoreError+ScopeRefused.reason : System.String { get }
+ToolUp.Platform.PageStoreError+StaleWrite (class)
+ToolUp.Platform.PageStoreError+StaleWrite.actual : System.Int32 { get }
+ToolUp.Platform.PageStoreError+StaleWrite.expected : System.Int32 { get }
+ToolUp.Platform.PageStoreError+Storage (class)
+ToolUp.Platform.PageStoreError+Storage.Item : ToolUp.Platform.DataObjectError { get }
+ToolUp.Platform.PageStoreError+StoredLayerUnreadable (class)
+ToolUp.Platform.PageStoreError+StoredLayerUnreadable.key : ToolUp.Platform.PageLayerKey { get }
+ToolUp.Platform.PageStoreError+StoredLayerUnreadable.reason : System.String { get }
+ToolUp.Platform.PageStoreError+Tags (class)
+ToolUp.Platform.PageStoreError+Tags.DocumentUndecodable : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.GrantMissing : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.InvalidPageRef : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.LayerDisabled : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.NoOps : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.NotSeeded : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.OpOutsideVocabulary : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.OpsDoNotApply : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.PermissionsUnavailable : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.ScopeRefused : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.StaleWrite : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.Storage : System.Int32 (literal)
+ToolUp.Platform.PageStoreError+Tags.StoredLayerUnreadable : System.Int32 (literal)
+ToolUp.Platform.PageStoreErrorModule (class)
+ToolUp.Platform.PageStoreErrorModule.code(ToolUp.Platform.PageStoreError) : System.String
+ToolUp.Platform.PageStoreOptions (class)
+ToolUp.Platform.PageStoreOptions..ctor(ToolUp.Platform.IndividualLayer, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.PageStoreOptions.IndividualLayer : ToolUp.Platform.IndividualLayer { get }
+ToolUp.Platform.PageStoreOptions.PlatformGrantTeam : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PageStoreOptionsModule (class)
+ToolUp.Platform.PageStoreOptionsModule.defaults : ToolUp.Platform.PageStoreOptions { get }
 ToolUp.Platform.PayloadFormat (class)
 ToolUp.Platform.PayloadFormat.Csv : ToolUp.Platform.PayloadFormat { get }
 ToolUp.Platform.PayloadFormat.IsCsv : System.Boolean { get }
@@ -9847,6 +10049,12 @@ ToolUp.Platform.RequestViewerContext.current() : Microsoft.FSharp.Core.FSharpOpt
 ToolUp.Platform.RequestViewerContext.establish(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RequestViewer]]) : System.IDisposable
 ToolUp.Platform.RequestViewerModule (class)
 ToolUp.Platform.RequestViewerModule.ofItems(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RequestViewer]
+ToolUp.Platform.ReseedReceipt (class)
+ToolUp.Platform.ReseedReceipt..ctor(System.Int32, System.String, System.String, ToolUp.Platform.FoldedPage)
+ToolUp.Platform.ReseedReceipt.Folded : ToolUp.Platform.FoldedPage { get }
+ToolUp.Platform.ReseedReceipt.PreviousSeedHash : System.String { get }
+ToolUp.Platform.ReseedReceipt.SeedHash : System.String { get }
+ToolUp.Platform.ReseedReceipt.Version : System.Int32 { get }
 ToolUp.Platform.ResilientBlobStorage (class)
 ToolUp.Platform.ResilientBlobStorage.applyStorageResilience(ToolUp.Platform.TransientFault+ResilienceMode, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.BlobStorage+IBlobStorage
 ToolUp.Platform.ResilientBlobStorage+ResilientBlobStorage (class)
@@ -10600,6 +10808,26 @@ ToolUp.Platform.SeedDataLoader (class)
 ToolUp.Platform.SeedDataLoader.SeedAppliedEventType : System.String (literal)
 ToolUp.Platform.SeedDataLoader.SeedSourceModule : System.String (literal)
 ToolUp.Platform.SeedDataLoader.runIfEnabled(System.IServiceProvider, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : System.Void
+ToolUp.Platform.SeedOutcome (class)
+ToolUp.Platform.SeedOutcome.IsAlreadySeeded : System.Boolean { get }
+ToolUp.Platform.SeedOutcome.IsDetached : System.Boolean { get }
+ToolUp.Platform.SeedOutcome.IsDiverged : System.Boolean { get }
+ToolUp.Platform.SeedOutcome.IsSeeded : System.Boolean { get }
+ToolUp.Platform.SeedOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.SeedOutcome+AlreadySeeded (class)
+ToolUp.Platform.SeedOutcome+AlreadySeeded.seedHash : System.String { get }
+ToolUp.Platform.SeedOutcome+Detached (class)
+ToolUp.Platform.SeedOutcome+Detached.storedSeedHash : System.String { get }
+ToolUp.Platform.SeedOutcome+Diverged (class)
+ToolUp.Platform.SeedOutcome+Diverged.storedSeedHash : System.String { get }
+ToolUp.Platform.SeedOutcome+Seeded (class)
+ToolUp.Platform.SeedOutcome+Seeded.seedHash : System.String { get }
+ToolUp.Platform.SeedOutcome+Seeded.version : System.Int32 { get }
+ToolUp.Platform.SeedOutcome+Tags (class)
+ToolUp.Platform.SeedOutcome+Tags.AlreadySeeded : System.Int32 (literal)
+ToolUp.Platform.SeedOutcome+Tags.Detached : System.Int32 (literal)
+ToolUp.Platform.SeedOutcome+Tags.Diverged : System.Int32 (literal)
+ToolUp.Platform.SeedOutcome+Tags.Seeded : System.Int32 (literal)
 ToolUp.Platform.SeedReport (class)
 ToolUp.Platform.SeedReport..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.SeedReport.ItemsSeeded : System.Int32 { get }
@@ -11301,6 +11529,17 @@ ToolUp.Platform.StoreIdSanitising+SanitisingShareTokenStore (class)
 ToolUp.Platform.StoreIdSanitising+SanitisingShareTokenStore..ctor(ToolUp.Platform.IShareTokenStore)
 ToolUp.Platform.StoreIdSanitising+SanitisingTeamStore (class)
 ToolUp.Platform.StoreIdSanitising+SanitisingTeamStore..ctor(ToolUp.Platform.TeamManagement+ITeamStore)
+ToolUp.Platform.StoredLayer (class)
+ToolUp.Platform.StoredLayer..ctor(ToolUp.Platform.PageLayerKey, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Core.OpRecord`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]]], System.String)
+ToolUp.Platform.StoredLayer.ChainHead : System.String { get }
+ToolUp.Platform.StoredLayer.ContentHash : System.String { get }
+ToolUp.Platform.StoredLayer.Detached : System.Boolean { get }
+ToolUp.Platform.StoredLayer.Key : ToolUp.Platform.PageLayerKey { get }
+ToolUp.Platform.StoredLayer.Records : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Core.OpRecord`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]]] { get }
+ToolUp.Platform.StoredLayer.Seed : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.StoredLayer.SeedHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.StoredLayer.Sidecar : Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]] { get }
+ToolUp.Platform.StoredLayer.Version : System.Int32 { get }
 ToolUp.Platform.SurfaceCoherenceValidator (class)
 ToolUp.Platform.SurfaceCoherenceValidator.evaluate(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], System.Int32) : ToolUp.Platform.ConfigValidation+ValidationResult
 ToolUp.Platform.SurfaceCoherenceValidator+SurfaceCoherenceValidator (class)
