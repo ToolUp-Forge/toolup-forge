@@ -1903,6 +1903,8 @@
              shared JSON converter set — and nothing in the file is composed
              by default, so nothing below needs to see it (GP 11 / GP 13). -->
         <Compile Include="Server\CountersignatureRegistry.fs" />
+        <Compile Include="Server\PageLayers.fs" />
+        <Compile Include="Server\PageDocumentStore.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />
@@ -1929,5 +1931,13 @@
          emits. Explicit reference forces the centrally-pinned version
          back into scope. -->
     <PackageReference Include="FSharp.Core" />
+    <!-- The page store's layers are op streams in the language
+         tier's vocabulary, applied by its engine; forge holds no copy of
+         either (PageLayers.fs, PageDocumentStore.fs). Published Apache-2.0,
+         restored from nuget.org at the pins in Directory.Packages.props. -->
+    <PackageReference Include="Fuaran.Core.OpStream" />
+    <PackageReference Include="Fuaran.UI.Ops.Abstractions" />
+    <PackageReference Include="Fuaran.UI.Ops" />
+    <PackageReference Include="Fuaran.UI.OpStream.Abstractions" />
   </ItemGroup>
 </Project>
