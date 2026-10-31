@@ -232,6 +232,13 @@
       }
     },
     {
+      "rule": "TUA001",
+      "reason": "The layout tools' answering executor: an answering tool is composed before any container exists and receives only the request's HttpContext, so it reads ONE value, the LayoutToolsRuntime record its own registration factory built (the page store and the page request resolvers are resolved there, never here). Every other dependency is read from the request's items, as the render tools read theirs.",
+      "sites": {
+        "src/ToolUp.Facts.Presentation.Server/Server/LayoutTools.fs": 1
+      }
+    },
+    {
       "rule": "TUA002",
       "reason": "KNOWN EGRESS BYPASS: the directory companion's process-wide client predates the egress seam.",
       "sites": {

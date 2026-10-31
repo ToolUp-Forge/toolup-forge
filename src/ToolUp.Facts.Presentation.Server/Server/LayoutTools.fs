@@ -1369,6 +1369,42 @@ module LayoutTools =
         Said = said
     }
 
+    /// A presentation request that leaves its site or its range to the page
+    /// takes the page's standing defaults, written into the payload before
+    /// the request codec reads it, so the codec judges the result.
+    let private withDefaults (defaults: PageDefaults) (request: JsonValue) : JsonValue =
+        let missing (name: string) (members: (string * JsonValue) list) =
+            match members |> List.tryFind (fun (k, _) -> k = name) with
+            | None
+            | Some(_, JsonValue.JNull) -> true
+            | Some _ -> false
+
+        match request with
+        | JsonValue.JObject members when
+            (JsonValue.tryField "kind" request |> Option.bind JsonValue.asString) = Some PageRequest.PresentationKind
+            ->
+            JsonValue.JObject(
+                members
+                |> List.map (fun (k, v) ->
+                    match k, v with
+                    | "payload", JsonValue.JObject payload ->
+                        let added = [
+                            match defaults.Period with
+                            | Some period when missing "period" payload -> "period", LayoutJson.periodJson period
+                            | _ -> ()
+                            match defaults.Site with
+                            | Some site when missing "subjectPrefix" payload ->
+                                "subjectPrefix", JsonValue.JArray(site |> List.map JsonValue.JString)
+                            | _ -> ()
+                        ]
+
+                        let named = added |> List.map fst |> Set.ofList
+
+                        k, JsonValue.JObject((payload |> List.filter (fun (n, _) -> not (named.Contains n))) @ added)
+                    | _ -> k, v)
+            )
+        | other -> other
+
     let private addBlock (session: Session) (args: Args) : Async<Result<Edit, LayoutRefusal>> = async {
         let tree = session.Folded.Tree
 
@@ -1376,18 +1412,9 @@ module LayoutTools =
             match arg "request" args with
             | None -> Error(LayoutRefusal.Arguments "'request' is required")
             | Some v ->
-                requestOf v
+                withDefaults session.Sidecar.Defaults v
+                |> requestOf
                 |> Result.bind (fun request ->
-                    // A request that leaves the site or the range to the
-                    // page takes the page's standing defaults.
-                    let defaults = session.Sidecar.Defaults
-
-                    let request =
-                        match request, defaults.Site with
-                        | PageRequest.Presentation(r, deps), Some site when List.isEmpty r.SubjectPrefix ->
-                            PageRequest.Presentation({ r with SubjectPrefix = site }, deps)
-                        | _ -> request
-
                     match text "key" args, text "title" args, text "block" args, placementOf args with
                     | Error e, _, _, _
                     | _, Error e, _, _

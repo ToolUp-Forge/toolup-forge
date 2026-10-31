@@ -610,6 +610,28 @@ let private editTests =
                     Expect.equal p.Period (PresentationPeriod.Ending(day1.AddDays 1.0, 2)) "each takes the range"
                 | PageRequest.Pipeline _ -> failtest "no pipeline here"
 
+            saveOf (
+                call
+                    r
+                    "owner"
+                    LayoutTool.AddBlock
+                    (pageArgs
+                        """ "request":{"kind":"presentation","payload":{"kind":"breakdown","tableId":"daily-trade","metrics":["revenue"]}},"key":"standing","into":"notes" """)
+            )
+
+            match
+                requestsOf (folded r "owner")
+                |> Map.toList
+                |> List.tryFind (fun (key, _) -> key.StartsWith "standing~")
+            with
+            | Some(_, PageRequest.Presentation(p, _)) ->
+                Expect.equal
+                    p.Period
+                    (PresentationPeriod.Ending(day1.AddDays 1.0, 2))
+                    "a block added without a range takes the page's"
+            | other -> failtestf "expected the added request, got %A" other
+
+            saveOf (call r "owner" LayoutTool.RemoveBlock (pageArgs """ "block":"standing" """))
             saveOf (call r "owner" LayoutTool.RemoveBlock (pageArgs """ "block":"by-site" """))
             Expect.equal (childrenOf (folded r "owner").Tree "breakdowns") (Some []) "removed"
             Expect.equal (requestsOf (folded r "owner")).Count 1 "its request is dropped with it"
