@@ -297,6 +297,7 @@ let private registeredTests =
         ComponentConfigTests.tests
         ComponentRequirementsTests.tests
         ComposableSurfaceTests.tests
+        CompositionProfileSurfaceTests.tests
         EventTopologyTests.tests
         DataFootprintTests.tests
         ScaleReadinessTests.tests

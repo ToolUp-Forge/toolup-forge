@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-token-unregistered-field-level","children":[{"kind":"moduleRef","view":"bareFeliz","entities":[{"name":"Order","disclosure":{"class":"internal"},"fields":[{"fieldPath":"OrderId","level":"secret","auditOnRead":"false"}]}],"id":"Orders","children":[]}]}

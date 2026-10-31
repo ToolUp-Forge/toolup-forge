@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-knob-value-unregistered-origin-path","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"PublicBaseUrl","value":"https://example.com/app","id":"knob-publicBaseUrl","children":[]}]}]}

@@ -1,0 +1,114 @@
+{
+  "profile": "server-app-host",
+  "profileVersion": "7.0",
+  "note": "forge's binding of the profile's registered tokens to its own composable surface. Not part of the wire format and not normative for any other evaluator: a token is a wire spelling, and this file says which forge type, field or builder each one reduces to. It also names the parts of forge's reflected surface the profile deliberately does not register, each with its reason, so a forge release that grows its surface fails the surface check until the profile either registers the addition or says here why it does not.",
+  "bases": {
+    "serverApp": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.ServerApp" },
+    "publicRenderingServerApp": { "assembly": "ToolUp.PublicRendering", "type": "ToolUp.PublicRendering.PublicRenderingCompose.PublicRenderingServerApp" }
+  },
+  "layers": {
+    "ai": { "assembly": "ToolUp.AI.Server", "type": "ToolUp.AI.AICompose.AIServerApp" },
+    "rag": { "assembly": "ToolUp.RAG.Server", "type": "ToolUp.RAG.RAGCompose.RAGServerApp" },
+    "forms": { "assembly": "ToolUp.Forms.Server", "type": "ToolUp.Forms.FormsCompose.FormsServerApp" },
+    "peer": { "assembly": "InterPlatform", "type": "ToolUp.InterPlatform.PeerCompose.PeerServerApp" },
+    "extensions": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.ComposeExtensions" },
+    "knowledgeBase": { "assembly": "ToolUp.KnowledgeBase.Server", "type": "ToolUp.KnowledgeBase.Server.AICompose", "member": "register" },
+    "publicRendering": { "assembly": "ToolUp.PublicRendering", "type": "ToolUp.PublicRendering.PublicRenderingCompose", "member": "withPublicRendering" }
+  },
+  "slots": {
+    "aiProvider": "IAIProvider",
+    "embeddingProvider": "IEmbeddingProvider",
+    "blobStorage": "IBlobStorage",
+    "authProvider": "IAuthProvider",
+    "notificationChannel": "INotificationChannel",
+    "vectorStore": "IVectorStore",
+    "secretStore": "ISecretStore",
+    "auditSink": "IAuditSink",
+    "metricsSink": "IMetricsSink",
+    "jobScheduler": "IJobScheduler",
+    "dataSource": "IDataSource",
+    "transactionalSink": "INotificationSink"
+  },
+  "unregisteredSlots": {
+    "IActivitySink": "Tracing span emission: an observability hook with no composition consequence a reader of the composition could act on.",
+    "IAnonymousSessionMigrator": "A per-module data hook run when an anonymous session signs in; it is a module's contribution, not a substrate seam a composition binds.",
+    "IBlobEncryptionKeyResolver": "Bound through the registered EncryptedBlobStorage setting (§P2.5), whose values name the key arrangement; the seam itself is not a second spelling of that choice.",
+    "IConfigValidator": "Startup preflight probes contributed by companions; diagnostics, not composition.",
+    "IDataExporter": "A persistent subsystem's contribution to a data-subject export, registered by the subsystem; the composition selects data-subject requests through the DataSubjectRequests setting.",
+    "IErasureHandler": "A persistent subsystem's contribution to a data-subject erasure, registered by the subsystem, as IDataExporter.",
+    "IHealthCheck": "Liveness probes contributed by companions; diagnostics, not composition.",
+    "ILogger": "Process logging; every host has one and nothing in a composition depends on which.",
+    "IModuleBindingVerifier": "Verifies a module's signed binding at compose time; trust configuration of the deployment, not a seam a composition names.",
+    "IOAuth1aFlow": "An outbound OAuth 1.0a leg used by a connector; carried by a connectorRef's oauth member, not bound as a seam.",
+    "IOAuthCredentialFlow": "An outbound OAuth 2 leg used by a connector; carried by a connectorRef's oauth member, not bound as a seam.",
+    "IPendingInviteStore": "Team-invitation persistence internal to the host's team substrate.",
+    "IProviderProfile": "Per-user model-provider configuration storage internal to the model-inference tier.",
+    "ISeedPack": "Development and demonstration seed data, applied only outside production shapes.",
+    "ISmokeTest": "Post-deployment verification probes; diagnostics, not composition.",
+    "ITeamQuotaPolicy": "Per-team quota decisions; a host policy, not a substrate seam.",
+    "IUserDirectory": "Display-name resolution for user ids, internal to the host's identity substrate."
+  },
+  "settings": {
+    "ProcessProfile": {
+      "kind": "cases",
+      "field": "ProcessProfile",
+      "unregisteredValues": {
+        "DispatcherOnly": "forge runs only the outbound dispatchers in this process role. The profile registers the three roles it registered at 1.0 and has not registered this one; a composition carrying it is refused as knob-value-unregistered until the profile does."
+      }
+    },
+    "ConfigDriftDetection": { "kind": "cases", "field": "ConfigDriftDetection" },
+    "JobScheduler": {
+      "kind": "cases",
+      "field": "JobScheduler",
+      "unregisteredValues": {
+        "QuartzJobScheduler": "Carries a configuration payload; a companion constructs the scheduler and forge adopts it, so the value has no single wire spelling under the enum grammar."
+      }
+    },
+    "PeerSubstrate": { "kind": "cases", "field": "PeerSubstrate" },
+    "FactStore": { "kind": "cases", "field": "FactStore" },
+    "FactStoreBackend": {
+      "kind": "builder",
+      "assembly": "ToolUp.FactStores.Postgres",
+      "type": "ToolUp.FactStores.Postgres.PostgresFactStoreCompose",
+      "member": "withPostgresFactStore",
+      "reason": "No ServerConfig field: Blob is the fact tier's default store, and Postgres is selected by composing the Postgres fact-store companion."
+    },
+    "AuditLog": { "kind": "cases", "field": "AuditLog" },
+    "ShareTokenStore": { "kind": "cases", "field": "ShareTokenStore" },
+    "TeamCreationPolicy": { "kind": "cases", "field": "TeamCreationPolicy" },
+    "EventStore": {
+      "kind": "spelled",
+      "field": "EventStore",
+      "reason": "The retention grammar (§P2.5.2) spells InMemoryOnly and the persistent store's retention policy as one string."
+    },
+    "IncludePlatformDefaults": { "kind": "spelled", "field": "IncludePlatformDefaults", "reason": "A boolean field, spelled by the boolean grammar (§P2.5.3)." },
+    "PublicBaseUrl": { "kind": "spelled", "field": "PublicBaseUrl", "reason": "An optional string field, held to the origin grammar (§P2.5.4)." },
+    "DataIngestion": { "kind": "cases", "field": "DataIngestion" },
+    "DataSubjectRequests": {
+      "kind": "spelled",
+      "field": "DataSubjectRequests",
+      "reason": "Disabled, or the enabled mode with its erasure policy, spelled sync:<policy> (§P2.5)."
+    },
+    "EncryptedBlobStorage": {
+      "kind": "builder",
+      "assembly": "ToolUp.Platform.Server",
+      "type": "ToolUp.Platform.ServerAppModule",
+      "member": "withEncryptedBlobStorage",
+      "reason": "No ServerConfig field: SingleKeyResolver names the key arrangement forge composes through this builder."
+    }
+  },
+  "unregisteredSettings": {
+    "reason": "The setting key space is open (§P2.5): forge composes these modes and the profile gives none of them a meaning, so a composition may carry any of them and is never refused for it. Registering one is a profile change (§P7).",
+    "keys": [
+      "AdAnalytics", "AssetStore", "AuditFailurePolicy", "AuthCookieIssuance", "ColumnMapping", "ComputeBudget",
+      "ConsentAudit", "ConsentStateStore", "DataMigrations", "Datasets", "DeployPlane", "DeploymentReadiness",
+      "DeploymentVerification", "DirectAddIdentityProof", "EntityGraphProjection", "EntityOutbox", "EntityStore",
+      "ExternalCompute", "ExternalContactStore", "GrantConsent", "GraphStore", "I18nCoverageMode", "JobProgress",
+      "Lineage", "LineageDurability", "LogLevel", "MappingDryRun", "MediaLibrary", "MetricsEndpoint", "ModelExecution",
+      "ModelFitting", "ModuleVisibility", "OAuth1a", "OAuthRefresher", "PlatformKnowledgeBase", "Presence",
+      "RateLimitStore", "RateLimiter", "ResultStore", "SecurityHardening", "SeedData", "ServerlessHost",
+      "ServiceAccounts", "SmokeTest", "SseAuthMode", "StaticPathBehaviour", "TelemetrySink", "TenantLifecycle",
+      "TenantOffboardConfirmation", "TimeSeriesStore", "UsageMetering", "UserSchemaAuthoring", "Webhooks"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"profile-fact-browse-server-only","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"FactStore","value":"EnabledFactStore","id":"knob-factStore","children":[]}]},{"kind":"factBrowse","mount":"serverOnly","id":"facts","children":[]}]}

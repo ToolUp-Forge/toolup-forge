@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-knob-value-unregistered-retention","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"EventStore","value":"byAge:90","id":"knob-eventStore","children":[]}]}]}

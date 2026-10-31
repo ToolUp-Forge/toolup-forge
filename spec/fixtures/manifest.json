@@ -1,0 +1,1902 @@
+{
+  "specification": "app-composition-wire",
+  "formatVersion": 1,
+  "profile": "server-app-host",
+  "profileKind": "vocabulary",
+  "profileVersion": "7.0",
+  "registry": "../registry.json",
+  "conformanceFamilies": [
+    "document",
+    "node",
+    "citation",
+    "extension",
+    "accept",
+    "reject",
+    "profile-server-app-host"
+  ],
+  "families": [
+    "profile-server-app-host"
+  ],
+  "facetFamilies": [
+    "kill-and-replay",
+    "partition-and-fold",
+    "attestation-quote",
+    "incremental-recompute"
+  ],
+  "facetDeclaration": {
+    "delivery": {
+      "honoured": [
+        "atMostOnce",
+        "atLeastOnce"
+      ],
+      "note": "Captured from what evaluators of this family provide, including where that is unflattering. A request is dispatched once and lost on failure; a retrying outbound sink delivers at least once. exactlyOnceEffective is not honoured and no vector claims it."
+    },
+    "idempotency": {
+      "honoured": [
+        "idempotent",
+        "nonIdempotent"
+      ],
+      "note": "A read repeats freely; a write repeats and takes twice. idempotentWithStore is not honoured: the store an effective-exactly-once claim rests on is not composed by evaluators of this family, so nothing in the composition can remember a replay."
+    },
+    "restart": {
+      "honoured": [
+        "lostOnRestart",
+        "retriedAfterRestart"
+      ],
+      "note": "In-flight work whose intent was not journaled is dropped at shutdown; a retrying sink re-attempts. survivesRestart is not honoured — no durable work queue is composed, so nothing carries in-flight work across a restart."
+    },
+    "convergence": {
+      "honoured": [
+        "singleWriter"
+      ],
+      "note": "An evaluator of this family is handed a composition VALUE, not an authorship stream, so it folds nothing. Divergent streams are refused rather than linearised silently, which is what the reject vector states."
+    },
+    "attestation": {
+      "honoured": [
+        "attestedAtLaunch",
+        "attestedWithinWindow"
+      ],
+      "note": "Per section 11.2 this declares what an implementation of this profile MAY claim, not what every one of them does: an evaluator of this family hosted in a measured environment can produce evidence binding a composition's identity to that environment's measurement, and one that re-establishes the evidence inside a declared window can claim the second value. An evaluator hosted in an ordinary process claims neither. The contrast with exactlyOnceEffective is the discriminating one — that value is declined because NO implementation of this family could claim it, where these are a property of where an implementation is hosted."
+    },
+    "locality": {
+      "honoured": [],
+      "note": "An evaluator of this family reduces a composition to an application and says nothing about where that application's data is processed. That is not a weakness of the family; it is that the question belongs to a deployment, and this profile registers no place for a deployment to answer it. A placement that DOES answer it is a different profile — which is what `edge-worker-host` is."
+    },
+    "recompute": {
+      "honoured": [
+        "fullOnChange",
+        "rowLocal",
+        "groupLocal"
+      ],
+      "note": "Per section 11.2 this declares what an implementation of this profile MAY claim, not what every one of them does. An evaluator of this family reduces a composition to an application serving requests over its registered data types, and the ordinary reduction evaluates a pipeline per request — that is fullOnChange, and it is listed first because it is what the family does today rather than as a fallback. An implementation that composes an incremental evaluation of a registered data type's pipeline claims the local values instead, for the rows it maintains or for the groups. The contrast with exactlyOnceEffective one axis along is the discriminating one: that value is declined because NO implementation of this family could claim it, where these are a property of what an implementation composes."
+    }
+  },
+  "core": {
+    "name": "App-composition wire specification",
+    "url": "https://github.com/Fuaran-Build/fuaran-app-composition-specification",
+    "commit": "110bd1cb757f5334eb508e986898d6b4e976d046",
+    "facetAxes": {
+      "delivery": [
+        "atMostOnce",
+        "atLeastOnce",
+        "exactlyOnceEffective"
+      ],
+      "idempotency": [
+        "idempotent",
+        "idempotentWithStore",
+        "nonIdempotent"
+      ],
+      "restart": [
+        "lostOnRestart",
+        "retriedAfterRestart",
+        "survivesRestart"
+      ],
+      "convergence": [
+        "singleWriter",
+        "convergentFold",
+        "divergentMerge"
+      ],
+      "attestation": [
+        "unattested",
+        "attestedAtLaunch",
+        "attestedWithinWindow"
+      ],
+      "locality": [
+        "unpinned",
+        "regionRouted",
+        "regionSealed"
+      ],
+      "recompute": [
+        "fullOnChange",
+        "rowLocal",
+        "groupLocal"
+      ]
+    },
+    "facetValuesWithoutDiscriminator": [
+      {
+        "axis": "restart",
+        "value": "survivesRestart",
+        "reason": "Section 12.1's replay rule restarts a step or drops it; a value that says in-flight work CONTINUES across the restart needs a third journaling state the rule does not specify. Recorded rather than silently absent, and a profile may not declare a value nothing can exhibit."
+      },
+      {
+        "axis": "convergence",
+        "value": "divergentMerge",
+        "reason": "It is a property of a PAIR of vectors — the same lanes, two arrival orders, two different folds — and the family's pass criteria are stated per vector. Carrying such a pair would also mean publishing an oracle for a hazard no registered profile claims."
+      },
+      {
+        "axis": "attestation",
+        "value": "unattested",
+        "reason": "It is the ABSENCE of evidence, and a family whose vectors are quotes cannot exhibit an absence: a vector carrying no quote is not a vector of that family, and would in any case demonstrate nothing a missing family does not already demonstrate. A profile that attests nothing therefore declares the axis empty with a reason (section 11.4) rather than claiming this value."
+      },
+      {
+        "axis": "locality",
+        "value": "unpinned",
+        "reason": "It is the ABSENCE of a constraint, and a family whose vectors are placement declarations cannot exhibit an absence: a vector declaring no placement is not a vector of this family, and would demonstrate nothing a missing family does not already demonstrate. A profile that pins nothing therefore declares the axis empty with a reason (section 11.4) rather than claiming this value — exactly as one that attests nothing declines `unattested`."
+      }
+    ],
+    "vectors": [
+      {
+        "id": "kill-and-replay/lost-in-flight",
+        "family": "kill-and-replay",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/kill-and-replay/lost-in-flight.json",
+        "sha256": "aaf0e475edae67ef364451a4ba5546a6fb47f593e20ad4d9e444c50633fab224"
+      },
+      {
+        "id": "kill-and-replay/retried-duplicate",
+        "family": "kill-and-replay",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/kill-and-replay/retried-duplicate.json",
+        "sha256": "180059e807836bc2b764203379e601d17b9b185063fbc971825bc0e359b6ae8d"
+      },
+      {
+        "id": "kill-and-replay/repeatable-read",
+        "family": "kill-and-replay",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/kill-and-replay/repeatable-read.json",
+        "sha256": "b9acf7a36dffd6ec62eb16a2b0140f540543fc00762329323dbc0b5fe7b4ff50"
+      },
+      {
+        "id": "kill-and-replay/reject-unrecoverable-append",
+        "family": "kill-and-replay",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "reject",
+        "file": "core/kill-and-replay/reject-unrecoverable-append.json",
+        "sha256": "7a493ce8b89c47ef4b5094225d6ca68fd11da459b7e288e563d0afa0f7321c50",
+        "reject": "replay-divergent",
+        "detect": "runtime"
+      },
+      {
+        "id": "partition-and-fold/reject-single-writer",
+        "family": "partition-and-fold",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "reject",
+        "file": "core/partition-and-fold/reject-single-writer.json",
+        "sha256": "6bd4822b854f7e3fdaeca780341ed34e4852b855e37b7ab991a29f63304493e6",
+        "reject": "concurrent-authorship-unsupported",
+        "detect": "runtime"
+      },
+      {
+        "id": "attestation-quote/bound-at-launch",
+        "family": "attestation-quote",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/attestation-quote/bound-at-launch.json",
+        "sha256": "816b1a75035e12f70d4ab10ca5232f5b1780ba628a72ec9a03f6e7f1c9bf28e8"
+      },
+      {
+        "id": "attestation-quote/fresh-within-window",
+        "family": "attestation-quote",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/attestation-quote/fresh-within-window.json",
+        "sha256": "f98b410b467c341ce7831fb38d296a093aab92361330561929e906420e1427ef"
+      },
+      {
+        "id": "attestation-quote/reject-stale-quote",
+        "family": "attestation-quote",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "reject",
+        "file": "core/attestation-quote/reject-stale-quote.json",
+        "sha256": "c490a9a1adcb20d8a01dc43f8691feb474d67b93367d22501222da918ef013f1",
+        "reject": "quote-stale",
+        "detect": "runtime"
+      },
+      {
+        "id": "attestation-quote/reject-measurement-outside-policy",
+        "family": "attestation-quote",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "reject",
+        "file": "core/attestation-quote/reject-measurement-outside-policy.json",
+        "sha256": "921f2ca6a1ee097c7ce92b7a5ddf13c999310f4a956a197c4bac54c86069f761",
+        "reject": "measurement-outside-policy",
+        "detect": "runtime"
+      },
+      {
+        "id": "attestation-quote/reject-binding-names-another-composition",
+        "family": "attestation-quote",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "reject",
+        "file": "core/attestation-quote/reject-binding-names-another-composition.json",
+        "sha256": "92c9e6fb8ffbb2e037a0dbb1d9a745d4415414c5f50b33d34ce3cff2db1bd0fd",
+        "reject": "binding-mismatched",
+        "detect": "runtime"
+      },
+      {
+        "id": "attestation-quote/reject-unverifiable-quote",
+        "family": "attestation-quote",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "reject",
+        "file": "core/attestation-quote/reject-unverifiable-quote.json",
+        "sha256": "b296d82b49b1ce2457f71bc19e807f430ba903747cea5baece02bc673c255967",
+        "reject": "quote-unverifiable",
+        "detect": "runtime"
+      },
+      {
+        "id": "incremental-recompute/point-edit-row-local",
+        "family": "incremental-recompute",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/incremental-recompute/point-edit-row-local.json",
+        "sha256": "79873d91279e34c836038ef144d9f19747325faf807b3b10382bdcdcd5eee822"
+      },
+      {
+        "id": "incremental-recompute/bulk-edit-row-local",
+        "family": "incremental-recompute",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/incremental-recompute/bulk-edit-row-local.json",
+        "sha256": "887741b93da957d72c2ad4d2b2498b0d44598a2ad3cee0910fbc2dde783802b2"
+      },
+      {
+        "id": "incremental-recompute/chain-edit-group-local",
+        "family": "incremental-recompute",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/incremental-recompute/chain-edit-group-local.json",
+        "sha256": "155a920af5440029e6b3c4e1ab1211591e3e3df941bbbf57962e85c5df60373b"
+      },
+      {
+        "id": "incremental-recompute/sort-merges-in-order",
+        "family": "incremental-recompute",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/incremental-recompute/sort-merges-in-order.json",
+        "sha256": "0367bfce5cd4189a2dcb1d3d21209773590ec4ebb2480d2ae18f0add0ebdcdcc"
+      },
+      {
+        "id": "incremental-recompute/window-declines-in-full",
+        "family": "incremental-recompute",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/incremental-recompute/window-declines-in-full.json",
+        "sha256": "e8b7f3364a69735472b5f40c8ea22441b8688b52db643ec4ac0ede0a23a62930"
+      },
+      {
+        "id": "incremental-recompute/join-declines-in-full",
+        "family": "incremental-recompute",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/incremental-recompute/join-declines-in-full.json",
+        "sha256": "1f0049a2f9308849d39253c45dd8175831a9172009e63fe0961241648b6cf3d0"
+      },
+      {
+        "id": "incremental-recompute/ordinal-declines-in-full",
+        "family": "incremental-recompute",
+        "profile": "server-app-host",
+        "home": "core",
+        "kind": "hash",
+        "file": "core/incremental-recompute/ordinal-declines-in-full.json",
+        "sha256": "66a1a3e4a359542365c861eb82f98c2a9d3ddded94b4857103576d7d7afc02a0"
+      },
+      {
+        "id": "profile-placement/reject-vocabulary-unresolved",
+        "family": "profile-placement",
+        "profile": "local-first-host",
+        "home": "core",
+        "kind": "reject",
+        "file": "core/profile-placement/reject-vocabulary-unresolved.json",
+        "sha256": "c2646426c04940fa5ebb3f53accad67db0b60fc9e6d0bd61d45f05f7ebb332e1",
+        "reject": "vocabulary-unresolved",
+        "detect": "profile"
+      }
+    ]
+  },
+  "vectors": [
+    {
+      "id": "profile-server-app-host/client-shell",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/client-shell.json",
+      "sha256": "f6689f67ea35481fd96817edc90e619ac6f3781319c1022c7e2876191890fc05",
+      "description": "The profile's client-shell node. A core reader refuses it as node-kind-unknown, correctly (section 8.3); that refusal is the profile boundary being real rather than advisory."
+    },
+    {
+      "id": "profile-server-app-host/declared-projects",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/declared-projects.json",
+      "sha256": "3174c21c08d99d09b80887519735116bcda4ff9c23faf598a943820e152a5298",
+      "description": "A composition with a client shell that declares the library its author code references as a project to build with the application (section P4.56, since profile 6.1). The document is a core document throughout; what the profile adds is that an evaluator builds the declared project, in declaration order, in the solution it names after the application."
+    },
+    {
+      "id": "profile-server-app-host/layout-ref",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/layout-ref.json",
+      "sha256": "2491199a43e6df32f3cdc628328b3fe44e4a1b1f9e1807515321791966fabf17",
+      "description": "Two server-side rendering layouts under a base that bundles no client. The layout name's value space is deliberately unregistered — which layouts exist is a deployment's own content."
+    },
+    {
+      "id": "profile-server-app-host/every-layer",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/every-layer.json",
+      "sha256": "79d7c1aaf09fddb227061e8d8cf37e422f304051d78ba540d7e1820ffb882a61",
+      "description": "Every registered layer, every registered seam and every registered composition-shaping setting family in one composition — the vector that fails when the profile registry and this corpus disagree about what is registered."
+    },
+    {
+      "id": "profile-server-app-host/layered-client-app",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/layered-client-app.json",
+      "sha256": "d9993a69446c53bd9cc3afcc5a5c46d10015f5cc2a202b2b0f880b1b70cb5cf8",
+      "description": "A synthetic layered host: one capability layer with its model seam bound, a scheduler seam, two settings (one outside the registered subset, which is legitimate), three data types, a module and a client shell with the application's machine name."
+    },
+    {
+      "id": "profile-server-app-host/connector-host",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/connector-host.json",
+      "sha256": "6f7681c7ffc893b5ed34e69c90392f3404c7e5f39641b099c39efb1c91407ec2",
+      "description": "A synthetic bare base with an authenticating, rate-limited outbound integration, a scheduler seam and four settings, one of which is outside the registered subset and is legitimate."
+    },
+    {
+      "id": "profile-server-app-host/server-rendered-host",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/server-rendered-host.json",
+      "sha256": "bc71aa029b1b385e5fba075d27da63e1d90bf155c62941312fca9a5b49dafda4",
+      "description": "The load-bearing synthetic host: a server-rendering host that bundles NO client, so it carries no client shell and no client port band. A corpus in which every composition bundled a client would let a reader that always emits one certify."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-base",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-base.json",
+      "sha256": "5867feef7f7451572818213b9ac9cb4b39b85f74d1af02634f2d0702881befc4",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A base host token this profile does not register. A CORE reader must NOT refuse this document — it has no basis for the check — and that difference is the entire content of the profile boundary."
+    },
+    {
+      "id": "profile-server-app-host/reject-citation-unexpected",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-citation-unexpected.json",
+      "sha256": "df5b17cfb799477592348706c2e63ec7b4f37cd85d06e3af9864d34a78445dce",
+      "reject": "citation-unexpected",
+      "detect": "profile",
+      "description": "A citation on a view token the profile does not mark citation-bearing. The document is structurally perfect; what is wrong is a claim about a contract this binding has no relationship to."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered.json",
+      "sha256": "97532150bf12b5bdfd414317f3ccb222ab803644d7112efb62c251eed61d3228",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "A registered composition-shaping setting carrying a value outside its closed set. An unregistered KEY would be legitimate here; a registered key with an unregistered value is not, and the pair is what makes the open key space honest rather than a loophole."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-audit-log",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-audit-log.json",
+      "sha256": "71de04db4901a889af2b6ddd7f110e96f6749499fe1cfc4e9f8b0d2c0e2c1e2d",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "An enum setting registered at 4.0 carrying the conventional flag value. `enabled` was legitimate on `AuditLog` at 3.7, when the key was unregistered; at 4.0 the key is held to the enum `NoAuditLog`, `EnabledAuditLog`, and this is the exact value the 3.7 to 4.0 migration re-spells."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-retention",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-retention.json",
+      "sha256": "fe78ef0862c44bb7d5440eda69e35808d4d38cd16a7308c20a8f66b13431b5be",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "A retention setting whose bounded form has lost its unit: `byAge:<n>d` requires the trailing `d`, so `byAge:90` is no form of the grammar. Leaving it out would let a reader guess a unit, and two readers would guess differently."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-boolean",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-boolean.json",
+      "sha256": "39a66666099d1747bcf2bb9533fc31ad2325d88358ad3cf1d067bde9cc8c6b6e",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "A boolean setting spelled `yes`. The grammar admits exactly `true` and `false`; a lenient reader that took `yes`, `1` or `on` would certify against compositions a strict one refuses."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-origin-slash",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-origin-slash.json",
+      "sha256": "be4454bb371a034827f48bb011eaa446eb41f38bf1de4b85b373b5b54fc5b2e5",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "An origin with a trailing slash. A lone `/` is a path, which an origin does not carry, so the one spelling of this origin is `https://app.example.com`; admitting both would give a link builder two bases that differ by a byte."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-origin-path",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-origin-path.json",
+      "sha256": "e6fb4b5f57ee4378f8eb1b46d6c7c660b4694207163f8581baefade3b1e9a0df",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "An origin with a path. A base URL under a path is not an origin, and links built on it resolve differently depending on whether the reader appends or replaces the path."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-data-ingestion",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-data-ingestion.json",
+      "sha256": "bb85d5ffa45e3452be149b57dd543cd70d56144261b1f4781f901875ea4d0a58",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "An enum setting registered at 5.0 carrying the conventional flag value. `enabled` was legitimate on `DataIngestion` at 4.0, when the key was unregistered; at 5.0 the key is held to the enum `NoDataIngestion`, `EnabledDataIngestion`, and this is the exact value the 4.0 to 5.0 migration re-spells on the connector-host vector."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-data-subject-requests",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-data-subject-requests.json",
+      "sha256": "9a9ccfecec8d930b71690465246b1845c532b757d0fe76906b6b7083d7ae2a6a",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "The data-subject request setting carrying the conventional flag value. `enabled` was legitimate on `DataSubjectRequests` at 4.0, when the key was unregistered; at 5.0 the key is held to `Disabled` or a `sync:` value naming an erasure policy, and a bare `enabled` names no policy, so two hosts would erase differently."
+    },
+    {
+      "id": "profile-server-app-host/reject-knob-value-unregistered-encrypted-blob-storage",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knob-value-unregistered-encrypted-blob-storage.json",
+      "sha256": "a5ce8836a462b4bf91a3423ac84be7195e6c1929b930d15fc247a627b7e5ba11",
+      "reject": "knob-value-unregistered",
+      "detect": "profile",
+      "description": "The blob-encryption setting carrying the conventional flag value. `enabled` was legitimate on `EncryptedBlobStorage` at 4.0, when the key was unregistered; at 5.0 the key is held to `NoEncryptedBlobStorage` or `SingleKeyResolver`, which names the key arrangement a host encrypts under."
+    },
+    {
+      "id": "profile-server-app-host/reject-layer-duplicate",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-layer-duplicate.json",
+      "sha256": "652ab654e24257e6e602f6d28a59c222d9f2a759adad68242e6a00351849dfe2",
+      "reject": "layer-duplicate",
+      "detect": "profile",
+      "description": "A capability layer applied twice. Refused, where a REDUNDANT layer (one subsumed by another) is deliberately not — the profile refuses what cannot be meant, never what is merely untidy."
+    },
+    {
+      "id": "profile-server-app-host/reject-client-shell-unsupported-base",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-client-shell-unsupported-base.json",
+      "sha256": "d40b16ee4b77de4f6a74edf4dd3544ae9dab968d80e69bbc73adfd0ef328414a",
+      "reject": "client-shell-unsupported-base",
+      "detect": "profile",
+      "description": "A client shell under a base that bundles no client. The composition is stating something the host cannot do, which is a different failure from a malformed one and is why it has its own class."
+    },
+    {
+      "id": "profile-server-app-host/reject-short-name-required",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-short-name-required.json",
+      "sha256": "70d047ebdce83a70088854de7524eca5f5a89cbe0f319b845373a48794f853be",
+      "reject": "short-name-required",
+      "detect": "profile",
+      "description": "A client shell under a root that declares no machine name. Since profile 6.0 an application that bundles a client names itself (section P4.55); the document is well formed and every token in it is registered, so what refuses it is the rule, not the reader."
+    },
+    {
+      "id": "profile-server-app-host/fact-tier",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/fact-tier.json",
+      "sha256": "c232ac9040aba8aabda9c9082af6af4f77cba9741da045452ff783e6709e523e",
+      "description": "The fact tier under the retrieval layer: the FactStore setting enabled, and a unit declaring both its surface kind and the tables it writes - each, since profile 2.0, with its definition over the metrics and hierarchies the unit registers."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-store-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-store-absent.json",
+      "sha256": "74b45eb3ad57065e4f96acfd459056debfc009521f8c72595e16edf9ae3cbc21",
+      "reject": "fact-store-absent",
+      "detect": "profile",
+      "description": "A unit declaring a fact table in a composition whose FactStore setting composes no fact tier. Every token is registered and the document is structurally perfect; what is wrong is that the declared writes have nowhere to go."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-table-duplicate",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-table-duplicate.json",
+      "sha256": "e993dd7b48787d8055612aa1c34690fee83b99243789711295a5fdc34989e0b6",
+      "reject": "fact-table-duplicate",
+      "detect": "profile",
+      "description": "Two units declaring the same fact-table id. A table with two declared writers has no single account of what produced its rows."
+    },
+    {
+      "id": "profile-server-app-host/fact-store-backend",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/fact-store-backend.json",
+      "sha256": "014c63f1e04fd2b5e191ab657dc75ba69f58197a5e6b38f29cf6126e3c8f5311",
+      "description": "The fact tier backed by the relational store: the FactStore setting enabled and the FactStoreBackend setting naming the non-default backend, so the backend has a tier to back."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-store-backend-without-tier",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-store-backend-without-tier.json",
+      "sha256": "ad6cba751b2c9fc51e13ea6cfe633fc5885e9672b94311fd4d028924d08ab1da",
+      "reject": "fact-store-backend-without-tier",
+      "detect": "profile",
+      "description": "A non-default fact-store backend in a composition that composes no fact tier. Every token is registered and the value is one the setting admits; what is wrong is that the backend names a store nothing writes to."
+    },
+    {
+      "id": "profile-server-app-host/fact-definitions",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/fact-definitions.json",
+      "sha256": "7c95f5ecc930afb8f6a9e64aac116d7af67b0659af79384ebfeb43fcb212a6ee",
+      "description": "The fact tier's definitions with every rule met: one unit registering the hierarchy and four metrics, another declaring two defined tables over them, so a column's metric and a table's level resolve across units. Every history mode, requirement, disclosure class, direction, staleness policy, recompute policy and roll-up kind appears."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-table-undefined",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-table-undefined.json",
+      "sha256": "d635c04e08b8991d13d4b6c1beace4b158188dc7b6c45e977fe98f2714d1e916",
+      "reject": "fact-table-undefined",
+      "detect": "profile",
+      "description": "A fact table declared by its references alone, in a composition that registers the metric and the hierarchy it names. Structurally perfect; what is missing is the definition a host needs to declare the table at all."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-table-definition-disagrees",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-table-definition-disagrees.json",
+      "sha256": "739bc8bb08e4cb1549e9d56ee73f11fb47a84ec1b5fc02b1a35c459d098850d4",
+      "reject": "fact-table-definition-disagrees",
+      "detect": "profile",
+      "description": "A defined table whose grains reference says week while its definition says day. Two statements of what the table covers, and they differ."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-definition-argument",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-definition-argument.json",
+      "sha256": "60a669633b28b63173c93a9fb2ffab3a126a394fd64f14b761ef5a7720d0ecb3",
+      "reject": "fact-definition-argument",
+      "detect": "profile",
+      "description": "A table disclosed as restricted with no policy named. The restricted class is governed by a policy, so the case without one names nothing."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-table-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-table-malformed.json",
+      "sha256": "0483dd2d2d87a5522417acd0854c61da19bdc2ce952d8bdd82a1c983baa31e39",
+      "reject": "fact-table-malformed",
+      "detect": "profile",
+      "description": "A defined table with a refresh cadence of zero seconds. A table that must be refreshed every zero seconds is stale the moment it is written."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-table-metric-unregistered",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-table-metric-unregistered.json",
+      "sha256": "17f2b315b74015544e251c087597459145be45188c9d138d942ec78880a6cff6",
+      "reject": "fact-table-metric-unregistered",
+      "detect": "profile",
+      "description": "A column for a metric no unit registers. The column has no unit, direction or staleness to be written under."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-table-subject-level-unknown",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-table-subject-level-unknown.json",
+      "sha256": "708334bb7a97db6a6aacf723d8b9ed3ab7f03c36a404a472361e2e9e96249cd9",
+      "reject": "fact-table-subject-level-unknown",
+      "detect": "profile",
+      "description": "A table at a level its hierarchy does not have. Every row's subject is a path down to the table's level, so the table places no row anywhere."
+    },
+    {
+      "id": "profile-server-app-host/reject-grounding-definition-duplicate",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-grounding-definition-duplicate.json",
+      "sha256": "9252ef173ed556925598c0f6032423b8d0af25a42b640d0bd445e471572353b2",
+      "reject": "grounding-definition-duplicate",
+      "detect": "profile",
+      "description": "Two units registering one metric id. A host given two definitions of one metric has nothing to choose between them."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-history-mode",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-history-mode.json",
+      "sha256": "19953f778a4aa4f26a9b4bb9a3a0123e7d78de112ef02bea2fe50e9bd838654b",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A definition whose history mode is a token the profile does not register. A core reader preserves it; an implementation of this profile refuses it."
+    },
+    {
+      "id": "profile-server-app-host/knowledge-base",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/knowledge-base.json",
+      "sha256": "6c75d093348089dd436e5e382ed78f64b782eefa60a5f63b2e39c4d52ef7115d",
+      "description": "The knowledge-base layer over the retrieval layer: the composer that ingests documents registers onto the model-inference tier the retrieval layer already carries, so every seam it needs is bound."
+    },
+    {
+      "id": "profile-server-app-host/reject-knowledge-base-without-ai",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-knowledge-base-without-ai.json",
+      "sha256": "47c208cf0a6d04a9e0c2a3ef56ebddbf7b2079be114e1a7680ae406a2e3bae6c",
+      "reject": "knowledge-base-without-ai",
+      "detect": "profile",
+      "description": "A knowledge-base layer with no model-inference layer beneath it. Both seams it needs are bound, so nothing is missing from the configuration; what is missing is the tier the layer composes onto."
+    },
+    {
+      "id": "profile-server-app-host/published-pages",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/published-pages.json",
+      "sha256": "82ca24157ff083dde8e9551148740651f7b494dc8f5d164d46af304abda69acc",
+      "description": "Published pages co-hosted with a retrieval application on one server host: one page under each audience shape - public, authenticated, a scope naming two roles over a captured route, a client relationship - over both server-renderable views, with the identity seam bound so the gated pages can be gated."
+    },
+    {
+      "id": "profile-server-app-host/ai-funding-byok",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/ai-funding-byok.json",
+      "sha256": "8b654e99c776f978ef6be6c6252dc33aa54a09bf3fcc8e040da156ca5976b297",
+      "description": "A bring-your-own-key funding: the aiProvider selection holds one aiFunding child whose policy is strictBYOK and which names no host key, beside the secret store each caller's own key is read from. Written with the absent keyEnv spelled null; the encoder omits it."
+    },
+    {
+      "id": "profile-server-app-host/ai-funding-platform",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/ai-funding-platform.json",
+      "sha256": "2a916ade356ce53f66185c1f63dde7c2398a7d68a4b2753da6a76edadfcbda4c",
+      "description": "A permissive funding on a RAG host: callers' own keys where configured, the host's otherwise, with the host key's environment variable named and the secret store bound."
+    },
+    {
+      "id": "profile-server-app-host/reject-ai-funding-tier-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-ai-funding-tier-absent.json",
+      "sha256": "c425e9457d88c708e5d87653a9b6e4f6f6dfd463fd4d10a473e304965c1c4d3a",
+      "reject": "ai-funding-tier-absent",
+      "detect": "profile",
+      "description": "A funded aiProvider selection in a composition with no model-inference layer. The funding and the secret store it reads are declared; nothing makes a model call for anyone to pay for."
+    },
+    {
+      "id": "profile-server-app-host/reject-ai-funding-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-ai-funding-malformed.json",
+      "sha256": "7b305760bdec0d67b3643bc3094f715445732982ac02fde3507d937f19fadb19",
+      "reject": "ai-funding-malformed",
+      "detect": "profile",
+      "description": "A host-paid funding that names no key. Every token is registered and the node is well-formed; the host pays with a key the composition never says where to find."
+    },
+    {
+      "id": "profile-server-app-host/reject-ai-funding-malformed-permissive",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-ai-funding-malformed-permissive.json",
+      "sha256": "a9fb19d6552624d5ec1dc01bda384764380c5b8cf96b59fb048ceb12d21b44a8",
+      "reject": "ai-funding-malformed",
+      "detect": "profile",
+      "description": "A permissive funding that names no key, beside a bound secret store. Callers' own keys have somewhere to be read from; the host still pays for every caller who configured none, so the permissive policy is host-paid and needs its key named exactly as platformOnly does."
+    },
+    {
+      "id": "profile-server-app-host/reject-ai-funding-secret-store-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-ai-funding-secret-store-absent.json",
+      "sha256": "50c3e7dd916b1fb9d1a24cc1bc1d94a9bbe811e85676f57af118e2baac46b99a",
+      "reject": "ai-funding-secret-store-absent",
+      "detect": "profile",
+      "description": "A bring-your-own-key funding in a composition that binds no secret store. Each caller's own key has nowhere to be read from."
+    },
+    {
+      "id": "profile-server-app-host/page-routes",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/page-routes.json",
+      "sha256": "eee62e71c5fc5a065e4f3d9a4e05cf1170b6745fca848de42079677578ce57dc",
+      "description": "What a page says about itself (2.3): a dated report page whose date capture is typed, beside the literal latest page declared after it, both titled and framed by a layout whose frame is a typed-tree view; a client page typing two captures in written order and naming no layout; and a bare layout. The absent title, layout and layout view are spelled null; the encoder omits them."
+    },
+    {
+      "id": "profile-server-app-host/reject-page-layout-unregistered",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-page-layout-unregistered.json",
+      "sha256": "09ef31bd69b585658840f6b0a362734d3a6399576198a05f5ac8218b967f2fe9",
+      "reject": "page-layout-unregistered",
+      "detect": "profile",
+      "description": "A page framed by a layout no layoutRef registers - a misspelling of the one that is. The node is well-formed; a host would frame the page in some other layout."
+    },
+    {
+      "id": "profile-server-app-host/reject-page-capture-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-page-capture-undeclared.json",
+      "sha256": "138cac6db5978ca7a81d0a4ad91a34e1e7535b90f54940d312db652cbb245415",
+      "reject": "page-capture-undeclared",
+      "detect": "profile",
+      "description": "A page typing a capture its route does not have. The type token is registered; it constrains a segment nothing captures."
+    },
+    {
+      "id": "profile-server-app-host/reject-page-title-blank",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-page-title-blank.json",
+      "sha256": "01412f738564b349069fbd365259f51fe88e30fe271f179def5d614b9091fb61",
+      "reject": "page-title-blank",
+      "detect": "profile",
+      "description": "A page whose declared title is white space - no title, spelled a second way."
+    },
+    {
+      "id": "profile-server-app-host/publication-pages",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/publication-pages.json",
+      "sha256": "7cc56c051b33999b6a04182f03a011e41ee3c8c3b6c85f5032fcf9c243f951c9",
+      "description": "Pages published to readers outside the application (2.4): a dated report page and the literal latest page, both read by one reader group from one publishing scope, a second publication naming two reader groups, and a public page."
+    },
+    {
+      "id": "profile-server-app-host/reject-page-publication-readers-empty",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-page-publication-readers-empty.json",
+      "sha256": "5b48d7afdee159c52424ed7aeda0ab5fc451c9205e2cc3a6faac2a8f05eb8c8a",
+      "reject": "page-publication-malformed",
+      "detect": "profile",
+      "description": "A publication naming no reader - a page nobody may read. The node is well-formed; a host would refuse every reader silently."
+    },
+    {
+      "id": "profile-server-app-host/reject-page-publication-scope-not-a-name",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-page-publication-scope-not-a-name.json",
+      "sha256": "648441e7dbe6244aa196d167d22a4035ffa9cac08db28597456cbc1bf9c03fd6",
+      "reject": "page-publication-malformed",
+      "detect": "profile",
+      "description": "A publication whose publishing scope carries ':' - an identifier written where the composition names the scope, and one that does not round-trip through the textual audience form."
+    },
+    {
+      "id": "profile-server-app-host/reference-data",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/reference-data.json",
+      "sha256": "42706ecf2bd4055adc2ff7c527698d9f1d1cfb4ed4ca3332914ea4ae99586259",
+      "description": "Reference data (3.0): a fiscal calendar two hierarchies count their periods in, a dataset no calendar names, every column type, and a hierarchy stating no calendar. Members given out of order in the emitter's model; section P3.6's order restored."
+    },
+    {
+      "id": "profile-server-app-host/owned-entities",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/owned-entities.json",
+      "sha256": "c266ade23b25a5583bc5ee51e26ed8c666b7018f84111549c52eb55700cc5bf1",
+      "description": "Owned entities and AI exposure (3.1): pseudonymous order records (internal, identifiers classified pii) in a unit stating itself notQueryable, a surfaceable entity with every level in a queryable unit, and a restricted entity in a unit stating no exposure. Every 3.1 rule is met."
+    },
+    {
+      "id": "profile-server-app-host/disclosure-policies",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/disclosure-policies.json",
+      "sha256": "6051695c1ed60550abc1d857c301ee0ed004ed34e4cb5fa100a2f73753c3598d",
+      "description": "Disclosure policies (3.3): a fact table restricted under a declared policy that permits the assistant's doors and publication, cited by a narrative published at narrativePublication; a sealed taint-propagating policy with a contributor scope; and a column restricted under a policy no unit declares, which is denied everywhere and never refused (section P3.9). Every 3.3 rule is met."
+    },
+    {
+      "id": "profile-server-app-host/reject-disclosure-policy-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-disclosure-policy-malformed.json",
+      "sha256": "792fc8aaf05bb323b00d6db9e8b291b7a375f39b501246b9fe36a90c2056cbe2",
+      "reject": "disclosure-policy-malformed",
+      "detect": "profile",
+      "description": "Two units each declaring a policy named trade-figures (section P4.40). A host keeps one stance per reference, so a second declaration would silently replace the first."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-surface-forbidden",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-surface-forbidden.json",
+      "sha256": "c9eb331e2e3bd95815d96eeb46f4a09ce7c73dd822c8a4227f4490b2a425f3c8",
+      "reject": "narrative-surface-forbidden",
+      "detect": "profile",
+      "description": "A narrative published at narrativePublication citing a metric whose only table is restricted under a declared policy permitting retrieval and toolResult alone (section P4.41). The host's gate would deny every fact the narrative could cite; permitting narrativePublication on the policy is the one-token difference that admits it."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-policy-surface",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-policy-surface.json",
+      "sha256": "26b1f5bae73de76b2d2222bcfd0b526cffcfd9e382b2b79a667e5f92cafd1deb",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A disclosure policy permitting the surface publicPage (section P2.17). No public-page door exists: publishing to a page is narrativePublication."
+    },
+    {
+      "id": "profile-server-app-host/entity-reads",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/entity-reads.json",
+      "sha256": "80d232f3fe1a355e51ed645f246e93f6a82a703b857dd1898b3286fd089ff395",
+      "description": "The entities a surface reads (3.4): an embedding store and a layout reading a surfaceable entity, a page reading two, and a vector store declaring it reads none, its empty reads WRITTEN as [] rather than omitted, beside a unit owning an internal entity no surface reads. Every 3.4 rule is met. An emitter that omits an empty reads, or writes an edge's members out of order, fails it."
+    },
+    {
+      "id": "profile-server-app-host/reject-entity-reads-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-entity-reads-malformed.json",
+      "sha256": "6d553fee9ad07a637934dd49271626dd2e686157df7bffde930c029dc4be65cb",
+      "reject": "entity-reads-malformed",
+      "detect": "profile",
+      "description": "A page listing its edge to Orders.OrderSummary twice (section P4.42). One edge is one statement; the second copy says it again."
+    },
+    {
+      "id": "profile-server-app-host/reject-entity-read-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-entity-read-undeclared.json",
+      "sha256": "b4448731f99403676c222a498a232e69cbdf25b4b6f824f8b55c55b917ba96ba",
+      "reject": "entity-read-undeclared",
+      "detect": "profile",
+      "description": "An embedding store reading Orders.Customer, an entity the Orders unit does not declare (section P4.43). Nothing states the record's class, so nothing could say whether the store may read it."
+    },
+    {
+      "id": "profile-server-app-host/reject-surface-entity-forbidden",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-surface-entity-forbidden.json",
+      "sha256": "fedd3680177f4a0fdfd89a11110a181b9a91eabeeb45ddcc8f56bf70980ae61f",
+      "reject": "surface-entity-forbidden",
+      "detect": "profile",
+      "description": "A published page reading Orders.HighValueOrder, whose disclosure class is internal (section P4.44). Its unit is notQueryable, so the unit's boundary is met; the refusal is of the one edge that would carry the record to the page."
+    },
+    {
+      "id": "profile-server-app-host/standing-subscription",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/standing-subscription.json",
+      "sha256": "83ebf0aacfd735da150d7ff6ae3f1514be031dc14c1d6f7b1f42af287a4dd255",
+      "description": "A standing report subscription (3.5): a trigger-free grounded narrative a producer writes into the one text placeholder of a Markdown template, delivered every Monday at 06:00 as transactional email through an Smtp transactionalSink, on the selected jobScheduler, as a declared principal. The template also declares an optional number placeholder carrying a format hint, its empty columns OMITTED and both required members WRITTEN as boolean strings; the subscription binds one parameter and names one recipient. Every 3.5 rule is met. An emitter that writes empty columns as [], omits an empty placeholders or recipients array, or writes required as a JSON boolean fails it."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-key-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-key-invalid.json",
+      "sha256": "a3686dcf08de9d0fff47ce2d5b193b1a527c493219f620c2c4ea19d906dcb5ac",
+      "reject": "subscription-key-invalid",
+      "detect": "profile",
+      "description": "A standing subscription whose key (its node id) is \"weekly brief\", holding a space (section P4.45). The key becomes part of a storage path and a job key, so only letters, digits, ., - and _ are admitted."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-reference-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-reference-undeclared.json",
+      "sha256": "66ddc2f47625d9ddcd4e29ca437b0de9c6899742b5ef3d734f1559db3e01f9a6",
+      "reject": "subscription-reference-undeclared",
+      "detect": "profile",
+      "description": "A standing subscription whose principal names \"auditor\", which no subscriptionPrincipal declares (section P4.46). The run would read and deliver as an identity nothing states."
+    },
+    {
+      "id": "profile-server-app-host/reject-producer-placeholder-unfit",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-producer-placeholder-unfit.json",
+      "sha256": "6fd0b02422b7047669527ade05b580632be006e41c9400a8db990f253819dfa7",
+      "reject": "producer-placeholder-unfit",
+      "detect": "profile",
+      "description": "A producer filling the template's body placeholder while the template's figure placeholder is now required (section P4.47). The producer supplies one value, so every render would refuse the missing required one."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-recipients-empty",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-recipients-empty.json",
+      "sha256": "7265498cf7605ef0a0397f30da6827b50dab9a97109041b95465b326293dd225",
+      "reject": "subscription-recipients-empty",
+      "detect": "profile",
+      "description": "A standing subscription whose recipients array is [] (section P4.48). The member is present, as the codec requires; the subscription delivers to nobody."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-schedule-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-schedule-invalid.json",
+      "sha256": "3b409ad31e0c700f5bc807e4c37350d59a6807de1565ad70c5f835672006c8b4",
+      "reject": "subscription-schedule-invalid",
+      "detect": "profile",
+      "description": "A standing subscription whose schedule is \"0 6 * *\", four fields where the cron grammar takes five (section P4.49)."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-sink-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-sink-absent.json",
+      "sha256": "6cf1a0e1c215afcddf0ce179d8b6d1b8e4ece201f0285d5cb3fb3e99f67e5b04",
+      "reject": "subscription-sink-absent",
+      "detect": "profile",
+      "description": "A standing subscription in a composition selecting no transactionalSink (section P4.50). The report job delivers a transactional email and there is no email sink to deliver it through; the scheduler is selected."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-scheduler-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-scheduler-absent.json",
+      "sha256": "a3f50bf3836ed04dcbf95737a37049878aa1cac847f106fb0fe332c313eb9e1a",
+      "reject": "subscription-scheduler-absent",
+      "detect": "profile",
+      "description": "A standing subscription in a composition selecting no jobScheduler (section P4.50). The email sink is selected and the narrative reacts to no metric and no commit, so the subscription is the one node needing a scheduler."
+    },
+    {
+      "id": "profile-server-app-host/reject-template-placeholder-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-template-placeholder-malformed.json",
+      "sha256": "809c99937330d17d25e9a28ca18777765b7687319ffde6cdb437fe8f940b2e78",
+      "reject": "template-placeholder-malformed",
+      "detect": "profile",
+      "description": "A template whose text placeholder carries a hint (section P4.51). Only a number or date placeholder carries a format hint, and an image its MIME type; a text placeholder carries none."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-report-format",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-report-format.json",
+      "sha256": "63a5ac7a20aa526a85a6ac39d187ac86fa863f68834272b47d1358258fc0adf1",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A report template whose format is \"pptx\", a token the profile does not register (section P2.18): no presentation renderer is registered; the registered formats are markdown, html and pdf (text) and docx and xlsx (binary, 3.7). A core reader preserves it; an implementation of this profile refuses it. (At 3.5 this vector spelled the format \"pdf\" and at 3.6 \"docx\"; each was registered by the next version, so the vector moved to one that stays unregistered. Its subscription's format, markdown, is registered and is not compared with an unregistered one, so P4.52 does not also refuse it.)"
+    },
+    {
+      "id": "profile-server-app-host/pdf-subscription",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/pdf-subscription.json",
+      "sha256": "4a5e65f4d21cbbf9a152b96cb00a44a47020831b680ff5b98106560a98883d2d",
+      "description": "A PDF board pack (3.6): a standing subscription whose format is pdf over a template whose format is pdf and whose body is HTML written for print (an @page rule and a page break), its one text placeholder filled by a producer over a trigger-free grounded narrative, delivered on the first of every month at 07:00 as transactional email through a SendGrid transactionalSink on the selected jobScheduler. The subscription binds no parameter, so it OMITS parameters. Every 3.6 rule is met, P4.52 included. An implementation that refuses the pdf token, or that refuses a pdf subscription over a pdf template, fails it."
+    },
+    {
+      "id": "profile-server-app-host/docx-subscription",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/docx-subscription.json",
+      "sha256": "d99f7322711893ca777cb756c8e6de8b8ee565079b3aecdaf19ff2701cdee008",
+      "description": "Binary reports (3.7): a Word board pack and a spreadsheet ledger, each template a content-addressed file - source and contentHash in place of body (section P3.11) - each filled by a producer over one trigger-free grounded narrative and subscribed to in its own format, docx and xlsx, delivered on the first of every month as transactional email through a SendGrid transactionalSink on the selected jobScheduler. Every 3.7 rule is met, P4.52-P4.54 included. An implementation that refuses the docx or xlsx token, that reads a template without a body as malformed, or that writes a binary body's members in another order, fails it."
+    },
+    {
+      "id": "profile-server-app-host/reject-template-body-unfit",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-template-body-unfit.json",
+      "sha256": "7abaeadeb4f032194e7782e1227ed7fe8ed9916640ecd2def5a554353144f497",
+      "reject": "template-body-unfit",
+      "detect": "profile",
+      "description": "The binary reports with the Word template's body declared as text - a body string in place of source and contentHash - under format docx (section P4.53): a host fills a docx body as a word-processor document, and text is not one. The node is well-formed and every token is registered, so only P4.53 refuses it, once."
+    },
+    {
+      "id": "profile-server-app-host/reject-template-body-unfit-text",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-template-body-unfit-text.json",
+      "sha256": "920e0d51ba513ff47578f9b471c3a56d7bf1ca5c1fab0bb2f8554ec53f6142b5",
+      "reject": "template-body-unfit",
+      "detect": "profile",
+      "description": "The binary reports with the Word template's format, and its subscription's, changed to markdown while the template keeps its source and contentHash (section P4.53, the converse): a host fills a markdown body as text, and a file is not one. The subscription agrees with its template, so P4.52 does not refuse it; P4.53 refuses it once."
+    },
+    {
+      "id": "profile-server-app-host/reject-template-source-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-template-source-malformed.json",
+      "sha256": "452808cd95d4dae4ba723d1001cbf681d54e779b1ff5faa83a4b618bf9c8efb6",
+      "reject": "template-source-malformed",
+      "detect": "profile",
+      "description": "The binary reports with the Word template's source climbing out of the application's root through a .. segment (section P4.54, the grammar P4.32 holds a reference dataset's source to). Refused once."
+    },
+    {
+      "id": "profile-server-app-host/reject-template-source-malformed-hash",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-template-source-malformed-hash.json",
+      "sha256": "e1f59c858d96136b7d75f09471c97dfa22634d1d745acc3195c5326ae2ff00b5",
+      "reject": "template-source-malformed",
+      "detect": "profile",
+      "description": "The binary reports with the workbook template's contentHash written in upper-case hexadecimal (section P4.54): the one spelling is sha256: and 64 lower-case hexadecimal digits, as for a reference dataset. Refused once."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-format-unfit-binary",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-format-unfit-binary.json",
+      "sha256": "b2fc54300dcd7b963a3088ec7b744d4d09bbf41d9449cc0987129831d4eaf52f",
+      "reject": "subscription-format-unfit",
+      "detect": "profile",
+      "description": "The binary reports with the Word board pack's subscription changed to markdown while its template stays docx (section P4.52, widened at 3.7): a host would read a word-processor document's bytes as Markdown. Both formats are registered, so no token rule refuses it; P4.52 refuses it once."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-format-unfit",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-format-unfit.json",
+      "sha256": "83ca6a95c1624f75c24907120dd82a849c8354409bf34f1de68652a73a62cdca",
+      "reject": "subscription-format-unfit",
+      "detect": "profile",
+      "description": "The PDF board pack with its template's format changed to markdown while its subscription stays pdf (section P4.52): a host would print the Markdown source as HTML. Both formats are registered, so no token rule refuses it; P4.52 refuses it once."
+    },
+    {
+      "id": "profile-server-app-host/reject-subscription-format-unfit-template",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subscription-format-unfit-template.json",
+      "sha256": "9af3b5ecbed082a68999af30231e1652e0e1d1a7da05eada6baf47bcfd226572",
+      "reject": "subscription-format-unfit",
+      "detect": "profile",
+      "description": "The PDF board pack with its subscription's format changed to html while its template stays pdf (section P4.52, the converse): a host would deliver print HTML as an HTML report. Both formats are registered, so no token rule refuses it; P4.52 refuses it once."
+    },
+    {
+      "id": "profile-server-app-host/reject-reference-data-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-reference-data-malformed.json",
+      "sha256": "9f26d964139a36462634c2073ee6aa204f89e508e26e24e417a6be6bda49a61c",
+      "reject": "reference-data-malformed",
+      "detect": "profile",
+      "description": "A reference dataset whose source climbs out of the application's root ('../'). Every member is present and every token registered; the path names a file a host cannot be held to, so the declaration pins nothing."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-reference-column",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-reference-column.json",
+      "sha256": "9cb7d71b192e6ceed8ac50b31bc905e4ce8daa8796d3cfdd6d361ce4ff96d99c",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A reference dataset column whose type is a token the profile does not register. A core reader preserves it; an implementation of this profile refuses it."
+    },
+    {
+      "id": "profile-server-app-host/reject-subject-calendar-unresolved",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-subject-calendar-unresolved.json",
+      "sha256": "6dc42f64e9e682774a9c1c635ad9502423a671267f2526abc156db05e4d23cda",
+      "reject": "subject-calendar-unresolved",
+      "detect": "profile",
+      "description": "A hierarchy counting its periods in a calendar no referenceData node declares, beside a dataset of a near-miss name. Valid at 2.x, where a calendar was a tag nothing had to declare; refused at 3.0 (section P4.33)."
+    },
+    {
+      "id": "profile-server-app-host/reject-entity-exposure-forbidden",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-entity-exposure-forbidden.json",
+      "sha256": "590f5372e34174c22f91b95054ce7ec72e167b21feb3628ce7e7a2d635c527ba",
+      "reject": "entity-exposure-forbidden",
+      "detect": "profile",
+      "description": "A queryable unit owning an internal entity beside a surfaceable one (section P4.35). The internal entity's class forbids a model, and the unit's exposure would carry it there; the surfaceable one alone would be admitted."
+    },
+    {
+      "id": "profile-server-app-host/data-delivery",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/data-delivery.json",
+      "sha256": "5ceb0d8fc2f17c5c3e0da7672c51eb066273ec042eebb3a3c490441e7563d73f",
+      "description": "A data delivery (3.2): a workbook source delivered by upload through the unit whose route serves it, stored in the selected blob store, beside a database source nothing delivers. Every 3.2 rule is met. Members given out of order in the emitter's model; section P3.8's order restored."
+    },
+    {
+      "id": "profile-server-app-host/declared-delivery",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/declared-delivery.json",
+      "sha256": "c1a57d901fc1bc9aac8e9c138c50d7a8c6958a2ee9e009ced9dc583dfc97064f",
+      "description": "Declared deliveries (6.2): a database source pulled daily, two tables, and a workbook source fed by a watched location, both run as one declared principal over a blob store and a scheduler. Every 6.2 rule is met. Members given out of order in the emitter's model, the absent module spelled null; section P3.8's order restored and the member omitted."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-reference-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-reference-undeclared.json",
+      "sha256": "5daf1e30d886c628118ae1a9df177a6f219073934ae0a192cfc46cd0817f82d4",
+      "reject": "delivery-reference-undeclared",
+      "detect": "profile",
+      "description": "A delivery naming source 'ds-trade' beside a connectorRef 'ds-trades' (section P4.36). The unit, the blob store and the mode are all in order; the source the delivery names is declared by nothing, so it delivers nothing."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-duplicate",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-duplicate.json",
+      "sha256": "a2bd1bb343828f82696812148d2f6822bc7a756f49240bfb097f66f9b426e152",
+      "reject": "delivery-duplicate",
+      "detect": "profile",
+      "description": "Two deliveries of one source (section P4.37), each well formed on its own. Two declarations of how one source's data arrives are two answers to one question."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-store-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-store-absent.json",
+      "sha256": "6ca61af7fbbe70a5d5a4b457499b39719ce00f83495088eb03ae82c3bd40c47e",
+      "reject": "delivery-store-absent",
+      "detect": "profile",
+      "description": "An upload delivery in a composition selecting no blobStorage (section P4.38). The source and the unit are declared and the connector reads files; where the uploaded file is stored is left to a host default."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-source-unfit",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-source-unfit.json",
+      "sha256": "75b4103d2b1f2a49e128c13e395048942fa30c5c972d2b2fafcbf68a47a3d011",
+      "reject": "delivery-source-unfit",
+      "detect": "profile",
+      "description": "An upload delivered through a database connector (section P4.39), beside a workbook connector that would have been admitted. The file would be stored and never read."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-delivery-mode",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-delivery-mode.json",
+      "sha256": "8c9926922e619956f867834107933c0e3358396482e07d4f30b509be60d6d4a2",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A delivery whose mode is a token the profile does not register (section P2.15): an email delivery, which no host composes. A core reader preserves it; an implementation of this profile refuses it. (At 3.2-6.1 this vector carried a scheduled pull, which 6.2 registers.)"
+    },
+    {
+      "id": "profile-server-app-host/reject-entity-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-entity-malformed.json",
+      "sha256": "cae544f9b2b71cfadc0d34af866355b25a32702400d5a78df8a5669cb5e5a26e",
+      "reject": "entity-malformed",
+      "detect": "profile",
+      "description": "Two units each declaring an entity named Order (section P4.34). An entity's record belongs to the unit that owns it, so a second owner is two declarations of one record."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-field-level",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-field-level.json",
+      "sha256": "a827b0f2acff00737f469449de0b8ddc6fc071a57dcb8a310fef4eed62cd3881",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A classified field whose level is a token the profile does not register (section P2.13). A core reader preserves it; an implementation of this profile refuses it."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-capture",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-capture.json",
+      "sha256": "df39d88cfe73bf784f8a5dd9f860d7a30d48dc7569012a69fc142e145b53d97e",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A typed capture whose type is a token the profile does not register. A core reader preserves it; an implementation of this profile refuses it."
+    },
+    {
+      "id": "profile-server-app-host/grounded-narrative",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/grounded-narrative.json",
+      "sha256": "38a027798df715f7b8156f6f8cd380050442d52e5710e32fb1912f2754109d7d",
+      "description": "Two grounded narratives over a declared fact table on one server host: one enqueued by the table's commit, written from the metric it carries and served by a gated page at a literal route; the other reacting to nothing, attributed to a route within its unit and checked at another surface - every array member present, empty ones as [], the optional strings present on one and absent on the other."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-tier-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-tier-absent.json",
+      "sha256": "6038d809115883e55e193c3c78b8fdb485dd5df192310282211b4a13800c716a",
+      "reject": "narrative-tier-absent",
+      "detect": "profile",
+      "description": "A grounded narrative in a composition with no model-inference layer. The narrative and everything it names are declared; nothing can write it."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-reference-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-reference-undeclared.json",
+      "sha256": "66d7c6ba45b517898189fba730a19e5223cfe2607cea176161828a287e9978a1",
+      "reject": "narrative-reference-undeclared",
+      "detect": "profile",
+      "description": "A grounded narrative enqueued by the commit of a fact table no unit declares. Every token is registered and the node is well-formed; the table it names is not there."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-page-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-page-invalid.json",
+      "sha256": "971c549c1f5a2e894d63289b3f87f0cdddb931f623e6e592657d26816d1a630d",
+      "reject": "narrative-page-invalid",
+      "detect": "profile",
+      "description": "A grounded narrative serving a page whose route captures a segment. The page is declared; a captured route names a family of pages no single latest narrative chooses between."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-malformed.json",
+      "sha256": "6490fda5f33c508b5521574d8ff1a0f6265b2d200af42e6440e651d237ed9f31",
+      "reject": "narrative-malformed",
+      "detect": "profile",
+      "description": "A grounded narrative with an empty title. Every member is present and every reference is declared; the title is the structure the composition authors, and it says nothing."
+    },
+    {
+      "id": "profile-server-app-host/reject-public-rendering-layer-unsupported-base",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-public-rendering-layer-unsupported-base.json",
+      "sha256": "b8e7fdea98099cc1788dd40aebf1941dbe30c6711a810e9e375e4dfba402afc0",
+      "reject": "public-rendering-layer-unsupported-base",
+      "detect": "profile",
+      "description": "The rendering layer on the base that already renders. Every token is registered and the page is well-formed; what is wrong is that the composition would compose rendering twice."
+    },
+    {
+      "id": "profile-server-app-host/reject-page-without-rendering-tier",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-page-without-rendering-tier.json",
+      "sha256": "a63e054c6ff2ba0b71c490bee99c3e4920293ed5396216cceaaa3acfafba6f3d",
+      "reject": "page-without-rendering-tier",
+      "detect": "profile",
+      "description": "A published page in a composition that renders nothing server-side: no rendering layer and a base that does not render. The page is well-formed; nothing serves it."
+    },
+    {
+      "id": "profile-server-app-host/reject-page-view-client-only",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-page-view-client-only.json",
+      "sha256": "8e4335da1106a2fadb164ec171c4e3b48e335ab38ade677e92605035215d8e5e",
+      "reject": "page-view-client-only",
+      "detect": "profile",
+      "description": "A page whose view is the host's client view technology. The token is registered for a module's view; a page is rendered before any client runs."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-grain",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-grain.json",
+      "sha256": "9c6ee429a6cc4d238901807ddaf588b738f262b920c0bffe4dbaea3454bc50dd",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A fact table at a grain the profile does not register. A core reader preserves the token; an implementation of this profile refuses it."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-member-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-member-absent.json",
+      "sha256": "a7c643f65ba6327c2896f05de70f3ad5f9945b83f614c8898c743aacdc44708f",
+      "reject": "delivery-member-absent",
+      "detect": "profile",
+      "description": "A watched delivery that names its principal and no location (section P4.57). The blob store, the scheduler and the principal are in order; where the objects land is not said."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-member-unfit",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-member-unfit.json",
+      "sha256": "1b3c8d6762deb58b432e08c198fca5860598eacab6f52556b738fa6ad05b44ac",
+      "reject": "delivery-member-unfit",
+      "detect": "profile",
+      "description": "A scheduled pull that also names a unit (section P4.57), a member only an upload takes. The unit is declared and every member a pull takes is present; a host would have to ignore the module."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-principal-unresolvable",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-principal-unresolvable.json",
+      "sha256": "36ac053b60475ba60e45b18bfe034327fd7c4af185a3710f6c59d349452efe06",
+      "reject": "delivery-principal-unresolvable",
+      "detect": "profile",
+      "description": "A scheduled pull run as a declared principal whose userId is empty (section P4.58). No resolver maps an empty identity to a scope."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-cadence-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-cadence-invalid.json",
+      "sha256": "26730b052b65137942a9020636cd5d60188ffeff820b29d1b1bce1553478cfff",
+      "reject": "delivery-cadence-invalid",
+      "detect": "profile",
+      "description": "A scheduled pull whose cadence is the word 'daily' (section P4.59), not a five-field cron expression."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-location-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-location-invalid.json",
+      "sha256": "e77015c324a8d9c0ffed40848b570e5497a3338a27251f41237e83fbd9dc6348",
+      "reject": "delivery-location-invalid",
+      "detect": "profile",
+      "description": "A watched location that climbs out of the principal's scope through '..' segments (section P4.60)."
+    },
+    {
+      "id": "profile-server-app-host/reject-delivery-scheduler-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-delivery-scheduler-absent.json",
+      "sha256": "fb450f0ad43fe521130fe13e8b5177391e5fcb9189ecf10cbc4177ceccf6ee2f",
+      "reject": "delivery-scheduler-absent",
+      "detect": "profile",
+      "description": "A scheduled pull in a composition selecting no jobScheduler (section P4.61). The pull is well formed; nothing runs it."
+    },
+    {
+      "id": "profile-server-app-host/scheduled-narrative",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/scheduled-narrative.json",
+      "sha256": "e73ddd478fb020df2e6aafec93cf644077c0d0701d6b172e5e7f5495bc279530",
+      "description": "A scheduled grounded narrative (6.3): a Monday briefing on the cadence 0 7 * * 1, run as one declared principal, beside a narrative triggered only by a commit, over a scheduler. Every 6.3 rule is met. Members given out of order in the emitter's model, the second narrative's cadence and runsAs spelled null; section P3.4's order restored and both omitted."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-cadence-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-cadence-invalid.json",
+      "sha256": "478c65d9c3cc9d60869336998f7eaf8a3fa53758b17fab296bb5fb1de615c89f",
+      "reject": "narrative-cadence-invalid",
+      "detect": "profile",
+      "description": "A grounded narrative whose cadence is the word 'weekly' (section P4.62), not a five-field cron expression."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-principal-unresolvable",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-principal-unresolvable.json",
+      "sha256": "d7aada8b4affe9950ec13ab905fe71e83a1670b66cf7d6f178186f12d5ea11a9",
+      "reject": "narrative-principal-unresolvable",
+      "detect": "profile",
+      "description": "A scheduled grounded narrative running as a declared principal whose userId is blank (section P4.63). Every reference is declared; no host can resolve the principal."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-runs-as-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-runs-as-undeclared.json",
+      "sha256": "beb33cecd25c08896d5ca69a297ac3c35c19215b7da99f3a4fa7b941a3941ebf",
+      "reject": "narrative-reference-undeclared",
+      "detect": "profile",
+      "description": "A scheduled grounded narrative whose runsAs names no subscriptionPrincipal (section P4.22, widened at 6.3). The cadence is a valid cron."
+    },
+    {
+      "id": "profile-server-app-host/reject-narrative-cadence-without-principal",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-narrative-cadence-without-principal.json",
+      "sha256": "e4e60d3877efe5f300026f2006e5ef762762cd9b94b2839203e672219c01144f",
+      "reject": "narrative-malformed",
+      "detect": "profile",
+      "description": "A grounded narrative carrying a cadence and no runsAs (section P4.24, widened at 6.3): a schedule with no principal names no scope to run in."
+    },
+    {
+      "id": "profile-server-app-host/fact-browse",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/fact-browse.json",
+      "sha256": "680d5bfd77f453942dfb5c2bacc664b03992310a7941fd0ad06b99b8755ad6a1",
+      "description": "A fact browse with both halves (6.4): the browse surface and the client module, renamed Data tables and filed under the application's own Trading group, over a fact table restricted under a declared policy that permits browse, in a composition with a client shell. Every 6.4 rule is met. Members given out of order in the emitter's model and the absent mount spelled null; section P3.15's order restored and mount omitted."
+    },
+    {
+      "id": "profile-server-app-host/fact-browse-server-only",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/fact-browse-server-only.json",
+      "sha256": "cb4322bb140ce191b214b9167175c40946cfa35acc8f2501a566c1a3216a82a4",
+      "description": "A fact browse mounting the server half alone (6.4, section P2.21): a view of the application's own reads the series, so there is no client module, no client shell, no label and no group. A composition defining no fact table meets section P4.67 vacuously. The absent label and group spelled null in the emitter's model and omitted."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-browse-without-tier",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-browse-without-tier.json",
+      "sha256": "d6b9beb25659491e9ff6df084c5d80cfe531f85be43cd12443c5eeb1f8093be1",
+      "reject": "fact-browse-without-tier",
+      "detect": "profile",
+      "description": "A serverOnly fact browse in a composition that selects no fact tier (section P4.64). FactStore is not set, so it is NoFactStore, and a host has nothing to mount."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-browse-client-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-browse-client-absent.json",
+      "sha256": "923f1b16d1a18d4ff82c62cc5416b15bc9a0a9276fee5fd5de89af3be3fb21ca",
+      "reject": "fact-browse-client-absent",
+      "detect": "profile",
+      "description": "A fact browse with no mount - the surface and the client module together - in a composition carrying no clientShell (section P4.65). There is no bundled client to add the module to; serverOnly is the one-token difference that admits it."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-browse-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-browse-malformed.json",
+      "sha256": "6ec4651be990f777d0660470e37e895cb9a9d568f41a8a759e448fdb6524ee54",
+      "reject": "fact-browse-malformed",
+      "detect": "profile",
+      "description": "A serverOnly fact browse that names a label (section P4.66). It adds no client module, so a name for one makes the document say two things."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-browse-malformed-blank",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-browse-malformed-blank.json",
+      "sha256": "7eac3a1030ae1b8a33a68f57f1fa35d5098242ef9a53126391c524b7a26b6208",
+      "reject": "fact-browse-malformed",
+      "detect": "profile",
+      "description": "A fact browse whose group is white space (section P4.66) - no group, spelled a second way. Every other member is the fact-browse round-trip vector's."
+    },
+    {
+      "id": "profile-server-app-host/reject-fact-browse-surface-forbidden",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-fact-browse-surface-forbidden.json",
+      "sha256": "6a2387125a03427c7e5a23bb3e588f043f4bf50071d689b8b1519fe9a1ccfa2a",
+      "reject": "fact-browse-surface-forbidden",
+      "detect": "profile",
+      "description": "A fact browse over a composition whose only fact table is restricted under a declared policy permitting retrieval alone (section P4.67). The host's gate would deny every fact the browse could show; permitting browse on the policy is the one-token difference that admits it."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-fact-browse-mount",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-fact-browse-mount.json",
+      "sha256": "f77cc6b0c2c7761337bbee1d1bc1c588aa555aa35905b9edf572d806e61e098e",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A fact browse whose mount is a token the profile does not register (section P2.21): clientOnly, a client module calling routes nothing serves. A core reader preserves it; an implementation of this profile refuses it."
+    },
+    {
+      "id": "profile-server-app-host/client-shell-home",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/client-shell-home.json",
+      "sha256": "f8408e7bedbe8af68b84608bf84c2318dd1e3b006a87334526846344bde69b07",
+      "description": "A client shell whose home page links two published pages (6.5): a public page with a description, then a scope page without one, in the composition's order. Every 6.5 rule is met. Entry members given out of order in the emitter's model and the absent description spelled null; section P3.1's order restored and description omitted."
+    },
+    {
+      "id": "profile-server-app-host/reject-home-entry-page-unknown",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-home-entry-page-unknown.json",
+      "sha256": "6fdb6f622cd11cddfe2b6f50aba0a66ec0cc31cbc2edbdb6dbad66ede158906b",
+      "reject": "home-entry-page-unknown",
+      "detect": "profile",
+      "description": "A client shell whose second home entry names a page the composition does not declare (section P4.68). Every other member is the client-shell-home round-trip vector's."
+    },
+    {
+      "id": "profile-server-app-host/reject-home-entry-route-captured",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-home-entry-route-captured.json",
+      "sha256": "5d4c45b1fd7defd668fcee954fa34cd8c86c9a13268f82cf138faa87eb7063af",
+      "reject": "home-entry-route-captured",
+      "detect": "profile",
+      "description": "A client shell whose home entry links a page served at a captured route, reports/{client} (section P4.69): a captured route names a family of pages, and a link must name one."
+    },
+    {
+      "id": "profile-server-app-host/reject-home-entry-audience-unreadable",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-home-entry-audience-unreadable.json",
+      "sha256": "67cf549a82667041aff3d22f0f824243be2220d6b3f5afddc87ff194caebcbee",
+      "reject": "home-entry-audience-unreadable",
+      "detect": "profile",
+      "description": "A client shell whose home entry links a page whose audience is one client's own relationship (section P4.70): its reader is that client, never a user of the application's home page."
+    },
+    {
+      "id": "profile-server-app-host/reject-home-entry-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-home-entry-malformed.json",
+      "sha256": "c931c2c7999d671c031514a8b226a5de04fa5592d4bcad0532e85bb7e5f9aa7f",
+      "reject": "home-entry-malformed",
+      "detect": "profile",
+      "description": "A client shell whose first home entry's title is white space (section P4.71) - a link with no heading. Every other member is the client-shell-home round-trip vector's."
+    },
+    {
+      "id": "profile-server-app-host/theme",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/theme.json",
+      "sha256": "e709ec47a3e596676e7255db20c29d452144dbbdc57f55d882dcfe0c36fa1244",
+      "description": "A house theme (6.6, section P3.16) beside a client shell and a page published at a literal route, so one declaration reaches the bundled client and the server-rendered page alike: a relative source and a content hash in section P4.72's grammar. Every 6.6 rule is met. Members given out of order in the emitter's model; section P3.16's order restored."
+    },
+    {
+      "id": "profile-server-app-host/reject-theme-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-theme-malformed.json",
+      "sha256": "6db79073b65273cf0fc7e19f2bea9be43356313eb6b495c2aeb3c3762a835510",
+      "reject": "theme-malformed",
+      "detect": "profile",
+      "description": "A theme whose source carries a .. segment, design/../house.theme.json (section P4.72): a source names one file under the application's root and cannot climb out of it."
+    },
+    {
+      "id": "profile-server-app-host/reject-theme-unplaced",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-theme-unplaced.json",
+      "sha256": "a80c4b1dc951edd5e488fc2e29b9f078672b032b6ffe43f3fc9cf25069375768",
+      "reject": "containment-invalid",
+      "detect": "profile",
+      "description": "A theme declared under the server configuration rather than the root (section P4.1): a theme styles every surface the application renders, so it is a child of appRoot and of nothing else."
+    },
+    {
+      "id": "profile-server-app-host/narrative-conjecture",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/narrative-conjecture.json",
+      "sha256": "bd93aeb1503912ade0b11d250e602fb6216f335915db43b7ef10ed542b17d11d",
+      "description": "A grounded narrative that may mark a conjecture (6.7, section P3.4): a daily report allowed to state a hypothesis, labelled as one and carrying no number, beside a weekly review that may not. Every 6.7 rule is met. Members given out of order in the emitter model, the review given allowsConjecture false; section P3.4 order restored, allowsConjecture written as the boolean string \"true\" after the sections on the first and omitted on the second."
+    },
+    {
+      "id": "profile-server-app-host/narrative-conjecture-omitted",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/narrative-conjecture-omitted.json",
+      "sha256": "9820d238408f5fa07f3fc431f5144ed888c82d96cfd08afb193a88a62104eaf8",
+      "description": "The omission alone (6.7, section P3.4): a narrative whose emitter model says allowsConjecture false, written without the member, so its bytes are a 6.6 narrative byte for byte. An emitter that writes \"false\", or a JSON boolean, fails it."
+    },
+    {
+      "id": "profile-server-app-host/narrative-conjecture-false-spelled",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "accept",
+      "file": "profile-server-app-host/narrative-conjecture-false-spelled.json",
+      "sha256": "a043f5f44d2a3b0da90b76ad5beeabf250bc4f4f012c3c300d3a186e404af6ea",
+      "description": "The one place where what a writer emits and what a reader accepts differ for this member: a writer never writes \"false\" (absence is its spelling), and a reader must not refuse it, because \"false\" is one of the two boolean spellings section 4.5 admits.",
+      "interpretation": "Read as the narrative-conjecture-omitted composition: allowsConjecture \"false\" is the format boolean spelling of the default, so the narrative may not mark a conjecture. On re-encoding the member is omitted, and the bytes are narrative-conjecture-omitted exactly (section P3.4)."
+    },
+    {
+      "id": "profile-server-app-host/ui-control",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/ui-control.json",
+      "sha256": "2a7bcae9f39760e40a114629851e0c64e7c36c7c98adfc89b26196b4c27a7c3b",
+      "description": "What an assistant may operate (6.8, section P3.17), beside the client shell that renders the controls: the fast path on, triage served by the composition's own AI provider, a spoken instruction offered; a unit entry granting two fields, a button and page navigation, and a tree entry granting two controls and its own targets. Every 6.8 rule is met. Members, and each entry's members, given out of order in the emitter's model; section P3.17's order restored, and caseBase, false, omitted."
+    },
+    {
+      "id": "profile-server-app-host/reject-ui-control-allow-empty",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-ui-control-allow-empty.json",
+      "sha256": "53c84e39c3657a604ea92a2869ca82b26261ebadaff6d659417b24727a9ed2a6",
+      "reject": "ui-control-allow-malformed",
+      "detect": "profile",
+      "description": "A uiControl whose allow list is empty (section P4.74): an assistant permitted to operate nothing is a composition with no uiControl, and the empty declaration is refused rather than read as either."
+    },
+    {
+      "id": "profile-server-app-host/reject-ui-control-client-absent",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-ui-control-client-absent.json",
+      "sha256": "0f28c466f6b03b9ec8bdd4b2a505d71fa6964bdf4f09df067918e4707f3e5ecf",
+      "reject": "ui-control-client-absent",
+      "detect": "profile",
+      "description": "A uiControl in a composition with no client shell (section P4.73): the controls an allowlist names are rendered by the bundled client, so with no client there is nothing for an assistant to operate. Every other member is well formed."
+    },
+    {
+      "id": "profile-server-app-host/reject-ui-control-triage-provider-unknown",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-ui-control-triage-provider-unknown.json",
+      "sha256": "eebdf7131a8345ff84e68ba2083f5a7a00afebfce8178f4ef4968dfe7f02aa53",
+      "reject": "ui-control-triage-provider-unknown",
+      "detect": "profile",
+      "description": "A uiControl whose triageProvider, cheap, names no companion selection (section P4.75): the composition's only AI provider is ai, and a host cannot route an instruction to a provider the composition does not compose."
+    }
+  ]
+}
