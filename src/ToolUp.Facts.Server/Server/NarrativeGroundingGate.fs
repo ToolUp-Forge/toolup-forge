@@ -51,16 +51,18 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // from, which are checked as citations (resolve, disclosable, current) with
 // no stated value to compare.
 //
-// **The computed-percentage decision (985.F).** A figure computed from two
-// Facts — "margin was 12.5%" from revenue and cost — is REFUSED. It is not
-// a reference to anything: stated as prose it is an unreferenced number,
-// and stated as a span citing one of its inputs it misstates that input.
-// A deployment that wants to publish a derived figure asserts it as a Fact
-// first (a `Computed` method naming its inputs), which gives it an id, a
-// lineage, a disclosure stance and a supersession edge — everything the
-// gate checks. Admitting "a declared derivation of named Facts" instead
-// would put a second arithmetic engine inside the gate, whose rounding and
-// formula a reader would have to trust without a Fact to trace it to.
+// **Derived figures.** A figure computed from two Facts — "margin was
+// 12.5%" from revenue and cost — is refused when the model writes it: it is
+// not a reference to anything, and stated as a span citing one of its
+// inputs it misstates that input. It is admitted only as an AUTHORISED
+// CALCULATION: a `calc:` reference the server computed by a formula the
+// deployment declared (`NarrativeCalculations`), which this gate resolves
+// itself by deriving the figure again from the cited Facts as they are now,
+// through the declaration's own evaluation, and checking the reference's
+// content address. A reader traces it to its Facts and its formula through
+// the certificate, which seals each calculation it admits. A deployment
+// that declares none can still assert a derived figure as a Fact first (a
+// `Computed` method naming its inputs).
 
 /// What one reference resolved to, as the pure check reads it.
 type GroundingResolution =
@@ -732,9 +734,14 @@ module NarrativeGrounding =
     /// No other number becomes admissible: a percentage, a currency amount,
     /// a fraction or a decimal is never a whole number (`mentions`).
     ///
-    /// Beside the verdict: each number admitted without a Fact, as the
-    /// location of the claim stating it and the citation admitting it, in
-    /// document order (empty when the verdict is `Ungrounded`).
+    /// A figure in prose is never admitted by a calculation: a derived
+    /// figure is stated as a `Metric` span citing a `calc:` reference, and
+    /// judged like any other reference.
+    ///
+    /// Beside the verdict: each number admitted without a Fact (the two
+    /// admissions above, and every cited `calc:` reference), as the location
+    /// of the claim stating it and the citation admitting it, in document
+    /// order (empty when the verdict is `Ungrounded`).
     let private judgeWith
         (policy: GroundingPolicy)
         (resolve: string -> GroundingResolution)
@@ -824,6 +831,19 @@ module NarrativeGrounding =
                     [ offence loc claim (MisstatedValue(reference, s, current)) ]
                 | _ -> []
 
+        // An authorised calculation the document cites is an admission too:
+        // the certificate seals it where it is cited.
+        let calculation (loc: string) (reference: string) : (string * NarrativeCitation) list =
+            match referenceKind reference with
+            | kind, _ when kind = AuthorisedCalculation.ReferenceKind -> [
+                loc,
+                {
+                    ReferenceKind = kind
+                    Reference = reference
+                }
+              ]
+            | _ -> []
+
         let prose (context: ClaimContext) (loc: string) (text: string) =
             match admit context loc text with
             | Some admissions -> [], admissions
@@ -843,8 +863,16 @@ module NarrativeGrounding =
                         | None -> [ offence loc claim MetricWithoutReference ]
                         | Some reference -> judgeReference loc claim reference (Some value)
 
-                    labelOffence @ valueOffence, admissions
-                | CitationClaim(loc, reference) -> judgeReference loc reference reference None, [])
+                    let calculated =
+                        match reference, valueOffence with
+                        | Some reference, [] -> calculation loc reference
+                        | _ -> []
+
+                    labelOffence @ valueOffence, admissions @ calculated
+                | CitationClaim(loc, reference) ->
+                    match judgeReference loc reference reference None with
+                    | [] -> [], calculation loc reference
+                    | offences -> offences, [])
 
         match judged |> List.collect fst with
         | [] ->
@@ -936,10 +964,16 @@ type FactNarrativeGroundingGate
         registry: Grounding.IMetricRegistry option,
         kinds: ICitableReferenceKind list,
         issuer: IGroundingCertificateIssuer,
-        policy: GroundingPolicy
+        policy: GroundingPolicy,
+        calculations: NarrativeCalculations
     ) =
 
     let kindsByName = kinds |> List.map (fun k -> k.Kind, k) |> Map.ofList
+
+    /// Is `reference` an authorised calculation this gate derives itself?
+    let isCalculation (reference: string) =
+        not (NarrativeCalculations.isEmpty calculations)
+        && fst (NarrativeGrounding.referenceKind reference) = AuthorisedCalculation.ReferenceKind
 
     let currentOf (fact: Fact) : GroundingResolution =
         let metric = registry |> Option.bind (fun r -> r.TryGetMetric fact.Metric.Value)
@@ -1013,8 +1047,24 @@ type FactNarrativeGroundingGate
                 | CitableReferenceWithheld policyRef -> GroundingWithheld policyRef
     }
 
+    /// A `calc:` reference, derived again from its inputs at `surface`, and
+    /// its record when it holds.
+    let resolveCalculation (scope: ResolvedScope) (principal: string) (surface: FactEgressSurface) (reference: string) = async {
+        let _, id = NarrativeGrounding.referenceKind reference
+
+        let! check = NarrativeCalculations.rederive calculations store disclosure registry scope principal surface id
+
+        match check with
+        | CalculationHolds record ->
+            return reference, GroundingCurrent([ record.Rendering ], Some record.Stated, false), Some record
+        | CalculationMoved successor -> return reference, GroundingSuperseded successor, None
+        | CalculationWithheld policyRef -> return reference, GroundingWithheld policyRef, None
+        | CalculationRefused _ -> return reference, GroundingUnresolved, None
+    }
+
     /// How every reference `document` cites resolves in `scope` for
-    /// `principal` at `surface`, and the subject of each current Fact.
+    /// `principal` at `surface`, the subject of each current Fact, and the
+    /// record of each authorised calculation that holds.
     let resolving
         (scope: ResolvedScope)
         (principal: string)
@@ -1028,6 +1078,8 @@ type FactNarrativeGroundingGate
                 references
                 |> List.partition (fun r -> fst (NarrativeGrounding.referenceKind r) = NarrativeGrounding.FactKind)
 
+            let calculated, declared = declared |> List.partition isCalculation
+
             let! facts, subjects = resolveFacts scope principal surface factIds
 
             let! others =
@@ -1035,13 +1087,26 @@ type FactNarrativeGroundingGate
                 |> List.map (resolveDeclared scope.ScopeId principal)
                 |> Async.Sequential
 
+            let! derived =
+                calculated
+                |> List.map (resolveCalculation scope principal surface)
+                |> Async.Sequential
+
             let resolutions =
-                Map.fold (fun acc k v -> Map.add k v acc) (Map.ofArray others) facts
+                Map.fold
+                    (fun acc k v -> Map.add k v acc)
+                    (Map.ofArray (Array.append others (derived |> Array.map (fun (r, g, _) -> r, g))))
+                    facts
+
+            let records =
+                derived
+                |> Array.choose (fun (r, _, record) -> record |> Option.map (fun record -> r, record))
+                |> Map.ofArray
 
             let resolve reference =
                 resolutions.TryFind reference |> Option.defaultValue GroundingUnresolved
 
-            return resolve, subjects.TryFind
+            return resolve, subjects.TryFind, records
         }
 
     let checkWith
@@ -1052,7 +1117,7 @@ type FactNarrativeGroundingGate
         (options: GroundingCheckOptions)
         =
         async {
-            let! resolve, subjectOf = resolving scope principal surface document
+            let! resolve, subjectOf, _ = resolving scope principal surface document
             return NarrativeGrounding.checkWith policy resolve subjectOf options document
         }
 
@@ -1078,6 +1143,10 @@ type FactNarrativeGroundingGate
     /// data from the narrative at the root.
     static member CertificateDepth = 8
 
+    /// The gate with no authorised calculation.
+    new(store, disclosure, registry, kinds, issuer, policy) =
+        FactNarrativeGroundingGate(store, disclosure, registry, kinds, issuer, policy, NarrativeCalculations.empty)
+
     interface IInstructedNarrativeGroundingGate with
         member _.CheckWith(scope, principal, surface, document, options) =
             checkWith scope principal surface document options
@@ -1088,7 +1157,7 @@ type FactNarrativeGroundingGate
         // caller's record of the verdict, and a disagreement is refused
         // rather than sealed either way.
         member _.CertifyWith(scope, principal, surface, narrativeId, document, options, citations) = async {
-            let! resolve, subjectOf = resolving scope principal surface document
+            let! resolve, subjectOf, records = resolving scope principal surface document
 
             match NarrativeGrounding.admissionsWith policy resolve subjectOf options document with
             | Error offences ->
@@ -1100,9 +1169,24 @@ type FactNarrativeGroundingGate
                             (offences |> List.map GroundingOffence.describe |> String.concat "; ")
                     )
             | Ok admissions ->
+                // A calculation the gate derived is sealed with its operator,
+                // inputs, rounding, format and result.
+                let admissions =
+                    admissions
+                    |> List.map (fun admission ->
+                        match records.TryFind admission.Reference with
+                        | Some record when admission.Kind = AuthorisedCalculation.ReferenceKind ->
+                            NarrativeCalculations.admission admission.Location record
+                        | _ -> admission)
+
                 let found = admissions |> List.map _.Reference |> set
 
-                let recorded = NarrativeCitation.admissions citations |> List.map _.Reference |> set
+                let recorded =
+                    NarrativeCitation.admissions citations
+                    @ (citations
+                       |> List.filter (fun c -> c.ReferenceKind = AuthorisedCalculation.ReferenceKind))
+                    |> List.map _.Reference
+                    |> set
 
                 if found <> recorded then
                     return
@@ -1113,7 +1197,16 @@ type FactNarrativeGroundingGate
                                 (recorded |> String.concat ", ")
                         )
                 else
-                    let citedFactIds = NarrativeCitation.factIds citations
+                    // A calculation's inputs are cited Facts too: the chain
+                    // reaches each one's lineage.
+                    let citedFactIds =
+                        NarrativeCitation.factIds citations
+                        @ (admissions
+                           |> List.filter (fun a -> a.Kind = AuthorisedCalculation.ReferenceKind)
+                           |> List.collect (fun a ->
+                               CertificateAdmission.attribute CertificateAdmission.InputsAttribute a
+                               |> Option.defaultValue []))
+                        |> List.distinct
 
                     return!
                         issue
@@ -1152,3 +1245,24 @@ module FactNarrativeGroundingGate =
         (issuer: IGroundingCertificateIssuer)
         : INarrativeGroundingGate =
         FactNarrativeGroundingGate(store, disclosure, registry, kinds, issuer, policy) :> INarrativeGroundingGate
+
+    /// The gate under the default policy, deriving every `calc:` reference
+    /// again against `calculations` (empty, it is `create`'s gate).
+    let createWithCalculations
+        (calculations: NarrativeCalculations)
+        (store: IFactStore)
+        (disclosure: IFactDisclosureGate)
+        (registry: Grounding.IMetricRegistry option)
+        (kinds: ICitableReferenceKind list)
+        (issuer: IGroundingCertificateIssuer)
+        : INarrativeGroundingGate =
+        FactNarrativeGroundingGate(
+            store,
+            disclosure,
+            registry,
+            kinds,
+            issuer,
+            NarrativeGrounding.defaultPolicy,
+            calculations
+        )
+        :> INarrativeGroundingGate

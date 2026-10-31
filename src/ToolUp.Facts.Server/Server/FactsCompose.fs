@@ -601,10 +601,14 @@ module FactsCompose =
             // too: a grounded narrative run composed anywhere finds a gate
             // whenever the fact tier is, and finds none (and refuses every
             // narrative) when it is not. Declared reference kinds are every
-            // `ICitableReferenceKind` the deployment registered.
+            // `ICitableReferenceKind` the deployment registered, and a
+            // `calc:` reference is derived again against the calculations
+            // `withNarrativeCalculations` registered (none, no kind).
             .AddSingleton<INarrativeGroundingGate>(
                 Func<IServiceProvider, INarrativeGroundingGate>(fun sp ->
-                    FactNarrativeGroundingGate.create
+                    FactNarrativeGroundingGate.createWithCalculations
+                        (tryService<NarrativeCalculations> sp
+                         |> Option.defaultValue NarrativeCalculations.empty)
                         (sp.GetRequiredService<IFactStore>())
                         (sp.GetRequiredService<IFactDisclosureGate>())
                         (tryService<Grounding.IMetricRegistry> sp)
@@ -860,6 +864,30 @@ module FactsCompose =
                     AITools = app.AITools @ NarrativeGrounding.factTools
             }
             |> contribute register
+
+    /// **Adds** the deployment's authorised narrative calculations: the
+    /// grounding gate then derives every `calc:` reference a narrative cites
+    /// again against them, and admits it only when it holds. Give a grounded
+    /// run the `calculate` tool from the same value
+    /// (`NarrativeCalculations.tools`). Empty calculations change nothing, as
+    /// does a deployment with no fact store; registering calculations twice
+    /// is refused.
+    let withNarrativeCalculations (calculations: NarrativeCalculations) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore when NarrativeCalculations.isEmpty calculations -> app
+        | EnabledFactStore ->
+            app
+            |> contribute (fun s ->
+                if s |> Seq.exists (fun d -> d.ServiceType = typeof<NarrativeCalculations>) then
+                    ServiceComposition.refuse (
+                        CompositionRefusal.InvalidDeclaration(
+                            "FactsCompose.withNarrativeCalculations",
+                            "narrative calculations are already registered; declare them all in one NarrativeCalculations value"
+                        )
+                    )
+                else
+                    s.AddSingleton<NarrativeCalculations>(calculations))
 
     /// Declare what `list_fact_tables` lists: the cap on the distinct members
     /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`

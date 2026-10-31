@@ -384,6 +384,14 @@ let rulesFor (definition: GroundedNarrativeDefinition) : string list =
                 "Answer with ONLY a JSON object: {\"sections\":[{\"id\":\"<section id>\",\"paragraphs\":[\"...\"],\"projections\":[]}]}"
         ]
 
+/// The instruction a run given the authorised-calculation tool adds: a
+/// derived figure is requested, never computed. A run without the tool
+/// gets no such line, so its instruction is unchanged.
+let calculationRule (toolName: string) : string =
+    sprintf
+        "To state a change, difference, ratio, share, sum or mean, call %s with a declared calculation and the input fact ids, and cite the reference it returns as [[label|value|calc:...]], with the value exactly as it was rendered. Never compute a figure yourself: a figure no tool returned is refused."
+        toolName
+
 /// The instruction the model works from: the definition's wording (the
 /// declared one, or an administrator's in its place), then `rulesFor` it.
 let systemPrompt (definition: GroundedNarrativeDefinition) (toolNames: string list) : string =
@@ -411,6 +419,9 @@ let systemPrompt (definition: GroundedNarrativeDefinition) (toolNames: string li
             "Read the figures with your tools (%s). Each fact has an id and a canonical rendering."
             (String.concat ", " toolNames)
     )
+
+    if List.contains AuthorisedCalculation.ToolName toolNames then
+        line (calculationRule AuthorisedCalculation.ToolName)
 
     line ""
 

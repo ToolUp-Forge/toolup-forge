@@ -107,6 +107,201 @@ ToolUp.Facts.BlobFactStoreScale.verdict(System.Int32, System.Int32, System.Int32
 ToolUp.Facts.BlobFactStoreScaleValidator (class)
 ToolUp.Facts.BlobFactStoreScaleValidator..ctor(System.Int32, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], System.Boolean)
 ToolUp.Facts.BlobFactStoreScaleValidator..ctor(System.Int32, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], System.Boolean, System.Int32, System.Int32)
+ToolUp.Facts.CalculationCheck (class)
+ToolUp.Facts.CalculationCheck.IsCalculationHolds : System.Boolean { get }
+ToolUp.Facts.CalculationCheck.IsCalculationMoved : System.Boolean { get }
+ToolUp.Facts.CalculationCheck.IsCalculationRefused : System.Boolean { get }
+ToolUp.Facts.CalculationCheck.IsCalculationWithheld : System.Boolean { get }
+ToolUp.Facts.CalculationCheck.Tag : System.Int32 { get }
+ToolUp.Facts.CalculationCheck+CalculationHolds (class)
+ToolUp.Facts.CalculationCheck+CalculationHolds.Item : ToolUp.Facts.CalculationRecord { get }
+ToolUp.Facts.CalculationCheck+CalculationMoved (class)
+ToolUp.Facts.CalculationCheck+CalculationMoved.successor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.CalculationCheck+CalculationRefused (class)
+ToolUp.Facts.CalculationCheck+CalculationRefused.Item : ToolUp.Facts.CalculationRefusal { get }
+ToolUp.Facts.CalculationCheck+CalculationWithheld (class)
+ToolUp.Facts.CalculationCheck+CalculationWithheld.policyRef : System.String { get }
+ToolUp.Facts.CalculationCheck+Tags (class)
+ToolUp.Facts.CalculationCheck+Tags.CalculationHolds : System.Int32 (literal)
+ToolUp.Facts.CalculationCheck+Tags.CalculationMoved : System.Int32 (literal)
+ToolUp.Facts.CalculationCheck+Tags.CalculationRefused : System.Int32 (literal)
+ToolUp.Facts.CalculationCheck+Tags.CalculationWithheld : System.Int32 (literal)
+ToolUp.Facts.CalculationDeclaration (class)
+ToolUp.Facts.CalculationDeclaration..ctor(System.String, System.Int32, ToolUp.Facts.CalculationOperator, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.CalculationRounding, ToolUp.Facts.CalculationFormat)
+ToolUp.Facts.CalculationDeclaration.Format : ToolUp.Facts.CalculationFormat { get }
+ToolUp.Facts.CalculationDeclaration.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CalculationDeclaration.Name : System.String { get }
+ToolUp.Facts.CalculationDeclaration.Operator : ToolUp.Facts.CalculationOperator { get }
+ToolUp.Facts.CalculationDeclaration.Rounding : ToolUp.Facts.CalculationRounding { get }
+ToolUp.Facts.CalculationDeclaration.Version : System.Int32 { get }
+ToolUp.Facts.CalculationDeclarationModule (class)
+ToolUp.Facts.CalculationDeclarationModule.address(ToolUp.Facts.CalculationDeclaration, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Decimal) : System.String
+ToolUp.Facts.CalculationDeclarationModule.evaluate(ToolUp.Facts.CalculationDeclaration, Microsoft.FSharp.Collections.FSharpList`1[System.Decimal]) : Microsoft.FSharp.Core.FSharpResult`2[System.Decimal, ToolUp.Facts.CalculationRefusal]
+ToolUp.Facts.CalculationDeclarationModule.parseReference(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]
+ToolUp.Facts.CalculationDeclarationModule.record(ToolUp.Facts.CalculationDeclaration, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Decimal) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CalculationRecord, ToolUp.Facts.CalculationRefusal]
+ToolUp.Facts.CalculationDeclarationModule.reference(ToolUp.Facts.CalculationDeclaration, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : System.String
+ToolUp.Facts.CalculationDeclarationModule.render(ToolUp.Facts.CalculationDeclaration, System.Decimal) : System.String
+ToolUp.Facts.CalculationDeclarationModule.resultText(ToolUp.Facts.CalculationDeclaration, System.Decimal) : System.String
+ToolUp.Facts.CalculationDeclarationModule.stated(ToolUp.Facts.CalculationDeclaration, System.Decimal) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
+ToolUp.Facts.CalculationFormat (class)
+ToolUp.Facts.CalculationFormat.IsCurrency : System.Boolean { get }
+ToolUp.Facts.CalculationFormat.IsNumber : System.Boolean { get }
+ToolUp.Facts.CalculationFormat.IsPercent : System.Boolean { get }
+ToolUp.Facts.CalculationFormat.IsScaled : System.Boolean { get }
+ToolUp.Facts.CalculationFormat.Number : ToolUp.Facts.CalculationFormat { get }
+ToolUp.Facts.CalculationFormat.Percent : ToolUp.Facts.CalculationFormat { get }
+ToolUp.Facts.CalculationFormat.Tag : System.Int32 { get }
+ToolUp.Facts.CalculationFormat+Currency (class)
+ToolUp.Facts.CalculationFormat+Currency.code : System.String { get }
+ToolUp.Facts.CalculationFormat+Scaled (class)
+ToolUp.Facts.CalculationFormat+Scaled.Item : ToolUp.Facts.CalculationScale { get }
+ToolUp.Facts.CalculationFormat+Tags (class)
+ToolUp.Facts.CalculationFormat+Tags.Currency : System.Int32 (literal)
+ToolUp.Facts.CalculationFormat+Tags.Number : System.Int32 (literal)
+ToolUp.Facts.CalculationFormat+Tags.Percent : System.Int32 (literal)
+ToolUp.Facts.CalculationFormat+Tags.Scaled : System.Int32 (literal)
+ToolUp.Facts.CalculationOperator (class)
+ToolUp.Facts.CalculationOperator.Difference : ToolUp.Facts.CalculationOperator { get }
+ToolUp.Facts.CalculationOperator.IsDifference : System.Boolean { get }
+ToolUp.Facts.CalculationOperator.IsMean : System.Boolean { get }
+ToolUp.Facts.CalculationOperator.IsPercentChange : System.Boolean { get }
+ToolUp.Facts.CalculationOperator.IsRatio : System.Boolean { get }
+ToolUp.Facts.CalculationOperator.IsShare : System.Boolean { get }
+ToolUp.Facts.CalculationOperator.IsSum : System.Boolean { get }
+ToolUp.Facts.CalculationOperator.Mean : ToolUp.Facts.CalculationOperator { get }
+ToolUp.Facts.CalculationOperator.PercentChange : ToolUp.Facts.CalculationOperator { get }
+ToolUp.Facts.CalculationOperator.Ratio : ToolUp.Facts.CalculationOperator { get }
+ToolUp.Facts.CalculationOperator.Share : ToolUp.Facts.CalculationOperator { get }
+ToolUp.Facts.CalculationOperator.Sum : ToolUp.Facts.CalculationOperator { get }
+ToolUp.Facts.CalculationOperator.Tag : System.Int32 { get }
+ToolUp.Facts.CalculationOperator+Tags (class)
+ToolUp.Facts.CalculationOperator+Tags.Difference : System.Int32 (literal)
+ToolUp.Facts.CalculationOperator+Tags.Mean : System.Int32 (literal)
+ToolUp.Facts.CalculationOperator+Tags.PercentChange : System.Int32 (literal)
+ToolUp.Facts.CalculationOperator+Tags.Ratio : System.Int32 (literal)
+ToolUp.Facts.CalculationOperator+Tags.Share : System.Int32 (literal)
+ToolUp.Facts.CalculationOperator+Tags.Sum : System.Int32 (literal)
+ToolUp.Facts.CalculationOperatorModule (class)
+ToolUp.Facts.CalculationOperatorModule.MaxInputs : System.Int32 (literal)
+ToolUp.Facts.CalculationOperatorModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CalculationOperator] { get }
+ToolUp.Facts.CalculationOperatorModule.arity(ToolUp.Facts.CalculationOperator) : System.Tuple`2[System.Int32, System.Int32]
+ToolUp.Facts.CalculationOperatorModule.inputs(ToolUp.Facts.CalculationOperator) : System.String
+ToolUp.Facts.CalculationOperatorModule.name(ToolUp.Facts.CalculationOperator) : System.String
+ToolUp.Facts.CalculationOperatorModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CalculationOperator, System.String]
+ToolUp.Facts.CalculationRecord (class)
+ToolUp.Facts.CalculationRecord..ctor(ToolUp.Facts.CalculationDeclaration, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Decimal, System.Decimal, System.String, System.String, System.String)
+ToolUp.Facts.CalculationRecord.Address : System.String { get }
+ToolUp.Facts.CalculationRecord.Declaration : ToolUp.Facts.CalculationDeclaration { get }
+ToolUp.Facts.CalculationRecord.Display : System.Decimal { get }
+ToolUp.Facts.CalculationRecord.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CalculationRecord.Reference : System.String { get }
+ToolUp.Facts.CalculationRecord.Rendering : System.String { get }
+ToolUp.Facts.CalculationRecord.Stated : System.Decimal { get }
+ToolUp.Facts.CalculationRefusal (class)
+ToolUp.Facts.CalculationRefusal.IsAddressMismatch : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsCurrencyUncheckable : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsEvaluationFailed : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputCurrencyMismatch : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputMetricUndeclared : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputMetricUnregistered : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputNotScalar : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputSuperseded : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputUnitsDisagree : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputUnresolved : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsInputWithheld : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsMalformedReference : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsResultOutOfRange : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsUndeclaredCalculation : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsWrongInputCount : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.IsZeroDenominator : System.Boolean { get }
+ToolUp.Facts.CalculationRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.CalculationRefusal+AddressMismatch (class)
+ToolUp.Facts.CalculationRefusal+AddressMismatch.reference : System.String { get }
+ToolUp.Facts.CalculationRefusal+CurrencyUncheckable (class)
+ToolUp.Facts.CalculationRefusal+CurrencyUncheckable.calculation : System.String { get }
+ToolUp.Facts.CalculationRefusal+EvaluationFailed (class)
+ToolUp.Facts.CalculationRefusal+EvaluationFailed.calculation : System.String { get }
+ToolUp.Facts.CalculationRefusal+EvaluationFailed.reason : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputCurrencyMismatch (class)
+ToolUp.Facts.CalculationRefusal+InputCurrencyMismatch.code : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputCurrencyMismatch.factId : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputCurrencyMismatch.unit : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputMetricUndeclared (class)
+ToolUp.Facts.CalculationRefusal+InputMetricUndeclared.declared : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CalculationRefusal+InputMetricUndeclared.factId : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputMetricUndeclared.metric : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputMetricUnregistered (class)
+ToolUp.Facts.CalculationRefusal+InputMetricUnregistered.factId : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputMetricUnregistered.metric : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputNotScalar (class)
+ToolUp.Facts.CalculationRefusal+InputNotScalar.factId : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputSuperseded (class)
+ToolUp.Facts.CalculationRefusal+InputSuperseded.factId : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputSuperseded.head : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputUnitsDisagree (class)
+ToolUp.Facts.CalculationRefusal+InputUnitsDisagree.units : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CalculationRefusal+InputUnresolved (class)
+ToolUp.Facts.CalculationRefusal+InputUnresolved.factId : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputWithheld (class)
+ToolUp.Facts.CalculationRefusal+InputWithheld.factId : System.String { get }
+ToolUp.Facts.CalculationRefusal+InputWithheld.policyRef : System.String { get }
+ToolUp.Facts.CalculationRefusal+MalformedReference (class)
+ToolUp.Facts.CalculationRefusal+MalformedReference.reference : System.String { get }
+ToolUp.Facts.CalculationRefusal+ResultOutOfRange (class)
+ToolUp.Facts.CalculationRefusal+ResultOutOfRange.calculation : System.String { get }
+ToolUp.Facts.CalculationRefusal+Tags (class)
+ToolUp.Facts.CalculationRefusal+Tags.AddressMismatch : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.CurrencyUncheckable : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.EvaluationFailed : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputCurrencyMismatch : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputMetricUndeclared : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputMetricUnregistered : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputNotScalar : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputSuperseded : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputUnitsDisagree : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputUnresolved : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.InputWithheld : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.MalformedReference : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.ResultOutOfRange : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.UndeclaredCalculation : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.WrongInputCount : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+Tags.ZeroDenominator : System.Int32 (literal)
+ToolUp.Facts.CalculationRefusal+UndeclaredCalculation (class)
+ToolUp.Facts.CalculationRefusal+UndeclaredCalculation.declared : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.CalculationRefusal+UndeclaredCalculation.name : System.String { get }
+ToolUp.Facts.CalculationRefusal+WrongInputCount (class)
+ToolUp.Facts.CalculationRefusal+WrongInputCount.calculation : System.String { get }
+ToolUp.Facts.CalculationRefusal+WrongInputCount.expected : System.String { get }
+ToolUp.Facts.CalculationRefusal+WrongInputCount.given : System.Int32 { get }
+ToolUp.Facts.CalculationRefusal+ZeroDenominator (class)
+ToolUp.Facts.CalculationRefusal+ZeroDenominator.calculation : System.String { get }
+ToolUp.Facts.CalculationRefusalModule (class)
+ToolUp.Facts.CalculationRefusalModule.describe(ToolUp.Facts.CalculationRefusal) : System.String
+ToolUp.Facts.CalculationRounding (class)
+ToolUp.Facts.CalculationRounding..ctor(System.Int32, ToolUp.Facts.CalculationRoundingMode)
+ToolUp.Facts.CalculationRounding.Mode : ToolUp.Facts.CalculationRoundingMode { get }
+ToolUp.Facts.CalculationRounding.Places : System.Int32 { get }
+ToolUp.Facts.CalculationRoundingMode (class)
+ToolUp.Facts.CalculationRoundingMode.HalfAwayFromZero : ToolUp.Facts.CalculationRoundingMode { get }
+ToolUp.Facts.CalculationRoundingMode.HalfEven : ToolUp.Facts.CalculationRoundingMode { get }
+ToolUp.Facts.CalculationRoundingMode.IsHalfAwayFromZero : System.Boolean { get }
+ToolUp.Facts.CalculationRoundingMode.IsHalfEven : System.Boolean { get }
+ToolUp.Facts.CalculationRoundingMode.Tag : System.Int32 { get }
+ToolUp.Facts.CalculationRoundingMode+Tags (class)
+ToolUp.Facts.CalculationRoundingMode+Tags.HalfAwayFromZero : System.Int32 (literal)
+ToolUp.Facts.CalculationRoundingMode+Tags.HalfEven : System.Int32 (literal)
+ToolUp.Facts.CalculationScale (class)
+ToolUp.Facts.CalculationScale.Billion : ToolUp.Facts.CalculationScale { get }
+ToolUp.Facts.CalculationScale.IsBillion : System.Boolean { get }
+ToolUp.Facts.CalculationScale.IsMillion : System.Boolean { get }
+ToolUp.Facts.CalculationScale.IsThousand : System.Boolean { get }
+ToolUp.Facts.CalculationScale.Million : ToolUp.Facts.CalculationScale { get }
+ToolUp.Facts.CalculationScale.Tag : System.Int32 { get }
+ToolUp.Facts.CalculationScale.Thousand : ToolUp.Facts.CalculationScale { get }
+ToolUp.Facts.CalculationScale+Tags (class)
+ToolUp.Facts.CalculationScale+Tags.Billion : System.Int32 (literal)
+ToolUp.Facts.CalculationScale+Tags.Million : System.Int32 (literal)
+ToolUp.Facts.CalculationScale+Tags.Thousand : System.Int32 (literal)
 ToolUp.Facts.CertificateAdmission (class)
 ToolUp.Facts.CertificateAdmission..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CertificateAdmissionAttribute])
 ToolUp.Facts.CertificateAdmission.Attributes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CertificateAdmissionAttribute] { get }
@@ -118,9 +313,18 @@ ToolUp.Facts.CertificateAdmissionAttribute..ctor(System.String, Microsoft.FSharp
 ToolUp.Facts.CertificateAdmissionAttribute.Name : System.String { get }
 ToolUp.Facts.CertificateAdmissionAttribute.Values : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.CertificateAdmissionModule (class)
+ToolUp.Facts.CertificateAdmissionModule.AddressAttribute : System.String (literal)
+ToolUp.Facts.CertificateAdmissionModule.DeclarationAttribute : System.String (literal)
+ToolUp.Facts.CertificateAdmissionModule.DeclarationVersionAttribute : System.String (literal)
+ToolUp.Facts.CertificateAdmissionModule.FormatAttribute : System.String (literal)
+ToolUp.Facts.CertificateAdmissionModule.InputsAttribute : System.String (literal)
+ToolUp.Facts.CertificateAdmissionModule.OperationAttribute : System.String (literal)
+ToolUp.Facts.CertificateAdmissionModule.ResultAttribute : System.String (literal)
+ToolUp.Facts.CertificateAdmissionModule.RoundingAttribute : System.String (literal)
 ToolUp.Facts.CertificateAdmissionModule.SectionAttribute : System.String (literal)
 ToolUp.Facts.CertificateAdmissionModule.WordingVersionAttribute : System.String (literal)
 ToolUp.Facts.CertificateAdmissionModule.attribute(System.String, ToolUp.Facts.CertificateAdmission) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Facts.CertificateAdmissionModule.ofCalculation(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]]) : ToolUp.Facts.CertificateAdmission
 ToolUp.Facts.CertificateAdmissionModule.ofCitation(System.String, ToolUp.Platform.Narrative.NarrativeCitation) : ToolUp.Facts.CertificateAdmission
 ToolUp.Facts.CertificateEdge (class)
 ToolUp.Facts.CertificateEdge..ctor(System.String, System.String, System.String)
@@ -791,9 +995,11 @@ ToolUp.Facts.FactLevelMembers+Tags.CountOnly : System.Int32 (literal)
 ToolUp.Facts.FactLevelMembers+Tags.Listed : System.Int32 (literal)
 ToolUp.Facts.FactNarrativeGroundingGate (class)
 ToolUp.Facts.FactNarrativeGroundingGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ICitableReferenceKind], ToolUp.Facts.IGroundingCertificateIssuer, ToolUp.Facts.GroundingPolicy)
+ToolUp.Facts.FactNarrativeGroundingGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ICitableReferenceKind], ToolUp.Facts.IGroundingCertificateIssuer, ToolUp.Facts.GroundingPolicy, ToolUp.Facts.NarrativeCalculations)
 ToolUp.Facts.FactNarrativeGroundingGate.CertificateDepth : System.Int32 { get }
 ToolUp.Facts.FactNarrativeGroundingGateModule (class)
 ToolUp.Facts.FactNarrativeGroundingGateModule.create(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ICitableReferenceKind], ToolUp.Facts.IGroundingCertificateIssuer) : ToolUp.Platform.INarrativeGroundingGate
+ToolUp.Facts.FactNarrativeGroundingGateModule.createWithCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ICitableReferenceKind], ToolUp.Facts.IGroundingCertificateIssuer) : ToolUp.Platform.INarrativeGroundingGate
 ToolUp.Facts.FactNarrativeGroundingGateModule.createWithPolicy(ToolUp.Facts.GroundingPolicy, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ICitableReferenceKind], ToolUp.Facts.IGroundingCertificateIssuer) : ToolUp.Platform.INarrativeGroundingGate
 ToolUp.Facts.FactPublication (class)
 ToolUp.Facts.FactPublication.createDurable(ToolUp.Platform.ScopeCarrier, ToolUp.Facts.FactPublicationConfig, ToolUp.Facts.IFactStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactSigner], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactVerifier], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactPublication
@@ -1199,6 +1405,7 @@ ToolUp.Facts.FactsCompose.withFactTableWriter(ToolUp.Platform.ServerApp) : ToolU
 ToolUp.Facts.FactsCompose.withFactTablesOptions(ToolUp.Facts.FactTablesOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactTier(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.GroundingEnvelope]], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withNarrativeCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withTeamOutputVisibility(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsOperatorTaskCompose (class)
@@ -1406,6 +1613,19 @@ ToolUp.Facts.InvalidationOutcome+Tags.DeferredToQuery : System.Int32 (literal)
 ToolUp.Facts.InvalidationOutcome+Tags.Enqueued : System.Int32 (literal)
 ToolUp.Facts.InvalidationOutcome+Tags.ScheduleFailed : System.Int32 (literal)
 ToolUp.Facts.InvalidationOutcome+Tags.SurfacedOnly : System.Int32 (literal)
+ToolUp.Facts.NarrativeCalculations (class)
+ToolUp.Facts.NarrativeCalculations.Declarations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CalculationDeclaration] { get }
+ToolUp.Facts.NarrativeCalculationsModule (class)
+ToolUp.Facts.NarrativeCalculationsModule.admission(System.String, ToolUp.Facts.CalculationRecord) : ToolUp.Facts.CertificateAdmission
+ToolUp.Facts.NarrativeCalculationsModule.compute(ToolUp.Facts.NarrativeCalculations, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CalculationRecord, ToolUp.Facts.CalculationRefusal]]
+ToolUp.Facts.NarrativeCalculationsModule.declare(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CalculationDeclaration]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.NarrativeCalculations, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Facts.NarrativeCalculationsModule.definition(ToolUp.Facts.NarrativeCalculations) : ToolUp.Platform.AIToolDefinition
+ToolUp.Facts.NarrativeCalculationsModule.empty : ToolUp.Facts.NarrativeCalculations { get }
+ToolUp.Facts.NarrativeCalculationsModule.executeWith(ToolUp.Facts.NarrativeCalculations, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.NarrativeCalculationsModule.isEmpty(ToolUp.Facts.NarrativeCalculations) : System.Boolean
+ToolUp.Facts.NarrativeCalculationsModule.rederive(ToolUp.Facts.NarrativeCalculations, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.CalculationCheck]
+ToolUp.Facts.NarrativeCalculationsModule.tools(ToolUp.Facts.NarrativeCalculations) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]
+ToolUp.Facts.NarrativeCalculationsModule.tryFind(System.String, ToolUp.Facts.NarrativeCalculations) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.CalculationDeclaration]
 ToolUp.Facts.NarrativeGrounding (class)
 ToolUp.Facts.NarrativeGrounding.FactKind : System.String (literal)
 ToolUp.Facts.NarrativeGrounding.FactRefsProp : System.String (literal)

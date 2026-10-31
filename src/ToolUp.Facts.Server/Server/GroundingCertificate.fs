@@ -115,6 +115,57 @@ module CertificateAdmission =
             Attributes = attributes
         }
 
+    /// The attribute naming an authorised calculation's declaration.
+    [<Literal>]
+    let DeclarationAttribute = "declaration"
+
+    /// The declaration version a calculation was computed under.
+    [<Literal>]
+    let DeclarationVersionAttribute = "declarationVersion"
+
+    /// A calculation's operator (`percentChange`, `share`, …).
+    [<Literal>]
+    let OperationAttribute = "operation"
+
+    /// A calculation's input Fact ids, in the operator's order.
+    [<Literal>]
+    let InputsAttribute = "inputs"
+
+    /// A calculation's rounding: its places, then its mode.
+    [<Literal>]
+    let RoundingAttribute = "rounding"
+
+    /// A calculation's display format (`percent`; `currency`, code; …).
+    [<Literal>]
+    let FormatAttribute = "format"
+
+    /// A calculation's result, in display units at its declared places.
+    [<Literal>]
+    let ResultAttribute = "result"
+
+    /// A calculation's content address.
+    [<Literal>]
+    let AddressAttribute = "address"
+
+    /// The admission of an authorised calculation (kind
+    /// `AuthorisedCalculation.ReferenceKind`) cited as `reference` at
+    /// `location`, with its details as attributes, ordered by name as the
+    /// signed body orders them.
+    let ofCalculation
+        (location: string)
+        (reference: string)
+        (attributes: (string * string list) list)
+        : CertificateAdmission =
+        {
+            Kind = AuthorisedCalculation.ReferenceKind
+            Reference = reference
+            Location = location
+            Attributes =
+                attributes
+                |> List.sortBy fst
+                |> List.map (fun (name, values) -> { Name = name; Values = values })
+        }
+
     /// The values of the attribute `name`, when the admission carries it.
     let attribute (name: string) (admission: CertificateAdmission) : string list option =
         admission.Attributes

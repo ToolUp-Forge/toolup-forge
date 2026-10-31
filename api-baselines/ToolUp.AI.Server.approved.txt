@@ -1099,6 +1099,7 @@ ToolUp.AI.GroundedNarrativeRun (class)
 ToolUp.AI.GroundedNarrativeRun.ConjectureLabel : System.String (literal)
 ToolUp.AI.GroundedNarrativeRun.MaxRequestedProjections : System.Int32 (literal)
 ToolUp.AI.GroundedNarrativeRun.assemble(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], ToolUp.Platform.Narrative.NarrativeProvenance) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]
+ToolUp.AI.GroundedNarrativeRun.calculationRule(System.String) : System.String
 ToolUp.AI.GroundedNarrativeRun.conjectureCallout(System.String) : ToolUp.Platform.Narrative.NarrativeElement
 ToolUp.AI.GroundedNarrativeRun.parseOutput(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft], System.String]
 ToolUp.AI.GroundedNarrativeRun.parseParagraph(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]

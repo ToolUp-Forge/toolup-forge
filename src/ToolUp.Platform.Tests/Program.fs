@@ -1064,6 +1064,7 @@ let private registeredTests =
         PageRequestResolverTests.tests
         LayoutToolsTests.tests
         AppCompositionConformanceTests.tests
+        NarrativeCalculationTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
