@@ -533,9 +533,18 @@ module internal FactRow =
     let deserialise (payload: string) : Fact =
         JsonSerializer.Deserialize<Fact>(payload, jsonOptions)
 
-    /// The `lineage_hash` column: the SHA-256 of the fact's lineage key.
+    /// The `lineage_hash` column: the SHA-256 of the fact's lineage key,
+    /// built through `Fact.instant`, so the same fact hashes the same on
+    /// every machine.
     let lineageHash (f: Fact) =
         Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+
+    /// The `lineage_hash` a stored row's payload says it should carry: the
+    /// hash of the fact the store reads back, which is what every lineage
+    /// lookup the server makes computes. A row whose column differs was
+    /// keyed by other arithmetic (a key computed on a machine whose zone
+    /// moved its period) and its lineage cannot be found.
+    let lineageHashOfPayload (payload: string) = lineageHash (deserialise payload)
 
     /// Write `f` as one row of an open `Sql.copyIn` import. Every column
     /// but the head flag is a projection of the stored payload, so a column
@@ -553,11 +562,11 @@ module internal FactRow =
         importer.Write(stored.Period.From.Ticks, NpgsqlDbType.Bigint)
         importer.Write(stored.Period.To.Ticks, NpgsqlDbType.Bigint)
         importer.Write(Fact.methodIdentity stored.Method, NpgsqlDbType.Text)
-        importer.Write(lineageHash f, NpgsqlDbType.Text)
-        importer.Write(f.AsOf.Ticks, NpgsqlDbType.Bigint)
-        importer.Write(DateTime(f.AsOf.Ticks, DateTimeKind.Utc), NpgsqlDbType.TimestampTz)
+        importer.Write(lineageHash stored, NpgsqlDbType.Text)
+        importer.Write(stored.AsOf.Ticks, NpgsqlDbType.Bigint)
+        importer.Write(DateTime(stored.AsOf.Ticks, DateTimeKind.Utc), NpgsqlDbType.TimestampTz)
 
-        match f.Supersedes with
+        match stored.Supersedes with
         | Some id -> importer.Write(id, NpgsqlDbType.Text)
         | None -> importer.WriteNull()
 
