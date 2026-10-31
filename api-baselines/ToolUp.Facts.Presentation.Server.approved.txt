@@ -50,6 +50,7 @@ ToolUp.Facts.Presentation.LayoutRefusal.IsOpsDoNotApply : System.Boolean { get }
 ToolUp.Facts.Presentation.LayoutRefusal.IsSidecar : System.Boolean { get }
 ToolUp.Facts.Presentation.LayoutRefusal.IsStaleProposal : System.Boolean { get }
 ToolUp.Facts.Presentation.LayoutRefusal.IsStore : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsTabs : System.Boolean { get }
 ToolUp.Facts.Presentation.LayoutRefusal.IsUnavailable : System.Boolean { get }
 ToolUp.Facts.Presentation.LayoutRefusal.IsUndeclared : System.Boolean { get }
 ToolUp.Facts.Presentation.LayoutRefusal.IsUnknownNode : System.Boolean { get }
@@ -81,6 +82,9 @@ ToolUp.Facts.Presentation.LayoutRefusal+StaleProposal (class)
 ToolUp.Facts.Presentation.LayoutRefusal+StaleProposal.proposalId : System.String { get }
 ToolUp.Facts.Presentation.LayoutRefusal+Store (class)
 ToolUp.Facts.Presentation.LayoutRefusal+Store.Item : ToolUp.Platform.PageStoreError { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Tabs (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Tabs.problem : ToolUp.Facts.Presentation.TabRefusal { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Tabs.sectionId : System.String { get }
 ToolUp.Facts.Presentation.LayoutRefusal+Tags (class)
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.Arguments : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.Binding : System.Int32 (literal)
@@ -93,6 +97,7 @@ ToolUp.Facts.Presentation.LayoutRefusal+Tags.OpsDoNotApply : System.Int32 (liter
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.Sidecar : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.StaleProposal : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.Store : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Tabs : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.Unavailable : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.Undeclared : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutRefusal+Tags.UnknownNode : System.Int32 (literal)
@@ -315,3 +320,32 @@ ToolUp.Facts.Presentation.RenderTools.kinds(ToolUp.Facts.Presentation.RenderTool
 ToolUp.Facts.Presentation.RenderTools.name(ToolUp.Facts.Presentation.RenderTool) : System.String
 ToolUp.Facts.Presentation.RenderTools.summary(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.SeriesAnswer], ToolUp.Platform.AI.BlockProvenance) : System.String
 ToolUp.Facts.Presentation.RenderTools.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]] { get }
+ToolUp.Facts.Presentation.TabRefusal (class)
+ToolUp.Facts.Presentation.TabRefusal.IsBlockNamedTwice : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsNotInSection : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsNotTabbed : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsSeveralTabSets : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsTabNamedTwice : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsUnassigned : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsUnknownTab : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.NotTabbed : ToolUp.Facts.Presentation.TabRefusal { get }
+ToolUp.Facts.Presentation.TabRefusal.SeveralTabSets : ToolUp.Facts.Presentation.TabRefusal { get }
+ToolUp.Facts.Presentation.TabRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.TabRefusal+BlockNamedTwice (class)
+ToolUp.Facts.Presentation.TabRefusal+BlockNamedTwice.blockId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+NotInSection (class)
+ToolUp.Facts.Presentation.TabRefusal+NotInSection.blockId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+TabNamedTwice (class)
+ToolUp.Facts.Presentation.TabRefusal+TabNamedTwice.tabId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+Tags (class)
+ToolUp.Facts.Presentation.TabRefusal+Tags.BlockNamedTwice : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.NotInSection : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.NotTabbed : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.SeveralTabSets : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.TabNamedTwice : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.Unassigned : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.UnknownTab : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Unassigned (class)
+ToolUp.Facts.Presentation.TabRefusal+Unassigned.blockId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+UnknownTab (class)
+ToolUp.Facts.Presentation.TabRefusal+UnknownTab.tabId : System.String { get }
