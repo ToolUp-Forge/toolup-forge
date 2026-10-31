@@ -1381,14 +1381,18 @@ ToolUp.Facts.NarrativeGrounding (class)
 ToolUp.Facts.NarrativeGrounding.FactKind : System.String (literal)
 ToolUp.Facts.NarrativeGrounding.FactRefsProp : System.String (literal)
 ToolUp.Facts.NarrativeGrounding.check(ToolUp.Facts.GroundingPolicy, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Facts.GroundingResolution], ToolUp.Platform.Narrative.NarrativeDocument) : ToolUp.Platform.Narrative.NarrativeGroundingVerdict
+ToolUp.Facts.NarrativeGrounding.checkWith(ToolUp.Facts.GroundingPolicy, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Facts.GroundingResolution], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.GroundingCheckOptions, ToolUp.Platform.Narrative.NarrativeDocument) : ToolUp.Platform.Narrative.NarrativeGroundingVerdict
 ToolUp.Facts.NarrativeGrounding.citedFactIds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.NarrativeGrounding.claims(ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.NarrativeGrounding+Claim]
 ToolUp.Facts.NarrativeGrounding.defaultPolicy : ToolUp.Facts.GroundingPolicy { get }
+ToolUp.Facts.NarrativeGrounding.echoes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.NarrativeGrounding+NumberMention], ToolUp.Facts.NarrativeGrounding+NumberMention) : System.Boolean
 ToolUp.Facts.NarrativeGrounding.englishNumberWords : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Facts.NarrativeGrounding.factTools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
+ToolUp.Facts.NarrativeGrounding.mentions(ToolUp.Facts.GroundingPolicy, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.NarrativeGrounding+NumberMention]
 ToolUp.Facts.NarrativeGrounding.parseStated(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[System.Decimal, System.Decimal, System.Boolean]]
 ToolUp.Facts.NarrativeGrounding.referenceKind(System.String) : System.Tuple`2[System.String, System.String]
 ToolUp.Facts.NarrativeGrounding.references(ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.NarrativeGrounding.singular(System.String) : System.String
 ToolUp.Facts.NarrativeGrounding.statesNumber(ToolUp.Facts.GroundingPolicy, System.String) : System.Boolean
 ToolUp.Facts.NarrativeGrounding.statesValue(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], System.Boolean) : System.Boolean
 ToolUp.Facts.NarrativeGrounding+Claim (class)
@@ -1411,6 +1415,10 @@ ToolUp.Facts.NarrativeGrounding+Claim+Tags (class)
 ToolUp.Facts.NarrativeGrounding+Claim+Tags.CitationClaim : System.Int32 (literal)
 ToolUp.Facts.NarrativeGrounding+Claim+Tags.MetricClaim : System.Int32 (literal)
 ToolUp.Facts.NarrativeGrounding+Claim+Tags.ProseClaim : System.Int32 (literal)
+ToolUp.Facts.NarrativeGrounding+NumberMention (class)
+ToolUp.Facts.NarrativeGrounding+NumberMention..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.NarrativeGrounding+NumberMention.Following : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.NarrativeGrounding+NumberMention.Whole : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Facts.NoFactRecomputer (class)
 ToolUp.Facts.NoFactRecomputer..ctor()
 ToolUp.Facts.PeerTrustAnchor (class)

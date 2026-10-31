@@ -76,6 +76,14 @@ type NarrativeGroundingCertificate = {
     /// The sealed certificate itself, in its open interchange JSON form, so
     /// a holder can verify it offline against the deployment's public key.
     CertificateJson: string
+    /// The numbers the narrative states without a Fact, and why each was
+    /// admitted: an `instruction` citation (the wording in force asked for
+    /// that number) or a `structural-count` citation (it counts what the
+    /// document itself lists). Listed beside the signed chain, not inside
+    /// it: the signed body is the Fact chain, and an admission is checked
+    /// against the wording and the document, which the fact store does not
+    /// hold. Empty when the narrative states no such number.
+    Admissions: NarrativeCitation list
 }
 
 /// The fact tier's face toward narratives: the grounding gate and the
@@ -99,6 +107,75 @@ type INarrativeGroundingGate =
     abstract Certify:
         scope: ResolvedScope * principal: string * narrativeId: string * citedFactIds: string list ->
             Async<Result<NarrativeGroundingCertificate, string>>
+
+/// The wording a grounded run's instruction was built from, as the gate reads
+/// it: the narrative's prompt and each section's guidance, and the version
+/// they were saved under (0 for the declaration).
+type GroundingInstruction = {
+    /// The wording version — 0 for the declaration, else the administrator's
+    /// saved version in force.
+    Version: int
+    /// The narrative's prompt: the instruction in force for every section.
+    Prompt: string
+    /// Each section's guidance, by section id: the instruction in force for
+    /// that section, beside the prompt.
+    Guidance: Map<string, string>
+}
+
+/// What a grounding check is asked to admit beyond Fact references.
+type GroundingCheckOptions = {
+    /// The wording in force. A whole number in prose that the wording states
+    /// counting the same thing ("the top three categories" when the wording
+    /// asks for the top three categories) is admitted, cited as
+    /// `instruction:<version>#<section id>`. `None` admits no such number.
+    Instruction: GroundingInstruction option
+    /// The repair loop's late stage: the model has been asked to cite or
+    /// rephrase and could not. A whole number in prose that counts what the
+    /// document itself lists is then admitted, cited as
+    /// `structural-count:<location>`. Never set on a first draft.
+    LateStage: bool
+}
+
+module GroundingCheckOptions =
+    /// No instruction and not the late stage: exactly the check `Check` makes.
+    let none: GroundingCheckOptions = {
+        Instruction = None
+        LateStage = false
+    }
+
+/// A grounding gate that also takes the wording in force and the repair
+/// stage. The grounded run asks for this face and falls back to
+/// `INarrativeGroundingGate.Check` — which admits neither number — on a gate
+/// that does not offer it (`GroundingCheck.run`).
+type IInstructedNarrativeGroundingGate =
+    inherit INarrativeGroundingGate
+
+    /// `Check`, with the numbers `options` admits. Under
+    /// `GroundingCheckOptions.none` the verdict is `Check`'s.
+    abstract CheckWith:
+        scope: ResolvedScope *
+        principal: string *
+        surface: FactEgressSurface *
+        document: NarrativeDocument *
+        options: GroundingCheckOptions ->
+            Async<NarrativeGroundingVerdict>
+
+module GroundingCheck =
+    /// Check `document` through `gate` under `options`: through `CheckWith`
+    /// when the gate offers it, else through `Check`, which admits no number
+    /// without a Fact.
+    let run
+        (gate: INarrativeGroundingGate)
+        (scope: ResolvedScope)
+        (principal: string)
+        (surface: FactEgressSurface)
+        (options: GroundingCheckOptions)
+        (document: NarrativeDocument)
+        : Async<NarrativeGroundingVerdict> =
+        match gate with
+        | :? IInstructedNarrativeGroundingGate as instructed ->
+            instructed.CheckWith(scope, principal, surface, document, options)
+        | _ -> gate.Check(scope, principal, surface, document)
 
 /// One section of a grounded narrative's shape. The heading is the
 /// deployment's, never the model's; `Guidance` tells the model what the
@@ -410,6 +487,15 @@ module GroundedNarrativeDefinition =
                             | Some text -> { shape with Guidance = text }
                             | None -> shape)
             }
+
+module GroundingInstruction =
+    /// The wording `definition` carries, saved as `version` (0 for the
+    /// declaration).
+    let ofDefinition (version: int) (definition: GroundedNarrativeDefinition) : GroundingInstruction = {
+        Version = version
+        Prompt = definition.Prompt
+        Guidance = definition.Sections |> List.map (fun s -> s.Id, s.Guidance) |> Map.ofList
+    }
 
 /// Compose-time registry of grounded narrative runs. Written during
 /// composition, read by both triggers thereafter; the same posture as the
