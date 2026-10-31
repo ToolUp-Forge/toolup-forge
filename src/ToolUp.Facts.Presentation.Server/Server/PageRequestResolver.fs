@@ -168,6 +168,15 @@ type PageGateViewer = {
     OutputVisibility: string option
 }
 
+/// Where a viewer's team facts are read, resolved once when the resolvers
+/// are registered.
+type PageGateSources = {
+    /// The team store: a member's role.
+    Teams: ITeamStore option
+    /// The team output-visibility source: a team's level in force.
+    OutputVisibility: ITeamOutputVisibilitySource option
+}
+
 /// Fingerprinting a viewer.
 [<RequireQualifiedAccess>]
 module PageGateViewer =
@@ -196,35 +205,40 @@ module PageGateViewer =
         |> Canonical.write Rendering.CrossHost
         |> sha256
 
-    /// The viewer a request's composition knows: the request's viewer, the
-    /// team's role for it and the team's output level, where those services
-    /// are composed.
-    let forRequest (ctx: HttpContext) (scope: ResolvedScope) (principal: string) : Async<PageGateViewer> = async {
-        let viewer = RequestViewer.ofItems ctx.Items
-        let teamId = viewer |> Option.bind _.ActiveTeamId
+    /// The viewer of a request: its viewer, the team's role for it and the
+    /// team's output level, read from `sources` where they are composed.
+    let forRequest
+        (sources: PageGateSources)
+        (ctx: HttpContext)
+        (scope: ResolvedScope)
+        (principal: string)
+        : Async<PageGateViewer> =
+        async {
+            let viewer = RequestViewer.ofItems ctx.Items
+            let teamId = viewer |> Option.bind _.ActiveTeamId
 
-        let! role =
-            match teamId, ServiceComposition.tryService<ITeamStore> ctx.RequestServices with
-            | Some team, Some teams -> teams.GetMemberRole(team, principal)
-            | _ -> async.Return None
+            let! role =
+                match teamId, sources.Teams with
+                | Some team, Some teams -> teams.GetMemberRole(team, principal)
+                | _ -> async.Return None
 
-        let! level =
-            match teamId, ServiceComposition.tryService<ITeamOutputVisibilitySource> ctx.RequestServices with
-            | Some team, Some source -> source.Current team
-            | _ -> async.Return(Error "")
+            let! level =
+                match teamId, sources.OutputVisibility with
+                | Some team, Some source -> source.Current team
+                | _ -> async.Return(Error "")
 
-        return {
-            Principal = principal
-            ScopeId = scope.ScopeId
-            ActiveTeamId = teamId
-            IsPlatformAdmin = viewer |> Option.exists _.IsPlatformAdmin
-            TeamRole = role |> Option.map (sprintf "%A")
-            OutputVisibility =
-                match level with
-                | Ok level -> Some(sprintf "%A" level)
-                | Error _ -> None
+            return {
+                Principal = principal
+                ScopeId = scope.ScopeId
+                ActiveTeamId = teamId
+                IsPlatformAdmin = viewer |> Option.exists _.IsPlatformAdmin
+                TeamRole = role |> Option.map (sprintf "%A")
+                OutputVisibility =
+                    match level with
+                    | Ok level -> Some(sprintf "%A" level)
+                    | Error _ -> None
+            }
         }
-    }
 
 /// One caller's cached resolutions.
 type PageResolutionSession = {
@@ -530,7 +544,7 @@ type PageRequestResolvers = {
 module PageRequestResolvers =
 
     /// The registration over a process's cache.
-    let create (cache: PageResolutionCache) : PageRequestResolvers = {
+    let create (cache: PageResolutionCache) (sources: PageGateSources) : PageRequestResolvers = {
         ForRequest =
             fun ctx -> async {
                 match FactBrowseHandler.factBrowseDeps ctx with
@@ -546,7 +560,7 @@ module PageRequestResolvers =
                     let! session = cache.Session(scope, principal)
 
                     let gate () = async {
-                        let! viewer = PageGateViewer.forRequest ctx scope principal
+                        let! viewer = PageGateViewer.forRequest sources ctx scope principal
                         return PageGateViewer.fingerprint viewer
                     }
 
@@ -567,7 +581,10 @@ module PageRequestResolvers =
 
         services.AddSingleton<PageRequestResolvers>(
             Func<IServiceProvider, PageRequestResolvers>(fun sp ->
-                create (sp.GetRequiredService<PageResolutionCache>()))
+                create (sp.GetRequiredService<PageResolutionCache>()) {
+                    Teams = ServiceComposition.tryService<ITeamStore> sp
+                    OutputVisibility = ServiceComposition.tryService<ITeamOutputVisibilitySource> sp
+                })
         )
         |> ignore
 
