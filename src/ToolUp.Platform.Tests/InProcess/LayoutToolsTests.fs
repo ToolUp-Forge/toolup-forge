@@ -24,7 +24,6 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.Providers
 open ToolUp.Platform.StorageScopeResolver
 open ToolUp.AI
 open ToolUp.AI.AICompose
@@ -619,42 +618,7 @@ let private editTests =
 
 // ── Composition ────────────────────────────────────────────────────────
 
-let private factory =
-    { new IAIProviderFactory with
-        member _.Available = []
-        member _.PlatformDescriptors = []
-        member _.PlatformDescriptor = None
-        member _.Resolve _ = async { return Error NoProviderConfigured }
-        member _.TryResolveByLabel(_, _) = async { return Error NoProviderConfigured }
-        member _.BuildPlatform(_, _, _) = None
-    }
-
-let private profile =
-    { new IProviderProfile with
-        member _.Get _ = async { return None }
-        member _.Set(_, _) = async { return Ok() }
-        member _.Clear _ = async { return () }
-        member _.ResolveEntry(_, _, _) = async { return None }
-        member _.SetEntryHealth(_, _, _) = async { return Ok() }
-    }
-
-/// An AI composition with or without the fact store and the page store.
-let aiApp (factStore: FactStoreMode) (pageStore: bool) : AIServerApp =
-    let app = {
-        ServerApp.empty with
-            Config = {
-                ServerConfig.defaults with
-                    FactStore = factStore
-            }
-    }
-
-    AIServerApp.createFrom
-        factory
-        profile
-        (if pageStore then
-             PageDocumentStoreCompose.withPageDocumentStore PageStoreOptions.defaults app
-         else
-             app)
+let private aiApp = AIToolSchemaTests.LayoutCensus.aiApp
 
 let private names (app: AIServerApp) =
     app.AIAnsweringTools |> List.map (fun (d, _) -> d.Name)
