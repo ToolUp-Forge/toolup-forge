@@ -1611,23 +1611,178 @@ let private runOptionsTests =
             Expect.isFalse (List.contains (inputOf 'a') (InputHash.named current.Evidence)) "and not the earlier run's"
         }
 
-        test "the delegate still refuses a period slice, by name, and holds nothing" {
+        test "a slice carries every row outside it under the run that wrote it, and withdraws only the rows inside it" {
             let w = delegatedWorld FactTableHistoryMode.Replace
 
-            let sliced = FactTableRunOptions.none |> FactTableRunOptions.forSlice september
+            let october: TemporalExtent = {
+                From = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+                To = DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)
+                Label = Some "2026-10"
+            }
+
+            let first =
+                match
+                    commitWith w (FactTableRunOptions.none |> FactTableRunOptions.withInputs [ inputOf 'a' ]) [
+                        row "acme" "a1" 10m
+                        row "zeta" "z1" 5m
+                        {
+                            row "acme" "a1" 20m with
+                                Period = october
+                        }
+                    ]
+                with
+                | Ok c -> c
+                | Error e -> failtestf "first run: %s" (FactTableWriteError.describe e)
+
+            let at (period: TemporalExtent) (facts: Fact list) =
+                facts |> List.filter (fun f -> f.Period = period) |> List.exactlyOne
+
+            // Quoted before the slice, so there is a fact to withdraw.
+            let octoberBefore = point w "revenue" [ "acme"; "a1" ] |> at october
+            Expect.equal (valueOf (point w "revenue" [ "zeta"; "z1" ] |> at september)) 5m "zeta, quoted"
+
+            let firstRunId =
+                match w.Writer.Runs(w.Scope, "sku-sales") |> Async.RunSynchronously with
+                | Ok [ only ] -> only.RunId
+                | other -> failtestf "expected the one run, got %A" other
+
+            // September re-delivered without zeta, from another input.
+            let sliced =
+                FactTableRunOptions.none
+                |> FactTableRunOptions.withInputs [ inputOf 'b' ]
+                |> FactTableRunOptions.forSlice september
+
+            let second =
+                match commitWith w sliced [ row "acme" "a1" 11m ] with
+                | Ok c -> c
+                | Error e -> failtestf "the sliced run: %s" (FactTableWriteError.describe e)
+
+            Expect.equal second.Change.Removed 1 "the slice's dropped row is removed"
+            Expect.equal second.Change.Changed 1 "and its kept row changed"
+            Expect.equal second.Watermark.Sequence (first.Watermark.Sequence + 1L) "one commit"
+
+            match (point w "revenue" [ "zeta"; "z1" ] |> at september).Value with
+            | Absent reason -> Expect.stringContains reason "removed by fact-table run" "withdrawn by the run"
+            | other -> failtestf "expected zeta withdrawn, got %A" other
+
+            let acme = point w "revenue" [ "acme"; "a1" ]
+            let september' = acme |> at september
+            Expect.equal (valueOf september') 11m "the slice's row"
+            Expect.contains (InputHash.named september'.Evidence) (inputOf 'b') "under the slice's input"
+
+            let october' = acme |> at october
+            Expect.equal october'.FactId octoberBefore.FactId "the carried row is the fact its own run minted"
+            Expect.equal (InputHash.named october'.Evidence) [ inputOf 'a' ] "under its own run's input"
+
+            Expect.equal
+                october'.Evidence.TriggerRef
+                (Some(DelegateMint.triggerRef "sku-sales" firstRunId))
+                "naming the run that wrote it"
+
+            // An earlier, whole-table run's rows are what the image holds.
+            match w.Writer.Status(w.Scope, "sku-sales") |> Async.RunSynchronously with
+            | Ok status ->
+                Expect.equal
+                    (status.LastCommit |> Option.map _.Watermark.Sequence)
+                    (Some second.Watermark.Sequence)
+                    "the sliced run is current"
+            | Error e -> failtestf "status: %s" (FactTableWriteError.describe e)
+        }
+
+        test "a slice that would split a committed row is refused and the image stands" {
+            let w = delegatedWorld FactTableHistoryMode.Replace
+
+            match commitWith w FactTableRunOptions.none [ row "acme" "a1" 10m ] with
+            | Ok _ -> ()
+            | Error e -> failtestf "first run: %s" (FactTableWriteError.describe e)
+
+            // A slice from August to mid-September: it holds August whole and
+            // splits the committed September row.
+            let august: TemporalExtent = {
+                From = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+                To = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                Label = Some "2026-08"
+            }
+
+            let slice = {
+                august with
+                    To = DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc)
+            }
 
             match
-                w.Writer.OpenRun(w.Scope, "sku-sales", options = sliced)
+                commitWith w (FactTableRunOptions.none |> FactTableRunOptions.forSlice slice) [
+                    {
+                        row "acme" "a1" 1m with
+                            Period = august
+                    }
+                ]
+            with
+            | Error(FactTableRunOptionsRefused(_, reason)) ->
+                Expect.stringContains reason "splits 1 committed row" "says why"
+            | other -> failtestf "expected the split refused, got %A" other
+
+            Expect.equal (point w "revenue" [ "acme"; "a1" ] |> List.map valueOf) [ 10m ] "the committed row stands"
+        }
+
+        test "a slice over rows stored before rows were attributed is refused at open, by name, and holds nothing" {
+            let w = delegatedWorld FactTableHistoryMode.Replace
+
+            match commitWith w FactTableRunOptions.none [ row "acme" "a1" 10m; row "zeta" "z1" 5m ] with
+            | Ok _ -> ()
+            | Error e -> failtestf "first run: %s" (FactTableWriteError.describe e)
+
+            // Rewrite the stored image in the shape an earlier release left
+            // it: no row names its writer.
+            let scope = w.Scope.ScopeId
+
+            let name =
+                w.Storage.List(scope, "_delegate-tables/rows/")
+                |> Async.RunSynchronously
+                |> List.exactlyOne
+
+            let image =
+                match w.Storage.Download(scope, name) |> Async.RunSynchronously with
+                | Ok bytes -> Text.Json.Nodes.JsonNode.Parse(Text.Encoding.UTF8.GetString bytes).AsArray()
+                | Error e -> failtestf "download: %s" e
+
+            for node in image do
+                node.AsObject().Remove "WrittenBy" |> ignore
+
+            w.Storage.Upload(scope, name, Text.Encoding.UTF8.GetBytes(image.ToJsonString()))
+            |> Async.RunSynchronously
+            |> ignore
+
+            let october: TemporalExtent = {
+                From = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+                To = DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)
+                Label = Some "2026-10"
+            }
+
+            match
+                w.Writer.OpenRun(
+                    w.Scope,
+                    "sku-sales",
+                    options = (FactTableRunOptions.none |> FactTableRunOptions.forSlice october)
+                )
                 |> Async.RunSynchronously
             with
             | Error(FactTableRunOptionsRefused(tableId, reason)) ->
                 Expect.equal tableId "sku-sales" "names the table"
-                Expect.stringContains reason "period slice" "and says what it does not take"
+                Expect.stringContains reason "stored before rows were attributed" "says why"
+                Expect.stringContains reason "--attribute-delegate-rows" "and names the remedy"
             | other -> failtestf "expected FactTableRunOptionsRefused, got %A" other
 
             match w.Writer.Runs(w.Scope, "sku-sales") |> Async.RunSynchronously with
-            | Ok runs -> Expect.isEmpty runs "no run was opened"
+            | Ok runs -> Expect.hasLength runs 1 "no run was opened"
             | Error e -> failtestf "runs: %s" (FactTableWriteError.describe e)
+
+            // The unattributed rows still read under the run whose image they are.
+            Expect.equal (point w "revenue" [ "zeta"; "z1" ] |> List.map valueOf) [ 5m ] "read as before"
+
+            // And a whole-table run, which carries nothing, is taken.
+            match commitWith w FactTableRunOptions.none [ row "acme" "a1" 12m ] with
+            | Ok _ -> ()
+            | Error e -> failtestf "a whole-table run: %s" (FactTableWriteError.describe e)
         }
 
         test "a run recorded before the record kept its options mints under the method kept beside it" {
@@ -1753,9 +1908,42 @@ let private contractTests =
         let w = delegatedWorld FactTableHistoryMode.AppendByRun
         w.Store, newScope (), newScope ())
 
+/// The read-fault law over the delegated store: a table that cannot be read
+/// answers `StorageFault` on the point and population doors, and a quote or
+/// an inner read that cannot be read does too — never a shorter answer, and
+/// never a refusal fact standing in for the fault.
+let private readFaultTests =
+    ToolUp.Platform.Tests.Contracts.IFactStoreContract.readFaultTests "DelegatedFactStore" (fun () ->
+        let storage =
+            ToolUp.Platform.Tests.Contracts.IFactStoreContract.FaultableBlobStorage(InMemoryBlobStorage())
+
+        let w = delegatedWorldOver storage FactTableHistoryMode.AppendByRun true
+        commit w [ row "acme" "a1" 10m; row "zeta" "z1" 5m ] |> ignore
+
+        {
+            ToolUp.Platform.Tests.Contracts.IFactStoreContract.Executor = w.Store
+            InScope = w.Scope.ScopeId
+            Fault = storage.Fault
+            Point =
+                Some(
+                    FactQuery.forSubjectMetric
+                        {
+                            Hierarchy = "products"
+                            Path = [ "acme"; "a1" ]
+                        }
+                        (MetricRef "revenue")
+                )
+            Population =
+                Some {
+                    PopulationQuery.create (MetricRef "revenue") "products" with
+                        Ordering = Descending
+                }
+        })
+
 let tests =
     testList "Phase 889 — delegate facts" [
         contractTests
+        readFaultTests
         equivalenceTests
         quotedOnlyTests
         quotingTests

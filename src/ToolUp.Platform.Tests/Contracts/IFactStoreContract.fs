@@ -1802,6 +1802,112 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
                 "naming a method selects exactly its lineage"
         }
     ]
+// ─── The read-fault law — every executor, every read member ──────────
+//
+// A storage fault on any read answers `StorageFault`, never absence: a store
+// that cannot read a fact must not answer as if it held fewer. The law is
+// the same for every executor; each binds it with a harness over storage it
+// can make fail, and the law asks every read member after the fault. A
+// `StorageFault` cannot be answered vacuously — a store that answered
+// `Ok []` fails — so the law needs no "before" read to be meaningful.
+
+/// A store over storage the harness can make fail, for the read-fault law.
+type FactStoreFaultHarness = {
+    /// The store under test.
+    Executor: IFactStore
+    /// The scope it is written and read in.
+    InScope: string
+    /// Make every read of the store's storage fail from now on.
+    Fault: unit -> unit
+    /// The point read to ask, when the executor answers it from storage
+    /// other than the seeded fact's (a delegated metric's table); `None`
+    /// asks for the seeded fact's subject and metric.
+    Point: FactQuery option
+    /// The population read to ask, likewise; `None` ranks the seeded
+    /// fact's metric over its hierarchy, descending.
+    Population: PopulationQuery option
+}
+
+/// An `IBlobStorage` over another whose every read fails once `Fault` is
+/// called — the storage a blob-backed executor's harness makes fail.
+type FaultableBlobStorage(inner: ToolUp.Platform.BlobStorage.IBlobStorage) =
+    let mutable faulted = false
+
+    /// Fail every download from now on.
+    member _.Fault() = faulted <- true
+
+    interface ToolUp.Platform.BlobStorage.IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = async {
+            if faulted then
+                return Error "injected storage fault"
+            else
+                return! inner.Download(container, blobName)
+        }
+
+        member _.DownloadRange(container, blobName, offset, length) = async {
+            if faulted then
+                return Error "injected storage fault"
+            else
+                return! inner.DownloadRange(container, blobName, offset, length)
+        }
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let readFaultTests (name: string) (harness: unit -> FactStoreFaultHarness) =
+    let faulted (label: string) (answer: Async<Result<'T, FactStoreError>>) = async {
+        match! answer with
+        | Error(FactStoreError.StorageFault _) -> ()
+        | Error other ->
+            failtestf "%s: a read over failed storage is a StorageFault, got %s" label (FactStoreError.describe other)
+        | Ok _ -> failtestf "%s: a read over failed storage answered as if it held what it could read" label
+    }
+
+    testList $"IFactStore read-fault law — {name}" [
+        testCaseAsync "a storage fault on every read member answers StorageFault, never absence"
+        <| async {
+            let h = harness ()
+            let! seeded = assertOk "seed" h.Executor h.InScope (draft "uk" "revenue" "sha256:aa" 100m)
+            let scope = TestScope.resolved h.InScope
+
+            let point =
+                h.Point
+                |> Option.defaultValue (FactQuery.forSubjectMetric seeded.Subject seeded.Metric)
+
+            let population =
+                h.Population
+                |> Option.defaultValue {
+                    PopulationQuery.create seeded.Metric seeded.Subject.Hierarchy with
+                        Ordering = Descending
+                }
+
+            h.Fault()
+
+            do! h.Executor.Get(scope, seeded.FactId) |> faulted "Get"
+            do! h.Executor.Query(scope, point) |> faulted "Query"
+            do! h.Executor.QueryWithCompetition(scope, point) |> faulted "QueryWithCompetition"
+
+            do!
+                h.Executor.QuerySupersessionChain(scope, seeded.FactId)
+                |> faulted "QuerySupersessionChain"
+
+            do! h.Executor.QueryPopulation(scope, population) |> faulted "QueryPopulation"
+        }
+    ]
+
 // ─── Differential pack — two implementations, one answer (Phase 888) ─
 //
 // The contract packs above hold one store to the laws. This one holds a

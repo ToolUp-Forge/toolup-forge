@@ -1373,6 +1373,28 @@ let private liveTests (conn: string) =
         IFactStoreContract.tests "PostgresFactStore" factory
         IFactStoreContract.populationRegistryTests "PostgresFactStore" registryFactory
 
+        // The read-fault law: a store over a table of its own, dropped from
+        // under it once seeded.
+        IFactStoreContract.readFaultTests "PostgresFactStore"
+        <| fun () ->
+            let table = "toolup_facts_fault_" + Guid.NewGuid().ToString("N").Substring(0, 12)
+
+            let target =
+                PostgresFactStore.createWithDataSource
+                    dataSource
+                    { liveOptions with Table = table }
+                    (events ())
+                    None
+                    (fun () -> DateTime.UtcNow)
+
+            {
+                IFactStoreContract.Executor = target
+                InScope = newScope ()
+                Fault = fun () -> execute (sprintf "DROP TABLE %s CASCADE" table) |> Async.RunSynchronously
+                Point = None
+                Population = None
+            }
+
         // The disclosure-taint index pack, the one BlobFactStore binds.
         IDisclosureTaintIndexSourceContract.tests "PostgresFactStore"
         <| fun () ->

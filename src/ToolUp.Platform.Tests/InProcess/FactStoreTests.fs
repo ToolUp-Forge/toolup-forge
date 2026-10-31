@@ -2532,6 +2532,25 @@ let private rankedCount (r: Result<PopulationResult, FactStoreError>) =
 let private readFaultTests =
     testList "BlobFactStore read faults" [
 
+        // The cross-executor law, over every read member, with surfaces off
+        // and on.
+        for surfaces, label in
+            [
+                FactSurfaceOptions.disabled, "BlobFactStore"
+                FactSurfaceOptions.always, "BlobFactStore (surfaces on)"
+            ] do
+            IFactStoreContract.readFaultTests label (fun () ->
+                let storage =
+                    IFactStoreContract.FaultableBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+
+                {
+                    IFactStoreContract.Executor = storeOver storage (steppingClock baseAsOf) surfaces
+                    InScope = newScope ()
+                    Fault = storage.Fault
+                    Point = None
+                    Population = None
+                })
+
         testCaseAsync
             "a failed download fails Query, QueryPopulation and the supersession chain instead of shortening them"
         <| async {

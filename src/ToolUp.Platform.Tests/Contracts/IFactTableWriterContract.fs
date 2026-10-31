@@ -1438,6 +1438,13 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
             publish f f.ScopeA table.Id (daily 2 'b') [ dayRow 2 "acme" "a1" 11m; dayRow 2 "zeta" "z1" 7m ]
             |> ignore
 
+            // Read before the redelivery, so every writer holds a fact for
+            // the run to withdraw (a delegate holds only what was quoted).
+            Expect.equal
+                (oneAt f.Facts f.ScopeA "revenue" [ "zeta"; "z1" ] (day 1)).Value
+                (Scalar 5m)
+                "day one's zeta before the redelivery"
+
             // Day one re-delivered without zeta.
             let redelivered =
                 publish f f.ScopeA table.Id (daily 1 'c') [ dayRow 1 "acme" "a1" 10m ]
@@ -1536,8 +1543,8 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
             | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
 
             Expect.equal
-                (valueAt f.Facts f.ScopeA "revenue" [ "acme"; "a1" ])
-                (Some(Scalar 10m))
+                (cellFacts f.Facts f.ScopeA "revenue" [ "acme"; "a1" ] |> List.map _.Value)
+                [ Scalar 10m ]
                 "the committed row stands"
 
             ok "the refused run released the table" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))
@@ -1575,12 +1582,10 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
         }
     ]
 
-/// The run-record pack (Phase 1092): what a run declared when it was opened
-/// rides its RECORD, so a commit observer reads a run's inputs and method
-/// from `Runs` or `Status` alone. Bound to every writer, the delegate
-/// writer included: the options here are inputs and a method, which every
-/// writer takes (a period slice is the default writer's, pinned in
-/// `runOptionsTests`).
+/// The run-record pack: what a run declared when it was opened rides its
+/// RECORD, so a commit observer reads a run's inputs and method from `Runs`
+/// or `Status` alone. Bound to every writer, the delegate writer included (a
+/// period slice is pinned on every writer in `runOptionsTests`).
 let runRecordTests (name: string) (factory: FactTableWriterFactory) =
     let declared =
         FactTableRunOptions.none
@@ -1694,30 +1699,7 @@ let runRecordTests (name: string) (factory: FactTableWriterFactory) =
         }
     ]
 
-/// What a writer that does not take run options does with them: refuses the
-/// run, by name, before anything is held or written.
-let runOptionsRefusedTests (name: string) (factory: FactTableWriterFactory) =
-    testList $"IFactTableWriter run options refused — {name}" [
 
-        test "a writer that cannot honour run options refuses them and holds nothing" {
-            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
-            let f = factory (fun () -> t0) [ table ] registry
-
-            let options =
-                FactTableRunOptions.none
-                |> FactTableRunOptions.withInputs [ inputHash 'a' ]
-                |> FactTableRunOptions.forSlice (day 1)
-
-            match refused "open" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = options)) with
-            | FactTableRunOptionsRefused(tableId, _) -> Expect.equal tableId table.Id "names the table"
-            | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
-
-            ok
-                "none is not an option set"
-                (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id, options = FactTableRunOptions.none))
-            |> ignore
-        }
-    ]
 
 /// A writer that records the provenance each `OpenRun` is handed — what a
 /// decorator is bound over.
