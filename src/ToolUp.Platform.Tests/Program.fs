@@ -1059,6 +1059,7 @@ let private registeredTests =
         FactTablesToolTests.tests
         AggregateMetricToolTests.tests
         PipelineAssertionTests.tests
+        PageRequestResolverTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

@@ -674,6 +674,18 @@ module FactsCompose =
                 FactQuestionCompilerGuard(services) :> ConfigValidation.IConfigValidator
             )
 
+    /// The fact-table change signal, dormant until a reader registers its
+    /// demand (`FactTableChangeSignal.demand`); it raises across processes
+    /// through the composed notification channel.
+    let private registerTableChangeSignal (services: IServiceCollection) : IServiceCollection =
+        services.TryAddSingleton<IFactTableChangeSignal>(
+            Func<IServiceProvider, IFactTableChangeSignal>(fun sp ->
+                let demanded = lazy (FactTableChangeSignal.demanded sp)
+                FactTableChangeSignal.create (tryService<INotificationChannel> sp) (fun () -> demanded.Value))
+        )
+
+        services
+
     let private registerReactiveRecomputation (services: IServiceCollection) : IServiceCollection =
         // (1) The default recompute engine — TryAdd so a deployment-
         //     supplied `IFactRecomputer` registered anywhere in the
@@ -703,24 +715,33 @@ module FactsCompose =
                     let narratives () =
                         tryService<GroundedNarrativeRegistry> sp
 
+                    // A reader of the fact-table change signal hears a
+                    // landed data object as a change of any table of its
+                    // scope, after the recompute and narrative reactions.
+                    let tableChangeDemanded = lazy (FactTableChangeSignal.demanded sp)
+
                     let react =
                         ReactiveDataChangeComposition.combine
-                            (ReactiveDataChange.reaction
-                                (fun () -> sp.GetRequiredService<IFactStore>())
-                                (fun () -> resolveLineage sp)
-                                scheduler
-                                registry)
-                            (GroundedNarrativeTrigger.reaction
-                                (fun () -> sp.GetRequiredService<IFactStore>())
-                                (fun () -> resolveLineage sp)
-                                scheduler
-                                narratives)
+                            (ReactiveDataChangeComposition.combine
+                                (ReactiveDataChange.reaction
+                                    (fun () -> sp.GetRequiredService<IFactStore>())
+                                    (fun () -> resolveLineage sp)
+                                    scheduler
+                                    registry)
+                                (GroundedNarrativeTrigger.reaction
+                                    (fun () -> sp.GetRequiredService<IFactStore>())
+                                    (fun () -> resolveLineage sp)
+                                    scheduler
+                                    narratives))
+                            (FactTableChangeSignal.reaction (fun () -> sp.GetRequiredService<IFactTableChangeSignal>()))
 
                     ReactiveDataChange.decorate
                         (captured.Resolve sp)
                         (ReactiveDataChangeComposition.either
-                            (ReactiveDataChange.gate registry scheduler)
-                            (GroundedNarrativeTrigger.armed scheduler narratives))
+                            (ReactiveDataChangeComposition.either
+                                (ReactiveDataChange.gate registry scheduler)
+                                (GroundedNarrativeTrigger.armed scheduler narratives))
+                            (fun () -> tableChangeDemanded.Value))
                         (ReactiveDataChange.requestScope (fun () ->
                             tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp))
                         react
@@ -798,7 +819,7 @@ module FactsCompose =
             // one registration pass: the store first, then the recompute
             // engine + handler + data-arrival hook over it.
             let register (s: IServiceCollection) =
-                registerReactiveRecomputation (registerFactStore s)
+                registerReactiveRecomputation (registerTableChangeSignal (registerFactStore s))
                 // Phase 888 — the backend marker and, for a multi-replica
                 // deployment only, the blob store's scale guard.
                 |> registerBlobScaleGuard app.Config.ReplicaCount
@@ -1525,13 +1546,20 @@ module FactsCompose =
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactTableWriter>(
                     Func<IServiceProvider, IFactTableWriter>(fun sp ->
-                        DefaultFactTableWriter.create
-                            (sp.GetRequiredService<IFactStore>())
-                            (sp.GetRequiredService<IBlobStorage>())
-                            (sp.GetRequiredService<IEventStore>())
-                            (tryService<Grounding.IFactTableRegistry> sp
-                             |> Option.defaultValue Grounding.FactTableRegistry.empty)
-                            (tryService<Grounding.IMetricRegistry> sp))
+                        let writer =
+                            DefaultFactTableWriter.create
+                                (sp.GetRequiredService<IFactStore>())
+                                (sp.GetRequiredService<IBlobStorage>())
+                                (sp.GetRequiredService<IEventStore>())
+                                (tryService<Grounding.IFactTableRegistry> sp
+                                 |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                                (tryService<Grounding.IMetricRegistry> sp)
+
+                        // A committed run raises its table's change, for a
+                        // reader that keeps what it read.
+                        match tryService<IFactTableChangeSignal> sp with
+                        | Some signal -> FactTableChangeSignal.raisingWriter signal writer
+                        | None -> writer)
                 )
 
             app

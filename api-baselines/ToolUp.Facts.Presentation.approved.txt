@@ -6,6 +6,70 @@
 ToolUp.Facts.Presentation.IPipelineBlockApi (class)
 ToolUp.Facts.Presentation.IPipelineBlockApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]])
 ToolUp.Facts.Presentation.IPipelineBlockApi.Evaluate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]] { get }
+ToolUp.Facts.Presentation.PageRequest (class)
+ToolUp.Facts.Presentation.PageRequest.IsPipeline : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRequest.IsPresentation : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRequest.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.PageRequest+Pipeline (class)
+ToolUp.Facts.Presentation.PageRequest+Pipeline.dependsOn : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageRequest+Pipeline.request : ToolUp.Facts.Presentation.PipelineBlockRequest { get }
+ToolUp.Facts.Presentation.PageRequest+Presentation (class)
+ToolUp.Facts.Presentation.PageRequest+Presentation.dependsOn : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageRequest+Presentation.request : ToolUp.Facts.Presentation.PresentationRequest { get }
+ToolUp.Facts.Presentation.PageRequest+Tags (class)
+ToolUp.Facts.Presentation.PageRequest+Tags.Pipeline : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequest+Tags.Presentation : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequestError (class)
+ToolUp.Facts.Presentation.PageRequestError.IsInvalidField : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRequestError.IsMissingField : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRequestError.IsNotJson : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRequestError.IsPresentation : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRequestError.IsUnknownKind : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRequestError.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.PageRequestError+InvalidField (class)
+ToolUp.Facts.Presentation.PageRequestError+InvalidField.field : System.String { get }
+ToolUp.Facts.Presentation.PageRequestError+InvalidField.reason : System.String { get }
+ToolUp.Facts.Presentation.PageRequestError+MissingField (class)
+ToolUp.Facts.Presentation.PageRequestError+MissingField.field : System.String { get }
+ToolUp.Facts.Presentation.PageRequestError+NotJson (class)
+ToolUp.Facts.Presentation.PageRequestError+NotJson.reason : System.String { get }
+ToolUp.Facts.Presentation.PageRequestError+Presentation (class)
+ToolUp.Facts.Presentation.PageRequestError+Presentation.Item : ToolUp.Facts.Presentation.PresentationRequestError { get }
+ToolUp.Facts.Presentation.PageRequestError+Tags (class)
+ToolUp.Facts.Presentation.PageRequestError+Tags.InvalidField : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequestError+Tags.MissingField : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequestError+Tags.NotJson : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequestError+Tags.Presentation : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequestError+Tags.UnknownKind : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequestError+UnknownKind (class)
+ToolUp.Facts.Presentation.PageRequestError+UnknownKind.kind : System.String { get }
+ToolUp.Facts.Presentation.PageRequestErrorModule (class)
+ToolUp.Facts.Presentation.PageRequestErrorModule.describe(ToolUp.Facts.Presentation.PageRequestError) : System.String
+ToolUp.Facts.Presentation.PageRequestModule (class)
+ToolUp.Facts.Presentation.PageRequestModule.PipelineKind : System.String (literal)
+ToolUp.Facts.Presentation.PageRequestModule.PresentationKind : System.String (literal)
+ToolUp.Facts.Presentation.PageRequestModule.dependsOn(ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.Presentation.PageRequestModule.kind(ToolUp.Facts.Presentation.PageRequest) : System.String
+ToolUp.Facts.Presentation.PageRequestModule.ofJVal(Fuaran.Core.JVal) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageRequest, ToolUp.Facts.Presentation.PageRequestError]
+ToolUp.Facts.Presentation.PageRequestModule.ofJson(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageRequest, ToolUp.Facts.Presentation.PageRequestError]
+ToolUp.Facts.Presentation.PageRequestModule.tableId(ToolUp.Facts.Presentation.PageRequest) : System.String
+ToolUp.Facts.Presentation.PageRequestModule.toJVal(ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.JVal, ToolUp.Facts.Presentation.PageRequestError]
+ToolUp.Facts.Presentation.PageRequestModule.toJson(ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.PageRequestError]
+ToolUp.Facts.Presentation.PageResolution (class)
+ToolUp.Facts.Presentation.PageResolution..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.Presentation.PageResolution.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageResolution.FactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageResolution.Kind : System.String { get }
+ToolUp.Facts.Presentation.PageResolution.Notes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageResolution.Rows : System.Int32 { get }
+ToolUp.Facts.Presentation.PageResolution.RunStamp : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.Presentation.PageResolution.Table : System.String { get }
+ToolUp.Facts.Presentation.PageResolution.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld] { get }
+ToolUp.Facts.Presentation.PageResolutionModule (class)
+ToolUp.Facts.Presentation.PageResolutionModule.table(ToolUp.Facts.Presentation.PageResolution) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.Table, System.String]
+ToolUp.Facts.Presentation.PageResolutionModule.toJVal(ToolUp.Facts.Presentation.PageResolution) : Fuaran.Core.JVal
+ToolUp.Facts.Presentation.PageResolutionModule.toJson(ToolUp.Facts.Presentation.PageResolution) : System.String
+ToolUp.Facts.Presentation.PageResolutionModule.withheldCount(ToolUp.Facts.Presentation.PageResolution) : System.Int32
 ToolUp.Facts.Presentation.PipelineBlock (class)
 ToolUp.Facts.Presentation.PipelineBlock.Kind : System.String (literal)
 ToolUp.Facts.Presentation.PipelineBlock.cellText(Fuaran.Core.Cell) : System.String
@@ -48,6 +112,7 @@ ToolUp.Facts.Presentation.PipelineBlockResult.Table : System.String { get }
 ToolUp.Facts.Presentation.PipelineBlockResult.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.PipelineBlockColumn] { get }
 ToolUp.Facts.Presentation.Presentation (class)
 ToolUp.Facts.Presentation.Presentation.build`1(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.SeriesAnswer]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationBlock`1[Msg], ToolUp.Facts.Presentation.PresentationDefect]
+ToolUp.Facts.Presentation.Presentation.data(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.SeriesAnswer]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationData, ToolUp.Facts.Presentation.PresentationDefect]
 ToolUp.Facts.Presentation.Presentation.findings`1(Fuaran.UI.Generated+Node`1[Msg]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.Presentation.PresentationAnnotation (class)
 ToolUp.Facts.Presentation.PresentationAnnotation..ctor(System.DateTime, System.String)
@@ -61,6 +126,11 @@ ToolUp.Facts.Presentation.PresentationBlock`1.Provenance : ToolUp.Platform.AI.Bl
 ToolUp.Facts.Presentation.PresentationCompareTo (class)
 ToolUp.Facts.Presentation.PresentationCompareTo.PreviousDelivery : ToolUp.Facts.Presentation.PresentationCompareTo { get }
 ToolUp.Facts.Presentation.PresentationCompareTo.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.PresentationData (class)
+ToolUp.Facts.Presentation.PresentationData..ctor(Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Core.Table], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.AI.BlockProvenance)
+ToolUp.Facts.Presentation.PresentationData.Notes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PresentationData.Provenance : ToolUp.Platform.AI.BlockProvenance { get }
+ToolUp.Facts.Presentation.PresentationData.Table : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Core.Table] { get }
 ToolUp.Facts.Presentation.PresentationDay (class)
 ToolUp.Facts.Presentation.PresentationDay.iso(System.DateTime) : System.String
 ToolUp.Facts.Presentation.PresentationDay.ofDateTime(System.DateTime) : System.DateTime
