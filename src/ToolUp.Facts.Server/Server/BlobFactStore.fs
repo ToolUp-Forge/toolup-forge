@@ -217,7 +217,7 @@ module internal FactIndexLayout =
         match d.Kind with
         | DateTimeKind.Utc -> 'U', d.Ticks
         | DateTimeKind.Unspecified -> 'N', d.Ticks
-        | _ -> 'L', d.ToUniversalTime().Ticks
+        | _ -> 'L', (Fact.instant d).Ticks
 
     /// The leaf blob name for one fact.
     let leafName (f: Fact) : string =
@@ -301,13 +301,14 @@ module internal FactIndexLayout =
         period.From.Ticks < toHi && fromLo < period.To.Ticks
 
     // Does one endpoint canonicalise — as the lineage key does, through
-    // `ToUniversalTime` on THIS machine — to the target's instant?
+    // `Fact.instant` (an `Unspecified` endpoint read as UTC on every
+    // machine) — to the target's instant?
     let private sameInstant (kind: char) (ticks: int64) (target: DateTime) : bool =
-        let targetUtc = target.ToUniversalTime().Ticks
+        let targetUtc = (Fact.instant target).Ticks
 
         match kind with
-        | 'U' -> ticks = targetUtc
-        | 'N' -> DateTime(ticks, DateTimeKind.Unspecified).ToUniversalTime().Ticks = targetUtc
+        | 'U'
+        | 'N' -> ticks = targetUtc
         | _ -> abs (ticks - targetUtc) <= LocalTolerance
 
     /// Could this leaf's fact share a lineage with a fact over

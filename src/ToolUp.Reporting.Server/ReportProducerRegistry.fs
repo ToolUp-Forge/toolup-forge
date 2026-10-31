@@ -226,7 +226,7 @@ module GroundedNarrativeProducer =
                     }
 
                 match outcome with
-                | GroundedNarrativePublished(_, document, _, _, _) ->
+                | GroundedNarrativePublished(document = document) ->
                     return
                         Ok {
                             TemplateId = templateId

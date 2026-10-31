@@ -3148,7 +3148,7 @@ module PlatformClientProxies =
 
     /// Generated JSON decoder for `JobDefinition` — members by name, cases by case name, read off the type's own shape.
     let decodeJobDefinition: JsonDecoder<JobDefinition> =
-        JsonDecode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags -> ({
+        JsonDecode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags lastRunWarning -> ({
             JobId = jobId
             ScopeId = scopeId
             Handler = handler
@@ -3167,6 +3167,7 @@ module PlatformClientProxies =
             LastRunError = lastRunError
             ConsecutiveFailures = consecutiveFailures
             Tags = tags
+            LastRunWarning = lastRunWarning
         }: JobDefinition))
         |> JsonDecode.apply (JsonDecode.field "JobId" JsonDecode.asGuid)
         |> JsonDecode.apply (JsonDecode.field "ScopeId" JsonDecode.asString)
@@ -3186,6 +3187,7 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.optionalField "LastRunError" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "ConsecutiveFailures" JsonDecode.asInt32)
         |> JsonDecode.apply (JsonDecode.field "Tags" (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asString))
+        |> JsonDecode.apply (JsonDecode.optionalField "LastRunWarning" JsonDecode.asString)
 
     /// Generated JSON decoder for `ExternalHandle` — members by name, cases by case name, read off the type's own shape.
     let decodeExternalHandle: JsonDecoder<ExternalHandle> =
@@ -3204,7 +3206,7 @@ module PlatformClientProxies =
 
     /// Generated JSON decoder for `JobRun` — members by name, cases by case name, read off the type's own shape.
     let decodeJobRun: JsonDecoder<JobRun> =
-        JsonDecode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle -> ({
+        JsonDecode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle warning -> ({
             RunId = runId
             JobId = jobId
             ScopeId = scopeId
@@ -3215,6 +3217,7 @@ module PlatformClientProxies =
             Error = error
             DurationMs = durationMs
             ExternalHandle = externalHandle
+            Warning = warning
         }: JobRun))
         |> JsonDecode.apply (JsonDecode.field "RunId" JsonDecode.asGuid)
         |> JsonDecode.apply (JsonDecode.field "JobId" JsonDecode.asGuid)
@@ -3226,6 +3229,7 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.optionalField "Error" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.optionalField "DurationMs" JsonDecode.asInt64)
         |> JsonDecode.apply (JsonDecode.optionalField "ExternalHandle" decodeExternalHandle)
+        |> JsonDecode.apply (JsonDecode.optionalField "Warning" JsonDecode.asString)
 
     /// Generated JSON decoder for `ScheduleError` — members by name, cases by case name, read off the type's own shape.
     let decodeScheduleError: JsonDecoder<ScheduleError> =

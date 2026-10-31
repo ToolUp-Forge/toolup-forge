@@ -1231,6 +1231,7 @@ let private handoffTests =
                 Error = Some "upstream timeout"
                 DurationMs = Some 300_000L
                 ExternalHandle = None
+                Warning = None
             }
 
             // Build a genuine pre-319 blob by serialising and stripping
@@ -1991,6 +1992,7 @@ let private pinCapture () : string =
                 Error = None
                 DurationMs = None
                 ExternalHandle = None
+                Warning = None
             }
             |> Async.RunSynchronously
 
@@ -2044,6 +2046,7 @@ let private lifecycleJob: JobDefinition = {
     LastRunError = None
     ConsecutiveFailures = 2
     Tags = Map.empty
+    LastRunWarning = None
 }
 
 let private lifecycleHandle: ExternalHandle = {
@@ -2065,6 +2068,7 @@ let private lifecycleRun (attempt: int) : JobRun = {
     Error = None
     DurationMs = None
     ExternalHandle = None
+    Warning = None
 }
 
 let private ended (origin: JobLifecycle.TransitionOrigin) (attempt: int) (outcome: JobLifecycle.RunOutcome) =

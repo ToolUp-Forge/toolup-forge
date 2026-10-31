@@ -208,6 +208,7 @@ type RecordingScheduler() =
                                 LastRunError = None
                                 ConsecutiveFailures = 0
                                 Tags = registration.Tags
+                                LastRunWarning = None
                             }
 
                             return Result.Ok(Scheduled jobId)

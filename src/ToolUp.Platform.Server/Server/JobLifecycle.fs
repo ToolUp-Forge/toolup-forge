@@ -152,6 +152,10 @@ type RunOutcome =
     /// The dispatch loop spent its last attempt on a retriable failure; the
     /// failure is promoted to a dead letter on a row of its own.
     | RetriesExhausted
+    /// The attempt succeeded with a warning an operator should see: ends the
+    /// run exactly as `Completed` does, with the warning on the row and the
+    /// definition.
+    | CompletedWithWarning of warning: string
 
 module RunOutcome =
     /// A handler's result as a run outcome.
@@ -161,6 +165,7 @@ module RunOutcome =
         | TransientFailure error -> Retriable error
         | PermanentFailure error -> Terminal error
         | JobResult.HandedOff handle -> HandedOff handle
+        | SuccessWithWarning warning -> CompletedWithWarning warning
 
     /// A backend's outcome as a run outcome; `None` while it is still pending
     /// or running, which ends nothing.
@@ -370,6 +375,7 @@ let transition
                 CompletedAt = Some now
                 Error = error
                 DurationMs = Some durationMs
+                Warning = None
         }
 
         let fold status error failures = {
@@ -384,6 +390,7 @@ let transition
                 LastRunAt = Some now
                 LastRunStatus = Some status
                 LastRunError = error
+                LastRunWarning = None
                 ConsecutiveFailures = failures
         }
 
@@ -452,10 +459,15 @@ let transition
 
         let attemptsRemain = run.Attempt < policy.MaxAttempts
 
-        match outcome with
-        | Completed -> {
+        /// A success, with the warning it carries (if any) on the row and
+        /// the definition.
+        let completed (warning: string option) = {
             ScopeId = scope
-            Row = Some(ended Succeeded None)
+            Row =
+                Some {
+                    ended Succeeded None with
+                        Warning = warning
+                }
             Events =
                 event "JobCompleted" {
                     JobId = run.JobId
@@ -467,9 +479,18 @@ let transition
                 }
                 :: reconciled
             Notify = None
-            Definition = Some(fold Succeeded priorError 0)
+            Definition =
+                Some {
+                    fold Succeeded priorError 0 with
+                        LastRunWarning = warning
+                }
             Continue = Stop
-          }
+        }
+
+        match outcome with
+        | Completed -> completed None
+
+        | CompletedWithWarning warning -> completed (Some warning)
 
         | Retriable error ->
             match origin with
@@ -593,6 +614,7 @@ let unattempted (job: JobDefinition) (now: DateTime) : Transition = {
                 LastRunAt = Some now
                 LastRunStatus = Some Pending
                 LastRunError = None
+                LastRunWarning = None
         }
     Continue = Stop
 }

@@ -13,7 +13,9 @@ module ToolUp.AI.GroundedNarrativeRun
 // token. The run assembles a `NarrativeDocument` from that prose and the
 // projections, puts it through the fact tier's grounding gate, and either
 // publishes it (narrative store, knowledge base, grounding certificate) or
-// refuses it. Either way the outcome is one audit row.
+// repairs it (below) and publishes what is grounded — refusing it only when
+// the definition's repair policy says so or nothing survives. The outcome is
+// one audit row, beside one row per repair round.
 //
 // **Placement (985.A).** No package references the AI, fact and reporting
 // server tiers together, and none should: the gate lives beside the fact
@@ -417,6 +419,552 @@ let systemPrompt (definition: GroundedNarrativeDefinition) (toolNames: string li
 
     sb.ToString()
 
+// ── The repair loop ──────────────────────────────────────────────
+//
+// A draft the gate refuses is repaired, not dropped: the run asks the model,
+// in the same conversation, to rewrite the elements that hold the refused
+// claims, splices each rewrite in place of its element alone, and puts the
+// WHOLE document through the gate again — a rewrite can break a neighbour,
+// and the gate stays the only judge. While the rounds make progress the
+// loop goes on; when they stop (`GroundedRepairPolicy`), what is still
+// refused is cut away at the smallest unit that holds it, a note names each
+// withheld claim's place and reason (never its value — the note passes the
+// gate itself), and the grounded remainder is published.
+//
+// The pure parts — progress, stopping, where a refused claim sits, the
+// splice, the prune and the note — are below; the runner drives them.
+
+/// The repair loop's pure decisions and document edits.
+module GroundedRepair =
+
+    /// Why the repair loop stopped.
+    type Stop =
+        /// No refused claim is left.
+        | Settled
+        /// `MaxRoundsWithoutProgress` rounds in a row made no progress.
+        | NoProgress
+        /// `MaxRepairRounds` rounds were taken.
+        | Ceiling
+        /// The run's model calls reached `MaxRunTokens`.
+        | TokenBudget
+        /// No refused claim sits in prose the model wrote, so there is
+        /// nothing to ask it to rewrite.
+        | Unrepairable
+        /// A repair call produced no answer; the reason.
+        | ModelFailed of reason: string
+
+    module Stop =
+        let describe (stop: Stop) : string =
+            match stop with
+            | Settled -> "every claim is grounded"
+            | NoProgress -> "the repair stopped making progress"
+            | Ceiling -> "the repair-round ceiling was reached"
+            | TokenBudget -> "the run's token budget was reached"
+            | Unrepairable -> "no refused claim is in prose the model can rewrite"
+            | ModelFailed reason -> sprintf "a repair call failed: %s" reason
+
+    /// Where the loop stands between rounds.
+    type Progress = {
+        /// Rounds taken.
+        Rounds: int
+        /// Rounds in a row, ending with the last, that made no progress.
+        RoundsWithoutProgress: int
+        /// Tokens the run's model calls have spent.
+        Tokens: int64
+    }
+
+    /// Before the first round.
+    let start: Progress = {
+        Rounds = 0
+        RoundsWithoutProgress = 0
+        Tokens = 0L
+    }
+
+    /// Whether `next` is progress on `previous`: fewer refused claims, or as
+    /// many with different members (the model is working on them, not
+    /// repeating itself).
+    let isProgress (previous: GroundingOffence list) (next: GroundingOffence list) : bool =
+        let members = List.map GroundingOffence.describe >> Set.ofList
+
+        List.length next < List.length previous
+        || (List.length next = List.length previous && members next <> members previous)
+
+    /// Whether the loop stops before another round, and why.
+    let shouldStop (policy: GroundedRepairPolicy) (progress: Progress) : Stop option =
+        if progress.Rounds >= policy.MaxRepairRounds then
+            Some Ceiling
+        elif progress.RoundsWithoutProgress >= policy.MaxRoundsWithoutProgress then
+            Some NoProgress
+        else
+            match policy.MaxRunTokens with
+            | Some budget when progress.Tokens >= budget -> Some TokenBudget
+            | _ -> None
+
+    /// The progress after one more round, which `made` progress or not, with
+    /// the run's token count now at `tokens`.
+    let advance (made: bool) (tokens: int64) (progress: Progress) : Progress = {
+        Rounds = progress.Rounds + 1
+        RoundsWithoutProgress = if made then 0 else progress.RoundsWithoutProgress + 1
+        Tokens = tokens
+    }
+
+    // ── Where a refused claim sits ──────────────────────────────
+
+    /// The smallest unit of an element a refused claim can be cut at.
+    type Part =
+        /// The element as a whole.
+        | WholeElement
+        /// A top-level span of a paragraph, heading, callout or quote.
+        | Span of int
+        /// A list item.
+        | Item of int
+        /// A table row.
+        | Row of int
+        /// A key-value entry.
+        | Entry of int
+
+    /// The section, the element (numbered from one) and the part of it a
+    /// refused claim sits in.
+    type Place = {
+        Section: string
+        Element: int
+        Part: Part
+    }
+
+    let private located =
+        Regex(@"^section '(?<section>.*?)' › element (?<element>\d+)(?<rest>.*)$", RegexOptions.CultureInvariant)
+
+    let private firstStep =
+        Regex(@"^ › (?<step>span|item|row|entry) (?<n>\d+)", RegexOptions.CultureInvariant)
+
+    /// Read the place out of a gate offence's `Location`
+    /// (`section 'summary' › element 2 › span 1`, `… › row 3 › column 2`).
+    /// `None` when it is not a place in a section's element list.
+    let tryPlace (location: string) : Place option =
+        let m = located.Match location
+
+        if not m.Success then
+            None
+        else
+            let step = firstStep.Match m.Groups["rest"].Value
+
+            let part =
+                if not step.Success then
+                    WholeElement
+                else
+                    let n = int step.Groups["n"].Value
+
+                    match step.Groups["step"].Value with
+                    | "span" -> Span n
+                    | "item" -> Item n
+                    | "row" -> Row n
+                    | _ -> Entry n
+
+            Some {
+                Section = m.Groups["section"].Value
+                Element = int m.Groups["element"].Value
+                Part = part
+            }
+
+    // ── The splice ──────────────────────────────────────────────
+
+    /// One element the model rewrote.
+    type Repair = {
+        Section: string
+        /// The element's number in its section, from one.
+        Element: int
+        /// The rewrite, in the format the model writes a paragraph in.
+        Text: string
+    }
+
+    let private isConjecture (element: NarrativeElement) =
+        match element with
+        | Callout(_, Strong label :: _) -> label = ConjectureLabel
+        | _ -> false
+
+    /// Whether `element` is prose the model wrote, and so the model's to
+    /// rewrite: a paragraph, or a conjecture callout.
+    let isProse (element: NarrativeElement) : bool =
+        match element with
+        | Paragraph _ -> true
+        | other -> isConjecture other
+
+    /// The elements one paragraph string of the model's becomes, as
+    /// `assemble` builds them.
+    let elementsOf (text: string) : NarrativeElement list =
+        proseOf text
+        |> List.choose (function
+            | ProseParagraph [] -> None
+            | ProseParagraph spans -> Some(Paragraph spans)
+            | ProseConjecture conjecture -> Some(conjectureCallout conjecture))
+
+    /// A prose element in the format the model writes it in: each `Metric`
+    /// span back as its citation token, a conjecture as `{{...}}`.
+    let tokensOf (element: NarrativeElement) : string =
+        let rec spans (xs: InlineSpan list) =
+            xs
+            |> List.map (function
+                | Text s
+                | Emphasis s
+                | Strong s
+                | Code s -> s
+                | Metric(label, value, Some reference) -> sprintf "[[%s|%s|%s]]" label value reference
+                | Metric(label, value, None) -> sprintf "[[%s|%s]]" label value
+                | Link(_, inner) -> spans inner
+                | Image(_, alt, _) -> alt
+                | Br -> " ")
+            |> String.concat ""
+
+        match element with
+        | Paragraph xs -> spans xs
+        | Callout(_, _ :: rest) when isConjecture element -> "{{" + (spans rest).TrimStart(':', ' ') + "}}"
+        | _ -> ""
+
+    /// The document with each repaired element replaced by its rewrite and
+    /// nothing else moved. A repair naming an element that is not the
+    /// model's prose is ignored; a later repair of one element replaces an
+    /// earlier.
+    let splice (repairs: Repair list) (document: NarrativeDocument) : NarrativeDocument =
+        let rewrites =
+            repairs |> List.map (fun r -> (r.Section, r.Element), r.Text) |> Map.ofList
+
+        {
+            document with
+                Sections =
+                    document.Sections
+                    |> List.map (fun section -> {
+                        section with
+                            Elements =
+                                section.Elements
+                                |> List.mapi (fun i element ->
+                                    match rewrites.TryFind(section.Id, i + 1) with
+                                    | Some text when isProse element -> elementsOf text
+                                    | _ -> [ element ])
+                                |> List.concat
+                    })
+        }
+
+    // ── The repair instruction and its answer ────────────────────
+
+    /// The instruction for one repair round: each prose element holding a
+    /// refused claim, as written, with every claim refused in it and why.
+    /// `None` when no refused claim sits in the model's prose.
+    let instruction (document: NarrativeDocument) (offences: GroundingOffence list) : string option =
+        let elementAt (place: Place) =
+            document.Sections
+            |> List.tryFind (fun s -> s.Id = place.Section)
+            |> Option.bind (fun s -> List.tryItem (place.Element - 1) s.Elements)
+
+        let targets =
+            offences
+            |> List.choose (fun o ->
+                tryPlace o.Location
+                |> Option.bind (fun place ->
+                    match elementAt place with
+                    | Some element when isProse element -> Some((place.Section, place.Element), (element, o))
+                    | _ -> None))
+            |> List.groupBy fst
+            |> List.map (fun (key, xs) -> key, fst (snd xs.Head), xs |> List.map (snd >> snd))
+
+        if List.isEmpty targets then
+            None
+        else
+            let sb = StringBuilder()
+            let line (s: string) = sb.AppendLine s |> ignore
+
+            line
+                "The report was refused, and nothing was published: some claims are not grounded. Rewrite ONLY the elements below and leave every other element as it is. The rules still hold: every figure a citation token, no other digits, no numbers in words. Where a value is misstated, the reason gives the recorded value; cite that, with its reference. A claim you cannot ground, leave out."
+
+            for ((section, element), written, refused) in targets do
+                line ""
+                line (sprintf "Section '%s', element %d, as written: %s" section element (tokensOf written))
+
+                for o in refused do
+                    line (sprintf "- refused: \"%s\" — %s" o.Claim (GroundingOffenceReason.describe o.Reason))
+
+            line ""
+
+            line
+                "Answer with ONLY a JSON object: {\"repairs\":[{\"section\":\"<section id>\",\"element\":<element number>,\"text\":\"<the rewritten element>\"}]}"
+
+            Some(sb.ToString())
+
+    /// Read a repair answer. `Error` names what is wrong with its format.
+    let parseRepairs (content: string) : Result<Repair list, string> =
+        let first = if isNull content then -1 else content.IndexOf '{'
+        let last = if isNull content then -1 else content.LastIndexOf '}'
+
+        if first < 0 || last <= first then
+            Error "the repair answer is not a JSON object"
+        else
+            try
+                use doc = JsonDocument.Parse(content.Substring(first, last - first + 1))
+
+                match doc.RootElement.TryGetProperty "repairs" with
+                | true, repairs when repairs.ValueKind = JsonValueKind.Array ->
+                    repairs.EnumerateArray()
+                    |> Seq.choose (fun r ->
+                        if r.ValueKind <> JsonValueKind.Object then
+                            None
+                        else
+                            match stringProperty "section" r, r.TryGetProperty "element", stringProperty "text" r with
+                            | Some section, (true, element), Some text when element.ValueKind = JsonValueKind.Number ->
+                                match element.TryGetInt32() with
+                                | true, n ->
+                                    Some {
+                                        Section = section
+                                        Element = n
+                                        Text = text
+                                    }
+                                | _ -> None
+                            | _ -> None)
+                    |> List.ofSeq
+                    |> Ok
+                | _ -> Error "the repair answer has no \"repairs\" array"
+            with ex ->
+                Error(sprintf "the repair answer is not valid JSON: %s" ex.Message)
+
+    // ── The prune and the note ───────────────────────────────────
+
+    let private meaningful (spans: InlineSpan list) =
+        spans
+        |> List.exists (function
+            | Text s
+            | Emphasis s
+            | Strong s
+            | Code s -> s |> Seq.exists Char.IsLetterOrDigit
+            | Metric _
+            | Link _
+            | Image _ -> true
+            | Br -> false)
+
+    let private without (numbers: Set<int>) (xs: 'a list) : 'a list =
+        xs
+        |> List.indexed
+        |> List.filter (fun (i, _) -> not (numbers.Contains(i + 1)))
+        |> List.map snd
+
+    /// `element` with `parts` cut away; `None` when nothing of it survives —
+    /// a paragraph with no meaningful span left, a list with no item, a
+    /// table with no row. A part that does not fit the element (or any
+    /// `WholeElement`) takes the whole element.
+    let cut (parts: Part list) (element: NarrativeElement) : NarrativeElement option =
+        let numbers pick =
+            let picked = parts |> List.map pick
+
+            if List.forall Option.isSome picked then
+                Some(picked |> List.choose id |> Set.ofList)
+            else
+                None
+
+        let spans =
+            numbers (function
+                | Span n -> Some n
+                | _ -> None)
+
+        let items =
+            numbers (function
+                | Item n -> Some n
+                | _ -> None)
+
+        let rows =
+            numbers (function
+                | Row n -> Some n
+                | _ -> None)
+
+        let entries =
+            numbers (function
+                | Entry n -> Some n
+                | _ -> None)
+
+        let prose (rebuild: InlineSpan list -> NarrativeElement) (xs: InlineSpan list) =
+            match spans with
+            | Some cutAt ->
+                let kept = without cutAt xs
+                if meaningful kept then Some(rebuild kept) else None
+            | None -> None
+
+        let nonEmpty (rebuild: 'a list -> NarrativeElement) (cutAt: Set<int> option) (xs: 'a list) =
+            match cutAt with
+            | Some cutAt ->
+                match without cutAt xs with
+                | [] -> None
+                | kept -> Some(rebuild kept)
+            | None -> None
+
+        match element with
+        | _ when isConjecture element -> None
+        | Paragraph xs -> prose Paragraph xs
+        | Heading(level, xs) -> prose (fun kept -> Heading(level, kept)) xs
+        | Callout(severity, xs) -> prose (fun kept -> Callout(severity, kept)) xs
+        | Blockquote(citation, xs) -> prose (fun kept -> Blockquote(citation, kept)) xs
+        | BulletList xs -> nonEmpty BulletList items xs
+        | OrderedList xs -> nonEmpty OrderedList items xs
+        | Table(columns, xs) -> nonEmpty (fun kept -> Table(columns, kept)) rows xs
+        | KeyValueGrid xs -> nonEmpty KeyValueGrid entries xs
+        | _ -> None
+
+    /// The document with every refused claim cut away at the smallest unit
+    /// that holds it: a span, else a list item, table row or entry, else the
+    /// element. `Error` names a claim whose place cannot be read.
+    let prune (offences: GroundingOffence list) (document: NarrativeDocument) : Result<NarrativeDocument, string> =
+        let placed = offences |> List.map (fun o -> o, tryPlace o.Location)
+
+        match placed |> List.tryFind (snd >> Option.isNone) with
+        | Some(o, _) -> Error(sprintf "the place of a refused claim cannot be read: %s" o.Location)
+        | None ->
+            let partsAt =
+                placed
+                |> List.choose snd
+                |> List.groupBy (fun p -> p.Section, p.Element)
+                |> List.map (fun (key, places) -> key, places |> List.map _.Part)
+                |> Map.ofList
+
+            Ok {
+                document with
+                    Sections =
+                        document.Sections
+                        |> List.map (fun section -> {
+                            section with
+                                Elements =
+                                    section.Elements
+                                    |> List.mapi (fun i element ->
+                                        match partsAt.TryFind(section.Id, i + 1) with
+                                        | Some parts -> cut parts element
+                                        | None -> Some element)
+                                    |> List.choose id
+                        })
+            }
+
+    /// The id of the section the withheld-claims note is published as.
+    [<Literal>]
+    let WithheldSectionId = "withheld-claims"
+
+    /// The heading the withheld-claims note carries.
+    [<Literal>]
+    let WithheldHeading = "Withheld claims"
+
+    /// Why a claim was withheld, in words a reader of the report can take
+    /// in — no reference, no value, no digit.
+    let withheldReason (reason: GroundingOffenceReason) : string =
+        match reason with
+        | UnreferencedNumber -> "a number that is not a recorded fact"
+        | MetricWithoutReference -> "a figure that cites no recorded fact"
+        | UnresolvedReference _ -> "a figure whose reference does not resolve"
+        | SupersededReference _ -> "a figure whose recorded fact has since been revised"
+        | UndisclosableReference _ -> "a figure that may not be disclosed here"
+        | MisstatedValue _ -> "a figure that does not match its recorded value"
+        | UnregisteredReferenceKind _ -> "a figure citing an unknown kind of reference"
+
+    /// The note a report published with withheld claims carries: each
+    /// withheld claim's place (the section by its heading, the kind of unit
+    /// cut) and its reason, and never the value it stated. A heading that
+    /// carries a digit is named as "a section", so the note states no number
+    /// and passes the gate on its own.
+    let withheldNote (document: NarrativeDocument) (offences: GroundingOffence list) : NarrativeSection =
+        let sectionName (id: string) =
+            match document.Sections |> List.tryFind (fun s -> s.Id = id) with
+            | Some s when
+                not (String.IsNullOrWhiteSpace s.Heading)
+                && not (s.Heading |> Seq.exists Char.IsDigit)
+                ->
+                sprintf "the section \"%s\"" s.Heading
+            | _ -> "a section"
+
+        let unitName (part: Part) =
+            match part with
+            | WholeElement -> "an element"
+            | Span _ -> "part of a paragraph"
+            | Item _ -> "a list item"
+            | Row _ -> "a table row"
+            | Entry _ -> "an entry"
+
+        let items =
+            offences
+            |> List.map (fun o ->
+                let where =
+                    match tryPlace o.Location with
+                    | Some place -> sprintf "%s in %s" (unitName place.Part) (sectionName place.Section)
+                    | None -> "a claim"
+
+                sprintf "%s: %s" where (withheldReason o.Reason))
+            |> List.distinct
+            |> List.map (fun s -> [ Text s ])
+
+        {
+            Id = WithheldSectionId
+            Heading = WithheldHeading
+            Subheading = None
+            Elements = [
+                Paragraph [
+                    Text "Some claims in this report could not be grounded in a recorded fact, so they were withheld:"
+                ]
+                BulletList items
+            ]
+        }
+
+    /// Whether anything of the report itself survives in `document` — a
+    /// section other than the note with an element left.
+    let survives (document: NarrativeDocument) : bool =
+        document.Sections
+        |> List.exists (fun s -> s.Id <> WithheldSectionId && not (List.isEmpty s.Elements))
+
+/// The run's model calls, counted: every call goes to `inner`, and the
+/// tokens each reply reports (prompt plus output) are summed, so the repair
+/// loop can hold the run to its token budget. Forwards the per-call options
+/// capability, so the run's call budget reaches the provider unchanged.
+type internal TokenTally(inner: IAIProvider) =
+    let mutable tokens = 0L
+
+    let count (sent: Result<AIProviderResponse, AIProviderError>) =
+        match sent with
+        | Ok response ->
+            match response.Usage with
+            | Some usage ->
+                Interlocked.Add(&tokens, int64 usage.PromptTokens + int64 usage.OutputTokens)
+                |> ignore
+            | None -> ()
+        | Error _ -> ()
+
+        sent
+
+    /// The tokens the calls so far reported.
+    member _.Tokens: int64 = Interlocked.Read(&tokens)
+
+    interface IAIProvider with
+        member _.Capabilities = inner.Capabilities
+
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
+            let! sent = inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+            return count sent
+        }
+
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let! sent = inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            return count sent
+        }
+
+    interface IAIProviderModelOverride with
+        member _.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) = async {
+            let! sent = inner.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy)
+
+            return
+                sent
+                |> Result.map (fun call ->
+                    count (Ok call.Response) |> ignore
+                    call)
+        }
+
+        member _.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let! sent = inner.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy)
+
+            return
+                sent
+                |> Result.map (fun call ->
+                    count (Ok call.Response) |> ignore
+                    call)
+        }
+
 // ── The run ──────────────────────────────────────────────────────
 
 let private jsonOptions = FableConverters.create ()
@@ -453,6 +1001,32 @@ type internal GroundedNarrativeAuditRow = {
     /// Phase 1136 — each requested projection refused, naming the request
     /// and why. A row written before 1136 reads as none.
     ProjectionRefusals: string list
+    /// The repair rounds the run took; a row written before the repair loop
+    /// existed reads as 0, which is what those runs took.
+    RepairRounds: int
+    /// Each claim withheld from a narrative published with withheld claims,
+    /// as the gate refused it. A row written before the repair loop reads
+    /// as none.
+    Withheld: string list
+}
+
+/// One repair round, on the audit trail beside the run's outcome row.
+type internal GroundedNarrativeRepairRow = {
+    RunKey: string
+    Trigger: string
+    /// The round's number, from one.
+    Round: int
+    /// The refused claims the round was asked to repair.
+    OffencesIn: string list
+    /// The refused claims after it.
+    OffencesOut: string list
+    /// Whether it made progress (`GroundedRepair.isProgress`).
+    Progress: bool
+    /// The tokens the run's model calls had spent when it ended.
+    Tokens: int64
+    /// What went wrong in it, when something did: an unreadable answer, or
+    /// a failed call.
+    Detail: string option
 }
 
 module internal GroundedNarrativeAuditRow =
@@ -464,10 +1038,16 @@ module internal GroundedNarrativeAuditRow =
 
             if isNull (box row) || String.IsNullOrEmpty row.RunKey then
                 None
-            elif isNull (box row.ProjectionRefusals) then
-                Some { row with ProjectionRefusals = [] }
             else
-                Some row
+                Some {
+                    row with
+                        ProjectionRefusals =
+                            if isNull (box row.ProjectionRefusals) then
+                                []
+                            else
+                                row.ProjectionRefusals
+                        Withheld = if isNull (box row.Withheld) then [] else row.Withheld
+                }
         with _ ->
             None
 
@@ -695,7 +1275,7 @@ type private RunMarks = {
 type GroundedNarrativeRunner
     (services: IServiceProvider, registry: GroundedNarrativeRegistry, options: GroundedNarrativeRunOptions) =
 
-    let record (scopeId: string) (eventType: string) (row: GroundedNarrativeAuditRow) : Async<unit> = async {
+    let write (scopeId: string) (eventType: string) (payload: string) : Async<unit> = async {
         match tryService<IEventStore> services with
         | None -> return ()
         | Some events ->
@@ -707,11 +1287,17 @@ type GroundedNarrativeRunner
                         ScopeId = scopeId
                         SourceModule = GroundedNarrativeEvents.SourceModule
                         EventType = eventType
-                        Payload = JsonSerializer.Serialize(row, jsonOptions)
+                        Payload = payload
                     }
             with _ ->
                 ()
     }
+
+    let record (scopeId: string) (eventType: string) (row: GroundedNarrativeAuditRow) : Async<unit> =
+        write scopeId eventType (JsonSerializer.Serialize(row, jsonOptions))
+
+    let recordRound (scopeId: string) (row: GroundedNarrativeRepairRow) : Async<unit> =
+        write scopeId GroundedNarrativeEvents.RepairRoundType (JsonSerializer.Serialize(row, jsonOptions))
 
     /// Which wording a row's run used: the version and any
     /// fallback reason. A run that fails before its wording is resolved
@@ -746,6 +1332,8 @@ type GroundedNarrativeRunner
                     Conjectures = 0
                     Projections = 0
                     ProjectionRefusals = []
+                    RepairRounds = 0
+                    Withheld = []
                 }
 
             return result reason
@@ -918,26 +1506,20 @@ type GroundedNarrativeRunner
             return List.ofSeq drawn, List.ofSeq refusals
         }
 
-    let generate
+    /// Run the agent loop over `messages` with the run's tools: the final
+    /// answer's text and the conversation as it then stands, so a repair
+    /// round can continue it.
+    let converse
         (definition: GroundedNarrativeDefinition)
         (resolved: ResolvedScope)
         (scope: StorageScope)
         (provider: IAIProvider)
-        : Async<Result<GroundedSectionDraft list, GenerationShortfall>> =
+        (messages: AIProviderMessage list)
+        : Async<Result<string * AIProviderMessage list, GenerationShortfall>> =
         async {
             let tools = AIToolRegistry()
             tools.RegisterAll(options.Tools |> List.map (fun (def, exec) -> createTool def exec))
             let toolNames = options.Tools |> List.map (fun (def, _) -> def.Name)
-
-            let messages: AIProviderMessage list = [
-                {
-                    Role = "user"
-                    Content = "Write the report now, citing every figure."
-                    ToolCalls = []
-                    ToolResults = []
-                    Parts = []
-                }
-            ]
 
             let ctx, diScope = contextFor resolved scope definition.Principal
 
@@ -974,11 +1556,120 @@ type GroundedNarrativeRunner
                         |> List.tryFind (fun m -> m.Role = "assistant" && not (String.IsNullOrWhiteSpace m.Content))
 
                     match answer with
-                    | Some message -> return parseOutput message.Content |> Result.mapError GenerationFailed
+                    | Some message -> return Ok(message.Content, state.Messages)
                     | None -> return Error(GenerationFailed "the model returned no narrative")
             finally
                 diScope.Dispose()
         }
+
+    let userMessage (content: string) : AIProviderMessage = {
+        Role = "user"
+        Content = content
+        ToolCalls = []
+        ToolResults = []
+        Parts = []
+    }
+
+    /// The first draft: the model's sections, and the conversation that
+    /// wrote them.
+    let generate
+        (definition: GroundedNarrativeDefinition)
+        (resolved: ResolvedScope)
+        (scope: StorageScope)
+        (provider: IAIProvider)
+        : Async<Result<GroundedSectionDraft list * AIProviderMessage list, GenerationShortfall>> =
+        async {
+            match!
+                converse definition resolved scope provider [ userMessage "Write the report now, citing every figure." ]
+            with
+            | Error shortfall -> return Error shortfall
+            | Ok(content, conversation) ->
+                return
+                    parseOutput content
+                    |> Result.map (fun drafts -> drafts, conversation)
+                    |> Result.mapError GenerationFailed
+        }
+
+    /// Repair `document`, which the gate refused for `offences`, while the
+    /// repair makes progress (`GroundedRepairPolicy`), recording every
+    /// round. Answers the best document reached with the gate's verdict over
+    /// it, the rounds taken and why the loop stopped. A round that made no
+    /// progress is not kept: the next round starts from the best document,
+    /// in the conversation as it now stands.
+    let repair
+        (request: GroundedNarrativeRequest)
+        (gate: INarrativeGroundingGate)
+        (definition: GroundedNarrativeDefinition)
+        (scope: StorageScope)
+        (tally: TokenTally)
+        (document: NarrativeDocument)
+        (offences: GroundingOffence list)
+        (conversation: AIProviderMessage list)
+        : Async<NarrativeDocument * NarrativeGroundingVerdict * int * GroundedRepair.Stop> =
+        let policy = definition.RepairPolicy
+
+        let rec loop document offences conversation (progress: GroundedRepair.Progress) = async {
+            match GroundedRepair.shouldStop policy { progress with Tokens = tally.Tokens } with
+            | Some stop -> return document, Ungrounded offences, progress.Rounds, stop
+            | None ->
+                match GroundedRepair.instruction document offences with
+                | None -> return document, Ungrounded offences, progress.Rounds, GroundedRepair.Unrepairable
+                | Some instruction ->
+                    let round = progress.Rounds + 1
+                    let described = offences |> List.map GroundingOffence.describe
+
+                    let roundRow offencesOut made detail = {
+                        RunKey = request.RunKey
+                        Trigger = request.Trigger
+                        Round = round
+                        OffencesIn = described
+                        OffencesOut = offencesOut
+                        Progress = made
+                        Tokens = tally.Tokens
+                        Detail = detail
+                    }
+
+                    match!
+                        converse
+                            definition
+                            request.Scope
+                            scope
+                            (tally :> IAIProvider)
+                            (conversation @ [ userMessage instruction ])
+                    with
+                    | Error(GenerationFailed reason)
+                    | Error(GenerationOverBudget reason) ->
+                        do! recordRound request.Scope.ScopeId (roundRow described false (Some reason))
+                        return document, Ungrounded offences, round, GroundedRepair.ModelFailed reason
+                    | Ok(content, answered) ->
+                        let repaired, detail =
+                            match GroundedRepair.parseRepairs content with
+                            | Ok repairs -> GroundedRepair.splice repairs document, None
+                            | Error why -> document, Some why
+
+                        let! verdict = gate.Check(request.Scope, definition.Principal, definition.Surface, repaired)
+
+                        let after =
+                            match verdict with
+                            | Grounded _ -> []
+                            | Ungrounded remaining -> remaining
+
+                        let made = GroundedRepair.isProgress offences after
+
+                        do!
+                            recordRound
+                                request.Scope.ScopeId
+                                (roundRow (after |> List.map GroundingOffence.describe) made detail)
+
+                        let next = GroundedRepair.advance made tally.Tokens progress
+
+                        match verdict with
+                        | Grounded _ -> return repaired, verdict, round, GroundedRepair.Settled
+                        | Ungrounded _ when made -> return! loop repaired after answered next
+                        | Ungrounded _ -> return! loop document offences answered next
+        }
+
+        loop document offences conversation GroundedRepair.start
 
     let publish
         (request: GroundedNarrativeRequest)
@@ -988,6 +1679,7 @@ type GroundedNarrativeRunner
         (document: NarrativeDocument)
         (marks: RunMarks)
         (citations: NarrativeCitation list)
+        (repairSummary: GroundedRepairSummary)
         : Async<GroundedNarrativeOutcome> =
         async {
             let definition = wording.Definition
@@ -1029,7 +1721,11 @@ type GroundedNarrativeRunner
                     record request.Scope.ScopeId GroundedNarrativeEvents.PublishedType {
                         RunKey = request.RunKey
                         Trigger = request.Trigger
-                        Outcome = "published"
+                        Outcome =
+                            if GroundedRepairSummary.isComplete repairSummary then
+                                "published"
+                            else
+                                "published-with-withheld"
                         NarrativeId = Some(string narrativeId)
                         Citations = citations |> List.map _.Reference
                         Offences = []
@@ -1046,9 +1742,130 @@ type GroundedNarrativeRunner
                         Conjectures = marks.Conjectures
                         Projections = marks.Projections
                         ProjectionRefusals = marks.ProjectionRefusals
+                        RepairRounds = repairSummary.Rounds
+                        Withheld = repairSummary.Withheld |> List.map GroundingOffence.describe
                     }
 
-                return GroundedNarrativePublished(narrativeId, document, citations, indexed, certificate)
+                return GroundedNarrativePublished(narrativeId, document, citations, indexed, certificate, repairSummary)
+        }
+
+    /// The refusal: nothing is published, and the trail says why — every
+    /// refused claim, and, when the run repaired, why the repair stopped.
+    let refuse
+        (request: GroundedNarrativeRequest)
+        (wording: ResolvedWording)
+        (marks: RunMarks)
+        (offences: GroundingOffence list)
+        (rounds: int)
+        (detail: string option)
+        : Async<GroundedNarrativeOutcome> =
+        async {
+            do!
+                record request.Scope.ScopeId GroundedNarrativeEvents.RefusedType {
+                    RunKey = request.RunKey
+                    Trigger = request.Trigger
+                    Outcome = "refused"
+                    NarrativeId = None
+                    Citations = []
+                    Offences = offences |> List.map GroundingOffence.describe
+                    CertificateDigest = None
+                    Detail = detail
+                    PromptVersion = wording.Version
+                    PromptFallback = wording.Fallback
+                    Conjectures = marks.Conjectures
+                    Projections = marks.Projections
+                    ProjectionRefusals = marks.ProjectionRefusals
+                    RepairRounds = rounds
+                    Withheld = []
+                }
+
+            return GroundedNarrativeRefused offences
+        }
+
+    /// After the repair loop: publish the document whole when it passed;
+    /// otherwise — when the policy publishes the grounded remainder — cut
+    /// the refused claims away, add the withheld-claims note, and publish
+    /// what then passes the gate. Refuse when the policy does not publish a
+    /// remainder, when a refused claim cannot be placed, when nothing of the
+    /// report survives, or when the pruned document still does not pass.
+    let settle
+        (request: GroundedNarrativeRequest)
+        (wording: ResolvedWording)
+        (gate: INarrativeGroundingGate)
+        (scope: StorageScope)
+        (marks: RunMarks)
+        (document: NarrativeDocument)
+        (verdict: NarrativeGroundingVerdict)
+        (rounds: int)
+        (stop: GroundedRepair.Stop)
+        : Async<GroundedNarrativeOutcome> =
+        async {
+            let definition = wording.Definition
+
+            let stopped =
+                if rounds = 0 && stop = GroundedRepair.Ceiling then
+                    None
+                else
+                    Some(sprintf "repair stopped after %d round(s): %s" rounds (GroundedRepair.Stop.describe stop))
+
+            let check document =
+                gate.Check(request.Scope, definition.Principal, definition.Surface, document)
+
+            match verdict with
+            | Grounded citations ->
+                return!
+                    publish request wording gate scope document marks citations (GroundedRepairSummary.complete rounds)
+            | Ungrounded offences when not definition.RepairPolicy.PublishGroundedRemainder ->
+                return! refuse request wording marks offences rounds stopped
+            | Ungrounded offences ->
+                match GroundedRepair.prune offences document with
+                | Error why -> return! refuse request wording marks offences rounds (Some why)
+                | Ok pruned when not (GroundedRepair.survives pruned) ->
+                    return!
+                        refuse
+                            request
+                            wording
+                            marks
+                            offences
+                            rounds
+                            (Some "nothing of the report survives withholding its refused claims")
+                | Ok pruned ->
+                    let noted = {
+                        pruned with
+                            Sections = pruned.Sections @ [ GroundedRepair.withheldNote document offences ]
+                    }
+
+                    // A cut removes claims and adds none, so a second pass
+                    // only ever meets a line of the note itself (a heading
+                    // spelling a number in words): it is cut like any other.
+                    let! first = check noted
+
+                    let! final = async {
+                        match first with
+                        | Grounded citations -> return Ok(noted, citations)
+                        | Ungrounded again ->
+                            match GroundedRepair.prune again noted with
+                            | Error why -> return Error why
+                            | Ok recut ->
+                                match! check recut with
+                                | Grounded citations -> return Ok(recut, citations)
+                                | Ungrounded still ->
+                                    return
+                                        Error(
+                                            sprintf
+                                                "the pruned report still holds %d refused claim(s)"
+                                                (List.length still)
+                                        )
+                    }
+
+                    match final with
+                    | Ok(published, citations) ->
+                        return!
+                            publish request wording gate scope published marks citations {
+                                Rounds = rounds
+                                Withheld = offences
+                            }
+                    | Error why -> return! refuse request wording marks offences rounds (Some why)
         }
 
     member _.Run(request: GroundedNarrativeRequest) : Async<GroundedNarrativeOutcome> = async {
@@ -1083,13 +1900,15 @@ type GroundedNarrativeRunner
                     | Error(ProviderUnfunded reason) -> return! unfunded (Some wording) request reason
                     | Error(ProviderUnavailable reason) -> return! failed request reason
                     | Ok provider ->
+                        let tally = TokenTally provider
+
                         match! withProjectionContext definition request.Scope scope definition.Project with
                         | Error reason -> return! failed request (sprintf "the run's projections failed: %s" reason)
                         | Ok projections ->
-                            match! generate definition request.Scope scope provider with
+                            match! generate definition request.Scope scope (tally :> IAIProvider) with
                             | Error(GenerationFailed reason) -> return! failed request reason
                             | Error(GenerationOverBudget reason) -> return! overBudget (Some wording) request reason
-                            | Ok drafts ->
+                            | Ok(drafts, conversation) ->
                                 let provenance = {
                                     ModuleId = definition.ModuleId
                                     PageRoute = definition.PageRoute
@@ -1125,26 +1944,21 @@ type GroundedNarrativeRunner
                                         gate.Check(request.Scope, definition.Principal, definition.Surface, document)
                                     with
                                     | Grounded citations ->
-                                        return! publish request wording gate scope document marks citations
+                                        return!
+                                            publish
+                                                request
+                                                wording
+                                                gate
+                                                scope
+                                                document
+                                                marks
+                                                citations
+                                                (GroundedRepairSummary.complete 0)
                                     | Ungrounded offences ->
-                                        do!
-                                            record request.Scope.ScopeId GroundedNarrativeEvents.RefusedType {
-                                                RunKey = request.RunKey
-                                                Trigger = request.Trigger
-                                                Outcome = "refused"
-                                                NarrativeId = None
-                                                Citations = []
-                                                Offences = offences |> List.map GroundingOffence.describe
-                                                CertificateDigest = None
-                                                Detail = None
-                                                PromptVersion = wording.Version
-                                                PromptFallback = wording.Fallback
-                                                Conjectures = marks.Conjectures
-                                                Projections = marks.Projections
-                                                ProjectionRefusals = marks.ProjectionRefusals
-                                            }
+                                        let! best, verdict, rounds, stop =
+                                            repair request gate definition scope tally document offences conversation
 
-                                        return GroundedNarrativeRefused offences
+                                        return! settle request wording gate scope marks best verdict rounds stop
     }
 
     interface IGroundedNarrativeRun with

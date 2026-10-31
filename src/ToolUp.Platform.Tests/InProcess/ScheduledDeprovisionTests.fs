@@ -55,6 +55,7 @@ type private InMemoryJobScheduler() =
                 LastRunError = None
                 ConsecutiveFailures = 0
                 Tags = reg.Tags
+                LastRunWarning = None
             }
 
             jobs[id] <- def

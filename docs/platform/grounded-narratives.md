@@ -131,13 +131,61 @@ Then:
   `CitesFact` edge to every cited Fact, verifiable offline. Because the narrative's spans carry
   their Fact ids, superseding a cited Fact flags it stale through
   `NarrativeSupersession.findStaleNarratives` (the Phase 521 join).
-- **Ungrounded** — `GroundedNarrativeRefused` with every offence; nothing is published or indexed.
+- **Ungrounded** — the run repairs the draft (below). What it cannot repair is withheld, and the
+  grounded remainder is published as above, with a note naming what was withheld. Only when the
+  definition's repair policy does not publish a remainder, or nothing of the report survives, is the
+  run `GroundedNarrativeRefused` with every offence, publishing and indexing nothing.
 - **Anything else** (no gate composed, no provider, the anonymous scope, output not in the format)
   — `GroundedNarrativeFailed`; nothing is published.
 
-Every outcome writes one audit row, source `_narratives`: `GroundedNarrativePublished`,
+Every outcome writes one audit row, source `_narratives` (a repaired run also writes a row per round,
+below): `GroundedNarrativePublished`,
 `GroundedNarrativeRefused` (naming each offence) or `GroundedNarrativeFailed` (whose outcome field
 also tells `unfunded` and `over-budget` apart).
+
+### The repair loop and the publication rule
+
+A refused draft is repaired, not dropped: one unreferenced word in a nine-section report must not
+cost the day's report. Each definition carries a `GroundedRepairPolicy` (`RepairPolicy`, set with
+`GroundedNarrativeDefinition.withRepairPolicy`; `GroundedRepairPolicy.defaults` unless set):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `MaxRepairRounds` | 12 | The most repair rounds a run takes — a ceiling, not the expected case. |
+| `MaxRoundsWithoutProgress` | 3 | Consecutive rounds without progress after which the loop stops. |
+| `MaxRunTokens` | 500,000 | The tokens (prompt plus output, as the provider reports them) the run's model calls may spend. A provider that reports no usage never reaches it. |
+| `PublishGroundedRemainder` | `true` | Whether a run that ends with refused claims publishes what is grounded. |
+
+1. **A repair round.** The run continues the SAME conversation with the gate's offences: for each
+   prose element holding a refused claim, its place, the element as the model wrote it, and every
+   claim refused in it with its reason — a misstated value's reason names the recorded value. The
+   model answers `{"repairs":[{"section":"<id>","element":<n>,"text":"<rewrite>"}]}`. Each rewrite
+   replaces its own element and nothing else (a projection is never rewritten), and the gate
+   re-checks the WHOLE document, because a rewrite can break a neighbour.
+2. **Progress.** A round is progress when the offence set is smaller, or the same size with
+   different members. A round that is not progress is not kept: the next round starts from the best
+   document, in the conversation as it now stands. The loop stops when no offence is left, or at the
+   first limit above, or when no refused claim sits in the model's prose, or when a repair call fails.
+3. **Publication.** What is still refused is cut away at the smallest unit that holds it — a span,
+   else a list item, table row or key-value entry, else the element; an empty paragraph, list or
+   table goes with its last part. A `withheld-claims` section is appended naming each withheld
+   claim's place (the section by its heading, the kind of unit cut) and its reason — never its value,
+   so the note states no number and passes the gate on its own. The result goes through the gate
+   again and is published only if it passes; every number in a published report is still a Fact.
+4. **Record.** Every round writes a `GroundedNarrativeRepairRound` row beside the outcome row:
+   offences in, offences out, whether it made progress, and the tokens spent so far. The publication
+   row's outcome is `published` or `published-with-withheld`, with the rounds taken and each
+   withheld claim; the outcome itself carries a `GroundedRepairSummary` (`Rounds`, `Withheld`).
+
+**On the job.** `GroundedNarrativeOutcome.toJobResult` maps a publication with withheld claims to
+`JobResult.SuccessWithWarning`: the run row is `Succeeded` with `JobRun.Warning`, the definition's
+`LastRunWarning` is set, and the jobs view (`JobsAdminUI`) shows the warning — the count of withheld
+claims, the rounds taken and each claim with its reason — beside the status, listing failed jobs
+first and warned jobs next. A report published whole is a plain `Success`, which clears the warning.
+
+**The old behaviour.** `GroundedRepairPolicy.refuseOnOffence` (`MaxRepairRounds = 0`,
+`PublishGroundedRemainder = false`) refuses on the first offence and writes the single refusal row a
+run wrote before the loop existed.
 
 **The run's call budget (Phase 1109).** No client waits on a run, so it is not held to the
 interactive assistant's 50-second call cap. Every model call the run makes runs under

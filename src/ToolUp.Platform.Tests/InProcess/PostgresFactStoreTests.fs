@@ -1339,6 +1339,221 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
 
             Expect.equal raised.Scopes.Head.Outcome Verified "a scope at the bound migrates"
         }
+
+        testCaseAsync "a row's lineage hash is the hash of the fact it stores, whatever the period's kind"
+        <| async {
+            let scope = newScope ()
+            let target = targetOn TestTable (InMemoryEventStore.InMemoryEventStore())
+
+            // A Local period is written as its UTC instant, so it reads back
+            // as Utc: its kind changes on the round trip. An Unspecified
+            // period is read as UTC on every machine.
+            let utc = q2
+
+            let local = {
+                q2 with
+                    From = q2.From.ToLocalTime()
+                    To = q2.To.ToLocalTime()
+            }
+
+            let unspecified = {
+                q2 with
+                    From = DateTime.SpecifyKind(q2.From, DateTimeKind.Unspecified)
+                    To = DateTime.SpecifyKind(q2.To, DateTimeKind.Unspecified)
+            }
+
+            for member', period in [ "local", local; "unspecified", unspecified ] do
+                let draft = {
+                    draftFor member' "revenue" "k1" 1m with
+                        Period = period
+                }
+
+                match! (target :> IFactStore).Assert(TestScope.resolved scope, draft) with
+                | Error e -> failtestf "assert refused: %s" (FactStoreError.describe e)
+                | Ok f ->
+                    let! stored =
+                        scalar
+                            (sprintf "SELECT lineage_hash FROM %s WHERE scope = @scope AND fact_id = @id" TestTable)
+                            (fun cmd ->
+                                bindScope scope cmd
+                                cmd.Parameters.AddWithValue("id", f.FactId) |> ignore)
+
+                    let expected =
+                        Sha256.hexOfUtf8 (Fact.lineageKey draft.Subject draft.Metric utc draft.Method)
+
+                    Expect.equal
+                        (string stored)
+                        expected
+                        (sprintf "the %s period's row hashes as its UTC instant" member')
+        }
+
+        testCaseAsync
+            "the verification recomputes each lineage hash from the stored row, so one keyed an hour off fails"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let! migrated = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.isTrue migrated.Passed "the clean copy verifies"
+
+            let! export = source.ExportScope scope
+            let f = export.Facts |> List.find (fun f -> f.Metric = MetricRef "visits")
+
+            let correct =
+                Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+
+            // The key a machine an hour ahead of UTC computed for the same fact.
+            let shifted =
+                Sha256.hexOfUtf8 (
+                    Fact.lineageKey
+                        f.Subject
+                        f.Metric
+                        {
+                            f.Period with
+                                From = f.Period.From.AddHours -1.0
+                                To = f.Period.To.AddHours -1.0
+                        }
+                        f.Method
+                )
+
+            let! _ =
+                execute
+                    (sprintf
+                        "UPDATE %s SET lineage_hash = @shifted WHERE scope = @scope AND lineage_hash = @correct"
+                        TestTable)
+                    (fun cmd ->
+                        bindScope scope cmd
+                        cmd.Parameters.AddWithValue("shifted", shifted) |> ignore
+                        cmd.Parameters.AddWithValue("correct", correct) |> ignore)
+
+            let! report = FactStoreMigration.verify source target options [ scope ]
+            let s = report.Scopes.Head
+            Expect.equal s.Outcome VerificationFailed "the verification fails"
+
+            Expect.contains
+                s.Differences
+                (ColumnDiffers(f.FactId, "lineage_hash", correct, shifted))
+                "the shifted lineage hash is named against the recomputed one"
+        }
+
+        testCaseAsync "--ids moves lineage hashes keyed an hour off back onto the recomputed ones, once"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let! migrated = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.isTrue migrated.Passed "the clean copy verifies"
+
+            // Every lineage keyed as a machine an hour ahead of UTC would have.
+            let! export = source.ExportScope scope
+
+            let lineages =
+                export.Facts
+                |> List.map (fun f ->
+                    let shiftedPeriod = {
+                        f.Period with
+                            From = f.Period.From.AddHours -1.0
+                            To = f.Period.To.AddHours -1.0
+                    }
+
+                    Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method),
+                    Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric shiftedPeriod f.Method))
+                |> List.distinct
+
+            for correct, shifted in lineages do
+                let! _ =
+                    execute
+                        (sprintf
+                            "UPDATE %s SET lineage_hash = @shifted WHERE scope = @scope AND lineage_hash = @correct"
+                            TestTable)
+                        (fun cmd ->
+                            bindScope scope cmd
+                            cmd.Parameters.AddWithValue("shifted", shifted) |> ignore
+                            cmd.Parameters.AddWithValue("correct", correct) |> ignore)
+
+                ()
+
+            let! broken = FactStoreMigration.verify source target options [ scope ]
+            Expect.isFalse broken.Passed "the shifted copy does not verify"
+
+            let request (dryRun: bool) = {
+                Mode = FactsMigrateMode.Ids dryRun
+                Scopes = FactsMigrateScopes.Named [ scope ]
+                Options = options
+            }
+
+            let! planned, plannedCode = FactsMigrateTask.run source (Some target) log (request true) [ scope ]
+            Expect.equal plannedCode 0 planned
+
+            Expect.stringContains
+                planned
+                (sprintf "would move the lineage hash of %d rows in %d lineages" MigrationSeedFacts lineages.Length)
+                "the dry run plans every row"
+
+            let! still = FactStoreMigration.verify source target options [ scope ]
+            Expect.isFalse still.Passed "the dry run wrote nothing"
+
+            let! moved, movedCode = FactsMigrateTask.run source (Some target) log (request false) [ scope ]
+            Expect.equal movedCode 0 moved
+
+            Expect.stringContains
+                moved
+                (sprintf "moved the lineage hash of %d rows in %d lineages" MigrationSeedFacts lineages.Length)
+                "every row moved"
+
+            let! repaired = FactStoreMigration.verify source target options [ scope ]
+            Expect.isTrue repaired.Passed (FactStoreMigration.render repaired)
+
+            let! again, againCode = FactsMigrateTask.run source (Some target) log (request false) [ scope ]
+            Expect.equal againCode 0 again
+            Expect.stringContains again "moved the lineage hash of 0 rows in 0 lineages" "a second run plans nothing"
+        }
+
+        testCaseAsync "a re-key that would merge two stored lineages is refused and writes nothing"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let! migrated = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.isTrue migrated.Passed "the clean copy verifies"
+
+            // One lineage stored under two hashes: a superseded version moved
+            // off its head's hash. Re-keying it would merge it into the
+            // lineage its head already holds.
+            let! export = source.ExportScope scope
+
+            let superseded =
+                export.Facts
+                |> List.find (fun f -> export.Facts |> List.exists (fun g -> g.Supersedes = Some f.FactId))
+
+            let! _ =
+                execute
+                    (sprintf "UPDATE %s SET lineage_hash = 'stale' WHERE scope = @scope AND fact_id = @id" TestTable)
+                    (fun cmd ->
+                        bindScope scope cmd
+                        cmd.Parameters.AddWithValue("id", superseded.FactId) |> ignore)
+
+            let! before = rowsOf TestTable scope
+
+            let request = {
+                Mode = FactsMigrateMode.Ids false
+                Scopes = FactsMigrateScopes.Named [ scope ]
+                Options = options
+            }
+
+            let! text, code = FactsMigrateTask.run source (Some target) log request [ scope ]
+            Expect.equal code 1 text
+            Expect.stringContains text "postgres lineages REFUSED" "the refusal is named"
+            Expect.stringContains text "would merge two stored lineages" "the refusal says why"
+            let! after = rowsOf TestTable scope
+            Expect.equal after before "nothing was written"
+        }
     ]
 
 let private liveTests (conn: string) =

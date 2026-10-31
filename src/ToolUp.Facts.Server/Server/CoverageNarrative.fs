@@ -439,8 +439,8 @@ module CoverageNarrative =
                 | Some from, Some until ->
                     sprintf
                         "%s to %s"
-                        (from.ToUniversalTime().ToString "yyyy-MM-dd")
-                        (until.ToUniversalTime().ToString "yyyy-MM-dd")
+                        ((Fact.instant from).ToString "yyyy-MM-dd")
+                        ((Fact.instant until).ToString "yyyy-MM-dd")
                 | _ -> "no period recorded"
 
             let methods =
@@ -581,8 +581,8 @@ module CoverageNarrative =
         | _ ->
             sprintf
                 "%s to %s"
-                (period.From.ToUniversalTime().ToString "yyyy-MM-dd")
-                (period.To.ToUniversalTime().ToString "yyyy-MM-dd")
+                ((Fact.instant period.From).ToString "yyyy-MM-dd")
+                ((Fact.instant period.To).ToString "yyyy-MM-dd")
 
     /// Read one (metric, hierarchy) pair's coverage, folding the gate's
     /// verdicts through `PopulationDisclosure.fold` — Phase 706's shared

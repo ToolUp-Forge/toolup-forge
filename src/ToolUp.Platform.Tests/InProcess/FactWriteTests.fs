@@ -11,6 +11,8 @@ module ToolUp.Platform.Tests.InProcess.FactWriteTests
 // store.
 
 open System
+open System.IO
+open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Facts
 
@@ -82,8 +84,145 @@ let private differentialRows: FactDraft list = [
     draft [ "fr" ] "fr-q2" 9m
 ]
 
+// ── A fact's identity is a function of the fact, not of the machine ──
+//
+// `Fact.instant` reads an `Unspecified` endpoint as UTC. Midnight on
+// 9 September 2024 is inside British Summer Time, so on a machine in
+// Europe/London `ToUniversalTime` would read it as 23:00 the day before:
+// these cases fail there under the old rule and pass on every machine
+// under this one.
+
+let private nineSeptember (kind: DateTimeKind) : TemporalExtent = {
+    From = DateTime(2024, 9, 9, 0, 0, 0, kind)
+    To = DateTime(2024, 9, 10, 0, 0, 0, kind)
+    Label = None
+}
+
+let private uk = {
+    Hierarchy = "geography"
+    Path = [ "uk" ]
+}
+
+let private keyOf (period: TemporalExtent) =
+    Fact.lineageKey uk (MetricRef "revenue") period rollup
+
+let private idOf (period: TemporalExtent) =
+    Fact.compute uk (MetricRef "revenue") period rollup [ "v1" ]
+
+// The census: every `.ToUniversalTime()` in the fact tier's core and in the
+// fact stores is a clock read, the rule itself, or a named transaction-time
+// use — never a period's, which goes through `Fact.instant`.
+let private censusRoots = [ "src/ToolUp.Facts.Core"; "src/FactStores" ]
+
+let private censusServerFile (name: string) =
+    name.EndsWith("FactStore.fs", StringComparison.Ordinal)
+    || name = "CoverageNarrative.fs"
+
+let private clockRead = Regex(@"[cC]lock\(\)\.ToUniversalTime\(\)")
+
+// (file name, trimmed line, why it is not a period's).
+let private censusAllowed = [
+    "FactTypes.fs", "| _ -> d.ToUniversalTime()", "the rule itself: a Local value converted"
+    "DelegateFactTypes.fs",
+    "(asOf.ToUniversalTime().ToString \"o\")",
+    "a query's transaction time, rendered into a refusal message"
+    "DelegatedFactStore.fs", "let t = asOf.ToUniversalTime()", "a query's transaction time, compared with commit times"
+    "DelegatedFactStore.fs",
+    "InputHashes = [ sprintf \"refused:%s\" (asOf.ToUniversalTime().ToString \"o\") ]",
+    "a query's transaction time, named as a refusal's input"
+]
+
+/// The census over (file name, source text) pairs: each offending line.
+let private censusOffences (files: (string * string) list) : string list = [
+    for name, text in files do
+        for line in text.Split('\n') do
+            let trimmed = line.Trim()
+
+            if
+                trimmed.Contains(".ToUniversalTime()", StringComparison.Ordinal)
+                && not (clockRead.IsMatch trimmed)
+                && not (
+                    censusAllowed
+                    |> List.exists (fun (file, allowed, _) -> file = name && allowed = trimmed)
+                )
+            then
+                sprintf "%s: %s" name trimmed
+]
+
+let private censusFiles () : (string * string) list =
+    let root = ToolUp.Platform.Tests.Contracts.ArchitectureFitness.repoRoot ()
+
+    let under (dir: string) =
+        Directory.EnumerateFiles(Path.Combine(root, dir), "*.fs", SearchOption.AllDirectories)
+        |> Seq.filter (fun f -> not (f.Contains $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+        |> List.ofSeq
+
+    let server =
+        Directory.EnumerateFiles(Path.Combine(root, "src", "ToolUp.Facts.Server", "Server"), "*.fs")
+        |> Seq.filter (Path.GetFileName >> censusServerFile)
+        |> List.ofSeq
+
+    (censusRoots |> List.collect under) @ server
+    |> List.map (fun f -> Path.GetFileName f, File.ReadAllText f)
+
+let private identityTests =
+    testList "a fact's identity does not depend on the machine's zone" [
+
+        testCase "Unspecified and Utc periods with one wall clock share a lineage key and a content address"
+        <| fun () ->
+            let unspecified = nineSeptember DateTimeKind.Unspecified
+            let utc = nineSeptember DateTimeKind.Utc
+            Expect.equal (keyOf unspecified) (keyOf utc) "one lineage key, whatever the period's kind"
+            Expect.equal (idOf unspecified) (idOf utc) "one content address, whatever the period's kind"
+
+        testCase "the key a UTC host computed is unchanged, byte for byte"
+        <| fun () ->
+            Expect.equal
+                (keyOf (nineSeptember DateTimeKind.Unspecified))
+                "geography/uk|revenue|2024-09-09T00:00:00.0000000Z..2024-09-10T00:00:00.0000000Z|computed:rollup:1:p0"
+                "an Unspecified endpoint renders as the same wall clock in UTC"
+
+        testCase "a Local endpoint is converted to the instant it names"
+        <| fun () ->
+            let utc = nineSeptember DateTimeKind.Utc
+
+            let local = {
+                utc with
+                    From = utc.From.ToLocalTime()
+                    To = utc.To.ToLocalTime()
+            }
+
+            Expect.equal (keyOf local) (keyOf utc) "a Local value keys as its UTC instant"
+            Expect.equal (Fact.instant local.From) utc.From "the rule converts a Local value"
+            Expect.equal (Fact.instant utc.From).Kind DateTimeKind.Utc "the rule's value is UTC"
+
+        testCase "the census finds a planted period conversion"
+        <| fun () ->
+            let planted = [ "BlobFactStore.fs", "        let t = p.From.ToUniversalTime().Ticks" ]
+            Expect.hasLength (censusOffences planted) 1 "a period read through ToUniversalTime is an offence"
+
+            let clock = [ "BlobFactStore.fs", "        let t = clock().ToUniversalTime()" ]
+            Expect.isEmpty (censusOffences clock) "a clock read is exempt"
+
+        testCase "no period in the fact tier's core or its stores goes through ToUniversalTime"
+        <| fun () ->
+            let files = censusFiles ()
+
+            Expect.isTrue
+                (files |> List.exists (fun (name, _) -> name = "BlobFactStore.fs"))
+                "the census reads the blob store"
+
+            Expect.isTrue
+                (files |> List.exists (fun (name, _) -> name = "PostgresFactStore.fs"))
+                "the census reads the Postgres store"
+
+            Expect.isEmpty (censusOffences files) "every instant of a period goes through Fact.instant"
+    ]
+
 let tests =
     testList "FactWrite — the write plan (Phase 1091)" [
+
+        identityTests
 
         testCase "a plan is deterministic in its inputs"
         <| fun () ->

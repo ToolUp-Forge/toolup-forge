@@ -473,6 +473,7 @@ ToolUp.Platform.PerfMetric.ClientBootMs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.ClientDecodePerResponseUs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.ClientMinimalBundleKiB : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.ClientShellBundleKiB : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfMetric.ClientShellFirstLoadKiB : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.ClientViewPerDispatchUs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.ColdStartMs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.FactAssertMs : ToolUp.Platform.PerfMetric { get }
@@ -486,6 +487,7 @@ ToolUp.Platform.PerfMetric.IsClientBootMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsClientDecodePerResponseUs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsClientMinimalBundleKiB : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsClientShellBundleKiB : System.Boolean { get }
+ToolUp.Platform.PerfMetric.IsClientShellFirstLoadKiB : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsClientViewPerDispatchUs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsColdStartMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsFactAssertMs : System.Boolean { get }
@@ -505,6 +507,7 @@ ToolUp.Platform.PerfMetric+Tags.ClientBootMs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.ClientDecodePerResponseUs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.ClientMinimalBundleKiB : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.ClientShellBundleKiB : System.Int32 (literal)
+ToolUp.Platform.PerfMetric+Tags.ClientShellFirstLoadKiB : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.ClientViewPerDispatchUs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.ColdStartMs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.FactAssertMs : System.Int32 (literal)
