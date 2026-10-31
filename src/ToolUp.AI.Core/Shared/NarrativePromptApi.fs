@@ -6,7 +6,7 @@ namespace ToolUp.AI
 open System
 open ToolUp.Platform
 
-// ─── Phase 1111 — a grounded narrative's wording, edited in the platform ───
+// ─── A grounded narrative's wording, edited in the platform ───
 //
 // A grounded narrative is declared at composition with its instruction
 // (`Prompt`) and a guidance line per section. This contract lets an Owner or
@@ -105,7 +105,7 @@ type SaveNarrativePromptRequest = {
     BasedOnVersion: int
 }
 
-/// Limits on a saved wording (Phase 1111).
+/// Limits on a saved wording.
 module NarrativePromptLimits =
     /// The longest instruction a version may carry, in characters.
     [<Literal>]
@@ -119,7 +119,165 @@ module NarrativePromptLimits =
     [<Literal>]
     let MaxVersions = 50
 
-/// Remoting contract for the narrative wording admin (Phase 1111). Every
+// ─── Refusals that recur, and a wording an admin approves ───
+//
+// After every run that reaches the grounding gate, each claim it refused —
+// in the first draft or in any repair round — is kept per scope and
+// narrative with its class. A class that recurs under one wording version
+// gets ONE proposed sentence to add to the instruction, drafted by the
+// model. A proposal is never in force: it sits beside the wording history,
+// and only an Owner or Admin approving it saves it as a version.
+
+/// The class of one refused claim, as the learning loop counts it.
+[<RequireQualifiedAccess>]
+type NarrativeOffenceClass =
+    /// A numeral in prose, or a metric, with no reference.
+    | UnreferencedNumber
+    /// A number written in words in prose.
+    | NumberWord
+    /// A numeral that is part of a name ("B2B", "Q3") read as a figure.
+    | NameReadAsFigure
+    /// A reference that resolves to nothing, or names a kind no deployment
+    /// registered.
+    | MisattributedReference
+    /// A reference whose stated value is not the value it refers to.
+    | MisstatedValue
+    /// A reference to a fact that is no longer current.
+    | Superseded
+    /// A reference the publishing surface may not disclose.
+    | Withheld
+
+module NarrativeOffenceClass =
+    /// Every class, in the order the panel lists them.
+    let all: NarrativeOffenceClass list = [
+        NarrativeOffenceClass.UnreferencedNumber
+        NarrativeOffenceClass.NumberWord
+        NarrativeOffenceClass.NameReadAsFigure
+        NarrativeOffenceClass.MisattributedReference
+        NarrativeOffenceClass.MisstatedValue
+        NarrativeOffenceClass.Superseded
+        NarrativeOffenceClass.Withheld
+    ]
+
+    /// What the class means, in words — for the panel and for the model
+    /// drafting a proposal.
+    let describe (cls: NarrativeOffenceClass) : string =
+        match cls with
+        | NarrativeOffenceClass.UnreferencedNumber -> "a figure written without a citation"
+        | NarrativeOffenceClass.NumberWord -> "a number written in words"
+        | NarrativeOffenceClass.NameReadAsFigure -> "a name containing digits, read as a figure"
+        | NarrativeOffenceClass.MisattributedReference -> "a citation naming something that does not exist"
+        | NarrativeOffenceClass.MisstatedValue -> "a citation stating a value other than the fact's"
+        | NarrativeOffenceClass.Superseded -> "a citation of a fact that has been superseded"
+        | NarrativeOffenceClass.Withheld -> "a citation of a fact this report may not disclose"
+
+/// One claim the gate refused in a run.
+type NarrativeOffence = {
+    Class: NarrativeOffenceClass
+    /// The section id it sat in; empty when the location names none.
+    Section: string
+    /// `prose`, `list`, `table`, `entry` or `element`.
+    ElementKind: string
+    /// The gate's location, verbatim.
+    Location: string
+    /// The text carrying the claim.
+    Claim: string
+    /// `true` when a repair round fixed it; `false` when it was withheld
+    /// from the published report or the run was refused.
+    Repaired: bool
+}
+
+/// One run of a narrative that reached the gate, with every claim it
+/// refused. A run whose first draft passed carries none — and still counts.
+type NarrativeOffenceRun = {
+    RanAt: DateTime
+    /// The wording version in force; 0 is the declaration.
+    WordingVersion: int
+    /// `published`, `published-with-withheld` or `refused`.
+    Outcome: string
+    Offences: NarrativeOffence list
+}
+
+/// Where a proposed sentence stands.
+[<RequireQualifiedAccess>]
+type NarrativeProposalState =
+    /// Waiting for an Owner or Admin. Never in force.
+    | Open
+    /// Approved, and saved as this wording version.
+    | Approved of version: int
+    /// Dismissed. The class is not proposed again until it recurs under a
+    /// later wording version.
+    | Dismissed
+    /// The wording in force changed before it was decided, so the evidence
+    /// it was drafted from no longer describes the wording.
+    | Lapsed
+
+/// One proposed sentence to add to a narrative's instruction.
+type NarrativeWordingProposal = {
+    Id: string
+    Class: NarrativeOffenceClass
+    /// The sentence approving it appends to the instruction.
+    Sentence: string
+    /// The wording version in force when the class recurred; 0 is the
+    /// declaration.
+    WordingVersion: int
+    /// The refused claims it was drafted from.
+    Evidence: string list
+    /// Sentences approved earlier for the same class that did not stop it.
+    Earlier: string list
+    ProposedAt: DateTime
+    State: NarrativeProposalState
+    /// Who approved or dismissed it.
+    DecidedBy: string option
+    DecidedAt: DateTime option
+}
+
+/// How often a class was refused under one wording version, over the
+/// recurrence window.
+type NarrativeOffenceStanding = {
+    Class: NarrativeOffenceClass
+    WordingVersion: int
+    /// Runs under the version, in the window (at most its size).
+    Runs: int
+    /// Of those, the runs that refused the class at least once.
+    RunsWithClass: int
+    /// Whether the class recurs: `RunsWithClass` reached the threshold.
+    Recurs: bool
+}
+
+/// One proposal as the report admin shows it.
+type NarrativeProposalView = {
+    Proposal: NarrativeWordingProposal
+    /// The instruction approving it would put in force.
+    ResultingPrompt: string
+    /// For an approved proposal, how its class has fared under the version
+    /// it made — whether the sentence stopped the class recurring.
+    FollowThrough: NarrativeOffenceStanding option
+}
+
+/// A narrative's learning page: its proposals and how each refused class
+/// stands under the wording in force.
+type NarrativeLearningView = {
+    RunKey: string
+    /// Open proposals first, then the rest, newest first.
+    Proposals: NarrativeProposalView list
+    /// Each class refused under the wording in force.
+    Standing: NarrativeOffenceStanding list
+    /// The recurrence rule: `Threshold` of the last `Window` runs.
+    Threshold: int
+    Window: int
+}
+
+/// Approve or dismiss one proposal.
+type NarrativeProposalDecision = {
+    [<PiiSafe>]
+    [<NotEmpty>]
+    RunKey: string
+    [<NotEmpty>]
+    ProposalId: string
+}
+
+/// Remoting contract for the narrative wording admin. Every
 /// method acts on the caller's ACTIVE team, which is the publishing scope,
 /// and every method refuses a caller who is not an Owner or Admin of it.
 /// Each save and reset is audited under the team.
@@ -154,4 +312,23 @@ type NarrativePromptApi = {
     /// audit trail and in `GetNarrative`'s `LastRun`.
     [<TenantScoped>]
     Regenerate: string -> Async<Result<Guid, string>>
+
+    /// A narrative's proposed sentences, with their evidence
+    /// and the wording each would produce, and how each refused class
+    /// stands under the wording in force.
+    [<TenantScoped>]
+    ListProposals: string -> Async<Result<NarrativeLearningView, string>>
+
+    /// Approve an open proposal: its sentence is appended to
+    /// the instruction in force and saved as a new version, which the next
+    /// run uses. Refused when the wording has changed since the proposal
+    /// was drafted.
+    [<TenantScoped>]
+    ApproveProposal: NarrativeProposalDecision -> Async<Result<NarrativePromptView, string>>
+
+    /// Dismiss an open proposal. The decision is recorded, and
+    /// the class is not proposed again until it recurs under a later
+    /// wording version.
+    [<TenantScoped>]
+    DismissProposal: NarrativeProposalDecision -> Async<Result<NarrativeLearningView, string>>
 }

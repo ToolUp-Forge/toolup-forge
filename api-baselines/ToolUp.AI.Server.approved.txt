@@ -1224,10 +1224,65 @@ ToolUp.AI.ICitationNormaliser.Normalise(Microsoft.FSharp.Collections.FSharpList`
 ToolUp.AI.LegacyAIConfigProviderProfile (class)
 ToolUp.AI.LegacyAIConfigProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
 ToolUp.AI.LegacyAIConfigProviderProfile.wrap(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Providers+IProviderProfile) : ToolUp.Platform.Providers+IProviderProfile
+ToolUp.AI.NarrativeOffenceHistory (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceRun], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeWordingProposal])
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning.Proposals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeWordingProposal] { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning.Runs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceRun] { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.appendSentence(System.String, System.String) : System.String
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.decide(System.String, ToolUp.AI.NarrativeProposalState, System.String, System.DateTime, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning, ToolUp.AI.NarrativeWordingProposal], System.String]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.due(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, System.Int32, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceClass]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.earlier(ToolUp.AI.NarrativeOffenceClass, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.empty : ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.evidence(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, System.Int32, ToolUp.AI.NarrativeOffenceClass, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.propose(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, ToolUp.AI.NarrativeWordingProposal, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.record(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, ToolUp.AI.NarrativeOffenceRun, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning) : ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.recurs(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceRun], System.Int32, ToolUp.AI.NarrativeOffenceClass) : System.Boolean
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.standing(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceRun], System.Int32, ToolUp.AI.NarrativeOffenceClass) : ToolUp.AI.NarrativeOffenceStanding
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.standings(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceRun], System.Int32) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceStanding]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.view(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, System.String, System.String, System.Int32, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning) : ToolUp.AI.NarrativeLearningView
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningModule.window(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceRun]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceRun]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy..ctor(System.Int32, System.Int32, System.Int32, System.Int32, System.Int32)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy.MaxEvidence : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy.MaxRunsKept : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy.MaxSentenceLength : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy.Threshold : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy.Window : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicyModule (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicyModule.defaults : ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy { get }
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore.BlobName(System.String) : System.String
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore.Decide(System.String, System.String, System.String, ToolUp.AI.NarrativeProposalState, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativeWordingProposal, System.String]]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore.Over(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore.Read(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning, System.String]]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningStore.Update`1(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning, Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeOffenceHistory+NarrativeLearning], R], System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[R, System.String]]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.classify(ToolUp.Platform.Narrative.GroundingOffence) : ToolUp.AI.NarrativeOffenceClass
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.ofDescribed(System.Boolean, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeOffence]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.ofOffence(System.Boolean, ToolUp.Platform.Narrative.GroundingOffence) : ToolUp.AI.NarrativeOffence
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.ofUnreferencedClaim(System.String) : ToolUp.AI.NarrativeOffenceClass
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.placeOf(System.String) : System.Tuple`2[System.String, System.String]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.runOffences(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffence]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceClassifier.tryClassifyDescribed(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[ToolUp.AI.NarrativeOffenceClass, System.String, System.String]]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearning (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearning.compose(ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearning.decorate(System.IServiceProvider, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy, ToolUp.Platform.IGroundedNarrativeRun) : ToolUp.Platform.IGroundedNarrativeRun
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearningRun (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeOffenceLearningRun..ctor(ToolUp.Platform.IGroundedNarrativeRun, System.IServiceProvider, ToolUp.AI.NarrativeOffenceHistory+NarrativeLearningPolicy)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting (class)
+ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting.request(ToolUp.AI.NarrativeOffenceClass, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting.sentenceOf(System.Int32, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting.statesFigure(ToolUp.Platform.INarrativeGroundingGate, ToolUp.Platform.ResolvedScope, ToolUp.Platform.GroundedNarrativeDefinition, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.AI.NarrativeOffenceHistory+NarrativeProposalDrafting.systemPrompt : System.String { get }
 ToolUp.AI.NarrativePromptHandler (class)
 ToolUp.AI.NarrativePromptHandler.narrativePromptApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.NarrativePromptApi
 ToolUp.AI.NarrativePromptHandler.withPromptAdmin(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit (class)
+ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.ProposalApprovedKind : System.String (literal)
+ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.ProposalDismissedKind : System.String (literal)
 ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.ResetKind : System.String (literal)
 ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.SavedKind : System.String (literal)
 ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob (class)

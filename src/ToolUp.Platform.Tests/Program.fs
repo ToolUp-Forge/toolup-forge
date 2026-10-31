@@ -602,6 +602,7 @@ let private registeredTests =
         FactClauseFeederTests.tests
         RagFactTierTests.tests
         GroundedNarrativeTests.tests
+        NarrativeOffenceHistoryTests.tests
         ReportSubscriptionScopeTests.tests
         AssistantFactScopeTests.tests
         AIToolResultBudgetTests.tests

@@ -461,6 +461,108 @@ change made under a resolved scope enqueues a run (the job is scheduled under it
 A metric whose recompute policy is `Eager` recomputes in its own job; the narrative job waits for
 it (a transient failure, backed off by its retry policy), and on its last attempt runs regardless.
 
+## The learning loop: refusals that recur, and a wording an admin approves
+
+The repair loop makes a refused claim cost a round instead of a report, but a model that makes the
+same mistake every morning pays that round every morning. The fix for a recurring mistake is the
+wording. `NarrativeOffenceLearning.compose` (in `ToolUp.AI.Server`, module
+`NarrativeOffenceHistory`) gives a narrative the evidence that a class of refusal recurs, and a
+proposed sentence an Owner or Admin can approve.
+
+**The history.** After every run that reaches the gate, each claim the gate refused, in the first
+draft or in any repair round, is kept with:
+
+- its class (below);
+- its section and element kind (`prose`, `list`, `table`, `entry` or `element`), read from the gate's
+  location;
+- the claim text;
+- whether a repair round fixed it, or it was withheld or refused the run;
+- the run's date and the wording version in force.
+
+A run whose first draft passed is kept too, with no claims: it counts toward the window. The source
+is the run's audit trail, read after the run. The outcome row names the wording version, and the
+repair-round rows name every claim refused along the way. A run that failed before the gate (no
+provider, unreadable output) is not counted. The history is one blob per narrative in the scope's own
+container, `narrative-learning/<run key>`, beside the wording history. It keeps the newest
+`MaxRunsKept` runs.
+
+**The classes.** Each `GroundingOffenceReason` maps to one class:
+
+| Gate reason | Class |
+|---|---|
+| a number in prose, written in digits (or a metric with no reference) | unreferenced number |
+| a number in prose, written in words | number word |
+| a number in prose that is part of a name ("Q3", "B2B") | name read as a figure |
+| an unresolved reference, or an unregistered reference kind | misattributed reference |
+| a stated value that is not the fact's | misstated value |
+| a superseded reference | superseded |
+| a reference the surface may not disclose | withheld |
+
+**Recurrence.** A class recurs when it was refused on `Threshold` of the last `Window` runs of the
+narrative under ONE wording version: 3 of 5 by default. A new wording version starts the count
+afresh, because the evidence was gathered under the old one.
+
+**Proposal.** When a class recurs, the run's own provider is asked for one sentence to add to the
+instruction, aimed at that class. The provider is resolved exactly as the run resolves it, under the
+team's funding. The model is given the class, up to `MaxEvidence` of the refused claims, the wording
+in force, and any sentence approved before for the same class that did not stop it, so it does not
+repeat one. The grounding gate then checks the sentence as prose. A sentence the gate would refuse,
+one that states a figure, is discarded and not saved. A kept sentence is saved as an OPEN proposal
+with its evidence. At most one proposal per class is open per narrative.
+
+**A proposal is never in force.** Proposals live in the learning blob, never in the wording history
+the run reads (`narrative-prompts/<run key>`), so no run can use one. Only an approval puts a sentence
+in force:
+
+- **Approve** (`NarrativePromptApi.ApproveProposal`) appends the sentence to the instruction in force,
+  keeping its section guidance, and saves the result as a new wording version. The next run uses that
+  version. The approval is refused when the wording in force has changed since the proposal was
+  drafted, or when the result would exceed `MaxPromptLength`.
+- **Dismiss** (`DismissProposal`) records the decision and who made it. The same class is not proposed
+  again until it recurs under a later wording version.
+- An open proposal whose wording changed before it was decided **lapses**. Once a proposal is
+  approved or dismissed, its class is not proposed again under that version.
+
+Each approval and dismissal is audited under the team (`Custom:NarrativeProposalApproved`,
+`Custom:NarrativeProposalDismissed`).
+
+**Follow-through.** `ListProposals` returns, for each approved proposal, how its class has fared
+under the version it made, and so whether the sentence stopped the class recurring. If the class
+recurs under the new version, it is proposed again, with the earlier sentence named. The page also
+lists each class refused under the wording in force, with its count over the window.
+
+**The report admin.** The narrative's page in the report admin (`NarrativePromptAdminUI`) shows a
+"Proposed wording" panel when the server composes the loop: each proposal's sentence, its evidence,
+the wording it would produce, its state, and Approve and Dismiss for an Owner or Admin. A deployment
+that does not compose the loop shows no panel.
+
+**The knobs** are `NarrativeLearningPolicy`, passed to `compose`:
+
+| Field | Default |
+|---|---|
+| `Window` | 5 |
+| `Threshold` | 3 |
+| `MaxEvidence` | 5 |
+| `MaxRunsKept` | 50 |
+| `MaxSentenceLength` | 400 |
+
+```fsharp skip=fragment
+app
+|> GroundedNarratives.compose options definitions
+|> NarrativePromptHandler.withPromptAdmin
+|> NarrativeOffenceLearning.compose NarrativeLearningPolicy.defaults
+```
+
+`compose` wraps the run that `GroundedNarratives.compose` registered, so it must come after that
+call; composed before it, the start fails naming the order. The loop needs the audit trail (an
+`IEventStore`) and blob storage. Without either, a run records nothing and proposes nothing.
+Recording or drafting never changes a run's outcome: a failure to learn is logged. Runs of one
+narrative are read off the trail between one outcome row and the previous one for the same trigger,
+so two runs of the same narrative overlapping under the same trigger could share their repair-round
+rows.
+
+Recipe: [`docs/migrations/1177-narrative-offence-learning.md`](../migrations/1177-narrative-offence-learning.md).
+
 ## In conversation
 
 The same fact tools answer the assistant in a chat turn, under the scope the platform resolved for
@@ -491,3 +593,8 @@ fails the start naming the subscription and what it lacks; and neither the princ
 reporting tier can build a resolved scope from a string.
 [`AssistantFactScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/AssistantFactScopeTests.fs)
 drives a chat turn whose `query_facts` call reads the requesting team's Fact and no other.
+[`NarrativeOffenceHistoryTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/NarrativeOffenceHistoryTests.fs)
+covers the learning loop. It table-tests the classifier against every gate reason and its audit-trail
+line, and the recurrence rule. It also runs the composed loop: a proposal appears on the third
+refused run, and a run made after a proposal is saved sends the wording in force until an Owner
+approves it.
