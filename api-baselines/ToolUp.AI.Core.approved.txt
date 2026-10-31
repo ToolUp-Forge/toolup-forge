@@ -52,6 +52,11 @@ ToolUp.AI.AIConsentStateModule.decisionFor(System.String, ToolUp.AI.AIConsentSta
 ToolUp.AI.AIConsentStateModule.empty : ToolUp.AI.AIConsentState { get }
 ToolUp.AI.AIConsentStateModule.record(System.String, ToolUp.AI.AllowDecision, ToolUp.AI.AIConsentState) : ToolUp.AI.AIConsentState
 ToolUp.AI.AIConsentStateModule.satisfies(ToolUp.AI.AllowDecision) : System.Boolean
+ToolUp.AI.AIDeclaredSurface (class)
+ToolUp.AI.AIDeclaredSurface..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIFieldDescriptor])
+ToolUp.AI.AIDeclaredSurface.Fields : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIFieldDescriptor] { get }
+ToolUp.AI.AIDeclaredSurface.ModuleId : System.String { get }
+ToolUp.AI.AIDeclaredSurface.Page : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.AIFallbackPolicy (class)
 ToolUp.AI.AIFallbackPolicy.IsPermissiveWithPlatformFallback : System.Boolean { get }
 ToolUp.AI.AIFallbackPolicy.IsPlatformOnly : System.Boolean { get }

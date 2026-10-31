@@ -1597,6 +1597,155 @@ let private rollupTests =
             Expect.equal rollup.TriageMeanLatencyMs 0.0 "nor here"
     ]
 
+// ─── The declared registry — a composition root fills it ─────────
+
+let private surfaceOf moduleId page fields : AIDeclaredSurface = {
+    ModuleId = moduleId
+    Page = page
+    Fields = fields
+}
+
+let private describeNow (registry: DeclaredAIFieldRegistry) moduleId page =
+    (registry :> IAIFieldRegistry).Describe(moduleId, page)
+    |> Async.RunSynchronously
+
+let private declaredRegistryTests =
+    testList "DeclaredAIFieldRegistry" [
+        testCase "Describe answers the declared fields of the keyed surface, in order"
+        <| fun _ ->
+            let registry =
+                DeclaredAIFieldRegistry [ surfaceOf "sales" (Some "/dashboard") [ countryField; periodField ] ]
+
+            match describeNow registry "sales" (Some "/dashboard") with
+            | Some s ->
+                Expect.equal s.ModuleId "sales" "the declared module id is the routing key"
+                Expect.equal s.Page (Some "/dashboard") "and the declared page"
+
+                Expect.equal
+                    s.Fields
+                    [ countryField; periodField ]
+                    "the descriptors, unchanged and in declaration order"
+            | None -> failtest "a declared surface must be described"
+
+        testCase "an unfilled page answers an empty snapshot, not an exception and not another page's fields"
+        <| fun _ ->
+            let registry =
+                DeclaredAIFieldRegistry [ surfaceOf "sales" (Some "/reports") [ countryField ] ]
+
+            for moduleId, page in [ "sales", Some "/dashboard"; "sales", None; "ops", Some "/reports"; "", None ] do
+                match describeNow registry moduleId page with
+                | Some s ->
+                    Expect.isEmpty s.Fields $"nothing is declared for {moduleId}/{page}"
+                    Expect.equal s.ModuleId moduleId "the snapshot names what was asked"
+                | None -> failtest "an unknown key is an empty snapshot"
+
+        testCase "an empty registry describes every surface as empty"
+        <| fun _ ->
+            match describeNow (DeclaredAIFieldRegistry []) "sales" None with
+            | Some s -> Expect.isEmpty s.Fields "no declaration, no fields"
+            | None -> failtest "expected an empty snapshot"
+
+        testCase "module and page match case-insensitively, and the declared spelling is what is returned"
+        <| fun _ ->
+            let registry =
+                DeclaredAIFieldRegistry [ surfaceOf "Sales" (Some "/Dashboard") [ countryField ] ]
+
+            match describeNow registry "sales" (Some " /dashboard ") with
+            | Some s ->
+                Expect.equal s.ModuleId "Sales" "routed to the declared module id"
+                Expect.equal s.Fields [ countryField ] "found"
+            | None -> failtest "expected a snapshot"
+
+        testCase "a page-less surface and a paged one are different keys"
+        <| fun _ ->
+            let registry =
+                DeclaredAIFieldRegistry [
+                    surfaceOf "sales" None [ countryField ]
+                    surfaceOf "sales" (Some "/dashboard") [ periodField ]
+                ]
+
+            let fieldIds page =
+                describeNow registry "sales" page
+                |> Option.map (fun s -> s.Fields |> List.map _.FieldId)
+
+            Expect.equal (fieldIds None) (Some [ "country" ]) "the page-less surface"
+            Expect.equal (fieldIds (Some "/dashboard")) (Some [ "period" ]) "the paged surface"
+
+        testCase "several declarations of one surface concatenate; a repeated field id keeps its first declaration"
+        <| fun _ ->
+            let shadow = {
+                countryField with
+                    Description = "a later duplicate"
+            }
+
+            let registry =
+                DeclaredAIFieldRegistry [
+                    surfaceOf "sales" (Some "/dashboard") [ countryField ]
+                    surfaceOf "sales" (Some "/dashboard") [ shadow; periodField ]
+                ]
+
+            match describeNow registry "sales" (Some "/dashboard") with
+            | Some s -> Expect.equal s.Fields [ countryField; periodField ] "merged, first id wins"
+            | None -> failtest "expected a snapshot"
+
+        testCase "an unfilled page plans as a fall-through, never a hit"
+        <| fun _ ->
+            let empty =
+                (describeNow (DeclaredAIFieldRegistry []) "sales" (Some "/dashboard")).Value
+
+            Expect.equal
+                (planTriage config empty (decision "set_field" (Some "country") (Some "UK") 0.99))
+                (TriageFallThrough OutcomeUnknownField)
+                "nothing declared, nothing to set"
+
+        testCaseAsync "a registered descriptor is what the triage prompt shows, and a hit goes through"
+        <| async {
+            let registry =
+                DeclaredAIFieldRegistry [ surfaceOf "sales" (Some "/dashboard") [ countryField; periodField ] ]
+
+            let provider = ScriptedProvider(true, hitReply, "agent answered")
+
+            let declaredConfig = FastPathTriageConfig.create (registry :> IAIFieldRegistry)
+
+            let! r = runLoop (Some declaredConfig) (provider :> IAIProvider) "set country to UK"
+
+            Expect.equal provider.StructuredCalls 1 "triage ran off the declared registry"
+            Expect.equal provider.SendCalls 0 "and the full loop did not"
+            Expect.equal (List.length r.Actions) 1 "one action emitted"
+
+            match provider.LastStructuredSystemPrompt with
+            | Some p ->
+                Expect.stringContains p "set country to {value}" "the declared phrasing reached the model"
+                Expect.stringContains p countryField.Description "and the declared description"
+                Expect.stringContains p "the reporting period" "and every declared field"
+
+                Expect.equal
+                    p
+                    (buildTriagePrompt (describeNow registry "sales" (Some "/dashboard")).Value)
+                    "the prompt is exactly the declaration's"
+            | None -> failtest "triage must send a system prompt"
+        }
+
+        testCaseAsync "an unfilled page runs the full loop without error and without a triage call"
+        <| async {
+            let registry =
+                DeclaredAIFieldRegistry [ surfaceOf "sales" (Some "/reports") [ countryField ] ]
+
+            let provider = ScriptedProvider(true, hitReply, "agent answered")
+
+            let! r =
+                runLoop
+                    (Some(FastPathTriageConfig.create (registry :> IAIFieldRegistry)))
+                    (provider :> IAIProvider)
+                    "set country to UK"
+
+            Expect.equal provider.StructuredCalls 0 "no declared fields, no prompt, no call"
+            Expect.equal provider.SendCalls 1 "the full agent loop ran"
+            Expect.isEmpty r.Actions "nothing was emitted"
+            Expect.isEmpty r.TriageRows "and no attempt was recorded"
+        }
+    ]
+
 let tests =
     testList "Phase 6j.B — Tier-3 fast-path triage" [
         pureTests
@@ -1605,4 +1754,5 @@ let tests =
         rollupTests
         grammarTests
         grammarLoopTests
+        declaredRegistryTests
     ]

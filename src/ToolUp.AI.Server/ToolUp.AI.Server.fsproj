@@ -97,6 +97,9 @@
              ToolApprovalDispatch (the registry + the audit writer). -->
         <Compile Include="Server\ToolApprovalHandler.fs" />
         <Compile Include="Server\AICancellationRegistry.fs" />
+        <!-- An IAIFieldRegistry a composition root fills from declared
+             surfaces. Depends only on the AI.Core field-registry seam. -->
+        <Compile Include="Server\DeclaredAIFieldRegistry.fs" />
         <!-- Phase 6j.B — Tier-3 fast-path triage. Depends on ToolContext
              (the ModuleAction emit) + the AI.Core field-registry seam;
              must precede AILatencyMetrics (which registers its metric
