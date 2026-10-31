@@ -3762,6 +3762,518 @@ let repairTests =
         }
     ]
 
+// ── Admissions: the number the instruction asked for, and the count ──
+
+let private wording (version: int) (prompt: string) : GroundingInstruction = {
+    Version = version
+    Prompt = prompt
+    Guidance = Map.empty
+}
+
+let private firstDraft (instruction: GroundingInstruction option) : GroundingCheckOptions = {
+    Instruction = instruction
+    LateStage = false
+}
+
+let private lateStage (instruction: GroundingInstruction option) : GroundingCheckOptions = {
+    Instruction = instruction
+    LateStage = true
+}
+
+let private subjectFacts: Map<string, string> =
+    Map.ofList [
+        String('1', 64), "brand/acme"
+        String('2', 64), "brand/globex"
+        String('3', 64), "brand/initech"
+        String('4', 64), "brand/acme"
+    ]
+
+let private admitResolve (reference: string) =
+    if subjectFacts.ContainsKey reference then
+        GroundingCurrent([ "100" ], Some 100m, false)
+    else
+        resolve reference
+
+let private checkUnder (options: GroundingCheckOptions) (elements: NarrativeElement list) =
+    NarrativeGrounding.checkWith
+        NarrativeGrounding.defaultPolicy
+        admitResolve
+        subjectFacts.TryFind
+        options
+        (docOf elements)
+
+/// A paragraph stating `prose`, then one metric span per fact id.
+let private citingSpans (prose: string) (factIds: string list) =
+    para [
+        text prose
+        yield! factIds |> List.map (fun id -> metric "Revenue" "100" (Some id))
+    ]
+
+let private listOf (n: int) =
+    NarrativeElement.BulletList [ for k in 1..n -> [ text (sprintf "Brand %c" (char (int 'A' + k - 1))) ] ]
+
+let private top3 = wording 2 "Report on the top three categories by revenue."
+
+let admissionTests =
+    testList
+        "Phase 1176 — the gate admits a number the instruction asked for, and, late, a count of what the document lists"
+        [
+
+            test "the matcher reads digits and words, singular and plural, with adjectives between" {
+                let read text =
+                    NarrativeGrounding.mentions NarrativeGrounding.defaultPolicy text
+                    |> List.map (fun m -> m.Whole, m.Following)
+
+                let table = [
+                    "the top three categories", [ Some 3, [ "category" ] ]
+                    "the top 3 categories", [ Some 3, [ "category" ] ]
+                    "three category", [ Some 3, [ "category" ] ]
+                    "the three largest categories all fell", [ Some 3, [ "largest"; "category" ] ]
+                    "twenty-one markets", [ Some 21, [ "market" ] ]
+                    "three of them", [ Some 3, [] ]
+                    "three pounds", [ None, [ "pound" ] ]
+                ]
+
+                for (text, expected) in table do
+                    Expect.equal (read text) expected (sprintf "'%s'" text)
+
+                // A figure is never a whole number, however its digits split.
+                for figure in
+                    [
+                        "3%"
+                        "£3"
+                        "GBP 3"
+                        "-3"
+                        "3.5 stores"
+                        "1,200 stores"
+                        "1/3 of stores"
+                        "½ of stores"
+                        "the 3rd store"
+                        "3m"
+                    ] do
+                    let wholes = read figure |> List.map fst
+                    Expect.isNonEmpty wholes (sprintf "'%s' states a number" figure)
+                    Expect.allEqual wholes None (sprintf "'%s' is no whole number" figure)
+
+                // "three percent": the number word "percent" is a mention too,
+                // and neither is a whole number.
+                Expect.equal
+                    (read "three percent" |> List.map fst)
+                    [ None; None ]
+                    "a percentage written in words is not a whole number"
+
+                let asked = NarrativeGrounding.mentions NarrativeGrounding.defaultPolicy top3.Prompt
+
+                let echoes text =
+                    NarrativeGrounding.mentions NarrativeGrounding.defaultPolicy text
+                    |> List.forall (NarrativeGrounding.echoes asked)
+
+                Expect.isTrue (echoes "the top three categories") "the echo"
+                Expect.isTrue (echoes "the three largest categories all made less") "adjectives between"
+                Expect.isTrue (echoes "3 categories") "digits for the word"
+                Expect.isTrue (echoes "three category") "the singular"
+                Expect.isFalse (echoes "three markets") "a different noun"
+                Expect.isFalse (echoes "four categories") "a different number"
+                Expect.isFalse (echoes "three largest markets") "an adjective in common is not the noun"
+            }
+
+            test "the echo passes on a FIRST draft, cited by its wording version and section" {
+                let elements = [
+                    citingSpans "The top three categories all grew; the largest, " [ String('1', 64) ]
+                ]
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (firstDraft None) elements))
+                    "with no instruction the number is refused as before"
+
+                match checkUnder (firstDraft (Some top3)) elements with
+                | Grounded citations ->
+                    Expect.contains citations (NarrativeCitation.instruction 2 "summary") "cited as the instruction"
+
+                    Expect.equal
+                        (List.last citations).Reference
+                        "instruction:2#summary"
+                        "written <kind>:<version>#<section>"
+
+                    Expect.equal
+                        (NarrativeCitation.admissions citations)
+                        [ NarrativeCitation.instruction 2 "summary" ]
+                        "the admissions are the non-Fact citations"
+
+                    Expect.equal (NarrativeCitation.factIds citations) [ String('1', 64) ] "beside the Fact it cites"
+                | Ungrounded offences ->
+                    failtestf
+                        "the echo was refused: %s"
+                        (offences |> List.map GroundingOffence.describe |> String.concat "; ")
+            }
+
+            test "a section's guidance is wording in force for that section only" {
+                let guided = {
+                    wording 1 "Summarise the month." with
+                        Guidance = Map.ofList [ "summary", "Name the five weakest stores." ]
+                }
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (firstDraft (Some guided)) [ para [ text "The five weakest stores all shrank." ] ]
+                    ))
+                    "the section's guidance admits its own number"
+
+                let elsewhere = {
+                    guided with
+                        Guidance = Map.ofList [ "outlook", "Name the five weakest stores." ]
+                }
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (firstDraft (Some elsewhere)) [ para [ text "The five weakest stores all shrank." ] ]
+                    ))
+                    "another section's guidance does not"
+            }
+
+            test "a near-miss echo is refused: the wrong noun, or the wrong number" {
+                for prose in [ "The top three markets all grew."; "The top four categories all grew." ] do
+                    Expect.equal
+                        (reasonsOf (checkUnder (lateStage (Some top3)) [ para [ text prose ] ]))
+                        [ UnreferencedNumber ]
+                        prose
+            }
+
+            test "after the instruction is reworded, the old number is refused" {
+                let elements = [ para [ text "The top three categories all grew." ] ]
+                let reworded = wording 3 "Report on the top five categories by revenue."
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (firstDraft (Some top3)) elements))
+                    "under version 2 it passes"
+
+                Expect.equal
+                    (reasonsOf (checkUnder (firstDraft (Some reworded)) elements))
+                    [ UnreferencedNumber ]
+                    "under version 3 it is refused"
+            }
+
+            test "a count of the cited subjects is refused on a first draft and passes at the late stage" {
+                let elements = [
+                    citingSpans "Three brands carried the month: " [ String('1', 64); String('2', 64); String('3', 64) ]
+                ]
+
+                Expect.equal
+                    (reasonsOf (checkUnder (firstDraft (Some top3)) elements))
+                    [ UnreferencedNumber ]
+                    "a first draft is asked to cite or rephrase first"
+
+                match checkUnder (lateStage (Some top3)) elements with
+                | Grounded citations ->
+                    Expect.equal
+                        (NarrativeCitation.admissions citations |> List.map _.Reference)
+                        [ "structural-count:section 'summary' › element 1 › span 1" ]
+                        "cited as a structural count at its location"
+                | Ungrounded offences ->
+                    failtestf
+                        "the count was refused: %s"
+                        (offences |> List.map GroundingOffence.describe |> String.concat "; ")
+            }
+
+            test "subjects are counted DISTINCT, and a count that does not match is refused" {
+                // Two of the three spans cite facts about the same brand.
+                let twoBrands =
+                    citingSpans "Two brands carried the month: " [ String('1', 64); String('2', 64); String('4', 64) ]
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (lateStage None) [ twoBrands ]))
+                    "two distinct subjects behind three spans"
+
+                let four =
+                    citingSpans "Four brands carried the month: " [ String('1', 64); String('2', 64); String('3', 64) ]
+
+                Expect.equal
+                    (reasonsOf (checkUnder (lateStage None) [ four ]))
+                    [ UnreferencedNumber ]
+                    "'four' with three cited subjects is refused"
+            }
+
+            test "a count of the list or table that immediately follows passes only at the late stage" {
+                let withList = [ para [ text "Three brands led:" ]; listOf 3 ]
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (firstDraft None) withList))
+                    "refused on a first draft"
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (lateStage None) withList))
+                    "the list's item count passes late"
+
+                let table =
+                    NarrativeElement.Table(
+                        [ "Brand", TableAlignment.Left ],
+                        [ [ [ text "Acme" ] ]; [ [ text "Globex" ] ]; [ [ text "Initech" ] ] ]
+                    )
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (lateStage None) [ para [ text "Three brands led:" ]; table ]
+                    ))
+                    "a table's row count passes late"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (lateStage None) [
+                            para [ text "Three brands led:" ]
+                            NarrativeElement.Divider
+                            listOf 3
+                        ]
+                    ))
+                    "a list that does not IMMEDIATELY follow is not counted"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (lateStage None) [ para [ text "Four brands led:" ]; listOf 3 ]
+                    ))
+                    "a count that does not match is refused"
+            }
+
+            test "a percentage, a currency amount and a fraction stay refused in every stage" {
+                // Every stage, with an instruction naming the same figure, and
+                // three cited subjects and a three-item list to count against.
+                let asks =
+                    wording 1 "Report the top 3% of categories, the £3 lines and the 1/3 share."
+
+                let three = [ String('1', 64); String('2', 64); String('3', 64) ]
+
+                for options in [ firstDraft (Some asks); lateStage (Some asks) ] do
+                    for prose in
+                        [
+                            "The top 3% of categories: "
+                            "The £3 lines: "
+                            "The 1/3 share: "
+                            "Three percent of categories: "
+                        ] do
+                        Expect.contains
+                            (reasonsOf (checkUnder options [ citingSpans prose three; listOf 3 ]))
+                            UnreferencedNumber
+                            (sprintf "'%s' (late stage: %b)" prose options.LateStage)
+            }
+
+            test "every number in a run must be admitted: one admitted number does not carry another" {
+                Expect.equal
+                    (reasonsOf (
+                        checkUnder (lateStage (Some top3)) [
+                            para [ text "The top three categories made 40% of sales." ]
+                        ]
+                    ))
+                    [ UnreferencedNumber ]
+                    "the percentage beside the echo still refuses the run"
+            }
+
+            test "the existing check is the check with no instruction, at no late stage" {
+                let elements = [
+                    citingSpans "Three brands: " [ String('1', 64); String('2', 64); String('3', 64) ]
+                    listOf 3
+                ]
+
+                Expect.equal
+                    (NarrativeGrounding.check NarrativeGrounding.defaultPolicy admitResolve (docOf elements))
+                    (checkUnder GroundingCheckOptions.none elements)
+                    "check = checkWith none"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder GroundingCheckOptions.none elements))
+                    "and refuses"
+            }
+
+            test "the fact gate resolves each current Fact's subject for the late-stage count" {
+                let fixture = gateFixture ()
+                let scopeId = "team-" + Guid.NewGuid().ToString "N"
+
+                let factFor (brand: string) =
+                    assertOk fixture.Store scopeId {
+                        assertedDraft "revenue" 1250m Surfaceable with
+                            Subject = {
+                                Hierarchy = "brand"
+                                Path = [ brand ]
+                            }
+                    }
+
+                let ids = [ "acme"; "globex"; "initech" ] |> List.map (fun b -> (factFor b).FactId)
+
+                let gate =
+                    match fixture.Gate with
+                    | :? IInstructedNarrativeGroundingGate as instructed -> instructed
+                    | _ -> failtest "the fact gate offers the instructed check"
+
+                let checkAt options prose =
+                    gate.CheckWith(
+                        TestScope.resolved scopeId,
+                        "reader",
+                        FactNarrativePublication,
+                        docOf [
+                            para [
+                                text prose
+                                yield! ids |> List.map (fun id -> metric "Revenue" "1250" (Some id))
+                            ]
+                        ],
+                        options
+                    )
+                    |> Async.RunSynchronously
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkAt (lateStage None) "Three brands: "))
+                    "three subjects"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkAt (lateStage None) "Four brands: "))
+                    "not four"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkAt (firstDraft None) "Three brands: "))
+                    "and not first"
+
+                Expect.equal
+                    (fixture.Gate.Check(
+                        TestScope.resolved scopeId,
+                        "reader",
+                        FactNarrativePublication,
+                        docOf [ para [ text "Three brands: " ] ]
+                     )
+                     |> Async.RunSynchronously
+                     |> reasonsOf)
+                    [ UnreferencedNumber ]
+                    "the plain Check admits neither"
+            }
+
+            test "end to end: the number the prompt asked for publishes on the first draft, listed on the certificate" {
+                let definition = {
+                    summaryRun with
+                        Prompt = "Report on the top three brands by revenue."
+                }
+
+                let deployment =
+                    deployShaped
+                        definition
+                        []
+                        (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+                        (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+                        (fun id rendering -> answer $"Of the top three brands, Acme made [[Revenue|{rendering}|{id}]].")
+
+                let fact =
+                    assertOk deployment.Store deployment.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+
+                match run deployment with
+                | GroundedNarrativePublished(_, _, citations, _, certificate, repair) ->
+                    Expect.equal repair.Rounds 0 "no repair round was needed"
+
+                    Expect.equal
+                        (citations |> List.map _.Reference)
+                        [ fact.FactId; "instruction:0#summary" ]
+                        "the Fact, and the instruction (the declaration is version 0)"
+
+                    match certificate with
+                    | Ok c ->
+                        Expect.equal c.CitedFactIds [ fact.FactId ] "the signed chain is the Fact's"
+
+                        Expect.equal
+                            c.Admissions
+                            [ NarrativeCitation.instruction 0 "summary" ]
+                            "the admission is listed"
+                    | Error reason -> failtestf "a certificate must issue: %s" reason
+                | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
+            }
+
+            test "end to end: a count of the table below is refused at first, and published once the repair loop stops" {
+                let table =
+                    NarrativeElement.Table(
+                        [ "Brand", TableAlignment.Left ],
+                        [ [ [ text "Acme" ] ]; [ [ text "Globex" ] ]; [ [ text "Initech" ] ] ]
+                    )
+
+                let calls = ref 0
+
+                let writer: Writer =
+                    fun id rendering ->
+                        calls.Value <- calls.Value + 1
+
+                        if calls.Value = 1 then
+                            JsonSerializer.Serialize {|
+                                sections = [
+                                    {|
+                                        id = "summary"
+                                        paragraphs = [
+                                            $"Acme revenue was [[Revenue|{rendering}|{id}]] in September."
+                                            "The three brands are listed below."
+                                        ]
+                                    |}
+                                ]
+                            |}
+                        else
+                            """{"repairs":[{"section":"summary","element":2,"text":"The three brands are listed below."}]}"""
+
+                let shaped policy =
+                    summaryRun
+                    |> GroundedNarrativeDefinition.withRepairPolicy policy
+                    |> GroundedNarrativeDefinition.withProjection (fun _ -> async {
+                        return Ok [ "summary", [ table ] ]
+                    })
+
+                // With no repair round there is no late stage: refused.
+                let unrepaired =
+                    deployShaped
+                        (shaped GroundedRepairPolicy.refuseOnOffence)
+                        []
+                        (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+                        (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+                        writer
+
+                assertOk unrepaired.Store unrepaired.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+                |> ignore
+
+                match run unrepaired with
+                | GroundedNarrativeRefused offences ->
+                    Expect.equal
+                        (offences |> List.map _.Reason)
+                        [ UnreferencedNumber ]
+                        "the count, refused on the first draft"
+                | other -> failtestf "expected a refusal, got %s" (GroundedNarrativeOutcome.describe other)
+
+                calls.Value <- 0
+
+                let repaired =
+                    deployShaped
+                        (shaped GroundedRepairPolicy.defaults)
+                        []
+                        (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+                        (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+                        writer
+
+                assertOk repaired.Store repaired.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+                |> ignore
+
+                match run repaired with
+                | GroundedNarrativePublished(_, document, citations, _, certificate, repair) ->
+                    Expect.isTrue (GroundedRepairSummary.isComplete repair) "published whole, nothing withheld"
+                    Expect.isTrue (repair.Rounds > 0) "after the repair loop stopped"
+
+                    Expect.isFalse
+                        (document.Sections
+                         |> List.exists (fun s -> s.Id = GroundedRepair.WithheldSectionId))
+                        "with no withheld-claims note"
+
+                    Expect.contains
+                        (citations |> List.map _.Reference)
+                        "structural-count:section 'summary' › element 2 › span 1"
+                        "the count is cited at its location"
+
+                    match certificate with
+                    | Ok c ->
+                        Expect.equal
+                            (c.Admissions |> List.map _.ReferenceKind)
+                            [ NarrativeCitation.StructuralCountKind ]
+                            "and listed on the certificate"
+                    | Error reason -> failtestf "a certificate must issue: %s" reason
+                | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
+            }
+        ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -3776,4 +4288,5 @@ let tests =
         jobResultTests
         triggerNameTests
         repairTests
+        admissionTests
     ]

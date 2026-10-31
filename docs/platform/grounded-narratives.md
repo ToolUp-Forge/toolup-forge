@@ -43,6 +43,45 @@ by cell, lists, captions, alt text, code. A `Component` block's props are prose,
 title, subtitle and section headings are structure the deployment authors, and are not inspected;
 the grounded run never lets the model write them.
 
+### What counts as a number, and the two that pass without a Fact
+
+Two kinds of number are grounded without a Fact, because a reader never mistakes them for a
+figure: the number the deployment asked for, and a count of what the report itself lists. The gate
+admits each only as a **whole number** — digits alone, or an English cardinal up to ninety-nine.
+A percentage, a currency amount, a fraction, a decimal, a grouped or signed figure, an ordinal, a
+scale word (`million`) and a multiplicative (`doubled`) are never whole numbers, so they stay
+refused in every stage unless they are a `Metric` span. Every number in a prose run must be
+admitted: "the top three categories made 40% of sales" is still refused for the `40%`.
+
+1. **The instruction echo — admitted on the first draft.** A whole number passes when the wording
+   in force states the same number counting the same noun. The wording in force is the narrative's
+   prompt plus the guidance of the section the number sits in, as the run resolved them (an
+   administrator's saved version, or the declaration). Each side pairs the number with the words
+   that follow it, up to punctuation, a function word or the fourth word, lower-cased and read in
+   the singular. The noun the instruction counts is the last of its words, and it must be among the
+   words that follow the prose number. So, when the prompt says "report on the top three
+   categories", "the three largest categories" and "3 categories" pass, and "three markets" and
+   "four categories" do not. The echo is cited `instruction:<wording version>#<section id>`, so once
+   an administrator rewords "top three" to "top five", "three" is refused on the next run.
+2. **The structural count — admitted only at the repair loop's late stage.** A whole number passes
+   when it equals the distinct subjects the `Metric` spans of the same element cite, or the items
+   of the list or rows of the table that immediately follows that element. On a first draft it is
+   refused as before, so the model is first asked to cite or rephrase. Only when the
+   [repair loop](#the-repair-loop-and-the-publication-rule) has run at least one round and stopped
+   with offences standing does the run check the best document again at the late stage. A run that
+   repairs nothing (`MaxRepairRounds = 0`) has no late stage. "Four brands" beside three cited
+   brands is refused at every stage. The count is cited `structural-count:<location>`.
+
+The gate takes the wording and the stage through `IInstructedNarrativeGroundingGate.CheckWith` and
+`GroundingCheckOptions`. The fact tier's gate offers it, and resolves each current Fact's subject for
+the count. `Check` is `CheckWith` under `GroundingCheckOptions.none` and admits neither number;
+`GroundingCheck.run` falls back to it for a gate that does not offer `CheckWith`. The pure form is
+`NarrativeGrounding.checkWith`, beside the matcher it uses (`NarrativeGrounding.mentions`,
+`NarrativeGrounding.echoes`). Both admissions are recorded beside the Fact citations on the
+verdict and the audit row. The published certificate lists them as `Admissions`, beside the signed
+chain rather than inside it: the signed body is the Fact chain, and an admission is checked
+against the wording and the document, which the fact store does not hold.
+
 A refusal is `Ungrounded` with **every** offending claim, in document order:
 
 | Reason | When |

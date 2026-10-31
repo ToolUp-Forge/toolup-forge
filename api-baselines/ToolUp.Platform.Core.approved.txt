@@ -9658,7 +9658,12 @@ ToolUp.Platform.Narrative.NarrativeCitation.Reference : System.String { get }
 ToolUp.Platform.Narrative.NarrativeCitation.ReferenceKind : System.String { get }
 ToolUp.Platform.Narrative.NarrativeCitationModule (class)
 ToolUp.Platform.Narrative.NarrativeCitationModule.FactKind : System.String (literal)
+ToolUp.Platform.Narrative.NarrativeCitationModule.InstructionKind : System.String (literal)
+ToolUp.Platform.Narrative.NarrativeCitationModule.StructuralCountKind : System.String (literal)
+ToolUp.Platform.Narrative.NarrativeCitationModule.admissions(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation]
 ToolUp.Platform.Narrative.NarrativeCitationModule.factIds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Narrative.NarrativeCitationModule.instruction(System.Int32, System.String) : ToolUp.Platform.Narrative.NarrativeCitation
+ToolUp.Platform.Narrative.NarrativeCitationModule.structuralCount(System.String) : ToolUp.Platform.Narrative.NarrativeCitation
 ToolUp.Platform.Narrative.NarrativeDocument (class)
 ToolUp.Platform.Narrative.NarrativeDocument..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeSection], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeProvenance], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Narrative.NarrativeDocument.CanonicalUrl : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
