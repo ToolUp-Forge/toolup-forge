@@ -98,6 +98,24 @@ type PageReadSet = {
     Verbs: string list
 }
 
+/// Why a section's blocks cannot be laid out in the tabs asked for.
+[<RequireQualifiedAccess>]
+type TabRefusal =
+    /// Two tabs (or one tab twice) name the block.
+    | BlockNamedTwice of blockId: string
+    /// The page holds the node, and it is not a block of the section.
+    | NotInSection of blockId: string
+    /// The section holds the block, and no tab names it.
+    | Unassigned of blockId: string
+    /// The tab id names no tab of the section.
+    | UnknownTab of tabId: string
+    /// Two entries keep the same tab.
+    | TabNamedTwice of tabId: string
+    /// The section holds no tabs to take away.
+    | NotTabbed
+    /// The section holds more than one set of tabs.
+    | SeveralTabSets
+
 /// Why a layout tool refused. Nothing was written.
 [<RequireQualifiedAccess>]
 type LayoutRefusal =
@@ -109,6 +127,8 @@ type LayoutRefusal =
     | UnknownNode of nodeId: string
     /// The node cannot take this edit.
     | NotEditable of nodeId: string * reason: string
+    /// The section's blocks cannot be laid out in the tabs asked for.
+    | Tabs of sectionId: string * problem: TabRefusal
     /// The ops do not apply to the caller's folded page.
     | OpsDoNotApply of reason: string
     /// The pre-emit validator found errors the edit introduced.
@@ -173,6 +193,15 @@ module LayoutRefusal =
         | LayoutRefusal.InlineRows _ -> "inline-rows"
         | LayoutRefusal.UnknownNode _ -> "unknown-node"
         | LayoutRefusal.NotEditable _ -> "not-editable"
+        | LayoutRefusal.Tabs(_, problem) ->
+            match problem with
+            | TabRefusal.BlockNamedTwice _ -> "tabs-block-named-twice"
+            | TabRefusal.NotInSection _ -> "tabs-not-in-section"
+            | TabRefusal.Unassigned _ -> "tabs-unassigned"
+            | TabRefusal.UnknownTab _ -> "tabs-unknown-tab"
+            | TabRefusal.TabNamedTwice _ -> "tabs-tab-named-twice"
+            | TabRefusal.NotTabbed -> "tabs-not-tabbed"
+            | TabRefusal.SeveralTabSets -> "tabs-several-tab-sets"
         | LayoutRefusal.OpsDoNotApply _ -> "ops-do-not-apply"
         | LayoutRefusal.Grammar _ -> "grammar"
         | LayoutRefusal.Binding _ -> "binding"
@@ -197,6 +226,19 @@ module LayoutRefusal =
                 where
         | LayoutRefusal.UnknownNode id -> sprintf "the page has no node '%s'" id
         | LayoutRefusal.NotEditable(id, reason) -> sprintf "node '%s' cannot take this edit: %s" id reason
+        | LayoutRefusal.Tabs(section, problem) ->
+            match problem with
+            | TabRefusal.BlockNamedTwice id ->
+                sprintf "block '%s' is named twice; each block of section '%s' goes in exactly one tab" id section
+            | TabRefusal.NotInSection id ->
+                sprintf "'%s' is not a block of section '%s'; a tab holds only the section's own blocks" id section
+            | TabRefusal.Unassigned id ->
+                sprintf "block '%s' of section '%s' is in no tab; name every block of the section in one tab" id section
+            | TabRefusal.UnknownTab id -> sprintf "'%s' is not a tab of section '%s'" id section
+            | TabRefusal.TabNamedTwice id -> sprintf "tab '%s' is kept twice; keep each tab once" id
+            | TabRefusal.NotTabbed -> sprintf "section '%s' holds no tabs to take away" section
+            | TabRefusal.SeveralTabSets ->
+                sprintf "section '%s' holds more than one set of tabs; move the blocks of one out first" section
         | LayoutRefusal.OpsDoNotApply reason -> sprintf "the edit does not apply to the page: %s" reason
         | LayoutRefusal.Grammar findings ->
             sprintf "the edited page fails the pre-emit validator: %s" (String.concat "; " findings)
@@ -588,7 +630,7 @@ type LayoutTool =
     | SetRequest
     /// `layout_retitle`: retitle a block, section, chart or heading.
     | Retitle
-    /// `layout_set_section`: add a section, or rename one.
+    /// `layout_set_section`: add a section, rename one, lay its blocks out in tabs, or take its tabs away.
     | SetSection
     /// `layout_set_default`: the page's standing site and range.
     | SetDefault
@@ -701,15 +743,17 @@ module internal LayoutTree =
         else
             collapsed
 
-    /// `base'`, or the first `base'-n` the tree does not hold.
-    let uniqueId (base': string) (tree: Node<unit>) : string =
-        let taken = all tree |> List.map _.Id |> Set.ofList
-
+    /// `base'`, or the first `base'-n` not in `taken`.
+    let freshId (taken: Set<string>) (base': string) : string =
         if not (taken.Contains base') then
             base'
         else
             Seq.initInfinite (fun i -> sprintf "%s-%d" base' (i + 2))
             |> Seq.find (fun id -> not (taken.Contains id))
+
+    /// `base'`, or the first `base'-n` the tree does not hold.
+    let uniqueId (base': string) (tree: Node<unit>) : string =
+        freshId (all tree |> List.map _.Id |> Set.ofList) base'
 
 /// The layout tools: definitions, executors and the save.
 [<RequireQualifiedAccess>]
@@ -899,11 +943,26 @@ module LayoutTools =
             @ [
                 ToolSchema.parameter
                     "action"
-                    "add: a new, empty section. rename: a section's heading."
+                    "add: a new, empty section. rename: a section's heading. tabs: lay the section's blocks out in tabs, or change its tabs. untab: put a tabbed section's blocks back in the section, in tab order."
                     true
-                    (ToolSchema.enumOf [ "add"; "rename" ])
-                ToolSchema.parameter "section" "rename: the section's id." false ToolSchema.text
-                ToolSchema.parameter "title" "The section's heading." true ToolSchema.text
+                    (ToolSchema.enumOf [ "add"; "rename"; "tabs"; "untab" ])
+                ToolSchema.parameter "section" "rename, tabs, untab: the section's id." false ToolSchema.text
+                ToolSchema.parameter "title" "add, rename: the section's heading." false ToolSchema.text
+                ToolSchema.parameter
+                    "tabs"
+                    "tabs: every tab, in order. Each names its label and the ids of the blocks it holds, in order; every block of the section goes in exactly one tab. Give an existing tab's id as 'tab' to keep it under a new label; a tab whose label is unchanged is kept without it."
+                    false
+                    (ToolSchema.arrayOf (
+                        ToolSchema.objectOf [
+                            ToolSchema.field "label" "The tab's label." true ToolSchema.text
+                            ToolSchema.field
+                                "blocks"
+                                "The ids of the blocks the tab holds, in order."
+                                true
+                                (ToolSchema.arrayOf ToolSchema.text)
+                            ToolSchema.field "tab" "An existing tab's id, to keep that tab." false ToolSchema.text
+                        ]
+                    ))
             ]
             @ placementParameters "add the section"
         | LayoutTool.SetDefault ->
@@ -946,7 +1005,9 @@ module LayoutTools =
             "Change one of a stored page's requests: its period, comparison baseline, metrics, subject level or site. Every block drawing it follows."
             + proposes
         | LayoutTool.Retitle -> "Retitle a block, section or chart of a stored page." + proposes
-        | LayoutTool.SetSection -> "Add a section to a stored page, or rename one." + proposes
+        | LayoutTool.SetSection ->
+            "Add a section to a stored page, rename one, lay a section's blocks out in tabs (or change its tabs), or take its tabs away."
+            + proposes
         | LayoutTool.SetDefault ->
             "Set a stored page's standing site and range: every request of the page takes them, and a block added later starts from them."
             + proposes
@@ -1819,15 +1880,316 @@ module LayoutTools =
                     sprintf "retitles '%s'" n.Id
                 ])
 
+    // ── Tabs ──────────────────────────────────────────────────────
+    //
+    // A tabbed section holds one `Tabs` node with no header list; each of its
+    // children is a card whose heading is the tab's label (the renderer's
+    // card-heading inference). Every act is a structural op or an in-place
+    // edit of one card's heading, so a lower layer's edit inside a block, or
+    // a block it adds to the section, survives the next fold: no op re-states
+    // a node's children.
+
+    /// One tab a `tabs` call asks for.
+    type private TabPlan = {
+        Label: string
+        Blocks: string list
+        /// The existing tab to keep under this label.
+        Keep: string option
+    }
+
+    /// A section read for tabbing: its one set of tabs (if any), the tabs it
+    /// holds, and every block of the section in reading order — the blocks
+    /// beside the tabs and the blocks inside each tab, in place.
+    type private SectionTabs = {
+        Section: Node<unit>
+        TabSet: Node<unit> option
+        Tabs: Node<unit> list
+        Blocks: string list
+    }
+
+    let private isTabSet (n: Node<unit>) =
+        match n.Kind with
+        | NodeKind.Tabs _ -> true
+        | _ -> false
+
+    let private isTab (n: Node<unit>) =
+        match n.Kind with
+        | NodeKind.Box _ -> true
+        | _ -> false
+
+    /// A tab's label: its card's literal heading.
+    let private labelOf (n: Node<unit>) : string option =
+        match n.Kind with
+        | NodeKind.Box {
+                           Heading = Some(TextSource.Literal text)
+                       } -> Some text
+        | _ -> None
+
+    let private sectionTabs (tree: Node<unit>) (sectionId: string) : Result<SectionTabs, LayoutRefusal> =
+        match LayoutTree.tryFind sectionId tree with
+        | None -> Error(LayoutRefusal.UnknownNode sectionId)
+        | Some({ Kind = NodeKind.Box _ } as section) ->
+            let children = LayoutTree.children section
+
+            match children |> List.filter isTabSet with
+            | _ :: _ :: _ -> Error(LayoutRefusal.Tabs(sectionId, TabRefusal.SeveralTabSets))
+            | sets ->
+                let tabSet = List.tryHead sets
+                let held = tabSet |> Option.map LayoutTree.children |> Option.defaultValue []
+
+                let inTabs =
+                    held |> List.collect (fun t -> if isTab t then LayoutTree.children t else [ t ])
+
+                Ok {
+                    Section = section
+                    TabSet = tabSet
+                    Tabs = held |> List.filter isTab
+                    Blocks =
+                        children
+                        |> List.collect (fun c -> if isTabSet c then inTabs else [ c ])
+                        |> List.map _.Id
+                }
+        | Some _ -> Error(LayoutRefusal.NotEditable(sectionId, "it is not a section"))
+
+    let private tabPlans (args: Args) : Result<TabPlan list, LayoutRefusal> =
+        let bad reason = Error(LayoutRefusal.Arguments reason)
+
+        let plan (i: int) (entry: JsonValue) : Result<TabPlan, LayoutRefusal> =
+            let at = sprintf "'tabs'[%d]" i
+
+            match entry with
+            | JsonValue.JObject members ->
+                match
+                    members
+                    |> List.tryFind (fun (k, _) -> k <> "label" && k <> "blocks" && k <> "tab")
+                with
+                | Some(k, _) -> bad (sprintf "%s: '%s' is not a member of a tab (its members: label, blocks, tab)" at k)
+                | None ->
+                    match text "label" members, text "tab" members, arg "blocks" members with
+                    | Error _, _, _
+                    | Ok None, _, _ -> bad (sprintf "%s: 'label' must be a non-empty string" at)
+                    | _, Error _, _ -> bad (sprintf "%s: 'tab' must be a non-empty string" at)
+                    | _, _, None -> bad (sprintf "%s: 'blocks' is required" at)
+                    | Ok(Some label), Ok keep, Some blocks ->
+                        match LayoutJson.strings blocks with
+                        | Error e -> bad (sprintf "%s: 'blocks': %s" at e)
+                        | Ok [] -> bad (sprintf "%s: tab '%s' holds no blocks" at label)
+                        | Ok ids ->
+                            Ok {
+                                Label = label
+                                Blocks = ids
+                                Keep = keep
+                            }
+            | _ -> bad (sprintf "%s is not an object" at)
+
+        match arg "tabs" args with
+        | None
+        | Some JsonValue.JNull -> bad "'tabs' is required: every tab, with its label and the ids of the blocks it holds"
+        | Some(JsonValue.JArray []) -> bad "'tabs' names no tab; to take a section's tabs away, use action untab"
+        | Some(JsonValue.JArray entries) ->
+            entries
+            |> List.indexed
+            |> List.fold
+                (fun acc (i, entry) ->
+                    acc
+                    |> Result.bind (fun plans -> plan i entry |> Result.map (fun p -> plans @ [ p ])))
+                (Ok [])
+        | Some _ -> bad "'tabs' must be an array of tabs"
+
+    /// Every block of the section in exactly one tab, and every kept tab one
+    /// of the section's, each named once.
+    let private checkTabs (tree: Node<unit>) (st: SectionTabs) (plans: TabPlan list) : Result<unit, LayoutRefusal> =
+        let refuse problem =
+            Error(LayoutRefusal.Tabs(st.Section.Id, problem))
+
+        let twice (ids: string list) =
+            ids |> List.tryFind (fun id -> (ids |> List.filter ((=) id) |> List.length) > 1)
+
+        let named = plans |> List.collect _.Blocks
+        let held = Set.ofList st.Blocks
+        let kept = plans |> List.choose _.Keep
+
+        match twice named with
+        | Some id -> refuse (TabRefusal.BlockNamedTwice id)
+        | None ->
+            match named |> List.tryFind (fun id -> not (held.Contains id)) with
+            | Some id when (LayoutTree.tryFind id tree).IsNone -> Error(LayoutRefusal.UnknownNode id)
+            | Some id -> refuse (TabRefusal.NotInSection id)
+            | None ->
+                match st.Blocks |> List.tryFind (fun id -> not (List.contains id named)) with
+                | Some id -> refuse (TabRefusal.Unassigned id)
+                | None ->
+                    match twice kept with
+                    | Some id -> refuse (TabRefusal.TabNamedTwice id)
+                    | None ->
+                        match
+                            kept
+                            |> List.tryFind (fun id -> not (st.Tabs |> List.exists (fun t -> t.Id = id)))
+                        with
+                        | Some id -> refuse (TabRefusal.UnknownTab id)
+                        | None -> Ok()
+
+    /// `structural`, then a `ReorderChildren` for each container whose
+    /// children, once `structural` has applied, are not in the order asked
+    /// for.
+    let private reorders
+        (tree: Node<unit>)
+        (structural: TreeOp<unit> list)
+        (orders: (string * string list) list)
+        : TreeOp<unit> list =
+        match
+            structural
+            |> List.fold (fun t op -> t |> Result.bind (Apply.apply op)) (Ok tree)
+        with
+        | Error _ -> structural
+        | Ok after ->
+            structural
+            @ (orders
+               |> List.choose (fun (parentId, order) ->
+                   match LayoutTree.tryFind parentId after with
+                   | Some parent when (LayoutTree.children parent |> List.map _.Id) <> order ->
+                       Some(TreeOp.ReorderChildren(NodeId parentId, order |> List.map NodeId))
+                   | _ -> None))
+
+    /// The ops that lay the section's blocks out in `plans`: the tab set and
+    /// each new tab inserted, a kept tab's label changed in place, each block
+    /// moved into its tab (ids kept, nothing recreated), each tab no longer
+    /// asked for removed once empty, then the order of the blocks in each tab
+    /// and of the tabs.
+    let private tabbed (session: Session) (st: SectionTabs) (plans: TabPlan list) : Result<Edit, LayoutRefusal> =
+        let tree = session.Folded.Tree
+
+        checkTabs tree st plans
+        |> Result.map (fun () ->
+            let matched, _ =
+                plans
+                |> List.mapFold
+                    (fun (claimed: Set<string>) plan ->
+                        match plan.Keep with
+                        | Some id -> Some id, claimed
+                        | None ->
+                            match
+                                st.Tabs
+                                |> List.tryFind (fun t -> not (claimed.Contains t.Id) && labelOf t = Some plan.Label)
+                            with
+                            | Some t -> Some t.Id, claimed.Add t.Id
+                            | None -> None, claimed)
+                    (plans |> List.choose _.Keep |> Set.ofList)
+
+            let taken = LayoutTree.all tree |> List.map _.Id |> Set.ofList
+
+            let tabSetId, taken =
+                match st.TabSet with
+                | Some set -> set.Id, taken
+                | None ->
+                    let id = LayoutTree.freshId taken (LayoutTree.slug (st.Section.Id + "-tabs"))
+                    id, taken.Add id
+
+            let tabs, _ =
+                List.zip plans matched
+                |> List.mapFold
+                    (fun (taken: Set<string>) (plan, existing) ->
+                        match existing with
+                        | Some id -> (plan, id, false), taken
+                        | None ->
+                            let id =
+                                LayoutTree.freshId taken (LayoutTree.slug (st.Section.Id + "-" + plan.Label))
+
+                            (plan, id, true), taken.Add id)
+                    taken
+
+            let insertSet =
+                match st.TabSet with
+                | Some _ -> []
+                | None -> [
+                    TreeOp.InsertChild(
+                        NodeId st.Section.Id,
+                        Fuaran.tabs tabSetId {
+                            Defaults.tabs with
+                                ActiveIndex = Binding.State(tabSetId, Some 0)
+                        }
+                    )
+                  ]
+
+            let insertTabs =
+                tabs
+                |> List.filter (fun (_, _, isNew) -> isNew)
+                |> List.map (fun (plan, id, _) ->
+                    TreeOp.InsertChild(
+                        NodeId tabSetId,
+                        Fuaran.box id {
+                            Defaults.box with
+                                Role = BoxRole.Card
+                                Heading = Some(TextSource.Literal plan.Label)
+                        }
+                    ))
+
+            let relabels =
+                tabs
+                |> List.filter (fun (plan, id, isNew) ->
+                    not isNew
+                    && st.Tabs |> List.exists (fun t -> t.Id = id && labelOf t <> Some plan.Label))
+                |> List.map (fun (plan, id, _) ->
+                    TreeOp.UpdateProp(NodeId id, "Heading", PropValue.Wire(JStr plan.Label)))
+
+            let moves =
+                tabs
+                |> List.collect (fun (plan, id, _) ->
+                    plan.Blocks
+                    |> List.filter (fun block -> (LayoutTree.parentOf block tree |> Option.map _.Id) <> Some id)
+                    |> List.map (fun block -> TreeOp.MoveNode(NodeId block, NodeId id)))
+
+            let kept = tabs |> List.map (fun (_, id, _) -> id) |> Set.ofList
+
+            let removals =
+                st.Tabs
+                |> List.filter (fun t -> not (kept.Contains t.Id))
+                |> List.map (fun t -> TreeOp.RemoveNode(NodeId t.Id))
+
+            let orders =
+                (tabs |> List.map (fun (plan, id, _) -> id, plan.Blocks))
+                @ [ tabSetId, tabs |> List.map (fun (_, id, _) -> id) ]
+
+            unchanged session (reorders tree (insertSet @ insertTabs @ relabels @ moves @ removals) orders) [
+                sprintf
+                    "lays section '%s' out in %d tab(s): %s"
+                    st.Section.Id
+                    (List.length plans)
+                    (plans |> List.map (fun p -> sprintf "'%s'" p.Label) |> String.concat ", ")
+            ])
+
+    /// The ops that put a tabbed section's blocks back in the section, where
+    /// its tabs stood and in tab order, and remove the emptied tab set.
+    let private untabbed (session: Session) (st: SectionTabs) : Result<Edit, LayoutRefusal> =
+        let tree = session.Folded.Tree
+
+        match st.TabSet with
+        | None -> Error(LayoutRefusal.Tabs(st.Section.Id, TabRefusal.NotTabbed))
+        | Some set ->
+            let moves =
+                st.Blocks
+                |> List.filter (fun block -> (LayoutTree.parentOf block tree |> Option.map _.Id) <> Some st.Section.Id)
+                |> List.map (fun block -> TreeOp.MoveNode(NodeId block, NodeId st.Section.Id))
+
+            Ok(
+                unchanged
+                    session
+                    (reorders tree (moves @ [ TreeOp.RemoveNode(NodeId set.Id) ]) [ st.Section.Id, st.Blocks ])
+                    [ sprintf "takes the tabs of section '%s' away" st.Section.Id ]
+            )
+
     let private setSection (session: Session) (args: Args) : Result<Edit, LayoutRefusal> =
         let tree = session.Folded.Tree
 
-        match required "action" args, required "title" args with
-        | Error e, _
-        | _, Error e -> Error e
-        | Ok "rename", Ok title ->
-            required "section" args
-            |> Result.bind (fun id ->
+        match required "action" args with
+        | Error e -> Error e
+        | Ok action when action <> "tabs" && (arg "tabs" args).IsSome ->
+            Error(LayoutRefusal.Arguments(sprintf "'tabs' is an argument of action tabs, not of %s" action))
+        | Ok "rename" ->
+            match required "title" args, required "section" args with
+            | Error e, _
+            | _, Error e -> Error e
+            | Ok title, Ok id ->
                 match LayoutTree.tryFind id tree with
                 | None -> Error(LayoutRefusal.UnknownNode id)
                 | Some { Kind = NodeKind.Box _ } ->
@@ -1836,10 +2198,12 @@ module LayoutTools =
                             sprintf "renames section '%s'" id
                         ]
                     )
-                | Some _ -> Error(LayoutRefusal.NotEditable(id, "it is not a section")))
-        | Ok "add", Ok title ->
-            placementOf args
-            |> Result.bind (fun placement ->
+                | Some _ -> Error(LayoutRefusal.NotEditable(id, "it is not a section"))
+        | Ok "add" ->
+            match required "title" args, placementOf args with
+            | Error e, _
+            | _, Error e -> Error e
+            | Ok title, Ok placement ->
                 let id = LayoutTree.uniqueId (LayoutTree.slug title) tree
 
                 target tree id placement
@@ -1853,8 +2217,16 @@ module LayoutTools =
 
                     unchanged session (reorder tree parentId order [ TreeOp.InsertChild(NodeId parentId, section) ]) [
                         sprintf "adds section '%s' into '%s'" id parentId
-                    ]))
-        | Ok other, _ -> Error(LayoutRefusal.Arguments(sprintf "'action' is '%s'; it is add or rename" other))
+                    ])
+        | Ok "tabs" ->
+            required "section" args
+            |> Result.bind (sectionTabs tree)
+            |> Result.bind (fun st -> tabPlans args |> Result.bind (tabbed session st))
+        | Ok "untab" ->
+            required "section" args
+            |> Result.bind (sectionTabs tree)
+            |> Result.bind (untabbed session)
+        | Ok other -> Error(LayoutRefusal.Arguments(sprintf "'action' is '%s'; it is add, rename, tabs or untab" other))
 
     // ── Validation ────────────────────────────────────────────────
 
