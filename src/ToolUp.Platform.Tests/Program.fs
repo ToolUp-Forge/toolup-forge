@@ -1045,6 +1045,7 @@ let private registeredTests =
         ServerAppSecretStoreTests.tests
         ServerAppOrderTests.tests
         ServerBindAddressTests.tests
+        PageDocumentStoreTests.tests
         AuditFireAndForgetTests.tests
         StoreFireAndForgetTests.tests
         LineageDurabilityTests.tests

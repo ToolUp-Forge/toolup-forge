@@ -891,6 +891,7 @@
         <Compile Include="InProcess\ServerAppSecretStoreTests.fs" />
         <Compile Include="InProcess\ServerAppOrderTests.fs" />
         <Compile Include="InProcess\ServerBindAddressTests.fs" />
+        <Compile Include="InProcess\PageDocumentStoreTests.fs" />
         <Compile Include="Support\FireAndForgetHarness.fs" />
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
         <Compile Include="InProcess\StoreFireAndForgetTests.fs" />
