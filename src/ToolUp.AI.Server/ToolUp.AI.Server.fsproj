@@ -118,6 +118,10 @@
              only the tools passed in, its output through the fact tier's
              grounding gate, published only when every number is a Fact. -->
         <Compile Include="Server\GroundedNarrativeRun.fs" />
+        <!-- The offence history and the wording proposals. After
+             GroundedNarrativeRun, whose trail rows and wording store it
+             reads; before NarrativePromptHandler, which approves. -->
+        <Compile Include="Server\NarrativeOffenceHistory.fs" />
         <!-- Phase 1111 - the narrative wording admin API and the regenerate job.
              After GroundedNarrativeRun, whose wording store, rules and audit
              row it reads. -->
