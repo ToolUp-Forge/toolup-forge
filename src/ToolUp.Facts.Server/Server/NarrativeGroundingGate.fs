@@ -731,13 +731,17 @@ module NarrativeGrounding =
     ///
     /// No other number becomes admissible: a percentage, a currency amount,
     /// a fraction or a decimal is never a whole number (`mentions`).
-    let checkWith
+    ///
+    /// Beside the verdict: each number admitted without a Fact, as the
+    /// location of the claim stating it and the citation admitting it, in
+    /// document order (empty when the verdict is `Ungrounded`).
+    let private judgeWith
         (policy: GroundingPolicy)
         (resolve: string -> GroundingResolution)
         (subjectOf: string -> string option)
         (options: GroundingCheckOptions)
         (document: NarrativeDocument)
-        : NarrativeGroundingVerdict =
+        : NarrativeGroundingVerdict * (string * NarrativeCitation) list =
         let offence loc claim reason = {
             Location = loc
             Claim = claim
@@ -780,9 +784,10 @@ module NarrativeGrounding =
 
             subjects @ following |> List.filter (fun n -> n > 0)
 
-        // `Some citations` when every number in `text` is admitted (none at
-        // all when it states no number); `None` when one is not.
-        let admit (context: ClaimContext) (loc: string) (text: string) : NarrativeCitation list option =
+        // `Some admissions` when every number in `text` is admitted (none at
+        // all when it states no number), each located at `loc`; `None` when
+        // one is not.
+        let admit (context: ClaimContext) (loc: string) (text: string) : (string * NarrativeCitation) list option =
             if not (statesNumber policy text) then
                 Some []
             else
@@ -802,7 +807,7 @@ module NarrativeGrounding =
                             | _ -> None)
 
                     if admitted |> List.forall Option.isSome then
-                        Some(admitted |> List.choose id)
+                        Some(admitted |> List.choose (Option.map (fun citation -> loc, citation)))
                     else
                         None
 
@@ -853,8 +858,43 @@ module NarrativeGrounding =
                         Reference = reference
                     })
 
-            references @ (judged |> List.collect snd) |> List.distinct |> Grounded
-        | offences -> Ungrounded offences
+            let admitted = judged |> List.collect snd |> List.distinct
+
+            (references @ (admitted |> List.map snd) |> List.distinct |> Grounded), admitted
+        | offences -> Ungrounded offences, []
+
+    /// The pure check under `options`: given how every reference resolved
+    /// and the subject each current Fact reference is about (`subjectOf`;
+    /// `None` for a reference with no subject), the verdict over `document`.
+    /// Every offending claim is reported, in document order. The admissions
+    /// are `judgeWith`'s, described there.
+    let checkWith
+        (policy: GroundingPolicy)
+        (resolve: string -> GroundingResolution)
+        (subjectOf: string -> string option)
+        (options: GroundingCheckOptions)
+        (document: NarrativeDocument)
+        : NarrativeGroundingVerdict =
+        judgeWith policy resolve subjectOf options document |> fst
+
+    /// What a certificate seals beside the Fact chain: every number
+    /// `checkWith` admits in `document` without a Fact, with where it sits,
+    /// in document order — one entry per citation and location. `Error`
+    /// carries the offences when the document does not pass.
+    let admissionsWith
+        (policy: GroundingPolicy)
+        (resolve: string -> GroundingResolution)
+        (subjectOf: string -> string option)
+        (options: GroundingCheckOptions)
+        (document: NarrativeDocument)
+        : Result<CertificateAdmission list, GroundingOffence list> =
+        match judgeWith policy resolve subjectOf options document with
+        | Ungrounded offences, _ -> Error offences
+        | Grounded _, admitted ->
+            Ok(
+                admitted
+                |> List.map (fun (location, citation) -> CertificateAdmission.ofCitation location citation)
+            )
 
     /// The pure check: given how every reference resolved, the verdict
     /// over `document`, with no instruction and not at the late stage: a
@@ -973,12 +1013,13 @@ type FactNarrativeGroundingGate
                 | CitableReferenceWithheld policyRef -> GroundingWithheld policyRef
     }
 
-    let checkWith
+    /// How every reference `document` cites resolves in `scope` for
+    /// `principal` at `surface`, and the subject of each current Fact.
+    let resolving
         (scope: ResolvedScope)
         (principal: string)
         (surface: FactEgressSurface)
         (document: NarrativeDocument)
-        (options: GroundingCheckOptions)
         =
         async {
             let references = NarrativeGrounding.references document
@@ -1000,8 +1041,38 @@ type FactNarrativeGroundingGate
             let resolve reference =
                 resolutions.TryFind reference |> Option.defaultValue GroundingUnresolved
 
-            return NarrativeGrounding.checkWith policy resolve subjects.TryFind options document
+            return resolve, subjects.TryFind
         }
+
+    let checkWith
+        (scope: ResolvedScope)
+        (principal: string)
+        (surface: FactEgressSurface)
+        (document: NarrativeDocument)
+        (options: GroundingCheckOptions)
+        =
+        async {
+            let! resolve, subjectOf = resolving scope principal surface document
+            return NarrativeGrounding.checkWith policy resolve subjectOf options document
+        }
+
+    let certificateOf (citedFactIds: string list) (certificate: GroundingCertificate) : NarrativeGroundingCertificate = {
+        Root = certificate.Body.Root
+        Digest = GroundingCertificate.certificateDigest certificate.Body
+        KeyId = certificate.Body.DeploymentKeyId
+        IssuedAt = certificate.Body.IssuedAt
+        CitedFactIds = citedFactIds
+        CertificateJson = CertificateEnvelope.predicateJson certificate
+    }
+
+    let issue (scope: ResolvedScope) (principal: string) (citedFactIds: string list) (subject: CertificateSubject) = async {
+        let! issued = issuer.Issue(scope, principal, subject, FactNarrativeGroundingGate.CertificateDepth)
+
+        return
+            issued
+            |> Result.map (certificateOf citedFactIds)
+            |> Result.mapError CertificateError.describe
+    }
 
     /// The certificate chain depth — deep enough to reach a Fact's input
     /// data from the narrative at the root.
@@ -1011,33 +1082,53 @@ type FactNarrativeGroundingGate
         member _.CheckWith(scope, principal, surface, document, options) =
             checkWith scope principal surface document options
 
+        // The admissions are derived here, from the document being sealed,
+        // rather than taken from the caller: the gate is what admitted them,
+        // and a certificate signs what the gate admits. `citations` is the
+        // caller's record of the verdict, and a disagreement is refused
+        // rather than sealed either way.
+        member _.CertifyWith(scope, principal, surface, narrativeId, document, options, citations) = async {
+            let! resolve, subjectOf = resolving scope principal surface document
+
+            match NarrativeGrounding.admissionsWith policy resolve subjectOf options document with
+            | Error offences ->
+                return
+                    Error(
+                        sprintf
+                            "the narrative no longer passes the grounding gate (%d offence(s): %s)"
+                            (List.length offences)
+                            (offences |> List.map GroundingOffence.describe |> String.concat "; ")
+                    )
+            | Ok admissions ->
+                let found = admissions |> List.map _.Reference |> set
+
+                let recorded = NarrativeCitation.admissions citations |> List.map _.Reference |> set
+
+                if found <> recorded then
+                    return
+                        Error(
+                            sprintf
+                                "the admissions the gate finds (%s) are not the ones the verdict records (%s)"
+                                (found |> String.concat ", ")
+                                (recorded |> String.concat ", ")
+                        )
+                else
+                    let citedFactIds = NarrativeCitation.factIds citations
+
+                    return!
+                        issue
+                            scope
+                            principal
+                            citedFactIds
+                            (AdmittedNarrativeCertificate(narrativeId, citedFactIds, admissions))
+        }
+
     interface INarrativeGroundingGate with
         member _.Check(scope, principal, surface, document) =
             checkWith scope principal surface document GroundingCheckOptions.none
 
-        member _.Certify(scope, principal, narrativeId, citedFactIds) = async {
-            let! issued =
-                issuer.Issue(
-                    scope,
-                    principal,
-                    NarrativeCertificate(narrativeId, citedFactIds),
-                    FactNarrativeGroundingGate.CertificateDepth
-                )
-
-            match issued with
-            | Ok certificate ->
-                return
-                    Ok {
-                        Root = certificate.Body.Root
-                        Digest = GroundingCertificate.certificateDigest certificate.Body
-                        KeyId = certificate.Body.DeploymentKeyId
-                        IssuedAt = certificate.Body.IssuedAt
-                        CitedFactIds = citedFactIds
-                        CertificateJson = CertificateEnvelope.predicateJson certificate
-                        Admissions = []
-                    }
-            | Error error -> return Error(CertificateError.describe error)
-        }
+        member _.Certify(scope, principal, narrativeId, citedFactIds) =
+            issue scope principal citedFactIds (NarrativeCertificate(narrativeId, citedFactIds))
 
 module FactNarrativeGroundingGate =
     /// The gate over the composed fact tier, under the default policy.

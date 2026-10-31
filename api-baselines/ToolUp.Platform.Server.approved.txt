@@ -5512,6 +5512,8 @@ ToolUp.Platform.GroundedSectionShape..ctor(System.String, System.String, System.
 ToolUp.Platform.GroundedSectionShape.Guidance : System.String { get }
 ToolUp.Platform.GroundedSectionShape.Heading : System.String { get }
 ToolUp.Platform.GroundedSectionShape.Id : System.String { get }
+ToolUp.Platform.GroundingCertification (class)
+ToolUp.Platform.GroundingCertification.run(ToolUp.Platform.INarrativeGroundingGate, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.GroundingCheckOptions, System.String, ToolUp.Platform.Narrative.NarrativeDocument, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NarrativeGroundingCertificate, System.String]]
 ToolUp.Platform.GroundingCheck (class)
 ToolUp.Platform.GroundingCheck.run(ToolUp.Platform.INarrativeGroundingGate, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.GroundingCheckOptions, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeGroundingVerdict]
 ToolUp.Platform.GroundingCheckOptions (class)
@@ -6472,6 +6474,7 @@ ToolUp.Platform.IIngestionStatusStore.List(System.String) : Microsoft.FSharp.Con
 ToolUp.Platform.IIngestionStatusStore.Set(System.String, System.String, DataManagementTypes+FileIngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IIngestionStatusStore.SetPending(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IInstructedNarrativeGroundingGate (interface)
+ToolUp.Platform.IInstructedNarrativeGroundingGate.CertifyWith(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, System.String, ToolUp.Platform.Narrative.NarrativeDocument, ToolUp.Platform.GroundingCheckOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NarrativeGroundingCertificate, System.String]]
 ToolUp.Platform.IInstructedNarrativeGroundingGate.CheckWith(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.Narrative.NarrativeDocument, ToolUp.Platform.GroundingCheckOptions) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeGroundingVerdict]
 ToolUp.Platform.IJobHandler (interface)
 ToolUp.Platform.IJobHandler.Execute(ToolUp.Platform.JobContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.JobResult]
@@ -8616,8 +8619,7 @@ ToolUp.Platform.NarrativeEntryInfo.Subtitle : Microsoft.FSharp.Core.FSharpOption
 ToolUp.Platform.NarrativeEntryInfo.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NarrativeEntryInfo.Title : System.String { get }
 ToolUp.Platform.NarrativeGroundingCertificate (class)
-ToolUp.Platform.NarrativeGroundingCertificate..ctor(System.String, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation])
-ToolUp.Platform.NarrativeGroundingCertificate.Admissions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation] { get }
+ToolUp.Platform.NarrativeGroundingCertificate..ctor(System.String, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
 ToolUp.Platform.NarrativeGroundingCertificate.CertificateJson : System.String { get }
 ToolUp.Platform.NarrativeGroundingCertificate.CitedFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NarrativeGroundingCertificate.Digest : System.String { get }

@@ -101,7 +101,7 @@ let subjectFor (root: string) : InTotoSubject = {
 /// (body + detached-JWS seal) in the same versioned shape the substrate
 /// already publishes as its open interchange format.
 let predicateJson (certificate: GroundingCertificate) : string =
-    JsonSerializer.Serialize(certificate, jsonOptions)
+    GroundingCertificate.certificateJson certificate
 
 /// The in-toto statement JSON for a certificate, unsigned. Exposed for
 /// tests and for a caller that wants to sign through its own path.
@@ -148,7 +148,7 @@ let verifyAndRead
             match JsonSerializer.Deserialize<GroundingCertificate>(predicate, jsonOptions) with
             | certificate when obj.ReferenceEquals(certificate.Body.Format, null) ->
                 Error(EnvelopeMalformed "predicate is not a grounding certificate (no format discriminator)")
-            | certificate when certificate.Body.Format <> GroundingCertificate.Format ->
+            | certificate when not (GroundingCertificate.isKnownFormat certificate.Body.Format) ->
                 Error(EnvelopeMalformed $"unsupported certificate format: {certificate.Body.Format}")
             | certificate -> Ok certificate
         with ex ->
@@ -238,7 +238,7 @@ let SigningKeyIdField = "signingKeyId"
 let attestedPredicateJson (certificate: AttestedGroundingCertificate) : string =
     let o = JsonObject()
 
-    o[CertificateField] <- JsonNode.Parse(JsonSerializer.Serialize(certificate, jsonOptions))
+    o[CertificateField] <- JsonNode.Parse(GroundingCertificate.attestedCertificateJson certificate)
     o[AttestationLevelField] <- JsonValue.Create(AttestationLevel.name certificate.Envelope.Level)
     o[PurposeField] <- JsonValue.Create(certificate.Envelope.Purpose)
     o[SigningKeyIdField] <- JsonValue.Create(certificate.Body.DeploymentKeyId)
@@ -298,7 +298,7 @@ let private readAttestedPredicate (predicate: string) : Result<AttestedGrounding
 
             if obj.ReferenceEquals(certificate.Body.Format, null) then
                 Error(EnvelopeMalformed "predicate is not an attested grounding certificate (no format discriminator)")
-            elif certificate.Body.Format <> GroundingCertificate.Format then
+            elif not (GroundingCertificate.isKnownFormat certificate.Body.Format) then
                 Error(EnvelopeMalformed $"unsupported certificate format: {certificate.Body.Format}")
             else
                 let surfaced (field: string) =

@@ -1717,22 +1717,19 @@ type GroundedNarrativeRunner
                         return Some outcome
                 }
 
-                let! certificate = async {
-                    let! issued =
-                        gate.Certify(
-                            request.Scope,
-                            definition.Principal,
-                            string narrativeId,
-                            NarrativeCitation.factIds citations
-                        )
-
-                    return
-                        issued
-                        |> Result.map (fun c -> {
-                            c with
-                                Admissions = NarrativeCitation.admissions citations
-                        })
-                }
+                // The gate seals what it admitted, under the options the
+                // verdict was reached under: the late stage once the repair
+                // loop has run a round (`settle`'s rule).
+                let! certificate =
+                    GroundingCertification.run
+                        gate
+                        request.Scope
+                        definition.Principal
+                        definition.Surface
+                        (checkOptions wording (repairSummary.Rounds > 0))
+                        (string narrativeId)
+                        document
+                        citations
 
                 do!
                     record request.Scope.ScopeId GroundedNarrativeEvents.PublishedType {

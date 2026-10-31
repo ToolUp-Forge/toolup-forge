@@ -430,6 +430,11 @@ let private gateCheck (fixture: GateFixture) (scopeId: string) (elements: Narrat
     fixture.Gate.Check(TestScope.resolved scopeId, "reader", FactNarrativePublication, docOf elements)
     |> Async.RunSynchronously
 
+/// The sealed certificate a narrative certificate carries, read back from its
+/// interchange JSON.
+let private sealedOf (certificate: NarrativeGroundingCertificate) : GroundingCertificate =
+    JsonSerializer.Deserialize<GroundingCertificate>(certificate.CertificateJson, FableConverters.create ())
+
 let factGateTests =
     testList "Phase 985 B — the fact-tier gate resolves against the store" [
 
@@ -4142,6 +4147,137 @@ let admissionTests =
                     "the plain Check admits neither"
             }
 
+            test "the gate seals each admission into a v2 certificate that verifies, and an edited admission does not" {
+                let fixture = gateFixture ()
+                let scopeId = "team-" + Guid.NewGuid().ToString "N"
+
+                let fact =
+                    assertOk fixture.Store scopeId (assertedDraft "revenue" 1250m Surfaceable)
+
+                let options =
+                    firstDraft (Some(wording 2 "Report on the top three brands by revenue."))
+
+                let document =
+                    docOf [
+                        para [
+                            text "Of the top three brands, Acme made "
+                            metric "Revenue" "1250" (Some fact.FactId)
+                        ]
+                    ]
+
+                let gate =
+                    match fixture.Gate with
+                    | :? IInstructedNarrativeGroundingGate as instructed -> instructed
+                    | _ -> failtest "the fact gate offers the instructed check"
+
+                let scope = TestScope.resolved scopeId
+
+                let citations =
+                    match
+                        gate.CheckWith(scope, "reader", FactNarrativePublication, document, options)
+                        |> Async.RunSynchronously
+                    with
+                    | Grounded citations -> citations
+                    | Ungrounded offences -> failtestf "the document must pass: %A" offences
+
+                let certify citations =
+                    GroundingCertification.run
+                        fixture.Gate
+                        scope
+                        "reader"
+                        FactNarrativePublication
+                        options
+                        "narrative-1"
+                        document
+                        citations
+                    |> Async.RunSynchronously
+
+                match certify citations with
+                | Error reason -> failtestf "a certificate must issue: %s" reason
+                | Ok certificate ->
+                    let sealedCert = sealedOf certificate
+                    Expect.equal sealedCert.Body.Format GroundingCertificate.FormatV2 "issued as v2"
+                    Expect.equal certificate.CitedFactIds [ fact.FactId ] "the chain is the Fact's"
+
+                    let admission =
+                        match sealedCert.Body.Admissions with
+                        | Some [ admission ] -> admission
+                        | other -> failtestf "expected one sealed admission, got %A" other
+
+                    Expect.equal admission.Kind NarrativeCitation.InstructionKind "an instruction echo"
+                    Expect.equal admission.Reference "instruction:2#summary" "cited as the gate cited it"
+                    Expect.equal admission.Location "section 'summary' › element 1 › span 1" "at its location"
+
+                    Expect.equal
+                        (CertificateAdmission.attribute CertificateAdmission.WordingVersionAttribute admission)
+                        (Some [ "2" ])
+                        "with its wording version"
+
+                    Expect.equal
+                        (CertificateAdmission.attribute CertificateAdmission.SectionAttribute admission)
+                        (Some [ "summary" ])
+                        "and its section"
+
+                    let verifier = DefaultArtefactVerifier.create fixture.Secrets
+
+                    let verify (c: GroundingCertificate) =
+                        GroundingCertificate.verify verifier c |> Async.RunSynchronously
+
+                    Expect.equal (verify sealedCert) (Ok()) "the sealed certificate verifies offline"
+
+                    let edited (field: string) (change: CertificateAdmission -> CertificateAdmission) =
+                        field,
+                        {
+                            sealedCert with
+                                Body = {
+                                    sealedCert.Body with
+                                        Admissions = Some [ change admission ]
+                                }
+                        }
+
+                    for field, tampered in
+                        [
+                            edited "Kind" (fun a -> {
+                                a with
+                                    Kind = NarrativeCitation.StructuralCountKind
+                            })
+                            edited "Reference" (fun a -> {
+                                a with
+                                    Reference = "instruction:3#summary"
+                            })
+                            edited "Location" (fun a -> {
+                                a with
+                                    Location = "section 'summary' › element 2 › span 1"
+                            })
+                            edited "Attributes" (fun a -> { a with Attributes = [] })
+                        ] do
+                        Expect.equal
+                            (verify tampered)
+                            (Error Tampered)
+                            (sprintf "an admission whose %s was edited fails verification" field)
+
+                    let dropped = {
+                        sealedCert with
+                            Body = {
+                                sealedCert.Body with
+                                    Admissions = None
+                            }
+                    }
+
+                    Expect.equal
+                        (verify dropped)
+                        (Error Tampered)
+                        "and so does a certificate whose admission was removed"
+
+                let factOnly =
+                    citations |> List.filter (fun c -> c.ReferenceKind = NarrativeCitation.FactKind)
+
+                match certify factOnly with
+                | Error reason ->
+                    Expect.stringContains reason "not the ones the verdict records" "a disagreement is refused"
+                | Ok _ -> failtest "the gate must not seal admissions the verdict does not record"
+            }
+
             test "end to end: the number the prompt asked for publishes on the first draft, listed on the certificate" {
                 let definition = {
                     summaryRun with
@@ -4172,10 +4308,20 @@ let admissionTests =
                     | Ok c ->
                         Expect.equal c.CitedFactIds [ fact.FactId ] "the signed chain is the Fact's"
 
+                        let sealedBody = (sealedOf c).Body
+
+                        Expect.equal sealedBody.Format GroundingCertificate.FormatV2 "a v2 certificate"
+
                         Expect.equal
-                            c.Admissions
-                            [ NarrativeCitation.instruction 0 "summary" ]
-                            "the admission is listed"
+                            (sealedBody.Admissions
+                             |> Option.defaultValue []
+                             |> List.map (fun a -> a.Kind, a.Reference, a.Location))
+                            [
+                                NarrativeCitation.InstructionKind,
+                                "instruction:0#summary",
+                                "section 'summary' › element 1 › span 1"
+                            ]
+                            "the admission is inside the signed body, at its location"
                     | Error reason -> failtestf "a certificate must issue: %s" reason
                 | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
             }
@@ -4266,9 +4412,13 @@ let admissionTests =
                     match certificate with
                     | Ok c ->
                         Expect.equal
-                            (c.Admissions |> List.map _.ReferenceKind)
-                            [ NarrativeCitation.StructuralCountKind ]
-                            "and listed on the certificate"
+                            ((sealedOf c).Body.Admissions
+                             |> Option.defaultValue []
+                             |> List.map (fun a -> a.Kind, a.Location))
+                            [
+                                NarrativeCitation.StructuralCountKind, "section 'summary' › element 2 › span 1"
+                            ]
+                            "and sealed into the certificate"
                     | Error reason -> failtestf "a certificate must issue: %s" reason
                 | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
             }
