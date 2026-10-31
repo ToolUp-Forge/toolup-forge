@@ -25,7 +25,9 @@ scope resolution and nowhere else, and what crosses a persistence or wire bounda
 **Where a scope comes from.** On a request, `ScopeResolution.forRequest ctx`. In a job, `JobContext.Scope`,
 which the runner re-mints from the job's sealed carrier; a fact-tier job registered under a shard that carries
 no re-minted scope is refused by name (`carries no resolver-minted scope`), never run under its string — so
-schedule it through `IJobScheduler.Schedule(scope, registration)`. For standing work the deployment declares, a
+schedule it through `IJobScheduler.Schedule(scope, registration)`. A job persisted that way before 0.38.0 is re-issued
+under the scope you name with `toolup facts migrate --reissue-jobs --scope <kind>:<id>` (see
+[1161](1161-delegate-executor-completes.md)). For standing work the deployment declares, a
 principal resolved through the platform's `DeclaredPrincipalResolver`.
 
 ## The rewrite

@@ -166,6 +166,20 @@ the one-open-run claim that serialises opens, and the commit's writes stay the e
 An orphan sweep reclaims only the leftovers of a run that has ended (`FactTableRun.hasEnded`); an
 open run is never swept, and an open run past its cadence reads `Failed` or `Discarded` by the clock.
 
+### One envelope for every kind of run
+
+`FactTableRunRecord` is what a writer keeps and the wire carries. The plane reads every kind of run
+it keeps (a fact-table run, a fit, an evaluation and its folds, a comparison, a promotion decision)
+as one envelope, `RunRecord` in `ToolUp.Platform.Core`: its `Kind`, the `Scope` it ran in, its
+`Subject`, `StartedAt`, the `Options` it declared, its `Provenance` and its `Outcome`, and an `Id`
+over the canonical frame with the kind's label first, so two kinds never share an id. Each kind
+keeps its own stored record and projects onto the envelope (`FactTableRun.toRunRecord`,
+`EvaluationRun.toRunRecord`, `ModelArtifact.toRunRecord` for a fit, and so on).
+
+The scope is a `ResolvedScope`, never a string. A projection takes the scope the reader resolved,
+and a modelling projection refuses a record stored under any other shard
+(`RunRecord.inScope`), so a run cannot be read across shards and nothing mints a scope to read one.
+
 ## The default writer
 
 `DefaultFactTableWriter` writes each cell as an ordinary fact through the composed `IFactStore`, so
@@ -223,9 +237,9 @@ one run for that day:
   cadence, a second `OpenRun` is refused with `FactTableRunInProgress`, naming the open run.
 
 Every writer and decorator honours the options or refuses them with `FactTableRunOptionsRefused`.
-The default writer honours them over any fact store. The delegate writer refuses them, because it
-mints a table's rows under its current run. `IFactTableWriterContract.runOptionsTests` and
-`exclusivityTests` check them. See [the migration note](../migrations/994-fact-run-inputs-and-periods.md).
+The default writer honours them over any fact store, and the delegate writer honours them over its
+row images (see [attributed rows](#attributed-rows-and-period-slices) below).
+`IFactTableWriterContract.runOptionsTests` and `exclusivityTests` check them on every writer. See [the migration note](../migrations/994-fact-run-inputs-and-periods.md).
 
 **Decision — a concurrent run is refused, not queued.** A queue would have the writer hold a
 producer's call until another run ends. That is state between calls, and a wait no portability rule
@@ -306,9 +320,9 @@ ordering, count), and those arrive as a typed `DelegateTableRead`.
   beside the log as a reconstruction instead, which `Get` and the disclosure gate resolve like any
   fact.
 - A **replace** table keeps only its latest run, so its history is `Approximate`. An `AsOf` read is
-  **refused**. The population read returns the refusal on its error channel. The point read has no
-  error channel, so it returns one `Absent` fact whose reason is the refusal. Neither read
-  approximates.
+  **refused**. The population read returns the refusal on its error channel. The point read
+  returns one `Absent` fact whose reason is the refusal, which the gate resolves like any fact.
+  Neither read approximates.
 
 **Refresh.** A commit advances the delegate records. It then finds the facts quoted from earlier
 runs, using the delegated form of the reactive-recomputation invalidation walk, and re-reads each
@@ -342,3 +356,35 @@ column is reported as restricted.
 change summary and single audit record. It keeps one row image per committed run, beside the
 scope's facts under `_delegate-tables/`, and it writes no fact (`FactsWritten = 0`). A table bound
 anywhere else goes to the writer that was already composed.
+
+### Attributed rows and period slices
+
+Every row of a stored image names the run that wrote it. A run's declared inputs, method and
+provenance therefore reach exactly the rows it wrote:
+
+- A run with no slice writes the whole image, and every row in it is its own.
+- A run with a **period slice** replaces exactly the committed rows inside the slice and carries
+  every other row forward, still naming the run that wrote it. A carried row is minted under that
+  run's watermark, inputs, method and provenance, so its fact is the fact its own run minted. A
+  quoted row the slice dropped is withdrawn under the slicing run, and the change summary counts
+  the slice only. A row outside the slice rejects the run, and a slice that would split a committed
+  row refuses it, exactly as the default writer does.
+
+An image stored before rows were attributed (before 0.38.0) holds rows that name no writer. Such an
+image was always written whole by its own run, so its rows are read under that run, unchanged. A
+slice over it is refused by name at `OpenRun`, because carried forward those rows would name no
+writer; a whole-table run is still taken. Record the attribution once:
+
+```text
+toolup facts migrate --attribute-delegate-rows --all-scopes --dry-run   # report, write nothing
+toolup facts migrate --attribute-delegate-rows --all-scopes             # record it
+```
+
+The task (`facts-attribute-delegate-rows`, composed by
+`FactsOperatorTaskCompose.withFactsOperatorTasks`) reads each image's writer from the table's head,
+the run that committed that sequence, and never guesses one. A second run finds nothing to do.
+
+**Read faults.** A delegated table, quote or lineage that cannot be read answers `StorageFault`, on
+the point door as on the population door. It is never answered with fewer facts, and never with a
+refusal fact standing in for the fault. The `IFactStore` contract's read-fault law
+(`IFactStoreContract.readFaultTests`) holds the blob, Postgres and delegated stores to it.
