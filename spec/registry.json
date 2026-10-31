@@ -1,0 +1,462 @@
+{
+  "specification": "app-composition-wire",
+  "coreVersion": 1,
+  "profile": "server-app-host",
+  "profileVersion": "7.0",
+  "note": "The machine-readable rendering of composition-profile.md sections P2, P3 and P8. Normative; the composition-profile surface check in this repository compares the two renderings and fails when they disagree. Counts appear nowhere: this file is the enumeration.",
+  "tokens": {
+    "appRoot.base": {
+      "closure": "closed",
+      "tokens": ["serverApp", "publicRenderingServerApp"]
+    },
+    "appRoot.layers": {
+      "closure": "closed",
+      "tokens": ["ai", "rag", "forms", "peer", "extensions", "knowledgeBase", "publicRendering"]
+    },
+    "companionSelection.slot": {
+      "closure": "closed",
+      "tokens": [
+        "aiProvider",
+        "embeddingProvider",
+        "blobStorage",
+        "authProvider",
+        "notificationChannel",
+        "vectorStore",
+        "secretStore",
+        "auditSink",
+        "metricsSink",
+        "jobScheduler",
+        "dataSource",
+        "transactionalSink"
+      ]
+    },
+    "moduleRef.view": {
+      "closure": "closed",
+      "tokens": ["bareFeliz", "fuaranUI", "custom"],
+      "citationBearing": ["fuaranUI"]
+    },
+    "configKnob.key": {
+      "closure": "open",
+      "unregisteredMeaning": "a setting this profile does not shape composition on; legitimate, never refused, preserved exactly",
+      "registered": {
+        "ProcessProfile": { "grammar": "enum", "values": ["AllInOne", "WebOnly", "WorkerOnly"] },
+        "ConfigDriftDetection": { "grammar": "enum", "values": ["NoConfigDriftDetection", "EnabledConfigDriftDetection"] },
+        "JobScheduler": { "grammar": "enum", "values": ["NoJobScheduler", "InProcessJobScheduler"] },
+        "PeerSubstrate": { "grammar": "enum", "values": ["NoPeerSubstrate", "EnabledPeerSubstrate"] },
+        "FactStore": { "grammar": "enum", "values": ["NoFactStore", "EnabledFactStore"] },
+        "FactStoreBackend": { "grammar": "enum", "values": ["Blob", "Postgres"] },
+        "AuditLog": { "grammar": "enum", "values": ["NoAuditLog", "EnabledAuditLog"] },
+        "ShareTokenStore": { "grammar": "enum", "values": ["NoShareTokenStore", "EnabledShareTokenStore"] },
+        "TeamCreationPolicy": { "grammar": "enum", "values": ["PlatformAdminOnly", "AnyAuthenticatedUser"] },
+        "EventStore": { "grammar": "retention" },
+        "IncludePlatformDefaults": { "grammar": "boolean" },
+        "PublicBaseUrl": { "grammar": "origin" },
+        "DataIngestion": { "grammar": "enum", "values": ["NoDataIngestion", "EnabledDataIngestion"] },
+        "DataSubjectRequests": { "grammar": "enum", "values": ["Disabled", "sync:HardDelete", "sync:Tombstone", "sync:RetainPerCompliance"] },
+        "EncryptedBlobStorage": { "grammar": "enum", "values": ["NoEncryptedBlobStorage", "SingleKeyResolver"] }
+      },
+      "valueGrammars": {
+        "enum": { "note": "exactly one of the entry's own values; the entry lists them, its default first" },
+        "retention": {
+          "literals": ["InMemoryOnly", "unlimited", "ninetyDays"],
+          "parameterised": [
+            { "prefix": "byAge:", "suffix": "d", "max": 10675199 },
+            { "prefix": "byCount:", "suffix": "", "max": 2147483647 }
+          ]
+        },
+        "boolean": { "literals": ["true", "false"] },
+        "origin": { "schemes": ["http", "https"], "defaultPorts": { "http": 80, "https": 443 } }
+      }
+    },
+    "moduleRef.factTables.grain": {
+      "closure": "closed",
+      "tokens": ["day", "week", "month", "quarter", "year", "snapshot"]
+    },
+    "moduleRef.factTables.definition.columns.shape": {
+      "closure": "closed",
+      "tokens": ["scalar", "interval", "distribution", "categorical", "series"]
+    },
+    "moduleRef.factTables.definition.historyMode": {
+      "closure": "closed",
+      "tokens": ["appendByRun", "replace"]
+    },
+    "moduleRef.factTables.definition.disclosure.class": {
+      "closure": "closed",
+      "tokens": ["surfaceable", "internal", "restricted"],
+      "takesArgument": ["restricted"]
+    },
+    "moduleRef.factTables.definition.requirement": {
+      "closure": "closed",
+      "tokens": ["required", "optional"]
+    },
+    "moduleRef.metricDefinitions.direction": {
+      "closure": "closed",
+      "tokens": ["higherIsBetter", "lowerIsBetter", "neutral"]
+    },
+    "moduleRef.metricDefinitions.staleness.policy": {
+      "closure": "closed",
+      "tokens": ["freshFor", "untilSuperseded", "untilUpstreamChange"],
+      "takesArgument": ["freshFor"]
+    },
+    "moduleRef.metricDefinitions.recomputePolicy": {
+      "closure": "closed",
+      "tokens": ["eager", "onQuery", "manual"]
+    },
+    "moduleRef.metricDefinitions.rollUp.kind": {
+      "closure": "closed",
+      "tokens": ["additive", "nonAdditive"],
+      "takesArgument": ["additive"]
+    },
+    "pageRef.audience": {
+      "closure": "closed",
+      "tokens": ["public", "authenticated", "scope", "client", "publication"],
+      "gated": ["authenticated", "scope", "client", "publication"]
+    },
+    "groundedNarrative.surface": {
+      "closure": "closed",
+      "tokens": [
+        "retrieval",
+        "toolResult",
+        "narrativePublication",
+        "export",
+        "webhook",
+        "peerEgress",
+        "browse",
+        "teamPublication"
+      ]
+    },
+    "aiFunding.policy": {
+      "closure": "closed",
+      "tokens": ["platformOnly", "permissiveWithPlatformFallback", "strictBYOK"]
+    },
+    "pageRef.captures": {
+      "closure": "closed",
+      "tokens": ["date", "slug", "int"]
+    },
+    "referenceData.columns.type": {
+      "closure": "closed",
+      "tokens": ["date", "integer", "text"]
+    },
+    "moduleRef.entities.disclosure.class": {
+      "closure": "closed",
+      "tokens": ["surfaceable", "internal", "restricted"],
+      "takesArgument": ["restricted"]
+    },
+    "moduleRef.entities.fields.level": {
+      "closure": "closed",
+      "tokens": ["public", "confidential", "financial", "regulatory", "pii", "spi"]
+    },
+    "moduleRef.aiExposure": {
+      "closure": "closed",
+      "tokens": ["notQueryable", "queryable"]
+    },
+    "dataDelivery.mode": {
+      "closure": "closed",
+      "tokens": ["upload", "scheduledPull", "watched"]
+    },
+    "moduleRef.disclosurePolicies.mode": {
+      "closure": "closed",
+      "tokens": ["plain", "taintPropagating"]
+    },
+    "moduleRef.disclosurePolicies.permitSurfaces": {
+      "closure": "closed",
+      "tokens": ["retrieval", "toolResult", "narrativePublication", "export", "webhook", "peerEgress", "browse", "teamPublication"]
+    },
+    "reportTemplate.format": {
+      "closure": "closed",
+      "tokens": ["markdown", "html", "pdf", "docx", "xlsx"]
+    },
+    "standingSubscription.format": {
+      "closure": "closed",
+      "tokens": ["markdown", "html", "pdf", "docx", "xlsx"]
+    },
+    "reportTemplate.placeholders.kind": {
+      "closure": "closed",
+      "tokens": ["text", "number", "date", "image", "table"]
+    },
+    "reportTemplate.placeholders.columns.kind": {
+      "closure": "closed",
+      "tokens": ["text", "number", "date", "image"]
+    },
+    "factBrowse.mount": {
+      "closure": "closed",
+      "tokens": ["serverOnly"]
+    }
+  },
+  "nodeKinds": {
+    "clientShell": {
+      "members": [
+        { "name": "home", "type": "array of home entry objects", "presence": "optional; absent when the shell declares none, never empty" }
+      ],
+      "leaf": true
+    },
+    "layoutRef": {
+      "members": [
+        { "name": "name", "type": "string", "presence": "required" },
+        { "name": "view", "type": "token", "presence": "optional; fuaranUI when present" },
+        { "name": "viewSpec", "type": "citation", "presence": "per moduleRef.view, when view is present" }
+      ],
+      "leaf": false
+    },
+    "pageRef": {
+      "members": [
+        { "name": "route", "type": "string", "presence": "required" },
+        { "name": "audience", "type": "token", "presence": "required" },
+        { "name": "roles", "type": "array of string", "presence": "required when audience is scope; absent otherwise" },
+        { "name": "relationship", "type": "string", "presence": "required when audience is client; absent otherwise" },
+        { "name": "readers", "type": "array of string", "presence": "required when audience is publication; absent otherwise" },
+        { "name": "publishingScope", "type": "string", "presence": "required when audience is publication; absent otherwise" },
+        { "name": "view", "type": "token", "presence": "required" },
+        { "name": "viewSpec", "type": "citation", "presence": "per moduleRef.view" },
+        { "name": "title", "type": "string", "presence": "optional" },
+        { "name": "layout", "type": "string", "presence": "optional" },
+        { "name": "captures", "type": "object of token", "presence": "optional; non-empty when present" }
+      ],
+      "leaf": false
+    },
+    "groundedNarrative": {
+      "members": [
+        { "name": "displayName", "type": "string", "presence": "required" },
+        { "name": "moduleId", "type": "string", "presence": "required" },
+        { "name": "pageRoute", "type": "string", "presence": "optional" },
+        { "name": "principal", "type": "string", "presence": "required" },
+        { "name": "title", "type": "string", "presence": "required" },
+        { "name": "prompt", "type": "string", "presence": "required" },
+        { "name": "dependsOnMetrics", "type": "array of string", "presence": "required; may be empty" },
+        { "name": "sections", "type": "array of section objects", "presence": "required" },
+        { "name": "allowsConjecture", "type": "boolean string", "presence": "optional; omitted when false" },
+        { "name": "tags", "type": "array of string", "presence": "required; may be empty" },
+        { "name": "surface", "type": "token", "presence": "required" },
+        { "name": "onCommit", "type": "array of string", "presence": "required; may be empty" },
+        { "name": "page", "type": "string", "presence": "optional" },
+        { "name": "cadence", "type": "string", "presence": "optional" },
+        { "name": "runsAs", "type": "string", "presence": "optional" }
+      ],
+      "leaf": false
+    },
+    "aiFunding": {
+      "members": [
+        { "name": "policy", "type": "token", "presence": "required" },
+        { "name": "keyEnv", "type": "string", "presence": "optional" }
+      ],
+      "parentSlot": "aiProvider",
+      "leaf": true
+    },
+    "referenceData": {
+      "members": [
+        { "name": "source", "type": "string", "presence": "required" },
+        { "name": "contentHash", "type": "string", "presence": "required" },
+        { "name": "columns", "type": "array of column objects", "presence": "required; non-empty" }
+      ],
+      "leaf": true
+    },
+    "dataDelivery": {
+      "members": [
+        { "name": "source", "type": "string", "presence": "required" },
+        { "name": "mode", "type": "profile token", "presence": "required" },
+        { "name": "module", "type": "string", "presence": "optional" },
+        { "name": "principal", "type": "string", "presence": "optional" },
+        { "name": "cadence", "type": "string", "presence": "optional" },
+        { "name": "location", "type": "string", "presence": "optional" },
+        { "name": "tables", "type": "array of string", "presence": "optional; non-empty when present" }
+      ],
+      "leaf": true
+    },
+    "entityReads": {
+      "members": [
+        { "name": "reads", "type": "array of edge objects", "presence": "required; may be empty" }
+      ],
+      "parentSlots": ["vectorStore", "embeddingProvider"],
+      "leaf": true
+    },
+    "reportTemplate": {
+      "members": [
+        { "name": "displayName", "type": "string", "presence": "required" },
+        { "name": "format", "type": "profile token", "presence": "required" },
+        { "name": "body", "type": "string", "presence": "required for a text body; absent for a binary one" },
+        { "name": "source", "type": "string", "presence": "required for a binary body; absent for a text one" },
+        { "name": "contentHash", "type": "string", "presence": "required for a binary body; absent for a text one" },
+        { "name": "placeholders", "type": "array of placeholder objects", "presence": "required; may be empty" }
+      ],
+      "leaf": true
+    },
+    "reportProducer": {
+      "members": [
+        { "name": "displayName", "type": "string", "presence": "required" },
+        { "name": "narrative", "type": "string", "presence": "required" },
+        { "name": "template", "type": "string", "presence": "required" },
+        { "name": "placeholder", "type": "string", "presence": "required" }
+      ],
+      "leaf": true
+    },
+    "subscriptionPrincipal": {
+      "members": [
+        { "name": "userId", "type": "string", "presence": "required" },
+        { "name": "displayName", "type": "string", "presence": "required" }
+      ],
+      "leaf": true
+    },
+    "standingSubscription": {
+      "members": [
+        { "name": "displayName", "type": "string", "presence": "required" },
+        { "name": "producer", "type": "string", "presence": "required" },
+        { "name": "template", "type": "string", "presence": "required" },
+        { "name": "parameters", "type": "array of parameter objects", "presence": "optional; non-empty when present" },
+        { "name": "schedule", "type": "string", "presence": "required" },
+        { "name": "principal", "type": "string", "presence": "required" },
+        { "name": "recipients", "type": "array of string", "presence": "required; may be empty" },
+        { "name": "format", "type": "profile token", "presence": "required" }
+      ],
+      "leaf": true
+    },
+    "factBrowse": {
+      "members": [
+        { "name": "mount", "type": "profile token", "presence": "optional" },
+        { "name": "label", "type": "string", "presence": "optional; absent under serverOnly" },
+        { "name": "group", "type": "string", "presence": "optional; absent under serverOnly" }
+      ],
+      "leaf": true
+    },
+    "theme": {
+      "members": [
+        { "name": "source", "type": "string", "presence": "required" },
+        { "name": "contentHash", "type": "string", "presence": "required" }
+      ],
+      "leaf": true
+    },
+    "uiControl": {
+      "members": [
+        { "name": "fastPath", "type": "boolean string", "presence": "required" },
+        { "name": "triage", "type": "boolean string", "presence": "optional; omitted when false" },
+        { "name": "triageProvider", "type": "string", "presence": "optional; only beside triage" },
+        { "name": "caseBase", "type": "boolean string", "presence": "optional; omitted when false" },
+        { "name": "voice", "type": "boolean string", "presence": "optional; omitted when false" },
+        { "name": "allow", "type": "array of allow entry objects", "presence": "required; never empty" }
+      ],
+      "leaf": true
+    }
+  },
+  "containment": {
+    "appRoot": [
+      "serverConfig",
+      "dataType",
+      "moduleRef",
+      "clientShell",
+      "portAllocation",
+      "layoutRef",
+      "pageRef",
+      "groundedNarrative",
+      "referenceData",
+      "dataDelivery",
+      "reportTemplate",
+      "reportProducer",
+      "subscriptionPrincipal",
+      "standingSubscription",
+      "factBrowse",
+      "theme",
+      "uiControl",
+      "extensionRef"
+    ],
+    "serverConfig": ["companionSelection", "connectorRef", "configKnob"],
+    "companionSelection": ["aiFunding", "entityReads"],
+    "pageRef": ["entityReads"],
+    "layoutRef": ["entityReads"],
+    "groundedNarrative": ["entityReads"]
+  },
+  "atMostOne": ["serverConfig", "clientShell", "portAllocation", "factBrowse", "theme", "uiControl"],
+  "clientBearingBases": ["serverApp"],
+  "undeclaredSurfaceKind": "view",
+  "facets": {
+    "delivery": ["atMostOnce", "atLeastOnce"],
+    "idempotency": ["idempotent", "nonIdempotent"],
+    "restart": ["lostOnRestart", "retriedAfterRestart"],
+    "convergence": ["singleWriter"],
+    "attestation": ["attestedAtLaunch", "attestedWithinWindow"],
+    "recompute": ["fullOnChange", "rowLocal", "groupLocal"]
+  },
+  "facetFamilies": [
+    "kill-and-replay",
+    "partition-and-fold",
+    "attestation-quote",
+    "incremental-recompute"
+  ],
+  "refusalClasses": [
+    "token-unregistered",
+    "citation-unexpected",
+    "containment-invalid",
+    "layer-duplicate",
+    "client-shell-unsupported-base",
+    "knob-value-unregistered",
+    "concurrent-authorship-unsupported",
+    "fact-store-absent",
+    "fact-table-duplicate",
+    "knowledge-base-without-ai",
+    "public-rendering-layer-unsupported-base",
+    "page-without-rendering-tier",
+    "page-view-client-only",
+    "fact-store-backend-without-tier",
+    "fact-table-undefined",
+    "fact-table-definition-disagrees",
+    "fact-definition-argument",
+    "fact-table-malformed",
+    "fact-table-metric-unregistered",
+    "fact-table-subject-level-unknown",
+    "grounding-definition-duplicate",
+    "narrative-tier-absent",
+    "narrative-reference-undeclared",
+    "narrative-page-invalid",
+    "narrative-malformed",
+    "ai-funding-tier-absent",
+    "ai-funding-malformed",
+    "ai-funding-secret-store-absent",
+    "page-layout-unregistered",
+    "page-capture-undeclared",
+    "page-title-blank",
+    "page-publication-malformed",
+    "reference-data-malformed",
+    "subject-calendar-unresolved",
+    "entity-malformed",
+    "entity-exposure-forbidden",
+    "delivery-reference-undeclared",
+    "delivery-duplicate",
+    "delivery-store-absent",
+    "delivery-source-unfit",
+    "disclosure-policy-malformed",
+    "narrative-surface-forbidden",
+    "entity-reads-malformed",
+    "entity-read-undeclared",
+    "surface-entity-forbidden",
+    "subscription-key-invalid",
+    "subscription-reference-undeclared",
+    "producer-placeholder-unfit",
+    "subscription-recipients-empty",
+    "subscription-schedule-invalid",
+    "subscription-sink-absent",
+    "subscription-scheduler-absent",
+    "template-placeholder-malformed",
+    "subscription-format-unfit",
+    "template-body-unfit",
+    "template-source-malformed",
+    "short-name-required",
+    "delivery-member-absent",
+    "delivery-member-unfit",
+    "delivery-principal-unresolvable",
+    "delivery-cadence-invalid",
+    "delivery-location-invalid",
+    "delivery-scheduler-absent",
+    "narrative-cadence-invalid",
+    "narrative-principal-unresolvable",
+    "fact-browse-without-tier",
+    "fact-browse-client-absent",
+    "fact-browse-malformed",
+    "fact-browse-surface-forbidden",
+    "home-entry-page-unknown",
+    "home-entry-route-captured",
+    "home-entry-audience-unreadable",
+    "home-entry-malformed",
+    "theme-malformed",
+    "ui-control-client-absent",
+    "ui-control-allow-malformed",
+    "ui-control-triage-provider-unknown"
+  ]
+}

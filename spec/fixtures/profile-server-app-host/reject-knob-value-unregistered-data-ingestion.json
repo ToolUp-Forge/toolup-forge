@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-knob-value-unregistered-data-ingestion","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"DataIngestion","value":"enabled","id":"knob-dataIngestion","children":[]}]}]}

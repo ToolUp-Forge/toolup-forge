@@ -346,6 +346,7 @@
         <Compile Include="InProcess\ComponentConfigTests.fs" />
         <Compile Include="InProcess\ComponentRequirementsTests.fs" />
         <Compile Include="InProcess\ComposableSurfaceTests.fs" />
+        <Compile Include="InProcess\CompositionProfileSurfaceTests.fs" />
         <Compile Include="InProcess\EventTopologyTests.fs" />
         <Compile Include="InProcess\DataFootprintTests.fs" />
         <Compile Include="InProcess\ScaleReadinessTests.fs" />
@@ -989,6 +990,7 @@
         <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Server\ToolUp.RAG.StaticCorpus.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.KnowledgeBase.Server\ToolUp.KnowledgeBase.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
+        <ProjectReference Include="..\ToolUp.Forms.Server\ToolUp.Forms.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.AssetStore\ToolUp.AssetStore.fsproj" />
         <ProjectReference Include="..\Media\MediaLibrary\ToolUp.MediaLibrary.fsproj" />
         <ProjectReference Include="..\Media\FFmpeg\ToolUp.Media.FFmpeg.fsproj" />

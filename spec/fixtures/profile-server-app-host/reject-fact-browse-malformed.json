@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-fact-browse-malformed","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"FactStore","value":"EnabledFactStore","id":"knob-factStore","children":[]}]},{"kind":"factBrowse","mount":"serverOnly","label":"Data tables","id":"facts","children":[]}]}

@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"edgeWorkerApp","layers":[],"id":"reject-vocabulary-unresolved","children":[{"kind":"extensionRef","namespace":"fuaran.placement","extensionKind":"profile-claim","fields":[{"name":"profiles","value":"local-first-host"}],"id":"Placement","children":[]},{"kind":"dataType","name":"Note","id":"Note","children":[]}]}

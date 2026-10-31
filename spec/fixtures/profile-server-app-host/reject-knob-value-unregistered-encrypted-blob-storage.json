@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-knob-value-unregistered-encrypted-blob-storage","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"EncryptedBlobStorage","value":"enabled","id":"knob-encryptedBlobStorage","children":[]}]}]}

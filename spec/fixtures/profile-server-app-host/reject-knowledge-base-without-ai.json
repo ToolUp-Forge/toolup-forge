@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":["knowledgeBase"],"id":"reject-knowledge-base-without-ai","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"companionSelection","slot":"aiProvider","impl":"Claude","id":"ai","children":[]},{"kind":"companionSelection","slot":"embeddingProvider","impl":"Local","id":"embed","children":[]}]}]}
