@@ -132,6 +132,7 @@ let tests =
                     LastRunError = None
                     ConsecutiveFailures = 0
                     Tags = Map.empty
+                    LastRunWarning = None
                 }
                 {
                     JobId = Guid.NewGuid()
@@ -152,6 +153,7 @@ let tests =
                     LastRunError = None
                     ConsecutiveFailures = 3
                     Tags = Map.empty
+                    LastRunWarning = None
                 }
             ]
 

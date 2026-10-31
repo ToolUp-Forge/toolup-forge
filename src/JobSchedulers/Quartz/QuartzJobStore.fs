@@ -338,6 +338,7 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
                         Error = None
                         DurationMs = None
                         ExternalHandle = None
+                        Warning = None
                     }
 
                     do! effects.RecordRun runningRow

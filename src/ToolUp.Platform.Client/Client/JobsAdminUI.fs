@@ -94,16 +94,27 @@ let rerunOffer (job: JobDefinition) : RerunOffer =
     | JobStatus.Disabled -> RerunOffer.RefusedDisabled
     | JobStatus.Cancelled -> RerunOffer.RefusedCancelled
 
+/// The warning a job's last run SUCCEEDED with, if any
+/// (`JobResult.SuccessWithWarning`): the job did its work, and the view
+/// shows what it warned of beside its status. A warning on any other
+/// standing is not shown — the record clears it on every other ending.
+let warningOf (job: JobDefinition) : string option =
+    match standingOf job, job.LastRunWarning with
+    | JobStanding.Succeeded, Some warning when not (String.IsNullOrWhiteSpace warning) -> Some warning
+    | _ -> None
+
 /// Table order: permanently failed jobs first, then jobs failing with
-/// retries left, then every other job. Within each band the order is the
-/// API's own (`CreatedAt` ascending) — `List.sortBy` is stable.
+/// retries left, then jobs that succeeded with a warning, then every other
+/// job. Within each band the order is the API's own (`CreatedAt`
+/// ascending) — `List.sortBy` is stable.
 let ordered (jobs: JobDefinition list) : JobDefinition list =
     jobs
     |> List.sortBy (fun job ->
-        match standingOf job with
-        | JobStanding.PermanentlyFailed -> 0
-        | JobStanding.FailingWillRetry -> 1
-        | _ -> 2)
+        match standingOf job, warningOf job with
+        | JobStanding.PermanentlyFailed, _ -> 0
+        | JobStanding.FailingWillRetry, _ -> 1
+        | _, Some _ -> 2
+        | _ -> 3)
 
 /// Whether `job`, read back after a re-run was accepted, shows the NEW
 /// attempt finished: its last run is no longer the one recorded when the
@@ -564,6 +575,13 @@ let private attemptPill (msgs: JobsAdminMessages) (reading: AttemptReading) =
         prop.text (attemptLabel msgs reading)
     ]
 
+/// A success's warning, shown in amber beside the status it qualifies.
+let private warningNote (warning: string) =
+    Html.p [
+        prop.className "mt-1 text-xs text-amber-700 font-mono break-all"
+        prop.text warning
+    ]
+
 let private attemptItem (msgs: JobsAdminMessages) (job: JobDefinition) (run: JobRun) =
     let reading = attemptReading job run
 
@@ -592,6 +610,9 @@ let private attemptItem (msgs: JobsAdminMessages) (job: JobDefinition) (run: Job
                     ]
                 ]
             | None -> Html.none
+            match run.Status, run.Warning with
+            | JobRunStatus.Succeeded, Some warning -> warningNote warning
+            | _ -> Html.none
         ]
     ]
 
@@ -690,6 +711,9 @@ let private summaryRow (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -
                             ]
                         ]
                     | _ -> Html.none
+                    match warningOf job with
+                    | Some warning -> warningNote warning
+                    | None -> Html.none
                 ]
             ]
             Html.td [

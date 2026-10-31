@@ -84,6 +84,7 @@ let definitionFor (jobId: JobId) (registration: JobRegistration) (now: DateTime)
     LastRunError = None
     ConsecutiveFailures = 0
     Tags = registration.Tags
+    LastRunWarning = None
 }
 
 /// Persist a new job under `jobId`, then `announce` it (the in-process

@@ -2465,7 +2465,7 @@ module PlatformDecoders =
 
     /// Generated decoder for `JobDefinition` — one combinator per field or case, read off the type's own shape.
     let jobDefinition: Decoder<JobDefinition> =
-        Decode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags -> ({
+        Decode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags lastRunWarning -> ({
             JobId = jobId
             ScopeId = scopeId
             Handler = handler
@@ -2484,6 +2484,7 @@ module PlatformDecoders =
             LastRunError = lastRunError
             ConsecutiveFailures = consecutiveFailures
             Tags = tags
+            LastRunWarning = lastRunWarning
         }: JobDefinition))
         |> Decode.apply (Decode.field "JobId" 0 Decode.asGuid)
         |> Decode.apply (Decode.field "ScopeId" 1 Decode.asString)
@@ -2503,6 +2504,7 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "LastRunError" 15 (Decode.option Decode.asString))
         |> Decode.apply (Decode.field "ConsecutiveFailures" 16 Decode.asInt32)
         |> Decode.apply (Decode.field "Tags" 17 (Decode.asMap Decode.asString Decode.asString))
+        |> Decode.apply (Decode.field "LastRunWarning" 18 (Decode.option Decode.asString))
 
     /// Generated decoder for `ExternalHandle` — one combinator per field or case, read off the type's own shape.
     let externalHandle: Decoder<ExternalHandle> =
@@ -2521,7 +2523,7 @@ module PlatformDecoders =
 
     /// Generated decoder for `JobRun` — one combinator per field or case, read off the type's own shape.
     let jobRun: Decoder<JobRun> =
-        Decode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle -> ({
+        Decode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle warning -> ({
             RunId = runId
             JobId = jobId
             ScopeId = scopeId
@@ -2532,6 +2534,7 @@ module PlatformDecoders =
             Error = error
             DurationMs = durationMs
             ExternalHandle = externalHandle
+            Warning = warning
         }: JobRun))
         |> Decode.apply (Decode.field "RunId" 0 Decode.asGuid)
         |> Decode.apply (Decode.field "JobId" 1 Decode.asGuid)
@@ -2543,6 +2546,7 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Error" 7 (Decode.option Decode.asString))
         |> Decode.apply (Decode.field "DurationMs" 8 (Decode.option Decode.asInt64))
         |> Decode.apply (Decode.field "ExternalHandle" 9 (Decode.option externalHandle))
+        |> Decode.apply (Decode.field "Warning" 10 (Decode.option Decode.asString))
 
     /// Generated decoder for `ScheduleError` — one combinator per field or case, read off the type's own shape.
     let scheduleError: Decoder<ScheduleError> =

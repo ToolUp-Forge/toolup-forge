@@ -45,6 +45,7 @@ let private mkDefinition (scopeId: string) (handler: string) (nextRunAt: DateTim
     LastRunError = None
     ConsecutiveFailures = 0
     Tags = Map.empty
+    LastRunWarning = None
 }
 
 let contractTests =

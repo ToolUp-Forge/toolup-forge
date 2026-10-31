@@ -5405,7 +5405,7 @@ ToolUp.Platform.GrantWritePathModule (class)
 ToolUp.Platform.GrantWritePathModule.identity(ToolUp.Platform.GrantWritePath) : System.String
 ToolUp.Platform.GrantWritePathModule.isOpenUnder(ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantWritePath) : System.Boolean
 ToolUp.Platform.GroundedNarrativeDefinition (class)
-ToolUp.Platform.GroundedNarrativeDefinition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface)
+ToolUp.Platform.GroundedNarrativeDefinition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.GroundedRepairPolicy)
 ToolUp.Platform.GroundedNarrativeDefinition.AllowsConjecture : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeDefinition.DependsOnMetrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.DisplayName : System.String { get }
@@ -5415,6 +5415,7 @@ ToolUp.Platform.GroundedNarrativeDefinition.PageRoute : Microsoft.FSharp.Core.FS
 ToolUp.Platform.GroundedNarrativeDefinition.Principal : System.String { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Project : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Prompt : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinition.RepairPolicy : ToolUp.Platform.GroundedRepairPolicy { get }
 ToolUp.Platform.GroundedNarrativeDefinition.RequestBuilders : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]]] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Sections : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape] { get }
 ToolUp.Platform.GroundedNarrativeDefinition.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
@@ -5427,12 +5428,14 @@ ToolUp.Platform.GroundedNarrativeDefinitionModule.reword(System.String, Microsof
 ToolUp.Platform.GroundedNarrativeDefinitionModule.withConjecture(ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.withProjection(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.withProjectionContext(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
+ToolUp.Platform.GroundedNarrativeDefinitionModule.withRepairPolicy(ToolUp.Platform.GroundedRepairPolicy, ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.withRequestBuilder(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.GroundedProjectionRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement], System.String]]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeDefinitionModule.withTags(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
 ToolUp.Platform.GroundedNarrativeEvents (class)
 ToolUp.Platform.GroundedNarrativeEvents.FailedType : System.String (literal)
 ToolUp.Platform.GroundedNarrativeEvents.PublishedType : System.String (literal)
 ToolUp.Platform.GroundedNarrativeEvents.RefusedType : System.String (literal)
+ToolUp.Platform.GroundedNarrativeEvents.RepairRoundType : System.String (literal)
 ToolUp.Platform.GroundedNarrativeEvents.SourceModule : System.String (literal)
 ToolUp.Platform.GroundedNarrativeOutcome (class)
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeFailed : System.Boolean { get }
@@ -5451,6 +5454,7 @@ ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.citations : 
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.document : ToolUp.Platform.Narrative.NarrativeDocument { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.indexed : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NarrativeIngestOutcome] { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.narrativeId : System.Guid { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.repair : ToolUp.Platform.GroundedRepairSummary { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeRefused (class)
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeRefused.offences : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence] { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeUnfunded (class)
@@ -5486,6 +5490,23 @@ ToolUp.Platform.GroundedProjectionRequest (class)
 ToolUp.Platform.GroundedProjectionRequest..ctor(System.String, System.String)
 ToolUp.Platform.GroundedProjectionRequest.Json : System.String { get }
 ToolUp.Platform.GroundedProjectionRequest.Kind : System.String { get }
+ToolUp.Platform.GroundedRepairPolicy (class)
+ToolUp.Platform.GroundedRepairPolicy..ctor(System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], System.Boolean)
+ToolUp.Platform.GroundedRepairPolicy.MaxRepairRounds : System.Int32 { get }
+ToolUp.Platform.GroundedRepairPolicy.MaxRoundsWithoutProgress : System.Int32 { get }
+ToolUp.Platform.GroundedRepairPolicy.MaxRunTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.GroundedRepairPolicy.PublishGroundedRemainder : System.Boolean { get }
+ToolUp.Platform.GroundedRepairPolicyModule (class)
+ToolUp.Platform.GroundedRepairPolicyModule.defaults : ToolUp.Platform.GroundedRepairPolicy { get }
+ToolUp.Platform.GroundedRepairPolicyModule.refuseOnOffence : ToolUp.Platform.GroundedRepairPolicy { get }
+ToolUp.Platform.GroundedRepairSummary (class)
+ToolUp.Platform.GroundedRepairSummary..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence])
+ToolUp.Platform.GroundedRepairSummary.Rounds : System.Int32 { get }
+ToolUp.Platform.GroundedRepairSummary.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence] { get }
+ToolUp.Platform.GroundedRepairSummaryModule (class)
+ToolUp.Platform.GroundedRepairSummaryModule.complete(System.Int32) : ToolUp.Platform.GroundedRepairSummary
+ToolUp.Platform.GroundedRepairSummaryModule.isComplete(ToolUp.Platform.GroundedRepairSummary) : System.Boolean
+ToolUp.Platform.GroundedRepairSummaryModule.warning(ToolUp.Platform.GroundedRepairSummary) : System.String
 ToolUp.Platform.GroundedSectionShape (class)
 ToolUp.Platform.GroundedSectionShape..ctor(System.String, System.String, System.String)
 ToolUp.Platform.GroundedSectionShape.Guidance : System.String { get }
@@ -7338,6 +7359,7 @@ ToolUp.Platform.JobLifecycle+RunOutcome.Completed : ToolUp.Platform.JobLifecycle
 ToolUp.Platform.JobLifecycle+RunOutcome.ExternallyCancelled : ToolUp.Platform.JobLifecycle+RunOutcome { get }
 ToolUp.Platform.JobLifecycle+RunOutcome.IsAbandoned : System.Boolean { get }
 ToolUp.Platform.JobLifecycle+RunOutcome.IsCompleted : System.Boolean { get }
+ToolUp.Platform.JobLifecycle+RunOutcome.IsCompletedWithWarning : System.Boolean { get }
 ToolUp.Platform.JobLifecycle+RunOutcome.IsExternallyCancelled : System.Boolean { get }
 ToolUp.Platform.JobLifecycle+RunOutcome.IsHandedOff : System.Boolean { get }
 ToolUp.Platform.JobLifecycle+RunOutcome.IsRetriable : System.Boolean { get }
@@ -7347,6 +7369,8 @@ ToolUp.Platform.JobLifecycle+RunOutcome.RetriesExhausted : ToolUp.Platform.JobLi
 ToolUp.Platform.JobLifecycle+RunOutcome.Tag : System.Int32 { get }
 ToolUp.Platform.JobLifecycle+RunOutcome+Abandoned (class)
 ToolUp.Platform.JobLifecycle+RunOutcome+Abandoned.reason : ToolUp.Platform.JobLifecycle+AbandonReason { get }
+ToolUp.Platform.JobLifecycle+RunOutcome+CompletedWithWarning (class)
+ToolUp.Platform.JobLifecycle+RunOutcome+CompletedWithWarning.warning : System.String { get }
 ToolUp.Platform.JobLifecycle+RunOutcome+HandedOff (class)
 ToolUp.Platform.JobLifecycle+RunOutcome+HandedOff.handle : ToolUp.Platform.ExternalHandle { get }
 ToolUp.Platform.JobLifecycle+RunOutcome+Retriable (class)
@@ -7354,6 +7378,7 @@ ToolUp.Platform.JobLifecycle+RunOutcome+Retriable.error : System.String { get }
 ToolUp.Platform.JobLifecycle+RunOutcome+Tags (class)
 ToolUp.Platform.JobLifecycle+RunOutcome+Tags.Abandoned : System.Int32 (literal)
 ToolUp.Platform.JobLifecycle+RunOutcome+Tags.Completed : System.Int32 (literal)
+ToolUp.Platform.JobLifecycle+RunOutcome+Tags.CompletedWithWarning : System.Int32 (literal)
 ToolUp.Platform.JobLifecycle+RunOutcome+Tags.ExternallyCancelled : System.Int32 (literal)
 ToolUp.Platform.JobLifecycle+RunOutcome+Tags.HandedOff : System.Int32 (literal)
 ToolUp.Platform.JobLifecycle+RunOutcome+Tags.Retriable : System.Int32 (literal)

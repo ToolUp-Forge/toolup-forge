@@ -631,6 +631,7 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
                                         Error = None
                                         DurationMs = None
                                         ExternalHandle = None
+                                        Warning = None
                                     }
 
                                 let! blob = storage.Download(platformContainer, name)
