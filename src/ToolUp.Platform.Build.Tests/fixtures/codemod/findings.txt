@@ -1,4 +1,4 @@
-Codemod: 41 site(s) in 11 file(s) need human review (not rewritten):
+Codemod: 45 site(s) in 12 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -30,6 +30,13 @@ Codemod: 41 site(s) in 11 file(s) need human review (not rewritten):
   src/Server/Connectors.fs
     L56 [1095-capability-probe] | :? IWatchableFileSource -> true
       -> Phase 1095: a connector's capabilities are its declared `Capabilities` record now: read `ConnectorCapabilities.watchable` / `ConnectorCapabilities.native` (or `source.Capabilities`), never the type — a decorator forwards its inner connector's record
+  src/Server/Facts.fs
+    L7 [1157-string-scope-call] let fact scopeId factId = store.Get(scopeId, factId)
+      -> Phase 1157: an `IFactStore` member takes a `ResolvedScope`, never a string: on a request `ScopeResolution.forRequest ctx`, in a job `JobContext.Scope`, for declared standing work a principal resolved through `DeclaredPrincipalResolver`. Every member answers `Result<_, FactStoreError>`: match it, or `FactStoreResult.orRaise` where the caller has no failure channel (a string-keyed store's own member is not affected)
+    L11 [1157-fact-store-implementer] interface IFactStore with
+      -> Phase 1157: an implementer of a fact-tier seam: delete the `string` scope members and keep the `ResolvedScope` ones; an `IFactStore` answers `Result<_, FactStoreError>` from every member, and wraps a read in `FactStoreResult.ofRead` so a fault is `StorageFault`, never absence
+    L14 [1157-coherence-scopes] let app = app |> FactsCompose.withCoherenceChecks daily
+      -> Phase 1157: coherence sweeps and their health probe name DECLARED PRINCIPALS now (`withCoherenceChecks cadence principal`, `withCoherenceChecksConfig config cadence principals`, `CoherenceConfig.HealthPrincipal`), each resolved through the platform's `DeclaredPrincipalResolver`; the `_platform` default sweep is gone
   src/Server/Guarded.fs
     L12 [815-remoting-permission-guarded-api] let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory
       -> Phase 815: `RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md
@@ -40,6 +47,8 @@ Codemod: 41 site(s) in 11 file(s) need human review (not rewritten):
       -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
     L18 [1066-scheduler-implementer] member _.TriggerOnce(scopeId, jobId, byUserId) = async {
       -> Phase 1066: an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy
+    L19 [1157-string-scope-call] match! inner.Get(scopeId, jobId) with
+      -> Phase 1157: an `IFactStore` member takes a `ResolvedScope`, never a string: on a request `ScopeResolution.forRequest ctx`, in a job `JobContext.Scope`, for declared standing work a principal resolved through `DeclaredPrincipalResolver`. Every member answers `Result<_, FactStoreError>`: match it, or `FactStoreResult.orRaise` where the caller has no failure channel (a string-keyed store's own member is not affected)
     L23 [1066-trigger-once-call] | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
       -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
   src/Server/Models.fs
@@ -99,6 +108,7 @@ Codemod: 41 site(s) in 11 file(s) need human review (not rewritten):
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md
+    Phase 1157 — docs/migrations/1157-one-scope-form.md
     Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
     Phase 815 — docs/migrations/815-remove-open-deprecations.md

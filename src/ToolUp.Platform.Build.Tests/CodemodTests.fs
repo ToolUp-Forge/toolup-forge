@@ -126,6 +126,7 @@ let tests =
                             "src/Client/Shell.fs"
                             "src/Server/Assistant.fs"
                             "src/Server/Connectors.fs"
+                            "src/Server/Facts.fs"
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
@@ -166,6 +167,7 @@ let tests =
                             "src/Server/Already.fs"
                             "src/Server/Assistant.fs"
                             "src/Server/Connectors.fs"
+                            "src/Server/Facts.fs"
                             "src/Server/Guarded.fs"
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
@@ -246,7 +248,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 14 file(s) visited, 69 rewrite(s) in 11 file(s), 41 site(s) for review."
+                        "Codemod: 15 file(s) visited, 73 rewrite(s) in 12 file(s), 45 site(s) for review."
                         "summary")
         ]
 
@@ -357,6 +359,53 @@ let tests =
                     (reviewSource source |> List.map (fun f -> f.RuleId, f.Line))
                     [ "1094-capability-probe", 1; "1094-isolated-backend", 3 ]
                     "both sites are listed for review"
+
+            testCase "the one scope form: a held scope is passed whole, a string scope is reported, never rewritten"
+            <| fun () ->
+                let before =
+                    String.concat "\n" [
+                        "let! receipt = store.AssertBatch(scope.ScopeId, drafts)"
+                        "let! ranked = store.QueryPopulation(ctx.Scope.ScopeId, query)"
+                        "| Error offenders -> Error(FactWrite.renderOffenders (List.length drafts) offenders)"
+                        "let options = CoverageNarrativeOptions.sameContainer \"reader\""
+                        "let! fact = store.Get(scopeId, factId)"
+                        "let! heads = store.Query(\"tenant\", FactQuery.all)"
+                        "let! row = entities.Get(request.ScopeId, id)"
+                    ]
+
+                let after =
+                    String.concat "\n" [
+                        "let! receipt = store.AssertBatch(scope, drafts)"
+                        "let! ranked = store.QueryPopulation(ctx.Scope, query)"
+                        "| Error offenders -> Error(FactStoreError.describe offenders)"
+                        "let options = CoverageNarrativeOptions.everyScope \"reader\""
+                        "let! fact = store.Get(scopeId, factId)"
+                        "let! heads = store.Query(\"tenant\", FactQuery.all)"
+                        "let! row = entities.Get(request.ScopeId, id)"
+                    ]
+
+                let rewritten, rewrites = rewriteSource before
+
+                Expect.equal (normalise rewritten) after "the golden rewrite"
+
+                Expect.equal
+                    (rewrites |> List.map _.RuleId |> List.sort)
+                    [
+                        "1157-render-offenders"
+                        "1157-resolved-scope-id"
+                        "1157-resolved-scope-id"
+                        "1157-same-container"
+                    ]
+                    "one rewrite per site, a string-keyed store's member left alone"
+
+                Expect.equal
+                    (reviewSource rewritten
+                     |> List.filter (fun f -> f.RuleId.StartsWith "1157-")
+                     |> List.map (fun f -> f.RuleId, f.Line))
+                    [ "1157-string-scope-call", 5; "1157-string-scope-call", 6 ]
+                    "a string scope has no mechanical target, so it is listed for review"
+
+                Expect.isEmpty (snd (rewriteSource rewritten)) "a second run adds nothing"
         ]
 
         testList "idempotence" [

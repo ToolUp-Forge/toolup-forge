@@ -148,6 +148,20 @@
 -    { new IDataSource with
 +    { new IDataSource with
 +        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :?> IEmitsNativePayload) }
+--- a/src/Server/Facts.fs
++++ b/src/Server/Facts.fs
+@@ L3 [1157-resolved-scope-id]
+-let receipt scope drafts = store.AssertBatch(scope.ScopeId, drafts)
++let receipt scope drafts = store.AssertBatch(scope, drafts)
+@@ L4 [1157-resolved-scope-id]
+-let ranked ctx query = store.QueryPopulation(ctx.Scope.ScopeId, query)
++let ranked ctx query = store.QueryPopulation(ctx.Scope, query)
+@@ L5 [1157-render-offenders]
+-let refused drafts offenders = Error(FactWrite.renderOffenders (List.length drafts) offenders)
++let refused drafts offenders = Error(FactStoreError.describe offenders)
+@@ L6 [1157-same-container]
+-let options = CoverageNarrativeOptions.sameContainer "coverage-reader"
++let options = CoverageNarrativeOptions.everyScope "coverage-reader"
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -235,4 +249,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 69 rewrite(s) across 11 file(s) pending.
+Codemod: 73 rewrite(s) across 12 file(s) pending.

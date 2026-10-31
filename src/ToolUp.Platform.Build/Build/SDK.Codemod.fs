@@ -38,6 +38,9 @@ type CodemodMigration =
     /// (`Scheduled` / `Coalesced`) and `TriggerOnce` refuses with a typed
     /// `TriggerError`.
     | JobOutcomes
+    /// `IFactStore` and the fact-tier seams take a `ResolvedScope` only, and
+    /// every fact-store member answers `Result<_, FactStoreError>`.
+    | OneScopeForm
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -56,6 +59,7 @@ module CodemodMigration =
             "docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md"
         | CodemodMigration.ModelCapabilities ->
             "docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md"
+        | CodemodMigration.OneScopeForm -> "docs/migrations/1157-one-scope-form.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -70,6 +74,7 @@ module CodemodMigration =
         | CodemodMigration.JobOutcomes -> "Phase 1066"
         | CodemodMigration.ModelCapabilities -> "Phase 1094"
         | CodemodMigration.RemotingLeftovers -> "Phase 1053"
+        | CodemodMigration.OneScopeForm -> "Phase 1157"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -609,6 +614,30 @@ module Codemod =
             @"\bError\s*\(?\s*""Cannot trigger a disabled job; enable it first""\s*\)?"
             "Error TriggerError.JobDisabled"
             "`Error \"Cannot trigger a disabled job; enable it first\"` → `Error TriggerError.JobDisabled`"
+        // A fact-store call handed `scope.ScopeId` already holds the resolved
+        // scope: pass the scope itself. Only the members no other store
+        // spells, so a string-keyed store's `Get(x.ScopeId, …)` is untouched.
+        rewrite
+            "1157-resolved-scope-id"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\.(AssertBatch|QueryWithCompetition|QuerySupersessionChain|QueryPopulation)\(\s*([A-Za-z_][\w.]*)\.ScopeId\s*,"
+            ".$1($2,"
+            "`store.AssertBatch(scope.ScopeId, …)` (and `QueryWithCompetition` / `QuerySupersessionChain` / `QueryPopulation`) → `store.AssertBatch(scope, …)`: the caller already holds the resolved scope"
+        rewrite
+            "1157-render-offenders"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\bFactWrite\.renderOffenders\s+(?:\([^()]*\)|[\w.]+)\s+"
+            "FactStoreError.describe "
+            "`FactWrite.renderOffenders total offenders` → `FactStoreError.describe refused` (`prepare` answers one `MalformedDrafts`)"
+        rewrite
+            "1157-same-container"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\bCoverageNarrativeOptions\.sameContainer\b"
+            "CoverageNarrativeOptions.everyScope"
+            "`CoverageNarrativeOptions.sameContainer` → `CoverageNarrativeOptions.everyScope` (the narrative commits under the resolved scope's own container)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -821,6 +850,26 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmember\s+\w+\.(?:Schedule|TriggerOnce)\b"
             "an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy"
+        // A fact-store call handed a string scope: no mechanical target
+        // exists, because nothing turns a string into a resolved scope.
+        review
+            "1157-string-scope-call"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\.(?:Assert|AssertBatch|Get|Query|QueryWithCompetition|QuerySupersessionChain|QueryPopulation)\(\s*(?:""[^""]*""|\w*[sS]copeId\b)\s*,"
+            "an `IFactStore` member takes a `ResolvedScope`, never a string: on a request `ScopeResolution.forRequest ctx`, in a job `JobContext.Scope`, for declared standing work a principal resolved through `DeclaredPrincipalResolver`. Every member answers `Result<_, FactStoreError>`: match it, or `FactStoreResult.orRaise` where the caller has no failure channel (a string-keyed store's own member is not affected)"
+        review
+            "1157-fact-store-implementer"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\binterface\s+(?:[\w.]+\.)?(?:IFactStore|IFactDisclosureGate|IDisclosureTaintIndexSource|IFactTableWriter)\s+with\b"
+            "an implementer of a fact-tier seam: delete the `string` scope members and keep the `ResolvedScope` ones; an `IFactStore` answers `Result<_, FactStoreError>` from every member, and wraps a read in `FactStoreResult.ofRead` so a fault is `StorageFault`, never absence"
+        review
+            "1157-coherence-scopes"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\b(?:withCoherenceChecks|withCoherenceChecksConfig)\b|\bHealthScope\b"
+            "coherence sweeps and their health probe name DECLARED PRINCIPALS now (`withCoherenceChecks cadence principal`, `withCoherenceChecksConfig config cadence principals`, `CoherenceConfig.HealthPrincipal`), each resolved through the platform's `DeclaredPrincipalResolver`; the `_platform` default sweep is gone"
         review
             "1053-thread-safe-cell"
             CodemodMigration.RemotingLeftovers

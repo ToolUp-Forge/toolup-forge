@@ -1,0 +1,14 @@
+module Consumer.Facts
+
+let receipt scope drafts = store.AssertBatch(scope, drafts)
+let ranked ctx query = store.QueryPopulation(ctx.Scope, query)
+let refused drafts offenders = Error(FactStoreError.describe offenders)
+let options = CoverageNarrativeOptions.everyScope "coverage-reader"
+let fact scopeId factId = store.Get(scopeId, factId)
+let row request id = entities.Get(request.ScopeId, id)
+
+type Recording(inner: IFactStore) =
+    interface IFactStore with
+        member _.Get(scope, factId) = inner.Get(scope, factId)
+
+let app = app |> FactsCompose.withCoherenceChecks daily
