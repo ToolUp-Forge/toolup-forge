@@ -33,6 +33,7 @@ open ToolUp.Platform.StorageScopeResolver
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
 open ToolUp.AI.NarrativeOffenceHistory
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ── Pure fixtures ────────────────────────────────────────────────
@@ -739,10 +740,35 @@ let private composedTests =
         }
     ]
 
+let private contractScope =
+    ScopeResolution.ofStorageScope {
+        ScopeId = "team-contract"
+        Container = "team-team-contract"
+        Persist = true
+    }
+
+/// Both implementations of the seam run its contract pack: the shipped run,
+/// and the same run wrapped by the learning loop.
+let private contractTests =
+    let deployment = lazy (deploy ())
+
+    testList "the run seam" [
+        IGroundedNarrativeRunContract.tests "GroundedNarratives.create" definition.Key contractScope (fun () ->
+            let services = deployment.Force().Services
+
+            GroundedNarratives.create
+                services
+                (services.GetRequiredService<GroundedNarrativeRegistry>())
+                (GroundedNarrativeRunOptions.create []))
+        IGroundedNarrativeRunContract.tests "NarrativeOffenceLearning.compose" definition.Key contractScope (fun () ->
+            deployment.Force().Services.GetRequiredService<IGroundedNarrativeRun>())
+    ]
+
 let tests =
     testList "Phase 1177 — narrative offence learning" [
         classifierTests
         recurrenceTests
         draftingTests
         composedTests
+        contractTests
     ]
