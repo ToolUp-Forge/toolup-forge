@@ -26,6 +26,7 @@
     <PackageTags>fsharp;fable;feliz;react;ag-charts;charts;bindings</PackageTags>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AgChartRuntime.fs" />
     <Compile Include="AgChart.fs" />
     <Content Include="package.json" />
   </ItemGroup>

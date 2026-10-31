@@ -3866,9 +3866,12 @@ module Client =
         let withLoadingIndicator =
             LoadingIndicatorContext.provider config.LoadingIndicator withAdminTiles
 
-        // Wrap in AgGridProvider — supplies AG Grid modules and optional license key
-        // to all grid instances in the React tree via context.
-        let withGrid = Feliz.AgGrid.provider config.GridModules [ withLoadingIndicator ]
+        // Phase 1168 — the grid modules and license key reach every grid from
+        // its own chunk, so the shell names them and holds no AG Grid. The
+        // chunk puts them in AgGridProvider around the grid. Set here, above
+        // every grid in the tree, because this is the one path both the
+        // mounted shell and the prerender pass take; the write is idempotent.
+        Feliz.AgGrid.configure config.GridModules
 
         // Phase 622 — wrap in the presence + soft-lock provider so module
         // views can read "who else is here" / "is this entity locked" via
@@ -3878,12 +3881,12 @@ module Client =
         //
         // Gated on `ClientConfig.Presence`, default `NoPresence`: an
         // unconfigured deployment evaluates one `match` and renders
-        // `withGrid` unchanged — no provider, no heartbeat timer, no SSE
+        // `withLoadingIndicator` unchanged — no provider, no heartbeat timer, no SSE
         // subscription (GP 11 + GP 13).
         let withPresence =
             match config.Presence with
-            | NoPresence -> withGrid
-            | EnabledPresence -> PresenceMount.mount model.ActiveModuleId withGrid
+            | NoPresence -> withLoadingIndicator
+            | EnabledPresence -> PresenceMount.mount model.ActiveModuleId withLoadingIndicator
 
         // Phase 5e — wrap the whole tree in the branding provider so any
         // view (shell chrome and module views alike) can read the active
