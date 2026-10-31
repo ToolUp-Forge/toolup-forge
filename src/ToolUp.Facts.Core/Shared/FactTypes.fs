@@ -339,8 +339,22 @@ module Fact =
     let private canonicalSubject (s: SubjectRef) : string =
         sprintf "%s/%s" s.Hierarchy (String.concat ">" s.Path)
 
+    /// The one rule for the instant a fact's period endpoint names: a
+    /// `Utc` value as it is, an `Unspecified` value read AS UTC,
+    /// a `Local` value converted. Periods arrive from ingestion and from
+    /// every payload round trip as `Unspecified`, and `ToUniversalTime`
+    /// reads those as the RUNNING machine's local time — so a key built
+    /// through it differs between a UTC server and a machine in any other
+    /// zone. Built through this rule, a fact's identity is a function of
+    /// the fact alone. Every value a UTC host computed is unchanged.
+    let instant (d: DateTime) : DateTime =
+        match d.Kind with
+        | DateTimeKind.Utc -> d
+        | DateTimeKind.Unspecified -> DateTime.SpecifyKind(d, DateTimeKind.Utc)
+        | _ -> d.ToUniversalTime()
+
     let private canonicalPeriod (p: TemporalExtent) : string =
-        sprintf "%s..%s" (p.From.ToUniversalTime().ToString("o")) (p.To.ToUniversalTime().ToString("o"))
+        sprintf "%s..%s" ((instant p.From).ToString("o")) ((instant p.To).ToString("o"))
 
     /// The **lineage key** (plan D19) — (subject, metric, period, method
     /// id) *without* the input hashes. Two facts share a lineage iff their

@@ -46,7 +46,8 @@ open ToolUp.Facts
 //
 // **Verified.** After the copy, a differential check compares source and
 // target: every row's presence, payload, transaction time, supersession
-// column, lineage hash and head flag; every lineage's chain as the target's
+// column, lineage hash (recomputed from the stored payload, as the server
+// computes it) and head flag; every lineage's chain as the target's
 // columns walk it; and the AsOf reads of both stores at sampled
 // transaction times. Each difference names its fact id.
 //
@@ -335,6 +336,10 @@ ON CONFLICT (scope) DO UPDATE SET source = EXCLUDED.source, source_digest = EXCL
     let deleteRow (table: string) =
         $"DELETE FROM {table} WHERE scope = @scope AND fact_id = @from"
 
+    /// Move every row of one scope carrying lineage hash `@from` to `@to`.
+    let internal relineage (table: string) =
+        $"UPDATE {table} SET lineage_hash = @to WHERE scope = @scope AND lineage_hash = @from"
+
     /// The statements that name a scope's rows, for the scope-binding check.
     let scopeBoundStatements (table: string) : string list = [
         readProgress table
@@ -342,7 +347,34 @@ ON CONFLICT (scope) DO UPDATE SET source = EXCLUDED.source, source_digest = EXCL
         targetRows table
         rekeyRow table
         deleteRow table
+        relineage table
     ]
+
+/// What one lineage re-key over one scope did, or on a dry run would do.
+type internal LineageMigrationReport = {
+    ScopeId: string
+    DryRun: bool
+    /// Rows the scope held when the re-key read it.
+    RowsRead: int
+    /// Stored lineages whose hash moved.
+    Lineages: int
+    /// Rows those lineages held.
+    Rows: int
+}
+
+module internal LineageMigrationReport =
+
+    /// One line per scope, for an operator.
+    let render (r: LineageMigrationReport) : string =
+        let verb = if r.DryRun then "would move" else "moved"
+
+        sprintf
+            "%s: %d rows read, %s the lineage hash of %d rows in %d lineages"
+            r.ScopeId
+            r.RowsRead
+            verb
+            r.Rows
+            r.Lineages
 
 /// One target row, as the verification reads it.
 type internal TargetRow = {
@@ -472,31 +504,42 @@ module FactStoreMigration =
     let private add (cmd: NpgsqlCommand) (name: string) (kind: NpgsqlDbType) (value: obj) =
         cmd.Parameters.Add(NpgsqlParameter(name, kind, Value = value)) |> ignore
 
-    let private readTargetRows (target: PostgresFactStore) (scope: string) : Async<TargetRow list> = async {
-        use! conn = target.DataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
-        use cmd = command target (MigrationSql.targetRows target.Options.Table) conn null
-        add cmd "scope" NpgsqlDbType.Text scope
-        use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
-        let rows = ResizeArray<TargetRow>()
+    // One scope's rows on an open connection (inside `tx` when one is given).
+    let private readRowsOn
+        (target: PostgresFactStore)
+        (scope: string)
+        (conn: NpgsqlConnection)
+        (tx: NpgsqlTransaction)
+        : Async<TargetRow list> =
+        async {
+            use cmd = command target (MigrationSql.targetRows target.Options.Table) conn tx
+            add cmd "scope" NpgsqlDbType.Text scope
+            use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+            let rows = ResizeArray<TargetRow>()
 
-        let rec loop () = async {
-            let! more = reader.ReadAsync() |> Async.AwaitTask
+            let rec loop () = async {
+                let! more = reader.ReadAsync() |> Async.AwaitTask
 
-            if more then
-                rows.Add {
-                    FactId = reader.GetString 0
-                    LineageHash = reader.GetString 1
-                    AsOfTicks = reader.GetInt64 2
-                    Supersedes = if reader.IsDBNull 3 then None else Some(reader.GetString 3)
-                    IsHead = reader.GetBoolean 4
-                    Payload = reader.GetString 5
-                }
+                if more then
+                    rows.Add {
+                        FactId = reader.GetString 0
+                        LineageHash = reader.GetString 1
+                        AsOfTicks = reader.GetInt64 2
+                        Supersedes = if reader.IsDBNull 3 then None else Some(reader.GetString 3)
+                        IsHead = reader.GetBoolean 4
+                        Payload = reader.GetString 5
+                    }
 
-                return! loop ()
+                    return! loop ()
+            }
+
+            do! loop ()
+            return List.ofSeq rows
         }
 
-        do! loop ()
-        return List.ofSeq rows
+    let private readTargetRows (target: PostgresFactStore) (scope: string) : Async<TargetRow list> = async {
+        use! conn = target.DataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+        return! readRowsOn target scope conn null
     }
 
     // The instants the AsOf reads are compared at: `samples` of the
@@ -570,7 +613,19 @@ module FactStoreMigration =
                     column "payload" (FactRow.serialise f) r.Payload
                     column "as_of_ticks" (string f.AsOf.Ticks) (string r.AsOfTicks)
                     column "supersedes" (defaultArg f.Supersedes "NULL") (defaultArg r.Supersedes "NULL")
-                    column "lineage_hash" (FactRow.lineageHash f) r.LineageHash
+                    // The row's lineage hash against what the server computes
+                    // from the row it stored, not against this process's own
+                    // copy arithmetic: a copy keyed on a machine whose zone
+                    // moved its periods agrees with itself and with nothing
+                    // else. A payload that does not read back is already a
+                    // payload difference; the source fact stands in for it.
+                    let recomputed =
+                        try
+                            FactRow.lineageHashOfPayload r.Payload
+                        with _ ->
+                            FactRow.lineageHash f
+
+                    column "lineage_hash" recomputed r.LineageHash
 
                     let isHead = sourceHeads.Contains f.FactId
 
@@ -1224,6 +1279,180 @@ module FactStoreMigration =
                     return Ok report
         }
 
+    // The lineage re-key's plan over one read of a scope: each stored hash
+    // that moves, the hash it moves to and how many rows carry it. Refused
+    // when a payload does not read back, when one stored lineage would split
+    // into two, or when two would merge (or one would land on a hash a row
+    // that is not moving already carries): each changes which facts share a
+    // lineage, which is not a re-key.
+    let private lineagePlan (rows: TargetRow list) : Result<(string * string * int) list, string> =
+        let recomputed =
+            rows
+            |> List.map (fun r ->
+                try
+                    Ok(r, FactRow.lineageHashOfPayload r.Payload)
+                with e ->
+                    Error(sprintf "%s (%s)" r.FactId e.Message))
+
+        match
+            recomputed
+            |> List.choose (fun x ->
+                match x with
+                | Error e -> Some e
+                | Ok _ -> None)
+        with
+        | _ :: _ as unreadable ->
+            Error(sprintf "rows whose payload does not read back: %s" (String.concat "; " unreadable))
+        | [] ->
+            let pairs =
+                recomputed
+                |> List.choose (fun x ->
+                    match x with
+                    | Ok p -> Some p
+                    | Error _ -> None)
+
+            let movingOld =
+                pairs
+                |> List.filter (fun (r, hash) -> r.LineageHash <> hash)
+                |> List.map (fun (r, _) -> r.LineageHash)
+                |> Set.ofList
+
+            let byOld =
+                pairs
+                |> List.filter (fun (r, _) -> movingOld.Contains r.LineageHash)
+                |> List.groupBy (fun (r, _) -> r.LineageHash)
+                |> List.map (fun (old, members) -> old, members |> List.map snd |> List.distinct, members.Length)
+
+            let staying =
+                pairs
+                |> List.filter (fun (r, _) -> not (movingOld.Contains r.LineageHash))
+                |> List.map (fun (r, _) -> r.LineageHash)
+                |> Set.ofList
+
+            match byOld |> List.filter (fun (_, targets, _) -> targets.Length > 1) with
+            | (old, targets, _) :: _ ->
+                Error(
+                    sprintf
+                        "lineage %s would split into %d lineages (%s)"
+                        old
+                        targets.Length
+                        (String.concat ", " targets)
+                )
+            | [] ->
+                let moves = byOld |> List.map (fun (old, targets, n) -> old, List.head targets, n)
+
+                let collision =
+                    moves
+                    |> List.groupBy (fun (_, into, _) -> into)
+                    |> List.tryFind (fun (into, group) -> group.Length > 1 || staying.Contains into)
+
+                match collision with
+                | Some(into, _) -> Error(sprintf "lineage %s would merge two stored lineages" into)
+                | None -> Ok moves
+
+    /// Move one scope's stored lineage hashes onto what the server computes
+    /// from each row's own payload (`FactRow.lineageHashOfPayload`): the
+    /// repair for rows keyed on a machine whose zone moved their periods. The
+    /// fact ids are `migrateIds`' to move; this rewrites `lineage_hash` only.
+    /// Refused, naming why, before anything is written when a payload does
+    /// not read back or the move would split or merge a lineage. One
+    /// transaction under the scope's exclusive write lock, planned again
+    /// under the lock and guarded the whole way: every move must touch
+    /// exactly the rows it counted, each goes through a staging value so no
+    /// two lineages ever share a head mid-move, and the scope is re-read
+    /// before commit with every row on its recomputed hash, or nothing is
+    /// kept. A second run plans nothing. `dryRun` reads, plans and writes
+    /// nothing. Run it with the deployment's writers stopped.
+    let internal migrateLineages
+        (target: PostgresFactStore)
+        (scope: string)
+        (dryRun: bool)
+        : Async<Result<LineageMigrationReport, string>> =
+        async {
+            let report (rowsRead: int) (moves: (string * string * int) list) = {
+                ScopeId = scope
+                DryRun = dryRun
+                RowsRead = rowsRead
+                Lineages = moves.Length
+                Rows = moves |> List.sumBy (fun (_, _, n) -> n)
+            }
+
+            let refused (reason: string) =
+                Error(sprintf "scope %s: %s; nothing was re-keyed" scope reason)
+
+            let! rows = readTargetRows target scope
+
+            match lineagePlan rows with
+            | Error reason -> return refused reason
+            | Ok moves when dryRun || List.isEmpty moves -> return Ok(report rows.Length moves)
+            | Ok _ ->
+                use! conn = target.DataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+                use! tx = conn.BeginTransactionAsync().AsTask() |> Async.AwaitTask
+
+                do! async {
+                    use lock = command target Sql.lockScopeExclusive conn tx
+                    add lock "scope" NpgsqlDbType.Text scope
+                    let! _ = exec lock
+                    ()
+                }
+
+                let move (from: string) (into: string) (expected: int) = async {
+                    use cmd = command target (MigrationSql.relineage target.Options.Table) conn tx
+                    add cmd "scope" NpgsqlDbType.Text scope
+                    add cmd "from" NpgsqlDbType.Text from
+                    add cmd "to" NpgsqlDbType.Text into
+                    let! moved = exec cmd
+
+                    return
+                        if moved = expected then
+                            None
+                        else
+                            Some(sprintf "moving lineage %s touched %d rows, expected %d" from moved expected)
+                }
+
+                let rec moveAll (steps: (string * string * int) list) = async {
+                    match steps with
+                    | [] -> return None
+                    | (from, into, n) :: rest ->
+                        match! move from into n with
+                        | Some problem -> return Some problem
+                        | None -> return! moveAll rest
+                }
+
+                let staged (hash: string) = "rekey:" + hash
+
+                // Planned again under the lock: the plan executed is the one
+                // over the rows this transaction sees.
+                let! locked = readRowsOn target scope conn tx
+
+                let! outcome = async {
+                    match lineagePlan locked with
+                    | Error reason -> return Error reason
+                    | Ok moves ->
+                        match! moveAll (moves |> List.map (fun (old, next, n) -> old, staged next, n)) with
+                        | Some problem -> return Error problem
+                        | None ->
+                            match! moveAll (moves |> List.map (fun (_, next, n) -> staged next, next, n)) with
+                            | Some problem -> return Error problem
+                            | None ->
+                                let! after = readRowsOn target scope conn tx
+
+                                match lineagePlan after with
+                                | Ok [] -> return Ok moves
+                                | Ok left ->
+                                    return Error(sprintf "%d lineages still off their hash after the move" left.Length)
+                                | Error reason -> return Error reason
+                }
+
+                match outcome with
+                | Error problem ->
+                    do! tx.RollbackAsync() |> Async.AwaitTask
+                    return refused problem
+                | Ok moves ->
+                    do! tx.CommitAsync() |> Async.AwaitTask
+                    return Ok(report locked.Length moves)
+        }
+
     /// A process exit code for an operator host: `0` when every scope
     /// verified (or, on a dry run, would migrate), `1` otherwise.
     let exitCode (report: FactStoreMigrationReport) : int = if report.Passed then 0 else 1
@@ -1294,8 +1523,9 @@ type FactsMigrateMode =
     | Verify
     /// Move persisted fact ids onto the canonical frame, in the
     /// blob store and in the Postgres table when one is composed
-    /// (`BlobFactStore.MigrateIds`, `FactStoreMigration.migrateIds`). With
-    /// `dryRun`, plan and write nothing.
+    /// (`BlobFactStore.MigrateIds`, `FactStoreMigration.migrateIds`), and
+    /// the table's lineage hashes onto what the server computes from each
+    /// row. With `dryRun`, plan and write nothing.
     | Ids of dryRun: bool
 
 /// Which scopes `facts-migrate` runs over.
@@ -1331,7 +1561,8 @@ module FactsMigrateTask =
             "  --all-scopes               Every scope the composition enumerates."
             "  --dry-run                  Read and check the source; write nothing."
             "  --verify                   Compare the existing copy with its source; write nothing."
-            "  --ids                      Move persisted fact ids onto the canonical frame (with"
+            "  --ids                      Move persisted fact ids onto the canonical frame, and the"
+            "                             table's lineage hashes onto their recomputed value (with"
             "                             --dry-run: plan only)."
             "  --max-scope-facts <n>      Raise the per-scope bound for this run."
             "  --allow-unreadable-source  Migrate scopes holding unreadable blobs (an operator's call)."
@@ -1408,11 +1639,11 @@ module FactsMigrateTask =
 
         sprintf "facts-migrate: %s %d scope(s)\n" doing scopes.Length
 
-    let private idsLeg (store: string) (results: Result<FactIdMigrationReport, string> list) =
+    let private idsLeg (store: string) (render: 'r -> string) (results: Result<'r, string> list) =
         let lines =
             results
             |> List.map (function
-                | Ok r -> sprintf "  %s %s" store (FactIdMigration.render r)
+                | Ok r -> sprintf "  %s %s" store (render r)
                 | Error reason -> sprintf "  %s REFUSED: %s" store reason)
 
         lines, results |> List.exists Result.isError
@@ -1436,6 +1667,7 @@ module FactsMigrateTask =
             | FactsMigrateMode.Ids dryRun, _ ->
                 let blob = ResizeArray()
                 let table = ResizeArray()
+                let lineages = ResizeArray()
 
                 for scope in scopes do
                     let! moved = source.MigrateIds(scope, dryRun)
@@ -1445,18 +1677,35 @@ module FactsMigrateTask =
                     | Some t ->
                         let! rekeyed = FactStoreMigration.migrateIds t scope dryRun
                         table.Add rekeyed
+
+                        // After the ids: the lineage hash is a projection of
+                        // the row's payload, which the id move rewrites.
+                        let! relineaged = FactStoreMigration.migrateLineages t scope dryRun
+                        lineages.Add relineaged
                     | None -> ()
 
-                let blobLines, blobRefused = idsLeg "blob" (List.ofSeq blob)
-                let tableLines, tableRefused = idsLeg "postgres" (List.ofSeq table)
+                let blobLines, blobRefused = idsLeg "blob" FactIdMigration.render (List.ofSeq blob)
+
+                let tableLines, tableRefused =
+                    idsLeg "postgres" FactIdMigration.render (List.ofSeq table)
+
+                let lineageLines, lineageRefused =
+                    idsLeg "postgres lineages" LineageMigrationReport.render (List.ofSeq lineages)
 
                 let note =
                     match target with
                     | Some _ -> []
                     | None -> [ "  (no Postgres fact store is composed: the blob store only)" ]
 
-                let text = head + String.concat "\n" (blobLines @ tableLines @ note) + "\n"
-                return text, (if blobRefused || tableRefused then 1 else 0)
+                let text =
+                    head + String.concat "\n" (blobLines @ tableLines @ lineageLines @ note) + "\n"
+
+                return
+                    text,
+                    (if blobRefused || tableRefused || lineageRefused then
+                         1
+                     else
+                         0)
             | _, None ->
                 return
                     head

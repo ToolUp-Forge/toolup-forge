@@ -528,6 +528,7 @@ ToolUp.Facts.FactModule.IdLabel : System.String (literal)
 ToolUp.Facts.FactModule.compute(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.Facts.FactModule.computeFor(ToolUp.Facts.Fact) : System.String
 ToolUp.Facts.FactModule.effectiveInputHashes(ToolUp.Facts.MethodRef, ToolUp.Facts.Evidence, ToolUp.Facts.FactValue) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.FactModule.instant(System.DateTime) : System.DateTime
 ToolUp.Facts.FactModule.isForecast(ToolUp.Facts.Fact) : System.Boolean
 ToolUp.Facts.FactModule.lineageKey(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef) : System.String
 ToolUp.Facts.FactModule.methodIdentity(ToolUp.Facts.MethodRef) : System.String
