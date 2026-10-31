@@ -19,6 +19,7 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open Fuaran.UI
 open Fuaran.UI.Types
+open Fuaran.UI.Ops
 open Fuaran.UI.Ops.Types
 open ToolUp.Platform
 open ToolUp.Platform.AI
@@ -97,7 +98,7 @@ let private facts () : FactBrowseHandler.FactBrowseDeps =
         Clock = clock
     }
 
-let private rig () : Rig =
+let private rigWith (options: PageStoreOptions) : Rig =
     let audit =
         AuditLog.EventStoreAuditLog(InMemoryEventStore.InMemoryEventStore(), silentLogger) :> IAuditLog
 
@@ -109,7 +110,7 @@ let private rig () : Rig =
                 PermissionStore.PermissionStore(InMemoryBlobStorage()),
                 (fun _ user -> async { return Map.tryFind user roles }),
                 audit,
-                PageStoreOptions.defaults
+                options
             )
         Audit = audit
         Cache = PageResolutionCache None
@@ -201,8 +202,8 @@ let private container (id: string) (role: BoxRole) (heading: string) (children: 
             Children = children
     }
 
-/// root ─ title, revenue(card: the comparison chart), breakdowns(section: by-site card)
-let private seedTree (r: Rig) : Node<unit> =
+/// root ─ title, revenue(card: the comparison chart), breakdowns(section: `breakdowns r`)
+let private seedTreeWith (breakdowns: Rig -> Node<unit> list) (r: Rig) : Node<unit> =
     Fuaran.box "root" {
         Defaults.box with
             Children = [
@@ -211,13 +212,16 @@ let private seedTree (r: Rig) : Node<unit> =
                         Text = TextSource.Literal "Daily trade"
                 }
                 container "revenue" BoxRole.Card "Revenue" [ chartFor r "revenue-chart" "revenue-30d" comparison ]
-                container "breakdowns" BoxRole.Group "Breakdowns" [
-                    container "by-site" BoxRole.Card "Revenue by site" [
-                        chartFor r "by-site-chart" "revenue-by-site" breakdown
-                    ]
-                ]
+                container "breakdowns" BoxRole.Group "Breakdowns" (breakdowns r)
             ]
     }
+
+/// The by-site card: the breakdown chart.
+let private bySite (r: Rig) =
+    container "by-site" BoxRole.Card "Revenue by site" [ chartFor r "by-site-chart" "revenue-by-site" breakdown ]
+
+/// The breakdowns section holds the by-site card.
+let private seedTree (r: Rig) : Node<unit> = seedTreeWith (fun r -> [ bySite r ]) r
 
 let private sidecarOf (requests: Map<string, PageRequest>) =
     match
@@ -229,16 +233,17 @@ let private sidecarOf (requests: Map<string, PageRequest>) =
     | Ok bytes -> bytes
     | Error e -> failtest e
 
-/// A rig with the page seeded through the store by a platform admin.
-let private seeded () : Rig =
-    let r = rig ()
+/// A rig over `options` with the page `tree` seeded through the store by a
+/// platform admin.
+let private seededWith (options: PageStoreOptions) (tree: Rig -> Node<unit>) : Rig =
+    let r = rigWith options
 
     r.Store.Seed(
         teamScope,
         admin,
         page,
         {
-            PageSeed.Document = Encoding.UTF8.GetBytes(PageLayers.encodeDocument (seedTree r))
+            PageSeed.Document = Encoding.UTF8.GetBytes(PageLayers.encodeDocument (tree r))
             Sidecar = Some(sidecarOf seedRequests)
         }
     )
@@ -246,6 +251,10 @@ let private seeded () : Rig =
     |> ignore
 
     r
+
+/// The page seeded under the default store options.
+let private seeded () : Rig =
+    seededWith PageStoreOptions.defaults seedTree
 
 // ── Calls ──────────────────────────────────────────────────────────────
 
@@ -638,6 +647,397 @@ let private editTests =
         }
     ]
 
+// ── Tabbed sections ────────────────────────────────────────────────────
+
+/// The breakdowns section holds two cards: by site, and by day (the
+/// comparison drawn again).
+let private tabbable (r: Rig) : Node<unit> =
+    seedTreeWith
+        (fun r -> [
+            bySite r
+            container "by-day" BoxRole.Card "Revenue by day" [ chartFor r "by-day-chart" "revenue-30d" comparison ]
+        ])
+        r
+
+/// A tabbable page whose deployment enables every viewer's own layer.
+let private tabbableRig () =
+    seededWith
+        {
+            PageStoreOptions.defaults with
+                IndividualLayer = IndividualLayer.EveryViewer
+        }
+        tabbable
+
+let private saveAs (r: Rig) (userId: string) (layer: string) (answer: ToolHelpers.ToolAnswer) =
+    let saved = save r userId (proposalOf answer) layer
+    Expect.stringContains saved.Text "Saved proposal" saved.Text
+
+let private tabsArgs (tabs: string) =
+    pageArgs (sprintf """ "action":"tabs","section":"breakdowns","tabs":%s """ tabs)
+
+let private bySiteAndByDay =
+    tabsArgs """[{"label":"By site","blocks":["by-site"]},{"label":"By day","blocks":["by-day"]}]"""
+
+let private findNode (tree: Node<unit>) (id: string) : Node<unit> option =
+    let rec find (n: Node<unit>) =
+        if n.Id = id then
+            Some n
+        else
+            NodeChildren.children NodeChildren.Reach.kindHeld n |> List.tryPick find
+
+    find tree
+
+let private parentOf (tree: Node<unit>) (id: string) : string option =
+    let rec find (n: Node<unit>) =
+        let children = NodeChildren.children NodeChildren.Reach.kindHeld n
+
+        if children |> List.exists (fun c -> c.Id = id) then
+            Some n.Id
+        else
+            children |> List.tryPick find
+
+    find tree
+
+let private literal (text: TextSource option) =
+    match text with
+    | Some(TextSource.Literal s) -> Some s
+    | _ -> None
+
+let private headingOf (tree: Node<unit>) (id: string) =
+    match findNode tree id |> Option.map _.Kind with
+    | Some(NodeKind.Box spec) -> literal spec.Heading
+    | other -> failtestf "expected box '%s', got %A" id other
+
+/// The section's tab set, and its tabs as (id, label, block ids).
+let private tabsOf (tree: Node<unit>) (sectionId: string) =
+    match childrenOf tree sectionId with
+    | Some ids ->
+        match
+            ids
+            |> List.choose (findNode tree)
+            |> List.filter (fun n ->
+                match n.Kind with
+                | NodeKind.Tabs _ -> true
+                | _ -> false)
+        with
+        | [ tabSet ] ->
+            match tabSet.Kind with
+            | NodeKind.Tabs spec ->
+                Expect.isNone spec.TabHeaders "the tabs carry no header list: each card's heading is its label"
+
+                match spec.ActiveIndex with
+                | Binding.State(key, Some 0) ->
+                    Expect.equal key tabSet.Id "the active tab is viewer state keyed by the tab set"
+                | other -> failtestf "expected the active tab bound to viewer state, got %A" other
+
+                tabSet.Id,
+                spec.Children
+                |> List.map (fun tab -> tab.Id, headingOf tree tab.Id, childrenOf tree tab.Id |> Option.defaultValue [])
+            | _ -> failtest "a tab set"
+        | other -> failtestf "expected one tab set in '%s', got %A" sectionId (other |> List.map _.Id)
+    | None -> failtestf "no section '%s'" sectionId
+
+/// The ops one layer holds, as stored.
+let private layerOps (page: FoldedPage) (layer: PageLayer) : TreeOp<unit> list =
+    page.Layers
+    |> List.filter (fun l -> l.Key.Layer = layer)
+    |> List.collect (fun l -> l.Records |> List.map _.Op)
+
+/// Every op stays inside `sectionId`'s subtree, and none re-states a node's
+/// children: no `EditNode` over a node holding children, no `ReplaceRoot`.
+let private expectConfined (before: Node<unit>) (sectionId: string) (ops: TreeOp<unit> list) =
+    let subtree (tree: Node<unit>) =
+        match findNode tree sectionId with
+        | Some section -> Introspect.allNodeIds section |> Set.ofList
+        | None -> Set.empty
+
+    Expect.isNonEmpty ops "the verb emitted ops"
+
+    ops
+    |> List.fold
+        (fun (tree: Node<unit>) op ->
+            match op with
+            | TreeOp.ReplaceRoot _ -> failtest "a ReplaceRoot"
+            | TreeOp.Batch _ -> failtest "a batch: each op is checked on its own"
+            | TreeOp.EditNode(NodeId id, _) ->
+                match findNode tree id |> Option.bind (fun n -> Introspect.getChildren n.Kind) with
+                | Some(_ :: _) -> failtestf "an EditNode over '%s', which holds children" id
+                | _ -> ()
+            | _ -> ()
+
+            match Apply.apply op tree with
+            | Error e -> failtestf "%A does not apply: %s" op e.Message
+            | Ok after ->
+                let inside = Set.union (subtree tree) (subtree after)
+
+                for target in TreeOp.targets op do
+                    Expect.isTrue (inside.Contains target) (sprintf "%A stays inside section '%s'" op sectionId)
+
+                after)
+        before
+    |> ignore
+
+let private tabTests =
+    testList "tabbed sections" [
+        test
+            "putting the breakdowns in tabs by site and by day proposes, previews and saves, and moves no block out of its id" {
+            let r = tabbableRig ()
+            let before = (folded r "owner").Tree
+
+            let answer = call r "owner" LayoutTool.SetSection bySiteAndByDay
+            expectProposed answer
+            Expect.stringContains answer.Text "2 tab(s): 'By site', 'By day'" answer.Text
+
+            Expect.equal
+                (childrenOf (folded r "owner").Tree "breakdowns")
+                (Some [ "by-site"; "by-day" ])
+                "a proposal writes nothing"
+
+            saveAs r "owner" "team" answer
+
+            let after = folded r "owner"
+            let tabSetId, tabs = tabsOf after.Tree "breakdowns"
+            Expect.equal (childrenOf after.Tree "breakdowns") (Some [ tabSetId ]) "the section holds its tabs"
+
+            Expect.equal
+                (tabs |> List.map (fun (_, label, blocks) -> label, blocks))
+                [ Some "By site", [ "by-site" ]; Some "By day", [ "by-day" ] ]
+                "each block in its tab, under its label"
+
+            Expect.equal (chartOf after.Tree "by-site-chart" |> keyOf) "revenue-by-site" "the block is the same node"
+            Expect.isEmpty after.Conflicts "the fold is clean"
+            expectConfined before "breakdowns" (layerOps after PageLayer.Team)
+        }
+
+        test "an individual's retitle inside a block survives the team tabbing the section" {
+            let r = tabbableRig ()
+
+            call r "member" LayoutTool.Retitle (pageArgs """ "block":"by-site-chart","title":"My sites" """)
+            |> saveAs r "member" "individual"
+
+            call r "owner" LayoutTool.SetSection bySiteAndByDay |> saveAs r "owner" "team"
+
+            let mine = folded r "member"
+            Expect.isEmpty mine.Conflicts "nothing conflicts"
+            Expect.equal (literal (chartOf mine.Tree "by-site-chart").Title) (Some "My sites") "the retitle is intact"
+
+            let _, tabs = tabsOf mine.Tree "breakdowns"
+
+            Expect.equal
+                (tabs |> List.map (fun (_, label, blocks) -> label, blocks))
+                [ Some "By site", [ "by-site" ]; Some "By day", [ "by-day" ] ]
+                "and the block is inside its tab"
+
+            let ops = layerOps mine PageLayer.Individual
+
+            match ops with
+            | [ TreeOp.UpdateProp(NodeId "by-site-chart", "Title", _) ] -> ()
+            | other -> failtestf "the individual layer holds its one edit, got %A" other
+        }
+
+        test "the team tabs, an individual retitles a block inside a tab, the team renames the tab: both edits hold" {
+            let r = tabbableRig ()
+            call r "owner" LayoutTool.SetSection bySiteAndByDay |> saveAs r "owner" "team"
+
+            let siteTab =
+                match tabsOf (folded r "owner").Tree "breakdowns" with
+                | _, (id, _, _) :: _ -> id
+                | _ -> failtest "the tabs"
+
+            call r "member" LayoutTool.Retitle (pageArgs """ "block":"by-site-chart","title":"My sites" """)
+            |> saveAs r "member" "individual"
+
+            let before = (folded r "owner").Tree
+            let opsBefore = layerOps (folded r "owner") PageLayer.Team |> List.length
+
+            call
+                r
+                "owner"
+                LayoutTool.SetSection
+                (tabsArgs (
+                    sprintf
+                        """[{"tab":"%s","label":"Sites","blocks":["by-site"]},{"label":"By day","blocks":["by-day"]}]"""
+                        siteTab
+                ))
+            |> saveAs r "owner" "team"
+
+            let renamed = layerOps (folded r "owner") PageLayer.Team |> List.skip opsBefore
+
+            match renamed with
+            | [ TreeOp.UpdateProp(NodeId id, "Heading", _) ] when id = siteTab -> ()
+            | other -> failtestf "renaming a tab is one edit of its heading, got %A" other
+
+            expectConfined before "breakdowns" renamed
+
+            let mine = folded r "member"
+            Expect.isEmpty mine.Conflicts "nothing conflicts"
+            Expect.equal (literal (chartOf mine.Tree "by-site-chart").Title) (Some "My sites") "the retitle holds"
+            Expect.equal (headingOf mine.Tree siteTab) (Some "Sites") "and so does the rename"
+            Expect.equal (parentOf mine.Tree "by-site") (Some siteTab) "the block is still in its tab"
+        }
+
+        test "an individual's tabs keep the team's later edits under the section" {
+            let r = tabbableRig ()
+
+            call r "member" LayoutTool.SetSection bySiteAndByDay
+            |> saveAs r "member" "individual"
+
+            call r "owner" LayoutTool.Retitle (pageArgs """ "block":"by-site-chart","title":"Sites, team" """)
+            |> saveAs r "owner" "team"
+
+            call r "owner" LayoutTool.MoveBlock (pageArgs """ "block":"revenue","into":"breakdowns" """)
+            |> saveAs r "owner" "team"
+
+            let mine = folded r "member"
+            Expect.isEmpty mine.Conflicts "nothing conflicts"
+
+            Expect.equal
+                (literal (chartOf mine.Tree "by-site-chart").Title)
+                (Some "Sites, team")
+                "the team's later retitle reaches the block inside the individual's tab"
+
+            let tabSetId, tabs = tabsOf mine.Tree "breakdowns"
+
+            Expect.equal
+                (childrenOf mine.Tree "breakdowns")
+                (Some [ "revenue"; tabSetId ])
+                "the block the team added to the section is not lost"
+
+            Expect.equal
+                (tabs |> List.map (fun (_, _, blocks) -> blocks))
+                [ [ "by-site" ]; [ "by-day" ] ]
+                "the tabs hold"
+        }
+
+        test "a tab the team removes under an individual's retitle of it is a conflict naming both acts" {
+            let r = tabbableRig ()
+            call r "owner" LayoutTool.SetSection bySiteAndByDay |> saveAs r "owner" "team"
+
+            let siteTab, dayTab =
+                match tabsOf (folded r "owner").Tree "breakdowns" with
+                | _, [ (site, _, _); (day, _, _) ] -> site, day
+                | _ -> failtest "two tabs"
+
+            call r "member" LayoutTool.Retitle (pageArgs (sprintf """ "block":"%s","title":"Days" """ dayTab))
+            |> saveAs r "member" "individual"
+
+            call
+                r
+                "owner"
+                LayoutTool.SetSection
+                (tabsArgs (sprintf """[{"tab":"%s","label":"All","blocks":["by-site","by-day"]}]""" siteTab))
+            |> saveAs r "owner" "team"
+
+            let removedAt =
+                layerOps (folded r "owner") PageLayer.Team
+                |> List.findIndexBack (function
+                    | TreeOp.RemoveNode(NodeId id) -> id = dayTab
+                    | _ -> false)
+
+            let mine = folded r "member"
+
+            match mine.Conflicts with
+            | [ conflict ] ->
+                Expect.equal conflict.Act.Layer PageLayer.Individual "the individual's act"
+                Expect.equal conflict.Act.Principal "member" "by the member"
+                Expect.equal conflict.Act.Seq 0 "its first"
+
+                match conflict.Cause with
+                | ConflictCause.Removed(NodeId target, removedBy) ->
+                    Expect.equal target dayTab "the retitled tab"
+                    Expect.equal removedBy.Layer PageLayer.Team "removed by the team's act"
+                    Expect.equal removedBy.Seq removedAt "the re-tab's removal"
+                | other -> failtestf "expected a removal, got %A" other
+            | other -> failtestf "expected one conflict, got %A" other
+
+            let _, tabs = tabsOf mine.Tree "breakdowns"
+
+            Expect.equal
+                (tabs |> List.map (fun (_, label, blocks) -> label, blocks))
+                [ Some "All", [ "by-site"; "by-day" ] ]
+                "the rest folds"
+        }
+
+        test "reordering tabs is one reorder, and untab puts the blocks back where the tabs stood" {
+            let r = tabbableRig ()
+            call r "owner" LayoutTool.SetSection bySiteAndByDay |> saveAs r "owner" "team"
+            let tabSetId, tabs = tabsOf (folded r "owner").Tree "breakdowns"
+
+            let count () =
+                layerOps (folded r "owner") PageLayer.Team |> List.length
+
+            let n = count ()
+
+            call
+                r
+                "owner"
+                LayoutTool.SetSection
+                (tabsArgs """[{"label":"By day","blocks":["by-day"]},{"label":"By site","blocks":["by-site"]}]""")
+            |> saveAs r "owner" "team"
+
+            match layerOps (folded r "owner") PageLayer.Team |> List.skip n with
+            | [ TreeOp.ReorderChildren(NodeId id, order) ] ->
+                Expect.equal id tabSetId "the tab set"
+                Expect.equal order (tabs |> List.rev |> List.map (fun (tab, _, _) -> NodeId tab)) "day, then site"
+            | other -> failtestf "expected one reorder, got %A" other
+
+            let n = count ()
+            let before' = (folded r "owner").Tree
+
+            call r "owner" LayoutTool.SetSection (pageArgs """ "action":"untab","section":"breakdowns" """)
+            |> saveAs r "owner" "team"
+
+            let after = folded r "owner"
+            Expect.equal (childrenOf after.Tree "breakdowns") (Some [ "by-day"; "by-site" ]) "in tab order"
+            Expect.isNone (findNode after.Tree tabSetId) "the tab set is gone"
+            expectConfined before' "breakdowns" (layerOps after PageLayer.Team |> List.skip n)
+        }
+
+        test "a block named twice, a node outside the section, a block in no tab and an unknown tab are refused by name" {
+            let r = tabbableRig ()
+            let hash = (folded r "owner").ContentHash
+
+            let refused (args: string) (cause: string) (names: string) =
+                let answer = call r "owner" LayoutTool.SetSection args
+                Expect.stringContains answer.Text (sprintf "(%s)" cause) answer.Text
+                Expect.stringContains answer.Text names answer.Text
+                Expect.isEmpty answer.Parts "nothing is proposed"
+
+            refused
+                (tabsArgs """[{"label":"A","blocks":["by-site"]},{"label":"B","blocks":["by-day","by-site"]}]""")
+                "tabs-block-named-twice"
+                "'by-site'"
+
+            refused
+                (tabsArgs """[{"label":"A","blocks":["by-site","title"]},{"label":"B","blocks":["by-day"]}]""")
+                "tabs-not-in-section"
+                "'title'"
+
+            refused
+                (tabsArgs """[{"label":"A","blocks":["by-site","nowhere"]},{"label":"B","blocks":["by-day"]}]""")
+                "unknown-node"
+                "'nowhere'"
+
+            refused (tabsArgs """[{"label":"A","blocks":["by-site"]}]""") "tabs-unassigned" "'by-day'"
+
+            refused
+                (tabsArgs """[{"tab":"by-site","label":"A","blocks":["by-site","by-day"]}]""")
+                "tabs-unknown-tab"
+                "'by-site'"
+
+            refused (pageArgs """ "action":"untab","section":"breakdowns" """) "tabs-not-tabbed" "'breakdowns'"
+            refused (tabsArgs "[]") "arguments" "untab"
+            refused (tabsArgs """[{"label":"A","blocks":[]}]""") "arguments" "holds no blocks"
+
+            refused
+                (pageArgs """ "action":"add","title":"X","tabs":[{"label":"A","blocks":["by-site"]}] """)
+                "arguments"
+                "'tabs'"
+
+            Expect.equal (folded r "owner").ContentHash hash "nothing was written"
+        }
+    ]
+
 // ── Composition ────────────────────────────────────────────────────────
 
 let private aiApp = AIToolSchemaTests.LayoutCensus.aiApp
@@ -685,4 +1085,11 @@ let private compositionTests =
     ]
 
 let tests =
-    testList "Layout tools" [ acceptanceTests; refusalTests; gateTests; editTests; compositionTests ]
+    testList "Layout tools" [
+        acceptanceTests
+        refusalTests
+        gateTests
+        editTests
+        tabTests
+        compositionTests
+    ]

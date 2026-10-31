@@ -188,6 +188,85 @@ let private foldTests =
             Expect.equal (bytesOf first.Document) (bytesOf expected) "every layer applied, platform first"
         }
 
+        test
+            "a section tabbed by structural ops keeps a lower layer's later edits; re-stating its children drops them silently" {
+            let card (id: string) (label: string) (children: Node<unit> list) =
+                Fuaran.box id {
+                    Defaults.box with
+                        Role = BoxRole.Card
+                        Heading = Some(TextSource.Literal label)
+                        Children = children
+                }
+
+            let tabSet (children: Node<unit> list) =
+                Fuaran.tabs "body-tabs" {
+                    Defaults.tabs with
+                        ActiveIndex = Binding.State("body-tabs", Some 0)
+                        Children = children
+                }
+
+            // The platform's edits under the section, made after the team tabbed it.
+            let platform =
+                record PageLayer.Platform "platform" [
+                    retitle "a" "Revenue (net)"
+                    TreeOp.InsertChild(NodeId "body", heading "d" "Returns")
+                ]
+
+            let structural =
+                record PageLayer.Team "t1" [
+                    TreeOp.InsertChild(NodeId "body", tabSet [])
+                    TreeOp.InsertChild(NodeId "body-tabs", card "one" "One" [])
+                    TreeOp.InsertChild(NodeId "body-tabs", card "two" "Two" [])
+                    TreeOp.MoveNode(NodeId "a", NodeId "one")
+                    TreeOp.MoveNode(NodeId "b", NodeId "one")
+                    TreeOp.MoveNode(NodeId "c", NodeId "two")
+                ]
+
+            let kept = PageLayers.fold seedTree [ platform; structural ]
+            Expect.isEmpty kept.Conflicts "nothing conflicts"
+
+            Expect.equal
+                (bytesOf kept.Document)
+                (bytesOf (
+                    box "root" [
+                        box "header" [ heading "title" "Daily trade" ]
+                        box "body" [
+                            heading "d" "Returns"
+                            tabSet [
+                                card "one" "One" [ heading "a" "Revenue (net)"; heading "b" "Units" ]
+                                card "two" "Two" [ heading "c" "Margin" ]
+                            ]
+                        ]
+                    ]
+                ))
+                "the lower layer's retitle and added block both survive"
+
+            // The same tabs written as one edit of the section, as the team saw it.
+            let restated =
+                record PageLayer.Team "t1" [
+                    TreeOp.EditNode(
+                        NodeId "body",
+                        NodeKind.Box {
+                            Defaults.box with
+                                Children = [
+                                    tabSet [
+                                        card "one" "One" [ heading "a" "Revenue"; heading "b" "Units" ]
+                                        card "two" "Two" [ heading "c" "Margin" ]
+                                    ]
+                                ]
+                        }
+                    )
+                ]
+
+            let clobbered = PageLayers.fold seedTree [ platform; restated ]
+
+            Expect.isEmpty clobbered.Conflicts "the loss raises no conflict: that is why the verb never emits it"
+            let ids = Introspect.allNodeIds clobbered.Document
+            Expect.isFalse (List.contains (NodeId "d") ids) "the lower layer's block is gone"
+
+            Expect.isFalse ((bytesOf clobbered.Document).Contains "Revenue (net)") "and so is its retitle"
+        }
+
         test "an individual op whose target the team removed is a conflict naming both acts, never dropped" {
             let team =
                 record PageLayer.Team "t1" [ retitle "b" "Volume"; TreeOp.RemoveNode(NodeId "a") ]
