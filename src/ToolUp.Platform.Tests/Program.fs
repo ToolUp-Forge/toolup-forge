@@ -1060,6 +1060,7 @@ let private registeredTests =
         AggregateMetricToolTests.tests
         PipelineAssertionTests.tests
         PageRequestResolverTests.tests
+        LayoutToolsTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
