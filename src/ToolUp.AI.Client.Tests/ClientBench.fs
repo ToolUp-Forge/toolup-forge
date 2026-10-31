@@ -56,6 +56,10 @@
 ///     every `.js` file under the build directory `--minimal-bundle` /
 ///     `--shell-bundle` names, minified and uncompressed (gzip beside it as
 ///     a lever). A size, not a clock; the gate script runs the builds.
+///   * FIRST LOAD (Phase 1168) — what a first load of the SDK shell fetches:
+///     the entry chunk and its static imports, walked through the manifest
+///     the shell build writes. The whole-bundle figure above sums every file
+///     and so cannot see a split.
 ///   * COMPOSITION-ROUTE SCOPE (Phase 910) — the same counts on the AI
 ///     composer, whole tree and over its own store, plus renders of the
 ///     shell's context readers (flags, branding, tiles, catalog) per
@@ -421,6 +425,79 @@ let private measureBundle (label: string) (dir: string) : BundleMeasure =
                         full
             }
 
+/// The shell's first load: the files a browser fetches before anything runs,
+/// which are the build's entry chunks and everything they import statically.
+/// Walked through `.vite/manifest.json`, so it follows the graph the bundler
+/// wrote rather than a guess from file names. A build with no manifest or no
+/// entry is UNOBSERVED, for `measureBundle`'s reason.
+let private measureFirstLoad (label: string) (dir: string) : BundleMeasure =
+    let full = resolvePath dir
+    let manifestPath = joinPath (full, ".vite/manifest.json")
+
+    let unobserved why = {
+        RawKiB = 0.0
+        GzipKiB = 0.0
+        Files = 0
+        Observed = false
+        Evidence = sprintf "%s NOT observed: %s (%s)" label why manifestPath
+    }
+
+    if not (existsSync manifestPath) then
+        unobserved "the build wrote no manifest"
+    else
+        let manifest = JS.JSON.parse (readFileSync (manifestPath, "utf8"))
+        let keys: string array = JS.Constructors.Object.keys manifest |> Seq.toArray
+        let chunk (key: string) : obj = manifest?(key)
+
+        let entries =
+            keys |> Array.filter (fun k -> (chunk k)?isEntry = box true) |> Array.toList
+
+        let staticImports (key: string) : string list =
+            let imports: obj = (chunk key)?imports
+
+            if isNullOrUndefined imports then
+                []
+            else
+                List.ofArray (unbox<string array> imports)
+
+        let rec walk (seen: Set<string>) (pending: string list) =
+            match pending with
+            | [] -> seen
+            | key :: rest when seen.Contains key -> walk seen rest
+            | key :: rest -> walk (seen.Add key) (staticImports key @ rest)
+
+        let closure = walk Set.empty entries
+
+        let files =
+            closure
+            |> Set.toArray
+            |> Array.map (fun key -> joinPath (full, unbox<string> (chunk key)?file))
+            |> Array.filter _.EndsWith(".js")
+
+        if List.isEmpty entries || Array.isEmpty files then
+            unobserved "the manifest names no entry chunk"
+        else
+            let raw = files |> Array.sumBy (fun f -> unbox<float> (statSync f)?size)
+
+            let gzip =
+                files |> Array.sumBy (fun f -> unbox<float> (gzipSync (readBytes f))?length)
+
+            {
+                RawKiB = raw / 1024.0
+                GzipKiB = gzip / 1024.0
+                Files = files.Length
+                Observed = true
+                Evidence =
+                    sprintf
+                        "%s: %d of %d manifest chunk(s), %.0f bytes minified (%.0f gzipped) under %s"
+                        label
+                        files.Length
+                        keys.Length
+                        raw
+                        gzip
+                        full
+            }
+
 // ─── Decode per response ───────────────────────────────────────────────
 
 type private DecodeFixture = {
@@ -727,12 +804,13 @@ let private runAsync (argv: string[]) : Async<int> = async {
     // ── Bundle size (Phase 909) ──
     let bundles =
         [
-            "minimalBundleKiB", "samples/MinimalClient", options.MinimalBundle
-            "shellBundleKiB", "SDK shell (SDK.Client)", options.ShellBundle
+            "minimalBundleKiB", measureBundle "samples/MinimalClient", options.MinimalBundle
+            "shellBundleKiB", measureBundle "SDK shell (SDK.Client)", options.ShellBundle
+            "shellFirstLoadKiB", measureFirstLoad "SDK shell first load", options.ShellBundle
         ]
-        |> List.choose (fun (metric, label, dir) ->
+        |> List.choose (fun (metric, measure, dir) ->
             match dir with
-            | Some d -> Some(metric, measureBundle label d)
+            | Some d -> Some(metric, measure d)
             | None ->
                 say (
                     sprintf
