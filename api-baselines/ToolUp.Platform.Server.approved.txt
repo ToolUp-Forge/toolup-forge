@@ -6336,8 +6336,8 @@ ToolUp.Platform.IExternalHandleStore.MarkTerminal(System.Guid) : Microsoft.FShar
 ToolUp.Platform.IExternalHandleStore.Register(ToolUp.Platform.ExternalHandle, System.Guid, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IExternalHandleStore.Resolve(System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalHandleRecord]]
 ToolUp.Platform.IFactEvidenceSource (interface)
-ToolUp.Platform.IFactEvidenceSource.FactsForResult(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FactEvidence]]
-ToolUp.Platform.IFactEvidenceSource.GetFact(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FactEvidence]]
+ToolUp.Platform.IFactEvidenceSource.FactsForResult(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FactEvidence]]
+ToolUp.Platform.IFactEvidenceSource.GetFact(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FactEvidence]]
 ToolUp.Platform.IFeatureFlagStore (interface)
 ToolUp.Platform.IFeatureFlagStore.ClearFlag(ToolUp.Platform.FlagScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IFeatureFlagStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
@@ -6523,10 +6523,10 @@ ToolUp.Platform.IModuleVisibilityStore.ClearProfile(ToolUp.Platform.FlagScope) :
 ToolUp.Platform.IModuleVisibilityStore.GetProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityProfile]]
 ToolUp.Platform.IModuleVisibilityStore.SetProfile(ToolUp.Platform.FlagScope, ToolUp.Platform.ModuleVisibilityProfile) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.INarrativeGroundingGate (interface)
-ToolUp.Platform.INarrativeGroundingGate.Certify(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NarrativeGroundingCertificate, System.String]]
-ToolUp.Platform.INarrativeGroundingGate.Check(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeGroundingVerdict]
+ToolUp.Platform.INarrativeGroundingGate.Certify(ToolUp.Platform.ResolvedScope, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NarrativeGroundingCertificate, System.String]]
+ToolUp.Platform.INarrativeGroundingGate.Check(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeGroundingVerdict]
 ToolUp.Platform.INarrativeIngestor (interface)
-ToolUp.Platform.INarrativeIngestor.Ingest(ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativeIngestOutcome]
+ToolUp.Platform.INarrativeIngestor.Ingest(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativeIngestOutcome]
 ToolUp.Platform.INarrativePagePublisher (interface)
 ToolUp.Platform.INarrativePagePublisher.PublishAsync(ToolUp.Platform.EntityTypes+EntityPrincipal, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.SlugCollisionPolicy, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativePublishOutcome]
 ToolUp.Platform.INarrativeStore (interface)
@@ -6622,8 +6622,8 @@ ToolUp.Platform.IPrivacyBudgetLedger.ReserveBudget(ToolUp.Platform.BudgetSpend, 
 ToolUp.Platform.IPromotedArtifactSigner (interface)
 ToolUp.Platform.IPromotedArtifactSigner.SignArtifact(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifactSignature, System.String]]
 ToolUp.Platform.IProvenanceGraph (interface)
-ToolUp.Platform.IProvenanceGraph.GetChain(System.String, ToolUp.Platform.ProvenanceRef, ToolUp.Platform.ProvenanceDirection, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
-ToolUp.Platform.IProvenanceGraph.GetChainForMessage(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
+ToolUp.Platform.IProvenanceGraph.GetChain(ToolUp.Platform.ResolvedScope, ToolUp.Platform.ProvenanceRef, ToolUp.Platform.ProvenanceDirection, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
+ToolUp.Platform.IProvenanceGraph.GetChainForMessage(ToolUp.Platform.ResolvedScope, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
 ToolUp.Platform.IProviderEntryProbe (interface)
 ToolUp.Platform.IProviderEntryProbe.Probe(ToolUp.Platform.StorageScope, ToolUp.Platform.ProviderEntry) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProbeOutcome, System.String]]
 ToolUp.Platform.IProviderOAuthFlow (interface)
@@ -9406,8 +9406,8 @@ ToolUp.Platform.PromotionVerdictModule (class)
 ToolUp.Platform.PromotionVerdictModule.describe(ToolUp.Platform.PromotionVerdict) : System.String
 ToolUp.Platform.PromotionVerdictModule.permitsPromotion(ToolUp.Platform.PromotionVerdict) : System.Boolean
 ToolUp.Platform.ProvenanceApiHandler (class)
-ToolUp.Platform.ProvenanceApiHandler.create(ToolUp.Platform.IProvenanceGraph, ToolUp.Platform.WireProvenanceCaps, System.String) : ToolUp.Platform.IProvenanceQueryApi
-ToolUp.Platform.ProvenanceApiHandler.createWithDisclosureGate(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, ToolUp.Platform.IProvenanceGraph, ToolUp.Platform.WireProvenanceCaps, System.String) : ToolUp.Platform.IProvenanceQueryApi
+ToolUp.Platform.ProvenanceApiHandler.create(ToolUp.Platform.IProvenanceGraph, ToolUp.Platform.WireProvenanceCaps, ToolUp.Platform.ResolvedScope) : ToolUp.Platform.IProvenanceQueryApi
+ToolUp.Platform.ProvenanceApiHandler.createWithDisclosureGate(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, ToolUp.Platform.IProvenanceGraph, ToolUp.Platform.WireProvenanceCaps, ToolUp.Platform.ResolvedScope) : ToolUp.Platform.IProvenanceQueryApi
 ToolUp.Platform.ProvenanceAttachment (class)
 ToolUp.Platform.ProvenanceAttachment..ctor(System.String, System.String, System.Byte[])
 ToolUp.Platform.ProvenanceAttachment.Bytes : System.Byte[] { get }

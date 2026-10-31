@@ -402,6 +402,11 @@ ToolUp.Facts.DisclosureViewer.OutputVisibility : ToolUp.Platform.TeamVisibilityL
 ToolUp.Facts.DisclosureViewer.TeamRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
 ToolUp.Facts.DisclosureViewerModule (class)
 ToolUp.Facts.DisclosureViewerModule.leastPrivileged(ToolUp.Platform.TeamVisibilityLevel) : ToolUp.Facts.DisclosureViewer
+ToolUp.Facts.DraftDefect (class)
+ToolUp.Facts.DraftDefect..ctor(System.Int32, ToolUp.Facts.FactDraft, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.DraftDefect.Defects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DraftDefect.Draft : ToolUp.Facts.FactDraft { get }
+ToolUp.Facts.DraftDefect.Position : System.Int32 { get }
 ToolUp.Facts.Evidence (class)
 ToolUp.Facts.Evidence..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Evidence.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -539,10 +544,25 @@ ToolUp.Facts.FactRendering (class)
 ToolUp.Facts.FactRendering.render(System.String, ToolUp.Facts.FactValue) : System.String
 ToolUp.Facts.FactRendering.renderFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.MetricDefinition], ToolUp.Facts.FactValue) : System.String
 ToolUp.Facts.FactStoreError (class)
+ToolUp.Facts.FactStoreError.IsMalformedDrafts : System.Boolean { get }
+ToolUp.Facts.FactStoreError.IsRefused : System.Boolean { get }
+ToolUp.Facts.FactStoreError.IsStorageFault : System.Boolean { get }
 ToolUp.Facts.FactStoreError.Tag : System.Int32 { get }
-ToolUp.Facts.FactStoreError.defects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.FactStoreError.draft : ToolUp.Facts.FactDraft { get }
-ToolUp.Facts.FactStoreError.position : System.Int32 { get }
+ToolUp.Facts.FactStoreError+MalformedDrafts (class)
+ToolUp.Facts.FactStoreError+MalformedDrafts.offenders : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DraftDefect] { get }
+ToolUp.Facts.FactStoreError+MalformedDrafts.total : System.Int32 { get }
+ToolUp.Facts.FactStoreError+Refused (class)
+ToolUp.Facts.FactStoreError+Refused.reason : System.String { get }
+ToolUp.Facts.FactStoreError+StorageFault (class)
+ToolUp.Facts.FactStoreError+StorageFault.operation : System.String { get }
+ToolUp.Facts.FactStoreError+StorageFault.reason : System.String { get }
+ToolUp.Facts.FactStoreError+Tags (class)
+ToolUp.Facts.FactStoreError+Tags.MalformedDrafts : System.Int32 (literal)
+ToolUp.Facts.FactStoreError+Tags.Refused : System.Int32 (literal)
+ToolUp.Facts.FactStoreError+Tags.StorageFault : System.Int32 (literal)
+ToolUp.Facts.FactStoreErrorModule (class)
+ToolUp.Facts.FactStoreErrorModule.describe(ToolUp.Facts.FactStoreError) : System.String
+ToolUp.Facts.FactStoreErrorModule.isFault(ToolUp.Facts.FactStoreError) : System.Boolean
 ToolUp.Facts.FactSupersededEvent (class)
 ToolUp.Facts.FactSupersededEvent..ctor(System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Facts.FactSupersededEvent.AsOf : System.DateTime { get }
@@ -583,9 +603,8 @@ ToolUp.Facts.FactWrite.address(ToolUp.Facts.FactDraft) : ToolUp.Facts.AddressedD
 ToolUp.Facts.FactWrite.factOf(ToolUp.Facts.AddressedDraft, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Facts.Fact
 ToolUp.Facts.FactWrite.headOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]
 ToolUp.Facts.FactWrite.plan(System.DateTime, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.WriteRequest) : ToolUp.Facts.WritePlan
-ToolUp.Facts.FactWrite.prepare(ToolUp.Facts.WriteShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.WriteRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactStoreError]]
+ToolUp.Facts.FactWrite.prepare(ToolUp.Facts.WriteShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.WriteRequest, ToolUp.Facts.FactStoreError]
 ToolUp.Facts.FactWrite.recordedAt(ToolUp.Facts.FactDraft, System.DateTime) : ToolUp.Facts.Fact
-ToolUp.Facts.FactWrite.renderOffenders(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactStoreError]) : System.String
 ToolUp.Facts.Freshness (class)
 ToolUp.Facts.Freshness.derive(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
 ToolUp.Facts.Freshness.deriveAt(ToolUp.Platform.Grounding.StalenessPolicy, System.DateTime, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
@@ -594,7 +613,6 @@ ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
 ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
 ToolUp.Facts.FreshnessHistogram.StaleCount : System.Int32 { get }
 ToolUp.Facts.IDisclosureTaintIndexSource (interface)
-ToolUp.Facts.IDisclosureTaintIndexSource.ReadTaintIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DisclosureTaintIndex]
 ToolUp.Facts.IDisclosureTaintIndexSource.ReadTaintIndex(ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DisclosureTaintIndex]
 ToolUp.Facts.IndexDelta (class)
 ToolUp.Facts.IndexDelta..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)

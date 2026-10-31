@@ -93,16 +93,22 @@ open ToolUp.Facts
 
 let store = BlobFactStore.create blobStorage eventStore   // IFactStore
 
+// The scope is the one the platform resolved: on a request,
+// ScopeResolution.forRequest ctx; in a job, JobContext.Scope.
+let scope = ScopeResolution.forRequest ctx
+
 // Assert is idempotent under the content address; a changed input
 // supersedes the current lineage head with a derived edge.
-let! fact = store.Assert(scopeId, { Subject = subject; Metric = MetricRef "revenue"; ... })
+let! fact = store.Assert(scope, { Subject = subject; Metric = MetricRef "revenue"; ... })
 
-// Reconstruct the fact base as of a past transaction time (L4):
+// Reconstruct the fact base as of a past transaction time (L4). Every
+// member answers Result<_, FactStoreError>: a storage fault is an Error,
+// never a shorter answer.
 let! asOfMay3 =
-    store.Query(scopeId, FactQuery.forSubjectMetric subject metric |> FactQuery.asOf may3)
+    store.Query(scope, FactQuery.forSubjectMetric subject metric |> FactQuery.asOf may3)
 
 // Walk a lineage:
-let! chain = store.QuerySupersessionChain(scopeId, fact.FactId)
+let! chain = store.QuerySupersessionChain(scope, factId)
 ```
 
 Every `Assert` (and each derived supersession) emits a durable audit
@@ -140,7 +146,7 @@ drafts asserted one at a time; an unchanged draft is never a new fact).
 
 ```fsharp skip=fragment
 match FactWrite.prepare WriteShape.BatchAssert drafts with
-| Error offenders -> Error(FactWrite.renderOffenders (List.length drafts) offenders)
+| Error refused -> Error refused   // MalformedDrafts; FactStoreError.describe renders it
 | Ok request ->
     let plan = FactWrite.plan now isStored lineageFacts request
     // persist plan.Facts, apply plan.IndexDeltas, write plan.Audit, return plan.Receipt
@@ -152,10 +158,31 @@ The competition indicator and canonical selection of a read are likewise one def
 A blob store's surface maintenance after a write never fails the write (the surface is derived, and reads
 reconcile against the log), but each failed step is now counted on `BlobFactStore.SurfaceFaults` and logged.
 
-**The store's scope form is unchanged here.** `IFactStore` still has a `string` and a `ResolvedScope` form
-of every member, and reads still raise a storage fault rather than typing it. Removing the `string` forms
-needs a string-to-scope adapter that the `ResolvedScope` design deliberately does not offer; that decision
-is open and recorded in the migration note.
+### One scope form, one error (Phase 1157)
+
+`IFactStore` has seven members and one scope form: each takes a `ResolvedScope`, the value the platform's
+scope resolution minted, and answers `Result<_, FactStoreError>`. There is no string form and no adapter to
+one: a `ResolvedScope` is minted by the resolver and nowhere else, and what crosses a persistence or wire
+boundary is a `ScopeKey` (security rule TI-7). Where a caller gets its scope:
+
+| Caller | Its scope |
+|---|---|
+| a request (an AI tool, a handler, the browse API) | `ScopeResolution.forRequest ctx` |
+| a job (a recompute, a coherence sweep, a publication) | `JobContext.Scope`, re-minted by the runner from the job's sealed carrier; a job that carries none is refused by name |
+| standing work a deployment declares (a coherence sweep, its health probe, a peer egress route, a publication read) | a declared principal, resolved through the platform's `DeclaredPrincipalResolver` |
+
+`FactStoreError` has three cases that never blur: `MalformedDrafts` (a batch refused before anything was
+written, its offenders by position), `StorageFault` (the store could not read or write — on a read it is an
+`Error`, never an absent fact or a shorter list) and `Refused` (a population ordering the store cannot
+resolve). `FactStoreError.describe` renders each; `FactStoreResult.orRaise` reads an answer where the caller's
+own surface has no failure channel, raising `FactStoreFault` rather than reading a fault as nothing.
+
+The same holds one seam out: the disclosure gate, the clause planner, the answer planner (one plan path, no
+`PlanScope.Legacy`), the fact resolver, the provenance graph, the table writer, the import door, the narrative
+grounding and certificate seams and the narrative ingestor each take the resolved scope; the recompute path is
+one path over it (`RecomputeJobHandler.reactToDataChange`), and a data write whose writer resolved no scope for
+its shard reacts with nothing. The executors' operator members (`ExportScope`, `QueryShard`, …) stay keyed by
+shard id for the composition root's operator tasks.
 
 ## Point reads vs population reads
 

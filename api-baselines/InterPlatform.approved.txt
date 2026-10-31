@@ -1370,10 +1370,11 @@ ToolUp.InterPlatform.PeerEgressPurpose..ctor(System.String, Microsoft.FSharp.Cor
 ToolUp.InterPlatform.PeerEgressPurpose.Claim : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.InterPlatform.PeerEgressPurpose.PurposeId : System.String { get }
 ToolUp.InterPlatform.PeerEgressRoute (class)
-ToolUp.InterPlatform.PeerEgressRoute..ctor(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.InterPlatform.PeerEgressPurpose, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]])
+ToolUp.InterPlatform.PeerEgressRoute..ctor(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.ResolvedScope, ToolUp.InterPlatform.PeerEgressPurpose, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]])
 ToolUp.InterPlatform.PeerEgressRoute.Gate : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate { get }
 ToolUp.InterPlatform.PeerEgressRoute.Purpose : ToolUp.InterPlatform.PeerEgressPurpose { get }
 ToolUp.InterPlatform.PeerEgressRoute.References : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.InterPlatform.PeerEgressRoute.Scope : ToolUp.Platform.ResolvedScope { get }
 ToolUp.InterPlatform.PeerEgressRoute.ViewReferences : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.InterPlatform.PeerError (class)
 ToolUp.InterPlatform.PeerError.IsPeerCleanRoomWithheld : System.Boolean { get }

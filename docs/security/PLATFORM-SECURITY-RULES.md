@@ -335,6 +335,42 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 
 ---
 
+> **TI-7 — A `ResolvedScope` is minted by the resolver and nowhere else; what
+> crosses a persistence or wire boundary is a `ScopeKey`.**
+> *Enablement:* Always on.
+> The fact tier's scope type is the proof that a scope came from the platform's
+> scope resolution: its representation is private, and its mints are internal
+> to `ToolUp.Platform.Server` — the scope-resolution middleware
+> (`ScopeResolution.remember`), the carrier that re-mints a job's sealed scope at
+> execution (`ScopeCarrier.Redeem` → `ResolvedScope.ofCarried`), and the
+> `DeclaredPrincipalResolver` that resolves a principal a deployment declared.
+> No string-to-`ResolvedScope` function is public or internal. Every member of
+> `IFactStore`, `IAnswerPlanner`, `IFactDisclosureGate`, `IFactClausePlanner`,
+> `IFactResolver`, `IFactTableWriter`, `IProvenanceGraph` and the narrative
+> grounding and certificate seams takes a `ResolvedScope`, so no read, write or
+> disclosure check can be addressed to a shard nobody resolved. Platform-carried
+> work (a job, a recompute, a coherence sweep) runs under the scope its runner
+> re-minted; a job registered under a shard that carries no re-minted scope is
+> refused by name, never run under its carried string and never under the
+> anonymous shard. Standing work a deployment declares (a coherence sweep, a
+> peer egress route, a report subscription) resolves a declared principal at
+> the composition edge. The concrete executors' operator members (`ExportScope`,
+> `CountScope`, `RebuildIndex`, `MigrateIds`, `QueryShard`, `ExplainQuery`) are
+> keyed by shard id and reachable only by code holding the concrete executor —
+> a composition root's operator task — never through `IFactStore`.
+> **Evidence:** `src/ToolUp.Platform.Core/Shared/Types/ResolvedScope.fs` (private
+> representation, internal mints) ·
+> `src/ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs`
+> (`ScopeResolution`) · `src/ToolUp.Platform.Server/Server/CarriedScopeToken.fs` ·
+> `src/ToolUp.Facts.Server/Server/IFactStore.fs` ·
+> `src/ToolUp.Platform.Tests/InProcess/ScopeChokePointTests.fs` (the mints are
+> internal; a write or job with no resolved scope recomputes nothing) ·
+> `src/ToolUp.Platform.Tests/InProcess/FactInvalidationTests.fs` and
+> `src/ToolUp.Platform.Tests/InProcess/CoherenceCheckTests.fs` (a job carrying no
+> re-minted scope is refused by name) ·
+> `src/ToolUp.Platform.Tests/Support/TestScope.fs` (the test pack's one stand-in
+> for the resolver) · `docs/migrations/1157-one-scope-form.md` (Phase 1157)
+
 ## 2. Authentication
 
 The SDK does not implement an identity provider. It consumes one, and enforces

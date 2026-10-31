@@ -13921,15 +13921,13 @@ ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags (class)
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactFresh : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactFreshnessInfo+Tags.FactStale : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactWebhookEgress (class)
-ToolUp.Platform.VectorKnowledgeTypes+FactWebhookEgress.permittedFactIds(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.VectorKnowledgeTypes+FactWebhookEgress.permittedFactIds(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.ResolvedScope, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactClausePlanner (interface)
-ToolUp.Platform.VectorKnowledgeTypes+IFactClausePlanner.PlanClauses(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses]
 ToolUp.Platform.VectorKnowledgeTypes+IFactClausePlanner.PlanClauses(ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses]
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate (interface)
-ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate.Check(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate.Check(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactResolver (interface)
-ToolUp.Platform.VectorKnowledgeTypes+IFactResolver.Resolve(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactClause) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact]]
+ToolUp.Platform.VectorKnowledgeTypes+IFactResolver.Resolve(ToolUp.Platform.ResolvedScope, ToolUp.Platform.VectorKnowledgeTypes+FactClause) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact]]
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy (class)
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy.Interleaved : ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy { get }
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy.IsInterleaved : System.Boolean { get }
