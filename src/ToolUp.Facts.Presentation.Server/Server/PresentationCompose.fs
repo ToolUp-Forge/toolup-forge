@@ -10,6 +10,11 @@ open ToolUp.AI.AICompose
 [<RequireQualifiedAccess>]
 module PresentationCompose =
 
+    /// The presentation companion's identity; the page request registrations
+    /// are made under it.
+    let private owner: ComponentId =
+        ComponentId.forCompanionSlot "ToolUp.Facts.Presentation"
+
     /// Compose `render_chart` and `render_table` onto the AI composition,
     /// beside the three fact tools the fact store declares. The tools ride
     /// `AIServerApp.AIAnsweringTools`, which `composeAI` registers through
@@ -77,6 +82,26 @@ module PresentationCompose =
             }
 
             AIServerApp.withAIAnsweringTools [ PipelineAnsweringTool.tool ] mounted
+
+    /// Compose the resolution a stored page renders through: registers
+    /// `PageRequestResolvers` (the resolver for a request's caller, a
+    /// presentation request and a pipeline request each answered under the
+    /// caller's gate) and the per-session `PageResolutionCache`, and arms the
+    /// fact-table change signal the cache is invalidated by. Only under
+    /// `EnabledFactStore`; under `NoFactStore` the app is returned unchanged
+    /// and nothing is registered. Call it after `FactsCompose.withFactStore`,
+    /// which composes the signal. **Adds** its registrations.
+    ///
+    /// ```fsharp skip=fragment
+    /// ServerApp.empty
+    /// |> FactsCompose.withFactStore
+    /// |> PresentationCompose.withPageRequests
+    /// |> ServerApp.run
+    /// ```
+    let withPageRequests (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore -> ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register) app
 
     /// Let `evaluate_pipeline` assert a result column as facts of a registered
     /// derived metric: the tool gains the `assert` argument, and the write it

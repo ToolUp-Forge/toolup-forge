@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 open System
 
-// Phase 347 — carved out of AuditTypes.fs: the platform-lane audit payload records
+// Carved out of AuditTypes.fs: the platform-lane audit payload records
 // (identity, teams, membership, files, analysis, permissions, notifications,
 // forms, workflow, entity lifecycle, encryption keys, health, audit sinks,
 // OAuth 2 / 1.0a / token refresh).
@@ -25,7 +25,7 @@ type UserLoggedInPayload = {
     AuthProvider: string
 }
 
-/// Phase 1002 — a publication reader's first-seen-this-session sign-in.
+/// A publication reader's first-seen-this-session sign-in.
 /// The reader holds no scope of its own, so the row is recorded under
 /// `_platform` (never a `user-<id>` container) and is the reader's
 /// counterpart of `UserLoggedIn`, which a reader never emits. Written
@@ -47,7 +47,7 @@ type PublicationReaderSignedInPayload = {
     OccurredAt: DateTimeOffset
 }
 
-/// Phase 1107 — an Owner or Admin of a publishing scope granted, or revoked,
+/// An Owner or Admin of a publishing scope granted, or revoked,
 /// one publication reader role to one principal in the platform. Recorded
 /// under the publishing scope. A revocation bites at the reader's next
 /// request (grants are read per request).
@@ -115,7 +115,7 @@ type TeamDeletedPayload = {
     TeamName: string
 }
 
-/// Phase 304 — team ownership transferred via `TeamApi.TransferOwnership`.
+/// Team ownership transferred via `TeamApi.TransferOwnership`.
 /// The outgoing Owner (`FromUserId`) was demoted to `Admin` and the
 /// incoming Owner (`ToUserId`) promoted to `Owner`. `ActorUserId` is the
 /// caller who performed the transfer — always equal to `FromUserId` under
@@ -190,7 +190,7 @@ type FileReprocessedPayload = {
 /// operator action).
 type DataStoreResetPayload = { UserId: string; FileCount: int }
 
-/// Phase 6p — an ephemeral `SessionFileStore` was dropped by the TTL
+/// An ephemeral `SessionFileStore` was dropped by the TTL
 /// eviction sweep and has since been RE-CREATED under the same scope
 /// container, so every file the caller uploaded before the gap is gone
 /// while their client may still be listing them.
@@ -223,7 +223,7 @@ type AnalysisRunPayload = {
     Summary: string
 }
 
-/// Phase 553 — the tamper-evidence link a permission-class audit record
+/// The tamper-evidence link a permission-class audit record
 /// carries. Two hashes, moved as ONE optional field rather than as two
 /// independent optional fields, because a record holding a predecessor
 /// with no self-hash (or the reverse) is a state the chain has no
@@ -265,7 +265,7 @@ type PermissionChangedPayload = {
     /// Comma-separated list of granted permissions (`Read`, `Write`,
     /// `Admin`). Empty string = revoked.
     Permissions: string
-    /// Phase 553 — the hash-chain link, filled in by the audit log at
+    /// The hash-chain link, filled in by the audit log at
     /// WRITE time. Emission call sites construct this `None`; the log
     /// reads the scope's current chain head and replaces it. A caller
     /// that supplies a link is taken at its word (the replicator's
@@ -450,7 +450,7 @@ type WorkflowTransitionedPayload = {
     ToState: string
 }
 
-/// Phase 21d — workflow action invocation outcome. Emitted by the
+/// Workflow action invocation outcome. Emitted by the
 /// `WorkflowEngine` after the action ledger resolves (either to
 /// `Succeeded`, `Failed`, `SkippedReplay` for a successful prior
 /// attempt, or `SkippedPending` for a pending prior attempt under a
@@ -487,7 +487,7 @@ type EntityLifecycleEventPayload = {
     /// `"system"` only when the caller passed `EntityPrincipal.system`; a
     /// store never infers it.
     UserId: string
-    /// Phase 806 — the subject `UserId` acted FOR when the write was
+    /// The subject `UserId` acted FOR when the write was
     /// delegated (`EntityPrincipal.OnBehalfOf`); `None` when the principal
     /// acted for itself. Absent on every pre-806 row and deserialises to
     /// `None` by the same null-is-`None` mechanism as `Replay` below.
@@ -547,7 +547,7 @@ type EncryptionKeyEventPayload = {
     Resolver: string
 }
 
-/// Phase 1059 — a stored encryption key could not be used: its material did
+/// A stored encryption key could not be used: its material did
 /// not decode, or decoded to the wrong length. Emitted by `PerScopeKeyResolver`,
 /// which REFUSES the resolution rather than minting a replacement over it — a
 /// replacement would leave every blob encrypted under the stored key
@@ -566,7 +566,7 @@ type EncryptionKeyUnreadablePayload = {
     Reason: string
 }
 
-/// Phase 22b — one replica's acknowledgement that it evicted its cached
+/// One replica's acknowledgement that it evicted its cached
 /// copy of a destroyed encryption key. Emitted by `PerScopeKeyResolver`'s
 /// `KeyDestroyed` subscription handler, once per replica that receives
 /// the broadcast; NOT emitted by the replica that originated the destroy
@@ -808,7 +808,7 @@ type OAuthRefreshFailedPayload = {
     Reason: string
 }
 
-// ─── Phase 10g — OAuth 1.0a substrate audit payloads ────────────────────
+// ─── OAuth 1.0a substrate audit payloads ────────────────────
 //
 // Emitted by the OAuth 1.0a callback / disconnect paths + the per-call
 // signer. Reserved source-module label `_platform.oauth1a`. Like the
@@ -850,7 +850,7 @@ type OAuth1aSigningFailedPayload = {
     Reason: string
 }
 
-// ─── Phase 10h — OAuth token refresh substrate audit payloads ───────────
+// ─── OAuth token refresh substrate audit payloads ───────────
 //
 // Emitted by `IOAuthTokenRefresher` / `OAuthRefreshJobHandler` for the
 // background refresh lifecycle. Distinct from the existing
@@ -951,7 +951,7 @@ type OAuthRefreshDeadLetteredPayload = {
     /// or `PermanentError` payload.
     FinalReason: string
 }
-// ─── Phase 6f.A — the external-contact consent trail ─────────────────
+// ─── The external-contact consent trail ─────────────────
 //
 // A consent is a legal artefact, so its whole lifecycle is audited: who
 // filed the contact, who asserted a per-channel consent and on what
@@ -1075,4 +1075,105 @@ type NotificationDeliveryRefusedPayload = {
     ContactIds: string list
     /// The envelope's correlation id, when it carried one.
     CorrelationId: string option
+}
+
+/// A module page's layer was written in the page store: ops appended to
+/// one layer's hash-chained stream (`Act = "append"`), or the layer reset
+/// to empty, which removes its overlay (`Act = "reset"`). Recorded under the
+/// scope the layer lives in — the platform trail for the platform layer,
+/// the team's or the caller's own scope for the team and individual layers.
+type PageSavedPayload = {
+    /// The module the page belongs to.
+    Module: string
+    /// The page within the module.
+    Page: string
+    /// The layer written: `"platform"`, `"team"` or `"individual"`.
+    Layer: string
+    /// Whose layer it is: the team id for a team layer, the user id for an
+    /// individual layer, the platform shard's id for the platform layer.
+    Principal: string
+    /// Who saved it (`AccessContext.UserId`).
+    ActorId: string
+    /// `"append"` or `"reset"`.
+    Act: string
+    /// How many ops the save appended (`0` for a reset).
+    OpCount: int
+    /// SHA-256 (lowercase hex) of the canonical JSON array of the ops the
+    /// save appended; the empty array's hash for a reset.
+    OpsHash: string
+    /// SHA-256 (lowercase hex) of the document as it folds for the saving
+    /// caller once the save landed: the hash the object store gives those
+    /// bytes.
+    DocumentHash: string
+    /// The layer's op-stream head after the save: the last record's hash,
+    /// or the empty genesis for an empty layer.
+    ChainHead: string
+    /// The stored object's version after the save.
+    Version: int
+    /// When the save landed.
+    OccurredAt: DateTimeOffset
+}
+
+/// A module page's platform layer took a new seed: the first seed of the
+/// page, or an operator's re-seed adopting a new compiled default. The
+/// overlays are re-folded over the new seed and every op that no longer
+/// applies is counted here and returned to the operator by name. Recorded
+/// on the platform trail.
+type PageReseededPayload = {
+    Module: string
+    Page: string
+    /// Who seeded it.
+    ActorId: string
+    /// SHA-256 of the seed replaced; `None` on the page's first seed.
+    PreviousSeedHash: string option
+    /// SHA-256 of the new seed's canonical wire bytes.
+    SeedHash: string
+    /// How many ops of the re-folded overlays no longer apply over the new
+    /// seed (each one is a conflict naming both acts).
+    ConflictCount: int
+    /// The stored platform object's version after the seed.
+    Version: int
+    OccurredAt: DateTimeOffset
+}
+
+/// A module page was detached from its compiled default: the stored
+/// platform document is kept, and a module release no longer offers to
+/// re-seed it. Recorded on the platform trail.
+type PageDetachedPayload = {
+    Module: string
+    Page: string
+    /// Who detached it.
+    ActorId: string
+    /// SHA-256 of the seed the page keeps.
+    SeedHash: string
+    /// The stored platform object's version after the detach.
+    Version: int
+    OccurredAt: DateTimeOffset
+}
+
+/// A write to the page store was refused — a save, a reset, a seed, a
+/// re-seed or a detach. Recorded under the caller's own scope, so a
+/// repeated refusal from one principal is readable as one trail. Nothing
+/// was written.
+type PageWriteRefusedPayload = {
+    Module: string
+    Page: string
+    /// The layer the write named: `"platform"`, `"team"` or `"individual"`.
+    Layer: string
+    /// Who asked (`AccessContext.UserId`).
+    ActorId: string
+    /// What was asked: `"append"`, `"reset"`, `"seed"`, `"reseed"` or
+    /// `"detach"`.
+    Act: string
+    /// The refusal's stable code (`PageStoreError.code`): `"grant-missing"`,
+    /// `"layer-disabled"`, `"op-outside-vocabulary"`, `"ops-do-not-apply"`,
+    /// and so on.
+    Reason: string
+    /// The page grant the write needed and the caller did not hold, when
+    /// the refusal was an authority refusal (`PageGrant.toToken`).
+    MissingGrant: string option
+    /// SHA-256 of the canonical JSON array of the ops the write carried;
+    /// the empty array's hash when it carried none.
+    OpsHash: string
+    OccurredAt: DateTimeOffset
 }

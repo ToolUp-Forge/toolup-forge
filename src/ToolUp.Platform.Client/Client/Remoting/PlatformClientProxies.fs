@@ -3506,18 +3506,28 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.field "Justification" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.optionalField "ConsentedBy" JsonDecode.asString)
 
+    /// Generated JSON decoder for `PageGrant` — members by name, cases by case name, read off the type's own shape.
+    let decodePageGrant: JsonDecoder<PageGrant> =
+        JsonDecode.union "PageGrant" (function
+            | "SavePlatform" -> Some(JsonDecode.case0 PageGrant.SavePlatform)
+            | "SaveTeam" -> Some(JsonDecode.case0 PageGrant.SaveTeam)
+            | "SaveOwn" -> Some(JsonDecode.case0 PageGrant.SaveOwn)
+            | _ -> None)
+
     /// Generated JSON decoder for `TeamPermissions` — members by name, cases by case name, read off the type's own shape.
     let decodeTeamPermissions: JsonDecoder<TeamPermissions> =
-        JsonDecode.succeed (fun defaults members exposure grants -> ({
+        JsonDecode.succeed (fun defaults members exposure grants pages -> ({
             Defaults = defaults
             Members = members
             Exposure = exposure
             Grants = grants
+            Pages = pages
         }: TeamPermissions))
         |> JsonDecode.apply (JsonDecode.field "Defaults" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list decodeModulePermission)))
         |> JsonDecode.apply (JsonDecode.field "Members" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list decodeModulePermission))))
         |> JsonDecode.apply (JsonDecode.field "Exposure" (JsonDecode.asMap JsonDecode.Key.string decodeModuleExposure))
         |> JsonDecode.apply (JsonDecode.field "Grants" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.asMap JsonDecode.Key.string decodeModuleGrantRecord)))
+        |> JsonDecode.apply (JsonDecode.field "Pages" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list decodePageGrant)))
 
     /// Generated JSON decoder for `PlatformKnowledgeBaseMode` — members by name, cases by case name, read off the type's own shape.
     let decodePlatformKnowledgeBaseMode: JsonDecoder<PlatformKnowledgeBaseMode> =

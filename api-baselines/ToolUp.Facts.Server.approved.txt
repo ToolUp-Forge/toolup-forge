@@ -899,6 +899,19 @@ ToolUp.Facts.FactSurfaceOptionsModule (class)
 ToolUp.Facts.FactSurfaceOptionsModule.always : ToolUp.Facts.FactSurfaceOptions { get }
 ToolUp.Facts.FactSurfaceOptionsModule.defaults : ToolUp.Facts.FactSurfaceOptions { get }
 ToolUp.Facts.FactSurfaceOptionsModule.disabled : ToolUp.Facts.FactSurfaceOptions { get }
+ToolUp.Facts.FactTableChangeDemand (class)
+ToolUp.Facts.FactTableChangeDemand..ctor()
+ToolUp.Facts.FactTableChangeNotice (class)
+ToolUp.Facts.FactTableChangeNotice..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.FactTableChangeNotice.Origin : System.String { get }
+ToolUp.Facts.FactTableChangeNotice.TableIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableChangeSignal (class)
+ToolUp.Facts.FactTableChangeSignal.NotificationKey : System.String (literal)
+ToolUp.Facts.FactTableChangeSignal.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean]) : ToolUp.Facts.IFactTableChangeSignal
+ToolUp.Facts.FactTableChangeSignal.demand(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Facts.FactTableChangeSignal.demanded(System.IServiceProvider) : System.Boolean
+ToolUp.Facts.FactTableChangeSignal.raisingWriter(ToolUp.Facts.IFactTableChangeSignal, ToolUp.Facts.IFactTableWriter) : ToolUp.Facts.IFactTableWriter
+ToolUp.Facts.FactTableChangeSignal.reaction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Facts.IFactTableChangeSignal], ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Facts.FactTableEvents (class)
 ToolUp.Facts.FactTableEvents.RunAbandonedType : System.String (literal)
 ToolUp.Facts.FactTableEvents.RunCommittedType : System.String (literal)
@@ -1311,6 +1324,9 @@ ToolUp.Facts.IFactStore.Query(ToolUp.Platform.ResolvedScope, ToolUp.Facts.FactQu
 ToolUp.Facts.IFactStore.QueryPopulation(ToolUp.Platform.ResolvedScope, ToolUp.Facts.PopulationQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PopulationResult, ToolUp.Facts.FactStoreError]]
 ToolUp.Facts.IFactStore.QuerySupersessionChain(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.FactStoreError]]
 ToolUp.Facts.IFactStore.QueryWithCompetition(ToolUp.Platform.ResolvedScope, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition], ToolUp.Facts.FactStoreError]]
+ToolUp.Facts.IFactTableChangeSignal (interface)
+ToolUp.Facts.IFactTableChangeSignal.Listen(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[System.IDisposable]
+ToolUp.Facts.IFactTableChangeSignal.Raise(ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Facts.IFactTableOrphanSweep (interface)
 ToolUp.Facts.IFactTableOrphanSweep.SweepOrphans(ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableOrphanSweepReport, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter (interface)

@@ -1045,6 +1045,7 @@ let private registeredTests =
         ServerAppSecretStoreTests.tests
         ServerAppOrderTests.tests
         ServerBindAddressTests.tests
+        PageDocumentStoreTests.tests
         AuditFireAndForgetTests.tests
         StoreFireAndForgetTests.tests
         LineageDurabilityTests.tests
@@ -1058,6 +1059,7 @@ let private registeredTests =
         FactTablesToolTests.tests
         AggregateMetricToolTests.tests
         PipelineAssertionTests.tests
+        PageRequestResolverTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

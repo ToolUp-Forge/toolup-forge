@@ -126,6 +126,7 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                 // contract's fixture, so the grant map is empty and the
                 // document round-trips exactly as it did pre-551.
                 Grants = Map.empty
+                Pages = Map.empty
             }
 
             let! _ = store.SetTeamPermissions(team, replacement)
@@ -181,6 +182,13 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                                 ConsentedBy = Some "bob"
                             }
                         ]
+                    ]
+                // Page-save grants round-trip too: a store that drops them
+                // silently revokes every explicit page grant.
+                Pages =
+                    Map.ofList [
+                        "alice", [ PageGrant.SaveTeam ]
+                        "bob", [ PageGrant.SaveOwn; PageGrant.SavePlatform ]
                     ]
             }
 

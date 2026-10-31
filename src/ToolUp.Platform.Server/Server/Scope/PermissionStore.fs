@@ -26,7 +26,7 @@ type IPermissionStore =
     /// Fetch the raw per-team document. Returns `TeamPermissions.empty`
     /// ONLY when no document exists — `canAccessModule` treats an empty
     /// map as unrestricted, so teams without explicit config behave as
-    /// they did pre-Phase 4. A document that exists but cannot be read
+    /// they did before module RBAC. A document that exists but cannot be read
     /// or parsed raises `PermissionStoreUnavailableException` rather
     /// than degrading to the unrestricted empty map (fail closed on a
     /// storage blip / corrupt blob — never silently grant access).
@@ -134,8 +134,8 @@ module private Json =
 
         dict
 
-    /// Phase 551 — grant records as `userId → moduleName → record`.
-    /// Absent entirely on a pre-551 document, and omitted on write when
+    /// Grant records as `userId → moduleName → record`.
+    /// Absent entirely on a document that predates them, and omitted on write when
     /// no module declares a policy stricter than `AdminDiscretion`, so
     /// the serialised bytes of an unchanged deployment are unchanged.
     let private grantsToObject (grants: Map<string, Map<string, ModuleGrantRecord>>) =
@@ -200,6 +200,38 @@ module private Json =
             ]
             |> Map.ofList
 
+    /// Page-save grants as `userId → [token]`, members holding none omitted.
+    let private pagesToObject (pages: Map<string, PageGrant list>) =
+        let dict = System.Collections.Generic.Dictionary<string, string[]>()
+
+        for KeyValue(userId, grants) in pages do
+            if not (List.isEmpty grants) then
+                dict[userId] <- grants |> List.map PageGrant.toToken |> List.distinct |> List.toArray
+
+        dict
+
+    /// The inverse of `pagesToObject`. An unknown token is dropped, never
+    /// read as a grant; a member left with none is absent.
+    let private pagesFromObject (obj: JsonElement) : Map<string, PageGrant list> =
+        if obj.ValueKind <> JsonValueKind.Object then
+            Map.empty
+        else
+            [
+                for prop in obj.EnumerateObject() do
+                    if prop.Value.ValueKind = JsonValueKind.Array then
+                        let grants = [
+                            for elem in prop.Value.EnumerateArray() do
+                                if elem.ValueKind = JsonValueKind.String then
+                                    match PageGrant.ofToken (elem.GetString()) with
+                                    | Some grant -> grant
+                                    | None -> ()
+                        ]
+
+                        if not (List.isEmpty grants) then
+                            prop.Name, List.distinct grants
+            ]
+            |> Map.ofList
+
     let serialize (perms: TeamPermissions) : byte[] =
         let membersDict =
             System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string[]>>()
@@ -220,13 +252,23 @@ module private Json =
                 perms.Exposure
                 |> Map.toArray
                 |> Array.choose (fun (k, v) -> if ModuleExposure.isExposed v then None else Some k)
-            // Phase 551 — grant-policy evidence. Empty on every pre-551
+            // Grant-policy evidence. Empty on every document that predates it
             // document and on every deployment where no module declares a
             // policy, in which case the property serialises as `{}`.
             grants = grantsToObject perms.Grants
         |}
 
-        JsonSerializer.Serialize(dto, options) |> Encoding.UTF8.GetBytes
+        // Page-save grants ride as `pages`, written only when a member holds
+        // one: a document with none serialises exactly as it did before the
+        // field existed, so its bytes do not move (GP 11).
+        let pages = if isNull (box perms.Pages) then Map.empty else perms.Pages
+
+        if Map.isEmpty pages then
+            JsonSerializer.Serialize(dto, options) |> Encoding.UTF8.GetBytes
+        else
+            let node = JsonSerializer.SerializeToNode(dto, options).AsObject()
+            node["pages"] <- JsonSerializer.SerializeToNode(pagesToObject pages, options)
+            node.ToJsonString options |> Encoding.UTF8.GetBytes
 
     /// Non-swallowing parse. `None` means the bytes are present but
     /// not a valid permission document — the caller decides whether
@@ -283,12 +325,19 @@ module private Json =
                         |> Map.ofList
                     | _ -> Map.empty
 
-            // Phase 551 — grant records. Absent on every pre-551 document
-            // ⇒ empty ⇒ every module behaves as `AdminDiscretion` unless
-            // one declares otherwise (GP 11).
+            // Grant records. Absent on a document that predates them ⇒
+            // empty ⇒ every module behaves as `AdminDiscretion` unless one
+            // declares otherwise (GP 11).
             let grants =
                 match root.TryGetProperty "grants" with
                 | true, g -> grantsFromObject g
+                | _ -> Map.empty
+
+            // Page-save grants. Absent ⇒ empty ⇒ nothing beyond what a role
+            // implies (deny by default).
+            let pages =
+                match root.TryGetProperty "pages" with
+                | true, p -> pagesFromObject p
                 | _ -> Map.empty
 
             Some {
@@ -296,6 +345,7 @@ module private Json =
                 Members = members
                 Exposure = exposure
                 Grants = grants
+                Pages = pages
             }
         with _ ->
             None

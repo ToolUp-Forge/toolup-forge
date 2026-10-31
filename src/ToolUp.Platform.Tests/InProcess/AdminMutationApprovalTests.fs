@@ -868,6 +868,7 @@ let tests =
                                     }
                                 ]
                             ]
+                        Pages = Map.ofList [ "bob", [ PageGrant.SaveTeam ] ]
                     }
                 ]
 

@@ -1144,6 +1144,10 @@ ToolUp.Platform.AuditEvent.IsOAuthTokenRefreshFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuthTokenRefreshed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOrphanSweepCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOrphanedContentBlobReclaimed : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPageDetached : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPageReseeded : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPageSaved : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPageWriteRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPasskeyCredentialRegistered : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPasskeyCredentialRemoved : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPeerCallCompleted : System.Boolean { get }
@@ -1492,6 +1496,14 @@ ToolUp.Platform.AuditEvent+OrphanSweepCompleted (class)
 ToolUp.Platform.AuditEvent+OrphanSweepCompleted.Item : ToolUp.Platform.OrphanSweepCompletedPayload { get }
 ToolUp.Platform.AuditEvent+OrphanedContentBlobReclaimed (class)
 ToolUp.Platform.AuditEvent+OrphanedContentBlobReclaimed.Item : ToolUp.Platform.OrphanedContentBlobReclaimedPayload { get }
+ToolUp.Platform.AuditEvent+PageDetached (class)
+ToolUp.Platform.AuditEvent+PageDetached.Item : ToolUp.Platform.PageDetachedPayload { get }
+ToolUp.Platform.AuditEvent+PageReseeded (class)
+ToolUp.Platform.AuditEvent+PageReseeded.Item : ToolUp.Platform.PageReseededPayload { get }
+ToolUp.Platform.AuditEvent+PageSaved (class)
+ToolUp.Platform.AuditEvent+PageSaved.Item : ToolUp.Platform.PageSavedPayload { get }
+ToolUp.Platform.AuditEvent+PageWriteRefused (class)
+ToolUp.Platform.AuditEvent+PageWriteRefused.Item : ToolUp.Platform.PageWriteRefusedPayload { get }
 ToolUp.Platform.AuditEvent+PasskeyCredentialRegistered (class)
 ToolUp.Platform.AuditEvent+PasskeyCredentialRegistered.Item : ToolUp.Platform.PasskeyCredentialRegisteredPayload { get }
 ToolUp.Platform.AuditEvent+PasskeyCredentialRemoved (class)
@@ -1712,6 +1724,10 @@ ToolUp.Platform.AuditEvent+Tags.OAuthTokenRefreshFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuthTokenRefreshed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OrphanSweepCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OrphanedContentBlobReclaimed : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PageDetached : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PageReseeded : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PageSaved : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PageWriteRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PasskeyCredentialRegistered : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PasskeyCredentialRemoved : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PeerCallCompleted : System.Int32 (literal)
@@ -10381,6 +10397,64 @@ ToolUp.Platform.OverallStatus+Tags.DegradedBy : System.Int32 (literal)
 ToolUp.Platform.OverallStatus+Tags.UnhealthyBy : System.Int32 (literal)
 ToolUp.Platform.OverallStatus+UnhealthyBy (class)
 ToolUp.Platform.OverallStatus+UnhealthyBy.sections : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PageDetachedPayload (class)
+ToolUp.Platform.PageDetachedPayload..ctor(System.String, System.String, System.String, System.String, System.Int32, System.DateTimeOffset)
+ToolUp.Platform.PageDetachedPayload.ActorId : System.String { get }
+ToolUp.Platform.PageDetachedPayload.Module : System.String { get }
+ToolUp.Platform.PageDetachedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.PageDetachedPayload.Page : System.String { get }
+ToolUp.Platform.PageDetachedPayload.SeedHash : System.String { get }
+ToolUp.Platform.PageDetachedPayload.Version : System.Int32 { get }
+ToolUp.Platform.PageGrant (class)
+ToolUp.Platform.PageGrant.IsSaveOwn : System.Boolean { get }
+ToolUp.Platform.PageGrant.IsSavePlatform : System.Boolean { get }
+ToolUp.Platform.PageGrant.IsSaveTeam : System.Boolean { get }
+ToolUp.Platform.PageGrant.SaveOwn : ToolUp.Platform.PageGrant { get }
+ToolUp.Platform.PageGrant.SavePlatform : ToolUp.Platform.PageGrant { get }
+ToolUp.Platform.PageGrant.SaveTeam : ToolUp.Platform.PageGrant { get }
+ToolUp.Platform.PageGrant.Tag : System.Int32 { get }
+ToolUp.Platform.PageGrant+Tags (class)
+ToolUp.Platform.PageGrant+Tags.SaveOwn : System.Int32 (literal)
+ToolUp.Platform.PageGrant+Tags.SavePlatform : System.Int32 (literal)
+ToolUp.Platform.PageGrant+Tags.SaveTeam : System.Int32 (literal)
+ToolUp.Platform.PageGrantModule (class)
+ToolUp.Platform.PageGrantModule.ofToken(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PageGrant]
+ToolUp.Platform.PageGrantModule.toToken(ToolUp.Platform.PageGrant) : System.String
+ToolUp.Platform.PageReseededPayload (class)
+ToolUp.Platform.PageReseededPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Int32, System.Int32, System.DateTimeOffset)
+ToolUp.Platform.PageReseededPayload.ActorId : System.String { get }
+ToolUp.Platform.PageReseededPayload.ConflictCount : System.Int32 { get }
+ToolUp.Platform.PageReseededPayload.Module : System.String { get }
+ToolUp.Platform.PageReseededPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.PageReseededPayload.Page : System.String { get }
+ToolUp.Platform.PageReseededPayload.PreviousSeedHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PageReseededPayload.SeedHash : System.String { get }
+ToolUp.Platform.PageReseededPayload.Version : System.Int32 { get }
+ToolUp.Platform.PageSavedPayload (class)
+ToolUp.Platform.PageSavedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.Int32, System.String, System.String, System.String, System.Int32, System.DateTimeOffset)
+ToolUp.Platform.PageSavedPayload.Act : System.String { get }
+ToolUp.Platform.PageSavedPayload.ActorId : System.String { get }
+ToolUp.Platform.PageSavedPayload.ChainHead : System.String { get }
+ToolUp.Platform.PageSavedPayload.DocumentHash : System.String { get }
+ToolUp.Platform.PageSavedPayload.Layer : System.String { get }
+ToolUp.Platform.PageSavedPayload.Module : System.String { get }
+ToolUp.Platform.PageSavedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.PageSavedPayload.OpCount : System.Int32 { get }
+ToolUp.Platform.PageSavedPayload.OpsHash : System.String { get }
+ToolUp.Platform.PageSavedPayload.Page : System.String { get }
+ToolUp.Platform.PageSavedPayload.Principal : System.String { get }
+ToolUp.Platform.PageSavedPayload.Version : System.Int32 { get }
+ToolUp.Platform.PageWriteRefusedPayload (class)
+ToolUp.Platform.PageWriteRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.DateTimeOffset)
+ToolUp.Platform.PageWriteRefusedPayload.Act : System.String { get }
+ToolUp.Platform.PageWriteRefusedPayload.ActorId : System.String { get }
+ToolUp.Platform.PageWriteRefusedPayload.Layer : System.String { get }
+ToolUp.Platform.PageWriteRefusedPayload.MissingGrant : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PageWriteRefusedPayload.Module : System.String { get }
+ToolUp.Platform.PageWriteRefusedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.PageWriteRefusedPayload.OpsHash : System.String { get }
+ToolUp.Platform.PageWriteRefusedPayload.Page : System.String { get }
+ToolUp.Platform.PageWriteRefusedPayload.Reason : System.String { get }
 ToolUp.Platform.PartyRef (class)
 ToolUp.Platform.PartyRef.Item : System.String { get }
 ToolUp.Platform.PartyRef.Tag : System.Int32 { get }
@@ -12996,14 +13070,16 @@ ToolUp.Platform.TeamOwnershipTransferredPayload.FromUserId : System.String { get
 ToolUp.Platform.TeamOwnershipTransferredPayload.TeamId : System.String { get }
 ToolUp.Platform.TeamOwnershipTransferredPayload.ToUserId : System.String { get }
 ToolUp.Platform.TeamPermissions (class)
-ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]])
+ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]])
 ToolUp.Platform.TeamPermissions.Defaults : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.TeamPermissions.Exposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
 ToolUp.Platform.TeamPermissions.Grants : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]] { get }
 ToolUp.Platform.TeamPermissions.Members : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]] { get }
+ToolUp.Platform.TeamPermissions.Pages : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]] { get }
 ToolUp.Platform.TeamPermissionsModule (class)
 ToolUp.Platform.TeamPermissionsModule.empty : ToolUp.Platform.TeamPermissions { get }
 ToolUp.Platform.TeamPermissionsModule.grantsFor(System.String, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]
+ToolUp.Platform.TeamPermissionsModule.pageGrantsFor(System.String, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]
 ToolUp.Platform.TeamRestoredPayload (class)
 ToolUp.Platform.TeamRestoredPayload..ctor(System.String, System.String, System.String)
 ToolUp.Platform.TeamRestoredPayload.TeamId : System.String { get }
@@ -15354,6 +15430,7 @@ ToolUp.Remoting.PlatformDecoders.oAuthRefreshOutcome : Microsoft.FSharp.Core.FSh
 ToolUp.Remoting.PlatformDecoders.offboardConfirmation : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.optInRecord : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OptInRecord, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.overallStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OverallStatus, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.pageGrant : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PageGrant, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.partyRef : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PartyRef, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.pendingInviteByEmail : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PendingInviteByEmail, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.platformInfo : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PlatformInfo, ToolUp.Remoting.DecodeError]] { get }

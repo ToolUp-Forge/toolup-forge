@@ -891,6 +891,7 @@
         <Compile Include="InProcess\ServerAppSecretStoreTests.fs" />
         <Compile Include="InProcess\ServerAppOrderTests.fs" />
         <Compile Include="InProcess\ServerBindAddressTests.fs" />
+        <Compile Include="InProcess\PageDocumentStoreTests.fs" />
         <Compile Include="Support\FireAndForgetHarness.fs" />
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
         <Compile Include="InProcess\StoreFireAndForgetTests.fs" />
@@ -900,6 +901,7 @@
         <Compile Include="InProcess\StreamAuthBothSignInsTests.fs" />
         <Compile Include="InProcess\DeliveryCompletedTests.fs" />
         <Compile Include="InProcess\FactPresentationTests.fs" />
+        <Compile Include="InProcess\PageRequestResolverTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
