@@ -953,6 +953,50 @@ let tests =
                 Expect.equal used [ "rt-1"; "rt-2" ] "no restart, no cache: the second call read the new token"
             }
 
+            testAsync "a token minted without the substrate stores a rotated refresh token" {
+                let secrets = MemorySecretStore()
+                seedCredentials secrets "team-m" "rt-1"
+
+                let post: OAuthTokenPost =
+                    fun _ _ -> async { return Ok """{"access_token":"a","refresh_token":"rt-2","expires_in":3600}""" }
+
+                let tokens =
+                    GoogleCalendarTokenSource(post, secrets, None, GoogleCalendarOAuthConfig.defaults)
+
+                let! token = tokens.AccessToken("team-m", Connection)
+                Expect.equal token (Ok "a") "the access token is handed out"
+
+                let! stored = (secrets :> ISecretStore).GetSecret("team-m", refreshTokenKey DefaultFlowName Connection)
+
+                Expect.equal stored (Some "rt-2") "the next mint reads the rotated token"
+            }
+
+            testAsync "a minted token is withheld when the store refuses the rotated refresh token" {
+                let secrets = MemorySecretStore()
+                seedCredentials secrets "team-m" "rt-1"
+                let inner = secrets :> ISecretStore
+
+                let refusing =
+                    { new ISecretStore with
+                        member _.GetSecret(s, k) = inner.GetSecret(s, k)
+                        member _.SetSecret(_, _, _) = async { return Error "store is read-only" }
+                        member _.DeleteSecret(s, k) = inner.DeleteSecret(s, k)
+                        member _.ListKeys s = inner.ListKeys s
+                    }
+
+                let post: OAuthTokenPost =
+                    fun _ _ -> async { return Ok """{"access_token":"a","refresh_token":"rt-2","expires_in":3600}""" }
+
+                let tokens =
+                    GoogleCalendarTokenSource(post, refusing, None, GoogleCalendarOAuthConfig.defaults)
+
+                match! tokens.AccessToken("team-m", Connection) with
+                | Error(AuthenticationFailed message) ->
+                    Expect.stringContains message Connection "names the connection"
+                    Expect.stringContains message "store is read-only" "carries the refusal"
+                | other -> failtestf "expected AuthenticationFailed, got %A" other
+            }
+
             testAsync "a missing credential is an authentication failure naming the key" {
                 let rig = rigWith false None
                 let orphan = { rig.Link with UserId = "nobody" }

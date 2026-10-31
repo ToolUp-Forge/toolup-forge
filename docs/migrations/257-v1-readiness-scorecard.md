@@ -8,7 +8,7 @@ Release tooling only. **No shipped code changed behaviour** and no package versi
 consumer deployment is byte-for-byte what it was (GP 11 / GP 13).
 
 1. **A new FAKE target, `V1Readiness`**, scores six preconditions for the 1.0 tag and writes
-   [`docs/reference/v1-readiness.md`](../reference/v1-readiness.md) — a regenerated table, each row
+   `docs/reference/v1-readiness.md` (rendered on demand, not committed) — a regenerated table, each row
    pass / fail with its measured value and the threshold it was graded against. "Are we 1.0 yet?"
    is now a deterministic, regenerable answer instead of a judgement call.
 

@@ -14,7 +14,7 @@ and read no migration entries may be carrying several of the changes below alrea
 yet compiled against. Do the audit in §1 first; it is cheap and it tells you which sections apply.
 
 The precondition for the 1.0 tag itself is the readiness scorecard
-([`docs/reference/v1-readiness.md`](../reference/v1-readiness.md), Phase 257); its `undecided-renames`
+(rendered on demand by the `V1Readiness` target, Phase 257); its `undecided-renames`
 row reads the decision table in §5 below, so a rename left undecided blocks the tag rather than
 surprising a consumer after it.
 
