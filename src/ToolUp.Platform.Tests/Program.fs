@@ -1063,6 +1063,7 @@ let private registeredTests =
         PipelineAssertionTests.tests
         PageRequestResolverTests.tests
         LayoutToolsTests.tests
+        AppCompositionConformanceTests.tests
         NarrativeCalculationTests.tests
     ]
 

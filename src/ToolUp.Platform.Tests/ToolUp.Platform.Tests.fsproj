@@ -906,6 +906,8 @@
         <Compile Include="InProcess\FactPresentationTests.fs" />
         <Compile Include="InProcess\PageRequestResolverTests.fs" />
         <Compile Include="InProcess\LayoutToolsTests.fs" />
+        <Compile Include="InProcess\AppCompositionCorpus.fs" />
+        <Compile Include="InProcess\AppCompositionConformanceTests.fs" />
         <Compile Include="InProcess\NarrativeCalculationTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />

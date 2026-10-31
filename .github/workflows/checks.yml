@@ -563,6 +563,30 @@ jobs:
           path: .model-execution-corpus
           persist-credentials: false
 
+      # ─── The App-composition wire specification, at forge's pin ─────
+      #
+      # `spec/fixtures/core/` carries copies of the specification's vectors
+      # that certify forge's composition profile, pinned at the commit
+      # `spec/fixtures/manifest.json` records (`core.commit`). The
+      # `AppCompositionConformanceTests` list holds every copy, byte for
+      # byte, to the specification read at that commit, and holds the
+      # pinned set to every vector the specification scopes to the
+      # profile. The specification is public
+      # (https://github.com/Fuaran-Build/fuaran-app-composition-specification,
+      # Apache-2.0), so the checkout needs no token and fork PRs run it.
+      #
+      # The `ref` is the same value as `core.commit`; bump the two
+      # together, in one reviewed commit, after reading the corpus diff.
+      # The harness finds the checkout by its DIRECTORY name at the
+      # repository root, and FAILS when it is absent — it never skips.
+      - name: Check out the App-composition wire specification at the pin
+        uses: actions/checkout@v6
+        with:
+          repository: Fuaran-Build/fuaran-app-composition-specification
+          ref: 110bd1cb757f5334eb508e986898d6b4e976d046
+          path: fuaran-app-composition-specification
+          persist-credentials: false
+
       - name: Build the solution
         run: dotnet build ToolUp.Forge.sln --nologo
 
