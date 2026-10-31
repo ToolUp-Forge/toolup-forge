@@ -152,6 +152,79 @@ type GroundedProjectionRequest = {
 type GroundedRequestBuilder =
     GroundedProjectionContext -> GroundedProjectionRequest -> Async<Result<NarrativeElement list, string>>
 
+/// How a grounded run answers a draft the gate refused: it repairs the draft
+/// while the repair makes progress, then publishes what is grounded and
+/// reports the rest.
+///
+/// A repair round sends the model the gate's offences in the same
+/// conversation, splices the elements it rewrites into the draft, and
+/// re-checks the WHOLE document. A round is progress when the offence set
+/// shrinks, or keeps its size with different members. The loop stops at
+/// the first of: no offence left, `MaxRoundsWithoutProgress` rounds in a
+/// row without progress, `MaxRepairRounds` rounds, or the run's model calls
+/// reaching `MaxRunTokens`. What is still refused then is withheld from the
+/// published report, with a note naming each withheld claim's place and
+/// reason, never its value — when `PublishGroundedRemainder` is set.
+/// Otherwise the run is refused, as a run that is not repaired always was.
+type GroundedRepairPolicy = {
+    /// The most repair rounds a run takes. `0` repairs nothing.
+    MaxRepairRounds: int
+    /// Consecutive rounds without progress after which the loop stops.
+    MaxRoundsWithoutProgress: int
+    /// The most tokens (prompt plus output, as the provider reports them)
+    /// the run's model calls may spend before the loop stops; `None` sets no
+    /// budget. A provider that reports no usage never reaches it.
+    MaxRunTokens: int64 option
+    /// Whether a run that ends with offences publishes its grounded
+    /// remainder. `false` refuses the whole narrative instead.
+    PublishGroundedRemainder: bool
+}
+
+module GroundedRepairPolicy =
+    /// Repair up to twelve rounds, stop after three without progress or at
+    /// half a million tokens, and publish the grounded remainder.
+    let defaults: GroundedRepairPolicy = {
+        MaxRepairRounds = 12
+        MaxRoundsWithoutProgress = 3
+        MaxRunTokens = Some 500_000L
+        PublishGroundedRemainder = true
+    }
+
+    /// No repair, and a refusal on the first offence: the behaviour of a run
+    /// before the repair loop existed.
+    let refuseOnOffence: GroundedRepairPolicy = {
+        defaults with
+            MaxRepairRounds = 0
+            PublishGroundedRemainder = false
+    }
+
+/// What the repair loop did for a published narrative: the rounds it took
+/// and the claims it withheld, each as the gate refused it. A narrative the
+/// gate passed whole withholds nothing.
+type GroundedRepairSummary = {
+    /// Repair rounds taken; `0` when the first draft passed.
+    Rounds: int
+    /// The claims withheld from the published narrative, as the gate
+    /// reported them.
+    Withheld: GroundingOffence list
+}
+
+module GroundedRepairSummary =
+    /// A narrative published whole after `rounds` repair rounds.
+    let complete (rounds: int) : GroundedRepairSummary = { Rounds = rounds; Withheld = [] }
+
+    /// Whether the narrative was published whole.
+    let isComplete (summary: GroundedRepairSummary) : bool = List.isEmpty summary.Withheld
+
+    /// The warning a job that published with withheld claims carries: the
+    /// count, the rounds and each claim with its reason.
+    let warning (summary: GroundedRepairSummary) : string =
+        sprintf
+            "published with %d claim(s) withheld after %d repair round(s): %s"
+            (List.length summary.Withheld)
+            summary.Rounds
+            (summary.Withheld |> List.map GroundingOffence.describe |> String.concat "; ")
+
 /// A registered grounded narrative run — what a deployment declares. The
 /// SDK holds the registry and names no report (GP 9): the deployment says
 /// which runs exist, and both triggers address a run by its `Key`.
@@ -199,6 +272,10 @@ type GroundedNarrativeDefinition = {
     Tags: string list
     /// The egress surface the narrative is checked for.
     Surface: FactEgressSurface
+    /// How a refused draft is repaired and what is published when the
+    /// repair stops (`GroundedRepairPolicy.defaults` unless set with
+    /// `withRepairPolicy`).
+    RepairPolicy: GroundedRepairPolicy
 }
 
 module GroundedNarrativeDefinition =
@@ -228,7 +305,15 @@ module GroundedNarrativeDefinition =
             AllowsConjecture = false
             Tags = []
             Surface = FactNarrativePublication
+            RepairPolicy = GroundedRepairPolicy.defaults
         }
+
+    /// Repair and publish under `policy` instead of
+    /// `GroundedRepairPolicy.defaults`. **Sets** the policy.
+    let withRepairPolicy (policy: GroundedRepairPolicy) (definition: GroundedNarrativeDefinition) = {
+        definition with
+            RepairPolicy = policy
+    }
 
     let dependingOn (metricIds: string list) (definition: GroundedNarrativeDefinition) = {
         definition with
@@ -391,13 +476,16 @@ type GroundedNarrativeOutcome =
     /// The narrative passed the gate and was published. `Indexed` is the
     /// knowledge-base commit's outcome (`None` when no knowledge base is
     /// composed); `Certificate` is the grounding certificate, or why none
-    /// could be issued.
+    /// could be issued. `Repair` says whether it was published whole or
+    /// with claims withheld, and how many repair rounds it took; the
+    /// document is what was published, withheld-claims note included.
     | GroundedNarrativePublished of
         narrativeId: NarrativeId *
         document: NarrativeDocument *
         citations: NarrativeCitation list *
         indexed: NarrativeIngestOutcome option *
-        certificate: Result<NarrativeGroundingCertificate, string>
+        certificate: Result<NarrativeGroundingCertificate, string> *
+        repair: GroundedRepairSummary
     /// The narrative failed the gate and was NOT published. Every offending
     /// claim is named, and the refusal is on the audit trail.
     | GroundedNarrativeRefused of offences: GroundingOffence list
@@ -431,13 +519,22 @@ module GroundedNarrativeOutcome =
     /// a log line.
     let describe (outcome: GroundedNarrativeOutcome) : string =
         match outcome with
-        | GroundedNarrativePublished(id, _, citations, _, certificate) ->
+        | GroundedNarrativePublished(id, _, citations, _, certificate, repair) ->
             let cert =
                 match certificate with
                 | Ok c -> sprintf "certificate %s" c.Digest
                 | Error reason -> sprintf "no certificate (%s)" reason
 
-            sprintf "published narrative %O citing %d reference(s); %s" id (List.length citations) cert
+            let withheld =
+                if GroundedRepairSummary.isComplete repair then
+                    ""
+                else
+                    sprintf
+                        "; %d claim(s) withheld after %d repair round(s)"
+                        (List.length repair.Withheld)
+                        repair.Rounds
+
+            sprintf "published narrative %O citing %d reference(s); %s%s" id (List.length citations) cert withheld
         | GroundedNarrativeRefused offences ->
             offences
             |> List.map GroundingOffence.describe
@@ -452,7 +549,10 @@ module GroundedNarrativeOutcome =
     /// data-arrival and the regeneration handlers cannot disagree.
     let toJobResult (outcome: GroundedNarrativeOutcome) : JobResult =
         match outcome with
-        | GroundedNarrativePublished _ -> Success
+        | GroundedNarrativePublished(repair = repair) when GroundedRepairSummary.isComplete repair -> Success
+        // Published with claims withheld: the job did its work, and the
+        // withheld claims are a warning the jobs view shows, not a failure.
+        | GroundedNarrativePublished(repair = repair) -> SuccessWithWarning(GroundedRepairSummary.warning repair)
         // A refusal is a decision, recorded on the audit trail by the run;
         // another attempt over the same facts would refuse again.
         | GroundedNarrativeRefused _ -> PermanentFailure(describe outcome)
@@ -477,7 +577,8 @@ type IGroundedNarrativeRun =
     abstract Run: request: GroundedNarrativeRequest -> Async<GroundedNarrativeOutcome>
 
 /// The audit trail's vocabulary for grounded runs. Every run that reaches
-/// the gate records exactly one of these rows.
+/// the gate records exactly one outcome row (published, refused or failed),
+/// and a repaired run one `RepairRoundType` row per round beside it.
 module GroundedNarrativeEvents =
     [<Literal>]
     let SourceModule = "_narratives"
@@ -490,3 +591,9 @@ module GroundedNarrativeEvents =
 
     [<Literal>]
     let FailedType = "GroundedNarrativeFailed"
+
+    /// One repair round of a run whose draft the gate refused: the offences
+    /// in and out, whether it made progress, and the tokens spent so far.
+    /// Written beside — never instead of — the run's one outcome row.
+    [<Literal>]
+    let RepairRoundType = "GroundedNarrativeRepairRound"

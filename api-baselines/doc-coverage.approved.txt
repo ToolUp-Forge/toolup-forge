@@ -14,7 +14,7 @@ ToolUp.AI.McpHost 144/247
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 4/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 844/1375
+ToolUp.AI.Server 884/1455
 ToolUp.AI.UiAwareness.Client 6/8
 ToolUp.AI.UiAwareness.Core 6/7
 ToolUp.AI.UiAwareness.Server 6/9
@@ -137,9 +137,9 @@ ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 333/603
-ToolUp.Platform.Client 2946/7263
-ToolUp.Platform.Core 7368/15569
-ToolUp.Platform.Server 7321/13303
+ToolUp.Platform.Client 2947/7264
+ToolUp.Platform.Core 7371/15575
+ToolUp.Platform.Server 7338/13328
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 72/184

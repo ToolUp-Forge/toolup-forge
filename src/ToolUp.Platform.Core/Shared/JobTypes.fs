@@ -273,6 +273,15 @@ type JobDefinition = {
     /// downstream telemetry can read it. E.g. `["origin", "module-X"]`,
     /// `["replay-of", "<old jobId>"]`.
     Tags: Map<string, string>
+    /// The warning the last run ended with, when it ended `Succeeded` with
+    /// one (`JobResult.SuccessWithWarning`); `None` after every other
+    /// ending, a plain success included, which clears it. The jobs view
+    /// shows it beside the status.
+    ///
+    /// **Additive-field back-compat (GP 11).** A definition written before
+    /// the field existed carries no `LastRunWarning` property; the converter
+    /// reads the absent reference-typed field as `null`, which is `None`.
+    LastRunWarning: string option
 }
 
 /// Per-attempt run history row. One per dispatch attempt — a job that
@@ -315,6 +324,11 @@ type JobRun = {
     /// both ways: a missing list field arrives as `null` where `[]` was
     /// assumed, and `Fable.SimpleJson` throws outright on the client).
     ExternalHandle: ExternalHandle option
+    /// The warning a `Succeeded` attempt ended with
+    /// (`JobResult.SuccessWithWarning`): the job did its work, and something
+    /// in it an operator should see. `None` on every other attempt; a row
+    /// written before the field existed reads as `None` (GP 11, as above).
+    Warning: string option
 }
 
 /// What caused this run. The handler reads this to distinguish a
@@ -411,6 +425,18 @@ type JobResult =
     /// `Success` / `TransientFailure` / `PermanentFailure` path in the
     /// scheduler is untouched.
     | HandedOff of handle: ExternalHandle
+
+    /// The handler did its work and the run SUCCEEDED, with a warning an
+    /// operator should see: the run row is `Succeeded` and carries
+    /// `JobRun.Warning`, the definition's `LastRunWarning` is set, and
+    /// `ConsecutiveFailures` resets exactly as on `Success`. A grounded
+    /// narrative that published with claims withheld returns this.
+    ///
+    /// **A result case, not a `JobRunStatus` case.** The job did succeed, so
+    /// the status it records is `Succeeded`; a new status would break every
+    /// exhaustive match over a persisted union. Appended at the END of this
+    /// union for the reason `HandedOff` is (GP 11).
+    | SuccessWithWarning of warning: string
 
 /// Caller-supplied scheduling request. Differs from `JobDefinition`
 /// only in fields the scheduler computes itself — `JobId`,

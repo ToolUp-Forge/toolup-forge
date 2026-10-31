@@ -583,6 +583,7 @@ type InProcessJobScheduler
                     Error = None
                     DurationMs = None
                     ExternalHandle = None
+                    Warning = None
                 }
 
                 do! store.RecordRun runningRow

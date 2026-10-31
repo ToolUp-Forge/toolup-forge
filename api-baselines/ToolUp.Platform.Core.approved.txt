@@ -7960,7 +7960,7 @@ ToolUp.Platform.JobContext.ScopeId : System.String { get }
 ToolUp.Platform.JobContext.Trigger : ToolUp.Platform.Trigger { get }
 ToolUp.Platform.JobContext.TriggerSource : ToolUp.Platform.TriggerSource { get }
 ToolUp.Platform.JobDefinition (class)
-ToolUp.Platform.JobDefinition..ctor(System.Guid, System.String, System.String, System.String, ToolUp.Platform.Trigger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IdempotencyKey], ToolUp.Platform.JobRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.JobPrecision, ToolUp.Platform.JobStatus, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobRunStatus], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.JobDefinition..ctor(System.Guid, System.String, System.String, System.String, ToolUp.Platform.Trigger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IdempotencyKey], ToolUp.Platform.JobRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.JobPrecision, ToolUp.Platform.JobStatus, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobRunStatus], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.JobDefinition.ConsecutiveFailures : System.Int32 { get }
 ToolUp.Platform.JobDefinition.CreatedAt : System.DateTime { get }
 ToolUp.Platform.JobDefinition.CreatedBy : System.String { get }
@@ -7970,6 +7970,7 @@ ToolUp.Platform.JobDefinition.JobId : System.Guid { get }
 ToolUp.Platform.JobDefinition.LastRunAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.JobDefinition.LastRunError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.JobDefinition.LastRunStatus : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobRunStatus] { get }
+ToolUp.Platform.JobDefinition.LastRunWarning : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.JobDefinition.NextRunAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.JobDefinition.Payload : System.String { get }
 ToolUp.Platform.JobDefinition.Precision : ToolUp.Platform.JobPrecision { get }
@@ -8030,6 +8031,7 @@ ToolUp.Platform.JobResult (class)
 ToolUp.Platform.JobResult.IsHandedOff : System.Boolean { get }
 ToolUp.Platform.JobResult.IsPermanentFailure : System.Boolean { get }
 ToolUp.Platform.JobResult.IsSuccess : System.Boolean { get }
+ToolUp.Platform.JobResult.IsSuccessWithWarning : System.Boolean { get }
 ToolUp.Platform.JobResult.IsTransientFailure : System.Boolean { get }
 ToolUp.Platform.JobResult.Success : ToolUp.Platform.JobResult { get }
 ToolUp.Platform.JobResult.Tag : System.Int32 { get }
@@ -8037,10 +8039,13 @@ ToolUp.Platform.JobResult+HandedOff (class)
 ToolUp.Platform.JobResult+HandedOff.handle : ToolUp.Platform.ExternalHandle { get }
 ToolUp.Platform.JobResult+PermanentFailure (class)
 ToolUp.Platform.JobResult+PermanentFailure.error : System.String { get }
+ToolUp.Platform.JobResult+SuccessWithWarning (class)
+ToolUp.Platform.JobResult+SuccessWithWarning.warning : System.String { get }
 ToolUp.Platform.JobResult+Tags (class)
 ToolUp.Platform.JobResult+Tags.HandedOff : System.Int32 (literal)
 ToolUp.Platform.JobResult+Tags.PermanentFailure : System.Int32 (literal)
 ToolUp.Platform.JobResult+Tags.Success : System.Int32 (literal)
+ToolUp.Platform.JobResult+Tags.SuccessWithWarning : System.Int32 (literal)
 ToolUp.Platform.JobResult+Tags.TransientFailure : System.Int32 (literal)
 ToolUp.Platform.JobResult+TransientFailure (class)
 ToolUp.Platform.JobResult+TransientFailure.error : System.String { get }
@@ -8054,7 +8059,7 @@ ToolUp.Platform.JobRetryPolicyModule (class)
 ToolUp.Platform.JobRetryPolicyModule.defaults : ToolUp.Platform.JobRetryPolicy { get }
 ToolUp.Platform.JobRetryPolicyModule.delayFor(ToolUp.Platform.JobRetryPolicy, System.Int32) : System.TimeSpan
 ToolUp.Platform.JobRun (class)
-ToolUp.Platform.JobRun..ctor(System.Guid, System.Guid, System.String, System.Int32, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.JobRunStatus, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalHandle])
+ToolUp.Platform.JobRun..ctor(System.Guid, System.Guid, System.String, System.Int32, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.JobRunStatus, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalHandle], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.JobRun.Attempt : System.Int32 { get }
 ToolUp.Platform.JobRun.CompletedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.JobRun.DurationMs : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
@@ -8065,6 +8070,7 @@ ToolUp.Platform.JobRun.RunId : System.Guid { get }
 ToolUp.Platform.JobRun.ScopeId : System.String { get }
 ToolUp.Platform.JobRun.StartedAt : System.DateTime { get }
 ToolUp.Platform.JobRun.Status : ToolUp.Platform.JobRunStatus { get }
+ToolUp.Platform.JobRun.Warning : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.JobRunStatus (class)
 ToolUp.Platform.JobRunStatus.AwaitingExternal : ToolUp.Platform.JobRunStatus { get }
 ToolUp.Platform.JobRunStatus.DeadLettered : ToolUp.Platform.JobRunStatus { get }

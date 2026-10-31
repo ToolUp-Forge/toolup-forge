@@ -1219,6 +1219,7 @@ let private carrierTests =
                 LastRunError = None
                 ConsecutiveFailures = 0
                 Tags = tags
+                LastRunWarning = None
             }
 
             let jobA = Guid.NewGuid()

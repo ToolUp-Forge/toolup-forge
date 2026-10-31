@@ -1131,6 +1131,86 @@ ToolUp.AI.GroundedNarrativeRun+GroundedProse+ProseParagraph.Item : Microsoft.FSh
 ToolUp.AI.GroundedNarrativeRun+GroundedProse+Tags (class)
 ToolUp.AI.GroundedNarrativeRun+GroundedProse+Tags.ProseConjecture : System.Int32 (literal)
 ToolUp.AI.GroundedNarrativeRun+GroundedProse+Tags.ProseParagraph : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.WithheldHeading : System.String (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.WithheldSectionId : System.String (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.advance(System.Boolean, System.Int64, ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress) : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.cut(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part], ToolUp.Platform.Narrative.NarrativeElement) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeElement]
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.elementsOf(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.instruction(ToolUp.Platform.Narrative.NarrativeDocument, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.isProgress(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence]) : System.Boolean
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.isProse(ToolUp.Platform.Narrative.NarrativeElement) : System.Boolean
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.parseRepairs(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Repair], System.String]
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.prune(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.shouldStop(ToolUp.Platform.GroundedRepairPolicy, ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop]
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.splice(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Repair], ToolUp.Platform.Narrative.NarrativeDocument) : ToolUp.Platform.Narrative.NarrativeDocument
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.start : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.survives(ToolUp.Platform.Narrative.NarrativeDocument) : System.Boolean
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.tokensOf(ToolUp.Platform.Narrative.NarrativeElement) : System.String
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.tryPlace(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Place]
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.withheldNote(ToolUp.Platform.Narrative.NarrativeDocument, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence]) : ToolUp.Platform.Narrative.NarrativeSection
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair.withheldReason(ToolUp.Platform.Narrative.GroundingOffenceReason) : System.String
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part.IsEntry : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part.IsItem : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part.IsRow : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part.IsSpan : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part.IsWholeElement : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part.Tag : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part.WholeElement : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Entry (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Entry.Item : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Item (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Item.Item : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Row (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Row.Item : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Span (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Span.Item : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Tags (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Tags.Entry : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Tags.Item : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Tags.Row : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Tags.Span : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part+Tags.WholeElement : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Place (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Place..ctor(System.String, System.Int32, ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Place.Element : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Place.Part : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Part { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Place.Section : System.String { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress..ctor(System.Int32, System.Int32, System.Int64)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress.Rounds : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress.RoundsWithoutProgress : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Progress.Tokens : System.Int64 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Repair (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Repair..ctor(System.String, System.Int32, System.String)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Repair.Element : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Repair.Section : System.String { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Repair.Text : System.String { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.Ceiling : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.IsCeiling : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.IsModelFailed : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.IsNoProgress : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.IsSettled : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.IsTokenBudget : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.IsUnrepairable : System.Boolean { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.NoProgress : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.Settled : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.Tag : System.Int32 { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.TokenBudget : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop.Unrepairable : ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+ModelFailed (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+ModelFailed.reason : System.String { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+Tags (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+Tags.Ceiling : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+Tags.ModelFailed : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+Tags.NoProgress : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+Tags.Settled : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+Tags.TokenBudget : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop+Tags.Unrepairable : System.Int32 (literal)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+StopModule (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedRepair+StopModule.describe(ToolUp.AI.GroundedNarrativeRun+GroundedRepair+Stop) : System.String
 ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft (class)
 ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.GroundedNarrativeRun+GroundedProse], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedProjectionRequest])
 ToolUp.AI.GroundedNarrativeRun+GroundedSectionDraft.Id : System.String { get }

@@ -896,6 +896,7 @@ JobsAdminUI.rerunOffer(ToolUp.Platform.JobDefinition) : JobsAdminUI+RerunOffer
 JobsAdminUI.standingOf(ToolUp.Platform.JobDefinition) : JobsAdminUI+JobStanding
 JobsAdminUI.startedAfterRecord(ToolUp.Platform.JobDefinition, ToolUp.Platform.JobRun) : System.Boolean
 JobsAdminUI.update(JobsAdminUI+Msg, JobsAdminUI+Model) : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[JobsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+JobsAdminUI.warningOf(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 JobsAdminUI+AttemptReading (class)
 JobsAdminUI+AttemptReading.Cancelled : JobsAdminUI+AttemptReading { get }
 JobsAdminUI+AttemptReading.Failed : JobsAdminUI+AttemptReading { get }
