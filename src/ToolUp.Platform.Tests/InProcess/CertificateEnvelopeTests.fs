@@ -74,9 +74,10 @@ let private withheldPolicy = "policy:hr-restricted"
 let private disclosedMethod = "computed:sum:v3:9f2c"
 
 /// A certificate body with one disclosable and one withheld fact node —
-/// the selective-disclosure shape the envelope must carry unchanged.
+/// the selective-disclosure shape the envelope must carry unchanged. A v1
+/// body: the pinned projections below were recorded over one.
 let private body: GroundingCertificateBody = {
-    Format = GroundingCertificate.Format
+    Format = GroundingCertificate.FormatV1
     Root = root
     IssuedAt = DateTimeOffset(DateTime(2026, 8, 23, 9, 0, 0, DateTimeKind.Utc))
     DeploymentKeyId = keyId

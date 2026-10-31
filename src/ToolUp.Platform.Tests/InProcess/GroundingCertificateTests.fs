@@ -159,6 +159,11 @@ let private v2Tests =
                 storedV1SignedBytes
                 "v1's canonical bytes are unchanged, byte for byte"
 
+            Expect.equal
+                (CertificateEnvelope.predicateJson certificate)
+                storedV1Certificate
+                "and so is its interchange JSON"
+
             match! GroundingCertificate.verify verifier certificate with
             | Ok() -> ()
             | Error e -> failtestf "a stored v1 certificate must still verify: %s" (VerificationError.describe e)
@@ -226,6 +231,13 @@ let private v2Tests =
                     GroundingCertificate.canonicalBytes cert.Body |> Text.Encoding.UTF8.GetString
 
                 Expect.stringContains json "\"Admissions\":[" "the admissions are in the signed bytes"
+
+                let readBack = readCertificate (CertificateEnvelope.predicateJson cert)
+                Expect.equal readBack.Body.Admissions (Some admissions) "the interchange JSON carries them"
+
+                match! GroundingCertificate.verify verifier readBack with
+                | Ok() -> ()
+                | Error e -> failtestf "a v2 certificate read back must verify: %s" (VerificationError.describe e)
 
                 match! GroundingCertificate.verify verifier cert with
                 | Ok() -> ()

@@ -35,6 +35,10 @@ under "The grounding certificate".
   re-signed. A body with admissions serialises the v1 fields, then `Admissions`.
 - **`GroundingCertificateBody` gains `Admissions: CertificateAdmission list option`.** A full record
   literal adds `Admissions = None` (FS0764). A v1 document read from JSON reads it as `None`.
+- **The interchange JSON keeps the signed shape.** `GroundingCertificate.certificateJson` (which
+  `CertificateEnvelope.predicateJson` uses) writes the body as `bodyJson` does: a certificate with no
+  admissions reads exactly as a v1 document always has, with no `Admissions` member. Serialising the
+  record directly would add `"Admissions":null`; use `certificateJson` instead.
 - **The attested path's purpose is unchanged** (`GroundingCertificate.AttestationPurpose` stays
   `grounding-certificate/v1`): it names the kind of payload, and the version is inside the signed
   body. The in-toto predicate type URIs are unchanged too.

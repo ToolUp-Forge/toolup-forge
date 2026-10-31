@@ -95,7 +95,7 @@ ToolUp.Facts.Client 51/118
 ToolUp.Facts.Core 689/1273
 ToolUp.Facts.Presentation 147/239
 ToolUp.Facts.Presentation.Server 174/312
-ToolUp.Facts.Server 1048/1553
+ToolUp.Facts.Server 1051/1556
 ToolUp.Facts.Shared 270/302
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19

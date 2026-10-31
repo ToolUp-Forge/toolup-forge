@@ -1260,11 +1260,14 @@ ToolUp.Facts.GroundingCertificateModule.Format : System.String (literal)
 ToolUp.Facts.GroundingCertificateModule.FormatV1 : System.String (literal)
 ToolUp.Facts.GroundingCertificateModule.FormatV2 : System.String (literal)
 ToolUp.Facts.GroundingCertificateModule.Formats : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.GroundingCertificateModule.attestedCertificateJson(ToolUp.Facts.AttestedGroundingCertificate) : System.String
 ToolUp.Facts.GroundingCertificateModule.auditTrailLog(ToolUp.Platform.IAuditLog) : ToolUp.Facts.ICertificateIssuanceLog
 ToolUp.Facts.GroundingCertificateModule.auditTrailLogWithIntegrity(ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]) : ToolUp.Facts.ICertificateIssuanceLog
+ToolUp.Facts.GroundingCertificateModule.bodyJson(ToolUp.Facts.GroundingCertificateBody) : System.String
 ToolUp.Facts.GroundingCertificateModule.canonicalBytes(ToolUp.Facts.GroundingCertificateBody) : System.Byte[]
 ToolUp.Facts.GroundingCertificateModule.canonicalise(ToolUp.Facts.GroundingCertificateBody) : ToolUp.Facts.GroundingCertificateBody
 ToolUp.Facts.GroundingCertificateModule.certificateDigest(ToolUp.Facts.GroundingCertificateBody) : System.String
+ToolUp.Facts.GroundingCertificateModule.certificateJson(ToolUp.Facts.GroundingCertificate) : System.String
 ToolUp.Facts.GroundingCertificateModule.checkInclusion(ToolUp.Facts.ICertificateIssuanceLog, System.String, ToolUp.Facts.GroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.CertificateInclusionVerdict]
 ToolUp.Facts.GroundingCertificateModule.checkInclusionAttested(ToolUp.Facts.ICertificateIssuanceLog, System.String, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.CertificateInclusionVerdict]
 ToolUp.Facts.GroundingCertificateModule.checkInclusionOfDigest(ToolUp.Facts.ICertificateIssuanceLog, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.CertificateInclusionVerdict]

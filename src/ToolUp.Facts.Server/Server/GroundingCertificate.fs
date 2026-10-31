@@ -449,6 +449,14 @@ module GroundingCertificate =
     /// `true` when `format` is one a verifier here reads.
     let isKnownFormat (format: string) : bool = List.contains format Formats
 
+    /// The purpose an attested certificate is signed as: the name of this
+    /// kind of payload, so a signature minted for one kind cannot be
+    /// replayed as another. It is the FIRST format string and stays so when
+    /// the format moves on: the version is inside the signed body, and a
+    /// purpose that moved with it would refuse every certificate already
+    /// sealed under the old one.
+    let AttestationPurpose = FormatV1
+
     let private jsonOptions = FableConverters.create ()
 
     /// Canonical node-kind string. Total over `ProvenanceNodeKind`.
@@ -547,50 +555,70 @@ module GroundingCertificate =
                 | _ -> None
     }
 
-    /// The exact bytes the detached JWS is computed over — canonical JSON of
-    /// the (canonicalised) body. Both issue and verify go through this, so
-    /// the byte stream matches on both sides.
+    /// A body's JSON in the shape it is signed in, as the body stands (no
+    /// reordering — `canonicalBytes` canonicalises first).
     ///
-    /// A body with no admissions signs v1's shape, whatever its format
+    /// A body with no admissions takes v1's shape, whatever its format
     /// string, so a v1 certificate verifies under v1's rules exactly as it
-    /// always has. A body WITH admissions signs them, after the policy refs —
-    /// so admissions added to a v1 certificate, or edited on a v2 one, change
-    /// the bytes and fail verification. The format string is itself inside
-    /// the bytes, so relabelling a certificate's version fails too.
+    /// always has, and its interchange JSON is unchanged. A body WITH
+    /// admissions carries them after the policy refs — so admissions added
+    /// to a v1 certificate, or edited on a v2 one, change the bytes and fail
+    /// verification. The format string is itself inside the bytes, so
+    /// relabelling a certificate's version fails too.
+    let bodyJson (body: GroundingCertificateBody) : string =
+        match body.Admissions with
+        | Some admissions when not (isNull (box admissions) || List.isEmpty admissions) ->
+            JsonSerializer.Serialize(
+                {
+                    SignedWithAdmissions.Format = body.Format
+                    Root = body.Root
+                    IssuedAt = body.IssuedAt
+                    DeploymentKeyId = body.DeploymentKeyId
+                    Nodes = body.Nodes
+                    Edges = body.Edges
+                    PolicyRefs = body.PolicyRefs
+                    Admissions = admissions
+                },
+                jsonOptions
+            )
+        | _ ->
+            JsonSerializer.Serialize(
+                {
+                    SignedV1.Format = body.Format
+                    Root = body.Root
+                    IssuedAt = body.IssuedAt
+                    DeploymentKeyId = body.DeploymentKeyId
+                    Nodes = body.Nodes
+                    Edges = body.Edges
+                    PolicyRefs = body.PolicyRefs
+                },
+                jsonOptions
+            )
+
+    /// The exact bytes the detached JWS is computed over — the signed-shape
+    /// JSON (`bodyJson`) of the canonicalised body. Both issue and verify go
+    /// through this, so the byte stream matches on both sides.
     let canonicalBytes (body: GroundingCertificateBody) : byte[] =
-        let body = canonicalise body
+        canonicalise body |> bodyJson |> Encoding.UTF8.GetBytes
 
-        let json =
-            match body.Admissions with
-            | None ->
-                JsonSerializer.Serialize(
-                    {
-                        SignedV1.Format = body.Format
-                        Root = body.Root
-                        IssuedAt = body.IssuedAt
-                        DeploymentKeyId = body.DeploymentKeyId
-                        Nodes = body.Nodes
-                        Edges = body.Edges
-                        PolicyRefs = body.PolicyRefs
-                    },
-                    jsonOptions
-                )
-            | Some admissions ->
-                JsonSerializer.Serialize(
-                    {
-                        SignedWithAdmissions.Format = body.Format
-                        Root = body.Root
-                        IssuedAt = body.IssuedAt
-                        DeploymentKeyId = body.DeploymentKeyId
-                        Nodes = body.Nodes
-                        Edges = body.Edges
-                        PolicyRefs = body.PolicyRefs
-                        Admissions = admissions
-                    },
-                    jsonOptions
-                )
+    /// A sealed certificate's open interchange JSON — `{"Body":…,"Signature":…}`
+    /// with the body in its signed shape, so a certificate with no admissions
+    /// reads exactly as a v1 document always has.
+    let certificateJson (certificate: GroundingCertificate) : string =
+        "{\"Body\":"
+        + bodyJson certificate.Body
+        + ",\"Signature\":"
+        + JsonSerializer.Serialize(certificate.Signature, jsonOptions)
+        + "}"
 
-        Encoding.UTF8.GetBytes json
+    /// An attested certificate's interchange JSON — `{"Body":…,"Envelope":…}`,
+    /// the body in its signed shape, as `certificateJson`.
+    let attestedCertificateJson (certificate: AttestedGroundingCertificate) : string =
+        "{\"Body\":"
+        + bodyJson certificate.Body
+        + ",\"Envelope\":"
+        + JsonSerializer.Serialize(certificate.Envelope, jsonOptions)
+        + "}"
 
     // ── issuance transparency (Phase 685) ───────────────────────────────
 
@@ -902,7 +930,7 @@ module GroundingCertificate =
                     match! builder.BuildBody(scope, principal, subject, depth, signer.ActiveKeyId()) with
                     | Error e -> return Error e
                     | Ok body ->
-                        match! signer.SignPayload(Format, canonicalBytes body) with
+                        match! signer.SignPayload(AttestationPurpose, canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
                         | Ok envelope ->
                             do! recordIssuance audit scope.ScopeId ApplicationSeal body
@@ -968,14 +996,6 @@ module GroundingCertificate =
         createIssuerWithClockAudited graph store gate events signer audit (fun () -> DateTime.UtcNow)
 
     // ── the attested path ───────────────────────────────────────────────
-
-    /// The purpose an attested certificate is signed as: the name of this
-    /// kind of payload, so a signature minted for one kind cannot be
-    /// replayed as another. It is the FIRST format string and stays so when
-    /// the format moves on: the version is inside the signed body, and a
-    /// purpose that moved with it would refuse every certificate already
-    /// sealed under the old one.
-    let AttestationPurpose = FormatV1
 
     /// Construct the attested issuer. `signer` is `None` when no
     /// `IApplicationSigner` is composed — issuance then refuses with
