@@ -86,6 +86,36 @@ let private verbTests =
                 ]
                 "dotnet run --project .")
 
+        testCase "each repair selects its own task and forwards the rest, and the two are exclusive" (fun _ ->
+            let taskOf (args: string list) =
+                let _, invoked = FactsMigrateCommand.invocation (parsed args) "o"
+                invoked |> List.skipWhile ((<>) "--operator-task") |> List.tail
+
+            Expect.equal
+                (taskOf [ "--reissue-jobs"; "--scope"; "team:a1"; "--principal"; "u-1"; "--dry-run" ])
+                [
+                    "facts-reissue-jobs"
+                    "--scope"
+                    "team:a1"
+                    "--principal"
+                    "u-1"
+                    "--dry-run"
+                ]
+                "the re-issue task, the operator's scope and principal forwarded as given"
+
+            Expect.equal
+                (taskOf [ "--attribute-delegate-rows"; "--all-scopes" ])
+                [ "facts-attribute-delegate-rows"; "--all-scopes" ]
+                "the attribution task"
+
+            Expect.equal (taskOf [ "--all-scopes" ]) [ "facts-migrate"; "--all-scopes" ] "and a migration by default"
+
+            Expect.isError
+                (FactsMigrateCommand.parse [ "--reissue-jobs"; "--attribute-delegate-rows"; "--all-scopes" ])
+                "two repairs at once"
+
+            Expect.isError (FactsMigrateCommand.parse [ "--reissue-jobs"; "--dry-run" ]) "a re-issue names its scope")
+
         testCase "a usage error is refused before any process starts" (fun _ ->
             Expect.isError (FactsMigrateCommand.parse [ "--dry-run" ]) "no scope named"
             Expect.isError (FactsMigrateCommand.parse [ "--all-scopes"; "--project"; "a"; "--dll"; "b" ]) "two roots"
@@ -195,6 +225,31 @@ let private grammarTests =
                 |> List.ofSeq
 
             Expect.equal names [ FactsMigrateTask.Name ] "one task, by name")
+
+        testCase "composing the fact tier's repairs registers both, under the names the verb runs" (fun _ ->
+            let app = ServerApp.empty |> FactsOperatorTaskCompose.withFactsOperatorTasks
+
+            let services = ServiceCollection() :> IServiceCollection
+
+            let registered =
+                match ServerApp.serviceConfig app with
+                | Some register -> register services
+                | None -> services
+
+            use provider = registered.BuildServiceProvider()
+
+            let names =
+                provider.GetServices<StartupModes.OperatorTask>()
+                |> Seq.map _.Name
+                |> List.ofSeq
+
+            Expect.equal
+                names
+                [
+                    FactsMigrateCommand.AttributeDelegateRowsTask
+                    FactsMigrateCommand.ReissueJobsTask
+                ]
+                "both tasks, by the names the verb asks for")
     ]
 
 // ── The task, live ────────────────────────────────────────────────────

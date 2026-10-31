@@ -3,7 +3,10 @@
 
 /// `toolup facts migrate` — move a deployment's facts from its blob fact
 /// store into its PostgreSQL fact store, check a copy, or move persisted
-/// fact ids onto the canonical frame.
+/// fact ids onto the canonical frame; or run one of the fact tier's two
+/// repairs: record the run that wrote each row of a delegated table
+/// (`--attribute-delegate-rows`), or re-issue fact jobs persisted under a
+/// bare shard id under the scope the operator names (`--reissue-jobs`).
 ///
 /// The migration needs Npgsql, the fact tier and the deployment's own
 /// storage backend, secrets, event store and metric registry, none of
@@ -21,9 +24,17 @@ open System
 open System.IO
 open ToolUp.Cli.Dispatch
 
-/// The operator task the composition root runs.
+/// The operator task the composition root runs for a migration.
 [<Literal>]
 let TaskName = "facts-migrate"
+
+/// The operator task that records the run that wrote each delegated row.
+[<Literal>]
+let AttributeDelegateRowsTask = "facts-attribute-delegate-rows"
+
+/// The operator task that re-issues fact jobs persisted under a bare shard id.
+[<Literal>]
+let ReissueJobsTask = "facts-reissue-jobs"
 
 /// Where the composition root is, and what to hand its task.
 type Options = {
@@ -32,6 +43,9 @@ type Options = {
     Root: Choice<string, string>
     /// Seconds to wait for the root to exit.
     TimeoutSeconds: int
+    /// The operator task to run: `TaskName`, `AttributeDelegateRowsTask` or
+    /// `ReissueJobsTask`.
+    Task: string
     /// The task's own arguments, forwarded verbatim: the task parses them,
     /// so there is one grammar.
     TaskArgs: string list
@@ -42,31 +56,47 @@ type Options = {
 let defaultOptions: Options = {
     Root = Choice1Of2 "."
     TimeoutSeconds = 3600
+    Task = TaskName
     TaskArgs = []
 }
 
-/// Parse the tokens after `facts migrate`. `--project`, `--dll` and
-/// `--timeout` are this verb's; every other token is the task's.
+/// Parse the tokens after `facts migrate`. `--project`, `--dll`,
+/// `--timeout` and the two repair selectors are this verb's; every other
+/// token is the task's.
 let parse (args: string list) : Result<Options, string> =
-    let rec go (roots: Choice<string, string> list) (opts: Options) (task: string list) (rest: string list) =
+    let rec go
+        (roots: Choice<string, string> list)
+        (tasks: string list)
+        (opts: Options)
+        (task: string list)
+        (rest: string list)
+        =
         match rest with
         | [] ->
             let opts = { opts with TaskArgs = List.rev task }
 
-            match roots with
-            | [] -> Ok opts
-            | [ root ] -> Ok { opts with Root = root }
-            | _ -> Error "name at most one of --project and --dll"
-        | "--project" :: path :: tail -> go (Choice1Of2 path :: roots) opts task tail
-        | "--dll" :: path :: tail -> go (Choice2Of2 path :: roots) opts task tail
+            match roots, tasks with
+            | _ :: _ :: _, _ -> Error "name at most one of --project and --dll"
+            | _, _ :: _ :: _ -> Error "name at most one of --attribute-delegate-rows and --reissue-jobs"
+            | roots, tasks ->
+                Ok {
+                    opts with
+                        Root = roots |> List.tryHead |> Option.defaultValue opts.Root
+                        Task = tasks |> List.tryHead |> Option.defaultValue opts.Task
+                }
+        | "--project" :: path :: tail -> go (Choice1Of2 path :: roots) tasks opts task tail
+        | "--dll" :: path :: tail -> go (Choice2Of2 path :: roots) tasks opts task tail
+        | "--attribute-delegate-rows" :: tail -> go roots (AttributeDelegateRowsTask :: tasks) opts task tail
+        | "--reissue-jobs" :: tail -> go roots (ReissueJobsTask :: tasks) opts task tail
         | "--timeout" :: seconds :: tail ->
             match Int32.TryParse seconds with
-            | true, n when n > 0 && n <= Int32.MaxValue / 1000 -> go roots { opts with TimeoutSeconds = n } task tail
+            | true, n when n > 0 && n <= Int32.MaxValue / 1000 ->
+                go roots tasks { opts with TimeoutSeconds = n } task tail
             | _ -> Error(sprintf "--timeout takes a positive number of seconds, not '%s'" seconds)
         | [ ("--project" | "--dll" | "--timeout") as flag ] -> Error(sprintf "%s needs a value" flag)
-        | token :: tail -> go roots opts (token :: task) tail
+        | token :: tail -> go roots tasks opts (token :: task) tail
 
-    match go [] defaultOptions [] args with
+    match go [] [] defaultOptions [] args with
     | Ok opts when not (opts.TaskArgs |> List.exists (fun a -> a = "--scope" || a = "--all-scopes")) ->
         Error "name a scope (--scope <id>) or pass --all-scopes"
     | result -> result
@@ -75,7 +105,7 @@ let parse (args: string list) : Result<Options, string> =
 /// writing its report to `outFile`.
 let invocation (opts: Options) (outFile: string) : string * string list =
     let taskArgs =
-        [ "--operator-task-out"; outFile; "--operator-task"; TaskName ] @ opts.TaskArgs
+        [ "--operator-task-out"; outFile; "--operator-task"; opts.Task ] @ opts.TaskArgs
 
     match opts.Root with
     | Choice2Of2 dll -> "dotnet", dll :: taskArgs
@@ -103,8 +133,9 @@ let run (runner: DescribeCommand.ProcessRunner) (out: TextWriter) (opts: Options
             code
         | Some code ->
             eprintfn
-                "facts migrate: the composition root exited %d without a report. It may have failed before composing (see the output above), not compose the facts-migrate task (FactStoreMigrationCompose.withFactsMigrateTask), or predate the --operator-task startup mode."
+                "facts migrate: the composition root exited %d without a report. It may have failed before composing (see the output above), not compose the %s task (FactStoreMigrationCompose.withFactsMigrateTask for a migration, FactsOperatorTaskCompose.withFactsOperatorTasks for the two repairs), or predate the --operator-task startup mode."
                 code
+                opts.Task
 
             if code = ExitOk then ExitRuntimeError else code
     finally
@@ -115,6 +146,9 @@ let help = [
     "Usage: toolup facts migrate [--project <path> | --dll <path>] [--timeout <seconds>]"
     "                            (--scope <id>... | --all-scopes) [--dry-run | --verify | --ids]"
     "                            [--max-scope-facts <n>] [--allow-unreadable-source]"
+    "       toolup facts migrate --attribute-delegate-rows (--scope <id>... | --all-scopes) [--dry-run]"
+    "       toolup facts migrate --reissue-jobs --scope <team|user|session>:<id>"
+    "                            [--principal <user-id>] [--dry-run]"
     ""
     "Move the deployment's facts from its BlobFactStore into its PostgresFactStore,"
     "verifying each scope, with one FactStoreMigrated audit record per scope."
@@ -143,11 +177,26 @@ let help = [
     "interrupted run resumes after its last committed page."
     "Exit code: 0 when every scope verified (or, with --dry-run, would migrate);"
     "1 when any scope differs, is refused, or failed to copy; 2 for a usage error."
+    ""
+    "--attribute-delegate-rows records, on every stored image of a delegated table,"
+    "the run that wrote each row: the run the table's head names for that image,"
+    "since an image stored before rows were attributed was written whole by its"
+    "run. Until it runs, a run with a period slice over such a table is refused."
+    "The root must compose FactsOperatorTaskCompose.withFactsOperatorTasks."
+    ""
+    "--reissue-jobs re-issues the scope of every fact recompute and coherence job"
+    "persisted under the shard <id> without one, which the runner refuses by name."
+    "The kind is yours to say: a bare shard id does not name it, and nothing guesses."
+    "--principal names a user the deployment's own scope resolver resolves to"
+    "exactly <kind>:<id>; any other resolution re-issues nothing. With --dry-run it"
+    "lists the refused jobs (and checks the principal, when given) and writes"
+    "nothing. Exit code: 0 when every listed job was re-issued (or listed); 1 when"
+    "the scope did not resolve as named or a re-issue failed; 2 for a usage error."
 ]
 
 let command = {
     Path = [ "facts"; "migrate" ]
-    Summary = "Migrate the blob fact store into the Postgres fact store, or check a copy."
+    Summary = "Migrate the blob fact store into the Postgres fact store, check a copy, or repair the fact tier."
     Help = help
     Run =
         fun args ->

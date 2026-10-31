@@ -1026,6 +1026,7 @@ let private registeredTests =
         FactBrowseTests.tests
         FactDeclarationsValidatorTests.tests
         DelegateFactTests.tests
+        FactsOperatorTaskTests.tests
         TeamOutputVisibilityTests.tests
         FactPublicationTests.tests
         Phase971InterPlatformTests.tests
