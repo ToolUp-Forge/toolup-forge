@@ -210,10 +210,10 @@ for the SDK shell's module graph (`SDK.Client` as the entry, every export kept, 
 `samples/MinimalClient/vite.shell.config.mts`) — the one that holds the remoting proxies and the
 generated client module, so the one that grows when a generated module does. The clocks carry about
 14x slack because wall-clock noise on a shared runner is one-sided; a size has no noise at all (three
-builds from two separate Fable compiles wrote the same bytes), so the bundles carry 1.025x, and the
-build test refuses more than 1.1x. The shell's headroom, about 98 KiB, is deliberately smaller than
-one more generated module the size of Phase 853's (about 110 KiB minified): the next one fails the
-gate and is raised in review, rather than growing every consumer's bundle unseen. The gate script
+builds from two separate Fable compiles wrote the same bytes), so the minimal bundle and the shell's first
+load are held tight: the build test refuses more than 1.1x. The whole shell carries 1 MiB above its baseline,
+and the test refuses more. Since Phase 1168 a user's wait follows the first load, so the whole-bundle figure is
+watched rather than held close, and the first-load ceiling is the one that stops growth. The gate script
 builds both into fresh directories under `artifacts/perf-budget/bundles/`, so a failed build is an
 unobserved bundle rather than the last run's size, and its `-TeethCheck` decides the sizes against a
 bundle-only 1 KiB block so they are shown red on their own.
