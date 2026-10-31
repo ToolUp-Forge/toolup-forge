@@ -115,6 +115,12 @@
         <!-- Phase 887 — the fact-table writer seam + its default over
              IFactStore. Before FactsCompose.fs, which composes it. -->
         <Compile Include="Server\IFactTableWriter.fs" />
+        <!-- The fact-table change signal: a committed run and a reacted
+             data-object arrival, raised by scope and table for a reader
+             that keeps what it read. After the writer it decorates and
+             the data-change seam it reacts on; before FactsCompose.fs,
+             which composes it. -->
+        <Compile Include="Server\FactTableChangeSignal.fs" />
         <!-- Phase 889 — the delegate fact: a delegated table's writer, the
              IFactStore decorator its reads go through, and the refresh.
              After the writer (it reuses its row validation and blob I/O),
