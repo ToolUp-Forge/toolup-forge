@@ -75,7 +75,7 @@ let private identity (run: FactTableRunRecord) =
 
 let private jsonOptions = FableConverters.create ()
 
-let tests =
+let private lifecycleTests =
     testList "Phase 1092 — FactTableRun, the run lifecycle as a pure state machine" [
 
         test "a run is opened Open, with nothing staged, in the current record format, carrying its options" {
@@ -163,3 +163,83 @@ let tests =
             Expect.equal read.Status FactTableRunStatus.Open "including its status"
         }
     ]
+
+// ─── The one run envelope ────────────────────────────────────────────
+
+let private holdout: DatasetVersionRef = {
+    ScopeId = "team-a"
+    DatasetId = "sales"
+    Version = 3
+}
+
+let private evaluation (scopeId: string) : EvaluationRun = {
+    RunId = EvaluationRun.id "artifact-1" holdout
+    ScopeId = scopeId
+    ArtifactKeyHash = "artifact-1"
+    ProviderId = "reference"
+    ProviderVersion = "1"
+    Holdout = holdout
+    Predictions = {
+        holdout with
+            DatasetId = "sales-predictions"
+    }
+    Metrics = Map.empty
+    Plan = None
+    EvaluatedBy = "test"
+    EvaluatedAt = DateTimeOffset(t0)
+}
+
+let private runRecordTests =
+    testList "RunRecord — one envelope for every kind of run" [
+
+        test "a run's id is the canonical frame's digest of its kind's label and its fields" {
+            Expect.equal
+                (RunRecord.id RunKind.Evaluation [ "x" ])
+                (CanonicalFrame.digest [ "evaluation"; "x" ])
+                "the label first, then the fields"
+
+            let ids = RunKind.all |> List.map (fun kind -> RunRecord.id kind [ "x" ])
+            Expect.equal (List.distinct ids) ids "two kinds over the same fields never share an id"
+        }
+
+        test "a fact-table run projects onto the envelope, outcome for outcome" {
+            let scope = TestScope.resolved "team-a"
+            let run = FactTableRun.toRunRecord scope RunProvenance.Computed
+
+            let record = run opened
+            Expect.equal record.Id (RunRecord.id RunKind.FactTableRun [ "sku-daily"; "run-1" ]) "the id"
+            Expect.equal record.Kind RunKind.FactTableRun "the kind"
+            Expect.equal record.Scope scope "the reader's scope"
+            Expect.equal record.Subject "sku-daily" "the table"
+            Expect.equal record.StartedAt t0 "opened at"
+            Expect.equal record.Options options "what it declared"
+            Expect.equal record.Outcome RunOutcome.Open "open"
+
+            let ended (f: OpenFactTableRun -> FactTableRunRecord) =
+                match FactTableRun.tryOpen opened with
+                | Ok o -> (run (f o)).Outcome
+                | Error e -> failtestf "open: %A" e
+
+            Expect.equal (ended (FactTableRun.reject "bad rows")) (RunOutcome.Failed "bad rows") "rejected"
+            Expect.equal (ended (FactTableRun.abandon "stopped")) (RunOutcome.Abandoned "stopped") "abandoned"
+        }
+
+        test "a modelling envelope projects in the scope it is stored under, and refuses any other" {
+            let run = evaluation "team-a"
+
+            match EvaluationRun.toRunRecord (TestScope.resolved "team-a") run with
+            | Ok record ->
+                Expect.equal record.Id (RunRecord.id RunKind.Evaluation [ run.RunId ]) "the id"
+                Expect.equal record.Subject "artifact-1" "the artifact"
+                Expect.equal record.Outcome (RunOutcome.Succeeded(DatasetVersionRef.key run.Predictions)) "its result"
+            | Error e -> failtestf "projection: %s" e
+
+            match EvaluationRun.toRunRecord (TestScope.resolved "team-b") run with
+            | Error reason -> Expect.stringContains reason "stored under shard 'team-a'" "refused by name"
+            | Ok _ -> failtest "a run stored under another shard was read"
+
+            Expect.isError (EvaluationRun.toRunRecord ResolvedScope.anonymous run) "the anonymous scope reads no shard"
+        }
+    ]
+
+let tests = testList "FactTableRun and RunRecord" [ lifecycleTests; runRecordTests ]

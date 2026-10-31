@@ -1020,6 +1020,13 @@ module internal FactTableRunClaim =
 /// Keeping and applying a run's provenance.
 module FactTableRunProvenance =
 
+    /// The provenance as the plane's one run envelope records it: `Computed`,
+    /// or `Imported` under each certificate the run's origins name.
+    let toRun (provenance: FactTableRunProvenance) : RunProvenance =
+        match provenance with
+        | ComputedRun -> RunProvenance.Computed
+        | ImportedRun origins -> RunProvenance.Imported(origins |> List.map _.CertificateRef |> List.distinct)
+
     /// The prefix the default writer keeps every run's provenance under.
     [<Literal>]
     let internal Root = "_fact-tables/provenance/"

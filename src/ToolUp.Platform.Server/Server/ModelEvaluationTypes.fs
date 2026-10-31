@@ -140,6 +140,23 @@ module EvaluationRun =
     /// The run's plan, with a pre-652 record reading as `TailHoldout`.
     let plan (run: EvaluationRun) : EvaluationPlan = EvaluationPlan.resolve run.Plan
 
+    /// The evaluation as the plane's one run envelope, in the scope the reader
+    /// resolved — refused unless that scope is the shard the run is stored
+    /// under. Its id is `RunRecord.id Evaluation [runId]`; its result is the
+    /// predictions vintage the scoring leg wrote.
+    let toRunRecord (scope: ResolvedScope) (run: EvaluationRun) : Result<RunRecord, string> =
+        RunRecord.inScope scope run.ScopeId
+        |> Result.map (fun scope -> {
+            Id = RunRecord.id RunKind.Evaluation [ run.RunId ]
+            Kind = RunKind.Evaluation
+            Scope = scope
+            Subject = run.ArtifactKeyHash
+            StartedAt = run.EvaluatedAt.UtcDateTime
+            Options = RunOptions.empty
+            Provenance = RunProvenance.Computed
+            Outcome = RunOutcome.Succeeded(DatasetVersionRef.key run.Predictions)
+        })
+
 /// One stored **per-fold** metric outcome of a run (phase 652): which fold of
 /// which run, the window/mask it evaluated, and the provider-computed metric
 /// map for that fold, stored verbatim (plan D10).
@@ -182,6 +199,22 @@ module EvaluationFoldOutcome =
     /// Deterministic fold-outcome id — lowercase SHA-256 hex of `canonical`.
     let id (runId: string) (foldId: string) : string =
         Sha256.hexOfUtf8 (canonical runId foldId)
+
+    /// The fold as the plane's one run envelope, in the scope the reader
+    /// resolved — refused unless that scope is the shard it is stored under.
+    /// Its id is `RunRecord.id FoldEvaluation [outcomeId]`.
+    let toRunRecord (scope: ResolvedScope) (fold: EvaluationFoldOutcome) : Result<RunRecord, string> =
+        RunRecord.inScope scope fold.ScopeId
+        |> Result.map (fun scope -> {
+            Id = RunRecord.id RunKind.FoldEvaluation [ fold.OutcomeId ]
+            Kind = RunKind.FoldEvaluation
+            Scope = scope
+            Subject = fold.ArtifactKeyHash
+            StartedAt = fold.RecordedAt.UtcDateTime
+            Options = RunOptions.empty
+            Provenance = RunProvenance.Computed
+            Outcome = RunOutcome.Succeeded fold.OutcomeId
+        })
 
 /// Which way a metric improves. Declared by the comparer (task 456.B) — the
 /// declaration is data; forge applies a float comparison in the declared
@@ -395,6 +428,23 @@ module ModelComparison =
         (direction: MetricDirection)
         : string =
         Sha256.hexOfUtf8 (canonical scopeId entrants holdout primaryMetric direction)
+
+    /// The comparison as the plane's one run envelope, in the scope the reader
+    /// resolved — refused unless that scope is the shard it is stored under.
+    /// Its id is `RunRecord.id Comparison [comparisonId]`; its subject is the
+    /// holdout vintage the entrants were compared on.
+    let toRunRecord (scope: ResolvedScope) (comparison: ModelComparison) : Result<RunRecord, string> =
+        RunRecord.inScope scope comparison.ScopeId
+        |> Result.map (fun scope -> {
+            Id = RunRecord.id RunKind.Comparison [ comparison.ComparisonId ]
+            Kind = RunKind.Comparison
+            Scope = scope
+            Subject = DatasetVersionRef.key comparison.Holdout
+            StartedAt = comparison.ComparedAt.UtcDateTime
+            Options = RunOptions.empty
+            Provenance = RunProvenance.Computed
+            Outcome = RunOutcome.Succeeded comparison.ComparisonId
+        })
 
     /// Canonical identity string including the declared fold aggregation
     /// (phase 652). `AggregateMetric` appends nothing, so a comparison
