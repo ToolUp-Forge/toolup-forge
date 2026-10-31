@@ -7004,6 +7004,7 @@ ToolUp.Platform.Grounding.FactTableRun.outcome(ToolUp.Platform.Grounding.FactTab
 ToolUp.Platform.Grounding.FactTableRun.reject(System.String, ToolUp.Platform.Grounding.OpenFactTableRun) : ToolUp.Platform.Grounding.FactTableRunRecord
 ToolUp.Platform.Grounding.FactTableRun.stage(System.Int32, ToolUp.Platform.Grounding.OpenFactTableRun) : ToolUp.Platform.Grounding.FactTableRunRecord
 ToolUp.Platform.Grounding.FactTableRun.statusName(ToolUp.Platform.Grounding.FactTableRunStatus) : System.String
+ToolUp.Platform.Grounding.FactTableRun.toRunRecord(ToolUp.Platform.ResolvedScope, ToolUp.Platform.RunProvenance, ToolUp.Platform.Grounding.FactTableRunRecord) : ToolUp.Platform.RunRecord
 ToolUp.Platform.Grounding.FactTableRun.tryOpen(ToolUp.Platform.Grounding.FactTableRunRecord) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.OpenFactTableRun, ToolUp.Platform.Grounding.FactTableRunTransitionError]
 ToolUp.Platform.Grounding.FactTableRunOutcome (class)
 ToolUp.Platform.Grounding.FactTableRunOutcome.InProgress : ToolUp.Platform.Grounding.FactTableRunOutcome { get }
@@ -11530,6 +11531,47 @@ ToolUp.Platform.RunOptions.Slice : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.P
 ToolUp.Platform.RunOptionsModule (class)
 ToolUp.Platform.RunOptionsModule.empty : ToolUp.Platform.RunOptions { get }
 ToolUp.Platform.RunOptionsModule.ofStored(ToolUp.Platform.RunOptions) : ToolUp.Platform.RunOptions
+ToolUp.Platform.RunOutcome (class)
+ToolUp.Platform.RunOutcome.IsAbandoned : System.Boolean { get }
+ToolUp.Platform.RunOutcome.IsFailed : System.Boolean { get }
+ToolUp.Platform.RunOutcome.IsOpen : System.Boolean { get }
+ToolUp.Platform.RunOutcome.IsSucceeded : System.Boolean { get }
+ToolUp.Platform.RunOutcome.Open : ToolUp.Platform.RunOutcome { get }
+ToolUp.Platform.RunOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.RunOutcome+Abandoned (class)
+ToolUp.Platform.RunOutcome+Abandoned.reason : System.String { get }
+ToolUp.Platform.RunOutcome+Failed (class)
+ToolUp.Platform.RunOutcome+Failed.reason : System.String { get }
+ToolUp.Platform.RunOutcome+Succeeded (class)
+ToolUp.Platform.RunOutcome+Succeeded.result : System.String { get }
+ToolUp.Platform.RunOutcome+Tags (class)
+ToolUp.Platform.RunOutcome+Tags.Abandoned : System.Int32 (literal)
+ToolUp.Platform.RunOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.RunOutcome+Tags.Open : System.Int32 (literal)
+ToolUp.Platform.RunOutcome+Tags.Succeeded : System.Int32 (literal)
+ToolUp.Platform.RunProvenance (class)
+ToolUp.Platform.RunProvenance.Computed : ToolUp.Platform.RunProvenance { get }
+ToolUp.Platform.RunProvenance.IsComputed : System.Boolean { get }
+ToolUp.Platform.RunProvenance.IsImported : System.Boolean { get }
+ToolUp.Platform.RunProvenance.Tag : System.Int32 { get }
+ToolUp.Platform.RunProvenance+Imported (class)
+ToolUp.Platform.RunProvenance+Imported.certificateRefs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.RunProvenance+Tags (class)
+ToolUp.Platform.RunProvenance+Tags.Computed : System.Int32 (literal)
+ToolUp.Platform.RunProvenance+Tags.Imported : System.Int32 (literal)
+ToolUp.Platform.RunRecord (class)
+ToolUp.Platform.RunRecord..ctor(System.String, ToolUp.Platform.RunKind, ToolUp.Platform.ResolvedScope, System.String, System.DateTime, ToolUp.Platform.RunOptions, ToolUp.Platform.RunProvenance, ToolUp.Platform.RunOutcome)
+ToolUp.Platform.RunRecord.Id : System.String { get }
+ToolUp.Platform.RunRecord.Kind : ToolUp.Platform.RunKind { get }
+ToolUp.Platform.RunRecord.Options : ToolUp.Platform.RunOptions { get }
+ToolUp.Platform.RunRecord.Outcome : ToolUp.Platform.RunOutcome { get }
+ToolUp.Platform.RunRecord.Provenance : ToolUp.Platform.RunProvenance { get }
+ToolUp.Platform.RunRecord.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.RunRecord.StartedAt : System.DateTime { get }
+ToolUp.Platform.RunRecord.Subject : System.String { get }
+ToolUp.Platform.RunRecordModule (class)
+ToolUp.Platform.RunRecordModule.id(ToolUp.Platform.RunKind, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.Platform.RunRecordModule.inScope(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ResolvedScope, System.String]
 ToolUp.Platform.RunSlice (class)
 ToolUp.Platform.RunSlice..ctor(System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.RunSlice.From : System.DateTime { get }

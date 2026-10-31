@@ -4461,6 +4461,7 @@ ToolUp.Platform.EvaluationFoldOutcome.Window : ToolUp.Platform.FoldWindow { get 
 ToolUp.Platform.EvaluationFoldOutcomeModule (class)
 ToolUp.Platform.EvaluationFoldOutcomeModule.canonical(System.String, System.String) : System.String
 ToolUp.Platform.EvaluationFoldOutcomeModule.id(System.String, System.String) : System.String
+ToolUp.Platform.EvaluationFoldOutcomeModule.toRunRecord(ToolUp.Platform.ResolvedScope, ToolUp.Platform.EvaluationFoldOutcome) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RunRecord, System.String]
 ToolUp.Platform.EvaluationPlan (class)
 ToolUp.Platform.EvaluationPlan.IsMaskedObservations : System.Boolean { get }
 ToolUp.Platform.EvaluationPlan.IsRollingOrigin : System.Boolean { get }
@@ -4516,6 +4517,7 @@ ToolUp.Platform.EvaluationRunModule (class)
 ToolUp.Platform.EvaluationRunModule.canonical(System.String, ToolUp.Platform.DatasetVersionRef) : System.String
 ToolUp.Platform.EvaluationRunModule.id(System.String, ToolUp.Platform.DatasetVersionRef) : System.String
 ToolUp.Platform.EvaluationRunModule.plan(ToolUp.Platform.EvaluationRun) : ToolUp.Platform.EvaluationPlan
+ToolUp.Platform.EvaluationRunModule.toRunRecord(ToolUp.Platform.ResolvedScope, ToolUp.Platform.EvaluationRun) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RunRecord, System.String]
 ToolUp.Platform.EventKind (class)
 ToolUp.Platform.EventKind.Item : System.String { get }
 ToolUp.Platform.EventKind.Tag : System.Int32 { get }
@@ -7902,6 +7904,7 @@ ToolUp.Platform.ModelArtifact.Status : ToolUp.Platform.ModelArtifactStatus { get
 ToolUp.Platform.ModelArtifact.Version : System.Int32 { get }
 ToolUp.Platform.ModelArtifactModule (class)
 ToolUp.Platform.ModelArtifactModule.id(ToolUp.Platform.ModelArtifact) : System.String
+ToolUp.Platform.ModelArtifactModule.toRunRecord(ToolUp.Platform.ResolvedScope, ToolUp.Platform.ModelArtifact) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RunRecord, System.String]
 ToolUp.Platform.ModelArtifactPage (class)
 ToolUp.Platform.ModelArtifactPage..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.ModelArtifactPage.Artifacts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelArtifact] { get }
@@ -7958,6 +7961,7 @@ ToolUp.Platform.ModelComparisonModule.canonicalFor(System.String, Microsoft.FSha
 ToolUp.Platform.ModelComparisonModule.id(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection) : System.String
 ToolUp.Platform.ModelComparisonModule.idFor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.DatasetVersionRef, System.String, ToolUp.Platform.MetricDirection, ToolUp.Platform.FoldAggregation) : System.String
 ToolUp.Platform.ModelComparisonModule.order(ToolUp.Platform.MetricDirection, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double]]]) : System.Tuple`3[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComparisonStanding], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ComparisonResult]
+ToolUp.Platform.ModelComparisonModule.toRunRecord(ToolUp.Platform.ResolvedScope, ToolUp.Platform.ModelComparison) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RunRecord, System.String]
 ToolUp.Platform.ModelEvaluationJobHandlerModule (class)
 ToolUp.Platform.ModelEvaluationJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Platform.ModelEvaluationJobHandlerModule.create(ToolUp.Platform.IModelEvaluationRunner, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
@@ -9257,6 +9261,7 @@ ToolUp.Platform.PromotionDecisionModule.canonical(System.String, System.String) 
 ToolUp.Platform.PromotionDecisionModule.describeDeltas(ToolUp.Platform.PromotionDecision) : System.String
 ToolUp.Platform.PromotionDecisionModule.id(System.String, System.String) : System.String
 ToolUp.Platform.PromotionDecisionModule.supersessionDeltas(ToolUp.Platform.PromotionDecision) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[System.String, System.Double, System.Double, System.Double]]
+ToolUp.Platform.PromotionDecisionModule.toRunRecord(ToolUp.Platform.ResolvedScope, ToolUp.Platform.PromotionDecision) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RunRecord, System.String]
 ToolUp.Platform.PromotionError (class)
 ToolUp.Platform.PromotionError.ComparisonNotFound : ToolUp.Platform.PromotionError { get }
 ToolUp.Platform.PromotionError.IsComparisonNotFound : System.Boolean { get }

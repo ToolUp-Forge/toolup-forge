@@ -500,13 +500,28 @@ ToolUp.Facts.DefaultFactTableWriterModule (class)
 ToolUp.Facts.DefaultFactTableWriterModule.Destination : System.String (literal)
 ToolUp.Facts.DefaultFactTableWriterModule.create(ToolUp.Facts.IFactStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : ToolUp.Facts.IFactTableWriter
 ToolUp.Facts.DefaultFactTableWriterModule.createWithClock(ToolUp.Facts.IFactStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactTableWriter
+ToolUp.Facts.DelegateAttributionReport (class)
+ToolUp.Facts.DelegateAttributionReport..ctor(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateImageAttribution])
+ToolUp.Facts.DelegateAttributionReport.DryRun : System.Boolean { get }
+ToolUp.Facts.DelegateAttributionReport.Images : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateImageAttribution] { get }
 ToolUp.Facts.DelegateFacts (class)
 ToolUp.Facts.DelegateFacts.resolve(ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateFact], System.String]
+ToolUp.Facts.DelegateImageAttribution (class)
+ToolUp.Facts.DelegateImageAttribution..ctor(System.String, System.String, System.Int64, System.String, System.Int32, System.Int32)
+ToolUp.Facts.DelegateImageAttribution.Rows : System.Int32 { get }
+ToolUp.Facts.DelegateImageAttribution.RunId : System.String { get }
+ToolUp.Facts.DelegateImageAttribution.Scope : System.String { get }
+ToolUp.Facts.DelegateImageAttribution.Sequence : System.Int64 { get }
+ToolUp.Facts.DelegateImageAttribution.TableId : System.String { get }
+ToolUp.Facts.DelegateImageAttribution.Unattributed : System.Int32 { get }
 ToolUp.Facts.DelegateMint (class)
 ToolUp.Facts.DelegateMint.RecordPeriod : ToolUp.Facts.TemporalExtent { get }
 ToolUp.Facts.DelegateMint.reconstruct(ToolUp.Facts.FactDraft, System.DateTime) : ToolUp.Facts.Fact
 ToolUp.Facts.DelegateMint.recordDraft(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun) : ToolUp.Facts.FactDraft
 ToolUp.Facts.DelegateMint.triggerRef(System.String, System.String) : System.String
+ToolUp.Facts.DelegateRowAttribution (class)
+ToolUp.Facts.DelegateRowAttribution.attribute(ToolUp.Platform.BlobStorage+IBlobStorage, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DelegateAttributionReport, System.String]]
+ToolUp.Facts.DelegateRowAttribution.render(ToolUp.Facts.DelegateAttributionReport) : System.String
 ToolUp.Facts.DelegateTableCommit (class)
 ToolUp.Facts.DelegateTableCommit..ctor(ToolUp.Facts.DelegateRun, ToolUp.Platform.Grounding.FactTableCommit)
 ToolUp.Facts.DelegateTableCommit.Commit : ToolUp.Platform.Grounding.FactTableCommit { get }
@@ -706,6 +721,32 @@ ToolUp.Facts.FactInvalidation.isMintedUnderStaleRun(ToolUp.Facts.DelegateFact, S
 ToolUp.Facts.FactInvalidation.policyFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.Fact) : ToolUp.Platform.Grounding.RecomputePolicy
 ToolUp.Facts.FactInvalidation.recomputeNow(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, ToolUp.Platform.ResolvedScope, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact], System.String]]
 ToolUp.Facts.FactInvalidation.staleDelegatedHeads(ToolUp.Facts.IFactStore, ToolUp.Platform.ResolvedScope, ToolUp.Facts.DelegateFact, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.FactStoreError]]
+ToolUp.Facts.FactJobReissue (class)
+ToolUp.Facts.FactJobReissue.exitCode(ToolUp.Facts.FactJobReissueReport) : System.Int32
+ToolUp.Facts.FactJobReissue.handlers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactJobReissue.parseKey(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ScopeKey, System.String]
+ToolUp.Facts.FactJobReissue.refused(ToolUp.Platform.ScopeCarrier, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RefusedFactJob]
+ToolUp.Facts.FactJobReissue.reissue(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ScopeCarrier, ToolUp.Platform.DeclaredPrincipalResolver, ToolUp.Platform.ScopeKey, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.FactJobReissueReport]
+ToolUp.Facts.FactJobReissue.render(ToolUp.Facts.FactJobReissueReport) : System.String
+ToolUp.Facts.FactJobReissueOutcome (class)
+ToolUp.Facts.FactJobReissueOutcome.IsFailed : System.Boolean { get }
+ToolUp.Facts.FactJobReissueOutcome.IsReissued : System.Boolean { get }
+ToolUp.Facts.FactJobReissueOutcome.IsWouldReissue : System.Boolean { get }
+ToolUp.Facts.FactJobReissueOutcome.Reissued : ToolUp.Facts.FactJobReissueOutcome { get }
+ToolUp.Facts.FactJobReissueOutcome.Tag : System.Int32 { get }
+ToolUp.Facts.FactJobReissueOutcome.WouldReissue : ToolUp.Facts.FactJobReissueOutcome { get }
+ToolUp.Facts.FactJobReissueOutcome+Failed (class)
+ToolUp.Facts.FactJobReissueOutcome+Failed.reason : System.String { get }
+ToolUp.Facts.FactJobReissueOutcome+Tags (class)
+ToolUp.Facts.FactJobReissueOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.Facts.FactJobReissueOutcome+Tags.Reissued : System.Int32 (literal)
+ToolUp.Facts.FactJobReissueOutcome+Tags.WouldReissue : System.Int32 (literal)
+ToolUp.Facts.FactJobReissueReport (class)
+ToolUp.Facts.FactJobReissueReport..ctor(ToolUp.Platform.ScopeKey, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.RefusedFactJob, ToolUp.Facts.FactJobReissueOutcome]], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.FactJobReissueReport.DryRun : System.Boolean { get }
+ToolUp.Facts.FactJobReissueReport.Jobs : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.RefusedFactJob, ToolUp.Facts.FactJobReissueOutcome]] { get }
+ToolUp.Facts.FactJobReissueReport.Key : ToolUp.Platform.ScopeKey { get }
+ToolUp.Facts.FactJobReissueReport.Refusal : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.FactLevelMemberCount (class)
 ToolUp.Facts.FactLevelMemberCount..ctor(System.Int32, System.Int32, System.String)
 ToolUp.Facts.FactLevelMemberCount.Cap : System.Int32 { get }
@@ -957,6 +998,7 @@ ToolUp.Facts.FactTableRunProvenance+Tags.ComputedRun : System.Int32 (literal)
 ToolUp.Facts.FactTableRunProvenance+Tags.ImportedRun : System.Int32 (literal)
 ToolUp.Facts.FactTableRunProvenanceModule (class)
 ToolUp.Facts.FactTableRunProvenanceModule.rewrite(ToolUp.Facts.FactTableRunProvenance) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactDraft, ToolUp.Facts.FactDraft]
+ToolUp.Facts.FactTableRunProvenanceModule.toRun(ToolUp.Facts.FactTableRunProvenance) : ToolUp.Platform.RunProvenance
 ToolUp.Facts.FactTableShown (class)
 ToolUp.Facts.FactTableShown..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableLevelView], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableMetricView], System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.FactTableShown.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableMetricView] { get }
@@ -1125,6 +1167,13 @@ ToolUp.Facts.FactsCompose.withFactTier(ToolUp.Platform.ServerApp) : ToolUp.Platf
 ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.GroundingEnvelope]], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withTeamOutputVisibility(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsOperatorTaskCompose (class)
+ToolUp.Facts.FactsOperatorTaskCompose.withFactsOperatorTasks(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsOperatorTasks (class)
+ToolUp.Facts.FactsOperatorTasks.AttributeDelegateRows : System.String (literal)
+ToolUp.Facts.FactsOperatorTasks.ReissueJobs : System.String (literal)
+ToolUp.Facts.FactsOperatorTasks.attributeDelegateRowsTask : ToolUp.Platform.StartupModes+OperatorTask { get }
+ToolUp.Facts.FactsOperatorTasks.reissueJobsTask : ToolUp.Platform.StartupModes+OperatorTask { get }
 ToolUp.Facts.GroundedNarrativeTrigger (class)
 ToolUp.Facts.GroundedNarrativeTrigger.Actor : System.String (literal)
 ToolUp.Facts.GroundedNarrativeTrigger.HandlerName : System.String (literal)
@@ -1413,6 +1462,12 @@ ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecompute(ToolUp.Platform.IJobSch
 ToolUp.Facts.RecomputeJobPayload (class)
 ToolUp.Facts.RecomputeJobPayload..ctor(System.String)
 ToolUp.Facts.RecomputeJobPayload.factId : System.String { get }
+ToolUp.Facts.RefusedFactJob (class)
+ToolUp.Facts.RefusedFactJob..ctor(System.Guid, System.String, System.String, System.DateTime)
+ToolUp.Facts.RefusedFactJob.CreatedAt : System.DateTime { get }
+ToolUp.Facts.RefusedFactJob.CreatedBy : System.String { get }
+ToolUp.Facts.RefusedFactJob.Handler : System.String { get }
+ToolUp.Facts.RefusedFactJob.JobId : System.Guid { get }
 ToolUp.Facts.SubjectBranch (class)
 ToolUp.Facts.SubjectBranch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }
