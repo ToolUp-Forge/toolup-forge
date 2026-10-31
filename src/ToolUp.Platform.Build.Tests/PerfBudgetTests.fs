@@ -527,7 +527,7 @@ let private clientTests =
         test "no shipped bundle ceiling is more than 1.1x its recorded baseline" {
             let budget = clientBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
 
-            for metric in [ ClientMinimalBundleKiB; ClientShellBundleKiB ] do
+            for metric in [ ClientMinimalBundleKiB; ClientShellBundleKiB; ClientShellFirstLoadKiB ] do
                 let ceiling = budget.Ceilings |> List.tryFind (fun (m, _) -> m = metric)
                 let baseline = budget.Baselines |> List.tryFind (fun (m, _) -> m = metric)
 

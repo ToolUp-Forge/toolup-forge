@@ -4,8 +4,8 @@
 # One line per packable assembly: <assembly> <documented>/<total>, measured over exactly the
 # Phase 175 tracked public surface. The GRADED property is (total - documented): it must not
 # increase. Improving coverage never fails — see docs/platform/doc-coverage.md.
-Feliz.AgCharts 40/333
-Feliz.AgGrid 62/680
+Feliz.AgCharts 41/335
+Feliz.AgGrid 66/695
 Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1312/2422
 ToolUp.AI.Client 128/648
@@ -136,7 +136,7 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 332/600
+ToolUp.Platform.Build 333/603
 ToolUp.Platform.Client 2945/7262
 ToolUp.Platform.Core 7328/15492
 ToolUp.Platform.Server 7220/13064

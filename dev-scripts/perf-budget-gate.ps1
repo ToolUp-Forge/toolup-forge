@@ -51,6 +51,13 @@
 # metric; its teeth check below is a bundle-only block, so the bundle budget
 # is shown red on its own rather than behind the boot clock.
 #
+# Phase 1168 added the shell's FIRST LOAD: the entry chunk and its static
+# imports, read from the manifest the shell build writes. AG Grid and AG Charts
+# load on demand, and Get-ShellChunkFinding refuses a build where they stopped
+# being separate chunks, so a change that collapses the chunks is named as that
+# rather than only reported as a size. The teeth check feeds it a collapsed
+# manifest and requires a refusal.
+#
 # ── The load half (Phase 886) ────────────────────────────────────────────
 #
 # Last, the script measures the FACT and RETRIEVAL paths under concurrent
@@ -542,6 +549,45 @@ function Invoke-NpxAnyOs {
     }
 }
 
+# Phase 1168 — $null when the shell build still loads AG Grid and AG Charts on
+# demand, otherwise a sentence saying what collapsed. A chunk must be reached by
+# a dynamic import from the entry's static closure and by no static import from
+# it: one static reference puts the whole library back in the first load.
+function Get-ShellChunkFinding {
+    param([string] $ManifestPath)
+
+    if (-not (Test-Path $ManifestPath)) { return "the shell build wrote no manifest at $ManifestPath" }
+
+    $manifest = Get-Content -Raw -Path $ManifestPath | ConvertFrom-Json -AsHashtable
+    $entries = @($manifest.Keys | Where-Object { $manifest[$_].isEntry })
+    if ($entries.Count -eq 0) { return "the manifest at $ManifestPath names no entry chunk" }
+
+    $seen = @{}
+    $pending = [System.Collections.Generic.Queue[string]]::new()
+    foreach ($entry in $entries) { $pending.Enqueue($entry) }
+    while ($pending.Count -gt 0) {
+        $key = $pending.Dequeue()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        foreach ($import in @($manifest[$key].imports)) {
+            if ($import) { $pending.Enqueue($import) }
+        }
+    }
+
+    $reachedLater = @($seen.Keys | ForEach-Object { $manifest[$_].dynamicImports } | Where-Object { $_ })
+
+    foreach ($runtime in @("AgGridRuntime", "AgChartRuntime")) {
+        if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0) {
+            return "$runtime is in the shell's first load; a static reference collapsed its chunk"
+        }
+        if (@($reachedLater | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -eq 0) {
+            return "$runtime is not a dynamic import of the shell's first load, so it is no longer loaded on demand"
+        }
+    }
+
+    return $null
+}
+
 $clientMeasurementsPath = Join-Path $repoRoot $ClientMeasurementsFile
 $minimalBundlePath = Join-Path $repoRoot (Join-Path $BundleDirectory "minimal")
 $shellBundlePath = Join-Path $repoRoot (Join-Path $BundleDirectory "shell")
@@ -577,6 +623,12 @@ if (-not $SkipClient -and -not $EvaluateOnly) {
         if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: the minimal sample's production build failed."; exit 1 }
         Invoke-NpxAnyOs --no-install vite build --config vite.shell.config.mts --outDir $shellBundlePath --emptyOutDir --logLevel warn | Out-Host
         if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: the SDK shell's production build failed."; exit 1 }
+
+        $chunkFinding = Get-ShellChunkFinding -ManifestPath (Join-Path $shellBundlePath ".vite/manifest.json")
+        if ($chunkFinding) {
+            Write-Error "perf-budget: the chunked shell is not what the first-load budget measures: $chunkFinding."
+            exit 1
+        }
     }
     finally {
         Pop-Location
@@ -838,8 +890,8 @@ if ($TeethCheck) {
     "label": "TEETH CHECK - bundle sizes only",
     "subject": "teeth check",
     "statistic": "min",
-    "ceilings": { "minimalBundleKiB": 1, "shellBundleKiB": 1 },
-    "minimumSamples": { "minimalBundleKiB": 1, "shellBundleKiB": 1 }
+    "ceilings": { "minimalBundleKiB": 1, "shellBundleKiB": 1, "shellFirstLoadKiB": 1 },
+    "minimumSamples": { "minimalBundleKiB": 1, "shellBundleKiB": 1, "shellFirstLoadKiB": 1 }
   }
 }
 '@ | Set-Content -Path $bundleTeethBudget -Encoding utf8
@@ -871,6 +923,19 @@ if ($TeethCheck) {
     if ($clientTeeth -eq 0) {
         Write-Error "perf-budget: TEETH CHECK FAILED — the client gate passed an unreachable client block. It is not deciding anything; do not trust its green."
         exit 1
+    }
+
+    # Phase 1168 — a build whose entry holds everything, as a collapse would write.
+    $collapsedManifest = Join-Path ([IO.Path]::GetTempPath()) "toolup-perf-teeth-collapsed-manifest.json"
+    '{ "SDK.Client.js": { "file": "assets/SDK.Client-x.js", "isEntry": true } }' | Set-Content -Path $collapsedManifest -Encoding utf8
+    try {
+        if (-not (Get-ShellChunkFinding -ManifestPath $collapsedManifest)) {
+            Write-Error "perf-budget: TEETH CHECK FAILED — the chunk check passed a collapsed build. A change that collapses the chunks would not go red."
+            exit 1
+        }
+    }
+    finally {
+        Remove-Item $collapsedManifest -ErrorAction SilentlyContinue
     }
 
     if ($bundleTeeth -eq 0) {
