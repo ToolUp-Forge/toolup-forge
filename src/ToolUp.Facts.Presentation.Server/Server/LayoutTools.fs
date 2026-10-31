@@ -79,7 +79,9 @@ type PageDefaults = {
 /// What a stored page's request sidecar holds: the request each
 /// data-bearing node names, by key, and the page's standing defaults.
 type PageRequestSidecar = {
+    /// The request each data-bearing node names, by its key.
     Requests: Map<string, PageRequest>
+    /// The page's standing site and range.
     Defaults: PageDefaults
 }
 
@@ -576,14 +578,23 @@ type LayoutProposalStore(maxCallers: int, maxPerCaller: int, ttl: TimeSpan, cloc
 /// Which layout tool.
 [<RequireQualifiedAccess>]
 type LayoutTool =
+    /// `layout_add_block`: a chart or table block drawing a request.
     | AddBlock
+    /// `layout_remove_block`: remove a block.
     | RemoveBlock
+    /// `layout_move_block`: move a block before or after a node, or into a section.
     | MoveBlock
+    /// `layout_set_request`: change one request's period, baseline, metrics, level or site.
     | SetRequest
+    /// `layout_retitle`: retitle a block, section, chart or heading.
     | Retitle
+    /// `layout_set_section`: add a section, or rename one.
     | SetSection
+    /// `layout_set_default`: the page's standing site and range.
     | SetDefault
+    /// `layout_reset`: drop one layer's edits.
     | Reset
+    /// `layout_save`: land a proposal on a layer.
     | Save
 
 /// What one call of a layout tool works with: the caller's scope and access
@@ -591,19 +602,30 @@ type LayoutTool =
 /// browse's dependencies, the caller's page request resolver, the page store
 /// and the proposals.
 type LayoutCaller = {
+    /// The scope the platform's scope resolution minted for the request.
     Scope: ResolvedScope
+    /// The access context the request carries: the principal a save is
+    /// authorised and attributed to.
     Access: AccessContext
+    /// The fact browse's dependencies: the declarations the read-set is
+    /// checked against.
     Deps: FactBrowseHandler.FactBrowseDeps
+    /// The caller's page request resolver.
     Resolver: PageRequestResolver
+    /// The page store.
     Store: IPageDocumentStore
+    /// The process's proposals.
     Proposals: LayoutProposalStore
 }
 
 /// What a deployment composing the layout tools registers: the page store,
 /// the resolvers and the proposals, resolved once in a registration factory.
 type LayoutToolsRuntime = {
+    /// The page store.
     Store: IPageDocumentStore
+    /// The resolver for a request's caller.
     Resolvers: PageRequestResolvers
+    /// The process's proposals.
     Proposals: LayoutProposalStore
 }
 
