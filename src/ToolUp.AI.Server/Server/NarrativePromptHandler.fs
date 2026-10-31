@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 1111 — the server half of `NarrativePromptApi`: an Owner or Admin
+/// The server half of `NarrativePromptApi`: an Owner or Admin
 /// of the publishing team rewords a grounded narrative's instruction and
 /// section guidance, keeps every earlier wording as a version, resets to the
 /// declaration, and runs the narrative now with the wording in force.
@@ -46,11 +46,12 @@ open ToolUp.Platform.RemotingHelpers
 open ToolUp.Platform.TeamManagement
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
+open ToolUp.AI.NarrativeOffenceHistory
 
 // ─── Audit rows ──────────────────────────────────────────────────
 //
 // Both ride the uniform `RemotingMethodAudited` case with an open-vocabulary
-// `Custom:` kind (the Phase 859 shape), so no exhaustive match over the audit
+// `Custom:` kind, so no exhaustive match over the audit
 // union has to change.
 
 module NarrativePromptAudit =
@@ -61,6 +62,14 @@ module NarrativePromptAudit =
     /// The declared wording put back.
     [<Literal>]
     let ResetKind = "Custom:NarrativePromptReset"
+
+    /// A proposed sentence approved and saved as a version.
+    [<Literal>]
+    let ProposalApprovedKind = "Custom:NarrativeProposalApproved"
+
+    /// A proposed sentence dismissed.
+    [<Literal>]
+    let ProposalDismissedKind = "Custom:NarrativeProposalDismissed"
 
 // ─── The regenerate job ──────────────────────────────────────────
 
@@ -276,6 +285,13 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
     let store =
         NarrativeWording.storeOver (serviceOf<IBlobStorage> ctx) (serviceOf<ILogger> ctx)
 
+    let learningStore =
+        NarrativeLearningStore.Over(serviceOf<IBlobStorage> ctx, serviceOf<ILogger> ctx)
+
+    let learningPolicy =
+        serviceOf<NarrativeLearningPolicy> ctx
+        |> Option.defaultValue NarrativeLearningPolicy.defaults
+
     let authorised (f: Caller -> Async<Result<'T, string>>) : Async<Result<'T, string>> = async {
         match serviceOf<GroundedNarrativeRegistry> ctx with
         | None -> return Error "Grounded narratives are not composed in this deployment."
@@ -356,35 +372,64 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
     /// response. Not wrapped in a catch: `IAuditLog.Record` absorbs a failed
     /// write under the default policy and raises under a compliance-grade one
     /// on purpose, so the call then fails rather than completing un-audited.
-    let auditFor
-        (caller: Caller)
-        (kind: string)
-        (methodName: string)
-        (runKey: string)
-        (version: NarrativePromptVersion)
-        =
-        async {
-            match serviceOf<IAuditLog> ctx with
-            | Some log ->
-                do!
-                    log.Record(
-                        AuditStreamKey.ofTeam caller.TeamId,
-                        RemotingMethodAudited {
-                            Kind = kind
-                            MethodName = methodName
-                            SubjectId = caller.UserId
-                            CorrelationId = None
-                            Payload =
-                                Map.ofList [
-                                    "teamId", caller.TeamId
-                                    "runKey", runKey
-                                    "version", string version.Version
-                                    "author", version.Author
-                                ]
-                        }
-                    )
-            | None -> ()
-        }
+    let audit (caller: Caller) (kind: string) (methodName: string) (runKey: string) (payload: (string * string) list) = async {
+        match serviceOf<IAuditLog> ctx with
+        | Some log ->
+            do!
+                log.Record(
+                    AuditStreamKey.ofTeam caller.TeamId,
+                    RemotingMethodAudited {
+                        Kind = kind
+                        MethodName = methodName
+                        SubjectId = caller.UserId
+                        CorrelationId = None
+                        Payload = Map.ofList ([ "teamId", caller.TeamId; "runKey", runKey ] @ payload)
+                    }
+                )
+        | None -> ()
+    }
+
+    let auditFor caller kind methodName runKey (version: NarrativePromptVersion) =
+        audit caller kind methodName runKey [ "version", string version.Version; "author", version.Author ]
+
+    let auditProposal caller kind methodName runKey (proposal: NarrativeWordingProposal) extra =
+        audit
+            caller
+            kind
+            methodName
+            runKey
+            ([
+                "proposalId", proposal.Id
+                "class", sprintf "%A" proposal.Class
+                "sentence", proposal.Sentence
+             ]
+             @ extra)
+
+    /// The learning page over the wording in force.
+    let learningOf (caller: Caller) (definition: GroundedNarrativeDefinition) = async {
+        match learningStore with
+        | None ->
+            return Ok(NarrativeLearning.view learningPolicy definition.Key definition.Prompt 0 NarrativeLearning.empty)
+        | Some learning ->
+            match! learning.Read(caller.Scope.Container, definition.Key) with
+            | Error reason -> return Error(sprintf "The learning of '%s' could not be read: %s" definition.Key reason)
+            | Ok recorded ->
+                match! versionsOf caller definition.Key with
+                | Error reason ->
+                    return Error(sprintf "The saved wording of '%s' could not be read: %s" definition.Key reason)
+                | Ok versions ->
+                    let inForce = NarrativeWording.current versions
+
+                    return
+                        Ok(
+                            NarrativeLearning.view
+                                learningPolicy
+                                definition.Key
+                                (inForce |> Option.map _.Prompt |> Option.defaultValue definition.Prompt)
+                                (inForce |> Option.map _.Version |> Option.defaultValue 0)
+                                recorded
+                        )
+    }
 
     let withDefinition (runKey: string) (f: Caller -> GroundedNarrativeDefinition -> Async<Result<'T, string>>) =
         authorised (fun caller -> async {
@@ -537,6 +582,133 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                             | Error refusal -> return Error(TriggerError.message refusal)
                             | Ok() -> return Ok jobId
                 })
+
+        ListProposals = fun runKey -> withDefinition runKey learningOf
+
+        ApproveProposal =
+            fun decision ->
+                withDefinition (if isNull (box decision) then "" else decision.RunKey) (fun caller definition -> async {
+                    match store, learningStore with
+                    | None, _
+                    | _, None -> return Error noStore
+                    | Some store, Some learning ->
+                        match! learning.Read(caller.Scope.Container, definition.Key) with
+                        | Error reason -> return Error reason
+                        | Ok recorded ->
+                            match recorded.Proposals |> List.tryFind (fun p -> p.Id = decision.ProposalId) with
+                            | None ->
+                                return Error(sprintf "No proposal '%s' exists for this report." decision.ProposalId)
+                            | Some proposal when proposal.State <> NarrativeProposalState.Open ->
+                                return Error(sprintf "Proposal '%s' was already decided." decision.ProposalId)
+                            | Some proposal ->
+                                let! appended =
+                                    store.Append(
+                                        caller.Scope.Container,
+                                        definition.Key,
+                                        fun versions ->
+                                            let inForce = NarrativeWording.current versions
+
+                                            let inForceVersion =
+                                                inForce |> Option.map _.Version |> Option.defaultValue 0
+
+                                            let prompt, guidance =
+                                                match inForce with
+                                                | Some version -> version.Prompt, version.Guidance
+                                                | None -> definition.Prompt, []
+
+                                            let prompt = NarrativeLearning.appendSentence prompt proposal.Sentence
+
+                                            if inForceVersion <> proposal.WordingVersion then
+                                                Error(
+                                                    sprintf
+                                                        "The wording in force is version %d; this proposal was drafted against version %d. Dismiss it: the class is proposed again if it recurs."
+                                                        inForceVersion
+                                                        proposal.WordingVersion
+                                                )
+                                            elif prompt.Length > NarrativePromptLimits.MaxPromptLength then
+                                                Error(
+                                                    sprintf
+                                                        "With this sentence the instruction is %d characters; the limit is %d. Shorten the wording first."
+                                                        prompt.Length
+                                                        NarrativePromptLimits.MaxPromptLength
+                                                )
+                                            else
+                                                Ok(
+                                                    Some {
+                                                        Version = NarrativeWording.latestNumber versions + 1
+                                                        IsReset = false
+                                                        Prompt = prompt
+                                                        Guidance = guidance
+                                                        Author = caller.UserId
+                                                        SavedAt = DateTime.UtcNow
+                                                    }
+                                                )
+                                    )
+
+                                match appended with
+                                | Error reason -> return Error reason
+                                | Ok None -> return Error "Nothing was saved."
+                                | Ok(Some version) ->
+                                    let! decided =
+                                        learning.Decide(
+                                            caller.Scope.Container,
+                                            definition.Key,
+                                            proposal.Id,
+                                            NarrativeProposalState.Approved version.Version,
+                                            caller.UserId,
+                                            DateTime.UtcNow
+                                        )
+
+                                    do!
+                                        auditProposal
+                                            caller
+                                            NarrativePromptAudit.ProposalApprovedKind
+                                            "ApproveProposal"
+                                            definition.Key
+                                            proposal
+                                            [ "version", string version.Version ]
+
+                                    match decided with
+                                    | Error reason ->
+                                        return
+                                            Error(
+                                                sprintf
+                                                    "The wording was saved as version %d, but the proposal could not be marked approved: %s"
+                                                    version.Version
+                                                    reason
+                                            )
+                                    | Ok _ -> return! viewOf caller definition
+                })
+
+        DismissProposal =
+            fun decision ->
+                withDefinition (if isNull (box decision) then "" else decision.RunKey) (fun caller definition -> async {
+                    match learningStore with
+                    | None -> return Error noStore
+                    | Some learning ->
+                        match!
+                            learning.Decide(
+                                caller.Scope.Container,
+                                definition.Key,
+                                decision.ProposalId,
+                                NarrativeProposalState.Dismissed,
+                                caller.UserId,
+                                DateTime.UtcNow
+                            )
+                        with
+                        | Error reason -> return Error reason
+                        | Ok proposal ->
+                            do!
+                                auditProposal
+                                    caller
+                                    NarrativePromptAudit.ProposalDismissedKind
+                                    "DismissProposal"
+                                    definition.Key
+                                    proposal
+                                    []
+
+                            return! learningOf caller definition
+                })
     }
 
 /// Compose the wording admin onto an app that composed grounded narratives
@@ -547,7 +719,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
 /// **Adds** one handler, and its registration through `ServerApp.addServiceConfig`.
 let withPromptAdmin (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
-        // Phase 1051 — exempt from the profile matrix: a handler
+        // Exempt from the profile matrix: a handler
         // registration, placed by the scheduler's own gate.
         s
         |> ProcessProfileGate.addExempt

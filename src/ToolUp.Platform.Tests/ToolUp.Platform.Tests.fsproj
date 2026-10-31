@@ -641,6 +641,8 @@
         <Compile Include="InProcess\FactClauseFeederTests.fs" />
         <Compile Include="InProcess\RagFactTierTests.fs" />
         <Compile Include="InProcess\GroundedNarrativeTests.fs" />
+        <Compile Include="Contracts\IGroundedNarrativeRunContract.fs" />
+        <Compile Include="InProcess\NarrativeOffenceHistoryTests.fs" />
         <Compile Include="InProcess\ReportSubscriptionEarlierNames.fs" />
         <Compile Include="InProcess\ReportSubscriptionScopeTests.fs" />
         <Compile Include="InProcess\AssistantFactScopeTests.fs" />

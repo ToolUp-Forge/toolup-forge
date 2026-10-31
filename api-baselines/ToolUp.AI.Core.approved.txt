@@ -550,10 +550,68 @@ ToolUp.AI.NarrativeLastRun.OccurredAt : System.DateTime { get }
 ToolUp.AI.NarrativeLastRun.Outcome : System.String { get }
 ToolUp.AI.NarrativeLastRun.PromptVersion : System.Int32 { get }
 ToolUp.AI.NarrativeLastRun.Trigger : System.String { get }
+ToolUp.AI.NarrativeLearningView (class)
+ToolUp.AI.NarrativeLearningView..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeProposalView], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceStanding], System.Int32, System.Int32)
+ToolUp.AI.NarrativeLearningView.Proposals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeProposalView] { get }
+ToolUp.AI.NarrativeLearningView.RunKey : System.String { get }
+ToolUp.AI.NarrativeLearningView.Standing : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceStanding] { get }
+ToolUp.AI.NarrativeLearningView.Threshold : System.Int32 { get }
+ToolUp.AI.NarrativeLearningView.Window : System.Int32 { get }
+ToolUp.AI.NarrativeOffence (class)
+ToolUp.AI.NarrativeOffence..ctor(ToolUp.AI.NarrativeOffenceClass, System.String, System.String, System.String, System.String, System.Boolean)
+ToolUp.AI.NarrativeOffence.Claim : System.String { get }
+ToolUp.AI.NarrativeOffence.Class : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffence.ElementKind : System.String { get }
+ToolUp.AI.NarrativeOffence.Location : System.String { get }
+ToolUp.AI.NarrativeOffence.Repaired : System.Boolean { get }
+ToolUp.AI.NarrativeOffence.Section : System.String { get }
+ToolUp.AI.NarrativeOffenceClass (class)
+ToolUp.AI.NarrativeOffenceClass.IsMisattributedReference : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceClass.IsMisstatedValue : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceClass.IsNameReadAsFigure : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceClass.IsNumberWord : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceClass.IsSuperseded : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceClass.IsUnreferencedNumber : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceClass.IsWithheld : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceClass.MisattributedReference : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceClass.MisstatedValue : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceClass.NameReadAsFigure : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceClass.NumberWord : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceClass.Superseded : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceClass.Tag : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceClass.UnreferencedNumber : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceClass.Withheld : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceClass+Tags (class)
+ToolUp.AI.NarrativeOffenceClass+Tags.MisattributedReference : System.Int32 (literal)
+ToolUp.AI.NarrativeOffenceClass+Tags.MisstatedValue : System.Int32 (literal)
+ToolUp.AI.NarrativeOffenceClass+Tags.NameReadAsFigure : System.Int32 (literal)
+ToolUp.AI.NarrativeOffenceClass+Tags.NumberWord : System.Int32 (literal)
+ToolUp.AI.NarrativeOffenceClass+Tags.Superseded : System.Int32 (literal)
+ToolUp.AI.NarrativeOffenceClass+Tags.UnreferencedNumber : System.Int32 (literal)
+ToolUp.AI.NarrativeOffenceClass+Tags.Withheld : System.Int32 (literal)
+ToolUp.AI.NarrativeOffenceClassModule (class)
+ToolUp.AI.NarrativeOffenceClassModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffenceClass] { get }
+ToolUp.AI.NarrativeOffenceClassModule.describe(ToolUp.AI.NarrativeOffenceClass) : System.String
+ToolUp.AI.NarrativeOffenceRun (class)
+ToolUp.AI.NarrativeOffenceRun..ctor(System.DateTime, System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffence])
+ToolUp.AI.NarrativeOffenceRun.Offences : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeOffence] { get }
+ToolUp.AI.NarrativeOffenceRun.Outcome : System.String { get }
+ToolUp.AI.NarrativeOffenceRun.RanAt : System.DateTime { get }
+ToolUp.AI.NarrativeOffenceRun.WordingVersion : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceStanding (class)
+ToolUp.AI.NarrativeOffenceStanding..ctor(ToolUp.AI.NarrativeOffenceClass, System.Int32, System.Int32, System.Int32, System.Boolean)
+ToolUp.AI.NarrativeOffenceStanding.Class : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeOffenceStanding.Recurs : System.Boolean { get }
+ToolUp.AI.NarrativeOffenceStanding.Runs : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceStanding.RunsWithClass : System.Int32 { get }
+ToolUp.AI.NarrativeOffenceStanding.WordingVersion : System.Int32 { get }
 ToolUp.AI.NarrativePromptApi (class)
-ToolUp.AI.NarrativePromptApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SaveNarrativePromptRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]])
+ToolUp.AI.NarrativePromptApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SaveNarrativePromptRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativeLearningView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.NarrativeProposalDecision, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.NarrativeProposalDecision, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativeLearningView, System.String]]])
+ToolUp.AI.NarrativePromptApi.ApproveProposal : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.NarrativeProposalDecision, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }
+ToolUp.AI.NarrativePromptApi.DismissProposal : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.NarrativeProposalDecision, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativeLearningView, System.String]]] { get }
 ToolUp.AI.NarrativePromptApi.GetNarrative : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }
 ToolUp.AI.NarrativePromptApi.ListNarratives : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary], System.String]]] { get }
+ToolUp.AI.NarrativePromptApi.ListProposals : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativeLearningView, System.String]]] { get }
 ToolUp.AI.NarrativePromptApi.ListVersions : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion], System.String]]] { get }
 ToolUp.AI.NarrativePromptApi.Regenerate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]] { get }
 ToolUp.AI.NarrativePromptApi.ResetPrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }
@@ -586,10 +644,47 @@ ToolUp.AI.NarrativePromptView.LatestVersion : System.Int32 { get }
 ToolUp.AI.NarrativePromptView.Rules : System.String { get }
 ToolUp.AI.NarrativePromptView.RunKey : System.String { get }
 ToolUp.AI.NarrativePromptView.Title : System.String { get }
+ToolUp.AI.NarrativeProposalDecision (class)
+ToolUp.AI.NarrativeProposalDecision..ctor(System.String, System.String)
+ToolUp.AI.NarrativeProposalDecision.ProposalId : System.String { get }
+ToolUp.AI.NarrativeProposalDecision.RunKey : System.String { get }
+ToolUp.AI.NarrativeProposalState (class)
+ToolUp.AI.NarrativeProposalState.Dismissed : ToolUp.AI.NarrativeProposalState { get }
+ToolUp.AI.NarrativeProposalState.IsApproved : System.Boolean { get }
+ToolUp.AI.NarrativeProposalState.IsDismissed : System.Boolean { get }
+ToolUp.AI.NarrativeProposalState.IsLapsed : System.Boolean { get }
+ToolUp.AI.NarrativeProposalState.IsOpen : System.Boolean { get }
+ToolUp.AI.NarrativeProposalState.Lapsed : ToolUp.AI.NarrativeProposalState { get }
+ToolUp.AI.NarrativeProposalState.Open : ToolUp.AI.NarrativeProposalState { get }
+ToolUp.AI.NarrativeProposalState.Tag : System.Int32 { get }
+ToolUp.AI.NarrativeProposalState+Approved (class)
+ToolUp.AI.NarrativeProposalState+Approved.version : System.Int32 { get }
+ToolUp.AI.NarrativeProposalState+Tags (class)
+ToolUp.AI.NarrativeProposalState+Tags.Approved : System.Int32 (literal)
+ToolUp.AI.NarrativeProposalState+Tags.Dismissed : System.Int32 (literal)
+ToolUp.AI.NarrativeProposalState+Tags.Lapsed : System.Int32 (literal)
+ToolUp.AI.NarrativeProposalState+Tags.Open : System.Int32 (literal)
+ToolUp.AI.NarrativeProposalView (class)
+ToolUp.AI.NarrativeProposalView..ctor(ToolUp.AI.NarrativeWordingProposal, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeOffenceStanding])
+ToolUp.AI.NarrativeProposalView.FollowThrough : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeOffenceStanding] { get }
+ToolUp.AI.NarrativeProposalView.Proposal : ToolUp.AI.NarrativeWordingProposal { get }
+ToolUp.AI.NarrativeProposalView.ResultingPrompt : System.String { get }
 ToolUp.AI.NarrativeSectionGuidance (class)
 ToolUp.AI.NarrativeSectionGuidance..ctor(System.String, System.String)
 ToolUp.AI.NarrativeSectionGuidance.Guidance : System.String { get }
 ToolUp.AI.NarrativeSectionGuidance.SectionId : System.String { get }
+ToolUp.AI.NarrativeWordingProposal (class)
+ToolUp.AI.NarrativeWordingProposal..ctor(System.String, ToolUp.AI.NarrativeOffenceClass, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTime, ToolUp.AI.NarrativeProposalState, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.AI.NarrativeWordingProposal.Class : ToolUp.AI.NarrativeOffenceClass { get }
+ToolUp.AI.NarrativeWordingProposal.DecidedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.AI.NarrativeWordingProposal.DecidedBy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.NarrativeWordingProposal.Earlier : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.NarrativeWordingProposal.Evidence : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.NarrativeWordingProposal.Id : System.String { get }
+ToolUp.AI.NarrativeWordingProposal.ProposedAt : System.DateTime { get }
+ToolUp.AI.NarrativeWordingProposal.Sentence : System.String { get }
+ToolUp.AI.NarrativeWordingProposal.State : ToolUp.AI.NarrativeProposalState { get }
+ToolUp.AI.NarrativeWordingProposal.WordingVersion : System.Int32 { get }
 ToolUp.AI.NumericVerdict (class)
 ToolUp.AI.NumericVerdict.IsNoFactsInScope : System.Boolean { get }
 ToolUp.AI.NumericVerdict.IsNumberUnmatched : System.Boolean { get }
