@@ -248,6 +248,25 @@ print is the exact account.
 declared, no diff touched and no forcing rule covers will pass it. Two things keep that cost bounded. The full lane is
 still the gate, and the lane says what it skipped.
 
+### The build floor under a selected run
+
+A selected lane still builds the solution first. What that build costs depends on what the change touched, because
+reference assemblies are on (`ProduceReferenceAssembly`, declared in `Directory.Build.props` and held by
+`CompilerLeversTests.fs` in the Build pack):
+
+- **Internal edit to an implementation.** The edited project recompiles. Its dependants do not, because they compile
+  against its reference assembly and that did not change. On a warm worktree an internal Server edit took about 1.5
+  minutes (2 projects) and an internal Core edit under a minute.
+- **Public change.** Every dependant recompiles: 129 projects for Server and 193 for Core, close to a clean build.
+- **A changed or added `[<Literal>]`.** The reference assembly does not move, so dependants are not recompiled and an
+  incremental build keeps the old value. Build them clean (`--no-incremental`) before you trust a green over a literal
+  change.
+
+The gate itself is unaffected. The Public-API approval list renders the implementation DLLs in `bin/`, never a `ref/`
+copy, so an internal edit leaves every baseline unchanged and a public addition still fails it by name. A clean solution
+build, the floor for a fresh checkout, is still the 4m18s quiet-machine figure. The measurements are in
+[`docs/migrations/1195-compiler-levers.md`](../migrations/1195-compiler-levers.md).
+
 ## Testing client-tier MVU update functions
 
 Client-tier modules (`ToolUp.Platform.Client`, `ToolUp.AI.Client`, etc.) cannot be exercised by the `.NET` Expecto runners. The blocker is module-level construction of ToolUp.Remoting proxies:

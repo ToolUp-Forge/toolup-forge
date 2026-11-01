@@ -155,6 +155,28 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!--
+    Compiler levers, measured on this tree and then declared. The tables are in docs/migrations/1195-compiler-levers.md;
+    src/ToolUp.Platform.Build.Tests/CompilerLeversTests.fs holds both verdicts.
+
+    ProduceReferenceAssembly is ON. The SDK already turns it on for an .fsproj
+    targeting net7.0+, so this line changes no build; it holds the setting
+    against a project, an import or a future SDK turning it off. It is what
+    lets an implementation-only edit stop at the edited project: an internal
+    edit to ToolUp.Platform.Server recompiles 2 projects, not 129. KNOWN GAP:
+    F#'s reference assembly does not move when a [<Literal>] is added or its
+    value changes, so dependants keep the old value on an INCREMENTAL build.
+    After touching a literal, build its dependants clean (see the doc).
+
+    ParallelCompilation is deliberately NOT declared. Measured on this
+    machine it made the two serial-bottleneck projects slower, and F# 10.0
+    flags the switch "for test purposes only" (FS0075) on every project, in
+    both directions. Re-measure on an idle machine before declaring it.
+  -->
+  <PropertyGroup>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Authors>Andrew J. Willshire</Authors>
     <Company>ToolUp Analytics Ltd (UK)</Company>
@@ -1041,6 +1063,7 @@
       - 1067 (0.39.0 — v0.38.0 is tagged, so this rides the next draft slot): breaking — every hosted service registers through `Hosting.register` with a declared `Placement` (`BackgroundSubsystem`, `shouldRegisterBackgroundService`, `HostedServiceExemption` and the `addExempt` family removed; RAG re-embedding and, over a shared queue, ingestion become SharedWork, the AI chat worker ProcessLocal), `InProcessJobScheduler` and `WebhookDispatcherService` each have one factory over an options record (`SchedulerOptions` / `WebhookOptions`; the three extra scheduler factories, the webhook secondary constructor and `createWithLock` removed), `ServerApp.withDistributedLock` composes the lock first, the tenant-lifecycle hooks are `TenantHook` values and `withDeclaredDataSources` takes the config (codemod rules 1067-*, docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md).
       - 1097 (0.39.0): additive — ToolUp.Platform.Build gains one process runner, one git reader and one flag parser: `ProcResult` / `ProcOptions` and `Proc.exec` / `redirected` / `execWith` / `create` / `ensure` / `onPath` / `options`, `Git.run` / `read` / `within`, `Lines.ofOutput`, `Paths.toSlash`, `Flags.parse` / `lenient` / `targetOf` / `has` / `value` / `union` / `sdk` over `FlagSpec` / `Flags`, `Scratch.root`, the publication-boundary rule `Neutrality.*`, and the template gate as data (`TemplateGate.TemplateGateSpec`, `Check`, `Step`, `Scaffold`, `Instantiation`, `NeutralScope`, `run`, `version`, `inPlaceBuildArgs`, `instantiateArgs`, `vendoredFinding`, `strayPins`, `layoutFindings`, `neutralHits`, `privatePackagesFolder`, `evict`, `EvictionReport`); `execute` and the SDK targets read the same parse, and no existing member changes.
       - 1200 (0.39.0): none — released first as the 0.38.1 patch off v0.38.0; ToolUp.Feliz.AgGrid and ToolUp.Feliz.AgCharts pack a `<Runtime>.js` beside each on-demand runtime source (`AgGridRuntime.js`, `AgChartRuntime.js`) re-exporting its compiled `.fs.js`, so a feed consumer's bundle resolves the `import("./<Runtime>.js")` Fable spells under fable_modules; no package surface moves.
+      - 1195 (0.39.0): none — `ProduceReferenceAssembly` is declared `true` (the SDK default for net7.0+ .fsproj, now held by CompilerLeversTests) and `ParallelCompilation` is measured and left off (docs/migrations/1195-compiler-levers.md); no package surface moves.
     -->
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
