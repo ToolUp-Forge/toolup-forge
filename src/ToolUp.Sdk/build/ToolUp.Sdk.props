@@ -148,7 +148,7 @@
     <ToolUpEntityStoresVersion Condition="'$(ToolUpEntityStoresVersion)' == ''">0.39.0</ToolUpEntityStoresVersion>
     <ToolUpExperimentsVersion Condition="'$(ToolUpExperimentsVersion)' == ''">0.1.0-alpha</ToolUpExperimentsVersion>
     <ToolUpFactStoresVersion Condition="'$(ToolUpFactStoresVersion)' == ''">0.39.0</ToolUpFactStoresVersion>
-    <ToolUpFeatureFlagProvidersVersion Condition="'$(ToolUpFeatureFlagProvidersVersion)' == ''">0.1.0-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpFeatureFlagProvidersVersion Condition="'$(ToolUpFeatureFlagProvidersVersion)' == ''">0.1.1-alpha</ToolUpFeatureFlagProvidersVersion>
     <ToolUpHostsVersion Condition="'$(ToolUpHostsVersion)' == ''">0.39.0</ToolUpHostsVersion>
     <ToolUpIngestionQueuesVersion Condition="'$(ToolUpIngestionQueuesVersion)' == ''">0.39.0</ToolUpIngestionQueuesVersion>
     <ToolUpJobSchedulersVersion Condition="'$(ToolUpJobSchedulersVersion)' == ''">0.39.0</ToolUpJobSchedulersVersion>
@@ -165,7 +165,7 @@
     <ToolUpShareTokenStoreDecoratorsVersion Condition="'$(ToolUpShareTokenStoreDecoratorsVersion)' == ''">0.39.0</ToolUpShareTokenStoreDecoratorsVersion>
     <ToolUpSparseIndicesVersion Condition="'$(ToolUpSparseIndicesVersion)' == ''">0.39.0</ToolUpSparseIndicesVersion>
     <ToolUpStorageVersion Condition="'$(ToolUpStorageVersion)' == ''">0.39.0</ToolUpStorageVersion>
-    <ToolUpStripeVersion Condition="'$(ToolUpStripeVersion)' == ''">0.2.0</ToolUpStripeVersion>
+    <ToolUpStripeVersion Condition="'$(ToolUpStripeVersion)' == ''">0.2.1</ToolUpStripeVersion>
     <ToolUpSvgRasterizersVersion Condition="'$(ToolUpSvgRasterizersVersion)' == ''">0.39.0</ToolUpSvgRasterizersVersion>
     <ToolUpTelemetrySinksVersion Condition="'$(ToolUpTelemetrySinksVersion)' == ''">0.39.0</ToolUpTelemetrySinksVersion>
     <ToolUpTimeSeriesStoresVersion Condition="'$(ToolUpTimeSeriesStoresVersion)' == ''">0.39.0</ToolUpTimeSeriesStoresVersion>

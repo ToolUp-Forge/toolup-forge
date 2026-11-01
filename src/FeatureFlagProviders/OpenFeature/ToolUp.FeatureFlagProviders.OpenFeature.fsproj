@@ -6,7 +6,7 @@
     <PackageId>ToolUp.FeatureFlagProviders.OpenFeature</PackageId>
     <Description>Opt-in IFlagSource (Phase 239) backed by the OpenFeature standard — back ToolUp feature-flag evaluation with an external flag system (LaunchDarkly / Flagsmith / Unleash) via OpenFeature. The free in-process flag store stays the default.</Description>
     <PackageTags>fsharp;feature-flags;openfeature;launchdarkly;flagsmith</PackageTags>
-    <Version>0.1.0-alpha</Version>
+    <Version>0.1.1-alpha</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="OpenFeatureFlagSource.fs" />

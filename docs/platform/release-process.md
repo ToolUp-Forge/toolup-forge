@@ -47,7 +47,9 @@ What follows from the file, all of it checked:
   moved by; `--propose` reports per group. The core advances at every release. A companion group whose
   packages did not move, at the version it was released at, is not re-released, unless a group it
   depends on broke: its published packages were compiled against the surface that broke, so it ships
-  again, at least as a patch.
+  again, at least as a patch. The first instance is 0.39.0: the core broke, so `stripe` (0.2.0 to 0.2.1)
+  and `feature-flag-providers` (0.1.0-alpha to 0.1.1-alpha) each take a patch although their own
+  surfaces did not move.
 - **The manifest.** `ToolUp.Sdk.props` resolves every package through its group's property:
   `ToolUpSdkVersion` for the core, `ToolUp<Family>Version` for a family. Each family property defaults
   to the version that family shipped at beside the core release, so a consumer pinning only

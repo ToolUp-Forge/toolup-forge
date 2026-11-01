@@ -10,7 +10,7 @@
          non-empty to >=32 bytes — a behavioural break packed over the 0.1.0-alpha
          slot, so machines diverged silently by cache age. Advance with the family;
          -alpha dropped with the family. -->
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <!-- Server-only, non-Fable project: Tier.tryParse takes `string | null`,
          which needs F# 10 nullable reference types. Per forge's nullable
          rule, server-only projects with no Fable involvement may enable

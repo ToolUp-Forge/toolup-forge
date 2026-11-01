@@ -11,7 +11,7 @@
          rather than repacking 0.1.0-alpha (which had already happened; consumers got
          one contract or the other depending on cache age). The family also left
          the -alpha channel here (operator decision 2026-07-29). -->
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="WebhookError.fs" />

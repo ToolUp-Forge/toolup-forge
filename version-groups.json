@@ -165,7 +165,7 @@
     {
       "id": "feature-flag-providers",
       "property": "ToolUpFeatureFlagProvidersVersion",
-      "version": "0.1.0-alpha",
+      "version": "0.1.1-alpha",
       "projects": [
         "src/FeatureFlagProviders/**"
       ]
@@ -349,7 +349,7 @@
     {
       "id": "stripe",
       "property": "ToolUpStripeVersion",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "projects": [
         "src/ToolUp.Stripe.*/**"
       ]

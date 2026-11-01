@@ -1121,7 +1121,7 @@
     <ToolUpEncryptionVersion>0.39.0</ToolUpEncryptionVersion>
     <ToolUpEntityStoresVersion>0.39.0</ToolUpEntityStoresVersion>
     <ToolUpFactStoresVersion>0.39.0</ToolUpFactStoresVersion>
-    <ToolUpFeatureFlagProvidersVersion>0.1.0-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpFeatureFlagProvidersVersion>0.1.1-alpha</ToolUpFeatureFlagProvidersVersion>
     <ToolUpHostsVersion>0.39.0</ToolUpHostsVersion>
     <ToolUpIngestionQueuesVersion>0.39.0</ToolUpIngestionQueuesVersion>
     <ToolUpJobSchedulersVersion>0.39.0</ToolUpJobSchedulersVersion>
@@ -1144,7 +1144,7 @@
     <ToolUpVectorStoresVersion>0.39.0</ToolUpVectorStoresVersion>
     <ToolUpVoiceProvidersVersion>0.39.0</ToolUpVoiceProvidersVersion>
     <ToolUpExperimentsVersion>0.1.0-alpha</ToolUpExperimentsVersion>
-    <ToolUpStripeVersion>0.2.0</ToolUpStripeVersion>
+    <ToolUpStripeVersion>0.2.1</ToolUpStripeVersion>
     <ToolUpWorkflowVersion>0.1.0-alpha</ToolUpWorkflowVersion>
     <ToolUpWebhooksVersion>0.1.0-alpha</ToolUpWebhooksVersion>
   </PropertyGroup>
