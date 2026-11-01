@@ -280,9 +280,6 @@ module Neutrality =
     /// The untracked token file at a repository root.
     let tokenFileName = "neutrality-tokens.local.txt"
 
-    /// The semicolon-separated variable read when the token file is absent.
-    let tokensVariable = "TOOLUP_NEUTRALITY_TOKENS"
-
     /// The tokens in `lines`: trimmed, blank lines and `#` comments dropped.
     let parseTokens (lines: string seq) : string list =
         lines
@@ -291,16 +288,17 @@ module Neutrality =
         |> Seq.toList
 
     /// The private token list for the repository at `root`: the token file
-    /// when it exists, else the environment variable; `None` when neither
-    /// supplies a token.
-    let externalTokens (root: string) : string list option =
+    /// when it exists, else the semicolon-separated environment variable
+    /// `variable` (a development knob the caller names, not a deployment
+    /// setting); `None` when neither supplies a token.
+    let externalTokens (root: string) (variable: string) : string list option =
         let file = IO.Path.Combine(root, tokenFileName)
 
         let tokens =
             if IO.File.Exists file then
                 parseTokens (IO.File.ReadAllLines file)
             else
-                match Environment.GetEnvironmentVariable tokensVariable with
+                match Environment.GetEnvironmentVariable variable with
                 | null
                 | "" -> []
                 | value -> parseTokens (value.Split ';')
@@ -774,8 +772,10 @@ module TemplateGate =
         /// The scaffold's packed nupkg carries every `required` entry and no
         /// `forbidden` one.
         | NupkgLayout of required: string list * forbidden: string list
-        /// No publication-boundary token in the scope.
-        | Neutral of NeutralScope
+        /// No publication-boundary token in the scope. The private token list
+        /// is the repository's token file, else the environment variable
+        /// `tokensVariable` names.
+        | Neutral of scope: NeutralScope * tokensVariable: string
 
     /// One step of an instantiated scaffold's own pipeline, run in the
     /// scaffold directory.
@@ -954,9 +954,6 @@ module TemplateGate =
             if r.ExitCode <> 0 then
                 failwithf "%s: `%s %s` exited %d (in %s)" spec.Name exe (String.concat " " args) r.ExitCode dir
 
-        let rules = Neutrality.rules (Neutrality.externalTokens root)
-        let fullList = rules.Length > 1
-
         let check (scaffoldDir: string) (c: Check) =
             match c with
             | VendoredPack(source, vendored, marker) ->
@@ -969,7 +966,10 @@ module TemplateGate =
                 with
                 | Some finding -> failwith finding
                 | None -> Trace.tracefn "▶ %s: vendored conformance pack matches %s" spec.Name source
-            | Neutral scope ->
+            | Neutral(scope, tokensVariable) ->
+                let rules = Neutrality.rules (Neutrality.externalTokens root tokensVariable)
+                let fullList = rules.Length > 1
+
                 let label, masked, dir =
                     match scope with
                     | TemplateFiles ->

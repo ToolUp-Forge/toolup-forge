@@ -214,6 +214,11 @@ let verifyPackagedModuleTemplate: TemplateGate.TemplateGateSpec =
         Done = "scaffold -> build -> conformance -> pack, green"
     }
 
+/// The semicolon-separated variable that carries the private publication-boundary
+/// token list when `neutrality-tokens.local.txt` is absent: a development and CI
+/// knob read by this driver and the OSS guard tests, never by shipped code.
+let neutralityTokensVariable = "TOOLUP_NEUTRALITY_TOKENS"
+
 /// The data-platform template's directory.
 let dataPlatformTemplateDir = "templates/platformsdk-dataplatform"
 
@@ -232,7 +237,7 @@ let verifyDataPlatformTemplate: TemplateGate.TemplateGateSpec =
         Name = "VerifyDataPlatformTemplate"
         Closure = dataPlatform
         Feed = "obj/dataplatform-template-feed"
-        Checks = [ TemplateGate.Neutral TemplateGate.TemplateFiles ]
+        Checks = [ TemplateGate.Neutral(TemplateGate.TemplateFiles, neutralityTokensVariable) ]
         Scaffold =
             TemplateGate.Instantiate {
                 Template = dataPlatformTemplateDir
@@ -241,7 +246,7 @@ let verifyDataPlatformTemplate: TemplateGate.TemplateGateSpec =
                 Args = []
                 Scratch = "tu-dpt"
                 Steps = [
-                    TemplateGate.Verify(TemplateGate.Neutral TemplateGate.ScaffoldedTree)
+                    TemplateGate.Verify(TemplateGate.Neutral(TemplateGate.ScaffoldedTree, neutralityTokensVariable))
                     TemplateGate.Dotnet [ "build"; name + ".slnx"; "--nologo" ]
                     TemplateGate.Verify(TemplateGate.StrayPins None)
                     TemplateGate.Dotnet [

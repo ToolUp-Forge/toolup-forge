@@ -42,12 +42,11 @@ ToolUp.Platform.Build+Lines (class)
 ToolUp.Platform.Build+Lines.ofOutput(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Build+Neutrality (class)
 ToolUp.Platform.Build+Neutrality.Canary : System.String (literal)
-ToolUp.Platform.Build+Neutrality.externalTokens(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.Build+Neutrality.externalTokens(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.Build+Neutrality.parseTokens(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Build+Neutrality.rules(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Text.RegularExpressions.Regex]]
 ToolUp.Platform.Build+Neutrality.toRegex(System.String) : System.Text.RegularExpressions.Regex
 ToolUp.Platform.Build+Neutrality.tokenFileName : System.String { get }
-ToolUp.Platform.Build+Neutrality.tokensVariable : System.String { get }
 ToolUp.Platform.Build+Paths (class)
 ToolUp.Platform.Build+Paths.toSlash(System.String) : System.String
 ToolUp.Platform.Build+Proc (class)
@@ -90,7 +89,8 @@ ToolUp.Platform.Build+TemplateGate+Check.IsStrayPins : System.Boolean { get }
 ToolUp.Platform.Build+TemplateGate+Check.IsVendoredPack : System.Boolean { get }
 ToolUp.Platform.Build+TemplateGate+Check.Tag : System.Int32 { get }
 ToolUp.Platform.Build+TemplateGate+Check+Neutral (class)
-ToolUp.Platform.Build+TemplateGate+Check+Neutral.Item : ToolUp.Platform.Build+TemplateGate+NeutralScope { get }
+ToolUp.Platform.Build+TemplateGate+Check+Neutral.scope : ToolUp.Platform.Build+TemplateGate+NeutralScope { get }
+ToolUp.Platform.Build+TemplateGate+Check+Neutral.tokensVariable : System.String { get }
 ToolUp.Platform.Build+TemplateGate+Check+NupkgLayout (class)
 ToolUp.Platform.Build+TemplateGate+Check+NupkgLayout.forbidden : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Build+TemplateGate+Check+NupkgLayout.required : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

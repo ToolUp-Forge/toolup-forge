@@ -115,7 +115,7 @@ let tokenFilePath =
 /// `None` means neither the local file nor the environment variable is
 /// present (or both are empty) — guard tests must then skip loudly.
 let externalTokens: string list option =
-    ToolUp.Platform.Build.Neutrality.externalTokens repoRootPath
+    ToolUp.Platform.Build.Neutrality.externalTokens repoRootPath "TOOLUP_NEUTRALITY_TOKENS"
 
 /// Every token the guard scans for: the hardcoded canary plus whatever
 /// the external source supplies.
