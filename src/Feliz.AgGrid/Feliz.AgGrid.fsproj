@@ -52,7 +52,7 @@
        package loader extracts and compiles source directly. Mirrors the
        Feliz / Fable.Elmish convention. -->
   <ItemGroup>
-    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    <Content Include="**\*.fsproj;**\*.fs;AgGridRuntime.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
