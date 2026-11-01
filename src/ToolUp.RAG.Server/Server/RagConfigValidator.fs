@@ -85,7 +85,7 @@ type TeamModeLocalEmbedderValidator
                         + "storage (or createScoped () for an ephemeral deployment) gives every scope its own IDF "
                         + "dictionary and lifts this warning; retrieval then embeds the query once per authorised "
                         + "scope, so cross-scope results still rank together. Otherwise wire in a stateless "
-                        + "embedder (OpenAI / Cohere / Anthropic embeddings) via RAGServerApp.create, or set "
+                        + "embedder (OpenAI / Cohere / Anthropic embeddings) via RagOptions.create, or set "
                         + "ServerConfig.AcceptLocalEmbedderAtScale = true "
                         + "(TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off explicitly. "
                         + "Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
@@ -175,7 +175,7 @@ type RagPersistenceValidator
 /// validator could not previously make: built from `ServerConfig` alone it
 /// could only see that a deployment MIGHT diverge, never that the operator
 /// had already addressed it, so it warned at a deployment doing the right
-/// thing. `RAGServerApp.withEmbeddingCache` composing a cross-replica cache
+/// thing. `RagOptions.withEmbeddingCache` composing a cross-replica cache
 /// (the shipped backing is `ToolUp.EmbeddingCaches.Redis`) removes the
 /// divergence outright, so the warning is **lifted** — the premise it rests
 /// on no longer holds. It is not silenced: an operator who composed nothing,
@@ -201,7 +201,7 @@ type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, crossRepl
                         + "The cache key (EmbeddingCacheKey in ToolUp.Platform.IEmbeddingCache) carries no tenant "
                         + "component, so each replica maintains an independent cache for the same text — retrieval "
                         + "and per-call latency become non-deterministic across replicas. Compose a cross-replica "
-                        + "cache (RAGServerApp.withEmbeddingCache — e.g. the ToolUp.EmbeddingCaches.Redis companion), "
+                        + "cache (RagOptions.withEmbeddingCache — e.g. the ToolUp.EmbeddingCaches.Redis companion), "
                         + "which removes the divergence and lifts this warning; or accept best-effort per-replica "
                         + "hit-rate via ServerConfig.AcceptSharedEmbeddingCacheInTeamMode = true "
                         + "(TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE=1). Verify in the HealthMonitorUI admin "
@@ -212,7 +212,7 @@ type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, crossRepl
         }
 
 /// Surfaces the `original → clamped` history of
-/// `RAGServerApp.withTopK` / `withMinScore` / `withSnippetCharLimit` /
+/// `RagOptions.withTopK` / `withMinScore` / `withSnippetCharLimit` /
 /// `withMmrLambda` / `withRetrievalDefaults` calls that landed an
 /// out-of-range value. The targeted setters clamp to a sane window so
 /// retrieval doesn't silently disable itself (TopK = 0 would return
@@ -325,7 +325,7 @@ type CitationDevEndpointValidator(serverConfig: ServerConfig, ?timeout: TimeSpan
 ///
 /// **Phase 509 — the lift.** `durableQueue` is `true` when the
 /// deployment composed an `IIngestionQueueStore`
-/// (`RAGServerApp.withDurableIngestionQueue`). The refusal exists
+/// (`RagOptions.withDurableIngestionQueue`). The refusal exists
 /// entirely because the default queue is process-local with no
 /// redelivery; a durable queue removes that premise — the queue outlives
 /// the process, the claim is atomic, and an unacknowledged lease is
@@ -347,7 +347,7 @@ type RagIngestionInstanceValidator(serverConfig: ServerConfig, durableQueue: boo
                 return
                     Error(
                         sprintf
-                            "RAG is composed with the in-process ingestion queue and ReplicaCount = %d. The queue is a process-local channel with no leasing or redelivery: only the replica that handled an upload can drain its ingestion job, and a crash/redeploy between dequeue and completion loses that document silently (the corpus becomes quietly incomplete). Compose a durable ingestion queue (RAGServerApp.withDurableIngestionQueue — e.g. the ToolUp.IngestionQueues.Redis companion), keep RAG single-instance, or set ServerConfig.AcceptInProcessIngestionInMultiInstance = true (TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE=1) if you accept best-effort per-instance ingestion. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
+                            "RAG is composed with the in-process ingestion queue and ReplicaCount = %d. The queue is a process-local channel with no leasing or redelivery: only the replica that handled an upload can drain its ingestion job, and a crash/redeploy between dequeue and completion loses that document silently (the corpus becomes quietly incomplete). Compose a durable ingestion queue (RagOptions.withDurableIngestionQueue — e.g. the ToolUp.IngestionQueues.Redis companion), keep RAG single-instance, or set ServerConfig.AcceptInProcessIngestionInMultiInstance = true (TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE=1) if you accept best-effort per-instance ingestion. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
                             serverConfig.ReplicaCount
                     )
             else
@@ -357,7 +357,7 @@ type RagIngestionInstanceValidator(serverConfig: ServerConfig, durableQueue: boo
 /// Phase 14w — surfaces the steady-state-memory contract for tombstone
 /// vacuuming. `IVectorStore.DeleteChunk` is a soft-delete (stamps
 /// `_deletedAt`); those tombstones are only reclaimed when
-/// `IVectorStore.Vacuum` runs. `RAGServerApp.withVacuumSchedule` drives
+/// `IVectorStore.Vacuum` runs. `RagOptions.withVacuumSchedule` drives
 /// `Vacuum` on a cron via the `IJobScheduler`, so a long-running replica's
 /// memory stabilises — but only when a scheduler is actually composed.
 ///
@@ -382,12 +382,12 @@ type VacuumScheduleValidator(serverConfig: ServerConfig, vacuumScheduleEnabled: 
             if vacuumScheduleEnabled && schedulerOff then
                 return
                     Warning(
-                        "RAGServerApp.withVacuumSchedule is configured but JobScheduler = NoJobScheduler — the tombstone auto-vacuum can never run. Soft-deleted chunks (_deletedAt tombstones from IVectorStore.DeleteChunk) accumulate until the process restarts, so a long-running replica grows toward OOM. Set ServerConfig.JobScheduler = InProcessJobScheduler (or a distributed scheduler companion) so the scheduled sweep can fire."
+                        "RagOptions.withVacuumSchedule is configured but JobScheduler = NoJobScheduler — the tombstone auto-vacuum can never run. Soft-deleted chunks (_deletedAt tombstones from IVectorStore.DeleteChunk) accumulate until the process restarts, so a long-running replica grows toward OOM. Set ServerConfig.JobScheduler = InProcessJobScheduler (or a distributed scheduler companion) so the scheduled sweep can fire."
                     )
             elif not vacuumScheduleEnabled && persistent then
                 return
                     Warning(
-                        "RAG is composed without a tombstone auto-vacuum schedule. Soft-deleted chunks (_deletedAt tombstones from IVectorStore.DeleteChunk) are reclaimed only when an operator calls IVectorStore.Vacuum manually — otherwise they accumulate indefinitely and a long-running replica's memory grows without bound. Enable RAGServerApp.withVacuumSchedule together with ServerConfig.JobScheduler = InProcessJobScheduler for steady-state memory. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
+                        "RAG is composed without a tombstone auto-vacuum schedule. Soft-deleted chunks (_deletedAt tombstones from IVectorStore.DeleteChunk) are reclaimed only when an operator calls IVectorStore.Vacuum manually — otherwise they accumulate indefinitely and a long-running replica's memory grows without bound. Enable RagOptions.withVacuumSchedule together with ServerConfig.JobScheduler = InProcessJobScheduler for steady-state memory. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
                     )
             else
                 return Ok
@@ -496,7 +496,7 @@ type LocalEmbeddingProviderInProductionModeValidator
                 return
                     Warning(
                         sprintf
-                            "LocalEmbeddingProvider is active in a %s deployment. The local TF-IDF embedder is dev-only and process-stateful: its IDF dictionary evolves with the corpus in THIS process, so the same document re-ingested later embeds differently, and a second replica embeds it differently again — retrieval quality drifts over time and diverges across instances (LocalEmbeddingProvider is the documented exception to portability rule 4, stateless-between-calls). Wire a stateless embedder (OpenAI / Cohere / Anthropic embeddings) as the third argument to RAGServerApp.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true (TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off on a single-replica deployment. The embedding_provider:local health probe reports Degraded for the same reason — see /dev/inspect."
+                            "LocalEmbeddingProvider is active in a %s deployment. The local TF-IDF embedder is dev-only and process-stateful: its IDF dictionary evolves with the corpus in THIS process, so the same document re-ingested later embeds differently, and a second replica embeds it differently again — retrieval quality drifts over time and diverges across instances (LocalEmbeddingProvider is the documented exception to portability rule 4, stateless-between-calls). Wire a stateless embedder (OpenAI / Cohere / Anthropic embeddings) as the third argument to RagOptions.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true (TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off on a single-replica deployment. The embedding_provider:local health probe reports Degraded for the same reason — see /dev/inspect."
                             (DeploymentConfig.surfacesLabel serverConfig)
                     )
             else
@@ -518,7 +518,7 @@ type LocalEmbeddingProviderInProductionModeValidator
 /// `Warning`, not `Error`. Two shapes legitimately index nothing:
 /// a retrieval-only deployment reading a corpus some other process
 /// wrote, and — checked explicitly below — a deployment that replaced
-/// the whole pipeline via `RAGServerApp.withRetrievalPipeline` (the
+/// the whole pipeline via `RagOptions.withRetrievalPipeline` (the
 /// static-corpus shape, where chunk embeddings are precomputed at build
 /// time and live ingestion is deliberately suppressed).
 type RAGHandlersRegisteredValidator
@@ -548,7 +548,7 @@ type RAGHandlersRegisteredValidator
                 return
                     Warning(
                         sprintf
-                            "RAG is composed but NO module contributes a VectorisationHandler, while %d data type(s) are registered: %s. Nothing will ever be indexed — uploads succeed, the ingestion queue stays empty, and retrieval returns no matches with no error anywhere in the path, so the symptom looks like a broken embedder or vector store. Add a VectorisationHandler whose DataTypeId matches each type you want retrievable (ServerModule.withVectorisation), or compose a precomputed pipeline via RAGServerApp.withRetrievalPipeline if this deployment is retrieval-only by design. The /dev/inspect 'Vectorisation handlers' panel lists what is actually registered."
+                            "RAG is composed but NO module contributes a VectorisationHandler, while %d data type(s) are registered: %s. Nothing will ever be indexed — uploads succeed, the ingestion queue stays empty, and retrieval returns no matches with no error anywhere in the path, so the symptom looks like a broken embedder or vector store. Add a VectorisationHandler whose DataTypeId matches each type you want retrievable (ServerModule.withVectorisation), or compose a precomputed pipeline via RagOptions.withRetrievalPipeline if this deployment is retrieval-only by design. The /dev/inspect 'Vectorisation handlers' panel lists what is actually registered."
                             (List.length unhandled)
                             (String.concat ", " unhandled)
                     )
@@ -580,7 +580,7 @@ type RagConfigBounds = {
 /// `RetrievalDefaultsValidator` reports the retrieval clamps that fired, so
 /// a value set through a setter is clamped and warned, never errored here.
 /// The lower-bound and `[0, 1]` arms below are for a value that bypassed
-/// its setter: `RAGServerApp` is a public record, and `{ app with
+/// its setter: `RagOptions` is a public record, and `{ app with
 /// IngestionConcurrency = 0 }` reaches this validator unclamped. The
 /// setters bound nothing above, so nothing else rejects `withTopK 200`
 /// (a 200-match context block crowds out the conversation and dilutes
@@ -618,13 +618,13 @@ type RAGConfigBoundsValidator(bounds: RagConfigBounds, ?timeout: TimeSpan) =
             if bounds.TopK < 1 || bounds.TopK > 100 then
                 errors.Add(
                     sprintf
-                        "TopK = %d is outside [1, 100] (RAGServerApp.withTopK / withRetrievalDefaults). TopK is the number of matches spliced into every system prompt: below 1 retrieval returns nothing at all, and above 100 the retrieval block crowds out the conversation and dilutes per-source attention long before it helps."
+                        "TopK = %d is outside [1, 100] (RagOptions.withTopK / withRetrievalDefaults). TopK is the number of matches spliced into every system prompt: below 1 retrieval returns nothing at all, and above 100 the retrieval block crowds out the conversation and dilutes per-source attention long before it helps."
                         bounds.TopK
                 )
             elif bounds.TopK > 50 then
                 warnings.Add(
                     sprintf
-                        "TopK = %d is legal but unusually high (RAGServerApp.withTopK). Typical deployments sit in 3-10; beyond ~50 the retrieval block dominates the prompt budget and per-source attention degrades. Confirm this was intended."
+                        "TopK = %d is legal but unusually high (RagOptions.withTopK). Typical deployments sit in 3-10; beyond ~50 the retrieval block dominates the prompt budget and per-source attention degrades. Confirm this was intended."
                         bounds.TopK
                 )
 
@@ -632,7 +632,7 @@ type RAGConfigBoundsValidator(bounds: RagConfigBounds, ?timeout: TimeSpan) =
             | Some score when score < 0.0 || score > 1.0 ->
                 errors.Add(
                     sprintf
-                        "MinScore = %g is outside [0.0, 1.0] (RAGServerApp.withMinScore). It gates the pipeline's score space (cosine similarity, or the fused score normalised onto [0, 1]; see RetrievalScoreSpace), which is bounded by that range: a negative threshold is a no-op gate and a threshold above 1.0 filters out EVERY match, so the assistant goes silent with no diagnostic."
+                        "MinScore = %g is outside [0.0, 1.0] (RagOptions.withMinScore). It gates the pipeline's score space (cosine similarity, or the fused score normalised onto [0, 1]; see RetrievalScoreSpace), which is bounded by that range: a negative threshold is a no-op gate and a threshold above 1.0 filters out EVERY match, so the assistant goes silent with no diagnostic."
                         score
                 )
             | _ -> ()
@@ -640,28 +640,28 @@ type RAGConfigBoundsValidator(bounds: RagConfigBounds, ?timeout: TimeSpan) =
             if bounds.MmrEnabled && (bounds.MmrLambda < 0.0 || bounds.MmrLambda > 1.0) then
                 errors.Add(
                     sprintf
-                        "MmrLambda = %g is outside [0.0, 1.0] (RAGServerApp.withMmrLambda). Lambda interpolates relevance against diversity in the MMR re-rank; outside the unit interval the objective is no longer a convex combination and the ordering it produces is meaningless."
+                        "MmrLambda = %g is outside [0.0, 1.0] (RagOptions.withMmrLambda). Lambda interpolates relevance against diversity in the MMR re-rank; outside the unit interval the objective is no longer a convex combination and the ordering it produces is meaningless."
                         bounds.MmrLambda
                 )
 
             if bounds.SnippetCharLimit < 32 || bounds.SnippetCharLimit > 8192 then
                 errors.Add(
                     sprintf
-                        "SnippetCharLimit = %d is outside [32, 8192] (RAGServerApp.withSnippetCharLimit). Below 32 characters a Sources-panel preview is truncated past the point of being identifiable; above 8192 the preview stops being a preview and ships whole documents to every client rendering the panel."
+                        "SnippetCharLimit = %d is outside [32, 8192] (RagOptions.withSnippetCharLimit). Below 32 characters a Sources-panel preview is truncated past the point of being identifiable; above 8192 the preview stops being a preview and ships whole documents to every client rendering the panel."
                         bounds.SnippetCharLimit
                 )
 
             if bounds.IngestionConcurrency < 1 || bounds.IngestionConcurrency > 64 then
                 errors.Add(
                     sprintf
-                        "IngestionConcurrency = %d is outside [1, 64] (RAGServerApp.withIngestionConcurrency). Each slot is one in-flight batched embedding call, so this is the effective upstream request concurrency: 0 halts ingestion entirely, and above 64 every hosted embedding provider rate-limits you into the retry path instead of going faster."
+                        "IngestionConcurrency = %d is outside [1, 64] (RagOptions.withIngestionConcurrency). Each slot is one in-flight batched embedding call, so this is the effective upstream request concurrency: 0 halts ingestion entirely, and above 64 every hosted embedding provider rate-limits you into the retry path instead of going faster."
                         bounds.IngestionConcurrency
                 )
 
             if bounds.IngestionQueueCapacity < 100 || bounds.IngestionQueueCapacity > 1_000_000 then
                 errors.Add(
                     sprintf
-                        "IngestionQueueCapacity = %d is outside [100, 1000000] (RAGServerApp.withIngestionQueueCapacity). The queue is the buffer between upload and indexing: below 100 a single bulk upload saturates it and documents are dropped (saved but permanently unsearchable), and above 1000000 the pending backlog is a memory-exhaustion surface rather than a buffer."
+                        "IngestionQueueCapacity = %d is outside [100, 1000000] (RagOptions.withIngestionQueueCapacity). The queue is the buffer between upload and indexing: below 100 a single bulk upload saturates it and documents are dropped (saved but permanently unsearchable), and above 1000000 the pending backlog is a memory-exhaustion surface rather than a buffer."
                         bounds.IngestionQueueCapacity
                 )
 
@@ -775,13 +775,13 @@ type InProcessIndexReplicaValidator
                 match inProcessVectorStore with
                 | Some name ->
                     sprintf
-                        "the vector store is the in-process %s (compose ToolUp.VectorStores.Pgvector via RAGServerApp.withVectorStore to share one index across replicas)"
+                        "the vector store is the in-process %s (compose ToolUp.VectorStores.Pgvector via RagOptions.withVectorStore to share one index across replicas)"
                         name
                 | None -> ()
                 match inProcessSparseIndex with
                 | Some name ->
                     sprintf
-                        "the keyword index is the in-process %s (compose ToolUp.SparseIndices.Postgres via RAGServerApp.withSparseIndex or withAnalyzedSparseIndex to share one index across replicas)"
+                        "the keyword index is the in-process %s (compose ToolUp.SparseIndices.Postgres via RagOptions.withSparseIndex or withAnalyzedSparseIndex to share one index across replicas)"
                         name
                 | None -> ()
             ]

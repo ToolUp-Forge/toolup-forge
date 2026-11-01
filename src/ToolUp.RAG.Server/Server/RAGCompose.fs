@@ -486,7 +486,7 @@ let internal makeVectorisationHook
 
                     logger.Error(
                         sprintf
-                            "[RAGCompose] DROPPED vectorisation for %s — %s. The file is saved but is not indexed; raise the limit via RAGServerApp.withMaxChunkBytes / withMaxDocumentBytes, or split the document upstream."
+                            "[RAGCompose] DROPPED vectorisation for %s — %s. The file is saved but is not indexed; raise the limit via RagOptions.withMaxChunkBytes / withMaxDocumentBytes, or split the document upstream."
                             entry.FileName
                             reason,
                         None
@@ -595,7 +595,7 @@ let internal makeVectorisationHook
                             let reason = "ingestion queue full after bounded retry"
 
                             logger.Error(
-                                $"[RAGCompose] Ingestion queue full ({queue.Count}/{queue.Capacity}) after {attempts} attempts — DROPPED vectorisation for {entry.FileName}. The file is saved but is permanently unsearchable until re-uploaded. Raise IngestionQueueCapacity (RAGServerApp.withIngestionQueueCapacity) or IngestionConcurrency if drops recur.",
+                                $"[RAGCompose] Ingestion queue full ({queue.Count}/{queue.Capacity}) after {attempts} attempts — DROPPED vectorisation for {entry.FileName}. The file is saved but is permanently unsearchable until re-uploaded. Raise IngestionQueueCapacity (RagOptions.withIngestionQueueCapacity) or IngestionConcurrency if drops recur.",
                                 None
                             )
 
@@ -679,30 +679,25 @@ let private makeNullBlobStorage () : IBlobStorage =
     }
 
 
-// ─── RAGServerApp — record-based wrapper around `AIServerApp` + RAG ──
+// ─── The RAG companion: `RagOptions` + `withRAG` ─────────────────────
 //
-// `RAGServerApp` is the top layer of the record-based compose stack. It
-// wraps an `AIServerApp` (which itself wraps `ServerApp`) and adds a
-// single RAG-specific extension point: the embedding provider. The
-// vectorisation handlers flow through from each module's `ServerModule`
-// via the base `ServerApp`.
+// RAG is a companion composed onto a `ServerApp`, not a record that wraps
+// one. `RagOptions` holds what only the RAG tier knows (embedding
+// provider, retrieval knobs, ingestion settings, …) and the options of the
+// AI tier RAG composes over (`AI: AIOptions`). `withRAG options` registers
+// the tier with `ServerApp.withCompanion`, so it is applied once, when the
+// deployment resolves, to the deployment as every builder left it. The
+// vectorisation handlers flow from each module's `ServerModule` via that
+// deployment.
 //
 // Composition root pattern:
 //
-//     RAGServerApp.empty
-//     |> RAGServerApp.withAI (
-//         AIServerApp.empty
-//         |> AIServerApp.withBase (
-//             ServerApp.empty
-//             |> ServerApp.withConfig config
-//             |> ServerApp.withAuth (Some auth)
-//             |> ServerApp.withStorage blobStorage
-//             |> ServerApp.addModules [ ... ])
-//         |> AIServerApp.withAIFactory factory
-//         |> AIServerApp.withProviderProfile providerProfile
-//         |> AIServerApp.withAITools allTools)
-//     |> RAGServerApp.withEmbeddingProvider embedder
-//     |> RAGServerApp.run
+//     ServerApp.empty
+//     |> ServerApp.withConfig config
+//     |> ServerApp.withStorage blobStorage
+//     |> ServerApp.addModules modules
+//     |> RAGCompose.withRAG (RagOptions.create factory providerProfile embedder |> RagOptions.withTopK 8)
+//     |> ServerApp.run
 
 /// Phase 893 — which keyword (sparse) index a composition runs hybrid
 /// retrieval over. The default, `InProcessSparseIndex`, constructs exactly
@@ -726,22 +721,19 @@ type SparseIndexComposition =
     /// over one list is that list, so the pipeline takes its dense-only path.
     | NoSparseIndex
 
-/// Record form of `composeWithRAG` arguments, wrapping an `AIServerApp`
-/// (which wraps a `ServerApp`). It is NOT a flat superset of either, and
-/// says so because a reader would assume it (Phase 1051, measured then):
-/// 43 of the 68 `ServerApp.with*` / `add*` builders and 10 of the 12
-/// AI-only builders have no delegating counterpart here. Reach the inner
-/// layers through `RAGServerApp.mapAI` (and, inside it, the AI layer's
-/// `Base` field) — the wrappers are retired by the composition-as-
-/// contributions model rather than completed. The
-/// required RAG dependency (`EmbeddingProvider`) plus the required AI
-/// dependencies (`AIProviderFactory`, `ProviderProfile`) are
-/// constructor parameters on `RAGServerApp.create`. Vectorisation
-/// handlers come
-/// from each module's `ServerModule.VectorisationHandlers` via the
-/// base `ServerApp`.
-type RAGServerApp = {
-    AI: AIServerApp
+/// What the RAG companion composes: the required RAG input
+/// (`EmbeddingProvider`), the options of the AI tier it composes over
+/// (`AI`, whose required inputs are the other two parameters of
+/// `RagOptions.create`), and the RAG tier's own settings. Vectorisation
+/// handlers come from each module's `ServerModule.VectorisationHandlers`
+/// via the deployment.
+type RagOptions = {
+    /// The AI tier RAG composes over. RAG folds its retrieval layers into
+    /// the assistant config and composes the tier itself, so a deployment
+    /// composing RAG does not also compose `AICompose.withAI`. Set with
+    /// `RagOptions.withAIOptions` (or `withAIConfig` /
+    /// `withModuleAIContexts`).
+    AI: AIOptions
     EmbeddingProvider: IEmbeddingProvider
     /// Observers fired by `IngestionBackgroundService` after each chunk
     /// completes (success or failure). Modules that need to surface live
@@ -812,7 +804,7 @@ type RAGServerApp = {
     /// a permanent failure (401/403 bad credentials, other 4xx) is
     /// dead-lettered immediately with an Owner/Admin alert. Defaults to
     /// `IngestionRetryPolicy.defaults` (5 attempts, 30s→30min backoff,
-    /// +20% jitter). Tune via `RAGServerApp.withIngestionRetryPolicy`.
+    /// +20% jitter). Tune via `RagOptions.withIngestionRetryPolicy`.
     IngestionRetryPolicy: IngestionRetryPolicy
     /// Optional substitute `IRagTelemetry`. When `None`, RAG installs a
     /// 60-second rolling-window in-memory implementation backing the
@@ -879,13 +871,13 @@ type RAGServerApp = {
     /// historical no-limit behaviour for backwards compatibility; setting
     /// `Some n` rejects oversize chunks at the post-save hook and emits
     /// `RAG.DocumentRejected` so KB can surface the rejection. Tune via
-    /// `RAGServerApp.withMaxChunkBytes`.
+    /// `RagOptions.withMaxChunkBytes`.
     MaxChunkBytes: int option
     /// Optional hard cap on the sum of UTF-8 byte sizes across every chunk
     /// in a single `DocumentIngestionJob`. Same rationale as `MaxChunkBytes`
     /// but bounds the per-document footprint rather than per-chunk. `None`
     /// (default) preserves no-limit behaviour. Tune via
-    /// `RAGServerApp.withMaxDocumentBytes`.
+    /// `RagOptions.withMaxDocumentBytes`.
     MaxDocumentBytes: int option
     /// Phase 14y — hard cap on the character length of a retrieval query
     /// reaching `IRetrievalPipeline.Retrieve`. Above the cap the pipeline
@@ -894,7 +886,7 @@ type RAGServerApp = {
     /// programming bug (an entire document pasted into the query slot), and
     /// embedding it wastes provider spend / can trip the provider's own token
     /// cap with an opaque error. Defaults to `Some 16384` (~4k tokens); tune
-    /// via `RAGServerApp.withMaxQueryChars`. `None` disables the guard (not
+    /// via `RagOptions.withMaxQueryChars`. `None` disables the guard (not
     /// reachable through the public builder — the default is always on).
     MaxQueryChars: int option
     /// Phase 14w — tombstone retention window. `IVectorStore.DeleteChunk`
@@ -902,7 +894,7 @@ type RAGServerApp = {
     /// hard-removes tombstones older than `now - TombstoneRetention`.
     /// Default 7 days — long enough for an accidental delete to be
     /// restored, short enough that soft-deleted content doesn't pin
-    /// memory indefinitely. Tune via `RAGServerApp.withTombstoneRetention`.
+    /// memory indefinitely. Tune via `RagOptions.withTombstoneRetention`.
     TombstoneRetention: System.TimeSpan
     /// Phase 14w — cron expression for the tombstone auto-vacuum sweep.
     /// `None` (default) = no scheduled vacuum: soft-deleted chunks are only
@@ -922,7 +914,7 @@ type RAGServerApp = {
     /// indexing under load, never loses a document). `Refuse` drops like
     /// `DropWrite` but additionally raises `ConfigPreflightFailedException`
     /// on sustained saturation for compliance-grade fail-loud. Tune via
-    /// `RAGServerApp.withIngestionQueueOverflowPolicy`.
+    /// `RagOptions.withIngestionQueueOverflowPolicy`.
     OverflowPolicy: IngestionOverflowPolicy
     /// Phase 63.A — substitute the entire `IRetrievalPipeline`. `None`
     /// (default) builds the standard dense/hybrid `RetrievalPipeline` over
@@ -935,7 +927,7 @@ type RAGServerApp = {
     /// producers ⇒ no consumers needed) so a static-doc deployment carries
     /// no live-ingestion overhead (GP 13). Query embedding still resolves the
     /// registered `IEmbeddingProvider`; only chunk embeddings move to build
-    /// time. Set via `RAGServerApp.withRetrievalPipeline`.
+    /// time. Set via `RagOptions.withRetrievalPipeline`.
     RetrievalPipelineOverride: IRetrievalPipeline option
     /// Phase 509 — durable backing for the ingestion queue. `None`
     /// (default) keeps the process-local `System.Threading.Channels`
@@ -945,7 +937,7 @@ type RAGServerApp = {
     /// a restart (an unacknowledged lease is redelivered) and N replicas
     /// drain one queue — which lifts the multi-replica refusal. The
     /// shipped durable backing is the `ToolUp.IngestionQueues.Redis`
-    /// companion. Set via `RAGServerApp.withDurableIngestionQueue`.
+    /// companion. Set via `RagOptions.withDurableIngestionQueue`.
     IngestionQueueStore: IIngestionQueueStore option
     /// Phase 509 — storage containers swept at startup for documents
     /// left `Pending` by a process that died mid-ingestion. Empty
@@ -954,7 +946,7 @@ type RAGServerApp = {
     /// restart genuinely loses the job and the per-file status would
     /// otherwise read `Pending` forever with nothing ever to clear it;
     /// on a durable queue the job is redelivered instead, so the sweep is
-    /// belt-and-braces. Set via `RAGServerApp.withIngestionRecoverySweep`.
+    /// belt-and-braces. Set via `RagOptions.withIngestionRecoverySweep`.
     ///
     /// Phase 723 — no longer the ONLY way to name the containers. A
     /// deployment that composes `withScopeEnumerator` has them
@@ -966,7 +958,7 @@ type RAGServerApp = {
     /// storage scopes does this deployment hold?" for the restart
     /// recovery sweep. `None` (default) ⇒ scopes come only from
     /// `IngestionRecoveryScopes`, exactly as before (GP 11 / GP 13). Set
-    /// via `RAGServerApp.withScopeEnumerator`; the SDK default is
+    /// via `RagOptions.withScopeEnumerator`; the SDK default is
     /// `ScopeEnumeration.fromTeamStore`.
     ScopeEnumerator: IScopeEnumerator option
     /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
@@ -981,7 +973,7 @@ type RAGServerApp = {
     /// `ReplicaCount > 1`. Composing a cross-replica cache (the shipped
     /// backing is the `ToolUp.EmbeddingCaches.Redis` companion) removes the
     /// divergence **and lifts that warning**, because the premise it rests
-    /// on no longer holds. Set via `RAGServerApp.withEmbeddingCache`.
+    /// on no longer holds. Set via `RagOptions.withEmbeddingCache`.
     EmbeddingCache: IEmbeddingCache option
     /// Phase 894 — the per-turn retrieval budgets: the query-time embed
     /// policy (attempts, wall-clock budget, concurrency ceiling) and the
@@ -1007,12 +999,10 @@ type RAGServerApp = {
     /// the same on every replica), `withAnalyzedSparseIndex` (an index built
     /// for the composed analyzer), or `withoutSparseIndex` (dense only).
     SparseIndex: SparseIndexComposition
-    /// Phase 986 — the fact tier, applied to the AI layer's base
-    /// `ServerApp` when the app is COMPOSED rather than when it is set, so
-    /// it sees the final `ServerConfig` whichever side of `withConfig` the
-    /// call sits. `None` (the default) composes no fact tier here — a
-    /// deployment that wires one by hand through `mapAI` is unchanged. Set
-    /// via `withFacts`.
+    /// The fact tier, applied to the deployment when the RAG tier is
+    /// COMPOSED rather than when it is set, so it sees the final
+    /// `ServerConfig` whichever side of `withConfig` the call sits. `None`
+    /// (the default) composes no fact tier here. Set via `withFacts`.
     FactTier: (ServerApp -> ServerApp) option
 }
 
@@ -1031,8 +1021,8 @@ type RAGServerApp = {
 /// its type, so a decorator that forwards the declaration keeps the
 /// warning. An undeclared cache reads as cross-replica, as an unrecognised
 /// cache did before (GP 11).
-let hasCrossReplicaEmbeddingCache (app: RAGServerApp) : bool =
-    match app.EmbeddingCache with
+let hasCrossReplicaEmbeddingCache (options: RagOptions) : bool =
+    match options.EmbeddingCache with
     | Some composed -> EmbeddingCacheLocality.isCrossReplica (box composed)
     | None -> false
 
@@ -1052,8 +1042,8 @@ let hasCrossReplicaEmbeddingCache (app: RAGServerApp) : bool =
 /// else: scope-keying is meaningless for a pure function of (model,
 /// text), which is exactly why the capability is a probe rather than a
 /// member on `IEmbeddingProvider`.
-let hasScopeKeyedEmbeddingProvider (app: RAGServerApp) : bool =
-    ScopedEmbedding.isScopeKeyed app.EmbeddingProvider
+let hasScopeKeyedEmbeddingProvider (options: RagOptions) : bool =
+    ScopedEmbedding.isScopeKeyed options.EmbeddingProvider
 
 /// Phase 893 — is `store` an in-process vector store, whose index lives in
 /// one process's memory (and so differs between replicas)? Keyed on the
@@ -1081,18 +1071,18 @@ let isInProcessSparseIndex (index: ISparseIndex) : bool = SparseIndexLocality.is
 /// `MinScore` gate in, or `None` when a supplied pipeline owns retrieval
 /// (`withRetrievalPipeline`) and its space is not the SDK's to see. Every
 /// keyword-index composition but `withoutSparseIndex` fuses.
-let private composedScoreSpace (app: RAGServerApp) : RetrievalScoreSpace option =
-    match app.RetrievalPipelineOverride with
+let private composedScoreSpace (options: RagOptions) : RetrievalScoreSpace option =
+    match options.RetrievalPipelineOverride with
     | Some _ -> None
     | None ->
         let keywordIndex =
-            match app.SparseIndex with
+            match options.SparseIndex with
             | SparseIndexComposition.NoSparseIndex -> false
             | SparseIndexComposition.InProcessSparseIndex
             | SparseIndexComposition.SuppliedSparseIndex _
             | SparseIndexComposition.AnalyzedSparseIndex _ -> true
 
-        Some(RetrievalScoreSpace.ofComposition keywordIndex app.Reranker.IsSome)
+        Some(RetrievalScoreSpace.ofComposition keywordIndex options.Reranker.IsSome)
 
 /// Phase 866 — warns at startup when a configured `MinScore` cannot be met,
 /// or cannot be confirmed reachable, in the composed pipeline's score space
@@ -1180,61 +1170,40 @@ type internal RetrievalStoreFlushService(owned: (string * System.IDisposable) li
 
 // ─── composeRAG ───────────────────────────────────────────────────
 //
-// Phase 1h seam (RAG half). `composeRAG : RAGServerApp -> ServerApp`
-// composes *over* `composeAI`: it builds the RAG-aware system-prompt
-// layers (framing preamble + retrieval builder + strict-grounding
-// guard), folds them into the AI assistant config, runs `composeAI` to
-// lift every AI contribution (agent-loop handlers, tool registry, AI
-// DI registrations, dev endpoints, tool-name + platform-provider
-// validation) onto the inner `ServerApp`, then layers the RAG-specific
-// contributions (vector store / sparse index / pipeline / ingestion +
-// reembedding hosted services, citation normaliser, the `/health/rag`
-// + `/dev/rag-citation` routes, the RAG config validators) on top.
-//
-// This replaces the former positional `composeWithRAG`, which inlined a
-// verbatim copy of every AI DI registration and drifted from
-// `AICompose.fs` whenever AI added infrastructure (Phase 6g.A / 6h both
-// shipped AI-only and silently broke RAG deployments). Composing over
-// `composeAI` makes that drift structurally impossible — RAG inherits
-// every AI registration for free, including ones the hand-copy had
-// fallen behind on (e.g. the Phase 171 `IActiveAiProbe`).
-//
-// `AIServerApp.run` is `composeAI >> ServerApp.run`; `RAGServerApp.run`
-// is now likewise `composeRAG >> ServerApp.run`, and the additive
-// `withRAG` extension calls `composeRAG` from inside a `ServerApp`-
-// shaped pipeline so RAG contributions stack with Forms / AI / future
-// companions on one composition root.
+// `composeRAG options` is the RAG companion's `apply`. It composes *over*
+// `composeAI`: it builds the RAG-aware system-prompt layers (framing
+// preamble + retrieval builder + strict-grounding guard), folds them into
+// the AI assistant config, runs `composeAI` to lift every AI contribution
+// (agent-loop handlers, tool registry, AI DI registrations, dev
+// endpoints, tool-name + platform-provider validation) onto the
+// deployment, then layers the RAG-specific contributions (vector store /
+// sparse index / pipeline / ingestion + reembedding hosted services,
+// citation normaliser, the `/health/rag` + `/dev/rag-citation` routes,
+// the RAG config validators) on top. Composing over `composeAI` keeps
+// every AI registration in one place: RAG inherits each one rather than
+// copying it.
 
-/// Apply every RAG-specific contribution onto the inner `ServerApp`
-/// (composing over `composeAI` for the AI half), returning the composed
-/// result without driving it. `RAGServerApp.run` calls this then
-/// `ServerApp.run`; the additive `withRAG` extension calls it from
-/// inside a `ServerApp`-shaped pipeline so RAG stacks with Forms / AI
-/// contributions onto one composition root (Phase 1h goal).
+/// The RAG companion's identity: the slot `withRAG` composes under, and the
+/// owner of its DI registrations.
+let private ragOwner: ComponentId = ComponentId.forCompanionSlot "ToolUp.RAG"
+
+/// Apply every RAG-specific contribution onto `app` (composing over
+/// `composeAI` for the AI half), returning the composed result without
+/// driving it.
 ///
-/// **Advanced.** Consumers should use `RAGServerApp.run` unless they are
-/// stacking multiple companion supersets — in which case use the
-/// `withRAG` additive extension. Hidden from IntelliSense via
-/// `[<EditorBrowsable>]`.
+/// **Advanced.** Consumers compose RAG with `withRAG`. Hidden from
+/// IntelliSense via `[<EditorBrowsable>]`.
 [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
-let composeRAG (app: RAGServerApp) : ServerApp =
-    // Phase 986 — the fact tier goes onto the base FIRST, against the
-    // config the app was finally given, so every probe below (the fact
-    // resolver, the disclosure gate, the clause planner) sees it.
-    let app =
-        match app.FactTier with
+let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
+    // The fact tier goes onto the deployment FIRST, against the config it
+    // was finally given, so every probe below (the fact resolver, the
+    // disclosure gate, the clause planner) sees it.
+    let b =
+        match options.FactTier with
         | None -> app
-        | Some factTier -> {
-            app with
-                AI = {
-                    app.AI with
-                        Base = factTier app.AI.Base
-                }
-          }
+        | Some factTier -> factTier app
 
-    let ai = app.AI
-    let b = ai.Base
-    let config = b.Config
+    let config = ServerApp.effectiveConfig b
 
     // Phase 14r — derive the tool-aware framing summary once, from the
     // deployment's aggregated module tool list (tools land here via
@@ -1249,7 +1218,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // Phase 541 — the same derivation, surfaced: which live-interface tools
     // are loaded and whether the framing above is consequently active.
     let liveInterface =
-        liveInterfaceSummary (b.AITools |> List.map fst) app.GroundingMode
+        liveInterfaceSummary (b.AITools |> List.map fst) options.GroundingMode
 
     // Phase 63.A — retrieval-pipeline override seam. When a consumer supplies
     // a pipeline via `withRetrievalPipeline` (e.g. a build-time-precomputed
@@ -1261,16 +1230,16 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // live-ingestion overhead (GP 13). Query embedding still resolves the
     // registered `IEmbeddingProvider`; only chunk embeddings move to build time.
     let suppressIngestion =
-        app.RetrievalPipelineOverride.IsSome && b.VectorisationHandlers.IsEmpty
+        options.RetrievalPipelineOverride.IsSome && b.VectorisationHandlers.IsEmpty
 
     // Phase 509 — one queue type, two backings. No store composed ⇒ the
     // historical process-local channel, byte for byte (GP 11 / GP 13);
     // `Some store` ⇒ the same surface over durable storage, with
     // lease-based at-least-once delivery and cross-replica draining.
     let queue =
-        match app.IngestionQueueStore with
-        | Some store -> IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy, store)
-        | None -> IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy)
+        match options.IngestionQueueStore with
+        | Some store -> IngestionQueue(options.IngestionQueueCapacity, options.OverflowPolicy, store)
+        | None -> IngestionQueue(options.IngestionQueueCapacity, options.OverflowPolicy)
 
     // Phase 893 — a supplied or analyzer-built keyword index is resolved
     // HERE, at composition, rather than inside the service registration: an
@@ -1279,11 +1248,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // actually composed. The in-process default is still constructed with
     // the RAG storage, below, exactly as before.
     let composedSparseIndex: ISparseIndex option =
-        match app.SparseIndex, app.SparseAnalyzer with
+        match options.SparseIndex, options.SparseAnalyzer with
         | SparseIndexComposition.SuppliedSparseIndex _, Some analyzer ->
             invalidOp (
                 sprintf
-                    "[RAGCompose] withSparseIndex and withSparseAnalyzer are both composed, but a supplied ISparseIndex tokenises however it was built to — the analyzer '%s' would be silently ignored. Compose the index with RAGServerApp.withAnalyzedSparseIndex so it is built for the analyzer (or refuses it), or drop withSparseAnalyzer."
+                    "[RAGCompose] withSparseIndex and withSparseAnalyzer are both composed, but a supplied ISparseIndex tokenises however it was built to — the analyzer '%s' would be silently ignored. Compose the index with RagOptions.withAnalyzedSparseIndex so it is built for the analyzer (or refuses it), or drop withSparseAnalyzer."
                     analyzer.Id
             )
         | SparseIndexComposition.SuppliedSparseIndex index, None -> Some index
@@ -1296,7 +1265,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel
     // export pass their own `IRagTelemetry` via `withTelemetry`.
     let telemetry =
-        app.Telemetry
+        options.Telemetry
         |> Option.defaultWith (fun () -> ToolUp.RAG.RagTelemetry.createDefault ())
 
     // Resolve a logger once — used for the null-blob warning, IngestionService,
@@ -1340,12 +1309,12 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 b.VectorisationHandlers
                 queue
                 telemetry
-                app.EnableDocumentSummaries
-                app.MaxChunkBytes
-                app.MaxDocumentBytes
+                options.EnableDocumentSummaries
+                options.MaxChunkBytes
+                options.MaxDocumentBytes
                 eventStoreRef
                 ingestionStatusStoreRef
-                app.OverflowPolicy
+                options.OverflowPolicy
                 auditLogRef
                 notificationChannelRef
                 ragLogger
@@ -1371,12 +1340,12 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             | Some pipeline ->
                 let! block =
                     (withRetrievalPlanned
-                        app.RetrievalDefaults
+                        options.RetrievalDefaults
                         (Some telemetry)
                         tracerRef.Value
                         toolFraming
                         clausePlannerRef.Value
-                        app.FactClausePlan
+                        options.FactClausePlan
                         pipeline)
                         ctx
 
@@ -1386,7 +1355,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // than relying solely on the prompt directive (which a model
                 // can ignore or be jailbroken past). Pairs with
                 // `strictlyGroundedDirective`.
-                if app.GroundingMode = StrictlyGrounded && List.isEmpty ctx.RetrievedSources.Value then
+                if
+                    options.GroundingMode = StrictlyGrounded
+                    && List.isEmpty ctx.RetrievedSources.Value
+                then
                     ctx.ShortCircuit.Value <- Some "I don't have information on that in your knowledge base."
 
                 return block
@@ -1400,7 +1372,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // `Preferred` when the deployment has such tools, so live-screen questions
     // defer to the inspection tool rather than a KB-miss refusal.
     let resolvedFraming =
-        resolveFramingWithTools app.GroundingMode app.RetrievalFraming toolFraming
+        resolveFramingWithTools options.GroundingMode options.RetrievalFraming toolFraming
 
     let framingBuilder: SystemPromptBuilder option =
         if System.String.IsNullOrWhiteSpace resolvedFraming then
@@ -1414,7 +1386,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     let resolvedAiConfig =
         let ragLayers = [ yield! framingBuilder |> Option.toList; yield ragBuilder ]
 
-        match ai.AIConfig with
+        match options.AI.AIConfig with
         | None ->
             Some {
                 Branding = {
@@ -1443,7 +1415,13 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // registrations, the agent-loop handlers, the tool registry, the AI dev
     // endpoints, and the tool-name + platform-provider validation — RAG no
     // longer duplicates any of them.
-    let aiComposed: ServerApp = composeAI { ai with AIConfig = resolvedAiConfig }
+    let aiComposed: ServerApp =
+        composeAI
+            {
+                options.AI with
+                    AIConfig = resolvedAiConfig
+            }
+            b
 
     // Phase 6q follow-up C — /dev/rag-citation rolling-window stats. Master
     // gate is `ServerConfig.EnableDevEndpoints`; the per-endpoint
@@ -1478,10 +1456,10 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         ToolUp.RAG.CitationNormaliserImpl.RollingCitationCounters() :> _
 
     let citationNormaliserOpt: ICitationNormaliser option =
-        if app.CitationPolicy = CitationNormaliser.Off then
+        if options.CitationPolicy = CitationNormaliser.Off then
             None
         else
-            Some(ToolUp.RAG.CitationNormaliserImpl.create app.CitationPolicy citationCounters)
+            Some(ToolUp.RAG.CitationNormaliserImpl.create options.CitationPolicy citationCounters)
 
     // RAG-owned routes layered on top of the AI handlers `composeAI` mounted.
     let ragHandlers = [
@@ -1506,7 +1484,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             | Some bs -> bs
             | None ->
                 ragLogger.Warn
-                    "[RAGCompose] No IBlobStorage supplied — vector index persistence is disabled. Ingested chunks will be lost across process restart. Pass `Some storage` (RAGServerApp.withStorage) for a durable deployment."
+                    "[RAGCompose] No IBlobStorage supplied — vector index persistence is disabled. Ingested chunks will be lost across process restart. Pass `Some storage` (RagOptions.withStorage) for a durable deployment."
 
                 makeNullBlobStorage ()
 
@@ -1515,9 +1493,9 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // built; a supplied or analyzer-built index was resolved at
         // composition (`composedSparseIndex`, above); `None` is dense-only.
         let sparseIndex: ISparseIndex option =
-            match app.SparseIndex with
+            match options.SparseIndex with
             | SparseIndexComposition.InProcessSparseIndex ->
-                match app.SparseAnalyzer with
+                match options.SparseAnalyzer with
                 | None -> Some(new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex)
                 | Some analyzer ->
                     Some(
@@ -1538,17 +1516,17 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // this site hard-constructed before, so an existing deployment is
         // byte-for-byte unchanged (GP 11).
         let embeddingCache: IEmbeddingCache =
-            match app.EmbeddingCache with
+            match options.EmbeddingCache with
             | Some composed -> composed
             | None -> new InMemoryEmbeddingCache() :> IEmbeddingCache
 
         let cachedEmbedder: IEmbeddingProvider =
-            CachingEmbeddingProvider.create app.EmbeddingProvider embeddingCache
+            CachingEmbeddingProvider.create options.EmbeddingProvider embeddingCache
 
         let pipelineOptions: RetrievalPipelineOptions = {
-            Reranker = app.Reranker
-            EnableMmr = app.EnableMmr
-            MmrLambda = app.MmrLambda
+            Reranker = options.Reranker
+            EnableMmr = options.EnableMmr
+            MmrLambda = options.MmrLambda
             ActiveModuleBoost = RetrievalPipelineOptions.defaults.ActiveModuleBoost
             SummaryBoost = RetrievalPipelineOptions.defaults.SummaryBoost
             FactNarrativeJoinBoost = RetrievalPipelineOptions.defaults.FactNarrativeJoinBoost
@@ -1621,7 +1599,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         auditLogRef.Value <- ragAuditLog
 
         let vectorStore: IVectorStore =
-            app.VectorStore
+            options.VectorStore
             |> Option.defaultWith (fun () ->
                 new InMemoryVectorStore(
                     blobStorageForRag,
@@ -1643,11 +1621,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // pipeline enqueues, a background loop writes, a full queue drops
         // and counts. `0` keeps the inline pre-894 write.
         let backgroundTracer =
-            if app.RetrievalTraceQueueCapacity > 0 then
+            if options.RetrievalTraceQueueCapacity > 0 then
                 Some(
                     ToolUp.RAG.RetrievalTracers.createBackground
                         composedTracer
-                        app.RetrievalTraceQueueCapacity
+                        options.RetrievalTraceQueueCapacity
                         ragLogger
                 )
             else
@@ -1665,7 +1643,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             // `IRetrievalPipeline.Retrieve` and embeds it via the registered
             // `IEmbeddingProvider`; it just doesn't consume the vector store /
             // sparse index / reranker this branch would build.
-            match app.RetrievalPipelineOverride with
+            match options.RetrievalPipelineOverride with
             | Some overridePipeline -> overridePipeline
             | None ->
                 // Phase 4b commit 5 + runtime-toggle follow-up — wire a snapshot
@@ -1708,7 +1686,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // `ProviderQueryRewriter.create`) before `withRAG` runs, and
                 // the pipeline picks it up. No registration ⇒ the argument is
                 // omitted and retrieval is byte-identical (GP 11 / GP 13),
-                // which is why this is a probe rather than a `RAGServerApp`
+                // which is why this is a probe rather than a `RagOptions`
                 // field: the opt-in already has a home, and the compose
                 // surface does not grow a knob for it.
                 let queryRewriterOpt =
@@ -1727,7 +1705,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     // so per-stage P50/P95 surface in the snapshot.
                     telemetry = telemetry,
                     // Phase 14y — query-size cap + audit sink for the hard refusal.
-                    ?maxQueryChars = app.MaxQueryChars,
+                    ?maxQueryChars = options.MaxQueryChars,
                     eventStore = eventStore,
                     // Phase 558 — the fact stage + its retrieval egress door,
                     // present exactly when the fact tier is composed.
@@ -1737,7 +1715,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     // an IQueryRewriter; absent otherwise.
                     ?queryRewriter = queryRewriterOpt,
                     // Phase 894 — the per-turn budgets (query embed, facts).
-                    budgets = app.RetrievalBudgets
+                    budgets = options.RetrievalBudgets
                 )
                 :> IRetrievalPipeline
 
@@ -1750,7 +1728,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // Phase 708 — fill the feeder from the same probe. Present exactly
         // when the fact tier is composed (`FactsCompose.withFactStore`
         // registers it beside the resolver and the gate), so this needs no
-        // knob of its own to arm — `app.FactClausePlan` only decides
+        // knob of its own to arm — `options.FactClausePlan` only decides
         // whether an armed feeder is consulted.
         clausePlannerRef.Value <-
             match probe.GetService(typeof<IFactClausePlanner>) with
@@ -1775,7 +1753,8 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // whatever observers the app registered (e.g. KB's). Append-only —
         // KB's observer is untouched; each fires independently and scopes
         // itself by the documents it tracks.
-        let ingestionObservers = app.IngestionObservers @ [ dataManagerIngestionObserver ]
+        let ingestionObservers =
+            options.IngestionObservers @ [ dataManagerIngestionObserver ]
 
         // Phase 14t — retry / dead-letter substrate. One shared
         // `IngestionAlertState` spans the first-attempt path (the
@@ -1792,7 +1771,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             NotificationChannel = ingestionNotificationChannel
             Telemetry = telemetry
             Logger = ragLogger
-            Policy = app.IngestionRetryPolicy
+            Policy = options.IngestionRetryPolicy
             AlertState = ingestionAlertState
         }
 
@@ -1852,11 +1831,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // registered (GP 13).
         let s =
             let owned = [
-                match app.VectorStore, box vectorStore with
+                match options.VectorStore, box vectorStore with
                 | None, (:? System.IDisposable as store) -> "vector-store", store
                 | _ -> ()
 
-                match app.SparseIndex, sparseIndex |> Option.map box with
+                match options.SparseIndex, sparseIndex |> Option.map box with
                 | SparseIndexComposition.InProcessSparseIndex, Some(:? System.IDisposable as index) ->
                     "sparse-index", index
                 | _ -> ()
@@ -1921,7 +1900,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // there: gating it off a WebOnly silo would strand every job
                 // that silo's HTTP tier enqueued.
                 let ingestionPlacement =
-                    match app.IngestionQueueStore with
+                    match options.IngestionQueueStore with
                     | Some _ -> SharedWork
                     | None -> ProcessLocal
 
@@ -1941,12 +1920,12 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                             cachedEmbedder
                             eventStore
                             ingestionObservers
-                            app.IngestionConcurrency
+                            options.IngestionConcurrency
                             ragLogger
                             telemetry
                             ingestionUsageLog
                             ingestionQuota
-                            app.IngestionRetryPolicy
+                            options.IngestionRetryPolicy
                             ingestionNotificationChannel
                             ingestionAlertState
                             getJobScheduler
@@ -1991,11 +1970,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // scope enumeration is a live read, so a team created since the
         // last start is swept on this one.
         let s =
-            if app.IngestionRecoveryScopes.IsEmpty && app.ScopeEnumerator.IsNone then
+            if options.IngestionRecoveryScopes.IsEmpty && options.ScopeEnumerator.IsNone then
                 s
             else
-                let explicitScopes = app.IngestionRecoveryScopes
-                let enumerator = app.ScopeEnumerator
+                let explicitScopes = options.IngestionRecoveryScopes
+                let enumerator = options.ScopeEnumerator
 
                 let ragSurface: IIngestionRecoverySurface =
                     IngestionRecoverySweep.ofIngestionStatusStore ingestionStatusStore
@@ -2011,7 +1990,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                             (fun () -> IngestionRecoverySweep.resolveScopes explicitScopes enumerator ragLogger)))
 
         let s =
-            match app.Reranker with
+            match options.Reranker with
             | Some r -> s.AddSingleton<IReranker>(r)
             | None -> s
 
@@ -2027,13 +2006,13 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // is idempotent (stable key + one-year TTL) so a restart re-attaches
         // to the existing job definition rather than duplicating it.
         let s =
-            match app.VacuumSchedule with
+            match options.VacuumSchedule with
             | None -> s
             | Some cron ->
                 let vacuumDeps: ToolUp.RAG.RAGVacuumJobHandler.RAGVacuumDeps = {
                     VectorStore = vectorStore
                     EventStore = eventStore
-                    Retention = app.TombstoneRetention
+                    Retention = options.TombstoneRetention
                     Logger = ragLogger
                 }
 
@@ -2079,7 +2058,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                                                 sprintf
                                                     "[RAGCompose] Tombstone auto-vacuum scheduled (cron '%s', retention %A)."
                                                     cron
-                                                    app.TombstoneRetention
+                                                    options.TombstoneRetention
                                             )
                                         | Error err ->
                                             ragLogger.Warn(
@@ -2123,7 +2102,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             .AddSingleton<IDevDiagnosticsContributor>(
                 ToolUp.RAG.RagConfigValidator.RagDurabilityContributor(
                     b.Storage.IsSome,
-                    app.VectorStore.IsSome,
+                    options.VectorStore.IsSome,
                     config.AcceptEphemeralRagIndex
                 )
                 :> IDevDiagnosticsContributor
@@ -2144,18 +2123,9 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 LiveInterfaceContributor(liveInterface) :> IDevDiagnosticsContributor
             )
 
-    // RAG config validators (mirrors the set the former `composeWithRAG` /
-    // `RAGServerApp.run` built). Constructed against the module-merged config
-    // so team-mode / replica / persistence checks see the deployment shape.
-    let finalConfig = {
-        b.Config with
-            ModuleNames =
-                if b.Config.ModuleNames.IsEmpty then
-                    b.ModuleNames
-                else
-                    b.Config.ModuleNames
-            ModuleConfigs = b.Config.ModuleConfigs @ b.ModuleConfigs
-    }
+    // RAG config validators, constructed against the effective config (the
+    // module names and config schemas merged in) so team-mode / replica /
+    // persistence checks see the deployment shape.
 
     let ragValidators: ConfigValidation.IConfigValidator list = [
         // Phase 4b commit 3 — IDF-leak warning when LocalEmbeddingProvider is
@@ -2166,51 +2136,48 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // the unscoped `create ()` / `createPersistent`, which leak exactly
         // as before.
         ToolUp.RAG.RagConfigValidator.TeamModeLocalEmbedderValidator(
-            finalConfig,
-            app.EmbeddingProvider,
-            hasScopeKeyedEmbeddingProvider app
+            config,
+            options.EmbeddingProvider,
+            hasScopeKeyedEmbeddingProvider options
         )
         // Refuse (persistent) / warn (ephemeral) when RAG has no durable backing.
-        ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(finalConfig, b.Storage.IsSome, app.VectorStore.IsSome)
+        ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(config, b.Storage.IsSome, options.VectorStore.IsSome)
         // Phase 9j follow-up — refuse the in-process ingestion queue under
         // ReplicaCount > 1 (no leasing/redelivery ⇒ silent corpus loss).
         // Phase 509 — the refusal is lifted when a DURABLE queue is
         // composed: the premise it rests on (process-local, no
         // redelivery) no longer holds.
-        ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator(finalConfig, queue.IsDurable)
+        ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator(config, queue.IsDurable)
         // Wave 2A Gap #1 — warn when default InMemoryEmbeddingCache is active
         // under multi-instance Team mode (cache key has no tenant component).
         // Phase 633 — the warning is lifted when a CROSS-REPLICA cache is
         // composed: the premise it rests on (each replica keeps its own
         // entries) no longer holds.
         ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator(
-            finalConfig,
-            hasCrossReplicaEmbeddingCache app
+            config,
+            hasCrossReplicaEmbeddingCache options
         )
         // Wave 2A Gap #9 — surface the clamp log so silent clamping of
         // operator-supplied values is visible at startup.
-        ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator app.RetrievalDefaultsClampLog
+        ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator options.RetrievalDefaultsClampLog
         // 2026-06-12 audit (RAG Gap 8) — warn when the citation-dev-
         // endpoint override is configured as the retired force-on shape.
-        ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator finalConfig
+        ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator config
         // Phase 14w — surface the steady-state-memory contract: warn when a
         // vacuum schedule is set without a scheduler, or when a persistent
         // deployment has no vacuum schedule at all (tombstones accumulate).
-        ToolUp.RAG.RagConfigValidator.VacuumScheduleValidator(finalConfig, app.VacuumSchedule.IsSome)
+        ToolUp.RAG.RagConfigValidator.VacuumScheduleValidator(config, options.VacuumSchedule.IsSome)
         // Phase 14y — warn when an authenticated RAG deployment runs with no
         // rate limiter: retrieval embeds every query, so an unbounded request
         // loop burns embedding spend even behind a proxy (per-query cost, not
         // per-connection). Mode ≠ Anonymous AND RateLimit = RateLimitConfig.none.
-        ToolUp.RAG.RagConfigValidator.RAGRateLimitConfiguredValidator finalConfig
+        ToolUp.RAG.RagConfigValidator.RAGRateLimitConfiguredValidator config
         // Phase 9m.B (2026-05-06 audit, Gap 4) — warn when the dev-only,
         // process-stateful LocalEmbeddingProvider serves a non-team
         // production shape. The team half is TeamModeLocalEmbedderValidator
         // above; the two partition the deployment space so one problem is
         // never reported twice.
-        ToolUp.RAG.RagConfigValidator.LocalEmbeddingProviderInProductionModeValidator(
-            finalConfig,
-            app.EmbeddingProvider
-        )
+        ToolUp.RAG.RagConfigValidator.LocalEmbeddingProviderInProductionModeValidator(config, options.EmbeddingProvider)
         // Phase 9m.B (Gap 6) — warn when data types are registered but NO
         // module contributes a VectorisationHandler: nothing is ever
         // indexed and there is no error anywhere in that path. Skipped
@@ -2219,40 +2186,40 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         ToolUp.RAG.RagConfigValidator.RAGHandlersRegisteredValidator(
             b.DataTypes |> List.map _.Id,
             b.VectorisationHandlers |> List.map _.DataTypeId,
-            app.RetrievalPipelineOverride.IsSome
+            options.RetrievalPipelineOverride.IsSome
         )
         // Phase 9m.B (Gap 7) — explicit bounds on the tuning knobs. The
         // `with*` setters clamp lower bounds only, so nothing today
         // rejects `withTopK 200` or `withIngestionQueueCapacity 10`.
         ToolUp.RAG.RagConfigValidator.RAGConfigBoundsValidator {
-            TopK = app.RetrievalDefaults.TopK
-            MinScore = app.RetrievalDefaults.MinScore
-            MmrLambda = app.MmrLambda
-            MmrEnabled = app.EnableMmr
-            SnippetCharLimit = app.RetrievalDefaults.SnippetCharLimit
-            IngestionConcurrency = app.IngestionConcurrency
-            IngestionQueueCapacity = app.IngestionQueueCapacity
+            TopK = options.RetrievalDefaults.TopK
+            MinScore = options.RetrievalDefaults.MinScore
+            MmrLambda = options.MmrLambda
+            MmrEnabled = options.EnableMmr
+            SnippetCharLimit = options.RetrievalDefaults.SnippetCharLimit
+            IngestionConcurrency = options.IngestionConcurrency
+            IngestionQueueCapacity = options.IngestionQueueCapacity
         }
         // Phase 866 — warn when the configured MinScore cannot be met, or
         // cannot be confirmed reachable, in the composed score space.
-        minScoreSpaceValidator (composedScoreSpace app) app.RetrievalDefaults.MinScore
+        minScoreSpaceValidator (composedScoreSpace options) options.RetrievalDefaults.MinScore
         // Phase 893 — warn when more than one replica runs over an
         // in-process vector store or keyword index: each replica keeps its
         // own, so retrieval differs by which replica served the turn.
         // Skipped when a retrieval-pipeline override owns the corpus.
         ToolUp.RAG.RagConfigValidator.InProcessIndexReplicaValidator(
-            finalConfig,
-            (if app.RetrievalPipelineOverride.IsSome then
+            config,
+            (if options.RetrievalPipelineOverride.IsSome then
                  None
              else
-                 match app.VectorStore with
+                 match options.VectorStore with
                  | None -> Some "InMemoryVectorStore"
                  | Some store when isInProcessVectorStore store -> Some(store.GetType().Name)
                  | Some _ -> None),
-            (if app.RetrievalPipelineOverride.IsSome then
+            (if options.RetrievalPipelineOverride.IsSome then
                  None
              else
-                 match app.SparseIndex with
+                 match options.SparseIndex with
                  | SparseIndexComposition.InProcessSparseIndex -> Some "InMemoryBM25Index"
                  | _ ->
                      match composedSparseIndex with
@@ -2281,76 +2248,22 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         withValidators with
             Extensions = mergedExt
     }
-    // Phase 1052 — RAG's registrations are a contribution under its own id.
-    |> ServerApp.addContribution (Contribution.service (ComponentId.forCompanionSlot "ToolUp.RAG") ragServiceConfig)
+    // RAG's registrations are a contribution under its own id.
+    |> ServerApp.addContribution (Contribution.service ragOwner ragServiceConfig)
 
-module RAGServerApp =
-    /// Construct a `RAGServerApp` with the three required dependencies:
-    /// AI provider factory, the canonical platform `IProviderProfile`
-    /// BYOK store (Phase 43.A — replaces the removed
-    /// `IUserAIConfigStore` shim), and the embedding provider. All
-    /// other fields default to the empty / `None` values; chain
-    /// `with*` helpers (delegating to AI/Server or RAG-specific) to
-    /// configure further.
+module RagOptions =
+    /// The RAG companion's options with the three required inputs: the AI
+    /// provider factory and the canonical platform `IProviderProfile` BYOK
+    /// store (the AI tier's, `AIOptions.create`), and the embedding
+    /// provider. Every other field takes its default; chain the
+    /// `RagOptions.with*` setters to configure further.
     let create
         (factory: IAIProviderFactory)
         (providerProfile: IProviderProfile)
         (embedder: IEmbeddingProvider)
-        : RAGServerApp =
+        : RagOptions =
         {
-            AI = AIServerApp.create factory providerProfile
-            EmbeddingProvider = embedder
-            EmbeddingCache = None
-            IngestionObservers = []
-            Reranker = None
-            EnableMmr = false
-            MmrLambda = 0.5
-            VectorStore = None
-            SparseAnalyzer = None
-            RetrievalFraming = defaultRetrievalFraming
-            IngestionConcurrency = 8
-            IngestionQueueCapacity = 5000
-            IngestionRetryPolicy = IngestionRetryPolicy.defaults
-            Telemetry = None
-            RetrievalDefaults = RetrievalDefaults.defaults
-            IndexConversations = false
-            GroundingMode = Preferred
-            FactClausePlan = FactClausePlanOptions.defaults
-            EnableDocumentSummaries = true
-            CitationPolicy = ToolUp.RAG.CitationNormaliser.Strict
-            RetrievalDefaultsClampLog = []
-            MaxChunkBytes = None
-            MaxDocumentBytes = None
-            MaxQueryChars = Some 16384
-            TombstoneRetention = System.TimeSpan.FromDays 7.0
-            VacuumSchedule = None
-            OverflowPolicy = DropWrite
-            RetrievalPipelineOverride = None
-            IngestionQueueStore = None
-            IngestionRecoveryScopes = []
-            ScopeEnumerator = None
-            RetrievalBudgets = RetrievalBudgets.defaults
-            RetrievalTraceQueueCapacity = 1024
-            SparseIndex = SparseIndexComposition.InProcessSparseIndex
-            FactTier = None
-        }
-
-    /// Phase 1h composition seam — lift an existing `ServerApp` into a
-    /// `RAGServerApp` so the additive `withRAG` extension can stack RAG
-    /// (and AI) contributions onto whatever the input `ServerApp`
-    /// already carries. The input `ServerApp` becomes the AI layer's
-    /// `Base` (via `AIServerApp.createFrom`); all RAG-specific fields
-    /// initialise to the same defaults as `create`. Required deps
-    /// (`factory`, `providerProfile`, `embedder`) are constructor
-    /// parameters, matching `create`.
-    let createFrom
-        (factory: IAIProviderFactory)
-        (providerProfile: IProviderProfile)
-        (embedder: IEmbeddingProvider)
-        (baseApp: ServerApp)
-        : RAGServerApp =
-        {
-            AI = AIServerApp.createFrom factory providerProfile baseApp
+            AI = AIOptions.create factory providerProfile
             EmbeddingProvider = embedder
             EmbeddingCache = None
             IngestionObservers = []
@@ -2396,198 +2309,33 @@ module RAGServerApp =
         (original: string)
         (clamped: string)
         (changed: bool)
-        (app: RAGServerApp)
-        : RAGServerApp =
+        (options: RagOptions)
+        : RagOptions =
         if not changed then
-            app
+            options
         else
             {
-                app with
+                options with
                     RetrievalDefaultsClampLog =
                         sprintf "%s = %s clamped to %s" field original clamped
-                        :: app.RetrievalDefaultsClampLog
+                        :: options.RetrievalDefaultsClampLog
             }
 
     /// Replace the embedding provider after construction. Rare — the
     /// constructor parameter is the canonical path.
-    let withEmbeddingProvider (provider: IEmbeddingProvider) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withEmbeddingProvider (provider: IEmbeddingProvider) (options: RagOptions) : RagOptions = {
+        options with
             EmbeddingProvider = provider
     }
 
-    // ─── Delegating helpers (mirror `AIServerApp` and `ServerApp`) ──────
-
-    let withConfig (c: ServerConfig) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withConfig c app.AI
-    }
-
-    let withAuth (a: IAuthProvider) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withAuth a app.AI
-    }
-
-    let withLogger (l: ILogger) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withLogger l app.AI
-    }
-
-    let withStorage (s: IBlobStorage) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withStorage s app.AI
-    }
-
-    let withNotifications (n: INotificationChannel) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withNotifications n app.AI
-    }
-
-    /// Register an `IUserDirectory` for invite-form typeahead + email-
-    /// address resolution. Delegates through `AIServerApp` to
-    /// `ServerApp.withUserDirectory`.
-    let withUserDirectory (directory: IUserDirectory) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withUserDirectory directory app.AI
-    }
-
-    /// Register an additional `ICspContributor` (a webfont / CDN / embed
-    /// origin the first-party CSP defaults don't cover). Delegates
-    /// through `AIServerApp` to `ServerApp.withCspContributor`.
-    let withCspContributor (contributor: ICspContributor) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withCspContributor contributor app.AI
-    }
-
-    /// Phase 6f — register an out-of-band transactional notification
-    /// sink. Delegates to `AIServerApp.withTransactionalSink` (which
-    /// in turn delegates to `ServerApp.withTransactionalSink`). See
-    /// `ServerApp.withTransactionalSink` for the full contract.
-    let withHealthCheck (check: HealthChecks.IHealthCheck) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withHealthCheck check app.AI
-    }
-
-    /// Phase 9m — register a companion-contributed startup config
-    /// validator. Delegates to `AIServerApp.withConfigValidator`.
-    let withConfigValidator (validator: ConfigValidation.IConfigValidator) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withConfigValidator validator app.AI
-    }
-
-    /// Phase 22 — opt into AES-GCM envelope encryption for the
-    /// registered IBlobStorage. Delegates to
-    /// `AIServerApp.withEncryptedBlobStorage` (which in turn delegates
-    /// to `ServerApp.withEncryptedBlobStorage`). See that helper's
-    /// docstring for the resolver-choice contract.
-    let withEncryptedBlobStorage (resolver: IBlobEncryptionKeyResolver) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withEncryptedBlobStorage resolver app.AI
-    }
-
-    /// Phase 9e — register a companion-contributed metrics sink
-    /// alongside the in-process Prometheus default. Delegates to
-    /// `AIServerApp.withMetricsSink` (which delegates to
-    /// `ServerApp.withMetricsSink`).
-    let withMetricsSink (sink: Metrics.IMetricsSink) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withMetricsSink sink app.AI
-    }
-
-    /// Phase 9v — declare an outbound rate-limit window for one
-    /// upstream provider. Delegates to
-    /// `AIServerApp.withRateLimitDescriptor` (which delegates to
-    /// `ServerApp.withRateLimitDescriptor`).
-    let withRateLimitDescriptor (descriptor: RateLimitDescriptor) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withRateLimitDescriptor descriptor app.AI
-    }
-
-    /// Phase 19 — register an entity type with the typed entity store.
-    /// Delegates to `AIServerApp.withEntity` (which delegates to
-    /// `ServerApp.withEntity`).
-    let withEntity<'T> (registration: EntityTypes.EntityRegistration<'T>) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withEntity registration app.AI
-    }
-
-    /// Phase 9b.B — declare a composition-root-owned background job.
-    /// Delegates through `AIServerApp.withJobHandler` to
-    /// `ServerApp.withJobHandler` so the underlying `ServerApp.ScheduledJobs`
-    /// list is what `composeWithRAG` threads through to the inner
-    /// `compose`.
-    let withJobHandler
-        (handlerName: string, handler: IJobHandler, trigger: Trigger)
-        (app: RAGServerApp)
-        : RAGServerApp =
-        {
-            app with
-                AI = AIServerApp.withJobHandler (handlerName, handler, trigger) app.AI
-        }
-
-    /// Phase 9b.B — declare a composition-root-owned background job
-    /// with full control over every `JobRegistration` knob. Delegates
-    /// to `AIServerApp.withScheduledJob`.
-    let withScheduledJob (declaration: ScheduledJobDeclaration) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withScheduledJob declaration app.AI
-    }
-
-    /// Phase 9b.A — opt into back-fill of `OnEvent` jobs on detected
-    /// scheduler tick drift. Delegates to `AIServerApp.withBackfillMissedTicks`.
-    let withBackfillMissedTicks (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withBackfillMissedTicks enabled app.AI
-    }
-
-    /// Phase 598 — opt into the event-trigger catch-up watermark.
-    /// Delegates to `AIServerApp.withEventTriggerCatchUp`.
-    let withEventTriggerCatchUp (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withEventTriggerCatchUp enabled app.AI
-    }
-
-    /// Phase 9t — audit-write failure policy. Delegates to
-    /// `AIServerApp.withAuditFailurePolicy`.
-    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withAuditFailurePolicy policy app.AI
-    }
-
-    /// Phase 599 — opt into the entity-write outbox. Delegates to
-    /// `AIServerApp.withEntityOutbox`.
-    let withEntityOutbox (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withEntityOutbox enabled app.AI
-    }
-
-    let withTransactionalSink (sink: INotificationSink) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withTransactionalSink sink app.AI
-    }
-
-    let withExtensions (e: ComposeExtensions) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withExtensions e app.AI
-    }
-
-    /// Apply an `AIServerApp -> AIServerApp` transform to the inner AI
-    /// layer. Escape hatch for companion compositions that operate on
-    /// the `AIServerApp` surface but have no dedicated `RAGServerApp`
-    /// delegate — the canonical case is registering a companion's AI
-    /// tools (e.g. `ToolUp.KnowledgeBase.Server.AICompose.register`).
-    /// Prefer a named `with*` helper when one exists; reach for `mapAI`
-    /// only when the transform genuinely lives on a companion, so RAG
-    /// never grows a reverse dependency on that companion's package.
-    let mapAI (f: AIServerApp -> AIServerApp) (app: RAGServerApp) : RAGServerApp = { app with AI = f app.AI }
-
-    /// Phase 986 — compose the fact tier onto this RAG app in one call:
+    /// **Sets** the fact tier this RAG composition composes:
     ///
-    /// ```fsharp
-    /// app |> RAGServerApp.withFacts FactsCompose.withFactTier
+    /// ```fsharp skip=fragment
+    /// options |> RagOptions.withFacts FactsCompose.withFactTier
     /// ```
     ///
-    /// `factTier` is applied to the AI layer's base `ServerApp` when the
-    /// app is composed, so the call may sit before or after `withConfig`
+    /// `factTier` is applied to the deployment when the RAG tier is
+    /// composed, so the `withRAG` call may sit before or after `withConfig`
     /// (which replaces the whole `ServerConfig`, the fact-store knob
     /// included). Composed that way the fact tier arms both doors: the
     /// retrieval pipeline picks up the fact resolver and the clause
@@ -2600,50 +2348,37 @@ module RAGServerApp =
     /// The tier is a parameter rather than a reference because the fact
     /// companion is a separate package: a RAG deployment that composes no
     /// facts takes no dependency on it. Calling `withFacts` again replaces
-    /// the tier; the `mapAI` route keeps working unchanged.
-    let withFacts (factTier: ServerApp -> ServerApp) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    /// the tier.
+    let withFacts (factTier: ServerApp -> ServerApp) (options: RagOptions) : RagOptions = {
+        options with
             FactTier = Some factTier
     }
 
-    let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withPreMiddleware f app.AI
+    /// **Sets** the options of the AI tier RAG composes over, replacing the
+    /// ones `create` built.
+    let withAIOptions (ai: AIOptions) (options: RagOptions) : RagOptions = { options with AI = ai }
+
+    /// **Sets** the AI tier's assistant config (`AIOptions.withAIConfig`).
+    let withAIConfig (config: AIAssistantServerConfig) (options: RagOptions) : RagOptions = {
+        options with
+            AI = AIOptions.withAIConfig config options.AI
     }
 
-    let withPostMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withPostMiddleware f app.AI
+    /// **Sets** the AI tier's per-module contexts
+    /// (`AIOptions.withModuleAIContexts`).
+    let withModuleAIContexts (contexts: ModuleAIContext list) (options: RagOptions) : RagOptions = {
+        options with
+            AI = AIOptions.withModuleAIContexts contexts options.AI
     }
 
-    let addModule (m: ServerModule) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.addModule m app.AI
+    let withIngestionObserver (observer: IIngestionStatusObserver) (options: RagOptions) : RagOptions = {
+        options with
+            IngestionObservers = options.IngestionObservers @ [ observer ]
     }
 
-    let addModules (modules: ServerModule list) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.addModules modules app.AI
-    }
-
-    let withAIConfig (config: AIAssistantServerConfig) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withAIConfig config app.AI
-    }
-
-    let withModuleAIContexts (contexts: ModuleAIContext list) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            AI = AIServerApp.withModuleAIContexts contexts app.AI
-    }
-
-    let withIngestionObserver (observer: IIngestionStatusObserver) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            IngestionObservers = app.IngestionObservers @ [ observer ]
-    }
-
-    let withIngestionObservers (observers: IIngestionStatusObserver list) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            IngestionObservers = app.IngestionObservers @ observers
+    let withIngestionObservers (observers: IIngestionStatusObserver list) (options: RagOptions) : RagOptions = {
+        options with
+            IngestionObservers = options.IngestionObservers @ observers
     }
 
     /// Register a cross-encoder reranker. Companion packages under
@@ -2653,18 +2388,21 @@ module RAGServerApp =
     /// one, the reranker scores every match retrieval returns — a pool
     /// larger than its `MaxBatchSize` is capped at it — and the boosts then
     /// nudge on its scale (Phase 978).
-    let withReranker (reranker: IReranker) (app: RAGServerApp) : RAGServerApp = { app with Reranker = Some reranker }
+    let withReranker (reranker: IReranker) (options: RagOptions) : RagOptions = {
+        options with
+            Reranker = Some reranker
+    }
 
     /// Enable MMR diversity reranking after retrieval (and rerank and the
     /// boosts, when present). MMR's order is the order the caller receives
     /// (Phase 978). Off by default. Use `withMmrLambda` to tune the
     /// relevance/diversity balance.
-    let withMmr (app: RAGServerApp) : RAGServerApp = { app with EnableMmr = true }
+    let withMmr (options: RagOptions) : RagOptions = { options with EnableMmr = true }
 
     /// Set the MMR `λ` ∈ [0, 1]. Higher = more relevance-weighted, lower =
     /// more diversity-weighted. 0.5 is the literature default. Implies
     /// `withMmr` if not already enabled.
-    let withMmrLambda (lambda: float) (app: RAGServerApp) : RAGServerApp =
+    let withMmrLambda (lambda: float) (options: RagOptions) : RagOptions =
         // Contract is λ ∈ [0, 1]; clamp rather than let an
         // out-of-range value silently skew (or NaN) the MMR
         // re-ranking. Matches the clamp-in-setter convention used
@@ -2672,7 +2410,7 @@ module RAGServerApp =
         let clamped = max 0.0 (min 1.0 lambda)
 
         {
-            app with
+            options with
                 EnableMmr = true
                 MmrLambda = clamped
         }
@@ -2686,7 +2424,10 @@ module RAGServerApp =
     /// Phase 869 — a supplied store stays the caller's: the composition
     /// flushes and disposes at stop only the store it constructed, so dispose
     /// a supplied one yourself once the host has stopped.
-    let withVectorStore (store: IVectorStore) (app: RAGServerApp) : RAGServerApp = { app with VectorStore = Some store }
+    let withVectorStore (store: IVectorStore) (options: RagOptions) : RagOptions = {
+        options with
+            VectorStore = Some store
+    }
 
     /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
     /// the supplied `IEmbeddingProvider` in, so a model's embedding is paid
@@ -2709,8 +2450,8 @@ module RAGServerApp =
     /// Composing `InMemoryEmbeddingCache` explicitly is accepted and
     /// behaves exactly as the default — including the warning, because it
     /// is still process-local.
-    let withEmbeddingCache (cache: IEmbeddingCache) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withEmbeddingCache (cache: IEmbeddingCache) (options: RagOptions) : RagOptions = {
+        options with
             EmbeddingCache = Some cache
     }
 
@@ -2732,8 +2473,8 @@ module RAGServerApp =
     ///
     /// Ignored when `withRetrievalPipeline` replaces the whole pipeline — that
     /// pipeline owns its own sparse index, if it has one.
-    let withSparseAnalyzer (analyzer: ISparseAnalyzer) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withSparseAnalyzer (analyzer: ISparseAnalyzer) (options: RagOptions) : RagOptions = {
+        options with
             SparseAnalyzer = Some analyzer
     }
 
@@ -2742,13 +2483,13 @@ module RAGServerApp =
     /// `RetrievalPipeline` (and, when no `VectorisationHandler` is present,
     /// the ingestion + reembedding background services) are skipped. Slots a
     /// build-time-precomputed static-corpus pipeline — or any custom
-    /// `IRetrievalPipeline` — into the standard `RAGServerApp` fluent shape so
+    /// `IRetrievalPipeline` — into the standard `RagOptions` fluent shape so
     /// static-doc-Q&A consumers and live-KB consumers share one composition
     /// root. Query embedding still uses the registered `IEmbeddingProvider`;
     /// only chunk embeddings are precomputed. `IEmbeddingProvider` remains a
     /// required `create` argument for now (relaxing it is a deferred follow-up).
-    let withRetrievalPipeline (pipeline: IRetrievalPipeline) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withRetrievalPipeline (pipeline: IRetrievalPipeline) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalPipelineOverride = Some pipeline
     }
 
@@ -2756,11 +2497,11 @@ module RAGServerApp =
     /// in parallel. Each slot does one batched embedding call covering a whole
     /// document, so the effective upstream concurrency equals this number of
     /// HTTP calls (not chunks). Default 8.
-    let withIngestionConcurrency (concurrency: int) (app: RAGServerApp) : RAGServerApp =
+    let withIngestionConcurrency (concurrency: int) (options: RagOptions) : RagOptions =
         let clamped = max 1 concurrency
 
         {
-            app with
+            options with
                 IngestionConcurrency = clamped
         }
         |> noteClamp "IngestionConcurrency" (string concurrency) (string clamped) (clamped <> concurrency)
@@ -2770,8 +2511,8 @@ module RAGServerApp =
     /// surface the rejection by marking the document `Failed`. Default 5,000.
     /// Lower for tight memory budgets, higher for deployments with bursty
     /// bulk uploads.
-    let withIngestionQueueCapacity (capacity: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withIngestionQueueCapacity (capacity: int) (options: RagOptions) : RagOptions = {
+        options with
             IngestionQueueCapacity = max 1 capacity
     }
 
@@ -2787,8 +2528,8 @@ module RAGServerApp =
     /// once sustained saturation is observed in the rolling 60s window — a
     /// loud, operator-visible signal for compliance-grade deploys that prefer
     /// a screaming error over a quiet drop.
-    let withIngestionQueueOverflowPolicy (policy: IngestionOverflowPolicy) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withIngestionQueueOverflowPolicy (policy: IngestionOverflowPolicy) (options: RagOptions) : RagOptions = {
+        options with
             OverflowPolicy = policy
     }
 
@@ -2810,8 +2551,8 @@ module RAGServerApp =
     /// expire, and the job is redelivered), which ingestion already
     /// tolerates — re-indexing a chunk overwrites the same vector-store
     /// id.
-    let withDurableIngestionQueue (store: IIngestionQueueStore) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withDurableIngestionQueue (store: IIngestionQueueStore) (options: RagOptions) : RagOptions = {
+        options with
             IngestionQueueStore = Some store
     }
 
@@ -2840,8 +2581,8 @@ module RAGServerApp =
     /// stale silently. The two compose — the union of the explicit list
     /// and the enumeration is swept — so a deployment can migrate
     /// without a gap and then drop the list.
-    let withIngestionRecoverySweep (containers: string list) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withIngestionRecoverySweep (containers: string list) (options: RagOptions) : RagOptions = {
+        options with
             IngestionRecoveryScopes = containers
     }
 
@@ -2866,8 +2607,8 @@ module RAGServerApp =
     /// containers are not enumerable from `ITeamStore`. A personal-mode
     /// deployment composes `ScopeEnumeration.ofScopes` or its own
     /// enumerator; see the `ScopeEnumeration.fromTeamStoreWith` remarks.
-    let withScopeEnumerator (enumerator: IScopeEnumerator) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withScopeEnumerator (enumerator: IScopeEnumerator) (options: RagOptions) : RagOptions = {
+        options with
             ScopeEnumerator = Some enumerator
     }
 
@@ -2878,8 +2619,8 @@ module RAGServerApp =
     /// (401/403 / other 4xx) dead-letter immediately with an Owner/Admin
     /// alert. Default `IngestionRetryPolicy.defaults` (5 attempts,
     /// 30s→30min backoff, +20% jitter). `MaxAttempts` is clamped to ≥ 1.
-    let withIngestionRetryPolicy (policy: IngestionRetryPolicy) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withIngestionRetryPolicy (policy: IngestionRetryPolicy) (options: RagOptions) : RagOptions = {
+        options with
             IngestionRetryPolicy = {
                 policy with
                     MaxAttempts = max 1 policy.MaxAttempts
@@ -2891,21 +2632,24 @@ module RAGServerApp =
     /// `/health/rag` endpoint resolves whatever is registered, so the
     /// override transparently feeds both the snapshot endpoint and any
     /// downstream metrics backend.
-    let withTelemetry (telemetry: IRagTelemetry) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withTelemetry (telemetry: IRagTelemetry) (options: RagOptions) : RagOptions = {
+        options with
             Telemetry = Some telemetry
     }
 
     /// Replace the entire `RetrievalDefaults` record. Use targeted setters
     /// (`withTopK`, `withMinScore`, `withMergeStrategy`,
     /// `withSnippetCharLimit`) when only one knob needs to change.
-    let withRetrievalDefaults (defaults: RetrievalDefaults) (app: RAGServerApp) : RAGServerApp =
+    let withRetrievalDefaults (defaults: RetrievalDefaults) (options: RagOptions) : RagOptions =
         // Clamp the whole-record override to the same bounds the
         // targeted setters enforce — otherwise a fat-fingered
         // TopK=0 / MinScore=1.0 here silently disables retrieval.
         let clamped = RetrievalDefaults.clamp defaults
 
-        { app with RetrievalDefaults = clamped }
+        {
+            options with
+                RetrievalDefaults = clamped
+        }
         |> noteClamp
             "RetrievalDefaults"
             (sprintf
@@ -2923,13 +2667,13 @@ module RAGServerApp =
     /// Cap the number of matches included in each retrieval block. Higher
     /// gives the model more grounding context; too high crowds the prompt
     /// and dilutes per-source attention. Default 5.
-    let withTopK (topK: int) (app: RAGServerApp) : RAGServerApp =
+    let withTopK (topK: int) (options: RagOptions) : RagOptions =
         let clamped = max 1 topK
 
         {
-            app with
+            options with
                 RetrievalDefaults = {
-                    app.RetrievalDefaults with
+                    options.RetrievalDefaults with
                         TopK = clamped
                 }
         }
@@ -2948,7 +2692,7 @@ module RAGServerApp =
     /// (`withoutSparseIndex`) scores are cosine similarity, an absolute
     /// floor. With a reranker composed the threshold reads the reranker's
     /// own, uncalibrated scale, and a startup validator says so.
-    let withMinScore (threshold: float option) (app: RAGServerApp) : RAGServerApp =
+    let withMinScore (threshold: float option) (options: RagOptions) : RagOptions =
         // Both SDK-known spaces (cosine, normalised fused) top out at 1.0
         // and the gate keeps only scores strictly above the threshold, so
         // values ≥ 1.0 filter out EVERY unboosted match (the assistant
@@ -2958,9 +2702,9 @@ module RAGServerApp =
         let clamped = threshold |> Option.map (fun t -> max 0.0 (min 0.99 t))
 
         {
-            app with
+            options with
                 RetrievalDefaults = {
-                    app.RetrievalDefaults with
+                    options.RetrievalDefaults with
                         MinScore = clamped
                 }
         }
@@ -2971,10 +2715,10 @@ module RAGServerApp =
     /// grouping for callers presenting platform vs team knowledge
     /// separately. With MMR enabled the `Interleaved` re-sort is skipped,
     /// because it would undo the diversity order MMR produced (Phase 978).
-    let withMergeStrategy (strategy: MergeStrategy) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withMergeStrategy (strategy: MergeStrategy) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalDefaults = {
-                app.RetrievalDefaults with
+                options.RetrievalDefaults with
                     Merge = strategy
             }
     }
@@ -2982,13 +2726,13 @@ module RAGServerApp =
     /// Set the maximum character length of each `RetrievedSource.Snippet`
     /// preview surfaced in the AI client's Sources panel. Trimmed with an
     /// ellipsis when content exceeds the budget. Default 240.
-    let withSnippetCharLimit (limit: int) (app: RAGServerApp) : RAGServerApp =
+    let withSnippetCharLimit (limit: int) (options: RagOptions) : RagOptions =
         let clamped = max 16 limit
 
         {
-            app with
+            options with
                 RetrievalDefaults = {
-                    app.RetrievalDefaults with
+                    options.RetrievalDefaults with
                         SnippetCharLimit = clamped
                 }
         }
@@ -3000,10 +2744,10 @@ module RAGServerApp =
     /// to restrict retrieval to specific origins (e.g.
     /// `Set.ofList [ Document; Note ]` excludes narratives + AI context +
     /// conversations).
-    let withOriginFilter (filter: Set<ChunkOrigin> option) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withOriginFilter (filter: Set<ChunkOrigin> option) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalDefaults = {
-                app.RetrievalDefaults with
+                options.RetrievalDefaults with
                     OriginFilter = filter
             }
     }
@@ -3021,10 +2765,10 @@ module RAGServerApp =
     ///
     /// `None` (the default) leaves retrieval unfiltered and byte-identical
     /// to a filter-unaware deployment (GP 11).
-    let withRetrievalFilters (filters: Map<string, string> option) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withRetrievalFilters (filters: Map<string, string> option) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalDefaults = {
-                app.RetrievalDefaults with
+                options.RetrievalDefaults with
                     Filters = filters
             }
     }
@@ -3034,8 +2778,8 @@ module RAGServerApp =
     /// AI conversations will be vectorised under
     /// `ChunkOrigin.Conversation`. Off by default; flipping the flag
     /// today is a no-op until the ingestion handler is wired.
-    let withIndexConversations (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withIndexConversations (enabled: bool) (options: RagOptions) : RagOptions = {
+        options with
             IndexConversations = enabled
     }
 
@@ -3044,7 +2788,10 @@ module RAGServerApp =
     /// or `StrictlyGrounded` (refuse to answer without a retrieval hit).
     /// `StrictlyGrounded` works best paired with `withMinScore (Some x)`
     /// so the model only refuses on genuinely-thin retrievals.
-    let withGroundingMode (mode: GroundingMode) (app: RAGServerApp) : RAGServerApp = { app with GroundingMode = mode }
+    let withGroundingMode (mode: GroundingMode) (options: RagOptions) : RagOptions = {
+        options with
+            GroundingMode = mode
+    }
 
     /// Phase 708 — turn the fact-clause feeder on or off, keeping the
     /// current budget. On (the default) and with the fact tier composed,
@@ -3053,10 +2800,10 @@ module RAGServerApp =
     /// of the chunks, without a tool round-trip. Off restores the pre-708
     /// behaviour exactly: the push path stays dormant and facts reach the
     /// model only through `query_facts`.
-    let withFactClausePlanning (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withFactClausePlanning (enabled: bool) (options: RagOptions) : RagOptions = {
+        options with
             FactClausePlan = {
-                app.FactClausePlan with
+                options.FactClausePlan with
                     Enabled = enabled
             }
     }
@@ -3065,9 +2812,9 @@ module RAGServerApp =
     /// (enabled flag + compile budget). Clamped into `[1 ms, 30 s]`: a
     /// non-positive budget is not a bound `Async.StartChild` will accept,
     /// and a budget past half a minute is not bounding a chat turn.
-    let withFactClausePlanOptions (options: FactClausePlanOptions) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            FactClausePlan = FactClausePlanOptions.clamp options
+    let withFactClausePlanOptions (planOptions: FactClausePlanOptions) (options: RagOptions) : RagOptions = {
+        options with
+            FactClausePlan = FactClausePlanOptions.clamp planOptions
     }
 
     /// Toggle document-level summary chunks. Default `true` — when a
@@ -3076,8 +2823,8 @@ module RAGServerApp =
     /// `_isSummary = "true"`. Pass `false` to skip the summary call
     /// entirely (cost control for AI-summary deployments where the extra
     /// per-document HTTP isn't worth the retrieval-quality gain).
-    let withDocumentSummaries (enabled: bool) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withDocumentSummaries (enabled: bool) (options: RagOptions) : RagOptions = {
+        options with
             EnableDocumentSummaries = enabled
     }
 
@@ -3087,8 +2834,8 @@ module RAGServerApp =
     /// and is what most deployments want. Pass `""` to opt out entirely
     /// (composes nothing) or any non-empty string to substitute custom
     /// framing.
-    let withRetrievalFraming (framing: string) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withRetrievalFraming (framing: string) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalFraming = framing
     }
 
@@ -3103,9 +2850,9 @@ module RAGServerApp =
     /// store byte-for-byte (pre-Phase-6q behaviour).
     let withCitationPolicy
         (policy: ToolUp.RAG.CitationNormaliser.RagCitationPolicy)
-        (app: RAGServerApp)
-        : RAGServerApp =
-        { app with CitationPolicy = policy }
+        (options: RagOptions)
+        : RagOptions =
+        { options with CitationPolicy = policy }
 
     /// Cap the UTF-8 byte size of any single chunk's `TextChunk.Content`
     /// reaching the ingestion queue. Default `None` = no limit (historical
@@ -3113,16 +2860,16 @@ module RAGServerApp =
     /// large enough that ordinary chunked PDFs / spreadsheets pass through
     /// unchanged, but small enough that a pathological spreadsheet cell
     /// can't pin memory across thousands of queued jobs.
-    let withMaxChunkBytes (maxBytes: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withMaxChunkBytes (maxBytes: int) (options: RagOptions) : RagOptions = {
+        options with
             MaxChunkBytes = Some(max 1 maxBytes)
     }
 
     /// Cap the sum of UTF-8 byte sizes across every chunk in a single
     /// `DocumentIngestionJob`. Default `None` = no limit. Typical value
     /// `Some (100 * 1024 * 1024)` (100 MB).
-    let withMaxDocumentBytes (maxBytes: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withMaxDocumentBytes (maxBytes: int) (options: RagOptions) : RagOptions = {
+        options with
             MaxDocumentBytes = Some(max 1 maxBytes)
     }
 
@@ -3133,8 +2880,8 @@ module RAGServerApp =
     /// generous for any genuine natural-language question, tight enough that
     /// an accidental whole-document paste is refused before it burns embedding
     /// spend. Clamped to a floor of 1.
-    let withMaxQueryChars (maxChars: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withMaxQueryChars (maxChars: int) (options: RagOptions) : RagOptions = {
+        options with
             MaxQueryChars = Some(max 1 maxChars)
     }
 
@@ -3144,7 +2891,7 @@ module RAGServerApp =
     /// Clamped to a floor of one minute so a fat-fingered `TimeSpan.Zero`
     /// can't turn every soft-delete into an immediate hard-delete on the
     /// next sweep (which would defeat `RestoreChunk`).
-    let withTombstoneRetention (retention: System.TimeSpan) (app: RAGServerApp) : RAGServerApp =
+    let withTombstoneRetention (retention: System.TimeSpan) (options: RagOptions) : RagOptions =
         let clamped =
             if retention < System.TimeSpan.FromMinutes 1.0 then
                 System.TimeSpan.FromMinutes 1.0
@@ -3152,7 +2899,7 @@ module RAGServerApp =
                 retention
 
         {
-            app with
+            options with
                 TombstoneRetention = clamped
         }
 
@@ -3164,8 +2911,8 @@ module RAGServerApp =
     /// without a scheduler the sweep never fires and the
     /// `VacuumScheduleValidator` warns at startup. Use
     /// `withVacuumScheduleCron` for a non-default cadence.
-    let withVacuumSchedule (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withVacuumSchedule (options: RagOptions) : RagOptions = {
+        options with
             VacuumSchedule = Some RAGVacuumJobHandler.DefaultVacuumCron
     }
 
@@ -3175,8 +2922,8 @@ module RAGServerApp =
     /// expression is rejected at schedule time with
     /// `ScheduleError.InvalidCron` and logged at `Warn` — the deployment
     /// still boots.
-    let withVacuumScheduleCron (cron: string) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withVacuumScheduleCron (cron: string) (options: RagOptions) : RagOptions = {
+        options with
             VacuumSchedule = Some cron
     }
 
@@ -3184,8 +2931,8 @@ module RAGServerApp =
 
     /// Phase 894 — replace the whole per-turn budget record. Default
     /// `RetrievalBudgets.defaults`.
-    let withRetrievalBudgets (budgets: RetrievalBudgets) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withRetrievalBudgets (budgets: RetrievalBudgets) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalBudgets = budgets
     }
 
@@ -3193,12 +2940,12 @@ module RAGServerApp =
     /// the dense branch returns nothing and the sparse branch, when
     /// composed, answers alone (stage mark `DenseDegraded:TimedOut`).
     /// Default 5 s. Non-positive disables the budget.
-    let withQueryEmbedTimeout (timeout: System.TimeSpan) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withQueryEmbedTimeout (timeout: System.TimeSpan) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalBudgets = {
-                app.RetrievalBudgets with
+                options.RetrievalBudgets with
                     QueryEmbed = {
-                        app.RetrievalBudgets.QueryEmbed with
+                        options.RetrievalBudgets.QueryEmbed with
                             Timeout = timeout
                     }
             }
@@ -3206,12 +2953,12 @@ module RAGServerApp =
 
     /// Phase 894 — attempts the query-time embed makes inside its budget.
     /// Default 1 (no retry inside a chat turn); clamped to at least 1.
-    let withQueryEmbedAttempts (attempts: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withQueryEmbedAttempts (attempts: int) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalBudgets = {
-                app.RetrievalBudgets with
+                options.RetrievalBudgets with
                     QueryEmbed = {
-                        app.RetrievalBudgets.QueryEmbed with
+                        options.RetrievalBudgets.QueryEmbed with
                             MaxAttempts = max 1 attempts
                     }
             }
@@ -3221,12 +2968,12 @@ module RAGServerApp =
     /// that finds it reached is refused at once, as a value — the dense
     /// branch degrades (stage mark `DenseDegraded:Refused`) rather than
     /// queueing. Default: no ceiling. Clamped to at least 1.
-    let withQueryEmbedConcurrency (maxConcurrentCalls: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withQueryEmbedConcurrency (maxConcurrentCalls: int) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalBudgets = {
-                app.RetrievalBudgets with
+                options.RetrievalBudgets with
                     QueryEmbed = {
-                        app.RetrievalBudgets.QueryEmbed with
+                        options.RetrievalBudgets.QueryEmbed with
                             MaxConcurrentCalls = Some(max 1 maxConcurrentCalls)
                     }
             }
@@ -3236,10 +2983,10 @@ module RAGServerApp =
     /// On overrun or fault the turn proceeds without pushed facts (stage
     /// mark `FactsDegraded:TimedOut` / `FactsDegraded:Failed`); a fact whose
     /// disclosure check did not complete is never admitted. Default 3 s.
-    let withFactStageTimeout (timeout: System.TimeSpan) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withFactStageTimeout (timeout: System.TimeSpan) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalBudgets = {
-                app.RetrievalBudgets with
+                options.RetrievalBudgets with
                     FactStage = timeout
             }
     }
@@ -3247,8 +2994,8 @@ module RAGServerApp =
     /// Phase 894 — bound on retrieval traces queued for the background
     /// writer. Default 1,024; a full queue drops and counts the trace.
     /// `0` writes traces inline on the request path (pre-894).
-    let withRetrievalTraceQueueCapacity (capacity: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withRetrievalTraceQueueCapacity (capacity: int) (options: RagOptions) : RagOptions = {
+        options with
             RetrievalTraceQueueCapacity = max 0 capacity
     }
 
@@ -3267,8 +3014,8 @@ module RAGServerApp =
     ///
     /// Phase 869 — as with `withVectorStore`, a supplied index stays the
     /// caller's to dispose; the composition flushes only what it constructed.
-    let withSparseIndex (index: ISparseIndex) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withSparseIndex (index: ISparseIndex) (options: RagOptions) : RagOptions = {
+        options with
             SparseIndex = SparseIndexComposition.SuppliedSparseIndex index
     }
 
@@ -3278,8 +3025,8 @@ module RAGServerApp =
     /// index that tokenises inside its own engine uses to map the analyzer
     /// to its own configuration — or to refuse it, naming it, before the
     /// deployment starts (e.g. `PostgresFullTextIndex.factory`).
-    let withAnalyzedSparseIndex (build: ISparseAnalyzer -> ISparseIndex) (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withAnalyzedSparseIndex (build: ISparseAnalyzer -> ISparseIndex) (options: RagOptions) : RagOptions = {
+        options with
             SparseIndex = SparseIndexComposition.AnalyzedSparseIndex build
     }
 
@@ -3289,70 +3036,36 @@ module RAGServerApp =
     /// `ISparseIndex` is registered — the entity store's optional full-text
     /// leg sees it absent. Index lifecycle and erasure fan out over the
     /// dense store alone.
-    let withoutSparseIndex (app: RAGServerApp) : RAGServerApp = {
-        app with
+    let withoutSparseIndex (options: RagOptions) : RagOptions = {
+        options with
             SparseIndex = SparseIndexComposition.NoSparseIndex
     }
 
-    /// Drive the final composition. Returns the process exit code. All
-    /// required dependencies (`AIProviderFactory`, `ProviderProfile`,
-    /// `EmbeddingProvider`) are guaranteed at compile time by
-    /// `RAGServerApp.create`. Phase 1h — implementation is now
-    /// `composeRAG >> ServerApp.run`; the RAG config validators and the
-    /// AI/RAG DI + handler contributions all live in `composeRAG`, which
-    /// composes over `composeAI`. Consumers needing to stack RAG with
-    /// Forms / AI companions on one composition root use the additive
-    /// `withRAG` extension instead.
-    let run (app: RAGServerApp) : int = composeRAG app |> ServerApp.run
+// ─── The RAG companion on a `ServerApp` ────────────────────────────
 
-// ─── Additive companion-set extension `withRAG` (Phase 1h) ──────────
-//
-// Stack RAG contributions (and the AI assistant they compose over) onto
-// an existing `ServerApp` pipeline alongside Forms / future companions,
-// without forcing the deployment to commit to `RAGServerApp.run` as the
-// terminal call.
-
-/// Phase 1h — stack the RAG pipeline (and the AI assistant it composes
-/// over) onto an existing `ServerApp` pipeline. Consumes the required
-/// RAG dependency (`embedder`) plus the required AI dependencies
-/// (`factory` + `providerProfile`) and a `configure` function that
-/// builds RAG-specific state (retrieval knobs, grounding mode,
-/// ingestion observers, citation policy, AI assistant config) on a fresh
-/// `RAGServerApp` whose AI layer's `Base` is the input `ServerApp`.
+/// **Sets** the RAG companion: the retrieval tier `options` describes, and
+/// the AI tier it composes over, are composed once, when the deployment
+/// resolves, onto the deployment as every builder left it — so a
+/// `ServerApp` builder applied after this call still reaches both tiers. A
+/// second call replaces the first.
 ///
-/// The configurator should call only RAG/AI-specific helpers
-/// (`RAGServerApp.withGroundingMode` / `withTopK` / `withAIConfig` / …);
-/// the delegating helpers (`withConfig` / `withAuth` / …) exist on
-/// `RAGServerApp` for backcompat but calling them inside the
-/// configurator overwrites the base `ServerApp`'s existing
-/// configuration. Set base configuration on the outer pipeline before
-/// calling `withRAG`.
-///
-/// Calling `withRAG` twice on the same pipeline re-composes AI + RAG
-/// (re-appends `AILatencyMetrics.registrations`, re-registers the DI
-/// services, re-mounts the routes); the existing duplicate-detection
-/// paths surface the misuse — most loudly at metric-sink construction.
-///
-/// Example — Forms + RAG in one composition root:
+/// RAG composes the AI tier itself (it folds its retrieval layers into the
+/// assistant config), so this also claims the AI companion's slot with a
+/// tier that adds nothing: an earlier `AICompose.withAI` is superseded by
+/// `options.AI`, and a later one is refused when the deployment resolves
+/// (`composeAI` refuses a deployment the AI tier was already composed
+/// onto), so the AI tier is never composed twice.
 ///
 ///     ServerApp.empty
 ///     |> ServerApp.withConfig config
 ///     |> ServerApp.withStorage storage
-///     |> FormsCompose.withForms (fun f ->
-///         f |> FormsServerApp.withFormSchema mySchema)
-///     |> RAGCompose.withRAG factory providerProfile embedder (fun rag ->
-///         rag
-///         |> RAGServerApp.withAIConfig assistant
-///         |> RAGServerApp.withGroundingMode StrictlyGrounded)
+///     |> RAGCompose.withRAG (
+///         RagOptions.create factory providerProfile embedder
+///         |> RagOptions.withAIConfig assistant
+///         |> RagOptions.withGroundingMode StrictlyGrounded
+///     )
 ///     |> ServerApp.run
-/// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
-let withRAG
-    (factory: IAIProviderFactory)
-    (providerProfile: IProviderProfile)
-    (embedder: IEmbeddingProvider)
-    (configure: RAGServerApp -> RAGServerApp)
-    (app: ServerApp)
-    : ServerApp =
-    RAGServerApp.createFrom factory providerProfile embedder app
-    |> configure
-    |> composeRAG
+let withRAG (options: RagOptions) (app: ServerApp) : ServerApp =
+    app
+    |> ServerApp.withCompanion aiCompanion id
+    |> ServerApp.withCompanion ragOwner (composeRAG options)

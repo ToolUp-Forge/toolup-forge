@@ -513,10 +513,10 @@ and withRetrievalPlanned
                     // pipeline to HONOUR the field, but this builder
                     // constructs its own `RetrievalRequest` and left it
                     // `None`, so the AI panel and every deployment composing
-                    // `RAGServerApp` could not scope a query however much the
+                    // RAG could not scope a query however much the
                     // pipeline was willing to. The deployment-level bound
                     // (`RetrievalDefaults.Filters`, set via
-                    // `RAGServerApp.withRetrievalFilters`) and the per-request
+                    // `RagOptions.withRetrievalFilters`) and the per-request
                     // one (`PromptContext.RetrievalFilters`, arriving from
                     // `AIMessageRequest`) merge here, deployment winning any
                     // shared key. Both `None` ⇒ `None`, so an unscoped turn

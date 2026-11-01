@@ -35,7 +35,7 @@ type KnowledgeQueryTooLargeException(queryChars: int, maxQueryChars: int) =
     inherit
         exn(
             sprintf
-                "Retrieval query of %d characters exceeds the configured MaxQueryChars cap of %d. A query this long is almost always a programming bug (an entire document pasted into the query slot) — split it, or raise the cap via RAGServerApp.withMaxQueryChars."
+                "Retrieval query of %d characters exceeds the configured MaxQueryChars cap of %d. A query this long is almost always a programming bug (an entire document pasted into the query slot) — split it, or raise the cap via RagOptions.withMaxQueryChars."
                 queryChars
                 maxQueryChars
         )
@@ -162,7 +162,7 @@ let private fuseRRF (dense: VectorMatch list) (sparse: VectorMatch list) : Vecto
 [<RequireQualifiedAccess>]
 type RetrievalScoreSpace =
     /// Dense cosine similarity exactly as the vector store scored it — the
-    /// dense-only composition (`RAGServerApp.withoutSparseIndex`). Absolute:
+    /// dense-only composition (`RagOptions.withoutSparseIndex`). Absolute:
     /// a threshold is a similarity floor, and a pool of weak matches can
     /// fall below it entirely.
     | Cosine
@@ -173,7 +173,7 @@ type RetrievalScoreSpace =
     /// `1.0` and its weakest `0.0`, so a threshold trims the weak tail
     /// relative to the best match rather than refusing a pool outright.
     | Fused
-    /// A cross-encoder reranker's own scale (`RAGServerApp.withReranker`).
+    /// A cross-encoder reranker's own scale (`RagOptions.withReranker`).
     /// `IReranker` promises an ordering, not a calibrated scale, so the SDK
     /// cannot say what range these scores occupy. The boosts read it too
     /// (Phase 978): each nudges in units of the reranked pool's range.
@@ -226,7 +226,7 @@ module RetrievalScoreSpace =
             | None ->
                 Some(
                     sprintf
-                        "MinScore = %g is applied to the scores of a supplied IRetrievalPipeline (RAGServerApp.withRetrievalPipeline), whose score space the SDK cannot see. Confirm that pipeline's scores can exceed %g; if they cannot, the gate drops every chunk and the assistant answers with no retrieved context."
+                        "MinScore = %g is applied to the scores of a supplied IRetrievalPipeline (RagOptions.withRetrievalPipeline), whose score space the SDK cannot see. Confirm that pipeline's scores can exceed %g; if they cannot, the gate drops every chunk and the assistant answers with no retrieved context."
                         t
                         t
                 )
@@ -235,7 +235,7 @@ module RetrievalScoreSpace =
                 | None ->
                     Some(
                         sprintf
-                            "MinScore = %g is applied in the %s score space: the composed reranker's own scores (RAGServerApp.withReranker). IReranker promises an ordering, not a calibrated scale, so the SDK cannot confirm %g is reachable. Check it against that reranker's documented score range; a threshold above it drops every chunk and the assistant answers with no retrieved context."
+                            "MinScore = %g is applied in the %s score space: the composed reranker's own scores (RagOptions.withReranker). IReranker promises an ordering, not a calibrated scale, so the SDK cannot confirm %g is reachable. Check it against that reranker's documented score range; a threshold above it drops every chunk and the assistant answers with no retrieved context."
                             t
                             (label space)
                             t
@@ -243,7 +243,7 @@ module RetrievalScoreSpace =
                 | Some bound when t >= bound ->
                     Some(
                         sprintf
-                            "MinScore = %g cannot be met in the %s score space, which tops out at %g: the gate keeps only scores strictly above the threshold, so it drops every unboosted chunk and the assistant answers with no retrieved context. Lower it (RAGServerApp.withMinScore)."
+                            "MinScore = %g cannot be met in the %s score space, which tops out at %g: the gate keeps only scores strictly above the threshold, so it drops every unboosted chunk and the assistant answers with no retrieved context. Lower it (RagOptions.withMinScore)."
                             t
                             (label space)
                             bound
@@ -521,7 +521,7 @@ module RetrievalPipelineOptions =
 /// Supplied to `RetrievalPipeline` as the optional `budgets` argument.
 /// Omitting it leaves every stage unbounded — the pipeline's pre-894
 /// behaviour, byte for byte, including a provider failure raising out of
-/// `Retrieve` (GP 11). `RAGServerApp` supplies `defaults` unless a
+/// `Retrieve` (GP 11). `RagOptions` supplies `defaults` unless a
 /// deployment sets its own.
 type RetrievalBudgets = {
     /// Policy for the query embed (the dense branch). On any outcome but
@@ -746,7 +746,7 @@ type RetrievalPipeline
         ?queryRewriter: IQueryRewriter,
         // Phase 894 — the per-turn budgets (query embed, fact stage). `None`
         // ⇒ every stage unbounded, the pre-894 pipeline byte for byte
-        // (GP 11); `RAGServerApp` passes `RetrievalBudgets.defaults` unless
+        // (GP 11); `RagOptions` passes `RetrievalBudgets.defaults` unless
         // configured otherwise.
         ?budgets: RetrievalBudgets
     ) =

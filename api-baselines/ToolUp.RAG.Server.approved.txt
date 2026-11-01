@@ -172,11 +172,11 @@ ToolUp.RAG.ProviderQueryRewriter+ProviderQueryRewriter..ctor(ToolUp.Platform.AI.
 ToolUp.RAG.RAGCitationDevEndpoint (class)
 ToolUp.RAG.RAGCitationDevEndpoint.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.RAG.RAGCompose (class)
-ToolUp.RAG.RAGCompose.composeRAG(ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.Platform.ServerApp
+ToolUp.RAG.RAGCompose.composeRAG(ToolUp.RAG.RAGCompose+RagOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.RAG.RAGCompose.defaultRetrievalFraming : System.String { get }
 ToolUp.RAG.RAGCompose.emitIngestionDrop(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache(ToolUp.RAG.RAGCompose+RAGServerApp) : System.Boolean
-ToolUp.RAG.RAGCompose.hasScopeKeyedEmbeddingProvider(ToolUp.RAG.RAGCompose+RAGServerApp) : System.Boolean
+ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache(ToolUp.RAG.RAGCompose+RagOptions) : System.Boolean
+ToolUp.RAG.RAGCompose.hasScopeKeyedEmbeddingProvider(ToolUp.RAG.RAGCompose+RagOptions) : System.Boolean
 ToolUp.RAG.RAGCompose.isInProcessSparseIndex(ToolUp.Platform.ISparseIndex+ISparseIndex) : System.Boolean
 ToolUp.RAG.RAGCompose.isInProcessVectorStore(ToolUp.Platform.IVectorStore+IVectorStore) : System.Boolean
 ToolUp.RAG.RAGCompose.liveInterfaceSummary(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition], ToolUp.RAG.RAGCompose+GroundingMode) : ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary
@@ -184,7 +184,7 @@ ToolUp.RAG.RAGCompose.resolveFraming(ToolUp.RAG.RAGCompose+GroundingMode, System
 ToolUp.RAG.RAGCompose.resolveFramingWithTools(ToolUp.RAG.RAGCompose+GroundingMode, System.String, ToolUp.RAG.RAGPromptBuilder+ToolFraming) : System.String
 ToolUp.RAG.RAGCompose.strictlyGroundedDirective : System.String { get }
 ToolUp.RAG.RAGCompose.uiToolFramingCompanion : System.String { get }
-ToolUp.RAG.RAGCompose.withRAG(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.RAG.RAGCompose+RAGServerApp, ToolUp.RAG.RAGCompose+RAGServerApp], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.RAG.RAGCompose.withRAG(ToolUp.RAG.RAGCompose+RagOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.RAG.RAGCompose+GroundingMode (class)
 ToolUp.RAG.RAGCompose+GroundingMode.IsPermissive : System.Boolean { get }
 ToolUp.RAG.RAGCompose+GroundingMode.IsPreferred : System.Boolean { get }
@@ -199,123 +199,96 @@ ToolUp.RAG.RAGCompose+GroundingMode+Tags.Preferred : System.Int32 (literal)
 ToolUp.RAG.RAGCompose+GroundingMode+Tags.StrictlyGrounded : System.Int32 (literal)
 ToolUp.RAG.RAGCompose+LiveInterfaceContributor (class)
 ToolUp.RAG.RAGCompose+LiveInterfaceContributor..ctor(ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary)
-ToolUp.RAG.RAGCompose+RAGServerApp (class)
-ToolUp.RAG.RAGCompose+RAGServerApp..ctor(ToolUp.AI.AICompose+AIServerApp, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker], System.Boolean, System.Double, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer], System.String, System.Int32, System.Int32, ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, System.Boolean, ToolUp.RAG.RAGCompose+GroundingMode, ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions, System.Boolean, ToolUp.RAG.CitationNormaliser+RagCitationPolicy, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IIngestionQueueStore], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IScopeEnumerator], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingCache+IEmbeddingCache], ToolUp.RAG.RetrievalPipeline+RetrievalBudgets, System.Int32, ToolUp.RAG.RAGCompose+SparseIndexComposition, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]])
-ToolUp.RAG.RAGCompose+RAGServerApp.AI : ToolUp.AI.AICompose+AIServerApp { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.CitationPolicy : ToolUp.RAG.CitationNormaliser+RagCitationPolicy { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.EmbeddingCache : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingCache+IEmbeddingCache] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.EmbeddingProvider : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.EnableDocumentSummaries : System.Boolean { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.EnableMmr : System.Boolean { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.FactClausePlan : ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.FactTier : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.GroundingMode : ToolUp.RAG.RAGCompose+GroundingMode { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.IndexConversations : System.Boolean { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.IngestionConcurrency : System.Int32 { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.IngestionObservers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.IngestionQueueCapacity : System.Int32 { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.IngestionQueueStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IIngestionQueueStore] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.IngestionRecoveryScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.IngestionRetryPolicy : ToolUp.RAG.IngestionTypes+IngestionRetryPolicy { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.MaxChunkBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.MaxDocumentBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.MaxQueryChars : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.MmrLambda : System.Double { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.OverflowPolicy : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.Reranker : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.RetrievalBudgets : ToolUp.RAG.RetrievalPipeline+RetrievalBudgets { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.RetrievalDefaults : ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.RetrievalDefaultsClampLog : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.RetrievalFraming : System.String { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.RetrievalPipelineOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.RetrievalTraceQueueCapacity : System.Int32 { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.ScopeEnumerator : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IScopeEnumerator] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.SparseAnalyzer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.SparseIndex : ToolUp.RAG.RAGCompose+SparseIndexComposition { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.Telemetry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.TombstoneRetention : System.TimeSpan { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.VacuumSchedule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.RAG.RAGCompose+RAGServerApp.VectorStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore] { get }
-ToolUp.RAG.RAGCompose+RAGServerAppModule (class)
-ToolUp.RAG.RAGCompose+RAGServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.addModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.create(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.createFrom(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.ServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.mapAI(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.AICompose+AIServerApp], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.run(ToolUp.RAG.RAGCompose+RAGServerApp) : System.Int32
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withAIConfig(ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withAnalyzedSparseIndex(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, ToolUp.Platform.ISparseIndex+ISparseIndex], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withAuditFailurePolicy(ToolUp.Platform.AuditFailurePolicy, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withBackfillMissedTicks(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withCitationPolicy(ToolUp.RAG.CitationNormaliser+RagCitationPolicy, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withCspContributor(ToolUp.Platform.ICspContributor, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withDocumentSummaries(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withDurableIngestionQueue(ToolUp.RAG.IngestionTypes+IIngestionQueueStore, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withEmbeddingCache(ToolUp.Platform.IEmbeddingCache+IEmbeddingCache, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withEmbeddingProvider(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withEntityOutbox(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withEventTriggerCatchUp(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withExtensions(ToolUp.Platform.ComposeExtensions, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withFactClausePlanOptions(ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withFactClausePlanning(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withFactStageTimeout(System.TimeSpan, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withFacts(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withGroundingMode(ToolUp.RAG.RAGCompose+GroundingMode, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withHealthCheck(ToolUp.Platform.HealthChecks+IHealthCheck, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIndexConversations(System.Boolean, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIngestionConcurrency(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIngestionObserver(ToolUp.RAG.IngestionTypes+IIngestionStatusObserver, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIngestionObservers(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIngestionQueueCapacity(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIngestionQueueOverflowPolicy(ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIngestionRecoverySweep(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withIngestionRetryPolicy(ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withJobHandler(System.String, ToolUp.Platform.IJobHandler, ToolUp.Platform.Trigger, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withLogger(ToolUp.Platform.ILogger, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMaxChunkBytes(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMaxDocumentBytes(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMaxQueryChars(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMergeStrategy(ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMetricsSink(ToolUp.Platform.Metrics.IMetricsSink, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMinScore(Microsoft.FSharp.Core.FSharpOption`1[System.Double], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMmr(ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withMmrLambda(System.Double, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withModuleAIContexts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withNotifications(ToolUp.Platform.INotificationChannel, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withOriginFilter(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin]], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withPostMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withPreMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withQueryEmbedAttempts(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withQueryEmbedConcurrency(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withQueryEmbedTimeout(System.TimeSpan, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withRateLimitDescriptor(ToolUp.Platform.RateLimitDescriptor, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withReranker(ToolUp.Platform.IReranker+IReranker, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalBudgets(ToolUp.RAG.RetrievalPipeline+RetrievalBudgets, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalDefaults(ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalFilters(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalFraming(System.String, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalPipeline(ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withRetrievalTraceQueueCapacity(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withScheduledJob(ToolUp.Platform.ScheduledJobDeclaration, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withScopeEnumerator(ToolUp.Platform.IScopeEnumerator, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withSnippetCharLimit(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withSparseAnalyzer(ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withSparseIndex(ToolUp.Platform.ISparseIndex+ISparseIndex, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withTelemetry(ToolUp.Platform.IRagTelemetry+IRagTelemetry, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withTombstoneRetention(System.TimeSpan, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withTopK(System.Int32, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withUserDirectory(ToolUp.Platform.IUserDirectory, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withVacuumSchedule(ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withVacuumScheduleCron(System.String, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withVectorStore(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
-ToolUp.RAG.RAGCompose+RAGServerAppModule.withoutSparseIndex(ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp
+ToolUp.RAG.RAGCompose+RagOptions (class)
+ToolUp.RAG.RAGCompose+RagOptions..ctor(ToolUp.AI.AICompose+AIOptions, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker], System.Boolean, System.Double, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer], System.String, System.Int32, System.Int32, ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, System.Boolean, ToolUp.RAG.RAGCompose+GroundingMode, ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions, System.Boolean, ToolUp.RAG.CitationNormaliser+RagCitationPolicy, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IIngestionQueueStore], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IScopeEnumerator], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingCache+IEmbeddingCache], ToolUp.RAG.RetrievalPipeline+RetrievalBudgets, System.Int32, ToolUp.RAG.RAGCompose+SparseIndexComposition, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]])
+ToolUp.RAG.RAGCompose+RagOptions.AI : ToolUp.AI.AICompose+AIOptions { get }
+ToolUp.RAG.RAGCompose+RagOptions.CitationPolicy : ToolUp.RAG.CitationNormaliser+RagCitationPolicy { get }
+ToolUp.RAG.RAGCompose+RagOptions.EmbeddingCache : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingCache+IEmbeddingCache] { get }
+ToolUp.RAG.RAGCompose+RagOptions.EmbeddingProvider : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider { get }
+ToolUp.RAG.RAGCompose+RagOptions.EnableDocumentSummaries : System.Boolean { get }
+ToolUp.RAG.RAGCompose+RagOptions.EnableMmr : System.Boolean { get }
+ToolUp.RAG.RAGCompose+RagOptions.FactClausePlan : ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions { get }
+ToolUp.RAG.RAGCompose+RagOptions.FactTier : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
+ToolUp.RAG.RAGCompose+RagOptions.GroundingMode : ToolUp.RAG.RAGCompose+GroundingMode { get }
+ToolUp.RAG.RAGCompose+RagOptions.IndexConversations : System.Boolean { get }
+ToolUp.RAG.RAGCompose+RagOptions.IngestionConcurrency : System.Int32 { get }
+ToolUp.RAG.RAGCompose+RagOptions.IngestionObservers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver] { get }
+ToolUp.RAG.RAGCompose+RagOptions.IngestionQueueCapacity : System.Int32 { get }
+ToolUp.RAG.RAGCompose+RagOptions.IngestionQueueStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IIngestionQueueStore] { get }
+ToolUp.RAG.RAGCompose+RagOptions.IngestionRecoveryScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.RAG.RAGCompose+RagOptions.IngestionRetryPolicy : ToolUp.RAG.IngestionTypes+IngestionRetryPolicy { get }
+ToolUp.RAG.RAGCompose+RagOptions.MaxChunkBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.RAG.RAGCompose+RagOptions.MaxDocumentBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.RAG.RAGCompose+RagOptions.MaxQueryChars : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.RAG.RAGCompose+RagOptions.MmrLambda : System.Double { get }
+ToolUp.RAG.RAGCompose+RagOptions.OverflowPolicy : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
+ToolUp.RAG.RAGCompose+RagOptions.Reranker : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IReranker+IReranker] { get }
+ToolUp.RAG.RAGCompose+RagOptions.RetrievalBudgets : ToolUp.RAG.RetrievalPipeline+RetrievalBudgets { get }
+ToolUp.RAG.RAGCompose+RagOptions.RetrievalDefaults : ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults { get }
+ToolUp.RAG.RAGCompose+RagOptions.RetrievalDefaultsClampLog : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.RAG.RAGCompose+RagOptions.RetrievalFraming : System.String { get }
+ToolUp.RAG.RAGCompose+RagOptions.RetrievalPipelineOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline] { get }
+ToolUp.RAG.RAGCompose+RagOptions.RetrievalTraceQueueCapacity : System.Int32 { get }
+ToolUp.RAG.RAGCompose+RagOptions.ScopeEnumerator : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IScopeEnumerator] { get }
+ToolUp.RAG.RAGCompose+RagOptions.SparseAnalyzer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer] { get }
+ToolUp.RAG.RAGCompose+RagOptions.SparseIndex : ToolUp.RAG.RAGCompose+SparseIndexComposition { get }
+ToolUp.RAG.RAGCompose+RagOptions.Telemetry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry] { get }
+ToolUp.RAG.RAGCompose+RagOptions.TombstoneRetention : System.TimeSpan { get }
+ToolUp.RAG.RAGCompose+RagOptions.VacuumSchedule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.RAG.RAGCompose+RagOptions.VectorStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+IVectorStore] { get }
+ToolUp.RAG.RAGCompose+RagOptionsModule (class)
+ToolUp.RAG.RAGCompose+RagOptionsModule.create(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withAIConfig(ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withAIOptions(ToolUp.AI.AICompose+AIOptions, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withAnalyzedSparseIndex(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, ToolUp.Platform.ISparseIndex+ISparseIndex], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withCitationPolicy(ToolUp.RAG.CitationNormaliser+RagCitationPolicy, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withDocumentSummaries(System.Boolean, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withDurableIngestionQueue(ToolUp.RAG.IngestionTypes+IIngestionQueueStore, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withEmbeddingCache(ToolUp.Platform.IEmbeddingCache+IEmbeddingCache, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withEmbeddingProvider(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withFactClausePlanOptions(ToolUp.Platform.VectorKnowledgeTypes+FactClausePlanOptions, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withFactClausePlanning(System.Boolean, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withFactStageTimeout(System.TimeSpan, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withFacts(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withGroundingMode(ToolUp.RAG.RAGCompose+GroundingMode, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIndexConversations(System.Boolean, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIngestionConcurrency(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIngestionObserver(ToolUp.RAG.IngestionTypes+IIngestionStatusObserver, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIngestionObservers(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.IngestionTypes+IIngestionStatusObserver], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIngestionQueueCapacity(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIngestionQueueOverflowPolicy(ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIngestionRecoverySweep(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withIngestionRetryPolicy(ToolUp.RAG.IngestionTypes+IngestionRetryPolicy, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withMaxChunkBytes(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withMaxDocumentBytes(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withMaxQueryChars(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withMergeStrategy(ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withMinScore(Microsoft.FSharp.Core.FSharpOption`1[System.Double], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withMmr(ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withMmrLambda(System.Double, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withModuleAIContexts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withOriginFilter(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.VectorKnowledgeTypes+ChunkOrigin]], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withQueryEmbedAttempts(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withQueryEmbedConcurrency(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withQueryEmbedTimeout(System.TimeSpan, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withReranker(ToolUp.Platform.IReranker+IReranker, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withRetrievalBudgets(ToolUp.RAG.RetrievalPipeline+RetrievalBudgets, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withRetrievalDefaults(ToolUp.Platform.VectorKnowledgeTypes+RetrievalDefaults, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withRetrievalFilters(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withRetrievalFraming(System.String, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withRetrievalPipeline(ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withRetrievalTraceQueueCapacity(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withScopeEnumerator(ToolUp.Platform.IScopeEnumerator, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withSnippetCharLimit(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withSparseAnalyzer(ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withSparseIndex(ToolUp.Platform.ISparseIndex+ISparseIndex, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withTelemetry(ToolUp.Platform.IRagTelemetry+IRagTelemetry, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withTombstoneRetention(System.TimeSpan, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withTopK(System.Int32, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withVacuumSchedule(ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withVacuumScheduleCron(System.String, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withVectorStore(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
+ToolUp.RAG.RAGCompose+RagOptionsModule.withoutSparseIndex(ToolUp.RAG.RAGCompose+RagOptions) : ToolUp.RAG.RAGCompose+RagOptions
 ToolUp.RAG.RAGCompose+SparseIndexComposition (class)
 ToolUp.RAG.RAGCompose+SparseIndexComposition.InProcessSparseIndex : ToolUp.RAG.RAGCompose+SparseIndexComposition { get }
 ToolUp.RAG.RAGCompose+SparseIndexComposition.IsAnalyzedSparseIndex : System.Boolean { get }
