@@ -573,12 +573,16 @@ Composing a policy is optional; without one the registry runs under `ToolPolicy.
 every tool, declared or not, is on the pre-793 path. With one:
 
 ```fsharp
-AIServerApp.create aiProviderFactory providerProfile
-|> AIServerApp.withToolEffects
-    CompositionProfile.Verified
-    (AIToolRegistry.ToolPolicy.readOnly
-     |> AIToolRegistry.ToolPolicy.withApprovalFor [ ToolEffectClass.WriteState; ToolEffectClass.Spend ]
-     |> AIToolRegistry.ToolPolicy.withExternalPrincipalCeiling [ ToolEffectClass.ReadFacts ])
+ServerApp.empty
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withToolEffects
+        CompositionProfile.Verified
+        (AIToolRegistry.ToolPolicy.readOnly
+         |> AIToolRegistry.ToolPolicy.withApprovalFor [ ToolEffectClass.WriteState; ToolEffectClass.Spend ]
+         |> AIToolRegistry.ToolPolicy.withExternalPrincipalCeiling [ ToolEffectClass.ReadFacts ])
+)
+|> ServerApp.run
 ```
 
 `withApprovalFor` keys the human-in-the-loop approval prompt on effect class, ahead of any
@@ -620,26 +624,29 @@ as a read-only card on its Live tab, through `IHealthMonitorApi.GetAIDenialRollu
 `PlatformRole.PlatformAdmin`. Both surfaces read the same `AIDenialRollup` record produced by the
 same function, so they cannot report different numbers. The card is suppressed entirely on a
 deployment that has never recorded a denial. The plumbing is the optional Core DI seam
-`IAIDenialRollupProbe`, which `composeAI` registers — so `ToolUp.Platform.Server` renders AI denials
+`IAIDenialRollupProbe`, which the AI tier registers when `AICompose.withAI` composes it — so `ToolUp.Platform.Server` renders AI denials
 without taking a dependency on `ToolUp.AI` (GP 1), and a deployment with no AI composed simply has
 no seam and no card (GP 13).
 
 **Paging on a sustained rate.** A campaign should not wait for someone to refresh a page. Opt in with
-`AIServerApp.withDenialRateAlert`: when one scope's refused calls cross `Threshold` within `Window`,
+`AIOptions.withDenialRateAlert`: when one scope's refused calls cross `Threshold` within `Window`,
 a single `SystemMessage` notification is published and then suppressed for `Cooldown` — one incident,
 one alert.
 
 ```fsharp skip=fragment
 open ToolUp.AI
 
-AIServerApp.create factory providerProfile
-|> AIServerApp.withDenialRateAlert
-    { AIDenialRateMonitor.AIDenialRateAlertPolicy.defaults with
-        Threshold = 20
-        // Multi-tenant: route the alert to the operator channel rather than
-        // telling the tenant that its session is being probed.
-        AlertScopeId = Some "_platform" }
-|> AIServerApp.run
+ServerApp.empty
+|> AICompose.withAI (
+    AIOptions.create factory providerProfile
+    |> AIOptions.withDenialRateAlert
+        { AIDenialRateMonitor.AIDenialRateAlertPolicy.defaults with
+            Threshold = 20
+            // Multi-tenant: route the alert to the operator channel rather than
+            // telling the tenant that its session is being probed.
+            AlertScopeId = Some "_platform" }
+)
+|> ServerApp.run
 ```
 
 Two caveats worth reading before sizing a threshold. The counter is **per process**, so an N-silo
@@ -767,14 +774,17 @@ let composedBuilder =
         dataSummaryPromptBuilder
     ]
 
-AIServerApp.create aiProviderFactory providerProfile
-|> AIServerApp.withAIConfig {
-    Branding = branding
-    SystemPrompt = Some composedBuilder
-    Limits = AgentLoopLimits.defaults
-    AISurfaceDerivation = TrustClient
-}
-|> AIServerApp.run
+ServerApp.empty
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withAIConfig {
+        Branding = branding
+        SystemPrompt = Some composedBuilder
+        Limits = AgentLoopLimits.defaults
+        AISurfaceDerivation = TrustClient
+    }
+)
+|> ServerApp.run
 ```
 
 ### Composition rules

@@ -24,8 +24,11 @@ work with, with no dictionary, no model and no native binary.
 open ToolUp.SparseIndices.Cjk
 
 let app =
-    RAGServerApp.create factory profile embedder
-    |> RAGServerApp.withSparseAnalyzer (CjkAnalyzer.bigrams ())
+    ServerApp.empty
+    |> RAGCompose.withRAG (
+        RagOptions.create factory profile embedder
+        |> RagOptions.withSparseAnalyzer (CjkAnalyzer.bigrams ())
+    )
 ```
 
 Or with explicit options:

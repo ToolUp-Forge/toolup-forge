@@ -56,7 +56,7 @@ let mutable internal pendingPostSaveHooks:
 let configurePostSaveHooks hooks = pendingPostSaveHooks <- hooks
 ```
 
-RAG's `composeWithRAG` calls `configurePostSaveHooks [ vectorisationHook ]` once. `compose` then **drains** the list into the `FileManagementRuntime` record it builds (`PostSaveHooks`, plus `PostSaveHooksLogger = Some resolvedLogger`) and resets it to `[]`, so a second compose run — integration tests that bring the host up repeatedly — starts clean. Everything the hooks pipeline reads at request time comes off that per-compose record, not off a mutable; `FileManagementRuntime.empty` is what a harness bypassing `compose` sees.
+The RAG tier (composed by `RAGCompose.withRAG`) calls `configurePostSaveHooks [ vectorisationHook ]` once. `compose` then **drains** the list into the `FileManagementRuntime` record it builds (`PostSaveHooks`, plus `PostSaveHooksLogger = Some resolvedLogger`) and resets it to `[]`, so a second compose run — integration tests that bring the host up repeatedly — starts clean. Everything the hooks pipeline reads at request time comes off that per-compose record, not off a mutable; `FileManagementRuntime.empty` is what a harness bypassing `compose` sees.
 
 **Failure routing.** Each hook is wrapped in a `try / with` shim before `Async.Parallel | Async.Start`:
 
@@ -97,7 +97,7 @@ The `Bundle` target builds for production: `dotnet publish` for the server, `dot
 | **Project count** | 3 (Shared, Server, Client) | 1 SDK + N modules + thin entry points |
 | **Shared types** | One Shared project | Each module owns its SharedTypes.fs |
 | **Client compilation** | All .fs files listed in Client.fsproj | Props injection — Client.fs is the only listed file |
-| **Server composition** | Hardcoded in Server.fs | `ServerApp` / `AIServerApp` / `RAGServerApp` fluent pipeline over `SDK.Server.compose` (plain `WebApplication.CreateBuilder` internally) |
+| **Server composition** | Hardcoded in Server.fs | `ServerApp` fluent pipeline (AI / RAG via `AICompose.withAI` / `RAGCompose.withRAG`) over `SDK.Server.compose` (plain `WebApplication.CreateBuilder` internally) |
 | **Elmish program** | Defined in App.fs / Index.fs | `SDK.Client.run` — shell MVU in SDK |
 | **Module addition** | Edit Shared, Server, and Client | Add props import + one `register()` call |
 | **Module removal** | Remove from Shared, Server, Client | Remove props import + one `register()` call |

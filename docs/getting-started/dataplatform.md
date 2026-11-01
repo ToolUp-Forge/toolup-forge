@@ -10,8 +10,8 @@ first run works.
 
 | Concern | What the scaffold uses | Docs |
 |---|---|---|
-| AI, retrieval and the knowledge base | `RAGServerApp` with Claude (strictly bring-your-own-key, the key read from `ISecretStore`), the local embedder, the HNSW vector store, and the knowledge base's AI tools | [knowledge-portal](../platform/knowledge-portal.md) |
-| The fact tier | `RAGServerApp.withFacts FactsCompose.withFactTier`: the fact store and the fact-table writer in one call | [facts](../platform/facts.md), [fact-publication](../platform/fact-publication.md) |
+| AI, retrieval and the knowledge base | `RAGCompose.withRAG` with Claude (strictly bring-your-own-key, the key read from `ISecretStore`), the local embedder, the HNSW vector store, and the knowledge base's AI tools | [knowledge-portal](../platform/knowledge-portal.md) |
+| The fact tier | `RagOptions.withFacts FactsCompose.withFactTier`: the fact store and the fact-table writer in one call | [facts](../platform/facts.md), [fact-publication](../platform/fact-publication.md) |
 | The data module | `DailyTrade`: an `IDataSource` over uploaded deliveries, a reader that validates the whole delivery or rejects it, and two declared fact tables with their metrics and subjects; it fills the client shell's data-manager slot | [modules](../platform/modules.md) |
 | The daily report | a `GroundedNarrativeDefinition` composed with `GroundedNarratives.compose` over `NarrativeGrounding.factTools`, run under the scope of the request that delivered the data | [grounded-narratives](../platform/grounded-narratives.md) |
 | The report pages | `insights/latest` and `insights/{date}`, declared in front of PublicRendering's content API with `PageAudience.ScopeGated [ "report-reader" ]`, rendering the stored `NarrativeDocument` | [gated-ssr](../platform/gated-ssr.md) |

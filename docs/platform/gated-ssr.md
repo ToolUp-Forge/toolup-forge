@@ -169,7 +169,7 @@ open ToolUp.RAG.RAGCompose
 ServerApp.empty
 |> ServerApp.withConfig config            // team surface, PublicPath = the client bundle, PublicRendering enabled
 |> ServerApp.withAuth authProvider        // one identity provider for the app and the pages
-|> RAGCompose.withRAG factory providerProfile embedder (fun rag -> rag |> RAGServerApp.withTopK 8)
+|> RAGCompose.withRAG (RagOptions.create factory providerProfile embedder |> RagOptions.withTopK 8)
 |> ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn (new System.Net.Http.HttpClient()) signIn
 |> PublicRenderingCompose.withPublicRendering (fun pr -> pr |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout)
 |> ServerApp.run                          // the combined pipeline ends here
@@ -177,11 +177,14 @@ ServerApp.empty
 // pages/q3-results.md  →  ---\naudience: scope:finance-reader\n---
 ```
 
-**End the pipeline in `ServerApp.run`, never `RAGServerApp.run`.** `RAGServerApp.run` (like
-`PublicRenderingServerApp.run`) is a terminal: it composes RAG and starts the host, so nothing can be stacked
-after it. Use the `with*` composers for every companion and call `ServerApp.run` once, last. Set base
-configuration (`withConfig`, `withAuth`, `withStorage`) on the outer pipeline before the first composer; the
-delegating helpers on `RAGServerApp` / `PublicRenderingServerApp` overwrite it if called inside a configurator.
+**End the pipeline in `ServerApp.run`, never `PublicRenderingServerApp.run`.** `PublicRenderingServerApp.run`
+is a terminal: it composes its companion and starts the host, so nothing can be stacked after it. Use the
+`with*` composers for every companion and call `ServerApp.run` once, last. RAG's settings live on the
+`RagOptions` record `withRAG` takes; the deployment's base configuration (`withConfig`, `withAuth`,
+`withStorage`) stays on the `ServerApp` pipeline, and because the RAG tier is composed when the deployment
+resolves, those builders reach it whichever side of `withRAG` they sit. Set base configuration on the outer
+pipeline before the PublicRendering composer; the delegating helpers on `PublicRenderingServerApp` overwrite it
+if called inside a configurator.
 
 How the routes divide on that pipeline:
 

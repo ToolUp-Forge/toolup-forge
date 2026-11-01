@@ -7,10 +7,10 @@ Deep technical reference for the `ToolUp.RAG` companion package. Assumes familia
 ```
 Browser                             Server
 ──────                              ──────
-File upload                         composeWithRAG (ToolUp.RAG)
+File upload                         composeRAG (ToolUp.RAG)
    │                                       │ wraps
    │ ToolUp.Remoting                       ▼
-   ▼                                composeWithAI (ToolUp.AI)
+   ▼                                composeAI (ToolUp.AI)
 SessionFileStore.AddFile            │     │ wraps
    │                                │     ▼
    │ post-save hook fires           │   Server.compose (ToolUp.Platform)
@@ -55,7 +55,7 @@ Two pipelines touch `IRetrievalPipeline`: **ingestion** (write path, background)
 
 ## Pipeline lifecycle — ingestion path
 
-1. **Trigger.** `SessionFileStore.AddFile` completes. The post-save hook registered by `composeWithRAG` runs the `makeVectorisationHook` closure with `(processedData, entry, scope)`.
+1. **Trigger.** `SessionFileStore.AddFile` completes. The post-save hook registered by `composeRAG` runs the `makeVectorisationHook` closure with `(processedData, entry, scope)`.
 2. **Handler lookup.** The hook finds the first `VectorisationHandler` whose `DataTypeId` matches `entry.DataType`. No match → the hook returns without emitting anything (non-breaking for modules that don't vectorise).
 3. **Chunk production.** `handler.Vectorise processedData` returns a `TextChunk list`. Empty list → no jobs enqueued.
 4. **Scope resolution.** Storage scope (`"team-<id>"` or `"user-<id>"`) is translated to `VectorScope`: team containers map to `Team teamId`; anything else to `Deployment`. `Platform` scope is never produced by the hook — platform content is loaded out-of-band by administrators.
@@ -84,7 +84,7 @@ The dequeue-and-fire-without-awaiting pattern is deliberate: if `processJob` wai
 
 ### Backpressure + overflow surfaces (Phase 303)
 
-The ingestion queue is a **bounded** `Channel<DocumentIngestionJob>` (default capacity 5,000, `RAGServerApp.withIngestionQueueCapacity`), not unbounded — a bulk-upload spike is rejected at the door rather than buffering unboundedly and tripping the embedding provider's rate limiter. When the post-save hook offers a document to a full queue, the behaviour is set by `RAGServerApp.withIngestionQueueOverflowPolicy : IngestionOverflowPolicy`:
+The ingestion queue is a **bounded** `Channel<DocumentIngestionJob>` (default capacity 5,000, `RagOptions.withIngestionQueueCapacity`), not unbounded — a bulk-upload spike is rejected at the door rather than buffering unboundedly and tripping the embedding provider's rate limiter. When the post-save hook offers a document to a full queue, the behaviour is set by `RagOptions.withIngestionQueueOverflowPolicy : IngestionOverflowPolicy`:
 
 | Policy | Full-queue behaviour |
 |---|---|
@@ -107,7 +107,7 @@ Alongside the triple, the existing per-scope `DocumentVectorisationDropped` even
 ## Pipeline lifecycle — retrieval path
 
 1. **Trigger.** `AIAssistantHandler` receives a `SubmitMessage` request, builds a `PromptContext` with `CurrentMessage = Some request.Content`, and invokes the configured `SystemPromptBuilder`.
-2. **Builder composition.** `composeWithRAG` appends `withRetrieval pipelineRef.Value.Value` to the builder chain. If the caller supplied no `aiConfig`, the retrieval builder alone becomes the system prompt. If the caller supplied one, `SystemPromptBuilder.compose` layers their builder with `withRetrieval` so retrieval content appears after their static/module content.
+2. **Builder composition.** `composeRAG` appends `withRetrieval pipelineRef.Value.Value` to the builder chain. If the caller supplied no `aiConfig`, the retrieval builder alone becomes the system prompt. If the caller supplied one, `SystemPromptBuilder.compose` layers their builder with `withRetrieval` so retrieval content appears after their static/module content.
 3. **Skip condition.** `withRetrieval` returns `""` immediately when `ctx.CurrentMessage = None` — a graceful no-op for builder invocations outside a user message (startup health checks, etc.).
 4. **Scope selection.** Team users query `[Platform; Deployment; Team ctx.Access.TeamId]`; anonymous or teamless users query `[Platform; Deployment]`. Platform and Deployment are universally readable; Team is filtered below.
 5. **Pipeline call.** `IRetrievalPipeline.Retrieve` runs `authorisedScopes` to drop any `Team teamId` whose `teamId ≠ ctx.TeamId`. If the permitted list is empty, return `[]` (graceful — no auth error, just no context).
@@ -175,7 +175,7 @@ The retention window itself is not stored — `Vacuum` takes the cutoff timestam
 `IVectorStore` is one interface with three stores behind it. The
 contract (scope isolation, `IBlobStorage` persistence, soft-delete
 tombstones) is identical for each, so a move is a
-`RAGServerApp.withVectorStore` swap with no pipeline change. The sizes
+`RagOptions.withVectorStore` swap with no pipeline change. The sizes
 below are MEASURED (Phases 970 and 1007, figures and method in
 [Measured scale](#measured-scale-phase-970) and
 [Measured scale (Phase 1007)](#measured-scale-phase-1007) below), not
@@ -190,12 +190,15 @@ measurement.
 | `ToolUp.VectorStores.Pgvector` companion | Postgres + pgvector | not measured by this benchmark | durable, multi-replica-safe vectors; the rung above what one process holds. |
 
 HNSW is opt-in (GP 13): a deployment that never composes it pulls none
-of the `HNSW.Net` weight. Compose it before `composeWithRAG`:
+of the `HNSW.Net` weight. Set it on the RAG options:
 
 ```fsharp skip=fragment
-RAGServerApp.create factory configStore
-|> RAGServerApp.withVectorStore (HnswVectorStore.create blobStorage logger)
-|> RAGServerApp.run
+ServerApp.empty
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withVectorStore (HnswVectorStore.create blobStorage logger)
+)
+|> ServerApp.run
 ```
 
 **Dimension-partition routing rule (multimodal — Phase 14k WS5).**
@@ -468,7 +471,7 @@ dotnet run -c Release --project src/ToolUp.RAG.Benchmarks -- --hnsw-scale scifac
 
 ## `IEmbeddingCache` + `CachingEmbeddingProvider`
 
-The supplied `IEmbeddingProvider` is wrapped transparently inside `composeWithRAG` with `CachingEmbeddingProvider`. The wrapper preserves the inner provider's `ProviderId` / `ModelId` / `Dimensions` so version stamping downstream still records the underlying identity.
+The supplied `IEmbeddingProvider` is wrapped transparently inside `composeRAG` with `CachingEmbeddingProvider`. The wrapper preserves the inner provider's `ProviderId` / `ModelId` / `Dimensions` so version stamping downstream still records the underlying identity.
 
 **Cache key.** `EmbeddingCacheKey = { Version: EmbeddingVersion; TextHash: string }` where `Version` is the wrapped provider's identity and `TextHash` is the SHA256 hex digest of the input text. SHA256 (rather than the raw text) means the cache never retains user content — a privacy property and a memory-bounding one.
 
@@ -476,7 +479,7 @@ The supplied `IEmbeddingProvider` is wrapped transparently inside `composeWithRA
 
 **Why an LRU.** Realistic query traffic exhibits locality — the top-of-mind questions in a session repeat, and chunk re-embeds during reingestion repeat the same content under the same key. Strict LRU is a good default; a more sophisticated policy (size-aware, frequency-aware) is a future companion. The cache is per-process; a distributed cache (Redis) is a future companion implementing the same `IEmbeddingCache` contract.
 
-**Why decorate at compose time, not at provider creation.** Callers register a *raw* `IEmbeddingProvider`. They don't need to know the cache exists. `composeWithRAG` wraps internally, and the cache is accessible to admin endpoints via DI (`IEmbeddingCache.HitRate()`). This keeps the embedding-provider companion surface clean — `LocalEmbeddingProvider.create ()` and `OpenAIEmbeddingProvider.create secretStore` both return raw providers; caching is a runtime property of the RAG composition, not of the provider library.
+**Why decorate at compose time, not at provider creation.** Callers register a *raw* `IEmbeddingProvider`. They don't need to know the cache exists. `composeRAG` wraps internally, and the cache is accessible to admin endpoints via DI (`IEmbeddingCache.HitRate()`). This keeps the embedding-provider companion surface clean — `LocalEmbeddingProvider.create ()` and `OpenAIEmbeddingProvider.create secretStore` both return raw providers; caching is a runtime property of the RAG composition, not of the provider library.
 
 ## `EmbeddingVersion` stamping + `ReembeddingBackgroundService`
 
@@ -516,7 +519,7 @@ The builder consumes `PromptContext.CurrentMessage` as the query and returns for
 - **It tolerates absent context.** Returns `""` when no matches or when the current message is `None`. An empty string composes cleanly — there's no marker for "I had no context to add."
 - **It is read-only per call.** No side effects (no events emitted, no logging of the query). Add a higher-level wrapper if retrieval observability is needed.
 
-The builder does not implement caching directly — it relies on the `CachingEmbeddingProvider` wrapper installed by `composeWithRAG` (Phase 14h). A conversation that sends ten turns with the same query string hits `IEmbeddingCache` on turns 2–10 and never re-runs the underlying embedding call. Cache key includes provider + model + dimensions, so a model swap automatically invalidates the entry without an explicit flush.
+The builder does not implement caching directly — it relies on the `CachingEmbeddingProvider` wrapper installed by `composeRAG` (Phase 14h). A conversation that sends ten turns with the same query string hits `IEmbeddingCache` on turns 2–10 and never re-runs the underlying embedding call. Cache key includes provider + model + dimensions, so a model swap automatically invalidates the entry without an explicit flush.
 
 ## Tool-aware framing (Phase 14r) — how framing composes with tool-calling
 
@@ -534,9 +537,9 @@ Phase 14r makes the framing **tool-aware** so this composition is handled by the
 
 **Division of labour:** the *framing companion* (compose-time, KB stays authoritative for documents/analyses; live on-screen state defers to inspection) sets the standing policy; the *empty-retrieval redirect* (per-request) is the concrete nudge at the moment a KB miss would otherwise read as a dead end. Together they let a RAG deployment with UI-rendering client tools answer live-screen questions via the inspection tool **without** a deployment-level system-prompt patch. The back-compat `withRetrieval` delegates to `withRetrievalToolAware` with `ToolFraming.none`, so any caller that doesn't thread a tool list keeps the original behaviour.
 
-## `composeWithRAG` wiring order
+## `composeRAG` wiring order
 
-`composeWithRAG` is invoked via `RAGServerApp.run`, which flattens the `RAGServerApp → AIServerApp → ServerApp` record stack into the parameter list expected by `composeWithRAG`. (Apps that still call `composeWithRAG` directly work identically.) Internally `composeWithRAG` runs in three phases:
+`composeRAG : RagOptions -> ServerApp -> ServerApp` (hidden from IntelliSense) is what `withRAG options` registers as the RAG companion; it runs once, when the deployment resolves, over the deployment as every `ServerApp` builder left it, and composes the AI tier (`composeAI options.AI`) inside itself. Consumers call `withRAG`, never `composeRAG`. Internally it runs in three phases:
 
 1. **Pre-compose construction.** Build the `IngestionQueue`, install the post-save hook via `configurePostSaveHooks` if any handlers were supplied, allocate a deferred `pipelineRef : IRetrievalPipeline option ref`, and construct the RAG-aware system prompt builder (which reads `pipelineRef.Value` lazily).
 2. **`serviceConfig` callback.** Executed by `compose` when DI is being built:
@@ -554,22 +557,23 @@ Phase 14r makes the framing **tool-aware** so this composition is handled by the
 
 The `pipelineRef` pattern is deliberate: the system-prompt builder is constructed *before* DI is built, but needs *a reference to* the pipeline that DI will construct. Using a mutable ref cell for this single fill-once-at-startup handoff is the simplest correct answer. The ref is written once during service-config and read lock-free from every request — there is no race.
 
-### `RAGServerApp` record — fluent composition surface
+### `RagOptions` record + `withRAG` — the composition surface
 
-`RAGServerApp` is the record-based counterpart to `composeWithRAG`. It wraps an `AIServerApp` in an `AI` field and carries the embedding provider alongside:
+`RagOptions` is the RAG companion's options. It carries the AI tier's `AIOptions` in an `AI` field and the embedding provider and retrieval settings alongside (abbreviated):
 
 ```fsharp skip=fragment
-type RAGServerApp = {
-    AI: AIServerApp
-    EmbeddingProvider: IEmbeddingProvider option
+type RagOptions = {
+    AI: AIOptions
+    EmbeddingProvider: IEmbeddingProvider
+    // ... the retrieval, ingestion and vacuum settings
 }
 ```
 
-`RAGServerApp.run` flattens the nested `AIServerApp → ServerApp` records and calls `composeWithRAG`, re-using the underlying AI wiring. Per-module `VectorisationHandler`s flow in via `ServerModule.withVectorisation` (on the innermost `ServerApp`); they appear in `composeWithRAG`'s `vectorisationHandlers` parameter after the flatten step. Apps without RAG use `AIServerApp.run` directly and never touch this companion.
+`withRAG options` sets the companion on a `ServerApp`, and claims the AI companion's slot too, so the AI tier is composed exactly once — by `composeRAG`, from `options.AI`. Per-module `VectorisationHandler`s flow in via `ServerModule.withVectorisation` and are read from the deployment's module registry. Apps without RAG compose `AICompose.withAI` and never touch this companion.
 
 ## Null-blob-storage fallback
 
-If the caller passes `blobStorage = None`, `composeWithRAG`:
+If the deployment supplies no `IBlobStorage`, `composeRAG`:
 
 1. Logs `"[RAGCompose] No IBlobStorage supplied — vector index persistence is disabled. Ingested chunks will be lost across process restart."` at `Warn`.
 2. Substitutes `makeNullBlobStorage ()` — a no-op implementation whose `Upload` returns `Ok ""` and whose `Download` returns `Error`.
@@ -647,7 +651,7 @@ With both no-op providers wired (the default), stage 1 is `false`, stage 2 retur
 
 ### Companion pattern (deferred)
 
-Concrete implementations land at `src/Ocr/<Name>/`, `src/TableExtractors/<Name>/`, `src/ImageEmbedders/<Name>/`, with the same `.fsproj` + `.Server.props` + `create` factory shape as `src/EmbeddingProviders/Local/`. Deployments wire a companion by importing the props and registering the implementation in DI ahead of `RAGServerApp.run`; the NoOp fallback in `composeWithRAG` only activates when nothing else is registered.
+Concrete implementations land at `src/Ocr/<Name>/`, `src/TableExtractors/<Name>/`, `src/ImageEmbedders/<Name>/`, with the same `.fsproj` + `.Server.props` + `create` factory shape as `src/EmbeddingProviders/Local/`. Deployments wire a companion by importing the props and registering the implementation in the deployment's DI; the NoOp fallback in `composeRAG` only activates when nothing else is registered.
 
 ## `IRetrievalTracer` + `EventStoreRetrievalTracer` (Phase 14j)
 
@@ -763,14 +767,14 @@ These numbers are the comparison point for future retrieval changes (reranker sw
 | 5 — No cross-scope ordering promises | `IVectorStore.Search`, `IRetrievalPipeline.Retrieve`, `IOcrProvider.ExtractText`, `ITableExtractor.ExtractTables` | ✓ Results ranked by score (search) or document-natural order (extraction); callers do not assume cross-scope ordering |
 | 6 — Precision at the lower bound | `IngestionBackgroundService`, `ReembeddingBackgroundService`, `IRetrievalTracer` | ✓ Bounded by semaphore concurrency or by `Stopwatch` precision (`LatencyMs : int64`); no sub-second guarantee claimed |
 
-A distributed `IVectorStore` companion (pgvector, Qdrant, Pinecone) is the key portability story this package sets up: the same `composeWithRAG` wiring, `RetrievalPipeline`, `IngestionBackgroundService`, and `RAGPromptBuilder` work unchanged — only the `InMemoryVectorStore` registration swaps for the new implementation. The Phase 14i extension points follow the same companion-replacement model — `IOcrProvider` / `ITableExtractor` / `IImageEmbedder` slot into DI without touching KB or RAG call sites.
+A distributed `IVectorStore` companion (pgvector, Qdrant, Pinecone) is the key portability story this package sets up: the same `composeRAG` wiring, `RetrievalPipeline`, `IngestionBackgroundService`, and `RAGPromptBuilder` work unchanged — only the `InMemoryVectorStore` registration swaps for the new implementation. The Phase 14i extension points follow the same companion-replacement model — `IOcrProvider` / `ITableExtractor` / `IImageEmbedder` slot into DI without touching KB or RAG call sites.
 
 ## Known limitations
 
 - **TF-IDF quality.** `LocalEmbeddingProvider` produces ~512-dim sparse vectors over an evolving vocabulary. It has no semantic understanding — synonyms, paraphrases, and cross-lingual matches are invisible to it. Use it for local dev and CI only; production deployments switch to a neural embedding provider.
 - **Chunk size policy is in modules, not in the SDK.** A module that returns a 50,000-character "chunk" will embed it as-is. Some embedding providers truncate inputs silently; others error. A chunking-helper function (split by token count with overlap, preserve sentence boundaries) is a sensible follow-up but not yet in package.
 - **Cosine is the only similarity.** `InMemoryVectorStore` computes cosine via a dot product of pre-normalised vectors. Use cases that need dot-product (un-normalised) or L2-distance similarity need a different store.
-- **Scale ceiling.** `InMemoryVectorStore` keeps every vector in a `ConcurrentDictionary` and scans all in-scope entries per query. Near 50,000 chunks per scope the scan reaches a 35 ms p50 at 512 dims, measured (see [Measured scale](#measured-scale-phase-970)); past the request budget the next store is the Pgvector companion. The HNSW companion ships at `src/VectorStores/Hnsw/` (`HNSW.Net`, MIT) and is wired in via `RAGServerApp.withVectorStore (HnswVectorStore.create blobStorage logger)` before `RAGServerApp.run`. Each scope owns an independent `SmallWorld<float[], float>` graph — scope isolation is structural, not a post-hoc filter — and the on-disk shape is JSON-of-entries (graph rebuilt lazily on first query) so the persisted blob remains implementation-portable; measured, it does not beat the flat scan at its shipped defaults at any size tried. `ToolUp.VectorStores.Pgvector` (`src/VectorStores/Pgvector/`) is the external store.
+- **Scale ceiling.** `InMemoryVectorStore` keeps every vector in a `ConcurrentDictionary` and scans all in-scope entries per query. Near 50,000 chunks per scope the scan reaches a 35 ms p50 at 512 dims, measured (see [Measured scale](#measured-scale-phase-970)); past the request budget the next store is the Pgvector companion. The HNSW companion ships at `src/VectorStores/Hnsw/` (`HNSW.Net`, MIT) and is wired in via `RagOptions.withVectorStore (HnswVectorStore.create blobStorage logger)` on the options passed to `withRAG`. Each scope owns an independent `SmallWorld<float[], float>` graph — scope isolation is structural, not a post-hoc filter — and the on-disk shape is JSON-of-entries (graph rebuilt lazily on first query) so the persisted blob remains implementation-portable; measured, it does not beat the flat scan at its shipped defaults at any size tried. `ToolUp.VectorStores.Pgvector` (`src/VectorStores/Pgvector/`) is the external store.
 - **`Platform` and `Deployment` scopes have no writer path through the SDK.** They are populated out-of-band by administrators (direct blob edits, maintenance scripts). Runtime writes from modules go exclusively to `Team` scope via the post-save hook.
 - **No retry on embedding failure.** A failed `GenerateEmbedding` in `IngestionBackgroundService.processJob` emits `KnowledgeChunkFailed` and moves on — the job is not re-enqueued. Bulk re-ingestion is the operational remediation.
 - **No auto-vacuum scheduler.** `IVectorStore.Vacuum` is callable but no `BackgroundService` drives it on a timer in this round (Phase 14h). Composing apps invoke `Vacuum` from their own admin / cron path with whatever retention they choose.

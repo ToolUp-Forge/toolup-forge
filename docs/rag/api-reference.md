@@ -102,7 +102,7 @@ type IIngestionStatusObserver =
     abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
 ```
 
-Optional observer for ingestion lifecycle. The job itself carries the identity an observer needs, so there are no bare job-id / chunk-id parameters, and no accepted / completed callbacks — completion is derived from the indexed count reaching the job's total. `ToolUp.KnowledgeBase` registers one to surface per-document status in the UI. Apps without KB skip it; several observers can coexist via `RAGServerApp.withIngestionObservers`.
+Optional observer for ingestion lifecycle. The job itself carries the identity an observer needs, so there are no bare job-id / chunk-id parameters, and no accepted / completed callbacks — completion is derived from the indexed count reaching the job's total. `ToolUp.KnowledgeBase` registers one to surface per-document status in the UI. Apps without KB skip it; several observers can coexist via `RagOptions.withIngestionObservers`.
 
 ## Shared types in `ToolUp.Platform.Core`
 
@@ -183,15 +183,13 @@ Modules declare one in `Server.fs` for each `DataTypeId` they want indexed. The 
 
 ## `ToolUp.RAG.Server`
 
-### `RAGServerApp`
+### `RagOptions` and `withRAG`
 
-Flat superset of `AIServerApp`. The fluent shape:
-
-The record is wide and flat — every knob is a field with a `with*` builder, rather than nested config records. Abbreviated to the shape-defining fields:
+`RagOptions` is the RAG companion's options record; `RAGCompose.withRAG` sets the companion on a `ServerApp`. The record is wide and flat — every knob is a field with a `RagOptions.with*` setter, rather than nested config records. Abbreviated to the shape-defining fields:
 
 ```fsharp skip=signature
-type RAGServerApp = {
-    AI: AIServerApp
+type RagOptions = {
+    AI: AIOptions
     EmbeddingProvider: IEmbeddingProvider
     EmbeddingCache: IEmbeddingCache option
     IngestionObservers: IIngestionStatusObserver list
@@ -207,32 +205,38 @@ type RAGServerApp = {
     IngestionRetryPolicy: IngestionRetryPolicy
     OverflowPolicy: IngestionOverflowPolicy
     // ... plus the MMR, citation-policy, size-cap, tombstone-retention,
-    // conversation-indexing and ingestion-recovery fields
+    // conversation-indexing, ingestion-recovery and sparse-index fields
 }
 ```
 
-Vectorisation handlers are **not** a `RAGServerApp` field — each module contributes its own via `ServerModule.withVectorisation`, and they aggregate on the inner `ServerApp`.
+Vectorisation handlers are **not** a `RagOptions` field — each module contributes its own via `ServerModule.withVectorisation`, and they aggregate on the deployment's `ServerApp`.
 
-Constructors:
+Constructor and entry point:
 
 ```fsharp skip=signature
-module RAGServerApp =
-    val create: IAIProviderFactory -> IProviderProfile -> IEmbeddingProvider -> RAGServerApp
-    val createFrom: IAIProviderFactory -> IProviderProfile -> IEmbeddingProvider -> ServerApp -> RAGServerApp
-    val empty: RAGServerApp                  // requires all three withFactory/withConfigStore/withEmbedder before run
+module RagOptions =
+    val create: IAIProviderFactory -> IProviderProfile -> IEmbeddingProvider -> RagOptions
+
+module RAGCompose =
+    val withRAG: options: RagOptions -> app: ServerApp -> ServerApp
 ```
 
-Mirrored `AIServerApp` builders (all `withConfig`, `withAuth`, `withStorage`, ... `withAITools`, `withAIConfig`, `withModuleAIContexts`, etc.).
+`withRAG` **sets** the RAG companion: the tier is composed once, when the deployment resolves, onto the deployment as every `ServerApp` builder left it, so a base builder (`ServerApp.withConfig`, `withAuth`, `withStorage`, `addModules`, ...) works on either side of it. RAG composes the AI tier itself, so it also claims the AI companion's slot: an earlier `AICompose.withAI` is superseded by `options.AI`, and a later one is refused when the deployment resolves. A second `withRAG` replaces the first.
+
+The AI tier's settings ride the options:
+- `withAIOptions: AIOptions -> RagOptions -> RagOptions` — sets the AI tier's options wholesale
+- `withAIConfig: AIAssistantServerConfig -> RagOptions -> RagOptions`
+- `withModuleAIContexts: ModuleAIContext list -> RagOptions -> RagOptions`
 
 RAG-specific builders:
-- `withTopK: int -> RAGServerApp -> RAGServerApp` (default 5)
-- `withMinScore: float option -> RAGServerApp -> RAGServerApp` (default `None` — no score gate; since Phase 866 the threshold reads the pipeline's score space: under the hybrid default the fused scores are min-max normalised per query onto `[0, 1]` so the best match scores `1.0`, and under dense-only (`withoutSparseIndex`) it reads raw cosine similarity)
-- `withMergeStrategy: MergeStrategy -> RAGServerApp -> RAGServerApp` (default `Interleaved`)
-- `withSnippetCharLimit: int -> RAGServerApp -> RAGServerApp` (default 1500)
-- `withOriginFilter: Set<ChunkOrigin> option -> RAGServerApp -> RAGServerApp` (default `None`)
-- `withGroundingMode: GroundingMode -> RAGServerApp -> RAGServerApp` (default `Permissive`)
-- `withFactClausePlanning: bool -> RAGServerApp -> RAGServerApp` (default `true`)
-- `withFactClausePlanOptions: FactClausePlanOptions -> RAGServerApp -> RAGServerApp` (default on, 3,000 ms budget)
+- `withTopK: int -> RagOptions -> RagOptions` (default 5)
+- `withMinScore: float option -> RagOptions -> RagOptions` (default `None` — no score gate; since Phase 866 the threshold reads the pipeline's score space: under the hybrid default the fused scores are min-max normalised per query onto `[0, 1]` so the best match scores `1.0`, and under dense-only (`withoutSparseIndex`) it reads raw cosine similarity)
+- `withMergeStrategy: MergeStrategy -> RagOptions -> RagOptions` (default `Interleaved`)
+- `withSnippetCharLimit: int -> RagOptions -> RagOptions` (default 1500)
+- `withOriginFilter: Set<ChunkOrigin> option -> RagOptions -> RagOptions` (default `None`)
+- `withGroundingMode: GroundingMode -> RagOptions -> RagOptions` (default `Preferred`)
+- `withFactClausePlanning: bool -> RagOptions -> RagOptions` (default `true`)
+- `withFactClausePlanOptions: FactClausePlanOptions -> RagOptions -> RagOptions` (default on, 3,000 ms budget)
 
 > The two fact-clause builders are inert unless the deployment composed the fact tier, which is what
 > registers the `IFactClausePlanner` they control. With it composed, each user turn is compiled into a
@@ -241,14 +245,14 @@ RAG-specific builders:
 > compile can cost a provider call, so it runs under the options' budget and degrades to no clause on
 > overrun or fault; pass `withFactClausePlanning false` when the fact tier is composed for its tool
 > surface alone and a second model call per chat turn is not wanted.
-- `withIngestionConcurrency: int -> RAGServerApp -> RAGServerApp` (default 2)
-- `withIngestionQueueCapacity: int -> RAGServerApp -> RAGServerApp` (default 5,000 documents)
-- `withTelemetry: IRagTelemetry -> RAGServerApp -> RAGServerApp`
-- `withVectorStore: IVectorStore -> RAGServerApp -> RAGServerApp` (default `InMemoryVectorStore`)
-- `withEmbeddingCache: IEmbeddingCache -> RAGServerApp -> RAGServerApp`
-- `withReranker: IReranker -> RAGServerApp -> RAGServerApp`
+- `withIngestionConcurrency: int -> RagOptions -> RagOptions` (default 8)
+- `withIngestionQueueCapacity: int -> RagOptions -> RagOptions` (default 5,000 documents)
+- `withTelemetry: IRagTelemetry -> RagOptions -> RagOptions`
+- `withVectorStore: IVectorStore -> RagOptions -> RagOptions` (default `InMemoryVectorStore`)
+- `withEmbeddingCache: IEmbeddingCache -> RagOptions -> RagOptions`
+- `withReranker: IReranker -> RagOptions -> RagOptions`
 
-> **Seams with no `with*` builder — register them in DI instead.** `composeWithRAG` probes DI for
+> **Seams with no `with*` builder — register them in DI instead.** The RAG composition probes DI for
 > `IOcrProvider`, `ITableExtractor` and `IRetrievalTracer`, falling back to its own default only when
 > it finds none. So `services.AddSingleton<IOcrProvider>(…)` (etc.) *before* the RAG composition runs
 > **is** the opt-in, and the compose surface grows no knob for it. See
@@ -269,8 +273,7 @@ RAG-specific builders:
 > `VectorisationHandler` is a per-module DECLARATION, not a builder: a module lists its handlers on
 > `ServerModule.VectorisationHandlers` and the composition reads them from the module registry.
 
-Terminal:
-- `run: RAGServerApp -> int`
+There is no RAG terminal: the pipeline ends in `ServerApp.run`.
 
 ## Server-side interfaces (in `ToolUp.Platform.Core` / `Server`)
 
@@ -519,20 +522,15 @@ and ScopeStrategy =
     | Custom of (AccessContext -> Async<VectorScope list>)
 ```
 
-## `composeWithRAG`
+## `composeRAG`
 
 ```fsharp skip=signature
 module RAGCompose =
-    val composeWithRAG:
-        ai: AIServerApp ->
-        embedder: IEmbeddingProvider ->
-        vectorisationHandlers: VectorisationHandler list ->
-        retrievalConfig: RetrievalConfig ->
-        ingestionConfig: IngestionConfig ->
-        int
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
+    val composeRAG: options: RagOptions -> app: ServerApp -> ServerApp
 ```
 
-Called internally by `RAGServerApp.run`. Wraps the embedder with `CachingEmbeddingProvider`, registers the ingestion + reembedding background services, wires the retrieval prompt builder into the AI compose, and runs.
+The composition `withRAG` registers as the companion, run when the deployment resolves; consumers call `withRAG`, not this. It composes the AI tier from `options.AI` with the retrieval layers folded into the assistant config, wraps the embedder with `CachingEmbeddingProvider`, registers the ingestion + reembedding background services, and wires the retrieval prompt builder — returning the composed `ServerApp` without driving it.
 
 ## Events emitted to `IEventStore`
 
@@ -548,7 +546,7 @@ Under `SourceModule = "_platform.retrieval"`:
 
 ## HTTP endpoints
 
-Auto-injected by `RAGServerApp.run`:
+Auto-injected by `withRAG`:
 
 - `GET /health/rag` — JSON snapshot (embedding provider id/model/dimensions, vector-store status, ingestion-queue depth, rolling-window stats from `IRagTelemetry`)
 
@@ -558,7 +556,7 @@ When `EnableDevEndpoints` is true and the RAG layer is active:
 
 ## Configuration knobs
 
-All set via the `RAGServerApp.with*` builders documented above.
+All set via the `RagOptions.with*` builders documented above.
 
 Environment variables (read by embedding providers via `ISecretStore`, never directly):
 - `OPENAI_API_KEY` (for `OpenAIEmbeddingProvider`) — store in `ISecretStore` under `_platform` scope.

@@ -592,5 +592,5 @@ into `IRagTelemetry` under the `Total` pseudo-stage — so it appears in `/healt
 `RetrievalStageP50Ms` / `RetrievalStageP95Ms` beside the per-stage entries — and keeps an in-flight
 gauge (`InFlight`, `PeakInFlight`, `Completed`). It rides the existing stage channel rather than a
 new `IRagTelemetry` member because that interface has implementations outside this repository. The
-harness composes it around every pipeline it measures; `RAGServerApp` does not compose it by
+harness composes it around every pipeline it measures; `RAGCompose.withRAG` does not compose it by
 default yet.

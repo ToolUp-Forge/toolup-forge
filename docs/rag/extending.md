@@ -55,15 +55,16 @@ module MyVendorEmbeddingProvider =
 
 ### Wire into a consumer
 
-`RAGServerApp.create` is curried, and its second argument is the
+`RagOptions.create` is curried, and its second argument is the
 `IProviderProfile` that resolves which model a scope gets — not a config
 store:
 
 ```fsharp
 let embedder = MyVendorEmbeddingProvider.create secretStore "myvendor-large"
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.run
+ServerApp.empty
+|> RAGCompose.withRAG (RagOptions.create aiProviderFactory providerProfile embedder)
+|> ServerApp.run
 ```
 
 Author `IHealthCheck` and `IConfigValidator` probes too — both self-register via DI; the validator emits `Warning` / `Error` at startup if misconfigured.
@@ -148,10 +149,10 @@ type DatadogRetrievalTracer(httpClient: HttpClient, apiKey: string) =
         }
 ```
 
-Register it in DI **before** the RAG composition runs. `composeRAG` probes
-for an already-registered `IRetrievalTracer` and falls back to the default
-only when it finds none, so registration is the whole of the wiring — there
-is no `RAGServerApp` pipeline step for it:
+Register it in DI **before** the RAG composition runs. The RAG composition
+probes for an already-registered `IRetrievalTracer` and falls back to the
+default only when it finds none, so registration is the whole of the wiring —
+there is no `RagOptions` setter for it:
 
 ```fsharp
 services.AddSingleton<IRetrievalTracer>(DatadogRetrievalTracer(httpClient, apiKey))

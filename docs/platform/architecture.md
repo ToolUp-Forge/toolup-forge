@@ -21,7 +21,7 @@ A consuming app has two thin composition roots (server + client) that list modul
 
 ### Server
 
-The server composition root assembles every module as a `ServerModule` record, composes them into an `ServerApp` / `AIServerApp` / `RAGServerApp` pipeline, and calls `.run`.
+The server composition root assembles every module as a `ServerModule` record, composes them into a `ServerApp` pipeline (with `AICompose.withAI` / `RAGCompose.withRAG` adding the AI / RAG companions), and calls `ServerApp.run`.
 
 ```fsharp skip=fragment
 let mySalesModule =
@@ -40,25 +40,33 @@ ServerApp.empty
 
 `ServerApp.run` returns an `int` exit code — slot directly into `[<EntryPoint>]`.
 
-For AI / RAG, use the flat-superset variants:
+For AI / RAG, add the companion to the same pipeline with its `withX` entry point:
 
 ```fsharp skip=fragment
 // + AI
-AIServerApp.create aiProviderFactory providerProfile
-|> AIServerApp.withConfig config
-|> AIServerApp.addModules modules
-|> AIServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.addModules modules
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withAIConfig assistantConfig
+)
+|> ServerApp.run
 
-// + RAG (which wraps AI)
-RAGServerApp.create aiProviderFactory providerProfile embeddingProvider
-|> RAGServerApp.withConfig config
+// + RAG (which composes the AI tier itself — no separate `withAI`)
+ServerApp.empty
+|> ServerApp.withConfig config
 // AI tools ride on the module that owns them — `ServerModule.withAITools`
 // — so they arrive with `addModules`.
-|> RAGServerApp.addModules modules
-|> RAGServerApp.run
+|> ServerApp.addModules modules
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embeddingProvider
+    |> RagOptions.withTopK 8
+)
+|> ServerApp.run
 ```
 
-`AIServerApp` is a flat superset of `ServerApp` — same fluent shape, AI-specific helpers added. `RAGServerApp` is a flat superset of `AIServerApp`. There's no "compose" magic; each tier adds its own surface.
+`AIOptions` and `RagOptions` are plain options records carrying only their companion's own knobs; the deployment itself (config, auth, storage, modules) stays on the `ServerApp` pipeline. `withAI` / `withRAG` set the companion on the deployment, and the tier is composed once, when the deployment resolves, onto the deployment as every builder left it — so any `ServerApp` builder works on either side of them.
 
 ### Client
 
@@ -251,7 +259,7 @@ Two knobs, and they do different jobs:
 
 | Knob | Default | Effect |
 |---|---|---|
-| Composition entry point | — | The snapshot the pages read is registered by `ServerApp.run` (and therefore by `AIServerApp.run` / `RAGServerApp.run`, which delegate to it). A host composed through the lower-level `compose` registers none, and every page then says so plainly rather than rendering an empty composition — which would read as "this deployment composes nothing". |
+| Composition entry point | — | The snapshot the pages read is registered by `ServerApp.run` (which also resolves any `AICompose.withAI` / `RAGCompose.withRAG` companion). A host composed through the lower-level `compose` registers none, and every page then says so plainly rather than rendering an empty composition — which would read as "this deployment composes nothing". |
 | `ClientConfig.Slots.CompositionInspector` | `SlotFill.Default` | The module. `SlotFill.Empty` removes the module, its sidebar entry, its five routes and every call it would make. `SlotFill.Configured` re-labels it; `SlotFill.External` replaces it. |
 
 There is no `ServerConfig` knob, deliberately: the substrate this surface reads is the composition itself, and a deployment cannot compose without one.

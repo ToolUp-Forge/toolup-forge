@@ -237,9 +237,11 @@ let tradingSummary =
         let! grid = brandRevenueGrid scopeId
         return Ok [ "summary", [ grid ] ] })
 
-RAGServerApp.create factory providerProfile embedder
-|> RAGServerApp.withFacts FactsCompose.withFactTier
-|> composeRAG
+app
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withFacts FactsCompose.withFactTier
+)
 |> GroundedNarratives.compose
     (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
     [ tradingSummary ]
@@ -746,7 +748,7 @@ scope for reads the anonymous shard, exactly as the request itself would.
 
 [`GroundedNarrativeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/GroundedNarrativeTests.fs)
 tries to defeat the gate claim by claim, runs the fact-tier gate and certificate over a real store,
-drives the run end to end on a RAG app composed with `RAGServerApp.withFacts FactsCompose.withFactTier`
+drives the run end to end on a RAG app composed with `RagOptions.withFacts FactsCompose.withFactTier`
 (a scripted model that reads a fact, then writes each defeat case — every one refused, unpublished
 and logged), and exercises both triggers.
 [`ReportSubscriptionScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/ReportSubscriptionScopeTests.fs)

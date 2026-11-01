@@ -49,7 +49,7 @@ Add the packages:
 <PackageReference Include="ToolUp.KnowledgeBase.Client" />
 ```
 
-Wire the server composition root (depends on `RAGServerApp` being in place):
+Wire the server composition root (depends on the RAG companion being composed with `RAGCompose.withRAG`):
 
 ```fsharp skip=fragment
 open ToolUp.KnowledgeBase
@@ -62,11 +62,14 @@ let kbModule =
 let ingestionStatusObserver =
     KnowledgeBase.Server.makeIngestionStatusObserver blobStorage (Some notificationChannel) logger
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.withConfig serverConfig
-|> RAGServerApp.addModules [ kbModule; (* other modules *) ]
-|> RAGServerApp.withIngestionObserver ingestionStatusObserver
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig serverConfig
+|> ServerApp.addModules [ kbModule; (* other modules *) ]
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    |> RagOptions.withIngestionObserver ingestionStatusObserver
+)
+|> ServerApp.run
 ```
 
 Wire the client composition root:
@@ -94,7 +97,7 @@ That's it. The Knowledge Base sidebar entry appears with three pages: Documents 
 External KB replacements (apps that want to provide their own KB module instead of using the built-in one) must honour:
 
 1. **NarrativeCommit handler** — call `Toolup.NarrativeCommit.install` with your submit handler. Other modules' "Save to Knowledge Base" buttons resolve through this hook.
-2. **`IIngestionStatusObserver`** — wired explicitly into `composeWithRAG`; not auto-injected. The observer surfaces per-document status (Pending / Extracting / Chunking / Embedding / Indexed / Failed) to the UI.
+2. **`IIngestionStatusObserver`** — wired explicitly onto the RAG options (`RagOptions.withIngestionObserver`); not auto-injected. The observer surfaces per-document status (Pending / Extracting / Chunking / Embedding / Indexed / Failed) to the UI.
 3. **Notification-key contract** — the literal `"KnowledgeBase.IngestionStatus"` is the wire format the AI side panel subscribes to. An external KB either matches it or accepts that the AI panel won't surface its progress.
 
 These are the only contracts. Internally, `KnowledgeBase.Server` is just an `IFormApi`-like ToolUp.Remoting handler that the SDK shell injects.

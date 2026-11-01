@@ -1506,13 +1506,17 @@ block with the presentation builders. It answers the record form a tool result c
 
 They live in their own package, `ToolUp.Facts.Presentation.Server`, because they bring the
 Fuaran-UI dependency; `ToolUp.Facts.Server` stays free of it. They are composed explicitly
-onto the AI composition, beside the three. They arm only with the fact store and the AI
+onto the AI options, beside the three: each takes and returns the pair `ServerApp * AIOptions`, because
+a tool rides `AIOptions.AIAnsweringTools` while its gate reads the deployment's config and its endpoint
+belongs to the deployment. They arm only with the fact store and the AI
 companion. A deployment that does not compose them has neither tool and no new dependency:
 
 ```fsharp skip=fragment
-AIServerApp.createFrom factory providerProfile app
-|> PresentationCompose.withRenderTools
-|> composeAI
+let app, ai =
+    (app, AIOptions.create factory providerProfile)
+    |> PresentationCompose.withRenderTools
+
+app |> AICompose.withAI ai |> ServerApp.run
 ```
 
 The tools take table, metric and level ids they cannot list, so a deployment names its fact
@@ -1568,10 +1572,12 @@ the render tools use. It is opt-in, idempotent, and arms only with the fact stor
 companion; a deployment that does not call it registers no pipeline tool and mounts no endpoint:
 
 ```fsharp skip=fragment
-AIServerApp.createFrom factory providerProfile app
-|> PresentationCompose.withRenderTools
-|> PresentationCompose.withPipelineTool
-|> composeAI
+let app, ai =
+    (app, AIOptions.create factory providerProfile)
+    |> PresentationCompose.withRenderTools
+    |> PresentationCompose.withPipelineTool
+
+app |> AICompose.withAI ai |> ServerApp.run
 ```
 
 The executor runs unchanged. The model reads its summary, and the assistant message carries one
@@ -1603,10 +1609,12 @@ than relax it, and no arithmetic runs inside a gate.
 A deployment opts in with one line beside the pipeline tool:
 
 ```fsharp skip=fragment
-AIServerApp.createFrom factory providerProfile app
-|> PresentationCompose.withPipelineTool
-|> PresentationCompose.withDerivedAssertions
-|> composeAI
+let app, ai =
+    (app, AIOptions.create factory providerProfile)
+    |> PresentationCompose.withPipelineTool
+    |> PresentationCompose.withDerivedAssertions
+
+app |> AICompose.withAI ai |> ServerApp.run
 ```
 
 The tool then declares an `assert` argument (`column`, `as_metric`, `level`) and the write it may make
@@ -1674,27 +1682,28 @@ warning — validator `fact-question-compiler` — says so and names the
 remedies. To keep the push door off deliberately, and silence the warning,
 choose the no-op compiler:
 `FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler`.
-`RAGServerApp.withFactClausePlanning false` instead stops a RAG app from
+`RagOptions.withFactClausePlanning false` instead stops a RAG app from
 consulting the planner at all.
 
 #### Composing the tier onto a RAG app in one call
 
 ```fsharp skip=fragment
-RAGServerApp.create factory providerProfile embedder
-|> RAGServerApp.withFacts FactsCompose.withFactTier
-|> RAGServerApp.withConfig config
+ServerApp.empty
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withFacts FactsCompose.withFactTier
+)
+|> ServerApp.withConfig config
+|> ServerApp.run
 ```
 
 `FactsCompose.withFactTier` switches `ServerConfig.FactStore` on and
-applies `withFactStore` and `withFactTableWriter`. `RAGServerApp.withFacts`
-applies it to the app's base when the app is **composed**, so it may sit on
-either side of `withConfig` — which replaces the whole `ServerConfig`,
-fact-store knob included, and used to make the hand-written
-`RAGServerApp.mapAI` route a silent no-op when it ran first. Because a RAG
-app always composes the AI tier, this one call arms both doors: the tools
-through the AI tier, the push door through the factory-backed compiler.
-The `mapAI` route still works when the knob is already on; `withFacts` is
-the order-independent form. The tier is passed in rather than referenced
+applies `withFactStore` and `withFactTableWriter`. `RagOptions.withFacts`
+applies it to the deployment when the RAG tier is **composed**, at resolve,
+so `withRAG` may sit on either side of `withConfig` — which replaces the
+whole `ServerConfig`, fact-store knob included. Because a RAG app always
+composes the AI tier, this one call arms both doors: the tools through the
+AI tier, the push door through the factory-backed compiler. The tier is passed in rather than referenced
 because the fact companion is a separate package — a RAG app that composes
 no facts takes no dependency on it.
 
@@ -1704,5 +1713,5 @@ resolves nothing produces no clause and retrieval is exactly what it
 would have been. The compile can cost a provider call, so it is bounded
 (default 3 s) and degrades to no clause on overrun or fault — a turn is
 never blocked by planning. Turn it off with
-`RAGServerApp.withFactClausePlanning false` when the store is composed
+`RagOptions.withFactClausePlanning false` when the store is composed
 for its tool surface alone.

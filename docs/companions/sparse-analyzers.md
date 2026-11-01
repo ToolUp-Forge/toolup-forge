@@ -39,9 +39,12 @@ per-language table are in each package's `README.md`.
 open ToolUp.SparseIndices.Snowball
 
 let app =
-    RAGServerApp.create factory profile embedder
-    |> RAGServerApp.withSparseAnalyzer (SnowballAnalyzer.english ())
-    |> RAGServerApp.withStorage storage
+    ServerApp.empty
+    |> ServerApp.withStorage storage
+    |> RAGCompose.withRAG (
+        RagOptions.create factory profile embedder
+        |> RagOptions.withSparseAnalyzer (SnowballAnalyzer.english ())
+    )
 ```
 
 Directly, for a bespoke composition root or a test:

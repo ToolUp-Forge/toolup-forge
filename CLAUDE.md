@@ -88,26 +88,26 @@ Pure infrastructure with zero domain knowledge. Per-tier packages:
 
 ### `ToolUp.AI` — AI assistant companion
 
-Agent loop, SSE streaming, conversation persistence, tool registry, system-prompt composition (platform + team + module layers), `composeWithAI`. Built on `IAIProvider` (extension point in `Platform.Core`).
+Agent loop, SSE streaming, conversation persistence, tool registry, system-prompt composition (platform + team + module layers), `AICompose.withAI`. Built on `IAIProvider` (extension point in `Platform.Core`).
 
 `AIAssistantMode` DU (in `ToolUp.AI.Core/Shared/AITypes.fs`):
 - `NoAIAssistant` — no AI module or side panel (default)
 - `DefaultAIAssistant` — built-in AI module with SDK defaults
 - `ConfiguredAIAssistant of AIAssistantBranding` — built-in AI module with custom branding
 
-Apps wanting AI call `AIServerApp.run` (from `ToolUp.AI.Server/Server/AICompose.fs`); apps without AI use `ServerApp.run` directly. `AIServerApp` is a flat superset of `ServerApp` — same fluent shape, AI-specific helpers added.
+Apps wanting AI compose the companion onto their `ServerApp`: `app |> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig …) |> ServerApp.run` (`ToolUp.AI.Server/Server/AICompose.fs`). `AIOptions` holds the AI tier's own settings; the tier is composed when the deployment resolves, so every `ServerApp` builder works on either side of `withAI`.
 
 ### `ToolUp.RAG` — retrieval-augmented generation
 
-Chunking, vector store, retrieval pipeline, ingestion + reembedding background services, `RAGPromptBuilder`, `composeWithRAG`. Built on `IEmbeddingProvider` + `IVectorStore` + `IRetrievalPipeline` extension points (in `Platform.Server`).
+Chunking, vector store, retrieval pipeline, ingestion + reembedding background services, `RAGPromptBuilder`, `RAGCompose.withRAG`. Built on `IEmbeddingProvider` + `IVectorStore` + `IRetrievalPipeline` extension points (in `Platform.Server`).
 
-Apps wanting RAG call `RAGServerApp.run` (from `ToolUp.RAG.Server/Server/RAGCompose.fs`); `RAGServerApp` is a flat superset of `AIServerApp`. Per-deployment tuning via `withTopK` / `withMinScore` / `withMergeStrategy` / `withSnippetCharLimit` / `withOriginFilter` / `withGroundingMode` / `withIngestionConcurrency` / `withIngestionQueueCapacity` / `withTelemetry`.
+Apps wanting RAG compose `app |> RAGCompose.withRAG (RagOptions.create factory providerProfile embedder |> …) |> ServerApp.run` (`ToolUp.RAG.Server/Server/RAGCompose.fs`); RAG composes the AI tier itself (`RagOptions.AI`), so such a deployment does not also call `withAI`. Per-deployment tuning via `RagOptions` `withTopK` / `withMinScore` / `withMergeStrategy` / `withSnippetCharLimit` / `withOriginFilter` / `withGroundingMode` / `withIngestionConcurrency` / `withIngestionQueueCapacity` / `withTelemetry`.
 
 ### `ToolUp.KnowledgeBase` — document KB
 
 User-facing canonical consumer of `ToolUp.RAG`: document upload, multi-format extraction (PDF / PPTX / DOCX / XLSX / CSV), ingestion-status surfacing, narrative-commit, notes, AI-context. Three integration contracts external KB replacements must honour:
 1. NarrativeCommit handler — call `Toolup.NarrativeCommit.install` with a submit handler
-2. `IIngestionStatusObserver` — wired explicitly into `composeWithRAG`
+2. `IIngestionStatusObserver` — wired explicitly with `RagOptions.withIngestionObserver`
 3. Notification-key contract — `"KnowledgeBase.IngestionStatus"` is the published wire format the AI side panel subscribes to.
 
 ### `ToolUp.Forms` — schema-driven forms

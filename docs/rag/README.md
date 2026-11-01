@@ -2,7 +2,7 @@
 
 Retrieval-augmented generation runtime for apps built on ToolUp Platform. Vector store, retrieval pipeline, background ingestion + reembedding services, prompt builder for injecting retrieved chunks into AI system prompts.
 
-Wraps `ToolUp.AI` — `RAGServerApp` is a flat superset of `AIServerApp`, which is itself a flat superset of `ServerApp`. Pick the tier that matches your needs.
+Builds on `ToolUp.AI` — a deployment composes it with `RAGCompose.withRAG (options: RagOptions)` on its `ServerApp`, where `RagOptions` carries the RAG settings plus the `AIOptions` of the AI tier it composes over. A deployment that needs the assistant without retrieval composes `AICompose.withAI` instead. Pick the tier that matches your needs.
 
 ## When to use this companion
 
@@ -63,11 +63,12 @@ let embedder =
         { Name = "openai"; Resolve = fun () -> OpenAIEmbeddingProvider.fromEnv secretStore }
     ] (fun () -> OpenAIEmbeddingProvider.create secretStore)
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.withConfig serverConfig
-|> RAGServerApp.withAuth authProvider
-|> RAGServerApp.addModules modules
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig serverConfig
+|> ServerApp.withAuth authProvider
+|> ServerApp.addModules modules
+|> RAGCompose.withRAG (RagOptions.create aiProviderFactory providerProfile embedder)
+|> ServerApp.run
 ```
 
 The agent loop now augments its system prompt with retrieved chunks from any registered scope. Documents uploaded via `KnowledgeBase` (or any `VectorisationHandler`-registered DataType) get auto-indexed on the post-save hook.
@@ -80,7 +81,7 @@ See [concepts.md](concepts.md) for the vector store, retrieval pipeline, chunkin
 
 ## API reference
 
-See [api-reference.md](api-reference.md) for `RAGServerApp`, `IRetrievalPipeline`, `IVectorStore`, `IEmbeddingProvider`, `VectorisationHandler`, `RAGPromptBuilder`, and the per-deployment tuning knobs (`withTopK`, `withMinScore`, `withMergeStrategy`, etc.).
+See [api-reference.md](api-reference.md) for `RagOptions` / `withRAG`, `IRetrievalPipeline`, `IVectorStore`, `IEmbeddingProvider`, `VectorisationHandler`, `RAGPromptBuilder`, and the per-deployment tuning knobs (`withTopK`, `withMinScore`, `withMergeStrategy`, etc.).
 
 ## Extending
 

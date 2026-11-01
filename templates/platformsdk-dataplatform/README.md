@@ -13,7 +13,7 @@ trading extract (`data/sample/daily-trade.synthetic.csv`) and an illustrative fi
 
 | Part | Where | What it is |
 |---|---|---|
-| The application | `src/MyDataPlatform-Server/Composition.fs` | A RAG app (AI, retrieval, the knowledge base) with the fact tier composed in one call (`RAGServerApp.withFacts FactsCompose.withFactTier`), ending in `ServerApp.run`. |
+| The application | `src/MyDataPlatform-Server/Composition.fs` | A RAG app (AI, retrieval, the knowledge base) composed with `RAGCompose.withRAG`, the fact tier riding its `RagOptions` in one call (`RagOptions.withFacts FactsCompose.withFactTier`), ending in `ServerApp.run`. |
 | Companions | `src/MyDataPlatform-Server/Companions.fs` | Claude, strictly bring-your-own-key (the key is read from the secret store, never from configuration); a local embedder and an HNSW vector store; local blob storage; the encrypted-file secret store. |
 | The data module | `src/Modules/DailyTrade/` | An `IDataSource` over uploaded deliveries, a reader that validates the whole delivery or rejects it, and two declared fact tables (`trade.site`, `trade.channel`) with their metrics and subjects. It fills the client shell's data-manager slot and publishes what it ingests. |
 | Reference data | `src/MyDataPlatform-Server/ReferenceData.fs` | The fiscal calendar every fact's period is labelled with, verified against a pinned hash before the server starts. |

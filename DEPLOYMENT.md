@@ -7,7 +7,7 @@ Operator-facing reference for running a server built on the ToolUp platform
 SDK. This document covers the runtime concerns that are decided at deploy time
 rather than in application code — most notably the **network-exposure posture
 of the built-in HTTP endpoints**. For how the composition root itself is
-assembled (`ServerApp` / `AIServerApp` / `RAGServerApp`, `ServerConfig`,
+assembled (`ServerApp`, `AICompose.withAI` / `RAGCompose.withRAG`, `ServerConfig`,
 surfaces), see `docs/platform/`.
 
 ## Health and metrics endpoints — authentication posture
@@ -31,7 +31,7 @@ should be restricted to the operator / monitoring network or disabled.**
 | `/health` | None | Always | Liveness only — a bare status, no configuration or internal state. | **Public OK.** Point the load balancer's liveness probe here. Safe to leave open. |
 | `/ready` | None | Always | Readiness — whether declared dependencies (stores, providers) have come up. No configuration values. | **Public OK.** Point the readiness probe here. Safe to leave open. |
 | `/metrics` | None | `ServerConfig.MetricsEndpoint = EnabledMetricsEndpoint` | OpenMetrics/Prometheus text: route templates, tag values, request counts and latencies — i.e. your traffic shape. No secrets, no request bodies. | **Restrict to the monitoring network.** Allow only the Prometheus/OTel scraper's source range at the proxy/LB, or set `MetricsEndpoint = NoMetricsEndpoint` to remove the route (clean 404) if you don't scrape it. |
-| `/health/rag` | None | RAG is composed (`RAGServerApp` / `withRAG`) | Aggregate RAG telemetry only — rolling-window counts and P50/P95 latencies. **No query plaintext, no per-team / per-user breakdown** (privacy contract). | **Restrict to the monitoring / operator network** at the proxy if you consider aggregate retrieval health sensitive. Lower-risk than `/metrics`, but still not user-facing. |
+| `/health/rag` | None | RAG is composed (`RAGCompose.withRAG`) | Aggregate RAG telemetry only — rolling-window counts and P50/P95 latencies. **No query plaintext, no per-team / per-user breakdown** (privacy contract). | **Restrict to the monitoring / operator network** at the proxy if you consider aggregate retrieval health sensitive. Lower-risk than `/metrics`, but still not user-facing. |
 | `/dev/inspect` | None | `ServerConfig.EnableDevEndpoints = true` (default **`false`**) | Rich diagnostics: registered modules, resolved configuration, startup config-validator outcomes, provider/probe results. This is your deployment's internal shape. | **Never expose in production.** Leave `EnableDevEndpoints = false` on internet-facing deployments; enable it only on a locked-down staging box or behind an operator-only proxy rule. |
 
 Notes:
@@ -46,7 +46,7 @@ Notes:
 - **`/health/rag` upholds the retrieval privacy contract**: even an operator
   reading it never sees query text — only hashed/aggregate signals. The same
   contract governs the `KnowledgeQueryRejected` audit emitted when a query
-  exceeds `RAGServerApp.withMaxQueryChars` (query hash + length only, never
+  exceeds `RagOptions.withMaxQueryChars` (query hash + length only, never
   plaintext).
 - The startup config validators (visible in `/dev/inspect`'s Validators panel)
   will **warn** when an authenticated deployment runs without a rate limiter —
@@ -339,7 +339,7 @@ can never fire; startup warns, and nothing else tells you.
 | Residue | What produces it | Reclaimed by | Composed with | Default cadence |
 |---|---|---|---|---|
 | **Orphaned content blobs** — `{container}/objects/_content/{hash}.data` with no metadata referencing them | A `IDataObjectStore.Save` that wrote its content blob and then died (crash, pod kill, storage error) before writing its metadata blob | `platform.data-object-orphan-sweep` | `ServerApp.withDataObjectOrphanSweep` | Daily 02:00 UTC, 24h grace |
-| **Vector-index tombstones** — soft-deleted chunks carrying `_deletedAt` | `IVectorStore.DeleteChunk`, i.e. every document deletion and re-ingestion | `IVectorStore.Vacuum` on a schedule | `RAGServerApp.withVacuumSchedule` | Daily 03:00 UTC, 7-day retention |
+| **Vector-index tombstones** — soft-deleted chunks carrying `_deletedAt` | `IVectorStore.DeleteChunk`, i.e. every document deletion and re-ingestion | `IVectorStore.Vacuum` on a schedule | `RagOptions.withVacuumSchedule` | Daily 03:00 UTC, 7-day retention |
 
 The two cadences are deliberately an hour apart so the reclaim passes do not
 contend for the same backing store in the same minute.

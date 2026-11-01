@@ -21,9 +21,9 @@ what the default `ToolUp.RAG` pipeline (with ingestion + a vector store) is for.
 
 ## The `withRetrievalPipeline` seam
 
-`RAGServerApp` gained a `withRetrievalPipeline` setter (`ToolUp.RAG.Server`) that
+`RagOptions.withRetrievalPipeline` (`ToolUp.RAG.Server`)
 substitutes the whole `IRetrievalPipeline`. When it is set **and** no module
-contributes a `VectorisationHandler`, `composeWithRAG` also suppresses the
+contributes a `VectorisationHandler`, the RAG composition also suppresses the
 ingestion + reembedding background services — so a static-doc deployment pays
 nothing for the live-ingestion machinery it doesn't use.
 
@@ -32,10 +32,13 @@ open ToolUp.RAG.StaticCorpus
 
 let embedder = HashingEmbeddingProvider.createDefault ()   // or a real model
 
-RAGServerApp.create providerFactory providerProfile embedder
-|> RAGServerApp.withRetrievalPipeline (
-    StaticCorpusRetrievalPipeline.loadFromFile embedder "docs.scidx")
-|> RAGServerApp.run
+ServerApp.empty
+|> RAGCompose.withRAG (
+    RagOptions.create providerFactory providerProfile embedder
+    |> RagOptions.withRetrievalPipeline (
+        StaticCorpusRetrievalPipeline.loadFromFile embedder "docs.scidx")
+)
+|> ServerApp.run
 ```
 
 The embedder passed to `StaticCorpusRetrievalPipeline` must be the **same

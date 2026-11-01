@@ -141,11 +141,11 @@ ServerApp.empty
 
 `ServerModule` carries a module's Name (the RBAC key its `withGuardedApi` gate checks), its `Handlers`, any registered `DataType`s, `VectorisationHandler`s, and an optional `ModuleConfigSchema`. `ServerApp` then aggregates those plus config, auth provider, logger, blob storage, and notification channel — `ServerApp.run` internally calls `SDK.Server.compose` with the flattened lists.
 
-Two companion records layer on top without duplicating the core wiring:
-- `AIServerApp` — wraps `ServerApp`, adds an `AIProviderFactory`, `AIConfigStore`, `AITools`, and optional `ModuleAIContexts`. `AIServerApp.run` calls `composeWithAI`. See [`src/ToolUp.AI/README.md`](../ToolUp.AI/README.md).
-- `RAGServerApp` — wraps `AIServerApp`, adds an `IEmbeddingProvider`. `RAGServerApp.run` calls `composeWithRAG` and re-uses the AI wiring underneath. See [`src/ToolUp.RAG/README.md`](../ToolUp.RAG/README.md).
+Two companion tiers join the same pipeline without duplicating the core wiring, each through an options record and a `withX` entry point:
+- `AIOptions` + `AICompose.withAI` — an `IAIProviderFactory`, provider profile, AI config, answering tools, and optional `ModuleAIContexts`. See [`src/ToolUp.AI/README.md`](../ToolUp.AI/README.md).
+- `RagOptions` + `RAGCompose.withRAG` — an `IEmbeddingProvider` and the retrieval knobs over an `AIOptions`; RAG composes the AI tier itself. See [`src/ToolUp.RAG/README.md`](../ToolUp.RAG/README.md).
 
-Apps without AI use `ServerApp.run` directly; with AI only, `AIServerApp.run`; with RAG, `RAGServerApp.run`. Each outer record has a `mapBase` / `mapAI` helper so you can build the inner layer inline.
+Every app ends in `ServerApp.run`: without AI, the pipeline has no companion; with AI only, it adds `AICompose.withAI`; with RAG, `RAGCompose.withRAG` (and no `withAI`). The tier is composed when the deployment resolves, so `ServerApp` builders work on either side of `withAI` / `withRAG`.
 
 ### Data type registration
 
@@ -402,7 +402,7 @@ Out-of-band email / SMS / push delivery for events whose audience isn't a live S
   - `src/NotificationChannels/WhatsApp/MetaCloud/` — Phase 6f.C. The Meta WhatsApp Business Cloud API (`/{phone-number-id}/messages` on the Graph API) over BCL `HttpClient`, no vendor SDK; System User token from `ISecretStore.GetSecret("_platform", "meta_whatsapp_access_token")`, read per send so rotation needs no restart. Template sends build Meta's `components` array from the `IWhatsAppTemplateRegistry` arity; free-form sends are `type: "text"`. Ships an inbound webhook handler (`whatsapp-meta`, on the `ToolUp.Webhooks` substrate, `X-Hub-Signature-256` verified) that stamps `ExternalContact.LastInboundUtc` — opening the 24-hour window — and audits `failed` delivery statuses. Recipients resolve through the consent-gated `INotificationAddressBook.ResolveWhatsApp`.
   - `src/NotificationChannels/Push/WebPush/` — RFC 8030 Web Push protocol via the `WebPush` NuGet package. VAPID public key + subject in env, private key in `ISecretStore`. Per-token send (one POST per registered browser). Includes `examples/sw.js` reference service worker.
 
-Apps wire sinks through `ServerApp.withTransactionalSink` (mirrored on `AIServerApp` / `RAGServerApp`); registering any sink causes `compose` to merge the SDK-shipped `_platform.notification_prefs` schema, build the `DispatchingNotificationChannel` decorator, and host the dispatcher as `IHostedService`. Apps without out-of-band delivery omit the call and pay zero runtime cost.
+Apps wire sinks through `ServerApp.withTransactionalSink` (on the same pipeline an AI / RAG deployment composes onto); registering any sink causes `compose` to merge the SDK-shipped `_platform.notification_prefs` schema, build the `DispatchingNotificationChannel` decorator, and host the dispatcher as `IHostedService`. Apps without out-of-band delivery omit the call and pay zero runtime cost.
 
 On the client, `Client/NotificationClient.fs` opens a single `EventSource` router and `subscribe (NotificationEnvelope -> unit)` returns a dispose thunk. The built-in `Components/ToastCentre.fs` subscribes to this router, filters to `SystemMessage`, and renders a fixed-position toast strip. `ToastCentreMode` on `ClientConfig` (`NoToastCentre` | `DefaultToastCentre` | `CustomToastCentre of ReactElement`) controls injection; the default is `DefaultToastCentre`. Toast state is local `React.useState` — not part of the Elmish model, per the "text inputs / transient UI state" convention. Transactional kinds (`TransactionalEmail` / `TransactionalSms` / `MobilePush`) are filtered out of SSE delivery defence-in-depth, so the in-process channel can ride non-decorated mode without leaking PII to any open tab.
 

@@ -83,7 +83,7 @@ Plus a wide set of provider companions for the extension-point interfaces — se
 
 ## Architecture
 
-See [`architecture.md`](architecture.md) for the full architecture overview — composition roots, `ServerApp` / `AIServerApp` / `RAGServerApp` pipelines, scope resolution, how modules plug in.
+See [`architecture.md`](architecture.md) for the full architecture overview — composition roots, the `ServerApp` pipeline and its `AICompose.withAI` / `RAGCompose.withRAG` companions, scope resolution, how modules plug in.
 
 ## Module convention
 

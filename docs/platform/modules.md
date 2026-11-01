@@ -470,7 +470,7 @@ let moduleContext: ModuleAIContext = {
 }
 ```
 
-`ModuleName` must match the module's `ModuleDefinition.Id` — the stable permission-key identifier, not the display name — because that is the value the client sends as `AIMessageRequest.ActiveModule` and the key the server looks up. Registered via `AIServerApp.withModuleAIContexts`. See the AI companion docs for the layered system-prompt composition (platform + team + module).
+`ModuleName` must match the module's `ModuleDefinition.Id` — the stable permission-key identifier, not the display name — because that is the value the client sends as `AIMessageRequest.ActiveModule` and the key the server looks up. Registered via `AIOptions.withModuleAIContexts`. See the AI companion docs for the layered system-prompt composition (platform + team + module).
 
 ## Text inputs use local React state, not Elmish model
 

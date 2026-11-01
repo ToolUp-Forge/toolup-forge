@@ -50,9 +50,13 @@ Setup:
 // `IEmbeddingProvider`.
 let embedder = LocalEmbeddingProvider.create ()
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 No API key needed. No network calls. Pure in-process.
@@ -73,16 +77,20 @@ Setup:
 // sibling, and `create` already returns `IEmbeddingProvider`.
 let embedder = OpenAIEmbeddingProvider.create secretStore
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 Store API key under `_platform` scope, key name `OPENAI_API_KEY`. The provider pulls per-call.
 
 Cost: ~$0.02 per 1M tokens for `text-embedding-3-small`. A 1000-document KB with 50 chunks each at ~500 tokens per chunk = 25M tokens = ~$0.50 once. Re-embedding on model swap = same cost again.
 
-Latency: ~50-200ms per embed call (OpenAI's API). Pair with `CachingEmbeddingProvider` (auto-wrapped by `composeWithRAG`) so repeated queries / re-embeds hit the cache.
+Latency: ~50-200ms per embed call (OpenAI's API). Pair with `CachingEmbeddingProvider` (auto-wrapped by `RAGCompose.withRAG`) so repeated queries / re-embeds hit the cache.
 
 ## Caching layer
 
@@ -122,10 +130,14 @@ Replace the in-memory cache with a Redis-backed companion:
 ```fsharp
 open ToolUp.RAG.EmbeddingCaches.Redis
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.withEmbeddingCache (RedisEmbeddingCache.create connectionString None)
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    |> RagOptions.withEmbeddingCache (RedisEmbeddingCache.create connectionString None)
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 `RedisEmbeddingCache.create : string -> ILogger option -> IEmbeddingCache` connects with the shipped defaults and owns the multiplexer. Use `fromMultiplexer` to share a connection pool the deployment already owns (the same `IConnectionMultiplexer` backing `RedisNotificationChannel` / `RedisDistributedLock`), or `createWith` to override `RedisEmbeddingCacheOptions`.
@@ -233,9 +245,13 @@ Wire:
 ```fsharp
 let embedder = MyVendor.EmbeddingProvider.create secretStore "myvendor-large"
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 Author an `IHealthCheck` + `IConfigValidator` for self-registration.
@@ -246,7 +262,7 @@ See [`rag/extending.md`](../rag/extending.md) for the full guide.
 
 - Production embedding provider — `LocalEmbeddingProvider` is dev-only.
 - API keys in `ISecretStore`, scoped to `_platform`.
-- `CachingEmbeddingProvider` wrapping enabled (auto-applied by `composeWithRAG`).
+- `CachingEmbeddingProvider` wrapping enabled (auto-applied by `RAGCompose.withRAG`).
 - Distributed cache (Redis) for multi-instance deployments.
 - Health probe + config validator self-register.
 - Model-swap procedure documented for operators — re-embed after swap, audit `KnowledgeChunkReembedded` events.

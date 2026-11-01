@@ -155,9 +155,9 @@ let serverModule =
 
 Composition-root-owned crons that aren't tied to a single module use the
 mirrored `ServerApp.withJobHandler` / `ServerApp.withScheduledJob` hooks
-(and the same names on every superset — `AIServerApp`,
-`FormsServerApp`, `RAGServerApp`, `SchedulingServerApp` — delegating to
-the base).
+(and the same names on `FormsServerApp` / `SchedulingServerApp`,
+delegating to the base; an AI / RAG deployment calls them on its
+`ServerApp` pipeline beside `AICompose.withAI` / `RAGCompose.withRAG`).
 
 ### Manual `RegisterHandler` + `Schedule` (advanced)
 
@@ -208,7 +208,7 @@ The threshold is exactly `60_000ms` (one full minute) — the loop's own tick in
 - **`/dev/inspect`** — `JobSchedulerDiagnosticsContributor` (registered when the scheduler is registered) emits a `"Job scheduler"` panel with the current counter, last drift, and last-miss timestamp. Debug-only — gated on `ServerConfig.EnableDevEndpoints`.
 - **`HealthMonitorApi.GetJobSchedulerTelemetry`** — production-safe Owner/Admin surface that the SDK's `HealthMonitorUI` admin module renders as an inline card on the "Live health" tab. The card is suppressed entirely when `HasScheduler = false` (no scheduler registered, or distributed companion that didn't ship a telemetry impl); when a miss has been observed the card draws with a yellow warning border so the signal is visible without reading the numbers.
 
-**Operator opt-in to back-fill.** `ServerConfig.BackfillMissedTicks` (default `false`) opts the deployment into re-firing `OnEvent`-triggered jobs once on drift recovery. The fluent helper is `ServerApp.withBackfillMissedTicks true` (mirrored on every superset: `AIServerApp`, `RAGServerApp`, `FormsServerApp`, `SchedulingServerApp`). Operators opt in when their `OnEvent` work is safely re-entrant — idempotent inserts, dedup'd upserts, advisory side effects. Non-idempotent work should stay opt-out; the missed dispatches are the trade-off for at-most-once semantics.
+**Operator opt-in to back-fill.** `ServerConfig.BackfillMissedTicks` (default `false`) opts the deployment into re-firing `OnEvent`-triggered jobs once on drift recovery. The fluent helper is `ServerApp.withBackfillMissedTicks true` (mirrored on `FormsServerApp` and `SchedulingServerApp`; an AI / RAG deployment calls it on its `ServerApp` pipeline). Operators opt in when their `OnEvent` work is safely re-entrant — idempotent inserts, dedup'd upserts, advisory side effects. Non-idempotent work should stay opt-out; the missed dispatches are the trade-off for at-most-once semantics.
 
 **Verifying drift detection manually.** Set a breakpoint inside the scheduler's `ExecuteAsync` loop (or hit `Ctrl+Break` to pause the whole process), wait ≥120 seconds, then resume. Within a few seconds: the `HealthMonitorUI` panel shows a non-zero `tick_missed_count`, and the `_platform.jobs`-scope operational-event log contains one `JobSchedulerTickMissed` entry whose `MissedTickCount` matches the number of minute boundaries inside the pause window. Without the pause, the counter stays at zero across an arbitrary uptime.
 
@@ -216,7 +216,7 @@ The threshold is exactly `60_000ms` (one full minute) — the loop's own tick in
 
 Drift back-fill (above) covers a scheduler that *paused*; it cannot cover a process that *died*. `OnEvent` triggering rides an in-memory hook — `JobNotifyEventStore` forwards each successful `IEventStore.Write` to `IJobScheduler.NotifyEventWritten` — so an event durably written immediately before a crash never fires its triggers: after restart the event sits in the store, the scheduler has no memory it was never dispatched, and the trigger is lost permanently. Writes that land during the compose window (before the scheduler cell is populated) are dropped the same way.
 
-**Opt-in:** `ServerConfig.EventTriggerCatchUp = true` (fluent: `ServerApp.withEventTriggerCatchUp true`, mirrored on every superset) alongside `JobScheduler = InProcessJobScheduler`. Default `false` — the notify path stays byte-for-byte at-most-once.
+**Opt-in:** `ServerConfig.EventTriggerCatchUp = true` (fluent: `ServerApp.withEventTriggerCatchUp true`, mirrored on the companion wrappers that delegate to the base) alongside `JobScheduler = InProcessJobScheduler`. Default `false` — the notify path stays byte-for-byte at-most-once.
 
 **Mechanism.** When enabled, compose creates one `JobTriggerWatermark` shared by the notify decorator and the scheduler:
 

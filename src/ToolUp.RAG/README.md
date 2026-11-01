@@ -19,7 +19,7 @@ What stays in core:
 - **`IEmbeddingCache`** (`src/ToolUp.Platform.Server/Server/IEmbeddingCache.fs`) — extension-point interface for caching `text → float32 array` lookups. The in-memory LRU implementation is in this companion; a distributed companion (Redis, blob-backed) can replace it without touching call sites.
 - **`IVectorStore`** (`src/ToolUp.Platform.Server/Server/Rag/IVectorStore.fs`) — extension-point interface. The in-memory implementation is in this companion; a distributed companion (Qdrant, pgvector, …) can replace it without touching module code. Soft-delete contract: `DeleteChunk` writes `_deletedAt` tombstones; `Vacuum` hard-removes past the retention window; `DeleteByScope` is a config-grade reset that bypasses tombstone semantics.
 - **`IRetrievalPipeline`** (`src/ToolUp.Platform.Server/Server/Rag/IRetrievalPipeline.fs`) — high-level facade that `SystemPromptBuilder` implementations and modules call into. The *runtime* (pipeline, vector store, background ingestion, reembedding service) lives in this companion.
-- **`IOcrProvider`** (`src/ToolUp.Platform.Server/Server/IOcrProvider.fs`) — optional document-understanding extension point. `IsScanned` decides whether a document needs OCR; `ExtractText` returns per-page text. The default no-op (in this companion) reports `IsScanned = false` and `ExtractText = []` so consumers route to native text extraction; a concrete provider ships as a companion — `ToolUp.OcrProviders.Tesseract` (`src/OcrProviders/Tesseract/`, Phase 500) is the first. There is no `with*` builder: register the provider in DI before the RAG composition runs and `composeWithRAG` picks it up (see `docs/companions/ocr-providers.md`).
+- **`IOcrProvider`** (`src/ToolUp.Platform.Server/Server/IOcrProvider.fs`) — optional document-understanding extension point. `IsScanned` decides whether a document needs OCR; `ExtractText` returns per-page text. The default no-op (in this companion) reports `IsScanned = false` and `ExtractText = []` so consumers route to native text extraction; a concrete provider ships as a companion — `ToolUp.OcrProviders.Tesseract` (`src/OcrProviders/Tesseract/`, Phase 500) is the first. There is no `with*` builder: register the provider in DI before the RAG composition runs and the composition picks it up (see `docs/companions/ocr-providers.md`).
 - **`ITableExtractor`** (`src/ToolUp.Platform.Server/Server/ITableExtractor.fs`) — optional document-understanding extension point. `ExtractTables` returns `ExtractedTable list` whose shape (`Page`, `Headers`, `Rows`) is deliberately compatible with `Chunking.SheetData` so consumers can pipe through `chunkSpreadsheet` without any type translation. The default no-op returns `[]`.
 - **`IImageEmbedder`** (`src/ToolUp.Platform.Server/Server/IImageEmbedder.fs`) — optional multimodal extension point. `EmbedImage` and `EmbedQuery` produce vectors in a shared modality space (CLIP-style). No default no-op is registered: there is no honest no-op for image vectors. Reserved constants `ImageRegionDataTypeId` and `ImageEmbeddingMetadata.{ProviderKey, ModelKey, DimensionsKey}` define the routing surface for future image-aware vector stores.
 - **`IRetrievalTracer`** (`src/ToolUp.Platform.Server/Server/IRetrievalTracer.fs`) — observability extension point. `Trace : RetrievalTrace -> AccessContext -> Async<unit>` runs after every `Retrieve` call. The `RetrievalTrace` record carries `QueryHash` (SHA256, never plaintext), `QueryLength`, requested vs permitted scopes, top-K, candidate-pool size, top score, dense/sparse/rerank flags, latency, stage list, and result count. Two implementations ship in this companion: `NoOpRetrievalTracer` (zero-cost opt-out) and `EventStoreRetrievalTracer` (writes `KnowledgeRetrieved` events under `SourceModule = "_platform.retrieval"`). The reserved literals `KnowledgeRetrievedEventType` and `RetrievalTraceSourceModule` are wire-format contracts.
@@ -49,11 +49,11 @@ Injected into the consuming server project via `ToolUp.RAG.Server.props`. Compil
 | `CachingEmbeddingProvider.fs` | Decorator that wraps any `IEmbeddingProvider` with an `IEmbeddingCache`. SHA256-hashes text so raw user content never lands in cache keys. Preserves the wrapped provider's `ProviderId` / `ModelId` / `Dimensions` so version stamping downstream still records the underlying identity |
 | `InMemoryVectorStore.fs` | `IVectorStore` implementation — cosine similarity, pre-normalised vectors, debounced `IBlobStorage` persistence, `IDisposable` with final flush on shutdown. Tombstone soft-delete via `_deletedAt`; `Vacuum` hard-removes entries past the retention window; `ListChunks` and `ListScopes` for re-embed scans |
 | `RetrievalPipeline.fs` | `IRetrievalPipeline` implementation — scope-access validation, embedding generation, merge strategies. `Index` stamps `EmbeddingVersion` (`_embedProvider` / `_embedModel` / `_embedDim`) onto every chunk so a model swap is detectable post-hoc. After every `Retrieve` call, builds a `RetrievalTrace` with hashed query + stage shape and emits via `IRetrievalTracer.Trace` (failures swallowed — tracing must never fail retrieval) |
-| `RetrievalTracers.fs` | `NoOpRetrievalTracer` (zero-cost opt-out) and `EventStoreRetrievalTracer` (default — writes `KnowledgeRetrieved` events into the configured `IEventStore` under `_platform.retrieval`). `hashQuery` SHA256 helper. `composeWithRAG` resolves the registered tracer from DI; if none is present, falls back to `EventStoreRetrievalTracer` so retrieval observability ships on by default |
+| `RetrievalTracers.fs` | `NoOpRetrievalTracer` (zero-cost opt-out) and `EventStoreRetrievalTracer` (default — writes `KnowledgeRetrieved` events into the configured `IEventStore` under `_platform.retrieval`). `hashQuery` SHA256 helper. The RAG composition resolves the registered tracer from DI; if none is present, falls back to `EventStoreRetrievalTracer` so retrieval observability ships on by default |
 | `IngestionService.fs` | `IngestionBackgroundService` — dequeues jobs, indexes via pipeline, emits `KnowledgeChunkIndexed` / `KnowledgeChunkFailed` events. Concurrency-capped via `SemaphoreSlim` |
 | `ReembeddingService.fs` | `ReembeddingQueue` (unbounded `Channel<VectorScope>`) + `ReembeddingBackgroundService` — drains the queue, scans each scope for chunks whose `EmbeddingVersion` doesn't match the current provider, re-runs `pipeline.Index` to replace the prior vector. Emits `KnowledgeChunkReembedded` / `KnowledgeChunkReembedFailed` events |
 | `RAGPromptBuilder.fs` | `withRetrieval` — a `SystemPromptBuilder` that injects retrieved chunks as cited context into the AI system prompt |
-| `RAGCompose.fs` | `composeWithRAG` + `RAGServerApp` record — drop-in replacement for `composeWithAI` / `AIServerApp`. `RAGServerApp` wraps an `AIServerApp.AI` and adds an `IEmbeddingProvider`; `RAGServerApp.run` calls `composeWithRAG` on top of the AI wiring. Internally wraps the supplied embedder with `CachingEmbeddingProvider` and registers the reembedding service |
+| `RAGCompose.fs` | `RagOptions` record + `withRAG` — the RAG counterpart of `AIOptions` / `AICompose.withAI`. `RagOptions` carries the AI tier's options in its `AI` field and adds an `IEmbeddingProvider` plus the retrieval settings; `withRAG options` sets the RAG companion on a `ServerApp`, which composes the AI tier with the retrieval layers on top when the deployment resolves. Internally wraps the supplied embedder with `CachingEmbeddingProvider` and registers the reembedding service |
 
 ## How to enable RAG in a deployment
 
@@ -77,7 +77,7 @@ Server project (`ToolupApp-Server.fsproj`):
 
 Deployments that use OpenAI embeddings swap `LocalEmbeddingProvider` for `OpenAIEmbeddingProvider`.
 
-### 2. Wire an embedding provider and run via `RAGServerApp`
+### 2. Wire an embedding provider and compose via `withRAG`
 
 In the server entry point:
 
@@ -98,40 +98,45 @@ let embeddingProvider = LocalEmbeddingProvider.create ()
 // via ServerModule.withVectorisation — the handlers flow through to
 // ServerApp.addModules. There is no separate `vectorisationHandlers` arg.
 
-RAGServerApp.createFrom aiProviderFactory providerProfile embeddingProvider (
-    ServerApp.empty
-    |> ServerApp.withConfig config
-    |> ServerApp.withAuth authProvider
-    |> ServerApp.withLogger logger
-    |> ServerApp.withStorage blobStorage
-    |> ServerApp.addModules modules)
-|> RAGServerApp.withModuleAIContexts moduleAIContexts
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withAuth authProvider
+|> ServerApp.withLogger logger
+|> ServerApp.withStorage blobStorage
+|> ServerApp.addModules modules
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embeddingProvider
+    |> RagOptions.withModuleAIContexts moduleAIContexts
+)
+|> ServerApp.run
 ```
 
-Deployments that don't want RAG use `AIServerApp.run` directly (no `RAGServerApp` wrapper). The AI wiring is identical — `RAGServerApp` only adds the embedding provider, vector-store, pipeline, ingestion queue, background service, post-save hook, and retrieval `SystemPromptBuilder` on top.
+Deployments that don't want RAG compose `AICompose.withAI` instead (with `AIOptions`). The AI wiring is identical — `withRAG` composes the AI tier from `RagOptions.AI` itself (so a RAG deployment does not also call `withAI`) and only adds the embedding provider, vector-store, pipeline, ingestion queue, background service, post-save hook, and retrieval `SystemPromptBuilder` on top.
 
 ### Tuning the retrieval surface (Phase 14m–14p)
 
-`RAGServerApp` exposes per-deployment knobs that tune retrieval behaviour without touching code. Compose them onto the pipeline before `run`:
+`RagOptions` exposes per-deployment knobs that tune retrieval behaviour without touching code. Chain them onto the options passed to `withRAG`:
 
 ```fsharp
-RAGServerApp.create aiProviderFactory providerProfile embedder
-// — Throughput (Phase 14n) —
-|> RAGServerApp.withIngestionConcurrency 16          // documents in flight per slot
-|> RAGServerApp.withIngestionQueueCapacity 10000     // bounded queue (`429 + Retry-After` on overflow)
-// — Retrieval shape (Phase 14o) —
-|> RAGServerApp.withTopK 8                           // matches per turn (default 5)
-|> RAGServerApp.withMinScore (Some 0.4)              // drop weak matches (default None)
-|> RAGServerApp.withSnippetCharLimit 320             // Sources panel preview (default 240)
-|> RAGServerApp.withOriginFilter (Some (Set.ofList [ Document; Note ]))
-                                                     // restrict to specific origins; default excludes AIContext
-|> RAGServerApp.withMergeStrategy Interleaved        // or Separate
-// — Grounding stance (Phase 14p) —
-|> RAGServerApp.withGroundingMode Preferred          // or Permissive | StrictlyGrounded
-// — Telemetry (Phase 14n) —
-|> RAGServerApp.withTelemetry customTelemetry        // optional Prometheus / OTel sink
-|> RAGServerApp.run
+ServerApp.empty
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    // — Throughput (Phase 14n) —
+    |> RagOptions.withIngestionConcurrency 16          // documents in flight per slot
+    |> RagOptions.withIngestionQueueCapacity 10000     // bounded queue (`429 + Retry-After` on overflow)
+    // — Retrieval shape (Phase 14o) —
+    |> RagOptions.withTopK 8                           // matches per turn (default 5)
+    |> RagOptions.withMinScore (Some 0.4)              // drop weak matches (default None)
+    |> RagOptions.withSnippetCharLimit 320             // Sources panel preview (default 240)
+    |> RagOptions.withOriginFilter (Some (Set.ofList [ Document; Note ]))
+                                                         // restrict to specific origins; default excludes AIContext
+    |> RagOptions.withMergeStrategy Interleaved        // or Separate
+    // — Grounding stance (Phase 14p) —
+    |> RagOptions.withGroundingMode Preferred          // or Permissive | StrictlyGrounded
+    // — Telemetry (Phase 14n) —
+    |> RagOptions.withTelemetry customTelemetry        // optional Prometheus / OTel sink
+)
+|> ServerApp.run
 ```
 
 `/health/rag` returns a 60-second rolling-window snapshot from `IRagTelemetry` — embedding latency / batch size, queue depth + rejections, flush latency + dirty chunks, retrieval hit / low-score-miss / empty counts. Wire it as a dashboard scrape target. `IRagTelemetry` is companion-extensible: register a Prometheus / OTel exporter via `withTelemetry` and `/health/rag` plus your downstream sink see the same data.
@@ -211,7 +216,7 @@ Both paths converge on `IngestionBackgroundService`, which dequeues jobs, calls 
 
 ### 4. Consume retrieved context
 
-With `AIConfig = None` (the default on `AIServerApp.empty`), `RAGServerApp.run` installs the `withRetrieval` builder automatically — every AI message goes through retrieval and relevant chunks are prepended to the system prompt as cited context.
+With `AIConfig = None` (the default from `AIOptions.create`, and so from `RagOptions.create`), `withRAG` installs the `withRetrieval` builder automatically — every AI message goes through retrieval and relevant chunks are prepended to the system prompt as cited context.
 
 Deployments that want custom prompt composition supply their own `aiConfig` and compose `withRetrieval` explicitly:
 
@@ -230,10 +235,10 @@ let ragAwarePrompt pipeline =
     ]
 ```
 
-`RetrievalDefaults.defaults` is the same record `RAGServerApp` starts from, so a
+`RetrievalDefaults.defaults` is the same record `RagOptions.create` starts from, so a
 deployment that has tuned the knobs above passes the tuned value here instead —
 this is the builder-factory variant, not a hard-coded `TopK = 5`. Passing `None`
-for telemetry and the tracer opts out of both; `composeWithRAG` supplies its own
+for telemetry and the tracer opts out of both; the RAG composition supplies its own
 when it installs the builder for you.
 
 
@@ -291,7 +296,7 @@ Three optional extension points let document-aware companions enrich extraction 
 
 Three operational features ride together because they share one substrate (chunk metadata) and one lifecycle (the retrieval / ingestion runtime).
 
-**Embedding cache (`IEmbeddingCache`).** The supplied `IEmbeddingProvider` is wrapped transparently inside `composeWithRAG` with `CachingEmbeddingProvider`. Repeated query strings (and re-uploaded chunks with identical text) hit an in-memory LRU keyed by `(ProviderId, ModelId, Dimensions, SHA256(text))` and skip the underlying provider — no API call for OpenAI, no TF-IDF recompute for `LocalEmbeddingProvider`. SHA256 is used so raw user text never sits in cache keys. The cache is registered as `IEmbeddingCache` in DI; admin endpoints can read `cache.HitRate()` to monitor steady-state behaviour. Default capacity 10000; eviction is strict-LRU.
+**Embedding cache (`IEmbeddingCache`).** The supplied `IEmbeddingProvider` is wrapped transparently by the RAG composition with `CachingEmbeddingProvider`. Repeated query strings (and re-uploaded chunks with identical text) hit an in-memory LRU keyed by `(ProviderId, ModelId, Dimensions, SHA256(text))` and skip the underlying provider — no API call for OpenAI, no TF-IDF recompute for `LocalEmbeddingProvider`. SHA256 is used so raw user text never sits in cache keys. The cache is registered as `IEmbeddingCache` in DI; admin endpoints can read `cache.HitRate()` to monitor steady-state behaviour. Default capacity 10000; eviction is strict-LRU.
 
 A model swap automatically invalidates the cache without any explicit flush — the cache key includes the provider identity, so old keys are simply unreachable under the new identity and age out via LRU.
 
@@ -301,16 +306,19 @@ The reembedding service drains a `ReembeddingQueue` (unbounded `Channel<VectorSc
 
 **Soft delete (`_deletedAt` tombstones).** `IVectorStore.DeleteChunk` no longer hard-deletes — it stamps `_deletedAt = <ISO 8601 UTC>` on the chunk's metadata and leaves the entry in place. `Search` filters tombstoned chunks out (so deleted content is invisible to AI prompts and module retrieval); `ListChunks scope false` agrees. `RestoreChunk` removes the tombstone within the retention window, making the chunk visible again; past retention, `Vacuum scope (UtcNow - retention)` hard-removes the entry and `RestoreChunk` becomes a no-op. `DeleteByScope` continues to hard-delete unconditionally — it's a config-grade reset, not a recoverable action.
 
-**Steady-state memory — the auto-vacuum contract (Phase 14w).** Soft-delete alone does not bound memory: without a vacuum, `_deletedAt` tombstones accumulate for the process lifetime and a long-running replica grows toward OOM. `RAGServerApp.withVacuumSchedule` closes that gap — it registers a `RAGVacuumJobHandler` on the `IJobScheduler` that, on a cron (default **daily 03:00 UTC**), enumerates every scope via `IVectorStore.ListScopes()` and calls `Vacuum(scope, now - retention)` per scope. The retention window defaults to **7 days** (tune with `withTombstoneRetention`; floored at one minute). Each scope that purges anything emits a `KnowledgeVacuumCompleted` audit event carrying `(ScopeKey, ChunksRemoved, BytesReclaimed, DurationMs)`.
+**Steady-state memory — the auto-vacuum contract (Phase 14w).** Soft-delete alone does not bound memory: without a vacuum, `_deletedAt` tombstones accumulate for the process lifetime and a long-running replica grows toward OOM. `RagOptions.withVacuumSchedule` closes that gap — it registers a `RAGVacuumJobHandler` on the `IJobScheduler` that, on a cron (default **daily 03:00 UTC**), enumerates every scope via `IVectorStore.ListScopes()` and calls `Vacuum(scope, now - retention)` per scope. The retention window defaults to **7 days** (tune with `withTombstoneRetention`; floored at one minute). Each scope that purges anything emits a `KnowledgeVacuumCompleted` audit event carrying `(ScopeKey, ChunksRemoved, BytesReclaimed, DurationMs)`.
 
-> **Production deployments must enable `JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) *and* `RAGServerApp.withVacuumSchedule` for memory to stabilise.** With the schedule set but no scheduler, the sweep can never fire; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call. The `VacuumScheduleValidator` warns at startup in both cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel).
+> **Production deployments must enable `JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) *and* `RagOptions.withVacuumSchedule` for memory to stabilise.** With the schedule set but no scheduler, the sweep can never fire; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call. The `VacuumScheduleValidator` warns at startup in both cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel).
 
 ```fsharp
-RAGServerApp.create factory providerProfile embedder
-|> RAGServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
-|> RAGServerApp.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
-|> RAGServerApp.withVacuumSchedule                                // daily 03:00 UTC; or withVacuumScheduleCron "0 */6 * * *"
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
+    |> RagOptions.withVacuumSchedule                                // daily 03:00 UTC; or withVacuumScheduleCron "0 */6 * * *"
+)
+|> ServerApp.run
 ```
 
 Deployments that want a bespoke cadence use `withVacuumScheduleCron "<5-field cron>"`; those that prefer to drive `Vacuum` from their own admin path can omit the schedule entirely (accepting the manual-reclaim contract above).
@@ -358,7 +366,7 @@ let skuAnalysisModule =
     |> ServerModule.withDataTypes [ salesDataType ]
     |> ServerModule.withVectorisation [ SkuAnalysis.Server.salesVectorisation ]
 
-// ... addModules flows handlers into the RAGServerApp pipeline above.
+// ... addModules flows handlers into the deployment that withRAG composes above.
 ```
 
 Principles:
@@ -387,14 +395,14 @@ The retrieval pipeline, ingestion service, and vector store are provider-agnosti
 The SDK's documented scale story is **in-memory < 50k → HNSW < 1M → external (Pgvector / Qdrant)**.
 
 - **`InMemoryVectorStore`** (this companion) — flat-scan cosine over a `ConcurrentDictionary`. Suitable for deployments up to ~50,000 chunks per scope; per-query CPU dominates above that.
-- **`HnswVectorStore`** ([`src/VectorStores/Hnsw/`](../VectorStores/Hnsw/)) — `HNSW.Net`-backed `SmallWorld<float[], float>` graph per scope. Scope isolation is structural (each scope owns an independent graph; cross-scope queries are impossible by construction). Wire it in via `RAGServerApp.withVectorStore (HnswVectorStore.create blobStorage logger)` before `RAGServerApp.run` — the in-memory default is silently skipped.
+- **`HnswVectorStore`** ([`src/VectorStores/Hnsw/`](../VectorStores/Hnsw/)) — `HNSW.Net`-backed `SmallWorld<float[], float>` graph per scope. Scope isolation is structural (each scope owns an independent graph; cross-scope queries are impossible by construction). Wire it in via `RagOptions.withVectorStore (HnswVectorStore.create blobStorage logger)` on the options passed to `withRAG` — the in-memory default is silently skipped.
 - **External (Pgvector, Qdrant, …)** — the `IVectorStore` contract supports them; concrete companions ship as separate `src/VectorStores/<Name>/` packages and substitute the same way.
 
 To add a new vector store:
 
 1. Place it at `src/VectorStores/<Name>/` (parallel to `src/Storage/` and `src/EmbeddingProviders/`).
 2. Implement all `IVectorStore` methods — `Upsert`, `Search`, `ListChunks` (honouring `includeDeleted`), `DeleteChunk` (tombstone-write, not hard-delete), `RestoreChunk`, `Vacuum`, `DeleteByScope`, `ListScopes`. Honour scope isolation (never return cross-scope results), keep the async contract, write `_deletedAt` tombstones rather than hard-removing on `DeleteChunk`, and make the type `IDisposable` if it owns background resources.
-3. Substitute it via `RAGServerApp.withVectorStore yourStore` before `RAGServerApp.run`. The existing `RetrievalPipeline`, `IngestionBackgroundService`, `ReembeddingBackgroundService`, and `RAGPromptBuilder` pick up the replacement via DI.
+3. Substitute it via `RagOptions.withVectorStore yourStore` on the options passed to `withRAG`. The existing `RetrievalPipeline`, `IngestionBackgroundService`, `ReembeddingBackgroundService`, and `RAGPromptBuilder` pick up the replacement via DI.
 
 The `InMemoryVectorStore` source is the reference implementation for the contract — especially its scope-key encoding (`"platform"`, `"deployment"`, `"team:{id}"`), its pre-normalisation approach to cosine similarity, and its tombstone semantics (strip `_deletedAt` on `Upsert`, filter on `Search`, parse on `Vacuum`). `HnswVectorStore` reuses the same scope-key encoding and tombstone semantics, differing only in the search algorithm and graph caching.
 
@@ -411,13 +419,13 @@ The `InMemoryVectorStore` source is the reference implementation for the contrac
 | `DenseUsed`, `SparseUsed`, `RerankerName` | stage telemetry | |
 | `LatencyMs`, `Stages`, `ResultCount` | outcome | `Stages` is an ordered list (`["AuthoriseScopes"; "Dense"; "TopK"]` for the cosine-only path) |
 
-The plaintext query never leaves request memory. Admin UIs and replay tooling read traces by `QueryHash`. To opt out, register a `NoOpRetrievalTracer` ahead of `RAGServerApp.run`:
+The plaintext query never leaves request memory. Admin UIs and replay tooling read traces by `QueryHash`. To opt out, register a `NoOpRetrievalTracer` before the RAG composition runs:
 
 ```fsharp
 services.AddSingleton<IRetrievalTracer>(ToolUp.RAG.RetrievalTracers.createNoOp ())
 ```
 
-`composeWithRAG` resolves `IRetrievalTracer` from DI; only when nothing is registered does it fall back to `EventStoreRetrievalTracer`. A custom tracer (e.g., one that mirrors traces to Splunk via `IAuditSink` once that ships) just needs to implement `IRetrievalTracer.Trace` and register ahead of `composeWithRAG`.
+The RAG composition resolves `IRetrievalTracer` from DI; only when nothing is registered does it fall back to `EventStoreRetrievalTracer`. A custom tracer (e.g., one that mirrors traces to Splunk via `IAuditSink` once that ships) just needs to implement `IRetrievalTracer.Trace` and register before the RAG composition runs.
 
 ### Eval harness — `src/ToolUp.RAG.Evaluation/`
 
@@ -449,18 +457,18 @@ The smoke fixture's baseline (Recall@5 ≈ 0.9, MRR ≈ 0.67 with TF-IDF) is bou
 
 ## Observability and metrics (Phase 9 / 9e delegations)
 
-`RAGServerApp` mirrors the `AIServerApp` (and through it, `ServerApp`) observability surface:
+A RAG deployment uses the `ServerApp` observability surface directly — the builders go on the deployment's pipeline, on either side of `withRAG`:
 
-- `RAGServerApp.withHealthCheck` (Phase 9k) — companion `IHealthCheck` (e.g. `HnswVectorStoreHealth`).
-- `RAGServerApp.withConfigValidator` (Phase 9m) — companion `IConfigValidator` for startup preflight.
-- `RAGServerApp.withMetricsSink` (Phase 9e) — companion `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. Wire `MetricsEndpoint = EnabledMetricsEndpoint` on `ServerConfig` to mount `/metrics`. RAG-specific metrics (`toolup.rag.embedding_latency_ms`, `toolup.rag.retrieval.empty_count`, etc.) are not yet emitted at SDK level — the `IRagTelemetry` interface (Phase 14j) carries them today; promoting RAG telemetry into the `IMetricsSink` substrate is a follow-up.
+- `ServerApp.withHealthCheck` (Phase 9k) — companion `IHealthCheck` (e.g. `HnswVectorStoreHealth`).
+- `ServerApp.withConfigValidator` (Phase 9m) — companion `IConfigValidator` for startup preflight.
+- `ServerApp.withMetricsSink` (Phase 9e) — companion `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. Wire `MetricsEndpoint = EnabledMetricsEndpoint` on `ServerConfig` to mount `/metrics`. RAG-specific metrics (`toolup.rag.embedding_latency_ms`, `toolup.rag.retrieval.empty_count`, etc.) are not yet emitted at SDK level — the `IRagTelemetry` interface (Phase 14j) carries them today; promoting RAG telemetry into the `IMetricsSink` substrate is a follow-up.
 
-Each helper delegates through `AIServerApp` to `ServerApp` — see [`src/ToolUp.Platform/README.md`](../ToolUp.Platform/README.md) and `TECHNICAL_GUIDE.md` for the full contract.
+See [`src/ToolUp.Platform/README.md`](../ToolUp.Platform/README.md) and `TECHNICAL_GUIDE.md` for the full contract.
 
 ## Deferred follow-ups
 
-- **Configurable `withRetrieval` parameters.** ✅ Shipped — `withRetrieval` takes a `RetrievalDefaults` record (`TopK` / `MinScore` / `Merge` / `SnippetCharLimit` / `OriginFilter` / `Filters`), and `RAGServerApp.withRetrievalDefaults` plus the targeted `withTopK` / `withMinScore` / … setters above tune it without rewriting the builder.
+- **Configurable `withRetrieval` parameters.** ✅ Shipped — `withRetrieval` takes a `RetrievalDefaults` record (`TopK` / `MinScore` / `Merge` / `SnippetCharLimit` / `OriginFilter` / `Filters`), and `RagOptions.withRetrievalDefaults` plus the targeted `withTopK` / `withMinScore` / … setters above tune it without rewriting the builder.
 - **Distributed vector store companion.** The HNSW companion ([`src/VectorStores/Hnsw/`](../VectorStores/Hnsw/)) is the first concrete in-process alternative to `InMemoryVectorStore`. The next rung is an external implementation (Pgvector / Qdrant) — the `IVectorStore` contract supports it; deferred follow-ups beyond Phase 14k.
-- **Auto-vacuum scheduler.** ✅ Shipped (Phase 14w) — `RAGServerApp.withVacuumSchedule` + `withTombstoneRetention` register a `RAGVacuumJobHandler` on the `IJobScheduler` that sweeps every scope on a cron (default daily 03:00 UTC). See the "Steady-state memory" contract above.
+- **Auto-vacuum scheduler.** ✅ Shipped (Phase 14w) — `RagOptions.withVacuumSchedule` + `withTombstoneRetention` register a `RAGVacuumJobHandler` on the `IJobScheduler` that sweeps every scope on a cron (default daily 03:00 UTC). See the "Steady-state memory" contract above.
 - **CI integration for the eval harness.** The repo has no CI pipeline yet; once one exists, a step running `dotnet run --project src/ToolUp.RAG.Evaluation -- --baseline baseline.json --out latest.json` against a tracked baseline would fail PRs that regress recall by more than 5%.
 - **Trace export sinks.** `IRetrievalTracer` only emits to `IEventStore` today. A Splunk / Datadog companion mirroring `KnowledgeRetrieved` payloads is a natural follow-up alongside `IAuditSink`.

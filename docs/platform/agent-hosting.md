@@ -50,19 +50,18 @@ let config = {
 open ToolUp.AI.McpHost
 open ToolUp.AI.McpHost.McpCompose
 
-AIServerApp.create factory providerProfile
-|> AIServerApp.withConfig config
-|> AIServerApp.withStorage blobStorage
-|> AIServerApp.withAIConfig assistant
-|> AIServerApp.addModules modules
-|> McpServerApp.create
-|> McpServerApp.withServerVersion "1.4.0"
-|> McpServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withStorage blobStorage
+|> ServerApp.addModules modules
+|> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig assistant)
+|> McpCompose.withMcp (McpOptions.create () |> McpOptions.withServerVersion "1.4.0")
+|> ServerApp.run
 ```
 
-`McpServerApp` wraps a composed `AIServerApp`, because the thing it projects — the registry of AI tools with their schemas — exists only once the AI tier has composed. Every `AIServerApp` helper stays reachable through `McpServerApp.over`.
+`McpCompose.withMcp` sets the MCP host companion on the deployment. It projects the registry of AI tools with their schemas, but it does not compose the AI tier itself: compose that beside it with `AICompose.withAI` (or `RAGCompose.withRAG`). Both companions are composed when the deployment resolves, so either order works.
 
-To carry one composition root across environments and turn the agent surface off in some of them, add `McpServerApp.withMcpHost NoMcpHost`; `run` then short-circuits to `AIServerApp.run` of the same base, contributing no handler, no DI registration and no middleware.
+To carry one composition root across environments and turn the agent surface off in some of them, add `McpOptions.withMcpHost NoMcpHost` to the options; the companion then contributes no handler, no DI registration and no middleware, and the AI tier is unaffected.
 
 ### 3. Create the agent and mint its credential
 
@@ -90,7 +89,7 @@ Withdraw a grant with `Write` carrying a narrower set, or `Remove` to return the
 Authorization: Bearer tusa_<tokenId>.<secret>
 ```
 
-An off-the-shelf MCP client needs nothing else. Change the path with `McpServerApp.withRoute`.
+An off-the-shelf MCP client needs nothing else. Change the path with `McpOptions.withRoute`.
 
 Two things a client author may notice: batching is unsupported (that revision removed it, so an array body is refused rather than partially handled), and `GET` on the same path answers `405` — this host serves no server-initiated stream, which the streamable-HTTP transport makes optional. `initialize` reports `tools.listChanged: false` honestly: the registry is fixed at compose.
 
@@ -99,11 +98,11 @@ Two things a client author may notice: batching is unsupported (that revision re
 Both are declared per agent, and both ride substrate the platform already has rather than a model of their own.
 
 ```fsharp skip=fragment
-|> McpServerApp.withDefaultPolicy {
+|> McpOptions.withDefaultPolicy {
     Budget = AgentBudget.callsPer BudgetPeriod.Daily 500M
     RateLimit = Some { MaxCalls = 60; Window = PerMinute }
    }
-|> McpServerApp.withAgentPolicy "acct-nightly-export" {
+|> McpOptions.withAgentPolicy "acct-nightly-export" {
     Budget = AgentBudget.concurrency 4
     RateLimit = None
    }

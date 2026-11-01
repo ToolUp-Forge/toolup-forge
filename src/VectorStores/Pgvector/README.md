@@ -198,8 +198,8 @@ The store also implements `IVectorStoreBatch`: `IVectorStore.upsertBatch store s
 
 ```fsharp skip=fragment
 app
-|> RAGServerApp.withHealthCheck (Health.create store)
-|> RAGServerApp.withConfigValidator (Health.validator store)
+|> ServerApp.withHealthCheck (Health.create store)
+|> ServerApp.withConfigValidator (Health.validator store)
 ```
 
 The readiness probe reports `Degraded` — with a full posture line naming the extension version, the configured index and whether it exists on the table, the search width in force, and the iterative-scan state — when the store is running around something an operator should fix: iterative scanning requested but unsupported, a configured index absent from the table, or an extension upgraded since `create`. `Health.report store` returns the same line on demand. The validator warns (never aborts) when the table is above `ExactScanWarningRows` with no approximate index.

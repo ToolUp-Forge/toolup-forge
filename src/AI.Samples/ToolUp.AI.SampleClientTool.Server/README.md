@@ -7,25 +7,27 @@ Apache-2.0 reference companion — server-side compose for the sample client-res
 ## What's in here
 
 - `toolDefinition` — the `AIToolDefinition` the agent loop sees. `Location = ClientResident` means the executor never runs server-side; the loop emits `ClientToolInvoke` over SSE and waits for the browser handler's POST.
-- `register : AIServerApp -> AIServerApp` — appends the tool with no authorizer. The seam-absent default in `AIAgentEngine.runAgentLoop` is `Allow`, so the model can fire the tool unrestricted. Suitable for sample / test use only.
-- `registerWithPolicy : IClientToolAuthorizer -> AIServerApp -> AIServerApp` — appends the tool + folds an operator-supplied authorizer into the composition root's `ServiceConfig`. The agent loop's DI resolution finds the authorizer and consults it before any `ClientToolInvoke` SSE emit.
+- `register : ServerApp -> ServerApp` — appends the tool to the deployment's `AITools` with no authorizer. The seam-absent default in `AIAgentEngine.runAgentLoop` is `Allow`, so the model can fire the tool unrestricted. Suitable for sample / test use only.
+- `registerWithPolicy : IClientToolAuthorizer -> ServerApp -> ServerApp` — appends the tool + adds an operator-supplied authorizer with `ServerApp.addServiceConfig`. The agent loop's DI resolution finds the authorizer and consults it before any `ClientToolInvoke` SSE emit.
 
 ## Wiring
 
 ```fsharp skip=fragment
-AIServerApp.create factory configStore
-|> AIServerApp.withConfig config
+ServerApp.empty
+|> ServerApp.withConfig config
 |> ToolUp.AI.SampleClientTool.Server.Compose.register
-|> AIServerApp.run
+|> AICompose.withAI (AIOptions.create factory providerProfile)
+|> ServerApp.run
 ```
 
 Or with an authorizer:
 
 ```fsharp skip=fragment
-AIServerApp.create factory configStore
-|> AIServerApp.withConfig config
+ServerApp.empty
+|> ServerApp.withConfig config
 |> ToolUp.AI.SampleClientTool.Server.Compose.registerWithPolicy myAuthorizer
-|> AIServerApp.run
+|> AICompose.withAI (AIOptions.create factory providerProfile)
+|> ServerApp.run
 ```
 
 ## See also

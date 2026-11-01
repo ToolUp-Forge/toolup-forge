@@ -9,7 +9,7 @@ dotnet build src/FormsAndAI.Server/FormsAndAI.Server.fsproj
 
 ## What this demonstrates
 
-Before Phase 1h, an application that needed a Forms `WorkflowDefinition` AND an AI assistant had to pick one composition root and drop the other — `FormsServerApp.run`, `AIServerApp.run`, and `RAGServerApp.run` were mutually exclusive. Phase 1h refactored both `FormsServerApp` and `AIServerApp` onto a flat `composeX : XServerApp -> ServerApp` seam and added additive `withForms` / `withAI` extensions, so a single pipeline can layer both:
+Before Phase 1h, an application that needed a Forms `WorkflowDefinition` AND an AI assistant had to pick one composition root and drop the other — `FormsServerApp.run`, `AIServerApp.run`, and `RAGServerApp.run` were mutually exclusive. Phase 1h refactored both `FormsServerApp` and `AIServerApp` onto a flat `composeX : XServerApp -> ServerApp` seam and added additive `withForms` / `withAI` extensions (the AI side has since become an `AIOptions` record that `withAI` takes), so a single pipeline can layer both:
 
 ```fsharp
 ServerApp.empty
@@ -21,14 +21,16 @@ ServerApp.empty
     |> FormsServerApp.withFormSchema demoSchema
     |> FormsServerApp.withWorkflow demoWorkflow
     |> FormsServerApp.withAction "stampSubmission" stampSubmission)
-|> AICompose.withAI aiFactory providerProfile (fun ai ->
-    ai |> AIServerApp.withAIConfig aiAssistantConfig)
+|> AICompose.withAI (
+    AIOptions.create aiFactory providerProfile
+    |> AIOptions.withAIConfig aiAssistantConfig
+)
 |> ServerApp.run
 ```
 
 `Server.fs` is the whole sample — substrate construction + the pipeline above. Three Phase 1h shapes show up:
 
-1. **One `ServerApp.empty |> ... |> ServerApp.run` pipeline** — no terminal `FormsServerApp.run` / `AIServerApp.run`. Both companions contribute via `withForms` / `withAI`.
+1. **One `ServerApp.empty |> ... |> ServerApp.run` pipeline** — no terminal `FormsServerApp.run`. Both companions contribute via `withForms` / `withAI`.
 2. **A workflow action resolving `IEntityStore` from `ctx.Services`** (`stampSubmission` in `Server.fs`). The Phase 1h `WorkflowGuard` / `WorkflowAction` signature change replaced the prior `Submission * AccessContext` tuple with a `WorkflowContext` record carrying the resolved `IServiceProvider`. Actions reach DI directly without compose-time capture — the same provider every other handler in the app sees, including the AI agent loop registered alongside.
 3. **The Phase 1h conflict validator** — calling `withForms` twice on the same pipeline fails fast at compose time with a single-line diagnostic (`ToolUp.Forms: companion already composed on this ServerApp pipeline. ...`) instead of cascading into the duplicate-entity-registration / double-mounted-route failures the pre-Phase-1h shape would have surfaced at first request. Uncomment the trailing `withForms` line in `Server.fs` to see it fire.
 

@@ -219,7 +219,7 @@ Values persist as JSON-encoded strings (`"true"`, `42`, `"hello"`). That choice 
 ### Server flow
 
 1. `ServerConfig.ModuleConfigs: ModuleConfigSchema list` lists app-level schemas; each `ServerModule.withConfig` adds a module-scoped schema. `ServerApp.run` concatenates both into the handler's registry. An empty list is legal; the reserved `_platform` entry is always surfaced by `ListModules` regardless.
-2. `ServerApp.run` (and its `AIServerApp` / `RAGServerApp` wrappers) wires `configApiHandler` into the ToolUp.Remoting surface alongside the five platform APIs (`PlatformInfoApi`, `TeamApi`, `PermissionApi`, `AccessibilityApi`, `DataCatalogApi`), `fileManagementApi`, and any AI/RAG companions.
+2. `ServerApp.run` (including a pipeline that composes AI / RAG through `AICompose.withAI` / `RAGCompose.withRAG`) wires `configApiHandler` into the ToolUp.Remoting surface alongside the five platform APIs (`PlatformInfoApi`, `TeamApi`, `PermissionApi`, `AccessibilityApi`, `DataCatalogApi`), `fileManagementApi`, and any AI/RAG companions.
 3. Each request reaches the handler with a resolved `AccessContext`. `AccessContext.configScope` returns `Some scopeId` for every non-Anonymous mode; Anonymous requests get `None` and every handler method short-circuits to `Error "Not available in Anonymous mode"`.
 4. `SaveModuleConfig` runs the payload through per-field validation (numeric range, string length, choice membership) before calling `IConfigStore.SetValues`. Invalid payloads return `Error` without touching storage.
 5. Writes are gated by `TeamRoles.canWriteTeamConfig` — the same predicate that guards `SetMemberPermissions`. Read is available to anyone in the scope.

@@ -48,7 +48,7 @@ module MyOps =
 
 Both server and client reference this Core project so the wire shape is exactly one definition.
 
-### 2. Register the tool with `AIServerApp` (Server tier)
+### 2. Register the tool on the `ServerApp` (Server tier)
 
 ```fsharp skip=fragment
 // Compose.fs (server side)
@@ -72,12 +72,13 @@ let private clientResidentStub _ctx _argsJson = async {
     return failwith "ClientResident executor must not run server-side"
 }
 
-let register (app: AIServerApp) : AIServerApp = {
-    app with Base = { app.Base with AITools = app.Base.AITools @ [ toolDefinition, clientResidentStub ] }
+let register (app: ServerApp) : ServerApp = {
+    app with
+        AITools = app.AITools @ [ toolDefinition, clientResidentStub ]
 }
 ```
 
-For production deployments add `registerWithPolicy` that folds an `IClientToolAuthorizer` into the composition root's `ServiceConfig` — see [`Server/Compose.fs`](../ToolUp.AI.SampleClientTool.Server/Server/Compose.fs).
+For production deployments add `registerWithPolicy` that adds an `IClientToolAuthorizer` with `ServerApp.addServiceConfig` — see [`Server/Compose.fs`](../ToolUp.AI.SampleClientTool.Server/Server/Compose.fs).
 
 ### 3. Implement the browser-side handler (Client tier — Fable)
 
@@ -105,10 +106,11 @@ The tuple input form (`ClientToolContext * string`) is non-negotiable — Fable 
 
 Server side:
 ```fsharp skip=fragment
-AIServerApp.create factory configStore
-|> AIServerApp.withConfig config
+ServerApp.empty
+|> ServerApp.withConfig config
 |> MyCompany.AITool.Server.Compose.register
-|> AIServerApp.run
+|> AICompose.withAI (AIOptions.create factory providerProfile)
+|> ServerApp.run
 ```
 
 Client side (in your shell's boot sequence, before `AIClientConfig.run`):

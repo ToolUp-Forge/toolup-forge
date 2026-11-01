@@ -19,7 +19,7 @@ deterministic `docs.scidx`.
 
 ## 2. Wire the pipeline into the composition root
 
-Compose with `RAGServerApp` and swap in the static-corpus pipeline. Because the
+Compose with `RAGCompose.withRAG` and swap in the static-corpus pipeline on its `RagOptions`. Because the
 override is set and no module contributes a `VectorisationHandler`, the ingestion
 and reembedding background services are suppressed — the deployment carries no
 live-ingestion overhead.
@@ -29,12 +29,15 @@ open ToolUp.RAG.StaticCorpus
 
 let embedder = HashingEmbeddingProvider.createDefault ()
 
-RAGServerApp.create providerFactory providerProfile embedder
-|> RAGServerApp.withConfig config
-|> RAGServerApp.addModule helloWorldModule
-|> RAGServerApp.withRetrievalPipeline (
-    StaticCorpusRetrievalPipeline.loadFromFile embedder "docs.scidx")
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.addModule helloWorldModule
+|> RAGCompose.withRAG (
+    RagOptions.create providerFactory providerProfile embedder
+    |> RagOptions.withRetrievalPipeline (
+        StaticCorpusRetrievalPipeline.loadFromFile embedder "docs.scidx")
+)
+|> ServerApp.run
 ```
 
 Use the **same** embedder at pack time and runtime so the query embeds into the

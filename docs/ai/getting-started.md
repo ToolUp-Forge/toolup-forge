@@ -82,21 +82,22 @@ let aiProviderFactory =
 ```fsharp skip=fragment
 [<EntryPoint>]
 let main _ =
-    AIServerApp.create aiProviderFactory providerProfile
-    |> AIServerApp.withConfig {
+    ServerApp.empty
+    |> ServerApp.withConfig {
         ServerConfig.defaults with
             Port = 5000
             Surfaces = Surfaces.individual
     }
-    |> AIServerApp.withAuth authProvider
-    |> AIServerApp.withStorage blobStorage
-    |> AIServerApp.addModules modules
-    |> AIServerApp.run
+    |> ServerApp.withAuth authProvider
+    |> ServerApp.withStorage blobStorage
+    |> ServerApp.addModules modules
+    |> AICompose.withAI (AIOptions.create aiProviderFactory providerProfile)
+    |> ServerApp.run
 ```
 
-`AIServerApp` is a flat superset of `ServerApp` — every `ServerApp.with*` is mirrored on `AIServerApp`, plus AI-specific helpers (`withProviderProfile`, `withPlatformProvider`, `withPlatformAIKeyStore`, `withAIConfig`, `withModuleAIContexts`). Both `create` arguments are required, so there is no partially-configured state to fail on at `run`.
+The deployment is built with the ordinary `ServerApp` builders; `AICompose.withAI` sets the AI companion on it. The AI tier is composed once, when the deployment resolves, so `ServerApp` builders work on either side of `withAI`. AI-specific settings live on the `AIOptions` record (`AIOptions.withProviderProfile`, `withPlatformProvider`, `withPlatformAIKeyStore`, `withAIConfig`, `withModuleAIContexts`, …). Both `AIOptions.create` arguments are required, so there is no partially-configured state to fail on at `run`.
 
-Tools are not registered here: each module declares its own with `ServerModule.withAITools`, and they aggregate on the inner `ServerApp`. See [extending.md](extending.md).
+Tools are not registered here: each module declares its own with `ServerModule.withAITools`, and they aggregate on the deployment's `ServerApp.AITools`. See [extending.md](extending.md).
 
 ## 5. Wire the client wrapper
 
@@ -169,10 +170,13 @@ let moduleAIContexts = [
     // ... other modules with AI contexts
 ]
 
-AIServerApp.create (aiProviderFactory, aiConfigStore)
+ServerApp.empty
 |> ...
-|> AIServerApp.withModuleAIContexts moduleAIContexts
-|> AIServerApp.run
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withModuleAIContexts moduleAIContexts
+)
+|> ServerApp.run
 ```
 
 When the user chats from `MyModule`'s view, the client attaches `ActiveModule = Some "MyModule"` to the request. The agent's system-prompt builder looks up that context and injects it. The user never sees this in their chat history — it's metadata to the model.

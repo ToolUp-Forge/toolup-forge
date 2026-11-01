@@ -58,8 +58,8 @@ substrate — it introduces no new module-authoring API. Composing it is two
 calls, one per tier:
 
 ```fsharp skip=fragment
-// Server composition root
-aiApp |> ToolUp.AI.UiAwareness.Server.AICompose.register
+// Server composition root — on the deployment, either side of `AICompose.withAI`
+app |> ToolUp.AI.UiAwareness.Server.AICompose.register
 
 // Client boot
 ToolUp.AI.UiAwareness.Client.InspectActiveModule.install ()
@@ -146,5 +146,5 @@ in their own browser.
 
 - [`src/AIExtensions/UiAwareness/README.md`](../../src/AIExtensions/UiAwareness/README.md) — package layout, full result shapes, access-control detail.
 - [`extending.md`](extending.md#client-resident-tools) — the general `ClientResident` tool-authoring contract this companion is built on, and the sibling `ToolUp.AI.SampleClientTool` reference companion.
-- [`../migrations/14r-tool-aware-rag-framing.md`](../migrations/14r-tool-aware-rag-framing.md) — a RAG deployment's prompt framing already treats `_platform.ui.*` / any `ClientResident` tool as *live-interface*: when this companion (or any such tool) is composed, `RAGCompose.composeRAG` appends a framing paragraph that routes "what's on my screen" questions to the inspection tool instead of retrieval, with no consumer change required.
+- [`../migrations/14r-tool-aware-rag-framing.md`](../migrations/14r-tool-aware-rag-framing.md) — a RAG deployment's prompt framing already treats `_platform.ui.*` / any `ClientResident` tool as *live-interface*: when this companion (or any such tool) is composed, the RAG tier (`RAGCompose.withRAG`) appends a framing paragraph that routes "what's on my screen" questions to the inspection tool instead of retrieval, with no consumer change required.
 - [`../migrations/538-live-interface-flag.md`](../migrations/538-live-interface-flag.md) — the `IsLiveInterface` flag `_platform.ui.inspect_active_module` sets (`Location = ClientResident` already implies it; the flag exists for the server-resident case).

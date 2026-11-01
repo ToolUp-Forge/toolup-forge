@@ -40,8 +40,9 @@ let claudeRateLimit: RateLimitDescriptor = {
 }
 
 let app =
-    AIServerApp.create config dataTypes
-    |> AIServerApp.withRateLimitDescriptor claudeRateLimit
+    ServerApp.empty
+    |> ServerApp.withRateLimitDescriptor claudeRateLimit
+    |> AICompose.withAI (AIOptions.create aiProviderFactory providerProfile)
     // …other companion wiring…
 ```
 
