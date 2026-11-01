@@ -1312,6 +1312,16 @@ let compose (plan: CompositionPlan) =
     let composedNotifications =
         LateBound<INotificationChannel>("composed notification channel", resolvedNotificationChannel)
 
+    // The slot is bound inside the factory of a once-at-start unit, so the
+    // DI-resolved channel is read where the container builds it, before any
+    // other hosted unit starts or any request arrives.
+    Hosting.register
+        services
+        (BackgroundUnit.create "composed-notification-channel" OnceAtStart (fun sp ->
+            composedNotifications.Bind(sp.GetRequiredService<INotificationChannel>())
+            Hosting.atStart ignore))
+    |> ignore
+
     // Every stage is built: hand the substrate to the staged contributions,
     // which read it at this fixed point (`Contribution.staged`).
     Substrate.register
@@ -1626,4 +1636,3 @@ let compose (plan: CompositionPlan) =
             extensions
             routeHandlers.Router
             devRoutes
-            (fun provider -> composedNotifications.Bind(provider.GetRequiredService<INotificationChannel>()))

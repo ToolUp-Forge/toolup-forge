@@ -217,7 +217,7 @@
         "src/ToolUp.PublicRendering/Server/PublicationReads.fs": 3,
         "src/ToolUp.PublicRendering/Server/SemanticSearchHandler.fs": 1,
         "src/ToolUp.RAG.Server/Server/RAGCitationDevEndpoint.fs": 1,
-        "src/ToolUp.RAG.Server/Server/RAGCompose.fs": 14,
+        "src/ToolUp.RAG.Server/Server/RAGCompose.fs": 2,
         "src/ToolUp.RAG.Server/Server/RagHealthHandler.fs": 1,
         "src/ToolUp.RAG.Server/Server/RagVectorStoreLifecycle.fs": 1,
         "src/ToolUp.Reporting.Server/ReportingAITools.fs": 3,
