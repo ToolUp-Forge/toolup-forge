@@ -5,6 +5,7 @@ open Microsoft.FSharp.Reflection
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 
 // ─── Phase 590 — PeerSurface derivation guard ────────────────────────
@@ -83,16 +84,20 @@ let private consumedAudit =
 /// long-running routine), the audit-transparency opt-in, and two
 /// consumed-contract declarations.
 let private referenceApp () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withLocalPeer localPeer
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<OrderContract> orderId [ v1; v11 ] fusion orderImpl)
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
-    |> PeerServerApp.withPeerAuditTransparency
-    |> PeerServerApp.withConsumedContract consumedDirectory
-    |> PeerServerApp.withConsumedContract consumedAudit
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (PeerOptions.withLocalPeer localPeer)
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<OrderContract> orderId [ v1; v11 ] fusion orderImpl)
+    )
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
+    )
+    |> PeerComposition.options (PeerOptions.withPeerAuditTransparency)
+    |> PeerComposition.options (PeerOptions.withConsumedContract consumedDirectory)
+    |> PeerComposition.options (PeerOptions.withConsumedContract consumedAudit)
 
 // ─── Independent enumeration (never through the descriptor) ──────────
 
@@ -161,12 +166,11 @@ let tests =
             Expect.equal surface.Consumes expected "the consumed set must equal the withConsumedContract declarations"
         }
 
-        test "every PeerServerApp registration field is accounted for by the descriptor" {
+        test "every PeerOptions registration field is accounted for by the descriptor" {
             // Drift guard for registration *kinds*: a new field on the
             // compose record is a new registration surface the descriptor
             // must learn (or explicitly exempt) before this list grows.
             let handled = [
-                "Base" // config gate (PeerSubstrate / JobScheduler) → Enabled / Budgets
                 "LocalPeer" // → LocalPeerId + TrustPosture.AudienceBound
                 "Contracts" // → Serves.Contracts (materialised builders)
                 "AuditTransparency" // → the reserved audit contract in Serves
@@ -448,14 +452,14 @@ let tests =
             ]
 
             let actual =
-                FSharpType.GetRecordFields typeof<PeerServerApp>
+                FSharpType.GetRecordFields typeof<PeerOptions>
                 |> Array.map _.Name
                 |> Array.toList
 
             Expect.equal
                 actual
                 handled
-                "PeerServerApp gained/lost a registration field the PeerSurface descriptor does not account for — teach PeerSurface.describe about it, then update this list"
+                "PeerOptions gained/lost a registration field the PeerSurface descriptor does not account for — teach PeerSurface.describe about it, then update this list"
         }
 
         test "the audit-transparency entry matches the live registration" {
@@ -483,10 +487,12 @@ let tests =
         test "routines are advertised only when the job substrate is composed" {
             let noScheduler =
                 referenceApp ()
-                |> PeerServerApp.withConfig {
-                    enabledConfig with
-                        JobScheduler = NoJobScheduler
-                }
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        enabledConfig with
+                            JobScheduler = NoJobScheduler
+                    }
+                )
 
             let surface = PeerSurface.describe noScheduler
 
@@ -521,10 +527,12 @@ let tests =
                     "a composition with a LocalPeer identity binds inbound audiences (Phase 130)"
 
             let hostOnly =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
+                )
 
             let hostOnlySurface = PeerSurface.describe hostOnly
 
@@ -544,16 +552,20 @@ let tests =
             // The same registrations in a different order — the sorted
             // canonical form must hash identically.
             let permuted =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withLocalPeer localPeer
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<OrderContract> orderId [ v11; v1 ] fusion orderImpl)
-                |> PeerServerApp.withPeerAuditTransparency
-                |> PeerServerApp.withConsumedContract consumedAudit
-                |> PeerServerApp.withConsumedContract consumedDirectory
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (PeerOptions.withLocalPeer localPeer)
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<OrderContract> orderId [ v11; v1 ] fusion orderImpl)
+                )
+                |> PeerComposition.options (PeerOptions.withPeerAuditTransparency)
+                |> PeerComposition.options (PeerOptions.withConsumedContract consumedAudit)
+                |> PeerComposition.options (PeerOptions.withConsumedContract consumedDirectory)
 
             let reference = PeerSurface.export (PeerSurface.describe (referenceApp ()))
             let permutedExport = PeerSurface.export (PeerSurface.describe permuted)
@@ -574,10 +586,12 @@ let tests =
 
             let grown =
                 referenceApp ()
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<UpstreamDirectoryContract> directoryId [ v1 ] fusion {
-                        Lookup = fun _ -> async { return None }
-                    })
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<UpstreamDirectoryContract> directoryId [ v1 ] fusion {
+                            Lookup = fun _ -> async { return None }
+                        })
+                )
 
             let grownExport = PeerSurface.export (PeerSurface.describe grown)
 
@@ -594,16 +608,20 @@ let tests =
 
         test "a non-federating deployment yields the empty surface at zero cost" {
             let disabled =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig {
-                    enabledConfig with
-                        PeerSubstrate = NoPeerSubstrate
-                }
+                PeerComposition.create ()
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        enabledConfig with
+                            PeerSubstrate = NoPeerSubstrate
+                    }
+                )
                 // A booby-trapped builder proves describe never runs the
                 // registrations on the strip-imports path (GP 13).
-                |> PeerServerApp.withContract (fun _ ->
-                    failwith "a NoPeerSubstrate describe must not materialise contract builders")
-                |> PeerServerApp.withConsumedContract consumedDirectory
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun _ ->
+                        failwith "a NoPeerSubstrate describe must not materialise contract builders")
+                )
+                |> PeerComposition.options (PeerOptions.withConsumedContract consumedDirectory)
 
             Expect.equal
                 (PeerSurface.describe disabled)
@@ -637,10 +655,12 @@ let tests =
 
             let pinned =
                 referenceApp ()
-                |> PeerServerApp.withConfig {
-                    enabledConfig with
-                        PinnedVocabularyPacks = [ packA ]
-                }
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        enabledConfig with
+                            PinnedVocabularyPacks = [ packA ]
+                    }
+                )
 
             let surface = PeerSurface.describe pinned
 
@@ -657,15 +677,17 @@ let tests =
             // pinned counterparty detects the drift.
             let repinned =
                 referenceApp ()
-                |> PeerServerApp.withConfig {
-                    enabledConfig with
-                        PinnedVocabularyPacks = [
-                            {
-                                packA with
-                                    Version = { Major = 2; Minor = 0 }
-                            }
-                        ]
-                }
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        enabledConfig with
+                            PinnedVocabularyPacks = [
+                                {
+                                    packA with
+                                        Version = { Major = 2; Minor = 0 }
+                                }
+                            ]
+                    }
+                )
 
             Expect.notEqual
                 (PeerSurface.export surface).SurfaceHash

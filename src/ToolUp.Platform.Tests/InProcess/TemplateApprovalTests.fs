@@ -7,6 +7,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
@@ -217,7 +218,7 @@ let private policyOver (registry: ITemplateApprovalRegistry) =
     TemplateApprovalPolicy.forRegistry registry
 
 /// A gated registration under the composed approval check — the shape
-/// `PeerCompose.run` wires.
+/// `PeerCompose.withPeer` wires.
 let private gatedWithApproval registry template cohort (sink: DecisionSink) =
     (CleanRoomGate.wrapApproved
         defaultBroker
@@ -954,40 +955,41 @@ let private enabledConfig = {
 }
 
 let private appHosting () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<ReachContract> contractId [ v1 ] fusion (impl 50))
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<ReachContract> contractId [ v1 ] fusion (impl 50))
+    )
 
 let compositionTests =
     testList "Phase 480 — composition posture" [
 
         test "a fresh compose record declares no approval registry" {
-            Expect.isNone (PeerServerApp.create ()).TemplateApprovals "off unless composed"
+            Expect.isNone (snd (PeerComposition.create ())).TemplateApprovals "off unless composed"
 
-            Expect.equal
-                (PeerServerApp.auditTemplateApprovals (appHosting ()))
-                TemplateApprovalOff
-                "…and reports nothing"
+            Expect.equal (PeerCompose.auditTemplateApprovals (appHosting ())) TemplateApprovalOff "…and reports nothing"
         }
 
         test "gating under a registry with a local identity is Enforced" {
             let app =
                 appHosting ()
-                |> PeerServerApp.withLocalPeer {
-                    PeerId = seller
-                    DisplayName = "Seller"
-                }
-                |> PeerServerApp.withCleanRoomTemplate contractId templateT
-                |> PeerServerApp.withTemplateApprovals (policyOver (freshRegistry ()))
+                |> PeerComposition.options (
+                    PeerOptions.withLocalPeer {
+                        PeerId = seller
+                        DisplayName = "Seller"
+                    }
+                )
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId templateT)
+                |> PeerComposition.options (PeerOptions.withTemplateApprovals (policyOver (freshRegistry ())))
 
-            match PeerServerApp.auditTemplateApprovals app with
+            match PeerCompose.auditTemplateApprovals app with
             | TemplateApprovalEnforced(receiverId, gated) ->
                 Expect.equal receiverId seller "the receiver's own id is the local half of every agreement"
                 Expect.equal gated [ contractId ] "…over the gated contracts"
             | other -> failtestf "Expected Enforced, got %A" other
 
-            PeerServerApp.enforceTemplateApprovals app
+            PeerCompose.enforceTemplateApprovals app
         }
 
         test "a registry with nothing gated is RecordingOnly, not a defect" {
@@ -995,78 +997,82 @@ let compositionTests =
             // it, and holding the trail, is a whole posture.
             let app =
                 appHosting ()
-                |> PeerServerApp.withTemplateApprovals (policyOver (freshRegistry ()))
+                |> PeerComposition.options (PeerOptions.withTemplateApprovals (policyOver (freshRegistry ())))
 
             Expect.equal
-                (PeerServerApp.auditTemplateApprovals app)
+                (PeerCompose.auditTemplateApprovals app)
                 TemplateApprovalRecordingOnly
                 "recording + serving approvals needs no local gate"
 
-            PeerServerApp.enforceTemplateApprovals app
+            PeerCompose.enforceTemplateApprovals app
         }
 
         test "gating under a registry with NO local identity refuses to start" {
             let app =
                 appHosting ()
-                |> PeerServerApp.withCleanRoomTemplate contractId templateT
-                |> PeerServerApp.withTemplateApprovals (policyOver (freshRegistry ()))
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId templateT)
+                |> PeerComposition.options (PeerOptions.withTemplateApprovals (policyOver (freshRegistry ())))
 
             Expect.equal
-                (PeerServerApp.auditTemplateApprovals app)
+                (PeerCompose.auditTemplateApprovals app)
                 TemplateApprovalUnidentified
                 "no peer id means no half of a bilateral agreement"
 
             Expect.throws
-                (fun () -> PeerServerApp.enforceTemplateApprovals app)
+                (fun () -> PeerCompose.enforceTemplateApprovals app)
                 "every gated call would be withheld forever with no composed lever to fix it"
         }
 
         test "a blank LocalPeer id counts as absent" {
             let app =
                 appHosting ()
-                |> PeerServerApp.withLocalPeer { PeerId = "  "; DisplayName = "Blank" }
-                |> PeerServerApp.withCleanRoomTemplate contractId templateT
-                |> PeerServerApp.withTemplateApprovals (policyOver (freshRegistry ()))
+                |> PeerComposition.options (PeerOptions.withLocalPeer { PeerId = "  "; DisplayName = "Blank" })
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId templateT)
+                |> PeerComposition.options (PeerOptions.withTemplateApprovals (policyOver (freshRegistry ())))
 
             Expect.equal
-                (PeerServerApp.auditTemplateApprovals app)
+                (PeerCompose.auditTemplateApprovals app)
                 TemplateApprovalUnidentified
                 "an empty peer id is not an identity, it just looks composed"
         }
 
         test "GP 13 — the strip-imports path reports nothing even with a registry composed" {
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withCleanRoomTemplate contractId templateT
-                |> PeerServerApp.withTemplateApprovals (policyOver (freshRegistry ()))
+                PeerComposition.create ()
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId templateT)
+                |> PeerComposition.options (PeerOptions.withTemplateApprovals (policyOver (freshRegistry ())))
 
             Expect.equal
-                (PeerServerApp.auditTemplateApprovals app)
+                (PeerCompose.auditTemplateApprovals app)
                 TemplateApprovalOff
                 "NoPeerSubstrate registers nothing at all, so the short-circuit stays a bare ServerApp.run"
         }
 
         test "the reserved approval contract counts as hosted, so a template on it binds" {
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withTemplateApprovals (policyOver (freshRegistry ()))
-                |> PeerServerApp.withCleanRoomTemplate TemplateApprovalContract.contractId templateT
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (PeerOptions.withTemplateApprovals (policyOver (freshRegistry ())))
+                |> PeerComposition.options (
+                    PeerOptions.withCleanRoomTemplate TemplateApprovalContract.contractId templateT
+                )
 
             Expect.isEmpty
-                (PeerServerApp.auditCleanRoomTemplates app)
+                (PeerCompose.auditCleanRoomTemplates app)
                 "the handshake contract is registered when a registry is composed"
         }
 
         test "the composed registry surfaces the handshake contract on the peer face" {
             let baseline =
                 appHosting ()
-                |> PeerServerApp.withLocalPeer {
-                    PeerId = seller
-                    DisplayName = "Seller"
-                }
+                |> PeerComposition.options (
+                    PeerOptions.withLocalPeer {
+                        PeerId = seller
+                        DisplayName = "Seller"
+                    }
+                )
 
-            let served (app: PeerServerApp) =
+            let served (app: PeerComposition) =
                 (PeerSurface.describe app).Serves.Contracts |> List.map _.ContractId
 
             Expect.isFalse
@@ -1074,7 +1080,8 @@ let compositionTests =
                 "a deployment without the registry serves no approval contract"
 
             let withRegistry =
-                baseline |> PeerServerApp.withTemplateApprovals (policyOver (freshRegistry ()))
+                baseline
+                |> PeerComposition.options (PeerOptions.withTemplateApprovals (policyOver (freshRegistry ())))
 
             Expect.contains
                 (served withRegistry)

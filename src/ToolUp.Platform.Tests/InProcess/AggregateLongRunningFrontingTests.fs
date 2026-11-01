@@ -15,6 +15,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
@@ -267,7 +268,7 @@ let private issue (provider: IPeerAuthProvider) (caller: PeerIdentity) = async {
 /// store, and the scheduler holding its jobs.
 type private LiveMember = {
     Identity: PeerIdentity
-    App: PeerServerApp
+    App: PeerComposition
     Peer: IPlatformPeer
     ResultStore: IPeerJobResultStore
     Scheduler: DeferredScheduler
@@ -280,7 +281,7 @@ let private memberSurface (m: LiveMember) : AggregateMember = {
 
 /// Register a composed app's contracts on a fresh in-process peer and its
 /// long-running job handlers on the member's own scheduler — the same two
-/// things `PeerCompose.run` does at first `IPlatformPeer` resolution,
+/// things `PeerCompose.withPeer` does at first `IPlatformPeer` resolution,
 /// without standing up a host.
 let private liveMember
     (identity: PeerIdentity)
@@ -312,10 +313,10 @@ let private liveMember
     let app =
         builders
         |> List.fold
-            (fun acc builder -> PeerServerApp.withContract builder acc)
-            (PeerServerApp.create ()
-             |> PeerServerApp.withConfig (peerConfig InProcessJobScheduler)
-             |> PeerServerApp.withLocalPeer identity)
+            (fun acc builder -> PeerComposition.options (PeerOptions.withContract builder) acc)
+            (PeerComposition.create ()
+             |> PeerComposition.app (ServerApp.withConfig (peerConfig InProcessJobScheduler))
+             |> PeerComposition.options (PeerOptions.withLocalPeer identity))
 
     {
         Identity = identity
@@ -344,11 +345,17 @@ let private schedulerlessMember (identity: PeerIdentity) (contractId: string) : 
     Target = target identity
     Surface =
         PeerSurface.describe (
-            PeerServerApp.create ()
-            |> PeerServerApp.withConfig (peerConfig NoJobScheduler)
-            |> PeerServerApp.withLocalPeer identity
-            |> PeerServerApp.withContract (fun fusion ->
-                JsonRpcPeerHost.contract<ReconcileContract> contractId [ v1 ] fusion (reconcileImpl identity.PeerId))
+            PeerComposition.create ()
+            |> PeerComposition.app (ServerApp.withConfig (peerConfig NoJobScheduler))
+            |> PeerComposition.options (PeerOptions.withLocalPeer identity)
+            |> PeerComposition.options (
+                PeerOptions.withContract (fun fusion ->
+                    JsonRpcPeerHost.contract<ReconcileContract>
+                        contractId
+                        [ v1 ]
+                        fusion
+                        (reconcileImpl identity.PeerId))
+            )
         )
 }
 
@@ -400,24 +407,25 @@ let private composeGateway
     (client: IPeerClient)
     (members: AggregateMember list)
     (exposure: AggregateExposure)
-    : PeerServerApp =
+    : PeerComposition =
     let baseApp =
-        PeerServerApp.create () |> PeerServerApp.withConfig (peerConfig NoJobScheduler)
+        PeerComposition.create ()
+        |> PeerComposition.app (ServerApp.withConfig (peerConfig NoJobScheduler))
 
     let withMap =
         match jobMap with
         | None -> baseApp
-        | Some map -> PeerServerApp.withGroupJobMap map baseApp
+        | Some map -> PeerComposition.options (PeerOptions.withGroupJobMap map) baseApp
 
     match PeerGateway.withAggregate client members exposure withMap with
     | Ok app -> app
     | Error errors -> failtestf "gateway composition was expected to succeed but reported %A" errors
 
 /// The gateway's in-process peer — the dispatch side under test.
-let private gatewayPeer (app: PeerServerApp) : IPlatformPeer =
+let private gatewayPeer (app: PeerComposition) : IPlatformPeer =
     let platformPeer = DefaultPlatformPeer() :> IPlatformPeer
 
-    for builder in app.Contracts do
+    for builder in (snd app).Contracts do
         platformPeer.RegisterContract (builder None).Registration
 
     platformPeer
@@ -486,7 +494,7 @@ let private dispatchReconcile (gateway: IPlatformPeer) (context: PeerCallContext
 type private Fixture = {
     Alpha: LiveMember
     Gateway: IPlatformPeer
-    App: PeerServerApp
+    App: PeerComposition
     Map: IPeerGroupJobMap
     Client: IPeerClient
     Blobs: IBlobStorage
@@ -1028,7 +1036,7 @@ let tests =
                     "the pre-630 gateway hands back whatever the member answered — no handle is minted, exactly as Phase 595 behaved"
             | other -> failtestf "expected exactly one member job to have been scheduled, got %A" other
 
-            Expect.isNone without.GroupJobMap "…because no group job map was composed, which is the whole opt-in"
+            Expect.isNone (snd without).GroupJobMap "…because no group job map was composed, which is the whole opt-in"
         }
 
         // ─── (g) the handle map's own retention ──────────────────────

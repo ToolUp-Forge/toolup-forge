@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 
 // ─── Phase 481 — the calibrated-noise mechanism ──────────────────────
@@ -765,10 +766,12 @@ let private enabledConfig = {
 }
 
 let private appHosting () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<ReachContract> contractId [ v1 ] fusion (answering 5000))
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<ReachContract> contractId [ v1 ] fusion (answering 5000))
+    )
 
 let compositionTests =
     testList "Phase 481 — a noise policy nothing applies cannot ship" [
@@ -776,9 +779,11 @@ let compositionTests =
         test "a policy naming an ungated contract is refused" {
             let app =
                 appHosting ()
-                |> PeerServerApp.withNoisedRelease contractId (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 1m))
+                |> PeerComposition.options (
+                    PeerOptions.withNoisedRelease contractId (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 1m))
+                )
 
-            let problems = PeerServerApp.auditNoisedRelease app
+            let problems = PeerCompose.auditNoisedRelease app
 
             Expect.isNonEmpty problems "a noise policy with no clean-room template is applied by nothing"
 
@@ -791,30 +796,38 @@ let compositionTests =
         test "a policy whose calibration is invalid is refused at compose time" {
             let app =
                 appHosting ()
-                |> PeerServerApp.withCleanRoomTemplate contractId template
-                |> PeerServerApp.withNoisedRelease contractId (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0m))
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId template)
+                |> PeerComposition.options (
+                    PeerOptions.withNoisedRelease contractId (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0m))
+                )
 
             Expect.isNonEmpty
-                (PeerServerApp.auditNoisedRelease app)
+                (PeerCompose.auditNoisedRelease app)
                 "a privacy parameter that is wrong is wrong at compose time, not at the first call"
 
-            Expect.throws (fun () -> PeerServerApp.enforceNoisedRelease app) "…and enforcing it refuses to start"
+            Expect.throws (fun () -> PeerCompose.enforceNoisedRelease app) "…and enforcing it refuses to start"
         }
 
         test "CONTROL — a healthy composition reports nothing, and one that composes no policy runs no probe" {
             let healthy =
                 appHosting ()
-                |> PeerServerApp.withCleanRoomTemplate contractId template
-                |> PeerServerApp.withNoisedRelease contractId (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 1m))
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId template)
+                |> PeerComposition.options (
+                    PeerOptions.withNoisedRelease contractId (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 1m))
+                )
 
-            Expect.isEmpty (PeerServerApp.auditNoisedRelease healthy) "a gated contract with a valid policy is fine"
-            PeerServerApp.enforceNoisedRelease healthy
+            Expect.isEmpty (PeerCompose.auditNoisedRelease healthy) "a gated contract with a valid policy is fine"
+            PeerCompose.enforceNoisedRelease healthy
 
             let untouched =
-                appHosting () |> PeerServerApp.withCleanRoomTemplate contractId template
+                appHosting ()
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId template)
 
-            Expect.isEmpty (untouched.NoisedReleases) "a composition that never calls withNoisedRelease carries nothing"
-            Expect.isEmpty (PeerServerApp.auditNoisedRelease untouched) "…and is not probed"
+            Expect.isEmpty
+                (snd untouched).NoisedReleases
+                "a composition that never calls withNoisedRelease carries nothing"
+
+            Expect.isEmpty (PeerCompose.auditNoisedRelease untouched) "…and is not probed"
         }
 
         test "the last policy for a contract wins, matching withCleanRoomTemplate" {
@@ -823,12 +836,12 @@ let compositionTests =
 
             let app =
                 appHosting ()
-                |> PeerServerApp.withCleanRoomTemplate contractId template
-                |> PeerServerApp.withNoisedRelease contractId first
-                |> PeerServerApp.withNoisedRelease contractId second
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId template)
+                |> PeerComposition.options (PeerOptions.withNoisedRelease contractId first)
+                |> PeerComposition.options (PeerOptions.withNoisedRelease contractId second)
 
             Expect.equal
-                (PeerServerApp.noisedReleaseMap app |> Map.tryFind contractId)
+                (PeerCompose.noisedReleaseMap (snd app) |> Map.tryFind contractId)
                 (Some second)
                 "the later declaration is the effective one"
         }

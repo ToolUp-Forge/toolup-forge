@@ -156,7 +156,7 @@ open ToolUp.Platform.BlobStorage
 //
 // ── Cost when unused (GP 13) ──
 //
-// Nothing here is composed by `PeerServerApp.run`, and nothing here runs
+// Nothing here is composed by `PeerCompose.withPeer`, and nothing here runs
 // on a timer of its own: `SignalFeed.emit` is DRIVEN — a deployment ticks
 // it from its own `IJobScheduler`, cron, or loop. There is no hosted
 // service, no background thread, and no allocation in a deployment that

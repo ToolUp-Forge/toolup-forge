@@ -6,12 +6,13 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 
 // ─── Phase 591 — federation-graph preflight ──────────────────────────
 //
 // A synthetic two-instance federation, built the way a real one is: each
-// counterparty is a genuine `PeerServerApp` whose `PeerSurface` is
+// counterparty is a genuine peer composition whose `PeerSurface` is
 // described, exported and pinned through the shipped path — never a
 // hand-written label. Every negative case is paired with the control that
 // makes it pass, so a rule that stopped firing would show up as a
@@ -70,31 +71,39 @@ let private preflightAt = DateTimeOffset(2026, 7, 3, 0, 0, 0, TimeSpan.Zero)
 /// drives `TrustPosture.AudienceBound` on the label it publishes.
 let private sellerSurface (versions: ContractVersion list) (bindAudience: bool) : PeerSurface =
     let composed =
-        PeerServerApp.create ()
-        |> PeerServerApp.withConfig enabledConfig
-        |> PeerServerApp.withContract (fun fusion ->
-            JsonRpcPeerHost.contract<ReachContract> reachId versions fusion reachImpl)
+        PeerComposition.create ()
+        |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+        |> PeerComposition.options (
+            PeerOptions.withContract (fun fusion ->
+                JsonRpcPeerHost.contract<ReachContract> reachId versions fusion reachImpl)
+        )
 
     if bindAudience then
         composed
-        |> PeerServerApp.withLocalPeer {
-            PeerId = sellerId
-            DisplayName = "Seller SSP"
-        }
+        |> PeerComposition.options (
+            PeerOptions.withLocalPeer {
+                PeerId = sellerId
+                DisplayName = "Seller SSP"
+            }
+        )
         |> PeerSurface.describe
     else
         PeerSurface.describe composed
 
 /// The hub counterparty's own deployment, described as a surface.
 let private hubSurface () : PeerSurface =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withLocalPeer {
-        PeerId = hubId
-        DisplayName = "Hub registry"
-    }
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<DirectoryContract> directoryId [ v1 ] fusion directoryImpl)
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (
+        PeerOptions.withLocalPeer {
+            PeerId = hubId
+            DisplayName = "Hub registry"
+        }
+    )
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<DirectoryContract> directoryId [ v1 ] fusion directoryImpl)
+    )
     |> PeerSurface.describe
 
 let private sellerPin (surface: PeerSurface) : PinnedPeerSurface =
@@ -107,31 +116,39 @@ let private hubPin (surface: PeerSurface) : PinnedPeerSurface =
 
 /// The deployment under preflight: it consumes both contracts, and pins
 /// whichever counterparty labels the case supplies.
-let private consumerApp (pins: PinnedPeerSurface list) (requirements: PeerTrustRequirement list) : PeerServerApp =
+let private consumerApp (pins: PinnedPeerSurface list) (requirements: PeerTrustRequirement list) : PeerComposition =
     let declared =
-        PeerServerApp.create ()
-        |> PeerServerApp.withConfig enabledConfig
-        |> PeerServerApp.withLocalPeer {
-            PeerId = "buyer-acme"
-            DisplayName = "Buyer"
-        }
-        |> PeerServerApp.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v1 ] "seller")
-        |> PeerServerApp.withConsumedContract (PeerSurface.consumes<DirectoryContract> directoryId [ v1 ] "hub")
+        PeerComposition.create ()
+        |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+        |> PeerComposition.options (
+            PeerOptions.withLocalPeer {
+                PeerId = "buyer-acme"
+                DisplayName = "Buyer"
+            }
+        )
+        |> PeerComposition.options (
+            PeerOptions.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v1 ] "seller")
+        )
+        |> PeerComposition.options (
+            PeerOptions.withConsumedContract (PeerSurface.consumes<DirectoryContract> directoryId [ v1 ] "hub")
+        )
 
     let pinned =
         pins
-        |> List.fold (fun acc pin -> PeerServerApp.withPinnedCounterparty pin acc) declared
+        |> List.fold (fun acc pin -> PeerComposition.options (PeerOptions.withPinnedCounterparty pin) acc) declared
 
     requirements
-    |> List.fold (fun acc requirement -> PeerServerApp.withRequiredPeerTrust requirement acc) pinned
+    |> List.fold
+        (fun acc requirement -> PeerComposition.options (PeerOptions.withRequiredPeerTrust requirement) acc)
+        pinned
 
 /// The conformant graph: both counterparties pinned, both serving what
 /// this deployment consumes, at a mutual version.
-let private conformantApp () : PeerServerApp =
+let private conformantApp () : PeerComposition =
     consumerApp [ sellerPin (sellerSurface [ v1; v11 ] true); hubPin (hubSurface ()) ] []
 
-let private defectsOf (app: PeerServerApp) =
-    PeerServerApp.auditFederationGraph preflightAt app
+let private defectsOf (app: PeerComposition) =
+    PeerCompose.auditFederationGraph preflightAt (snd app)
 
 let private codesOf (defects: CompositionDefect list) =
     defects |> List.map _.RuleCode |> List.distinct |> List.sort
@@ -173,10 +190,14 @@ let tests =
             // Control: dropping the DECLARATION clears it too — the rule
             // reads the consumed set, not a hardcoded expectation.
             let noDirectory =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v1 ] "seller")
-                |> PeerServerApp.withPinnedCounterparty (sellerPin (sellerSurface [ v1; v11 ] true))
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (
+                    PeerOptions.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v1 ] "seller")
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withPinnedCounterparty (sellerPin (sellerSurface [ v1; v11 ] true))
+                )
 
             Expect.isEmpty (defectsOf noDirectory) "a contract that is not consumed cannot be unsatisfied"
         }
@@ -205,10 +226,14 @@ let tests =
             // non-empty even though neither side's set is a subset of the
             // other's — the handshake's highest-mutual discipline exactly.
             let overlapping =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v11; v2 ] "seller")
-                |> PeerServerApp.withPinnedCounterparty (sellerPin (sellerSurface [ v1; v11 ] true))
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (
+                    PeerOptions.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v11; v2 ] "seller")
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withPinnedCounterparty (sellerPin (sellerSurface [ v1; v11 ] true))
+                )
 
             Expect.isEmpty (defectsOf overlapping) "a non-empty version intersection must pass"
         }
@@ -280,10 +305,12 @@ let tests =
                     "bystander-peer"
                     "peers/bystander.surface.json"
                     pinnedAt
-                    (PeerServerApp.create ()
-                     |> PeerServerApp.withConfig enabledConfig
-                     |> PeerServerApp.withContract (fun fusion ->
-                         JsonRpcPeerHost.contract<ReachContract> "example.unrelated" [ v1 ] fusion reachImpl)
+                    (PeerComposition.create ()
+                     |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                     |> PeerComposition.options (
+                         PeerOptions.withContract (fun fusion ->
+                             JsonRpcPeerHost.contract<ReachContract> "example.unrelated" [ v1 ] fusion reachImpl)
+                     )
                      |> PeerSurface.describe)
 
             let app =
@@ -386,7 +413,7 @@ let tests =
         test "a pin older than the declared maximum age reports, and never refuses" {
             let stale =
                 conformantApp ()
-                |> PeerServerApp.withPinnedSurfaceMaxAge (TimeSpan.FromHours 12.0)
+                |> PeerComposition.options (PeerOptions.withPinnedSurfaceMaxAge (TimeSpan.FromHours 12.0))
 
             let defects = defectsOf stale
 
@@ -398,7 +425,9 @@ let tests =
                 (fun d -> d.Severity = DefectWarning)
                 "an aged pin is absent evidence, not evidence of drift — it must warn, never error"
 
-            match FederationPreflight.toValidationResult (PeerServerApp.federationPreflightInput preflightAt stale) with
+            match
+                FederationPreflight.toValidationResult (PeerCompose.federationPreflightInput preflightAt (snd stale))
+            with
             | ValidationResult.Warning _ -> ()
             | other -> failtestf "a stale-only report must not abort startup, got %A" other
 
@@ -406,7 +435,7 @@ let tests =
             Expect.isEmpty
                 (defectsOf (
                     conformantApp ()
-                    |> PeerServerApp.withPinnedSurfaceMaxAge (TimeSpan.FromDays 30.0)
+                    |> PeerComposition.options (PeerOptions.withPinnedSurfaceMaxAge (TimeSpan.FromDays 30.0))
                 ))
                 "a pin inside the declared maximum age must not be reported"
 
@@ -417,25 +446,27 @@ let tests =
 
         test "a composition that pins nothing is checked against nothing" {
             let unpinned =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v1 ] "seller")
-                |> PeerServerApp.withRequiredPeerTrust PeerTrustRequirement.audienceBound
-                |> PeerServerApp.withPinnedSurfaceMaxAge (TimeSpan.FromSeconds 1.0)
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (
+                    PeerOptions.withConsumedContract (PeerSurface.consumes<ReachContract> reachId [ v1 ] "seller")
+                )
+                |> PeerComposition.options (PeerOptions.withRequiredPeerTrust PeerTrustRequirement.audienceBound)
+                |> PeerComposition.options (PeerOptions.withPinnedSurfaceMaxAge (TimeSpan.FromSeconds 1.0))
 
             Expect.isEmpty
                 (defectsOf unpinned)
                 "with no pinned counterparty there is no declared federation graph to check (GP 13)"
 
             Expect.equal
-                (PeerServerApp.create ()).FederationPins
+                (snd (PeerComposition.create ())).FederationPins
                 FederationPinStore.empty
                 "a bare composition must carry the empty pin store"
         }
 
         test "the preflight validator is structural-class and aborts on an unsatisfied edge" {
-            let inputOf (app: PeerServerApp) =
-                fun () -> PeerServerApp.federationPreflightInput preflightAt app
+            let inputOf (app: PeerComposition) =
+                fun () -> PeerCompose.federationPreflightInput preflightAt (snd app)
 
             let unsatisfied =
                 FederationPreflight.FederationPreflightValidator(
@@ -606,7 +637,7 @@ let tests =
             // of surprise this preflight family exists to move earlier.
             let app =
                 conformantApp ()
-                |> PeerServerApp.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly
+                |> PeerComposition.options (PeerOptions.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly)
 
             let defects = defectsOf app
 
@@ -641,7 +672,7 @@ let tests =
 
             let app =
                 consumerApp [ sellerPin grantingSeller; hubPin (hubSurface ()) ] []
-                |> PeerServerApp.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly
+                |> PeerComposition.options (PeerOptions.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly)
 
             // The hub grants nothing, and this deployment consumes from
             // it — so the rule must still fire for the hub and not for the
@@ -660,12 +691,14 @@ let tests =
             // are correct today and punish an operator for keeping a
             // complete registry.
             let unrelated =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withLocalPeer {
-                    PeerId = "observer"
-                    DisplayName = "Observer"
-                }
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (
+                    PeerOptions.withLocalPeer {
+                        PeerId = "observer"
+                        DisplayName = "Observer"
+                    }
+                )
                 |> PeerSurface.describe
 
             let app =
@@ -705,7 +738,7 @@ let tests =
             // model and no way to promote it.
             let app =
                 conformantApp ()
-                |> PeerServerApp.withRequiredPeerTransitionAuthority [ "Approved" ]
+                |> PeerComposition.options (PeerOptions.withRequiredPeerTransitionAuthority [ "Approved" ])
 
             let defects = defectsOf app
 
@@ -744,7 +777,7 @@ let tests =
 
             let app =
                 consumerApp [ sellerPin grantingSeller; hubPin partialHub ] []
-                |> PeerServerApp.withRequiredPeerTransitionAuthority [ "Approved" ]
+                |> PeerComposition.options (PeerOptions.withRequiredPeerTransitionAuthority [ "Approved" ])
 
             let messages = messagesFor "peer-transition-authority-insufficient" (defectsOf app)
 

@@ -83,7 +83,7 @@ open ToolUp.Platform
 //
 // ── Cost when unused (GP 13) ──
 //
-// Nothing here is composed by `PeerServerApp.run`. A deployment that
+// Nothing here is composed by `PeerCompose.withPeer`. A deployment that
 // never calls `hold` constructs none of these types and pays nothing; a
 // `Standard` submission never enters this file at all, and its dispatcher
 // path is byte-for-byte Phase 318's (GP 11).

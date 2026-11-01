@@ -17,7 +17,7 @@
 //     the agreed surface hash and the published export document.
 //
 // Declaring them here keeps the blocks copy-clean and — unlike a
-// `skip=fragment` marker — keeps every `PeerServerApp.*` /
+// `skip=fragment` marker — keeps every `PeerOptions.*` /
 // `JsonRpcPeerClient.*` / `JsonRpcPeerHost.*` / `CleanRoomTemplate` /
 // `FederationPin.*` name in them under the gate. That matters more here
 // than on most pages: this substrate's composition surface is the thing
@@ -52,9 +52,9 @@ module PageAmbient =
     /// The out-of-band-agreed HS256 signing key seeded for a trusted peer.
     let sharedKey: string = failwith "ambient"
 
-    /// The composed peer pipeline, at the point a later block adds one
-    /// more `with*` to it.
-    let app: PeerServerApp = failwith "ambient"
+    /// The peer companion options, at the point a later block adds one
+    /// more `with*` to them.
+    let peerOptions: PeerOptions = failwith "ambient"
 
     // ── The two ends of the federation ────────────────────────────
 
@@ -75,7 +75,7 @@ module PageAmbient =
     let v2: ContractVersion = { Major = 2; Minor = 0 }
 
     /// The composed outbound transport and version handshake, resolved
-    /// from DI by `PeerServerApp.run`.
+    /// from DI by `PeerCompose.withPeer`.
     let httpPeerClient: IPeerClient = failwith "ambient"
 
     let handshake: IPeerHandshake = failwith "ambient"
@@ -128,7 +128,7 @@ module PageAmbient =
     let fusion: PeerJobFusion option = failwith "ambient"
 
     /// The two host builders the compose blocks register. Both have the
-    /// shape `PeerServerApp.withContract` takes.
+    /// shape `PeerOptions.withContract` takes.
     let directoryHost: PeerJobFusion option -> PeerContractHost = failwith "ambient"
 
     let reachHost: PeerJobFusion option -> PeerContractHost = failwith "ambient"

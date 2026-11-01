@@ -86,7 +86,7 @@ open ToolUp.Platform
 //
 // ── Cost when unused (GP 13) ──
 //
-// Nothing here is composed by `PeerServerApp.run`. A deployment that
+// Nothing here is composed by `PeerCompose.withPeer`. A deployment that
 // never calls `host` or `governedDiagnostics` constructs none of these
 // types, registers no contract, and schedules no job.
 
@@ -884,7 +884,7 @@ type ModelExecutionPeerBinding = {
     /// side did (GP 12 rules 1 and 4).
     ///
     /// **Per-peer, not deployment-wide, and the difference is the whole
-    /// point.** `PeerServerApp.withPeerTransitionAuthority` publishes what
+    /// point.** `PeerOptions.withPeerTransitionAuthority` publishes what
     /// the deployment is willing to admit in general — the offer a
     /// counterparty pins — while this is what one counterparty was
     /// actually granted. A deployment publishing `Approved` has said it
@@ -1947,7 +1947,7 @@ module ModelExecutionPeerContract =
         }
 
     /// The submitter contract plus the job handlers its queued leg needs
-    /// — the shape `PeerServerApp.withContract` consumes.
+    /// — the shape `PeerOptions.withContract` consumes.
     ///
     /// One handler per queued operation, registered under the name the
     /// dispatch side schedules against, so the two halves cannot come to

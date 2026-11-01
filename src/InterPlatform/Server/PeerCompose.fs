@@ -15,14 +15,16 @@ open ToolUp.Platform.BlobEncryption
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Server
 
-// ─── Phase 18 — PeerServerApp composition root ───────────────────────
+// ─── The peer companion: `PeerOptions` + `withPeer` ────────────────────
 //
-// `PeerServerApp` mirrors the `PublicRenderingServerApp` companion shape:
-// it wraps a base `ServerApp` and adds `with*` helpers for the peer-
-// substrate-specific registrations (the local deployment identity and
-// the contracts this deployment exposes to peers). The companion brings
-// its own DI singletons and mounts `JsonRpcPeerHost.routes` onto the
-// SDK's route chain via `ComposeExtensions.Handlers`.
+// The peer substrate is a companion composed onto a `ServerApp`, not a
+// record that wraps one. `PeerOptions` holds the peer-substrate-specific
+// registrations (the local deployment identity and the contracts this
+// deployment exposes to peers); `withPeer options` registers the companion
+// with `ServerApp.withCompanion`, so it is applied once, when the
+// deployment resolves, to the deployment as every builder left it. The
+// companion brings its own DI singletons and contributes
+// `JsonRpcPeerHost.routes` to the SDK's route chain.
 //
 // **Required substrate**: nothing beyond what `ServerApp` itself needs.
 // Long-running contract methods additionally require
@@ -33,24 +35,22 @@ open ToolUp.Platform.Server
 // `ISecretStore`; the peer directory + job-result store ride on the
 // resolved `IBlobStorage`.
 //
-// **Strip-imports guarantee**: when
-// `ServerConfig.PeerSubstrate = NoPeerSubstrate`, `run` short-circuits to
-// `ServerApp.run app.Base` — no DI registrations, no `/peer/v1`
-// handlers, no peer audit. Byte-for-byte equivalent to a base
-// `ServerApp.run` of the same `Base` (GP 13 — zero cost when unused).
+// **Strip-imports guarantee**: when the resolved
+// `ServerConfig.PeerSubstrate = NoPeerSubstrate`, the companion contributes
+// nothing — no DI registrations, no `/peer/v1` handlers, no peer audit
+// (GP 13 — zero cost when unused).
 
-/// Phase 1052 — the peer companion's identity: its DI registrations are
-/// `Contribution.service` values under it.
-let private owner: ComponentId = ComponentId.forCompanionSlot "ToolUp.InterPlatform"
+/// The peer companion's identity: the slot `withPeer` composes under and
+/// the owner of its contributions.
+let peerCompanion: ComponentId = ComponentId.forCompanionSlot "ToolUp.InterPlatform"
 
-/// Record form of the peer compose arguments. Wraps a base `ServerApp`
-/// and carries the local deployment identity (used by the outbound
+let private owner = peerCompanion
+
+/// What the peer companion composes: the local deployment identity (used by the outbound
 /// client / handshake) plus the contracts this deployment hosts. Like
-/// `PublicRenderingServerApp`, the strip-imports gate is read from
-/// `ServerConfig.PeerSubstrate` (set via `withConfig`), not a field on
-/// this record, so a single `ServerConfig` override controls it.
-type PeerServerApp = {
-    Base: ServerApp
+/// the other companions, the strip-imports gate is read from the resolved
+/// `ServerConfig.PeerSubstrate`, not a field on this record, so a single `ServerConfig` override controls it.
+type PeerOptions = {
     /// The local deployment's own peer identity, vouched for by the
     /// outbound `IPeerClient` / `IPeerHandshake`. `None` for a host-only
     /// deployment that exposes contracts but never calls peers — the
@@ -345,10 +345,10 @@ type TemplateApprovalPosture =
     /// id, and every gated call is withheld forever.
     | TemplateApprovalUnidentified
 
-module PeerServerApp =
+module PeerOptions =
 
-    let create () : PeerServerApp = {
-        Base = ServerApp.empty
+    /// No local identity, no contracts, every posture at its default.
+    let create () : PeerOptions = {
         LocalPeer = None
         Contracts = []
         AuditTransparency = false
@@ -372,87 +372,13 @@ module PeerServerApp =
         TransitionAuthority = ModelTransitionAuthority.none
     }
 
-    // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
-
-    let withConfig (c: ServerConfig) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withConfig c app.Base
-    }
-
-    let withAuth (a: IAuthProvider) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withAuth a app.Base
-    }
-
-    let withLogger (l: ILogger) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withLogger l app.Base
-    }
-
-    let withStorage (s: IBlobStorage) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withStorage s app.Base
-    }
-
-    let withNotifications (n: INotificationChannel) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withNotifications n app.Base
-    }
-
-    let withTransactionalSink (sink: INotificationSink) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withTransactionalSink sink app.Base
-    }
-
-    let withHealthCheck (check: HealthChecks.IHealthCheck) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withHealthCheck check app.Base
-    }
-
-    let withConfigValidator (validator: ConfigValidation.IConfigValidator) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withConfigValidator validator app.Base
-    }
-
-    let withEncryptedBlobStorage (resolver: IBlobEncryptionKeyResolver) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withEncryptedBlobStorage resolver app.Base
-    }
-
-    let withEntity<'T> (registration: EntityTypes.EntityRegistration<'T>) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withEntity registration app.Base
-    }
-
-    let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withPreMiddleware f app.Base
-    }
-
-    let withPostMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.withPostMiddleware f app.Base
-    }
-
-    let addModule (m: ServerModule) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.addModule m app.Base
-    }
-
-    let addModules (modules: ServerModule list) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Base = ServerApp.addModules modules app.Base
-    }
-
-    // ─── Peer-substrate-specific helpers ─────────────────────────
-
     /// Set the local deployment's own peer identity. Required when this
     /// deployment *calls* peers (the outbound token vouches for this id,
     /// and the signing key is read from `ISecretStore` under
     /// `peers/{peerId}/signing-key`). A host-only deployment that just
     /// exposes contracts can omit it.
-    let withLocalPeer (identity: PeerIdentity) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withLocalPeer (identity: PeerIdentity) (options: PeerOptions) : PeerOptions = {
+        options with
             LocalPeer = Some identity
     }
 
@@ -462,9 +388,9 @@ module PeerServerApp =
     /// schedule background jobs. Multiple calls accumulate; re-registering
     /// the same contract id overwrites the previous binding at dispatch
     /// time.
-    let withContract (builder: PeerJobFusion option -> PeerContractHost) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            Contracts = app.Contracts @ [ builder ]
+    let withContract (builder: PeerJobFusion option -> PeerContractHost) (options: PeerOptions) : PeerOptions = {
+        options with
+            Contracts = options.Contracts @ [ builder ]
     }
 
     /// Phase 18a — register the SDK-shipped cross-deployment audit-
@@ -476,7 +402,10 @@ module PeerServerApp =
     /// resolved `IAuditLog`; a deployment with `AuditLog = NoAuditLog`
     /// still registers it but answers with an empty trail. Off by default
     /// (GP 13).
-    let withPeerAuditTransparency (app: PeerServerApp) : PeerServerApp = { app with AuditTransparency = true }
+    let withPeerAuditTransparency (options: PeerOptions) : PeerOptions = {
+        options with
+            AuditTransparency = true
+    }
 
     /// Phase 18d — declare a contract's per-method capability profile so
     /// callers can negotiate individual methods (deprecation windows,
@@ -486,9 +415,9 @@ module PeerServerApp =
     /// specific `(method, version)` pairs `Deprecated` / `Removed`).
     /// Multiple calls accumulate; the profile is served at
     /// `GET /peer/v1/capabilities/profile` and read by `NegotiateMethod`.
-    let withContractProfile (profile: ContractProfile) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            ContractProfiles = app.ContractProfiles @ [ profile ]
+    let withContractProfile (profile: ContractProfile) (options: PeerOptions) : PeerOptions = {
+        options with
+            ContractProfiles = options.ContractProfiles @ [ profile ]
     }
 
     /// Phase 590 — declare a peer contract this deployment *consumes*
@@ -497,40 +426,10 @@ module PeerServerApp =
     /// — it registers no dispatch machinery and `run` ignores it. Build
     /// the declaration with `PeerSurface.consumes<'TApi>` so it stays
     /// tied to a real contract type. Multiple calls accumulate.
-    let withConsumedContract (consumed: ConsumedContract) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            ConsumedContracts = app.ConsumedContracts @ [ consumed ]
+    let withConsumedContract (consumed: ConsumedContract) (options: PeerOptions) : PeerOptions = {
+        options with
+            ConsumedContracts = options.ConsumedContracts @ [ consumed ]
     }
-
-    /// Phase 18f — register a commutative-cipher backend and the two-party
-    /// private-set-intersection protocol over it, so contract handlers and
-    /// modules can resolve `ICommutativeCipher` / `IPrivateSetIntersection`
-    /// from DI.
-    ///
-    /// **Absent by default, and this is why it is a `with*` call rather
-    /// than a default singleton beside `ICleanRoomBroker`.** There is no
-    /// defensible SDK default here: `InMemoryCommutativeCipher` is a
-    /// reference backend nobody should reach by accident, and silently
-    /// picking the curve backend for every peer-enabled deployment would
-    /// hand a cryptographic choice to whoever forgot to make one. A
-    /// deployment that never calls this registers nothing and pays nothing
-    /// — no singleton, no allocation, byte-for-byte unchanged (GP 11 /
-    /// GP 13).
-    ///
-    /// Registered as a contribution on the base `ServerApp`, not
-    /// the peer branch, so PSI is available to a deployment that uses the
-    /// primitive without hosting peer contracts. `TryAdd`, so a deployment
-    /// that registered its own implementation earlier keeps it.
-    let withCommutativeCipher (cipher: ICommutativeCipher) (app: PeerServerApp) : PeerServerApp =
-        let register (services: IServiceCollection) =
-            services.TryAddSingleton<ICommutativeCipher>(cipher)
-            services.TryAddSingleton<IPrivateSetIntersection>(PrivateSetIntersection.create cipher)
-            services
-
-        {
-            app with
-                Base = app.Base |> ServerApp.addContribution (Contribution.service owner register)
-        }
 
     /// Phase 309 — refuse to start when this deployment hosts peer
     /// contracts without a `LocalPeer` identity, instead of logging the
@@ -546,8 +445,8 @@ module PeerServerApp =
     /// Compose-time only: it registers nothing, decides nothing per
     /// request, and a composition that never calls it is byte-for-byte
     /// unchanged (GP 13).
-    let withStrictAudienceBinding (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withStrictAudienceBinding (options: PeerOptions) : PeerOptions = {
+        options with
             StrictAudienceBinding = true
     }
 
@@ -570,8 +469,8 @@ module PeerServerApp =
     /// compose-time flag read by the handshake's fetch; it registers
     /// nothing, and a composition that never calls it never issues the
     /// second request (GP 13). Full rationale in `PeerRemoteProfile`.
-    let withLegacyProfileFallback (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withLegacyProfileFallback (options: PeerOptions) : PeerOptions = {
+        options with
             LegacyProfileFallback = true
     }
 
@@ -586,13 +485,16 @@ module PeerServerApp =
     /// exchanges larger argument payloads; lower it for a tighter
     /// boundary with a peer set whose call shapes are known.
     ///
-    ///     app |> PeerServerApp.withWireLimits (PeerWireLimits.defaults
+    ///     app |> PeerOptions.withWireLimits (PeerWireLimits.defaults
     ///                                          |> PeerWireLimits.withMaxRequestBytes (32L * 1024L * 1024L))
     ///
     /// The limit is per-receiver policy, not a wire-format term: the two
     /// peers need not agree on it, and a caller that exceeds it learns
     /// the ceiling from the structured `PeerRequestTooLarge` refusal.
-    let withWireLimits (limits: PeerWireLimits) (app: PeerServerApp) : PeerServerApp = { app with WireLimits = limits }
+    let withWireLimits (limits: PeerWireLimits) (options: PeerOptions) : PeerOptions = {
+        options with
+            WireLimits = limits
+    }
 
     /// Phase 331 — set the receiver-side cascade ceilings the contract
     /// route derives the trusted call context under (the hop budget it
@@ -605,14 +507,14 @@ module PeerServerApp =
     /// documented `HopBudget` guidance, so an existing deployment is
     /// unaffected (GP 11).
     ///
-    ///     app |> PeerServerApp.withCascadePolicy (PeerCascadePolicy.defaults
+    ///     app |> PeerOptions.withCascadePolicy (PeerCascadePolicy.defaults
     ///                                             |> PeerCascadePolicy.withMaxHopsRemaining 4)
     ///
     /// `LocalPeerId` on the supplied policy is ignored — `run` overwrites
     /// it with the composed `LocalPeer`'s id. The receiver's own identity
     /// is the one field this policy must not let anyone else name.
-    let withCascadePolicy (policy: PeerCascadePolicy) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withCascadePolicy (policy: PeerCascadePolicy) (options: PeerOptions) : PeerOptions = {
+        options with
             CascadePolicy = policy
     }
 
@@ -621,8 +523,8 @@ module PeerServerApp =
     /// asking its handlers to behave.
     ///
     ///     app
-    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract<IReachApi> "reach" [ v1 ] >> id)
-    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerOptions.withContract (JsonRpcPeerHost.contract<IReachApi> "reach" [ v1 ] >> id)
+    ///     |> PeerOptions.withCleanRoomTemplate "reach" reachTemplate
     ///
     /// **This is the documented default for a clean-room contract, and
     /// the manual `ICleanRoomBroker.Enforce` call is not.** Phase 18b's
@@ -662,15 +564,15 @@ module PeerServerApp =
     ///
     /// A composition that never calls this wraps nothing and is
     /// byte-for-byte a pre-311 composition (GP 11 / GP 13).
-    let withCleanRoomTemplate (contractId: string) (template: CleanRoomTemplate) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            CleanRoomTemplates = app.CleanRoomTemplates @ [ contractId, template ]
+    let withCleanRoomTemplate (contractId: string) (template: CleanRoomTemplate) (options: PeerOptions) : PeerOptions = {
+        options with
+            CleanRoomTemplates = options.CleanRoomTemplates @ [ contractId, template ]
     }
 
     /// Phase 312 — set the per-call deadline the composed outbound
     /// `IPeerClient` issues every peer request under.
     ///
-    ///     app |> PeerServerApp.withTransportPolicy (PeerTransportPolicy.defaults
+    ///     app |> PeerOptions.withTransportPolicy (PeerTransportPolicy.defaults
     ///                                               |> PeerTransportPolicy.withCallTimeout (TimeSpan.FromSeconds 5.0))
     ///
     /// A tunable, not a switch: the deadline is always in force, and a
@@ -690,8 +592,8 @@ module PeerServerApp =
     /// removes the deadline for calls bounded by something else (a
     /// receiver-side budget, a caller-held token), which still leaves
     /// them fully cancellable.
-    let withTransportPolicy (policy: PeerTransportPolicy) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withTransportPolicy (policy: PeerTransportPolicy) (options: PeerOptions) : PeerOptions = {
+        options with
             TransportPolicy = policy
     }
 
@@ -725,9 +627,9 @@ module PeerServerApp =
     /// discards it. Call `withTransportPolicy` first, or build the
     /// policy with `PeerTransportPolicy.allowInsecureTransport` and pass
     /// it whole.
-    let withInsecurePeerTransport (app: PeerServerApp) : PeerServerApp = {
-        app with
-            TransportPolicy = PeerTransportPolicy.allowInsecureTransport app.TransportPolicy
+    let withInsecurePeerTransport (options: PeerOptions) : PeerOptions = {
+        options with
+            TransportPolicy = PeerTransportPolicy.allowInsecureTransport options.TransportPolicy
     }
 
     /// Phase 480 — require every clean-room template this deployment
@@ -736,9 +638,9 @@ module PeerServerApp =
     /// content, within a live validity window.
     ///
     ///     app
-    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract<IReachApi> "reach" [ v1 ])
-    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
-    ///     |> PeerServerApp.withTemplateApprovals (
+    ///     |> PeerOptions.withContract (JsonRpcPeerHost.contract<IReachApi> "reach" [ v1 ])
+    ///     |> PeerOptions.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerOptions.withTemplateApprovals (
     ///            TemplateApprovalPolicy.forRegistry (BlobTemplateApprovalRegistry(blobs, signer)))
     ///
     /// **What this adds to Phase 311.** The gate already applies the
@@ -775,8 +677,8 @@ module PeerServerApp =
     ///
     /// A composition that never calls this is byte-for-byte a pre-480
     /// composition (GP 11 / GP 13).
-    let withTemplateApprovals (policy: TemplateApprovalPolicy) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withTemplateApprovals (policy: TemplateApprovalPolicy) (options: PeerOptions) : PeerOptions = {
+        options with
             TemplateApprovals = Some policy
     }
 
@@ -785,9 +687,9 @@ module PeerServerApp =
     /// queries cannot exhaust the privacy protection unobserved.
     ///
     ///     app
-    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract&lt;IReachApi&gt; "reach" [ v1 ])
-    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
-    ///     |> PeerServerApp.withPrivacyBudget (
+    ///     |> PeerOptions.withContract (JsonRpcPeerHost.contract&lt;IReachApi&gt; "reach" [ v1 ])
+    ///     |> PeerOptions.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerOptions.withPrivacyBudget (
     ///            PrivacyBudgetMeter.create
     ///                (BlobPrivacyBudgetLedger blobs)
     ///                (PrivacyBudgetPolicy.create 50m 1m))
@@ -824,8 +726,8 @@ module PeerServerApp =
     ///
     /// A composition that never calls this reads no ledger and is
     /// byte-for-byte a pre-190 composition (GP 11 / GP 13).
-    let withPrivacyBudget (meter: PrivacyBudgetMeter) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withPrivacyBudget (meter: PrivacyBudgetMeter) (options: PeerOptions) : PeerOptions = {
+        options with
             PrivacyBudget = Some meter
     }
 
@@ -833,11 +735,11 @@ module PeerServerApp =
     /// contract instead of only suppressing what falls below the floor.
     ///
     ///     app
-    ///     |> PeerServerApp.withContract (JsonRpcPeerHost.contract&lt;IReachApi&gt; "reach" [ v1 ])
-    ///     |> PeerServerApp.withCleanRoomTemplate "reach" reachTemplate
-    ///     |> PeerServerApp.withNoisedRelease "reach" (
+    ///     |> PeerOptions.withContract (JsonRpcPeerHost.contract&lt;IReachApi&gt; "reach" [ v1 ])
+    ///     |> PeerOptions.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerOptions.withNoisedRelease "reach" (
     ///            NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0.5m))
-    ///     |> PeerServerApp.withPrivacyBudget (
+    ///     |> PeerOptions.withPrivacyBudget (
     ///            PrivacyBudgetMeter.create
     ///                (BlobPrivacyBudgetLedger blobs)
     ///                (PrivacyBudgetPolicy.create 50m 1m))
@@ -869,9 +771,9 @@ module PeerServerApp =
     /// A composition that never calls this draws nothing, registers no
     /// mechanism, and is byte-for-byte a pre-481 composition (GP 11 /
     /// GP 13).
-    let withNoisedRelease (contractId: string) (policy: NoisedReleasePolicy) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            NoisedReleases = app.NoisedReleases @ [ contractId, policy ]
+    let withNoisedRelease (contractId: string) (policy: NoisedReleasePolicy) (options: PeerOptions) : PeerOptions = {
+        options with
+            NoisedReleases = options.NoisedReleases @ [ contractId, policy ]
     }
 
     /// Phase 591 — pin a counterparty's published `PeerSurface` label, so
@@ -883,8 +785,8 @@ module PeerServerApp =
     ///             agreedHash DateTimeOffset.UtcNow document
     ///
     ///     app
-    ///     |> PeerServerApp.withConsumedContract (PeerSurface.consumes<IReachApi> "reach" [ v1 ] "seller")
-    ///     |> PeerServerApp.withPinnedCounterparty pin
+    ///     |> PeerOptions.withConsumedContract (PeerSurface.consumes<IReachApi> "reach" [ v1 ] "seller")
+    ///     |> PeerOptions.withPinnedCounterparty pin
     ///
     /// **Labels, never compositions.** Nothing here inspects, requires,
     /// or reasons about a counterparty's internals — that is what makes
@@ -897,9 +799,9 @@ module PeerServerApp =
     /// `SkipPreflight` cannot bypass. A composition that never calls this
     /// registers nothing, checks nothing, and is byte-for-byte a pre-591
     /// composition (GP 11 / GP 13).
-    let withPinnedCounterparty (pin: PinnedPeerSurface) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            FederationPins = FederationPinStore.withPin pin app.FederationPins
+    let withPinnedCounterparty (pin: PinnedPeerSurface) (options: PeerOptions) : PeerOptions = {
+        options with
+            FederationPins = FederationPinStore.withPin pin options.FederationPins
     }
 
     /// Phase 591 — declare how long a pinned counterparty label stays
@@ -910,15 +812,15 @@ module PeerServerApp =
     /// down over a clock is not what an operator asked for by declaring a
     /// refresh cadence. Undeclared (the default) the rule is dormant —
     /// forge cannot know a federation's cadence and will not invent one.
-    let withPinnedSurfaceMaxAge (maxAge: System.TimeSpan) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            FederationPins = FederationPinStore.withMaxPinAge maxAge app.FederationPins
+    let withPinnedSurfaceMaxAge (maxAge: System.TimeSpan) (options: PeerOptions) : PeerOptions = {
+        options with
+            FederationPins = FederationPinStore.withMaxPinAge maxAge options.FederationPins
     }
 
     /// Phase 591 — require a trust facet of every pinned counterparty
     /// this deployment consumes contracts from.
     ///
-    ///     app |> PeerServerApp.withRequiredPeerTrust PeerTrustRequirement.audienceBound
+    ///     app |> PeerOptions.withRequiredPeerTrust PeerTrustRequirement.audienceBound
     ///
     /// Checked against the counterparty's published label and nothing
     /// else — a posture claim is exactly what a label IS, so there is
@@ -929,30 +831,30 @@ module PeerServerApp =
     ///
     /// Multiple calls accumulate. A composition that declares none leaves
     /// `peer-trust-mismatch` dormant (GP 13).
-    let withRequiredPeerTrust (requirement: PeerTrustRequirement) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            FederationPins = FederationPinStore.withRequiredTrust requirement app.FederationPins
+    let withRequiredPeerTrust (requirement: PeerTrustRequirement) (options: PeerOptions) : PeerOptions = {
+        options with
+            FederationPins = FederationPinStore.withRequiredTrust requirement options.FederationPins
     }
 
     /// Phase 642 — declare what a remote peer may see of THIS
     /// deployment's data.
     ///
-    ///     app |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
+    ///     app |> PeerOptions.withDataVisibility PeerDataVisibilityLevel.ViewOnly
     ///
     /// Published in the `PeerSurface` descriptor, so a counterparty pins
     /// the grant before it calls, and enforced data-side by the seams
     /// that carry data — one declaration, both readers. Undeclared is
     /// `AggregatesOnly`, which is the shipped posture named rather than
     /// changed (GP 11).
-    let withDataVisibility (level: PeerDataVisibilityLevel) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withDataVisibility (level: PeerDataVisibilityLevel) (options: PeerOptions) : PeerOptions = {
+        options with
             DataVisibility = level
     }
 
     /// Phase 642 — require an authority level of every pinned
     /// counterparty this deployment consumes contracts from.
     ///
-    ///     app |> PeerServerApp.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly
+    ///     app |> PeerOptions.withRequiredPeerDataVisibility PeerDataVisibilityLevel.ViewOnly
     ///
     /// A counterparty whose pinned label grants LESS than this refuses
     /// the composition at preflight (`peer-visibility-insufficient`),
@@ -960,16 +862,16 @@ module PeerServerApp =
     /// pins a data host granting aggregates only would otherwise discover
     /// it on its first view request, with traffic already flowing.
     /// Undeclared leaves the rule dormant (GP 13).
-    let withRequiredPeerDataVisibility (level: PeerDataVisibilityLevel) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            FederationPins = FederationPinStore.withRequiredDataVisibility level app.FederationPins
+    let withRequiredPeerDataVisibility (level: PeerDataVisibilityLevel) (options: PeerOptions) : PeerOptions = {
+        options with
+            FederationPins = FederationPinStore.withRequiredDataVisibility level options.FederationPins
     }
 
     /// Phase 644 — declare which registry lifecycle transitions THIS
     /// deployment admits from a peer.
     ///
     ///     app
-    ///     |> PeerServerApp.withPeerTransitionAuthority (
+    ///     |> PeerOptions.withPeerTransitionAuthority (
     ///         ModelTransitionAuthority.ofTargets [ "Approved"; "Retired" ])
     ///
     /// Published in the `PeerSurface` descriptor, so a counterparty pins
@@ -980,15 +882,15 @@ module PeerServerApp =
     /// Last call wins. A grant is a single statement of what this
     /// deployment accepts, and accumulating two would make widening it by
     /// accident easier than narrowing it on purpose.
-    let withPeerTransitionAuthority (authority: ModelTransitionAuthority) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withPeerTransitionAuthority (authority: ModelTransitionAuthority) (options: PeerOptions) : PeerOptions = {
+        options with
             TransitionAuthority = authority
     }
 
     /// Phase 644 — require a transition grant of every pinned
     /// counterparty this deployment consumes contracts from.
     ///
-    ///     app |> PeerServerApp.withRequiredPeerTransitionAuthority [ "Approved" ]
+    ///     app |> PeerOptions.withRequiredPeerTransitionAuthority [ "Approved" ]
     ///
     /// A counterparty whose pinned label admits less refuses the
     /// composition at preflight (`peer-transition-authority-insufficient`).
@@ -997,15 +899,15 @@ module PeerServerApp =
     /// pinned against a data host that admits none, would otherwise
     /// discover it with a fitted model and no way to promote it.
     /// Undeclared leaves the rule dormant (GP 13).
-    let withRequiredPeerTransitionAuthority (targets: string list) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            FederationPins = FederationPinStore.withRequiredTransitionAuthority targets app.FederationPins
+    let withRequiredPeerTransitionAuthority (targets: string list) (options: PeerOptions) : PeerOptions = {
+        options with
+            FederationPins = FederationPinStore.withRequiredTransitionAuthority targets options.FederationPins
     }
 
     /// Phase 316, composed by Phase 629 — bound how long the parked
     /// result of a long-running peer call stays readable.
     ///
-    ///     app |> PeerServerApp.withJobRetention (
+    ///     app |> PeerOptions.withJobRetention (
     ///                PeerJobRetentionPolicy.default'
     ///                |> PeerJobRetentionPolicy.withTtl (TimeSpan.FromDays 1.0)
     ///                |> PeerJobRetentionPolicy.withDeleteOnRead (TimeSpan.FromMinutes 5.0))
@@ -1029,8 +931,8 @@ module PeerServerApp =
     /// the base `ServiceConfig` keeps it, and honours whatever policy it
     /// was built with — `IPeerJobResultStore.Retention` is the value it
     /// reports (GP 12 rule 3).
-    let withJobRetention (retention: PeerJobRetentionPolicy) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withJobRetention (retention: PeerJobRetentionPolicy) (options: PeerOptions) : PeerOptions = {
+        options with
             JobRetention = retention
     }
 
@@ -1039,7 +941,7 @@ module PeerServerApp =
     /// methods as well as their immediate ones.
     ///
     ///     app
-    ///     |> PeerServerApp.withGroupJobMap (BlobPeerGroupJobMap blobs)
+    ///     |> PeerOptions.withGroupJobMap (BlobPeerGroupJobMap blobs)
     ///     |> PeerGateway.withAggregate client members exposure
     ///
     /// The map is passed in rather than assembled from DI because the
@@ -1053,8 +955,8 @@ module PeerServerApp =
     /// `PeerGateway.withAggregate` does nothing at all: the field is read
     /// only there, so it registers no singleton and allocates nothing
     /// beyond the map the caller constructed (GP 13).
-    let withGroupJobMap (map: IPeerGroupJobMap) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withGroupJobMap (map: IPeerGroupJobMap) (options: PeerOptions) : PeerOptions = {
+        options with
             GroupJobMap = Some map
     }
 
@@ -1064,8 +966,8 @@ module PeerServerApp =
     /// rather than by hand-building one.
     ///
     ///     app
-    ///     |> PeerServerApp.withLocalPeer me
-    ///     |> PeerServerApp.withRoundOrchestrator
+    ///     |> PeerOptions.withLocalPeer me
+    ///     |> PeerOptions.withRoundOrchestrator
     ///
     /// Three singletons, all assembled from substrate the peer
     /// composition already resolves and all `TryAdd` so a deployment
@@ -1089,12 +991,15 @@ module PeerServerApp =
     /// protocol has no use for. `RoundOrchestrator.create ()` remains
     /// the un-composed escape hatch for a caller that wants one without
     /// the DI registration.
-    let withRoundOrchestrator (app: PeerServerApp) : PeerServerApp = { app with RoundOrchestration = true }
+    let withRoundOrchestrator (options: PeerOptions) : PeerOptions = {
+        options with
+            RoundOrchestration = true
+    }
 
     /// Phase 338, composed by Phase 629 — set the receiver-side token
     /// policy: the replay seen-set and the contract binding.
     ///
-    ///     app |> PeerServerApp.withTokenPolicy (
+    ///     app |> PeerOptions.withTokenPolicy (
     ///                PeerTokenPolicy.unscoped
     ///                |> PeerTokenPolicy.withReplayGuard (BlobPeerReplayGuard blobs))
     ///
@@ -1117,8 +1022,8 @@ module PeerServerApp =
     /// A composition that never calls this runs under
     /// `PeerTokenPolicy.unscoped` — byte-for-byte the pre-338 validation
     /// path, consulting no store (GP 11 / GP 13).
-    let withTokenPolicy (policy: PeerTokenPolicy) (app: PeerServerApp) : PeerServerApp = {
-        app with
+    let withTokenPolicy (policy: PeerTokenPolicy) (options: PeerOptions) : PeerOptions = {
+        options with
             TokenPolicy = policy
     }
 
@@ -1127,7 +1032,7 @@ module PeerServerApp =
     /// than being a bearer capability for its whole 300 s + skew
     /// lifetime.
     ///
-    ///     app |> PeerServerApp.withReplayGuard (BlobPeerReplayGuard blobs)
+    ///     app |> PeerOptions.withReplayGuard (BlobPeerReplayGuard blobs)
     ///
     /// **Off by default, and the rollout order is why.** Every minted
     /// token has carried a `jti` since Phase 338 precisely so a fleet
@@ -1148,15 +1053,15 @@ module PeerServerApp =
     /// Additive over whatever `TokenPolicy` the composition already
     /// carries, so it composes with `withContractBoundCalls` in either
     /// order.
-    let withReplayGuard (guard: IPeerReplayGuard) (app: PeerServerApp) : PeerServerApp = {
-        app with
-            TokenPolicy = PeerTokenPolicy.withReplayGuard guard app.TokenPolicy
+    let withReplayGuard (guard: IPeerReplayGuard) (options: PeerOptions) : PeerOptions = {
+        options with
+            TokenPolicy = PeerTokenPolicy.withReplayGuard guard options.TokenPolicy
     }
 
     /// Phase 338, composed by Phase 629 — bind every inbound peer token
     /// to the ONE contract it is spent against, through the `cid` claim.
     ///
-    ///     app |> PeerServerApp.withContractBoundCalls
+    ///     app |> PeerOptions.withContractBoundCalls
     ///
     /// The host validates a contract call through
     /// `IPeerCallScopedAuth.ValidateScopedPeerToken` for the contract id
@@ -1175,889 +1080,915 @@ module PeerServerApp =
     ///
     /// Additive over the composition's existing `TokenPolicy`, so it
     /// composes with `withReplayGuard` in either order.
-    let withContractBoundCalls (app: PeerServerApp) : PeerServerApp = {
-        app with
-            TokenPolicy = PeerTokenPolicy.withContractBinding app.TokenPolicy
+    let withContractBoundCalls (options: PeerOptions) : PeerOptions = {
+        options with
+            TokenPolicy = PeerTokenPolicy.withContractBinding options.TokenPolicy
     }
 
-    /// Phase 309 — classify this composition's audience-binding posture.
-    /// Pure and total; exposed so a deployment can assert its own posture
-    /// in its own tests without booting a server, and so the advisory /
-    /// strict paths cannot drift from what the provider will actually do.
-    ///
-    /// A `LocalPeer` whose `PeerId` is blank counts as **absent**, not
-    /// present: `PeerJwt.checkAudience` short-circuits on an empty
-    /// expected audience, so `withLocalPeer { PeerId = ""; … }` binds
-    /// nothing while looking composed.
-    let auditAudienceBinding (app: PeerServerApp) : PeerAudienceBinding =
-        match app.Base.Config.PeerSubstrate with
-        | NoPeerSubstrate -> AudienceBindingOff
-        | EnabledPeerSubstrate ->
-            match app.LocalPeer with
-            | Some identity when not (System.String.IsNullOrWhiteSpace identity.PeerId) ->
-                AudienceBindingEnforced identity.PeerId
-            | _ ->
-                if List.isEmpty app.Contracts && not app.AuditTransparency then
-                    AudienceBindingIdle
-                else
-                    AudienceBindingMissing
+/// **Adds** a commutative-cipher backend and the two-party
+/// private-set-intersection protocol over it, so contract handlers and
+/// modules can resolve `ICommutativeCipher` / `IPrivateSetIntersection`
+/// from DI.
+///
+/// **Absent by default, and this is why it is a `with*` call rather
+/// than a default singleton beside `ICleanRoomBroker`.** There is no
+/// defensible SDK default here: `InMemoryCommutativeCipher` is a
+/// reference backend nobody should reach by accident, and silently
+/// picking the curve backend for every peer-enabled deployment would
+/// hand a cryptographic choice to whoever forgot to make one. A
+/// deployment that never calls this registers nothing and pays nothing
+/// — no singleton, no allocation, byte-for-byte unchanged (GP 11 /
+/// GP 13).
+///
+/// Registered as a contribution on the base `ServerApp`, not
+/// the peer branch, so PSI is available to a deployment that uses the
+/// primitive without hosting peer contracts. `TryAdd`, so a deployment
+/// that registered its own implementation earlier keeps it.
+let withCommutativeCipher (cipher: ICommutativeCipher) (app: ServerApp) : ServerApp =
+    let register (services: IServiceCollection) =
+        services.TryAddSingleton<ICommutativeCipher>(cipher)
+        services.TryAddSingleton<IPrivateSetIntersection>(PrivateSetIntersection.create cipher)
+        services
 
-    /// Phase 309 — the diagnosis shared by the advisory log line and the
-    /// strict refusal, so the two can never disagree about what is wrong
-    /// or which lever fixes it.
-    let audienceBindingDiagnosis =
-        "peer-audience-binding: this deployment hosts peer contracts but composed no LocalPeer identity, so JwtPeerAuthProvider validates inbound tokens against an empty expected audience and the 'aud' check never fires. A token another peer minted for a DIFFERENT receiver is accepted here whenever that receiver trusts the same issuer — the confused-deputy / cross-receiver replay the 'aud' claim exists to stop. Compose PeerServerApp.withLocalPeer with this deployment's own peer id to activate the check."
+    app |> ServerApp.addContribution (Contribution.service owner register)
 
-    /// The advisory emitted at `run` when the binding is missing.
-    let audienceBindingAdvisory =
-        $"{audienceBindingDiagnosis} (Advisory only — PeerServerApp.withStrictAudienceBinding turns this into a compose-time failure.)"
-
-    /// The refusal raised at `run` when the binding is missing and
-    /// `withStrictAudienceBinding` is composed.
-    let audienceBindingRefusal =
-        $"{audienceBindingDiagnosis} Refusing to start: PeerServerApp.withStrictAudienceBinding is composed."
-
-    /// Phase 309 — apply the posture. Loud `Warn` by default, `failwith`
-    /// under `withStrictAudienceBinding`, silence in every other state.
-    /// Called by `run` before any peer registration; exposed so a
-    /// deployment can run the same gate from its own preflight.
-    ///
-    /// The enforcement lives HERE, at the composition seam, and not in
-    /// `JwtPeerAuthProvider`: the provider is a stateless, policy-free
-    /// validator that is handed an expected audience and has no way to
-    /// know whether an empty one is a host-only deployment's deliberate
-    /// posture or a composition oversight (GP 12 rule 4). The compose
-    /// root is the only place that can tell the two apart, because it is
-    /// the only place that can see the hosted-contract set.
-    let enforceAudienceBinding (app: PeerServerApp) : unit =
-        match auditAudienceBinding app with
-        | AudienceBindingOff
-        | AudienceBindingEnforced _
-        | AudienceBindingIdle -> ()
-        | AudienceBindingMissing ->
-            if app.StrictAudienceBinding then
-                failwith audienceBindingRefusal
+/// Phase 309 — classify this composition's audience-binding posture.
+/// Pure and total; exposed so a deployment can assert its own posture
+/// in its own tests without booting a server, and so the advisory /
+/// strict paths cannot drift from what the provider will actually do.
+///
+/// A `LocalPeer` whose `PeerId` is blank counts as **absent**, not
+/// present: `PeerJwt.checkAudience` short-circuits on an empty
+/// expected audience, so `withLocalPeer { PeerId = ""; … }` binds
+/// nothing while looking composed.
+let auditAudienceBinding (app: ServerApp, options: PeerOptions) : PeerAudienceBinding =
+    match (ServerApp.effectiveConfig app).PeerSubstrate with
+    | NoPeerSubstrate -> AudienceBindingOff
+    | EnabledPeerSubstrate ->
+        match options.LocalPeer with
+        | Some identity when not (System.String.IsNullOrWhiteSpace identity.PeerId) ->
+            AudienceBindingEnforced identity.PeerId
+        | _ ->
+            if List.isEmpty options.Contracts && not options.AuditTransparency then
+                AudienceBindingIdle
             else
-                app.Base.Logger
-                |> Option.iter (fun logger -> logger.Warn audienceBindingAdvisory)
+                AudienceBindingMissing
 
-    /// Phase 339 — the advisory emitted at `run` when a composition has
-    /// opted out of peer-transport TLS enforcement. Emitted every start,
-    /// deliberately: a deployment that sends deployment-vouching bearer
-    /// tokens over cleartext should say so in its own logs rather than
-    /// have it be readable only from its source.
-    let insecureTransportAdvisory =
-        "peer-transport-tls: PeerTransportPolicy.AllowInsecureTransport is set, so this deployment will send peer bearer tokens to a cleartext http:// peer on any host, not just loopback. A peer token vouches for the whole deployment, so one observation on the path is peer impersonation until the signing key rotates. Drop PeerServerApp.withInsecurePeerTransport once every peer is reachable over https (loopback peers need no opt-out — http://localhost is accepted by default)."
+/// Phase 309 — the diagnosis shared by the advisory log line and the
+/// strict refusal, so the two can never disagree about what is wrong
+/// or which lever fixes it.
+let audienceBindingDiagnosis =
+    "peer-audience-binding: this deployment hosts peer contracts but composed no LocalPeer identity, so JwtPeerAuthProvider validates inbound tokens against an empty expected audience and the 'aud' check never fires. A token another peer minted for a DIFFERENT receiver is accepted here whenever that receiver trusts the same issuer — the confused-deputy / cross-receiver replay the 'aud' claim exists to stop. Compose PeerOptions.withLocalPeer with this deployment's own peer id to activate the check."
 
-    /// Phase 339 — apply the posture. Advisory only: unlike Phase 309's
-    /// audience gate there is nothing to refuse here, because the
-    /// insecure posture is a deliberate composition act rather than an
-    /// oversight, and the enforcement that matters happens per call in
-    /// `PeerTransportSecurity`. Exposed so a deployment can run the same
-    /// check from its own preflight.
-    let enforceTransportSecurity (app: PeerServerApp) : unit =
-        match app.Base.Config.PeerSubstrate with
-        | NoPeerSubstrate -> ()
-        | EnabledPeerSubstrate ->
-            if app.TransportPolicy.AllowInsecureTransport then
-                app.Base.Logger
-                |> Option.iter (fun logger -> logger.Warn insecureTransportAdvisory)
+/// The advisory emitted at `run` when the binding is missing.
+let audienceBindingAdvisory =
+    $"{audienceBindingDiagnosis} (Advisory only — PeerOptions.withStrictAudienceBinding turns this into a compose-time failure.)"
 
-    /// Phase 311 — the effective template per contract id, last-wins.
-    /// Exposed so a deployment can assert its own gating posture without
-    /// booting a server, and so the compose path and any preflight read
-    /// the same resolution rule.
-    let cleanRoomTemplateMap (app: PeerServerApp) : Map<string, CleanRoomTemplate> =
-        app.CleanRoomTemplates
-        |> List.fold (fun acc (contractId, template) -> Map.add contractId template acc) Map.empty
+/// The refusal raised at `run` when the binding is missing and
+/// `withStrictAudienceBinding` is composed.
+let audienceBindingRefusal =
+    $"{audienceBindingDiagnosis} Refusing to start: PeerOptions.withStrictAudienceBinding is composed."
 
-    /// Phase 311 — the contract ids this composition would register.
-    /// Materialises each `withContract` builder exactly the way
-    /// `PeerSurface.describe` does; `None` fusion is sufficient because a
-    /// contract's id does not depend on the job substrate.
-    let private hostedContractIds (app: PeerServerApp) : Set<string> =
-        let authored =
-            app.Contracts
-            |> List.map (fun builder -> (builder None).Registration.ContractId)
-
-        let transparency =
-            if app.AuditTransparency then
-                [ PeerAudit.contractId ]
-            else
-                []
-
-        // Phase 480 — the approval-handshake contract is registered
-        // alongside the author contracts whenever a registry is
-        // composed, so a template naming it binds rather than reading as
-        // unbound (an odd thing to gate, but the seam must not have an
-        // exception in it).
-        let approvals =
-            if app.TemplateApprovals.IsSome then
-                [ TemplateApprovalContract.contractId ]
-            else
-                []
-
-        Set.ofList (authored @ transparency @ approvals)
-
-    /// Phase 311 — the contract ids named by `withCleanRoomTemplate` that
-    /// no hosted contract answers to. Empty on a healthy composition.
-    ///
-    /// An unbound template is a gate that will never run while looking
-    /// entirely composed — the shape Phase 330's unreferenced
-    /// `VerifyDelegation` took, and the reason this phase exists at all.
-    /// Detection is data, not a log line, so a deployment can assert it
-    /// in its own preflight (the same posture `auditAudienceBinding`
-    /// takes for Phase 309).
-    ///
-    /// Materialising the contract builders is not free, so it happens
-    /// only when at least one template is composed: a deployment that
-    /// gates nothing runs no probe (GP 13). A `NoPeerSubstrate`
-    /// composition reports nothing — it registers no contracts at all,
-    /// and the strip-imports path must stay byte-for-byte a bare
-    /// `ServerApp.run`.
-    let auditCleanRoomTemplates (app: PeerServerApp) : string list =
-        match app.Base.Config.PeerSubstrate, app.CleanRoomTemplates with
-        | NoPeerSubstrate, _
-        | _, [] -> []
-        | EnabledPeerSubstrate, templates ->
-            let hosted = hostedContractIds app
-
-            templates
-            |> List.map fst
-            |> List.distinct
-            |> List.filter (fun contractId -> not (Set.contains contractId hosted))
-
-    /// The refusal raised at `run` when a composed clean-room template
-    /// binds to no hosted contract.
-    let cleanRoomTemplateRefusal (unbound: string list) =
-        let named = String.concat ", " unbound
-
-        $"peer-clean-room-gate: PeerServerApp.withCleanRoomTemplate names contract(s) [{named}] that this deployment does not host, so the privacy floor declared for them would never run — a gate that looks composed and enforces nothing. Refusing to start: register the contract with PeerServerApp.withContract under the same id, or drop the template."
-
-    /// Phase 311 — apply the posture. Unlike the Phase 309 audience gate
-    /// there is no advisory mode: an unbound template cannot be an
-    /// existing deployment's deliberate posture, because the helper that
-    /// creates one did not exist before this phase. Every reachable case
-    /// is a defect in code written after the gate shipped, so failing is
-    /// both safe (GP 11 — nothing pre-311 can trip it) and correct.
-    let enforceCleanRoomTemplates (app: PeerServerApp) : unit =
-        match auditCleanRoomTemplates app with
-        | [] -> ()
-        | unbound -> failwith (cleanRoomTemplateRefusal unbound)
-
-    /// Phase 481 — the effective noised-release policy per contract id,
-    /// last-wins. Exposed on the same terms as `cleanRoomTemplateMap`:
-    /// so a deployment can assert its own calibration posture without
-    /// booting a server, and so the compose path and any preflight read
-    /// one resolution rule.
-    let noisedReleaseMap (app: PeerServerApp) : Map<string, NoisedReleasePolicy> =
-        app.NoisedReleases
-        |> List.fold (fun acc (contractId, policy) -> Map.add contractId policy acc) Map.empty
-
-    /// Phase 481 — everything wrong with this composition's calibrated-
-    /// noise posture, as data. Empty on a healthy composition.
-    ///
-    /// Two families, both refusals rather than warnings:
-    ///
-    ///   * A policy naming a contract with **no clean-room template**.
-    ///     Nothing would apply it — the noise lives on the gate, and an
-    ///     ungated contract has no gate. That is the "composed and
-    ///     inert" shape Phase 311 exists to make unreachable, and it is
-    ///     worse here than there: an operator reading the composition
-    ///     would believe answers were being randomised when they were
-    ///     being released raw.
-    ///   * A spec that is not calibratable at all (`NoiseSpec.validate`
-    ///     / `NoisedReleasePolicy.validate`) — an unbounded sensitivity,
-    ///     a non-positive ε, a Gaussian with no δ. Every one of those
-    ///     would throw on the first call, and a privacy parameter that
-    ///     is wrong is wrong at compose time.
-    let auditNoisedRelease (app: PeerServerApp) : string list =
-        match app.Base.Config.PeerSubstrate, app.NoisedReleases with
-        | NoPeerSubstrate, _
-        | _, [] -> []
-        | EnabledPeerSubstrate, _ ->
-            let gated = app.CleanRoomTemplates |> List.map fst |> Set.ofList
-
-            noisedReleaseMap app
-            |> Map.toList
-            |> List.collect (fun (contractId, policy) ->
-                let ungated =
-                    if Set.contains contractId gated then
-                        []
-                    else
-                        [
-                            $"contract '{contractId}' has a noised-release policy but no clean-room template, so nothing would apply the noise"
-                        ]
-
-                ungated
-                @ (NoisedReleasePolicy.validate policy
-                   |> List.map (fun reason -> $"contract '{contractId}': {reason}")))
-
-    /// The refusal raised at `run` when the calibrated-noise posture
-    /// cannot be honoured.
-    let noisedReleaseRefusal (problems: string list) =
-        let named = String.concat "; " problems
-
-        $"peer-noised-release: PeerServerApp.withNoisedRelease was composed with a posture that cannot be honoured — {named}. Refusing to start: a noise policy that nothing applies, or one whose calibration is invalid, is a deployment that looks like it randomises its answers and does not."
-
-    /// Phase 481 — apply the posture. No advisory mode, on Phase 311's
-    /// argument: `withNoisedRelease` did not exist before this phase, so
-    /// every reachable case is a defect in code written after it and
-    /// nothing pre-481 can trip it (GP 11).
-    let enforceNoisedRelease (app: PeerServerApp) : unit =
-        match auditNoisedRelease app with
-        | [] -> ()
-        | problems -> failwith (noisedReleaseRefusal problems)
-
-    /// Phase 480 — classify this composition's bilateral-approval
-    /// posture. Pure and total; exposed so a deployment can assert its
-    /// own posture in its own tests without booting a server, and so the
-    /// refusal path cannot drift from what `run` will wire.
-    ///
-    /// A `LocalPeer` whose `PeerId` is blank counts as **absent**, on
-    /// the same argument `auditAudienceBinding` makes: an empty peer id
-    /// is not an identity, it just looks composed.
-    let auditTemplateApprovals (app: PeerServerApp) : TemplateApprovalPosture =
-        match app.Base.Config.PeerSubstrate, app.TemplateApprovals with
-        | NoPeerSubstrate, _
-        | _, None -> TemplateApprovalOff
-        | EnabledPeerSubstrate, Some _ ->
-            let gated = app.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
-
-            if List.isEmpty gated then
-                TemplateApprovalRecordingOnly
-            else
-                match app.LocalPeer with
-                | Some identity when not (System.String.IsNullOrWhiteSpace identity.PeerId) ->
-                    TemplateApprovalEnforced(identity.PeerId, gated)
-                | _ -> TemplateApprovalUnidentified
-
-    /// The refusal raised at `run` when a composition gates contracts
-    /// under an approval registry without a `LocalPeer` identity.
-    let templateApprovalRefusal (gated: string list) =
-        let named = String.concat ", " gated
-
-        $"peer-template-approval: PeerServerApp.withTemplateApprovals is composed and contract(s) [{named}] are clean-room gated, but this deployment composed no LocalPeer identity — so it has no peer id to be one half of a bilateral agreement, no counterparty can address an approval to it, and every gated call would be withheld forever with no composed lever to fix it. Refusing to start: compose PeerServerApp.withLocalPeer with this deployment's own peer id."
-
-    /// Phase 480 — apply the posture. No advisory mode, on Phase 311's
-    /// argument: `withTemplateApprovals` did not exist before this
-    /// phase, so every reachable case is a defect in code written after
-    /// it, and nothing pre-480 can trip it (GP 11).
-    let enforceTemplateApprovals (app: PeerServerApp) : unit =
-        match auditTemplateApprovals app with
-        | TemplateApprovalOff
-        | TemplateApprovalEnforced _
-        | TemplateApprovalRecordingOnly -> ()
-        | TemplateApprovalUnidentified ->
-            let gated = app.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
-            failwith (templateApprovalRefusal gated)
-
-    /// Phase 591 — the federation facts the preflight reads, derived from
-    /// the composition rather than hand-listed: this deployment's own peer
-    /// id, what it declared it consumes, and the pinned counterparty
-    /// labels it validates those declarations against.
-    ///
-    /// `now` is a parameter and not a read of the ambient clock, so the
-    /// stale rule is a pure function of its inputs and a test can age a
-    /// pin without waiting. `run` supplies `DateTimeOffset.UtcNow` at the
-    /// moment the preflight actually runs.
-    let federationPreflightInput (now: System.DateTimeOffset) (app: PeerServerApp) : FederationPreflightInput = {
-        LocalPeerId = app.LocalPeer |> Option.map _.PeerId |> Option.defaultValue ""
-        Consumes = app.ConsumedContracts
-        Pins = app.FederationPins
-        Now = now
-    }
-
-    /// Phase 591 — classify this composition's federation graph against
-    /// its pinned counterparty labels. Pure and total; exposed so a
-    /// deployment can assert its own edges in its own tests without
-    /// booting a server (the posture `auditAudienceBinding` /
-    /// `auditCleanRoomTemplates` / `auditTemplateApprovals` take), and so
-    /// the preflight validator cannot drift from what a deployment can
-    /// check for itself.
-    ///
-    /// Empty on a composition that pinned nothing, whatever it consumes
-    /// (GP 13).
-    let auditFederationGraph (now: System.DateTimeOffset) (app: PeerServerApp) : CompositionDefect list =
-        FederationPreflight.check (federationPreflightInput now app)
-
-    /// Phase 629 — this deployment's own peer identity, defaulted the way
-    /// `run` defaults it (a blank id when no `LocalPeer` was composed).
-    /// One definition, so a factory below and the compose path cannot
-    /// disagree about which identity the singletons are built against.
-    let private composedIdentity (app: PeerServerApp) : PeerIdentity =
-        app.LocalPeer |> Option.defaultValue { PeerId = ""; DisplayName = "" }
-
-    /// Phase 629 — the `IPeerJobResultStore` this composition would
-    /// register, over `blobs`. `run`'s DI factory is a one-line call to
-    /// this, so the retention knob is assertable without booting a server
-    /// (the posture `auditAudienceBinding` / `auditCleanRoomTemplates`
-    /// take for their own postures).
-    let jobResultStore (app: PeerServerApp) (blobs: IBlobStorage) : IPeerJobResultStore =
-        BlobPeerJobResultStore(blobs, app.JobRetention) :> IPeerJobResultStore
-
-    /// Phase 629 — the `IPeerAuthProvider` this composition would
-    /// register, over `secrets`. Carries the composed `TokenPolicy`
-    /// (Phase 338's replay guard + contract binding) and this
-    /// deployment's own id as the bound audience (Phase 130). Exposed on
-    /// the same terms as `jobResultStore`.
-    let peerAuthProvider (app: PeerServerApp) (secrets: ISecretStore) : IPeerAuthProvider =
-        JwtPeerAuthProvider(secrets, (composedIdentity app).PeerId, app.TokenPolicy) :> IPeerAuthProvider
-
-    /// Phase 629 — the Phase 483 round-orchestration registrations, or
-    /// `services` untouched when `withRoundOrchestrator` was not composed.
-    ///
-    /// A module-level function rather than three lines inside `run` so a
-    /// deployment (or a test) can apply it to a bare `IServiceCollection`
-    /// and resolve exactly what a composition would get, without booting
-    /// a server. Every registration is `TryAdd`: a deployment that
-    /// registered its own `IRoundStateStore` / `IRoundObserver` /
-    /// `IRoundOrchestrator` through the base `ServiceConfig` (which runs
-    /// first) keeps it, and the SDK default only fills the gap.
-    ///
-    /// The substrate is resolved lazily per singleton, so the order this
-    /// runs in relative to the rest of the peer graph does not matter —
-    /// `IPeerFanout` is `TryAdd`ed by the same compose pass and is
-    /// resolved at first orchestrator use, not here.
-    let roundOrchestrationServices (app: PeerServerApp) (services: IServiceCollection) : IServiceCollection =
-        if not app.RoundOrchestration then
-            services
+/// Phase 309 — apply the posture. Loud `Warn` by default, `failwith`
+/// under `withStrictAudienceBinding`, silence in every other state.
+/// Called by `run` before any peer registration; exposed so a
+/// deployment can run the same gate from its own preflight.
+///
+/// The enforcement lives HERE, at the composition seam, and not in
+/// `JwtPeerAuthProvider`: the provider is a stateless, policy-free
+/// validator that is handed an expected audience and has no way to
+/// know whether an empty one is a host-only deployment's deliberate
+/// posture or a composition oversight (GP 12 rule 4). The compose
+/// root is the only place that can tell the two apart, because it is
+/// the only place that can see the hosted-contract set.
+let enforceAudienceBinding (app: ServerApp, options: PeerOptions) : unit =
+    match auditAudienceBinding (app, options) with
+    | AudienceBindingOff
+    | AudienceBindingEnforced _
+    | AudienceBindingIdle -> ()
+    | AudienceBindingMissing ->
+        if options.StrictAudienceBinding then
+            failwith audienceBindingRefusal
         else
-            services.TryAddSingleton<IRoundStateStore>(
-                System.Func<System.IServiceProvider, IRoundStateStore>(fun sp ->
-                    let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
-                    BlobRoundStateStore(blobs) :> IRoundStateStore)
-            )
+            app.Logger |> Option.iter (fun logger -> logger.Warn audienceBindingAdvisory)
 
-            services.TryAddSingleton<IRoundObserver>(
-                System.Func<System.IServiceProvider, IRoundObserver>(fun sp ->
-                    // Both halves optional and independently so, exactly
-                    // as `PlatformRoundObserver` is written for: a
-                    // deployment with `AuditLog = NoAuditLog` still gets
-                    // progress, and a partial host with neither observes
-                    // nothing rather than failing to compose.
-                    let auditLog =
-                        sp.GetService(typeof<IAuditLog>)
-                        |> Option.ofObj
-                        |> Option.map (fun x -> x :?> IAuditLog)
+/// Phase 339 — the advisory emitted at `run` when a composition has
+/// opted out of peer-transport TLS enforcement. Emitted every start,
+/// deliberately: a deployment that sends deployment-vouching bearer
+/// tokens over cleartext should say so in its own logs rather than
+/// have it be readable only from its source.
+let insecureTransportAdvisory =
+    "peer-transport-tls: PeerTransportPolicy.AllowInsecureTransport is set, so this deployment will send peer bearer tokens to a cleartext http:// peer on any host, not just loopback. A peer token vouches for the whole deployment, so one observation on the path is peer impersonation until the signing key rotates. Drop PeerOptions.withInsecurePeerTransport once every peer is reachable over https (loopback peers need no opt-out — http://localhost is accepted by default)."
 
-                    let channel =
-                        sp.GetService(typeof<INotificationChannel>)
-                        |> Option.ofObj
-                        |> Option.map (fun x -> x :?> INotificationChannel)
+/// Phase 339 — apply the posture. Advisory only: unlike Phase 309's
+/// audience gate there is nothing to refuse here, because the
+/// insecure posture is a deliberate composition act rather than an
+/// oversight, and the enforcement that matters happens per call in
+/// `PeerTransportSecurity`. Exposed so a deployment can run the same
+/// check from its own preflight.
+let enforceTransportSecurity (app: ServerApp, options: PeerOptions) : unit =
+    match (ServerApp.effectiveConfig app).PeerSubstrate with
+    | NoPeerSubstrate -> ()
+    | EnabledPeerSubstrate ->
+        if options.TransportPolicy.AllowInsecureTransport then
+            app.Logger |> Option.iter (fun logger -> logger.Warn insecureTransportAdvisory)
 
-                    PlatformRoundObserver(auditLog, channel) :> IRoundObserver)
-            )
+/// Phase 311 — the effective template per contract id, last-wins.
+/// Exposed so a deployment can assert its own gating posture without
+/// booting a server, and so the compose path and any preflight read
+/// the same resolution rule.
+let cleanRoomTemplateMap (options: PeerOptions) : Map<string, CleanRoomTemplate> =
+    options.CleanRoomTemplates
+    |> List.fold (fun acc (contractId, template) -> Map.add contractId template acc) Map.empty
 
-            services.TryAddSingleton<IRoundOrchestrator>(
-                System.Func<System.IServiceProvider, IRoundOrchestrator>(fun sp ->
-                    let fanout = sp.GetService(typeof<IPeerFanout>) :?> IPeerFanout
-                    let store = sp.GetService(typeof<IRoundStateStore>) :?> IRoundStateStore
-                    let observer = sp.GetService(typeof<IRoundObserver>) :?> IRoundObserver
-                    DefaultRoundOrchestrator(fanout, store, observer) :> IRoundOrchestrator)
-            )
+/// Phase 311 — the contract ids this composition would register.
+/// Materialises each `withContract` builder exactly the way
+/// `PeerSurface.describe` does; `None` fusion is sufficient because a
+/// contract's id does not depend on the job substrate.
+let private hostedContractIds (options: PeerOptions) : Set<string> =
+    let authored =
+        options.Contracts
+        |> List.map (fun builder -> (builder None).Registration.ContractId)
 
-            services
+    let transparency =
+        if options.AuditTransparency then
+            [ PeerAudit.contractId ]
+        else
+            []
 
-    /// Drive the final composition. When `ServerConfig.PeerSubstrate` is
-    /// `NoPeerSubstrate`, short-circuits to `ServerApp.run` — byte-for-
-    /// byte the same shape as a base `ServerApp.run`. When
-    /// `EnabledPeerSubstrate`, registers the peer DI singletons, mounts
-    /// `JsonRpcPeerHost.routes`, and delegates to `ServerApp.run`.
-    let run (app: PeerServerApp) : int =
-        match app.Base.Config.PeerSubstrate with
-        | NoPeerSubstrate ->
-            // Strip-imports path: zero contribution to the base
-            // `ServerApp.run`. Same shape as if the peer substrate were
-            // never imported.
-            ServerApp.run app.Base
-        | EnabledPeerSubstrate ->
-            // Phase 309 — surface the audience-binding posture before
-            // anything registers. A host-only deployment that never
-            // composed `LocalPeer` gets a startup `Warn`; under
-            // `withStrictAudienceBinding` it does not start at all. Kept
-            // inside this branch so the `NoPeerSubstrate` short-circuit
-            // above stays byte-for-byte a bare `ServerApp.run` (GP 13).
-            enforceAudienceBinding app
+    // Phase 480 — the approval-handshake contract is registered
+    // alongside the author contracts whenever a registry is
+    // composed, so a template naming it binds rather than reading as
+    // unbound (an odd thing to gate, but the seam must not have an
+    // exception in it).
+    let approvals =
+        if options.TemplateApprovals.IsSome then
+            [ TemplateApprovalContract.contractId ]
+        else
+            []
 
-            // Phase 311 — refuse a clean-room template that binds to no
-            // hosted contract, before anything registers. Costs one
-            // builder pass and only when a template is composed; a
-            // composition that gates nothing does not run it (GP 13).
-            enforceCleanRoomTemplates app
+    Set.ofList (authored @ transparency @ approvals)
 
-            // Phase 481 — refuse a calibrated-noise policy that no gate
-            // would apply, or one whose calibration is not valid. Runs
-            // only when a policy is composed (GP 13).
-            enforceNoisedRelease app
+/// Phase 311 — the contract ids named by `withCleanRoomTemplate` that
+/// no hosted contract answers to. Empty on a healthy composition.
+///
+/// An unbound template is a gate that will never run while looking
+/// entirely composed — the shape Phase 330's unreferenced
+/// `VerifyDelegation` took, and the reason this phase exists at all.
+/// Detection is data, not a log line, so a deployment can assert it
+/// in its own preflight (the same posture `auditAudienceBinding`
+/// takes for Phase 309).
+///
+/// Materialising the contract builders is not free, so it happens
+/// only when at least one template is composed: a deployment that
+/// gates nothing runs no probe (GP 13). A `NoPeerSubstrate`
+/// composition reports nothing — it registers no contracts at all,
+/// and the strip-imports path must stay byte-for-byte a bare
+/// `ServerApp.run`.
+let auditCleanRoomTemplates (app: ServerApp, options: PeerOptions) : string list =
+    match (ServerApp.effectiveConfig app).PeerSubstrate, options.CleanRoomTemplates with
+    | NoPeerSubstrate, _
+    | _, [] -> []
+    | EnabledPeerSubstrate, templates ->
+        let hosted = hostedContractIds options
 
-            // Phase 480 — refuse a bilateral-approval posture that can
-            // never resolve (gated contracts, a composed registry, no
-            // local identity), before anything registers. Pure over the
-            // compose record; a composition with no registry short-
-            // circuits on the first match arm (GP 13).
-            enforceTemplateApprovals app
+        templates
+        |> List.map fst
+        |> List.distinct
+        |> List.filter (fun contractId -> not (Set.contains contractId hosted))
 
-            // Phase 339 — one line per start when the composition has
-            // opted out of peer-transport TLS enforcement. Silent in
-            // every other state, and inside this branch so the
-            // `NoPeerSubstrate` short-circuit stays byte-for-byte a bare
-            // `ServerApp.run` (GP 13).
-            enforceTransportSecurity app
+/// The refusal raised at `run` when a composed clean-room template
+/// binds to no hosted contract.
+let cleanRoomTemplateRefusal (unbound: string list) =
+    let named = String.concat ", " unbound
 
-            let contracts = app.Contracts
-            let cleanRoomTemplates = cleanRoomTemplateMap app
-            let templateApprovals = app.TemplateApprovals
-            let privacyBudget = app.PrivacyBudget
-            let noisedReleases = noisedReleaseMap app
-            let auditTransparency = app.AuditTransparency
-            let contractProfiles = app.ContractProfiles
-            let wireLimits = app.WireLimits
-            let transportPolicy = app.TransportPolicy
-            // Phase 591 — captured from the FINAL composition, so the
-            // preflight reads every `withConsumedContract` /
-            // `withPinnedCounterparty` declaration regardless of the order
-            // a composition made them in.
-            let federationPins = app.FederationPins
-            let consumedContracts = app.ConsumedContracts
-            let schedulerEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
+    $"peer-clean-room-gate: PeerOptions.withCleanRoomTemplate names contract(s) [{named}] that this deployment does not host, so the privacy floor declared for them would never run — a gate that looks composed and enforces nothing. Refusing to start: register the contract with PeerOptions.withContract under the same id, or drop the template."
 
-            let localIdentity =
-                app.LocalPeer |> Option.defaultValue { PeerId = ""; DisplayName = "" }
+/// Phase 311 — apply the posture. Unlike the Phase 309 audience gate
+/// there is no advisory mode: an unbound template cannot be an
+/// existing deployment's deliberate posture, because the helper that
+/// creates one did not exist before this phase. Every reachable case
+/// is a defect in code written after the gate shipped, so failing is
+/// both safe (GP 11 — nothing pre-311 can trip it) and correct.
+let enforceCleanRoomTemplates (app: ServerApp, options: PeerOptions) : unit =
+    match auditCleanRoomTemplates (app, options) with
+    | [] -> ()
+    | unbound -> failwith (cleanRoomTemplateRefusal unbound)
 
-            // Phase 331 — the composition owns the ceilings; the compose
-            // root owns the identity. A blank `LocalPeerId` (no
-            // `LocalPeer` composed) leaves only the receiver-on-route arm
-            // of the loop guard dormant — the same posture, and the same
-            // single cause, `enforceAudienceBinding` above has already
-            // surfaced as an advisory or a refusal.
-            let cascadePolicy = {
-                app.CascadePolicy with
-                    LocalPeerId = localIdentity.PeerId
-            }
+/// Phase 481 — the effective noised-release policy per contract id,
+/// last-wins. Exposed on the same terms as `cleanRoomTemplateMap`:
+/// so a deployment can assert its own calibration posture without
+/// booting a server, and so the compose path and any preflight read
+/// one resolution rule.
+let noisedReleaseMap (options: PeerOptions) : Map<string, NoisedReleasePolicy> =
+    options.NoisedReleases
+    |> List.fold (fun acc (contractId, policy) -> Map.add contractId policy acc) Map.empty
 
-            // One process-lifetime client shared by the outbound
-            // transport and the handshake's capability fetch. Lives until
-            // process exit (the documented single-long-lived-client
-            // pattern); never disposed.
-            //
-            // Phase 312 — deliberately left on the BCL's default
-            // `Timeout`. The contract transport's deadline rides
-            // `PeerTransportPolicy` and is applied per request, so
-            // lowering it does not silently re-bound the handshake and
-            // profile fetches that share this client, and an expiry
-            // stays distinguishable from a caller's cancellation. See
-            // `PeerServerApp.withTransportPolicy`.
-            // Phase 772 — through the platform client factory (egress policy
-            // handler in front of the same primary handler); byte-identical
-            // under the default permit-all policy, and a verified composition
-            // can now refuse a peer origin it did not declare.
-            let sharedHttpClient = PlatformHttpClient.create EgressSurface.Other
+/// Phase 481 — everything wrong with this composition's calibrated-
+/// noise posture, as data. Empty on a healthy composition.
+///
+/// Two families, both refusals rather than warnings:
+///
+///   * A policy naming a contract with **no clean-room template**.
+///     Nothing would apply it — the noise lives on the gate, and an
+///     ungated contract has no gate. That is the "composed and
+///     inert" shape Phase 311 exists to make unreachable, and it is
+///     worse here than there: an operator reading the composition
+///     would believe answers were being randomised when they were
+///     being released raw.
+///   * A spec that is not calibratable at all (`NoiseSpec.validate`
+///     / `NoisedReleasePolicy.validate`) — an unbounded sensitivity,
+///     a non-positive ε, a Gaussian with no δ. Every one of those
+///     would throw on the first call, and a privacy parameter that
+///     is wrong is wrong at compose time.
+let auditNoisedRelease (app: ServerApp, options: PeerOptions) : string list =
+    match (ServerApp.effectiveConfig app).PeerSubstrate, options.NoisedReleases with
+    | NoPeerSubstrate, _
+    | _, [] -> []
+    | EnabledPeerSubstrate, _ ->
+        let gated = options.CleanRoomTemplates |> List.map fst |> Set.ofList
 
-            // The handshake's outbound capability fetch. The receiver's
-            // `GET /peer/v1/capabilities` answers with a bare
-            // `CapabilityList` (not a JSON-RPC envelope), so this reads it
-            // directly. Mints a per-call token vouching for the local
-            // identity; a transport failure is `HandshakeUnreachable`, an
-            // auth / non-2xx refusal is `HandshakeRejected`.
-            //
-            // Phase 339 — gated on the same https-or-loopback rule as
-            // the contract transport, and refused BEFORE the token is
-            // minted. This leg carries the same deployment-vouching
-            // bearer, and it is usually the FIRST call made to a newly
-            // configured peer, so it is where a cleartext `BaseUrl` is
-            // most likely to be noticed.
-            let fetchRemote
-                (auth: IPeerAuthProvider)
-                (target: TargetPeer)
-                : Async<Result<CapabilityList, PeerHandshakeError>> =
-                async {
-                    match PeerTransportSecurity.check transportPolicy target.BaseUrl with
-                    | Error _ -> return Error(HandshakeRejected(PeerTransportSecurity.refusalMessage target.BaseUrl))
-                    | Ok() ->
-                        let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
-
-                        match tokenResult with
-                        | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
-                        | Ok token ->
-                            try
-                                use request =
-                                    new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities")
-
-                                request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
-                                let! response = sharedHttpClient.SendAsync request |> Async.AwaitTask
-                                let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
-                                if response.IsSuccessStatusCode then
-                                    return Ok(JsonRpc.deserialize<CapabilityList> body)
-                                else
-                                    return Error(HandshakeRejected body)
-                            with ex ->
-                                return Error(HandshakeUnreachable ex.Message)
-                }
-
-            // Phase 18d — the handshake's outbound *profile* fetch. Reads
-            // `GET /peer/v1/capabilities/profile` (a bare `PeerProfile`).
-            //
-            // Phase 343 — the non-2xx branch is no longer a silent degrade
-            // to the bare capability list. That fallback drops every
-            // per-method lifecycle declaration and fires on a status code
-            // the answering side chooses, so it was a one-response way to
-            // mask a `Deprecated` / `Removed` method. It now fails closed
-            // unless `withLegacyProfileFallback` is composed. The whole
-            // fetch lives in `PeerRemoteProfile` so the status handling is
-            // testable against a stub `HttpMessageHandler` rather than only
-            // reachable through a live compose.
-            let profileFallback =
-                if app.LegacyProfileFallback then
-                    PeerRemoteProfile.LegacyCapabilityFallback
+        noisedReleaseMap options
+        |> Map.toList
+        |> List.collect (fun (contractId, policy) ->
+            let ungated =
+                if Set.contains contractId gated then
+                    []
                 else
-                    PeerRemoteProfile.FailClosedProfile
+                    [
+                        $"contract '{contractId}' has a noised-release policy but no clean-room template, so nothing would apply the noise"
+                    ]
 
-            let fetchRemoteProfile (auth: IPeerAuthProvider) (target: TargetPeer) =
-                PeerRemoteProfile.fetch
-                    sharedHttpClient
-                    transportPolicy
-                    profileFallback
-                    (fetchRemote auth)
-                    auth
-                    localIdentity
-                    target
+            ungated
+            @ (NoisedReleasePolicy.validate policy
+               |> List.map (fun reason -> $"contract '{contractId}': {reason}")))
 
-            let peerServiceConfig (services: IServiceCollection) =
-                services
-                    // Phase 315 — the composed wire limits, resolved
-                    // per-request by the host handlers. Registered
-                    // unconditionally inside the enabled branch: the
-                    // host falls back to `PeerWireLimits.defaults` when
-                    // nothing is registered, so this only ever makes an
-                    // explicit `withWireLimits` reachable, and the
-                    // `NoPeerSubstrate` short-circuit above still
-                    // registers nothing at all (GP 13).
-                    .AddSingleton<PeerWireLimits>(wireLimits)
-                    // Phase 331 — the composed cascade ceilings plus this
-                    // deployment's own peer id, resolved per-request by
-                    // the contract route's context derivation. Registered
-                    // on the same terms as the wire limits: the host
-                    // falls back to `PeerCascadePolicy.defaults` when
-                    // nothing is registered, so this only ever carries an
-                    // explicit `withCascadePolicy` and the receiver's
-                    // identity through.
-                    .AddSingleton<PeerCascadePolicy>(cascadePolicy)
-                    .AddSingleton<IPeerAuthProvider>(
-                        System.Func<System.IServiceProvider, IPeerAuthProvider>(fun sp ->
-                            let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
-                            // Phase 130 — bind inbound tokens' `aud` to this
-                            // receiver's own peer id. Empty when no
-                            // `LocalPeer` was composed (host-only-without-
-                            // identity): audience binding stays off, matching
-                            // the pre-130 behaviour (GP 11). Phase 309 —
-                            // `enforceAudienceBinding` (above) has already
-                            // surfaced that case as an advisory, or refused
-                            // to start under `withStrictAudienceBinding`, so
-                            // an empty audience reaching here is a posture
-                            // the operator was told about rather than a
-                            // silent default.
-                            //
-                            // Phase 629 — built through `peerAuthProvider`
-                            // so the composed `TokenPolicy` (Phase 338's
-                            // replay guard + contract binding) rides it.
-                            // The default `PeerTokenPolicy.unscoped` is
-                            // exactly what the two-argument constructor
-                            // supplied before this phase, so an existing
-                            // composition validates identically (GP 11).
-                            peerAuthProvider app secrets)
-                    )
-                    .AddSingleton<IPeerJobResultStore>(
-                        System.Func<System.IServiceProvider, IPeerJobResultStore>(fun sp ->
-                            let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
-                            // Phase 629 — carries the composed
-                            // `JobRetention`. Its default is the value
-                            // `BlobPeerJobResultStore(blobs)` already
-                            // chose for itself (GP 11).
-                            jobResultStore app blobs)
-                    )
-                    .AddSingleton<IPeerRegistry>(
-                        System.Func<System.IServiceProvider, IPeerRegistry>(fun sp ->
-                            let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
-                            // Phase 339 — the directory refuses to
-                            // RECORD a cleartext peer under the same
-                            // policy the transport refuses to CALL one.
-                            // Reads stay ungated, so a pre-339 directory
-                            // still resolves (see `BlobPeerRegistry`).
-                            BlobPeerRegistry(blobs, transportPolicy) :> IPeerRegistry)
-                    )
-                    .AddSingleton<IPlatformPeer>(
-                        // Built once on first resolution (the first inbound
-                        // peer request). Constructing it registers every
-                        // contract on the peer and every long-running job
-                        // handler on the scheduler, so handlers are present
-                        // before any `LongRunning` dispatch schedules a job.
-                        System.Func<System.IServiceProvider, IPlatformPeer>(fun sp ->
-                            // Phase 331 — the receiver's own id, so the
-                            // loop guard can refuse a route that already
-                            // names this deployment.
-                            let peer = DefaultPlatformPeer(localIdentity.PeerId) :> IPlatformPeer
+/// The refusal raised at `run` when the calibrated-noise posture
+/// cannot be honoured.
+let noisedReleaseRefusal (problems: string list) =
+    let named = String.concat "; " problems
 
-                            let fusion =
-                                sp.GetService(typeof<PeerJobFusion>)
-                                |> Option.ofObj
-                                |> Option.map (fun x -> x :?> PeerJobFusion)
+    $"peer-noised-release: PeerOptions.withNoisedRelease was composed with a posture that cannot be honoured — {named}. Refusing to start: a noise policy that nothing applies, or one whose calibration is invalid, is a deployment that looks like it randomises its answers and does not."
 
-                            let scheduler =
-                                sp.GetService(typeof<IJobScheduler>)
-                                |> Option.ofObj
-                                |> Option.map (fun x -> x :?> IJobScheduler)
+/// Phase 481 — apply the posture. No advisory mode, on Phase 311's
+/// argument: `withNoisedRelease` did not exist before this phase, so
+/// every reachable case is a defect in code written after it and
+/// nothing pre-481 can trip it (GP 11).
+let enforceNoisedRelease (app: ServerApp, options: PeerOptions) : unit =
+    match auditNoisedRelease (app, options) with
+    | [] -> ()
+    | problems -> failwith (noisedReleaseRefusal problems)
 
-                            // Phase 311 — the clean-room gate is installed
-                            // HERE, at the single seam every contract
-                            // registration passes through, so a gated
-                            // contract cannot be registered ungated: the
-                            // wrapper owns the dispatch closure
-                            // `IPlatformPeer` will call, and the handler
-                            // is never consulted about whether the floor
-                            // applies. An id with no composed template is
-                            // registered exactly as it was before this
-                            // phase — same value, no branch on the call
-                            // path (GP 13).
-                            // Phase 480 — the bilateral-approval check
-                            // the gate runs as invariant 0, built once
-                            // per composition and closed over this
-                            // deployment's own peer id. `None` when no
-                            // registry is composed, which is the
-                            // pre-480 gate exactly.
-                            let approvalCheck =
-                                templateApprovals
-                                |> Option.map (fun policy -> TemplateApprovalGate.check policy localIdentity.PeerId)
+/// Phase 480 — classify this composition's bilateral-approval
+/// posture. Pure and total; exposed so a deployment can assert its
+/// own posture in its own tests without booting a server, and so the
+/// refusal path cannot drift from what `run` will wire.
+///
+/// A `LocalPeer` whose `PeerId` is blank counts as **absent**, on
+/// the same argument `auditAudienceBinding` makes: an empty peer id
+/// is not an identity, it just looks composed.
+let auditTemplateApprovals (app: ServerApp, options: PeerOptions) : TemplateApprovalPosture =
+    match (ServerApp.effectiveConfig app).PeerSubstrate, options.TemplateApprovals with
+    | NoPeerSubstrate, _
+    | _, None -> TemplateApprovalOff
+    | EnabledPeerSubstrate, Some _ ->
+        let gated = options.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
 
-                            let gate (registration: PeerContractRegistration) =
-                                match Map.tryFind registration.ContractId cleanRoomTemplates with
-                                | None -> registration
-                                | Some template ->
-                                    let broker = sp.GetService(typeof<ICleanRoomBroker>) :?> ICleanRoomBroker
+        if List.isEmpty gated then
+            TemplateApprovalRecordingOnly
+        else
+            match options.LocalPeer with
+            | Some identity when not (System.String.IsNullOrWhiteSpace identity.PeerId) ->
+                TemplateApprovalEnforced(identity.PeerId, gated)
+            | _ -> TemplateApprovalUnidentified
 
-                                    // Best-effort, like every other peer
-                                    // audit path: a partial host with no
-                                    // `IAuditLog` still gates, it just
-                                    // records nothing.
-                                    let sink =
-                                        match sp.GetService(typeof<IAuditLog>) with
-                                        | null -> CleanRoomGate.noAudit
-                                        | svc ->
-                                            let auditLog = svc :?> IAuditLog
+/// The refusal raised at `run` when a composition gates contracts
+/// under an approval registry without a `LocalPeer` identity.
+let templateApprovalRefusal (gated: string list) =
+    let named = String.concat ", " gated
 
-                                            fun payload ->
-                                                auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
+    $"peer-template-approval: PeerOptions.withTemplateApprovals is composed and contract(s) [{named}] are clean-room gated, but this deployment composed no LocalPeer identity — so it has no peer id to be one half of a bilateral agreement, no counterparty can address an approval to it, and every gated call would be withheld forever with no composed lever to fix it. Refusing to start: compose PeerOptions.withLocalPeer with this deployment's own peer id."
 
-                                    // Phase 481 — the calibrated-noise
-                                    // posture for THIS contract, paired
-                                    // with the resolved mechanism. `None`
-                                    // for a composition that declared no
-                                    // policy, which is the pre-481 gate
-                                    // exactly. The mechanism is resolved
-                                    // per gated contract rather than once
-                                    // per composition so a deployment
-                                    // registering its own `INoiseMechanism`
-                                    // through the base `ServiceConfig` is
-                                    // honoured on the same terms the
-                                    // broker is.
-                                    let noise =
-                                        Map.tryFind registration.ContractId noisedReleases
-                                        |> Option.map (fun policy ->
-                                            sp.GetService(typeof<INoiseMechanism>) :?> INoiseMechanism, policy)
+/// Phase 480 — apply the posture. No advisory mode, on Phase 311's
+/// argument: `withTemplateApprovals` did not exist before this
+/// phase, so every reachable case is a defect in code written after
+/// it, and nothing pre-480 can trip it (GP 11).
+let enforceTemplateApprovals (app: ServerApp, options: PeerOptions) : unit =
+    match auditTemplateApprovals (app, options) with
+    | TemplateApprovalOff
+    | TemplateApprovalEnforced _
+    | TemplateApprovalRecordingOnly -> ()
+    | TemplateApprovalUnidentified ->
+        let gated = options.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
+        failwith (templateApprovalRefusal gated)
 
-                                    // Phase 190 — the composed ε meter,
-                                    // or `None` for a composition that
-                                    // declared no budget (the pre-190
-                                    // gate exactly).
-                                    (CleanRoomGate.wrapNoised
-                                        broker
-                                        template
-                                        approvalCheck
-                                        privacyBudget
-                                        noise
-                                        sink
-                                        registration)
-                                        .Registration
+/// Phase 591 — the federation facts the preflight reads, derived from
+/// the composition rather than hand-listed: this deployment's own peer
+/// id, what it declared it consumes, and the pinned counterparty
+/// labels it validates those declarations against.
+///
+/// `now` is a parameter and not a read of the ambient clock, so the
+/// stale rule is a pure function of its inputs and a test can age a
+/// pin without waiting. `run` supplies `DateTimeOffset.UtcNow` at the
+/// moment the preflight actually runs.
+let federationPreflightInput (now: System.DateTimeOffset) (options: PeerOptions) : FederationPreflightInput = {
+    LocalPeerId = options.LocalPeer |> Option.map _.PeerId |> Option.defaultValue ""
+    Consumes = options.ConsumedContracts
+    Pins = options.FederationPins
+    Now = now
+}
 
-                            for builder in contracts do
-                                let host = builder fusion
-                                peer.RegisterContract(gate host.Registration)
+/// Phase 591 — classify this composition's federation graph against
+/// its pinned counterparty labels. Pure and total; exposed so a
+/// deployment can assert its own edges in its own tests without
+/// booting a server (the posture `auditAudienceBinding` /
+/// `auditCleanRoomTemplates` / `auditTemplateApprovals` take), and so
+/// the preflight validator cannot drift from what a deployment can
+/// check for itself.
+///
+/// Empty on a composition that pinned nothing, whatever it consumes
+/// (GP 13).
+let auditFederationGraph (now: System.DateTimeOffset) (options: PeerOptions) : CompositionDefect list =
+    FederationPreflight.check (federationPreflightInput now options)
 
-                                match scheduler with
-                                | Some s ->
-                                    host.JobHandlers
-                                    |> List.iter (fun (name, handler) -> s.RegisterHandler(name, handler))
-                                | None -> ()
+/// Phase 629 — this deployment's own peer identity, defaulted the way
+/// `run` defaults it (a blank id when no `LocalPeer` was composed).
+/// One definition, so a factory below and the compose path cannot
+/// disagree about which identity the singletons are built against.
+let private composedIdentity (options: PeerOptions) : PeerIdentity =
+    options.LocalPeer |> Option.defaultValue { PeerId = ""; DisplayName = "" }
 
-                            // Phase 18a — register the audit-transparency
-                            // contract when opted in. Reads the resolved
-                            // `IAuditLog`; absent in a partial host (no
-                            // `IAuditLog` registered) the contract is
-                            // skipped rather than failing closed at compose.
-                            if auditTransparency then
-                                match sp.GetService(typeof<IAuditLog>) with
-                                | null -> ()
-                                // Gated on the same terms as an author
-                                // contract: a template naming the
-                                // reserved audit id is unusual, but the
-                                // seam must not have an exception in it.
-                                | svc ->
-                                    peer.RegisterContract(
-                                        gate (PeerAuditContractHost.registration (svc :?> IAuditLog))
-                                    )
+/// Phase 629 — the `IPeerJobResultStore` this composition would
+/// register, over `blobs`. `run`'s DI factory is a one-line call to
+/// this, so the retention knob is assertable without booting a server
+/// (the posture `auditAudienceBinding` / `auditCleanRoomTemplates`
+/// take for their own postures).
+let jobResultStore (options: PeerOptions) (blobs: IBlobStorage) : IPeerJobResultStore =
+    BlobPeerJobResultStore(blobs, options.JobRetention) :> IPeerJobResultStore
 
-                            // Phase 480 — the approval handshake. Needs
-                            // no substrate beyond the composed registry
-                            // (which already carries its own storage +
-                            // signer), so unlike the audit contract it
-                            // cannot be skipped for a missing
-                            // dependency. Through `gate` on the same
-                            // terms: the seam must not have an
-                            // exception in it.
-                            match templateApprovals with
-                            | None -> ()
-                            | Some policy ->
-                                peer.RegisterContract(
-                                    gate (TemplateApprovalContract.registration localIdentity.PeerId policy.Registry)
-                                )
+/// Phase 629 — the `IPeerAuthProvider` this composition would
+/// register, over `secrets`. Carries the composed `TokenPolicy`
+/// (Phase 338's replay guard + contract binding) and this
+/// deployment's own id as the bound audience (Phase 130). Exposed on
+/// the same terms as `jobResultStore`.
+let peerAuthProvider (options: PeerOptions) (secrets: ISecretStore) : IPeerAuthProvider =
+    JwtPeerAuthProvider(secrets, (composedIdentity options).PeerId, options.TokenPolicy) :> IPeerAuthProvider
 
-                            peer)
-                    )
-                    .AddSingleton<IPeerClient>(
-                        System.Func<System.IServiceProvider, IPeerClient>(fun sp ->
-                            let auth = sp.GetService(typeof<IPeerAuthProvider>) :?> IPeerAuthProvider
-                            // Phase 312 — the composed per-call deadline
-                            // travels with the transport, not with the
-                            // shared client.
-                            HttpPeerClient(sharedHttpClient, auth, localIdentity, transportPolicy) :> IPeerClient)
-                    )
-                    .AddSingleton<IPeerProfileProvider>(
-                        // Phase 18d — aggregates the author-declared
-                        // contract profiles over the live capability table.
-                        System.Func<System.IServiceProvider, IPeerProfileProvider>(fun sp ->
-                            let peer = sp.GetService(typeof<IPlatformPeer>) :?> IPlatformPeer
-                            DefaultPeerProfileProvider(peer, contractProfiles) :> IPeerProfileProvider)
-                    )
-                    .AddSingleton<IPeerHandshake>(
-                        System.Func<System.IServiceProvider, IPeerHandshake>(fun sp ->
-                            let peer = sp.GetService(typeof<IPlatformPeer>) :?> IPlatformPeer
-                            let auth = sp.GetService(typeof<IPeerAuthProvider>) :?> IPeerAuthProvider
+/// Phase 629 — the Phase 483 round-orchestration registrations, or
+/// `services` untouched when `withRoundOrchestrator` was not composed.
+///
+/// A module-level function rather than three lines inside `run` so a
+/// deployment (or a test) can apply it to a bare `IServiceCollection`
+/// and resolve exactly what a composition would get, without booting
+/// a server. Every registration is `TryAdd`: a deployment that
+/// registered its own `IRoundStateStore` / `IRoundObserver` /
+/// `IRoundOrchestrator` through the base `ServiceConfig` (which runs
+/// first) keeps it, and the SDK default only fills the gap.
+///
+/// The substrate is resolved lazily per singleton, so the order this
+/// runs in relative to the rest of the peer graph does not matter —
+/// `IPeerFanout` is `TryAdd`ed by the same compose pass and is
+/// resolved at first orchestrator use, not here.
+let roundOrchestrationServices (options: PeerOptions) (services: IServiceCollection) : IServiceCollection =
+    if not options.RoundOrchestration then
+        services
+    else
+        services.TryAddSingleton<IRoundStateStore>(
+            System.Func<System.IServiceProvider, IRoundStateStore>(fun sp ->
+                let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+                BlobRoundStateStore(blobs) :> IRoundStateStore)
+        )
 
-                            let profileProvider =
-                                sp.GetService(typeof<IPeerProfileProvider>) :?> IPeerProfileProvider
+        services.TryAddSingleton<IRoundObserver>(
+            System.Func<System.IServiceProvider, IRoundObserver>(fun sp ->
+                // Both halves optional and independently so, exactly
+                // as `PlatformRoundObserver` is written for: a
+                // deployment with `AuditLog = NoAuditLog` still gets
+                // progress, and a partial host with neither observes
+                // nothing rather than failing to compose.
+                let auditLog =
+                    sp.GetService(typeof<IAuditLog>)
+                    |> Option.ofObj
+                    |> Option.map (fun x -> x :?> IAuditLog)
 
-                            InMemoryPeerHandshake(
-                                peer,
-                                fetchRemote auth,
-                                profileProvider.LocalProfile,
-                                fetchRemoteProfile auth
-                            )
-                            :> IPeerHandshake)
-                    )
-                |> fun s ->
-                    // Long-running fusion is registered only when the job
-                    // substrate is enabled; absent, the `IPlatformPeer`
-                    // factory resolves `None` and long-running methods
-                    // report "not enabled" (GP 13 — zero cost when unused).
-                    let withFusion =
-                        if schedulerEnabled then
-                            s.AddSingleton<PeerJobFusion>(
-                                System.Func<System.IServiceProvider, PeerJobFusion>(fun sp ->
-                                    let scheduler = sp.GetService(typeof<IJobScheduler>) :?> IJobScheduler
+                let channel =
+                    sp.GetService(typeof<INotificationChannel>)
+                    |> Option.ofObj
+                    |> Option.map (fun x -> x :?> INotificationChannel)
 
-                                    let resultStore =
-                                        sp.GetService(typeof<IPeerJobResultStore>) :?> IPeerJobResultStore
+                PlatformRoundObserver(auditLog, channel) :> IRoundObserver)
+        )
 
-                                    // Phase 310 — the execution side's audit
-                                    // log. Optional on the same terms the
-                                    // request path treats it: a partial host
-                                    // without one records nothing rather
-                                    // than failing to compose.
-                                    let auditLog =
-                                        sp.GetService(typeof<IAuditLog>)
-                                        |> Option.ofObj
-                                        |> Option.map (fun x -> x :?> IAuditLog)
+        services.TryAddSingleton<IRoundOrchestrator>(
+            System.Func<System.IServiceProvider, IRoundOrchestrator>(fun sp ->
+                let fanout = sp.GetService(typeof<IPeerFanout>) :?> IPeerFanout
+                let store = sp.GetService(typeof<IRoundStateStore>) :?> IRoundStateStore
+                let observer = sp.GetService(typeof<IRoundObserver>) :?> IRoundObserver
+                DefaultRoundOrchestrator(fanout, store, observer) :> IRoundOrchestrator)
+        )
 
-                                    {
-                                        Scheduler = scheduler
-                                        ResultStore = resultStore
-                                        AuditLog = auditLog
-                                    })
-                            )
-                        else
-                            s
+        services
 
-                    // Phase 18c — federation orchestration seams (`IPeerFanout`
-                    // scatter + `IPeerCascade` next-hop bookkeeping) and Phase
-                    // 18b — clean-room privacy-gate broker (`ICleanRoomBroker`).
-                    // Stateless default singletons. `TryAdd` so a deployment
-                    // that registers its own implementation via the base
-                    // `ServerApp`'s ServiceConfig (which runs first) keeps it —
-                    // the SDK default only fills the gap when nothing else is
-                    // registered. Present only when the peer substrate is
-                    // enabled; a singleton allocation is the whole cost (GP 13).
-                    withFusion.TryAddSingleton<IPeerFanout>(DefaultPeerFanout() :> IPeerFanout)
-                    withFusion.TryAddSingleton<IPeerCascade>(DefaultPeerCascade() :> IPeerCascade)
-                    withFusion.TryAddSingleton<ICleanRoomBroker>(DefaultCleanRoomBroker() :> ICleanRoomBroker)
+/// The peer companion's `apply`. When the resolved
+/// `ServerConfig.PeerSubstrate` is `NoPeerSubstrate`, contributes nothing.
+/// When `EnabledPeerSubstrate`, registers the peer DI singletons and
+/// contributes `JsonRpcPeerHost.routes`.
+let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
+    match (ServerApp.effectiveConfig app).PeerSubstrate with
+    | NoPeerSubstrate ->
+        // Strip-imports path: zero contribution. Same shape as if the
+        // peer substrate were never imported.
+        app
+    | EnabledPeerSubstrate ->
+        // Phase 309 — surface the audience-binding posture before
+        // anything registers. A host-only deployment that never
+        // composed `LocalPeer` gets a startup `Warn`; under
+        // `withStrictAudienceBinding` it does not start at all. Kept
+        // inside this branch so the `NoPeerSubstrate` short-circuit
+        // above stays byte-for-byte a bare `ServerApp.run` (GP 13).
+        enforceAudienceBinding (app, options)
 
-                    // Phase 481 — the calibrated-noise mechanism, and
-                    // ONLY when a policy was composed. Unlike the three
-                    // above it is not a default the substrate wants
-                    // present-but-idle: a mechanism that exists without a
-                    // policy draws nothing, and registering it anyway
-                    // would put a CSPRNG-backed sampler in every peer
-                    // deployment's container for no reachable caller
-                    // (GP 13). `TryAdd` so a deployment that registered
-                    // an accredited implementation through the base
-                    // `ServiceConfig` keeps it.
-                    if not (List.isEmpty app.NoisedReleases) then
-                        withFusion.TryAddSingleton<INoiseMechanism>(NoiseMechanism.create ())
+        // Phase 311 — refuse a clean-room template that binds to no
+        // hosted contract, before anything registers. Costs one
+        // builder pass and only when a template is composed; a
+        // composition that gates nothing does not run it (GP 13).
+        enforceCleanRoomTemplates (app, options)
 
-                    // Phase 591 — the federation-graph preflight, folded
-                    // into the Phase 9m preflight set as a
-                    // structural-class validator (so `SkipPreflight`
-                    // cannot bypass it: every rule is a pure sweep over
-                    // declared data already in memory, reaching no
-                    // counterparty). Registered ONLY when the composition
-                    // pinned at least one counterparty label — a
-                    // deployment that declared no federation graph pays
-                    // not even a singleton (GP 13), and can never be
-                    // refused for edges it never declared (GP 11).
-                    //
-                    // The input is a thunk so the pin ages are measured
-                    // when the preflight runs, not when the composition
-                    // was built.
-                    if not federationPins.Pins.IsEmpty then
-                        withFusion.AddSingleton<ConfigValidation.IConfigValidator>(
-                            FederationPreflight.FederationPreflightValidator(fun () -> {
-                                LocalPeerId = localIdentity.PeerId
-                                Consumes = consumedContracts
-                                Pins = federationPins
-                                Now = System.DateTimeOffset.UtcNow
-                            })
-                            :> ConfigValidation.IConfigValidator
-                        )
-                        |> ignore
+        // Phase 481 — refuse a calibrated-noise policy that no gate
+        // would apply, or one whose calibration is not valid. Runs
+        // only when a policy is composed (GP 13).
+        enforceNoisedRelease (app, options)
 
-                    // Phase 483 / 629 — the multi-round orchestrator
-                    // trio, and ONLY when `withRoundOrchestrator` was
-                    // composed. A federation that runs no round protocol
-                    // registers nothing and reaches no blob prefix
-                    // (GP 13). See `roundOrchestrationServices`.
-                    roundOrchestrationServices app withFusion |> ignore
+        // Phase 480 — refuse a bilateral-approval posture that can
+        // never resolve (gated contracts, a composed registry, no
+        // local identity), before anything registers. Pure over the
+        // compose record; a composition with no registry short-
+        // circuits on the first match arm (GP 13).
+        enforceTemplateApprovals (app, options)
 
-                    withFusion
+        // Phase 339 — one line per start when the composition has
+        // opted out of peer-transport TLS enforcement. Silent in
+        // every other state, and inside this branch so the
+        // `NoPeerSubstrate` short-circuit stays byte-for-byte a bare
+        // `ServerApp.run` (GP 13).
+        enforceTransportSecurity (app, options)
 
-            let baseExt = app.Base.Extensions
+        let contracts = options.Contracts
+        let cleanRoomTemplates = cleanRoomTemplateMap options
+        let templateApprovals = options.TemplateApprovals
+        let privacyBudget = options.PrivacyBudget
+        let noisedReleases = noisedReleaseMap options
+        let auditTransparency = options.AuditTransparency
+        let contractProfiles = options.ContractProfiles
+        let wireLimits = options.WireLimits
+        let transportPolicy = options.TransportPolicy
+        // Phase 591 — captured from the FINAL composition, so the
+        // preflight reads every `withConsumedContract` /
+        // `withPinnedCounterparty` declaration regardless of the order
+        // a composition made them in.
+        let federationPins = options.FederationPins
+        let consumedContracts = options.ConsumedContracts
 
-            let mergedExt: ComposeExtensions = {
-                baseExt with
-                    Handlers = baseExt.Handlers @ [ JsonRpcPeerHost.routes ]
+        let schedulerEnabled =
+            (ServerApp.effectiveConfig app).JobScheduler <> NoJobScheduler
+
+        let localIdentity =
+            options.LocalPeer |> Option.defaultValue { PeerId = ""; DisplayName = "" }
+
+        // Phase 331 — the composition owns the ceilings; the compose
+        // root owns the identity. A blank `LocalPeerId` (no
+        // `LocalPeer` composed) leaves only the receiver-on-route arm
+        // of the loop guard dormant — the same posture, and the same
+        // single cause, `enforceAudienceBinding` above has already
+        // surfaced as an advisory or a refusal.
+        let cascadePolicy = {
+            options.CascadePolicy with
+                LocalPeerId = localIdentity.PeerId
+        }
+
+        // One process-lifetime client shared by the outbound
+        // transport and the handshake's capability fetch. Lives until
+        // process exit (the documented single-long-lived-client
+        // pattern); never disposed.
+        //
+        // Phase 312 — deliberately left on the BCL's default
+        // `Timeout`. The contract transport's deadline rides
+        // `PeerTransportPolicy` and is applied per request, so
+        // lowering it does not silently re-bound the handshake and
+        // profile fetches that share this client, and an expiry
+        // stays distinguishable from a caller's cancellation. See
+        // `PeerOptions.withTransportPolicy`.
+        // Phase 772 — through the platform client factory (egress policy
+        // handler in front of the same primary handler); byte-identical
+        // under the default permit-all policy, and a verified composition
+        // can now refuse a peer origin it did not declare.
+        let sharedHttpClient = PlatformHttpClient.create EgressSurface.Other
+
+        // The handshake's outbound capability fetch. The receiver's
+        // `GET /peer/v1/capabilities` answers with a bare
+        // `CapabilityList` (not a JSON-RPC envelope), so this reads it
+        // directly. Mints a per-call token vouching for the local
+        // identity; a transport failure is `HandshakeUnreachable`, an
+        // auth / non-2xx refusal is `HandshakeRejected`.
+        //
+        // Phase 339 — gated on the same https-or-loopback rule as
+        // the contract transport, and refused BEFORE the token is
+        // minted. This leg carries the same deployment-vouching
+        // bearer, and it is usually the FIRST call made to a newly
+        // configured peer, so it is where a cleartext `BaseUrl` is
+        // most likely to be noticed.
+        let fetchRemote
+            (auth: IPeerAuthProvider)
+            (target: TargetPeer)
+            : Async<Result<CapabilityList, PeerHandshakeError>> =
+            async {
+                match PeerTransportSecurity.check transportPolicy target.BaseUrl with
+                | Error _ -> return Error(HandshakeRejected(PeerTransportSecurity.refusalMessage target.BaseUrl))
+                | Ok() ->
+                    let! tokenResult = auth.IssuePeerToken(localIdentity, target.Peer, Anonymous)
+
+                    match tokenResult with
+                    | Error e -> return Error(HandshakeRejected(JsonRpc.errorMessage e))
+                    | Ok token ->
+                        try
+                            use request =
+                                new HttpRequestMessage(HttpMethod.Get, $"{target.BaseUrl}/peer/v1/capabilities")
+
+                            request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token)
+                            let! response = sharedHttpClient.SendAsync request |> Async.AwaitTask
+                            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                            if response.IsSuccessStatusCode then
+                                return Ok(JsonRpc.deserialize<CapabilityList> body)
+                            else
+                                return Error(HandshakeRejected body)
+                        with ex ->
+                            return Error(HandshakeUnreachable ex.Message)
             }
 
-            let final =
-                { app.Base with Extensions = mergedExt }
-                |> ServerApp.addContribution (Contribution.service owner peerServiceConfig)
+        // Phase 18d — the handshake's outbound *profile* fetch. Reads
+        // `GET /peer/v1/capabilities/profile` (a bare `PeerProfile`).
+        //
+        // Phase 343 — the non-2xx branch is no longer a silent degrade
+        // to the bare capability list. That fallback drops every
+        // per-method lifecycle declaration and fires on a status code
+        // the answering side chooses, so it was a one-response way to
+        // mask a `Deprecated` / `Removed` method. It now fails closed
+        // unless `withLegacyProfileFallback` is composed. The whole
+        // fetch lives in `PeerRemoteProfile` so the status handling is
+        // testable against a stub `HttpMessageHandler` rather than only
+        // reachable through a live compose.
+        let profileFallback =
+            if options.LegacyProfileFallback then
+                PeerRemoteProfile.LegacyCapabilityFallback
+            else
+                PeerRemoteProfile.FailClosedProfile
 
-            ServerApp.run final
+        let fetchRemoteProfile (auth: IPeerAuthProvider) (target: TargetPeer) =
+            PeerRemoteProfile.fetch
+                sharedHttpClient
+                transportPolicy
+                profileFallback
+                (fetchRemote auth)
+                auth
+                localIdentity
+                target
+
+        let peerServiceConfig (services: IServiceCollection) =
+            services
+                // Phase 315 — the composed wire limits, resolved
+                // per-request by the host handlers. Registered
+                // unconditionally inside the enabled branch: the
+                // host falls back to `PeerWireLimits.defaults` when
+                // nothing is registered, so this only ever makes an
+                // explicit `withWireLimits` reachable, and the
+                // `NoPeerSubstrate` short-circuit above still
+                // registers nothing at all (GP 13).
+                .AddSingleton<PeerWireLimits>(wireLimits)
+                // Phase 331 — the composed cascade ceilings plus this
+                // deployment's own peer id, resolved per-request by
+                // the contract route's context derivation. Registered
+                // on the same terms as the wire limits: the host
+                // falls back to `PeerCascadePolicy.defaults` when
+                // nothing is registered, so this only ever carries an
+                // explicit `withCascadePolicy` and the receiver's
+                // identity through.
+                .AddSingleton<PeerCascadePolicy>(cascadePolicy)
+                .AddSingleton<IPeerAuthProvider>(
+                    System.Func<System.IServiceProvider, IPeerAuthProvider>(fun sp ->
+                        let secrets = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
+                        // Phase 130 — bind inbound tokens' `aud` to this
+                        // receiver's own peer id. Empty when no
+                        // `LocalPeer` was composed (host-only-without-
+                        // identity): audience binding stays off, matching
+                        // the pre-130 behaviour (GP 11). Phase 309 —
+                        // `enforceAudienceBinding` (above) has already
+                        // surfaced that case as an advisory, or refused
+                        // to start under `withStrictAudienceBinding`, so
+                        // an empty audience reaching here is a posture
+                        // the operator was told about rather than a
+                        // silent default.
+                        //
+                        // Phase 629 — built through `peerAuthProvider`
+                        // so the composed `TokenPolicy` (Phase 338's
+                        // replay guard + contract binding) rides it.
+                        // The default `PeerTokenPolicy.unscoped` is
+                        // exactly what the two-argument constructor
+                        // supplied before this phase, so an existing
+                        // composition validates identically (GP 11).
+                        peerAuthProvider options secrets)
+                )
+                .AddSingleton<IPeerJobResultStore>(
+                    System.Func<System.IServiceProvider, IPeerJobResultStore>(fun sp ->
+                        let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+                        // Phase 629 — carries the composed
+                        // `JobRetention`. Its default is the value
+                        // `BlobPeerJobResultStore(blobs)` already
+                        // chose for itself (GP 11).
+                        jobResultStore options blobs)
+                )
+                .AddSingleton<IPeerRegistry>(
+                    System.Func<System.IServiceProvider, IPeerRegistry>(fun sp ->
+                        let blobs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+                        // Phase 339 — the directory refuses to
+                        // RECORD a cleartext peer under the same
+                        // policy the transport refuses to CALL one.
+                        // Reads stay ungated, so a pre-339 directory
+                        // still resolves (see `BlobPeerRegistry`).
+                        BlobPeerRegistry(blobs, transportPolicy) :> IPeerRegistry)
+                )
+                .AddSingleton<IPlatformPeer>(
+                    // Built once on first resolution (the first inbound
+                    // peer request). Constructing it registers every
+                    // contract on the peer and every long-running job
+                    // handler on the scheduler, so handlers are present
+                    // before any `LongRunning` dispatch schedules a job.
+                    System.Func<System.IServiceProvider, IPlatformPeer>(fun sp ->
+                        // Phase 331 — the receiver's own id, so the
+                        // loop guard can refuse a route that already
+                        // names this deployment.
+                        let peer = DefaultPlatformPeer(localIdentity.PeerId) :> IPlatformPeer
+
+                        let fusion =
+                            sp.GetService(typeof<PeerJobFusion>)
+                            |> Option.ofObj
+                            |> Option.map (fun x -> x :?> PeerJobFusion)
+
+                        let scheduler =
+                            sp.GetService(typeof<IJobScheduler>)
+                            |> Option.ofObj
+                            |> Option.map (fun x -> x :?> IJobScheduler)
+
+                        // Phase 311 — the clean-room gate is installed
+                        // HERE, at the single seam every contract
+                        // registration passes through, so a gated
+                        // contract cannot be registered ungated: the
+                        // wrapper owns the dispatch closure
+                        // `IPlatformPeer` will call, and the handler
+                        // is never consulted about whether the floor
+                        // applies. An id with no composed template is
+                        // registered exactly as it was before this
+                        // phase — same value, no branch on the call
+                        // path (GP 13).
+                        // Phase 480 — the bilateral-approval check
+                        // the gate runs as invariant 0, built once
+                        // per composition and closed over this
+                        // deployment's own peer id. `None` when no
+                        // registry is composed, which is the
+                        // pre-480 gate exactly.
+                        let approvalCheck =
+                            templateApprovals
+                            |> Option.map (fun policy -> TemplateApprovalGate.check policy localIdentity.PeerId)
+
+                        let gate (registration: PeerContractRegistration) =
+                            match Map.tryFind registration.ContractId cleanRoomTemplates with
+                            | None -> registration
+                            | Some template ->
+                                let broker = sp.GetService(typeof<ICleanRoomBroker>) :?> ICleanRoomBroker
+
+                                // Best-effort, like every other peer
+                                // audit path: a partial host with no
+                                // `IAuditLog` still gates, it just
+                                // records nothing.
+                                let sink =
+                                    match sp.GetService(typeof<IAuditLog>) with
+                                    | null -> CleanRoomGate.noAudit
+                                    | svc ->
+                                        let auditLog = svc :?> IAuditLog
+
+                                        fun payload -> auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
+
+                                // Phase 481 — the calibrated-noise
+                                // posture for THIS contract, paired
+                                // with the resolved mechanism. `None`
+                                // for a composition that declared no
+                                // policy, which is the pre-481 gate
+                                // exactly. The mechanism is resolved
+                                // per gated contract rather than once
+                                // per composition so a deployment
+                                // registering its own `INoiseMechanism`
+                                // through the base `ServiceConfig` is
+                                // honoured on the same terms the
+                                // broker is.
+                                let noise =
+                                    Map.tryFind registration.ContractId noisedReleases
+                                    |> Option.map (fun policy ->
+                                        sp.GetService(typeof<INoiseMechanism>) :?> INoiseMechanism, policy)
+
+                                // Phase 190 — the composed ε meter,
+                                // or `None` for a composition that
+                                // declared no budget (the pre-190
+                                // gate exactly).
+                                (CleanRoomGate.wrapNoised
+                                    broker
+                                    template
+                                    approvalCheck
+                                    privacyBudget
+                                    noise
+                                    sink
+                                    registration)
+                                    .Registration
+
+                        for builder in contracts do
+                            let host = builder fusion
+                            peer.RegisterContract(gate host.Registration)
+
+                            match scheduler with
+                            | Some s ->
+                                host.JobHandlers
+                                |> List.iter (fun (name, handler) -> s.RegisterHandler(name, handler))
+                            | None -> ()
+
+                        // Phase 18a — register the audit-transparency
+                        // contract when opted in. Reads the resolved
+                        // `IAuditLog`; absent in a partial host (no
+                        // `IAuditLog` registered) the contract is
+                        // skipped rather than failing closed at compose.
+                        if auditTransparency then
+                            match sp.GetService(typeof<IAuditLog>) with
+                            | null -> ()
+                            // Gated on the same terms as an author
+                            // contract: a template naming the
+                            // reserved audit id is unusual, but the
+                            // seam must not have an exception in it.
+                            | svc ->
+                                peer.RegisterContract(gate (PeerAuditContractHost.registration (svc :?> IAuditLog)))
+
+                        // Phase 480 — the approval handshake. Needs
+                        // no substrate beyond the composed registry
+                        // (which already carries its own storage +
+                        // signer), so unlike the audit contract it
+                        // cannot be skipped for a missing
+                        // dependency. Through `gate` on the same
+                        // terms: the seam must not have an
+                        // exception in it.
+                        match templateApprovals with
+                        | None -> ()
+                        | Some policy ->
+                            peer.RegisterContract(
+                                gate (TemplateApprovalContract.registration localIdentity.PeerId policy.Registry)
+                            )
+
+                        peer)
+                )
+                .AddSingleton<IPeerClient>(
+                    System.Func<System.IServiceProvider, IPeerClient>(fun sp ->
+                        let auth = sp.GetService(typeof<IPeerAuthProvider>) :?> IPeerAuthProvider
+                        // Phase 312 — the composed per-call deadline
+                        // travels with the transport, not with the
+                        // shared client.
+                        HttpPeerClient(sharedHttpClient, auth, localIdentity, transportPolicy) :> IPeerClient)
+                )
+                .AddSingleton<IPeerProfileProvider>(
+                    // Phase 18d — aggregates the author-declared
+                    // contract profiles over the live capability table.
+                    System.Func<System.IServiceProvider, IPeerProfileProvider>(fun sp ->
+                        let peer = sp.GetService(typeof<IPlatformPeer>) :?> IPlatformPeer
+                        DefaultPeerProfileProvider(peer, contractProfiles) :> IPeerProfileProvider)
+                )
+                .AddSingleton<IPeerHandshake>(
+                    System.Func<System.IServiceProvider, IPeerHandshake>(fun sp ->
+                        let peer = sp.GetService(typeof<IPlatformPeer>) :?> IPlatformPeer
+                        let auth = sp.GetService(typeof<IPeerAuthProvider>) :?> IPeerAuthProvider
+
+                        let profileProvider =
+                            sp.GetService(typeof<IPeerProfileProvider>) :?> IPeerProfileProvider
+
+                        InMemoryPeerHandshake(
+                            peer,
+                            fetchRemote auth,
+                            profileProvider.LocalProfile,
+                            fetchRemoteProfile auth
+                        )
+                        :> IPeerHandshake)
+                )
+            |> fun s ->
+                // Long-running fusion is registered only when the job
+                // substrate is enabled; absent, the `IPlatformPeer`
+                // factory resolves `None` and long-running methods
+                // report "not enabled" (GP 13 — zero cost when unused).
+                let withFusion =
+                    if schedulerEnabled then
+                        s.AddSingleton<PeerJobFusion>(
+                            System.Func<System.IServiceProvider, PeerJobFusion>(fun sp ->
+                                let scheduler = sp.GetService(typeof<IJobScheduler>) :?> IJobScheduler
+
+                                let resultStore = sp.GetService(typeof<IPeerJobResultStore>) :?> IPeerJobResultStore
+
+                                // Phase 310 — the execution side's audit
+                                // log. Optional on the same terms the
+                                // request path treats it: a partial host
+                                // without one records nothing rather
+                                // than failing to compose.
+                                let auditLog =
+                                    sp.GetService(typeof<IAuditLog>)
+                                    |> Option.ofObj
+                                    |> Option.map (fun x -> x :?> IAuditLog)
+
+                                {
+                                    Scheduler = scheduler
+                                    ResultStore = resultStore
+                                    AuditLog = auditLog
+                                })
+                        )
+                    else
+                        s
+
+                // Phase 18c — federation orchestration seams (`IPeerFanout`
+                // scatter + `IPeerCascade` next-hop bookkeeping) and Phase
+                // 18b — clean-room privacy-gate broker (`ICleanRoomBroker`).
+                // Stateless default singletons. `TryAdd` so a deployment
+                // that registers its own implementation via the base
+                // `ServerApp`'s ServiceConfig (which runs first) keeps it —
+                // the SDK default only fills the gap when nothing else is
+                // registered. Present only when the peer substrate is
+                // enabled; a singleton allocation is the whole cost (GP 13).
+                withFusion.TryAddSingleton<IPeerFanout>(DefaultPeerFanout() :> IPeerFanout)
+                withFusion.TryAddSingleton<IPeerCascade>(DefaultPeerCascade() :> IPeerCascade)
+                withFusion.TryAddSingleton<ICleanRoomBroker>(DefaultCleanRoomBroker() :> ICleanRoomBroker)
+
+                // Phase 481 — the calibrated-noise mechanism, and
+                // ONLY when a policy was composed. Unlike the three
+                // above it is not a default the substrate wants
+                // present-but-idle: a mechanism that exists without a
+                // policy draws nothing, and registering it anyway
+                // would put a CSPRNG-backed sampler in every peer
+                // deployment's container for no reachable caller
+                // (GP 13). `TryAdd` so a deployment that registered
+                // an accredited implementation through the base
+                // `ServiceConfig` keeps it.
+                if not (List.isEmpty options.NoisedReleases) then
+                    withFusion.TryAddSingleton<INoiseMechanism>(NoiseMechanism.create ())
+
+                // Phase 591 — the federation-graph preflight, folded
+                // into the Phase 9m preflight set as a
+                // structural-class validator (so `SkipPreflight`
+                // cannot bypass it: every rule is a pure sweep over
+                // declared data already in memory, reaching no
+                // counterparty). Registered ONLY when the composition
+                // pinned at least one counterparty label — a
+                // deployment that declared no federation graph pays
+                // not even a singleton (GP 13), and can never be
+                // refused for edges it never declared (GP 11).
+                //
+                // The input is a thunk so the pin ages are measured
+                // when the preflight runs, not when the composition
+                // was built.
+                if not federationPins.Pins.IsEmpty then
+                    withFusion.AddSingleton<ConfigValidation.IConfigValidator>(
+                        FederationPreflight.FederationPreflightValidator(fun () -> {
+                            LocalPeerId = localIdentity.PeerId
+                            Consumes = consumedContracts
+                            Pins = federationPins
+                            Now = System.DateTimeOffset.UtcNow
+                        })
+                        :> ConfigValidation.IConfigValidator
+                    )
+                    |> ignore
+
+                // Phase 483 / 629 — the multi-round orchestrator
+                // trio, and ONLY when `withRoundOrchestrator` was
+                // composed. A federation that runs no round protocol
+                // registers nothing and reaches no blob prefix
+                // (GP 13). See `roundOrchestrationServices`.
+                roundOrchestrationServices options withFusion |> ignore
+
+                withFusion
+
+        app
+        |> ServerApp.addContribution (Contribution.routes owner [ JsonRpcPeerHost.routes ])
+        |> ServerApp.addContribution (Contribution.service owner peerServiceConfig)
+
+/// **Sets** the peer companion: the identity, hosted contracts and postures
+/// `options` describes are composed once, when the deployment resolves,
+/// onto the deployment as every builder left it — so a `ServerApp` builder
+/// applied after this call still reaches it. Contributes nothing unless the
+/// resolved `ServerConfig.PeerSubstrate` is `EnabledPeerSubstrate`. A
+/// second call replaces the first.
+///
+///     ServerApp.empty
+///     |> ServerApp.withConfig { config with PeerSubstrate = EnabledPeerSubstrate }
+///     |> PeerCompose.withPeer (PeerOptions.create () |> PeerOptions.withLocalPeer identity)
+///     |> ServerApp.run
+let withPeer (options: PeerOptions) (app: ServerApp) : ServerApp =
+    ServerApp.withCompanion peerCompanion (composePeer options) app

@@ -29,7 +29,7 @@ open ToolUp.Platform.BlobStorage
 // resume, and audit come from the substrate.
 //
 // Zero cost when unused (GP 13): nothing here is composed by
-// `PeerServerApp.run`. A deployment that never constructs an orchestrator
+// `PeerCompose.withPeer`. A deployment that never constructs an orchestrator
 // allocates nothing, registers no hosted service, and stores no blob. The
 // observer defaults to `RoundObserver.none`, so even a constructed
 // orchestrator emits no audit row and publishes no notification until a

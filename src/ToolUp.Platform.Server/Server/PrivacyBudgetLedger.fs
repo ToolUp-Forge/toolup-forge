@@ -127,7 +127,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 // ── Cost when unused (GP 13) ──
 //
 // Nothing here is reachable unless a composition declares a meter —
-// `PeerServerApp.withPrivacyBudget` at the federation tier,
+// `PeerOptions.withPrivacyBudget` at the federation tier,
 // `FactsCompose.withDeclassificationBudgets` at the grounding tier.
 // `NoPrivacyBudgetLedger` exists for the composition that wants the seam
 // present and the accounting off; a composition that declares no meter

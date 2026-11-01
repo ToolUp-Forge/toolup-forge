@@ -202,7 +202,7 @@ type CapabilityList = ContractCapability list
 
 /// Phase 590 — a compose-time declaration that this deployment *calls* a
 /// peer contract hosted elsewhere. The initiating side of the wire face:
-/// where `PeerServerApp.withContract` registers what a deployment
+/// where `PeerOptions.withContract` registers what a deployment
 /// *serves*, `withConsumedContract` registers what it *consumes*, so the
 /// `PeerSurface` descriptor derives both sides from the composition
 /// record rather than a hand-maintained list. Purely descriptive — the

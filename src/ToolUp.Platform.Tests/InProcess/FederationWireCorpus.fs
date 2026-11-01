@@ -53,6 +53,7 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Support
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 
 // ─── Corpus location ─────────────────────────────────────────────────
@@ -393,22 +394,32 @@ let private catalogueImpl: ReferenceCatalogueContract = {
 /// contract. Deliberately generic vocabulary — an implementer reading the
 /// corpus should see a protocol example, not this platform's furniture.
 let private referenceInstance () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig {
-        ServerConfig.defaults with
-            PeerSubstrate = EnabledPeerSubstrate
-            JobScheduler = InProcessJobScheduler
-    }
-    |> PeerServerApp.withLocalPeer {
-        PeerId = "seller-ssp"
-        DisplayName = "Seller supply-side"
-    }
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<ReferenceOrderContract> "example.orders" [ v1; v11 ] fusion orderImpl)
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<ReferenceCatalogueContract> "example.catalogue" [ v1 ] fusion catalogueImpl)
-    |> PeerServerApp.withConsumedContract (
-        PeerSurface.consumes<ReferenceDirectoryContract> "example.directory" [ v1 ] "hub"
+    PeerComposition.create ()
+    |> PeerComposition.app (
+        ServerApp.withConfig {
+            ServerConfig.defaults with
+                PeerSubstrate = EnabledPeerSubstrate
+                JobScheduler = InProcessJobScheduler
+        }
+    )
+    |> PeerComposition.options (
+        PeerOptions.withLocalPeer {
+            PeerId = "seller-ssp"
+            DisplayName = "Seller supply-side"
+        }
+    )
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<ReferenceOrderContract> "example.orders" [ v1; v11 ] fusion orderImpl)
+    )
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<ReferenceCatalogueContract> "example.catalogue" [ v1 ] fusion catalogueImpl)
+    )
+    |> PeerComposition.options (
+        PeerOptions.withConsumedContract (
+            PeerSurface.consumes<ReferenceDirectoryContract> "example.directory" [ v1 ] "hub"
+        )
     )
 
 let private instanceSurface () =
@@ -425,7 +436,7 @@ let private instanceSurface () =
 /// default would pass the first and fail this.
 let private authoritySurface () =
     referenceInstance ()
-    |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
+    |> PeerComposition.options (PeerOptions.withDataVisibility PeerDataVisibilityLevel.ViewOnly)
     |> PeerSurface.describe
 
 /// Phase 644 — the same reference deployment declaring a TRANSITION
@@ -443,7 +454,9 @@ let private authoritySurface () =
 /// owns the sort, not whoever typed the list.
 let private transitionGrantSurface () =
     referenceInstance ()
-    |> PeerServerApp.withPeerTransitionAuthority (ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ])
+    |> PeerComposition.options (
+        PeerOptions.withPeerTransitionAuthority (ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ])
+    )
     |> PeerSurface.describe
 
 // ─── Reference values — aggregate surface (gateway profile) ──────────

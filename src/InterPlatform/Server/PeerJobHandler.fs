@@ -839,7 +839,7 @@ type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy,
 /// gateway polls the owning member over.
 ///
 /// A single DI singleton rather than two, and registered **only** by a
-/// gateway composition that was given a map (`PeerServerApp.withGroupJobMap`
+/// gateway composition that was given a map (`PeerOptions.withGroupJobMap`
 /// + `PeerGateway.withAggregate`). An ordinary receiver registers nothing,
 /// the poll route resolves `None`, and its path through the handler is
 /// byte-for-byte the pre-630 one (GP 11 / GP 13).

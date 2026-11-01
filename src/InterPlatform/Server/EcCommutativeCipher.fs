@@ -54,8 +54,8 @@ open Org.BouncyCastle.Math.EC
 //     backend.
 //
 // Zero cost when unused (GP 13): nothing here is composed by
-// `PeerServerApp.run`. A deployment that never calls
-// `PeerServerApp.withCommutativeCipher` allocates nothing and registers
+// `PeerCompose.withPeer`. A deployment that never calls
+// `PeerCompose.withCommutativeCipher` allocates nothing and registers
 // nothing.
 
 /// Commutative cipher over a prime-order NIST / SEC named curve —

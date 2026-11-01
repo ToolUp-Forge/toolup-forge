@@ -9,6 +9,7 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Tests.Contracts
 
@@ -592,13 +593,13 @@ let composeTests =
     testList "Phase 339 — the composition's transport posture" [
 
         test "a default composition enforces, and withInsecurePeerTransport opts out" {
-            let app = PeerServerApp.create ()
+            let app = PeerOptions.create ()
 
             Expect.isFalse
                 app.TransportPolicy.AllowInsecureTransport
-                "PeerServerApp.create () enforces — the posture is not something to remember to switch on"
+                "PeerOptions.create () enforces — the posture is not something to remember to switch on"
 
-            let opted = app |> PeerServerApp.withInsecurePeerTransport
+            let opted = app |> PeerOptions.withInsecurePeerTransport
 
             Expect.isTrue opted.TransportPolicy.AllowInsecureTransport "…and the opt-out is a named, greppable act"
 
@@ -613,24 +614,24 @@ let composeTests =
             // a doc comment: a composition that opts out and then sets a
             // deadline has silently re-enabled enforcement.
             let clobbered =
-                PeerServerApp.create ()
-                |> PeerServerApp.withInsecurePeerTransport
-                |> PeerServerApp.withTransportPolicy (
+                PeerOptions.create ()
+                |> PeerOptions.withInsecurePeerTransport
+                |> (PeerOptions.withTransportPolicy (
                     PeerTransportPolicy.defaults
                     |> PeerTransportPolicy.withCallTimeout (TimeSpan.FromSeconds 5.0)
-                )
+                ))
 
             Expect.isFalse
                 clobbered.TransportPolicy.AllowInsecureTransport
                 "a later withTransportPolicy discards the opt-out — compose the policy whole instead"
 
             let kept =
-                PeerServerApp.create ()
-                |> PeerServerApp.withTransportPolicy (
+                PeerOptions.create ()
+                |> (PeerOptions.withTransportPolicy (
                     PeerTransportPolicy.defaults
                     |> PeerTransportPolicy.withCallTimeout (TimeSpan.FromSeconds 5.0)
-                )
-                |> PeerServerApp.withInsecurePeerTransport
+                ))
+                |> PeerOptions.withInsecurePeerTransport
 
             Expect.isTrue clobbered.TransportPolicy.CallTimeout.IsSome "…the deadline it set is in force"
             Expect.isTrue kept.TransportPolicy.AllowInsecureTransport "…and the documented order keeps both"
@@ -638,7 +639,7 @@ let composeTests =
         }
 
         test "the advisory names the posture and the lever that drops it" {
-            let advisory = PeerServerApp.insecureTransportAdvisory
+            let advisory = PeerCompose.insecureTransportAdvisory
 
             Expect.stringContains advisory "AllowInsecureTransport" "the advisory names the setting"
             Expect.stringContains advisory "withInsecurePeerTransport" "…and the compose call that set it"

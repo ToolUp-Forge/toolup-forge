@@ -36,7 +36,7 @@ The wire format is **JSON-RPC 2.0 over HTTP** — a deliberately open, language-
 | Outbound HTTP transport | [`Server/HttpPeerClient.fs`](Server/HttpPeerClient.fs) | `HttpPeerClient` |
 | Typed initiator proxy | [`Server/JsonRpcPeerClient.fs`](Server/JsonRpcPeerClient.fs) | `PeerProxyConfig`, module `JsonRpcPeerClient` |
 | JSON-RPC host | [`Server/JsonRpcPeerHost.fs`](Server/JsonRpcPeerHost.fs) | module `JsonRpcPeerHost` (`contract`, `routes`) |
-| Compose pipeline | [`Server/PeerCompose.fs`](Server/PeerCompose.fs) | `PeerServerApp` record + `run` |
+| Compose pipeline | [`Server/PeerCompose.fs`](Server/PeerCompose.fs) | `PeerOptions` + `withPeer` |
 | Cross-instance face descriptor (Phase 590) | [`Server/PeerSurface.fs`](Server/PeerSurface.fs) | `ConsumedContract` (in `Shared/PeerTypes.fs`), `ServedContract`, `PeerServes`, `PeerTrustPosture`, `PeerBudgetShape`, `PeerSurface`, `PeerSurfaceExport`, module `PeerSurface` (`describe`, `consumes`, `export`, `exportJson`) |
 | Federation-graph preflight (Phase 591) | [`Server/FederationPreflight.fs`](Server/FederationPreflight.fs), [`Server/FederationPin.fs`](Server/FederationPin.fs) | `PinnedTrustFacet`, `PinnedPeerSurface`, `PeerTrustRequirement`, `FederationPinStore`, `FederationPreflightInput`, module `FederationPreflight` (`structuralRules`, `ruleManifest`, `classifiedRuleManifest`, `check`, `FederationPreflightValidator`), module `FederationPin` (`ofSurface`, `ofExport`, `ofExportJson`) |
 
@@ -50,7 +50,7 @@ The companion is a *consumer* of substrate (`IBlobStorage` for the directory + j
 
 ## How to enable
 
-The substrate is selected by a single `ServerConfig` field — `PeerSubstrate`, mirroring `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in). Compose with `PeerServerApp` (the [`PeerCompose`](Server/PeerCompose.fs) companion root), which wraps a base `ServerApp` and adds peer-specific `with*` helpers:
+The substrate is selected by a single `ServerConfig` field — `PeerSubstrate`, mirroring `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in). Compose the [`PeerCompose`](Server/PeerCompose.fs) companion onto your `ServerApp` with `withPeer`, which takes a `PeerOptions` record of the peer-specific settings:
 
 ```fsharp
 open ToolUp.InterPlatform
@@ -66,27 +66,29 @@ let config = {
         JobScheduler = InProcessJobScheduler
 }
 
-// In your own Server.fs `main` carries [<EntryPoint>]; PeerServerApp.run
+// In your own Server.fs `main` carries [<EntryPoint>]; ServerApp.run
 // returns the int exit code it needs.
 let main _ =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig config
-    |> PeerServerApp.withAuth authProvider
-    |> PeerServerApp.withStorage (LocalFileStorage.LocalFileStorage("data"))
-    |> PeerServerApp.withLocalPeer { PeerId = "seller"; DisplayName = "Seller Deployment" }
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<DirectoryContract> "directory" [ v1 ] fusion directoryImpl)
-    |> PeerServerApp.run
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withAuth authProvider
+    |> ServerApp.withStorage (LocalFileStorage.LocalFileStorage("data"))
+    |> withPeer (
+        PeerOptions.create ()
+        |> PeerOptions.withLocalPeer { PeerId = "seller"; DisplayName = "Seller Deployment" }
+        |> PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<DirectoryContract> "directory" [ v1 ] fusion directoryImpl)
+    )
+    |> ServerApp.run
 ```
 
-`PeerServerApp.run`, when `PeerSubstrate = EnabledPeerSubstrate`:
+`PeerCompose.withPeer`, when `PeerSubstrate = EnabledPeerSubstrate`:
 
 1. Registers the peer DI singletons resolved from already-present substrate:
    `IPeerAuthProvider` (`JwtPeerAuthProvider` over `ISecretStore`), `IPeerJobResultStore` + `IPeerRegistry` (over `IBlobStorage`), `IPlatformPeer` (`DefaultPlatformPeer`), `IPeerClient` (`HttpPeerClient`), `IPeerHandshake` (`InMemoryPeerHandshake`).
 2. When `JobScheduler <> NoJobScheduler`, additionally registers `PeerJobFusion` (scheduler + result store) so long-running methods can park a background job. Absent it, long-running dispatch returns a clear `PeerHandler "… not enabled"` error.
 3. On first `IPlatformPeer` resolution, runs every registered contract builder — registering each contract on the peer and its long-running job handlers on the scheduler.
 4. Mounts `JsonRpcPeerHost.routes` onto the SDK route chain.
-5. Delegates the rest to `ServerApp.run`.
 
 When `PeerSubstrate = NoPeerSubstrate`, `run` short-circuits to `ServerApp.run app.Base` — **byte-for-byte** the shape of a base `ServerApp.run`: no DI registrations, no `/peer/v1` routes, no peer audit (GP 13).
 
@@ -134,7 +136,7 @@ let directoryHost fusion =
     JsonRpcPeerHost.contract<DirectoryContract> "directory" [ v1 ] fusion directoryImpl
 ```
 
-Register it with `PeerServerApp.withContract directoryHost`. Immediate-only contracts ignore the threaded `fusion`; long-running methods use it to schedule the background job.
+Register it with `PeerOptions.withContract directoryHost`. Immediate-only contracts ignore the threaded `fusion`; long-running methods use it to schedule the background job.
 
 **Caller side** — build a typed proxy and call it like a local API:
 
@@ -221,11 +223,11 @@ The receiver therefore derives its trusted `PeerCallContext` rather than copying
 | `ParentRequestId` | derived from the inbound JSON-RPC envelope id, never from the body; `None` at the originating hop. |
 | `ContractVersion` | left alone — `IPlatformPeer.Handle` already measures it against the receiver's own supported set. |
 
-Defaults are far above the documented `HopBudget` guidance (32 hops, 32 route entries, 128-character identifiers), so an existing federation is unaffected; tune them with `PeerServerApp.withCascadePolicy`. What this does **not** claim to stop is two colluding peers bouncing a call between themselves, each hop presenting a fresh in-ceiling budget — no receiver-side rule can see that from a single message. What it closes is the unilateral escape: one peer, one call, claiming a budget or a history the receiver never agreed to.
+Defaults are far above the documented `HopBudget` guidance (32 hops, 32 route entries, 128-character identifiers), so an existing federation is unaffected; tune them with `PeerOptions.withCascadePolicy`. What this does **not** claim to stop is two colluding peers bouncing a call between themselves, each hop presenting a fresh in-ceiling budget — no receiver-side rule can see that from a single message. What it closes is the unilateral escape: one peer, one call, claiming a budget or a history the receiver never agreed to.
 
 ## Clean-room gate (Phase 18b + 311)
 
-A **clean-room contract** answers an approved query against sensitive data with privacy-preserving outputs only — cohort counts at or above a k-anonymity floor, small cells suppressed, output shape constrained — never row-level data. `ICleanRoomBroker` ships that mechanism; `PeerServerApp.withCleanRoomTemplate` is what makes it *run*:
+A **clean-room contract** answers an approved query against sensitive data with privacy-preserving outputs only — cohort counts at or above a k-anonymity floor, small cells suppressed, output shape constrained — never row-level data. `ICleanRoomBroker` ships that mechanism; `PeerOptions.withCleanRoomTemplate` is what makes it *run*:
 
 ```fsharp
 let reachTemplate: CleanRoomTemplate = {
@@ -238,28 +240,31 @@ let reachTemplate: CleanRoomTemplate = {
     }
 }
 
-PeerServerApp.create ()
-|> PeerServerApp.withConfig config
-|> PeerServerApp.withLocalPeer thisPeerId
-|> PeerServerApp.withContract reachHost                            // contract id "example.reach"
-|> PeerServerApp.withCleanRoomTemplate "example.reach" reachTemplate
-|> PeerServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withPeer (
+    PeerOptions.create ()
+    |> PeerOptions.withLocalPeer thisPeerId
+    |> PeerOptions.withContract reachHost                            // contract id "example.reach"
+    |> PeerOptions.withCleanRoomTemplate "example.reach" reachTemplate
+)
+|> ServerApp.run
 ```
 
 **The floor is applied by the substrate, not by the handler.** The composed template wraps the contract's dispatch closure — the only route the receiver has to the wire — so every method's answer passes the gate whether or not the handler ever calls the broker. Gated methods answer with a `CohortResult`; an answer in any other shape is **withheld**, because a floor that cannot be evaluated must not be assumed cleared. Three invariants are the wrapper's own, so they hold even when a deployment substitutes its own `ICleanRoomBroker`: a method off `AllowedMethods` is refused before the handler runs, an uncheckable answer is withheld, and a release is re-checked against the composed floor.
 
 A withhold reaches the caller as `PeerCleanRoomWithheld templateId` — the template id and nothing more. The broker's reasons name cohort sizes, and a caller that can vary its query and read them back has a counting oracle over exactly the data the floor protects; the full reason is recorded receiver-side as a `PeerCleanRoomDecision` audit row (suppressed-cell labels included), and audit transparency below is the deliberate, caller-scoped route to any of it.
 
-Composing a template for a contract id this deployment does not host **refuses to start**: a privacy gate that looks composed and never runs is worse than no gate at all. `PeerServerApp.auditCleanRoomTemplates` reports the same finding as data for a deployment's own preflight. A composition that gates nothing wraps nothing and costs nothing.
+Composing a template for a contract id this deployment does not host **refuses to start**: a privacy gate that looks composed and never runs is worse than no gate at all. `PeerCompose.auditCleanRoomTemplates` reports the same finding as data for a deployment's own preflight. A composition that gates nothing wraps nothing and costs nothing.
 
 ### Privacy-budget ledger (Phase 190)
 
-The floor decides about **one** answer. Cohort floors do not compose — differencing two in-floor cohorts that overlap in all but one record recovers that record, and no per-query check can see it because *each query passed*. `PeerServerApp.withPrivacyBudget` bounds the series:
+The floor decides about **one** answer. Cohort floors do not compose — differencing two in-floor cohorts that overlap in all but one record recovers that record, and no per-query check can see it because *each query passed*. `PeerOptions.withPrivacyBudget` bounds the series:
 
 ```fsharp
-app
-|> PeerServerApp.withCleanRoomTemplate "example.reach" reachTemplate
-|> PeerServerApp.withPrivacyBudget (
+peerOptions
+|> PeerOptions.withCleanRoomTemplate "example.reach" reachTemplate
+|> PeerOptions.withPrivacyBudget (
        PrivacyBudgetMeter.create
            (BlobPrivacyBudgetLedger blobs)
            (PrivacyBudgetPolicy.create 50m 1m))          // 50 ε ceiling, 1 ε per answer
@@ -282,11 +287,14 @@ The substrate records one `PeerCallCompleted` audit row per inbound call, keyed 
 **Receiver side** — opt in when composing:
 
 ```fsharp
-PeerServerApp.create ()
-|> PeerServerApp.withConfig config            // PeerSubstrate = EnabledPeerSubstrate
-|> PeerServerApp.withContract directoryHost
-|> PeerServerApp.withPeerAuditTransparency    // registers _platform.peer.audit
-|> PeerServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config            // PeerSubstrate = EnabledPeerSubstrate
+|> withPeer (
+    PeerOptions.create ()
+    |> PeerOptions.withContract directoryHost
+    |> PeerOptions.withPeerAuditTransparency    // registers _platform.peer.audit
+)
+|> ServerApp.run
 ```
 
 **Caller side** — build a typed `IPeerAuditApi` proxy and query:
@@ -338,11 +346,14 @@ let directoryProfile =
         "GetCapabilities", v2, Deprecated { DeprecatedSince = v2; RemovedIn = Some v3; Note = "use ListContracts" }
     ]
 
-PeerServerApp.create ()
-|> PeerServerApp.withConfig config
-|> PeerServerApp.withContract directoryHost
-|> PeerServerApp.withContractProfile directoryProfile   // served at /peer/v1/capabilities/profile
-|> PeerServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withPeer (
+    PeerOptions.create ()
+    |> PeerOptions.withContract directoryHost
+    |> PeerOptions.withContractProfile directoryProfile   // served at /peer/v1/capabilities/profile
+)
+|> ServerApp.run
 ```
 
 **Caller side** — negotiate a method through the handshake:
@@ -366,21 +377,24 @@ A peer that predates 18d (no `/capabilities/profile` route) degrades cleanly: it
 
 `PeerSurface.describe` emits a deployment's **cross-instance face as data** — the instance's *label*: what a counterparty may rely on without seeing inside. It is **derived from the composed peer registrations by construction, never hand-listed** — a new `withContract` / `withConsumedContract` registration surfaces with zero descriptor edits:
 
-- **Serves** — every hosted contract (id + wire versions, from the same builders `PeerServerApp.run` composes, including the audit-transparency contract when opted in), the long-running **routines** it fuses onto the job substrate (advertised only when a job scheduler is actually composed, under their canonical `_platform.peer.{contractId}.{method}` handler names), and the `/peer/v1` endpoint templates.
+- **Serves** — every hosted contract (id + wire versions, from the same builders `PeerCompose.withPeer` composes, including the audit-transparency contract when opted in), the long-running **routines** it fuses onto the job substrate (advertised only when a job scheduler is actually composed, under their canonical `_platform.peer.{contractId}.{method}` handler names), and the `/peer/v1` endpoint templates.
 - **Consumes** — the contracts this instance *calls* on counterparts, declared at compose time with `withConsumedContract` (build declarations with `PeerSurface.consumes<'TApi>` so each stays tied to a real contract type) plus the expected counterpart role. Purely descriptive — dispatch still goes through `JsonRpcPeerClient.create`.
 - **TrustPosture** — what the composition wires by construction: fail-closed HS256 bearer JWTs with per-call key reads, whether inbound audiences are bound to the local peer id (exactly when `withLocalPeer` is declared), trust-anchor delegation verification, the freshness-window replay stance, and the deployment-managed transport stance.
 - **Budgets** — the cascade guard shape (per-call hop budget + route loop detection) and whether long-running dispatch is available.
 
 ```fsharp
 let app =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig config
-    |> PeerServerApp.withLocalPeer localIdentity
-    |> PeerServerApp.withContract directoryHost
-    |> PeerServerApp.withConsumedContract
+    ServerApp.empty
+    |> ServerApp.withConfig config
+
+let options =
+    PeerOptions.create ()
+    |> PeerOptions.withLocalPeer localIdentity
+    |> PeerOptions.withContract directoryHost
+    |> PeerOptions.withConsumedContract
         (PeerSurface.consumes<UpstreamRegistryContract> "registry" [ v1 ] "hub")
 
-let surface = PeerSurface.describe app      // pure, on demand
+let surface = PeerSurface.describe (app, options)   // pure, on demand
 let pinned  = PeerSurface.exportJson surface // canonical JSON + SHA-256 stamp
 ```
 
@@ -396,12 +410,15 @@ let sellerPin =
     FederationPin.ofExportJson "seller-ssp" "peers/seller-ssp.surface.json" agreedHash DateTimeOffset.UtcNow document
 
 let app =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig config
-    |> PeerServerApp.withConsumedContract (PeerSurface.consumes<IReachApi> "reach" [ v1 ] "seller")
-    |> PeerServerApp.withPinnedCounterparty (sellerPin |> Result.defaultWith failwith)
-    |> PeerServerApp.withRequiredPeerTrust PeerTrustRequirement.audienceBound
-    |> PeerServerApp.withPinnedSurfaceMaxAge (TimeSpan.FromDays 90.0)
+    ServerApp.empty
+    |> ServerApp.withConfig config
+
+let options =
+    PeerOptions.create ()
+    |> PeerOptions.withConsumedContract (PeerSurface.consumes<IReachApi> "reach" [ v1 ] "seller")
+    |> PeerOptions.withPinnedCounterparty (sellerPin |> Result.defaultWith failwith)
+    |> PeerOptions.withRequiredPeerTrust PeerTrustRequirement.audienceBound
+    |> PeerOptions.withPinnedSurfaceMaxAge (TimeSpan.FromDays 90.0)
 ```
 
 Three rules, exported as data through `FederationPreflight.ruleManifest` / `classifiedRuleManifest` (the same `CompositionRuleDescriptor` / `ClassifiedCompositionRule` shapes the intra-app composition rules project, so an external pre-build checker needs no new vocabulary):
@@ -412,7 +429,7 @@ Three rules, exported as data through `FederationPreflight.ruleManifest` / `clas
 | `peer-trust-mismatch` | Error | A required trust facet a pinned counterparty's label contradicts, or does not declare at all (an omitted facet is no claim, not a weaker one). |
 | `peer-surface-stale` | Warning | A pin older than the declared maximum age. An aged pin is the *absence* of fresh evidence rather than evidence of drift, so it reports and never refuses. |
 
-The rules run as a **structural-class** `IConfigValidator` in the composition-validator pass, so `ServerConfig.SkipPreflight` does not bypass them — every rule is a pure sweep over declared data already in memory and reaches no counterparty. `PeerServerApp.auditFederationGraph` runs the identical check as a value, so a deployment can assert its own edges without booting a server.
+The rules run as a **structural-class** `IConfigValidator` in the composition-validator pass, so `ServerConfig.SkipPreflight` does not bypass them — every rule is a pure sweep over declared data already in memory and reaches no counterparty. `PeerCompose.auditFederationGraph` runs the identical check as a value, so a deployment can assert its own edges without booting a server.
 
 **Contract-level checking is what makes a heterogeneous federation safe**: nothing here inspects a counterparty's *composition*, only the wire face it already publishes. An aggregate group (Phase 595) pins exactly like a single instance — its posture facets are floors over the exposing members, and a facet the members disagree on publishes as `mixed:a|b`, which satisfies no requirement because a counterparty may rely on neither stance. A composition that pins nothing registers no validator, checks nothing, and is byte-for-byte a pre-591 composition.
 

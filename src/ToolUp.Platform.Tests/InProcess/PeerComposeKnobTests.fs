@@ -41,10 +41,11 @@ let private enabledConfig = {
         JobScheduler = InProcessJobScheduler
 }
 
+/// The deployment the peer companion is composed onto.
+let private enabledApp = ServerApp.empty |> ServerApp.withConfig enabledConfig
+
 let private baseApp () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withLocalPeer localPeer
+    PeerOptions.create () |> PeerOptions.withLocalPeer localPeer
 
 /// A secret store carrying one strong signing key, so a token minted
 /// through a composed provider actually validates.
@@ -79,8 +80,8 @@ let jobRetentionTests =
                 |> PeerJobRetentionPolicy.withTtl (TimeSpan.FromHours 2.0)
                 |> PeerJobRetentionPolicy.withDeleteOnRead (TimeSpan.FromMinutes 1.0)
 
-            let app = baseApp () |> PeerServerApp.withJobRetention policy
-            let store = PeerServerApp.jobResultStore app (InMemoryBlobStorage() :> IBlobStorage)
+            let app = baseApp () |> PeerOptions.withJobRetention policy
+            let store = PeerCompose.jobResultStore app (InMemoryBlobStorage() :> IBlobStorage)
 
             Expect.equal
                 store.Retention
@@ -97,7 +98,7 @@ let jobRetentionTests =
             // construction — rather than against the constant, so a drift
             // in either is caught.
             let blobs = InMemoryBlobStorage() :> IBlobStorage
-            let composed = PeerServerApp.jobResultStore (baseApp ()) blobs
+            let composed = PeerCompose.jobResultStore (baseApp ()) blobs
             let pre629 = BlobPeerJobResultStore(blobs) :> IPeerJobResultStore
 
             Expect.equal
@@ -111,8 +112,8 @@ let jobRetentionTests =
         <| fun _ ->
             let app =
                 baseApp ()
-                |> PeerServerApp.withJobRetention PeerJobRetentionPolicy.keepForever
-                |> PeerServerApp.withJobRetention (
+                |> PeerOptions.withJobRetention PeerJobRetentionPolicy.keepForever
+                |> PeerOptions.withJobRetention (
                     PeerJobRetentionPolicy.withTtl (TimeSpan.FromDays 1.0) PeerJobRetentionPolicy.keepForever
                 )
 
@@ -148,7 +149,7 @@ let roundOrchestratorTests =
         <| fun _ ->
             let services = substrateFor true
 
-            PeerServerApp.roundOrchestrationServices (baseApp () |> PeerServerApp.withRoundOrchestrator) services
+            PeerCompose.roundOrchestrationServices (baseApp () |> PeerOptions.withRoundOrchestrator) services
             |> ignore
 
             use provider = services.BuildServiceProvider()
@@ -170,7 +171,7 @@ let roundOrchestratorTests =
             // Without this the case above proves only that the trio can be
             // resolved, not that it was the knob that put it there.
             let services = substrateFor true
-            PeerServerApp.roundOrchestrationServices (baseApp ()) services |> ignore
+            PeerCompose.roundOrchestrationServices (baseApp ()) services |> ignore
             use provider = services.BuildServiceProvider()
 
             Expect.isNull
@@ -189,7 +190,7 @@ let roundOrchestratorTests =
             let mine = InMemoryRoundStateStore() :> IRoundStateStore
             services.AddSingleton<IRoundStateStore>(mine) |> ignore
 
-            PeerServerApp.roundOrchestrationServices (baseApp () |> PeerServerApp.withRoundOrchestrator) services
+            PeerCompose.roundOrchestrationServices (baseApp () |> PeerOptions.withRoundOrchestrator) services
             |> ignore
 
             use provider = services.BuildServiceProvider()
@@ -207,7 +208,7 @@ let roundOrchestratorTests =
             // a `getService`-with-a-cast wiring would break.
             let services = substrateFor false
 
-            PeerServerApp.roundOrchestrationServices (baseApp () |> PeerServerApp.withRoundOrchestrator) services
+            PeerCompose.roundOrchestrationServices (baseApp () |> PeerOptions.withRoundOrchestrator) services
             |> ignore
 
             use provider = services.BuildServiceProvider()
@@ -230,8 +231,8 @@ let tokenPolicyTests =
             let secrets = KeyedSecretStore(localPeer.PeerId, signingKey) :> ISecretStore
             let guard = InMemoryPeerReplayGuard() :> IPeerReplayGuard
 
-            let app = baseApp () |> PeerServerApp.withReplayGuard guard
-            let provider = PeerServerApp.peerAuthProvider app secrets
+            let app = baseApp () |> PeerOptions.withReplayGuard guard
+            let provider = PeerCompose.peerAuthProvider app secrets
 
             match! provider.IssuePeerToken(localPeer, localPeer, Anonymous) with
             | Error e -> return failtestf "Expected a minted token, got %A" e
@@ -252,7 +253,7 @@ let tokenPolicyTests =
             // provider that had started refusing every second call for any
             // reason at all.
             let secrets = KeyedSecretStore(localPeer.PeerId, signingKey) :> ISecretStore
-            let provider = PeerServerApp.peerAuthProvider (baseApp ()) secrets
+            let provider = PeerCompose.peerAuthProvider (baseApp ()) secrets
 
             match! provider.IssuePeerToken(localPeer, localPeer, Anonymous) with
             | Error e -> return failtestf "Expected a minted token, got %A" e
@@ -275,7 +276,7 @@ let tokenPolicyTests =
                 "the default is the pre-338 posture, byte-for-byte"
 
             Expect.equal
-                (baseApp () |> PeerServerApp.withContractBoundCalls).TokenPolicy.CallScope
+                (baseApp () |> PeerOptions.withContractBoundCalls).TokenPolicy.CallScope
                 ContractBoundCalls
                 "…and the knob is what turns the binding on"
 
@@ -290,13 +291,13 @@ let tokenPolicyTests =
 
             let a =
                 baseApp ()
-                |> PeerServerApp.withReplayGuard guard
-                |> PeerServerApp.withContractBoundCalls
+                |> PeerOptions.withReplayGuard guard
+                |> PeerOptions.withContractBoundCalls
 
             let b =
                 baseApp ()
-                |> PeerServerApp.withContractBoundCalls
-                |> PeerServerApp.withReplayGuard guard
+                |> PeerOptions.withContractBoundCalls
+                |> PeerOptions.withReplayGuard guard
 
             Expect.equal a.TokenPolicy b.TokenPolicy "order does not change the composed policy"
             Expect.isSome a.TokenPolicy.ReplayGuard "the guard survived the binding call"
@@ -310,11 +311,48 @@ let tokenPolicyTests =
             let secrets = KeyedSecretStore(localPeer.PeerId, signingKey) :> ISecretStore
 
             Expect.equal
-                (PeerServerApp.auditAudienceBinding (baseApp ()))
+                (PeerCompose.auditAudienceBinding (enabledApp, baseApp ()))
                 (AudienceBindingEnforced localPeer.PeerId)
                 "the composition's posture is unchanged by the token-policy field"
 
             Expect.isTrue
-                (PeerServerApp.peerAuthProvider (baseApp ()) secrets :? IPeerCallScopedAuth)
+                (PeerCompose.peerAuthProvider (baseApp ()) secrets :? IPeerCallScopedAuth)
                 "and the composed provider still offers the call-scoped seam the host validates through"
+    ]
+// ─── The peer companion reaches every base builder ────────────────────
+//
+// The peer substrate is composed when the deployment resolves, so a
+// builder applied AFTER `withPeer` reaches both the resolved app and the
+// companion: the companion reads the final configuration.
+
+let reachabilityTests =
+    testList "the peer companion reaches the base builders applied after it" [
+        testCase "builders applied after withPeer reach the resolved app and the peer companion"
+        <| fun _ ->
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> PeerCompose.withPeer (baseApp ())
+                |> ServerApp.withConfig { enabledConfig with ReplicaCount = 2 }
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
+
+            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+
+            Expect.equal
+                (ServerApp.composedExtensions app).Handlers.Length
+                (ServerApp.empty.Extensions.Handlers.Length + 1)
+                "the companion read the final, peer-enabled configuration and contributed /peer/v1"
+
+        testCase "with the peer substrate off the companion contributes nothing"
+        <| fun _ ->
+            let app = ServerApp.empty |> PeerCompose.withPeer (baseApp ())
+
+            Expect.equal
+                (ServerApp.composedExtensions app).Handlers.Length
+                ServerApp.empty.Extensions.Handlers.Length
+                "NoPeerSubstrate composes no route (GP 13)"
     ]

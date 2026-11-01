@@ -890,6 +890,7 @@ let private registeredTests =
         PeerComposeKnobTests.jobRetentionTests
         PeerComposeKnobTests.roundOrchestratorTests
         PeerComposeKnobTests.tokenPolicyTests
+        PeerComposeKnobTests.reachabilityTests
         PeerAudienceBindingTests.bindingTests
         PeerAudienceBindingTests.postureTests
         PeerDelegationVerificationTests.hostVerificationTests

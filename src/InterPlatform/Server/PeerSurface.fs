@@ -24,8 +24,8 @@ open ToolUp.InterPlatform.PeerCompose
 // instances**.
 //
 // **Derived from the composed peer registrations by construction, never
-// hand-listed.** `describe` reads the same `PeerServerApp` record
-// `PeerCompose.run` composes from: the served contracts come from
+// hand-listed.** `describe` reads the same `PeerOptions` record
+// `PeerCompose.withPeer` composes from: the served contracts come from
 // materialising the very `Contracts` builders the compose path runs
 // (so a new `withContract` registration surfaces here with zero
 // descriptor edits), the consumed contracts from the
@@ -202,7 +202,7 @@ type PeerSurfaceExport = {
 }
 
 /// Derives a deployment's `PeerSurface` from its composed
-/// `PeerServerApp` and renders the hash-stamped canonical-JSON export.
+/// deployment and `PeerOptions` and renders the hash-stamped canonical-JSON export.
 module PeerSurface =
 
     /// Current export-format version.
@@ -337,7 +337,7 @@ module PeerSurface =
         PeerTransition.readDeclaration surface.TransitionAuthority
 
     /// Typed consumed-contract declaration for
-    /// `PeerServerApp.withConsumedContract`: ties the declaration to a
+    /// `PeerOptions.withConsumedContract`: ties the declaration to a
     /// real record-of-functions contract type (the same shape
     /// `JsonRpcPeerClient.create<'TApi>` proxies), so a declaration
     /// cannot name a contract that has no type behind it.
@@ -358,30 +358,32 @@ module PeerSurface =
         }
 
     /// Assemble the deployment's cross-instance face from its composed
-    /// `PeerServerApp`. Pure + on demand (GP 13): a `NoPeerSubstrate`
+    /// deployment and `PeerOptions`. Pure + on demand (GP 13): a `NoPeerSubstrate`
     /// composition short-circuits to `empty` without running a single
     /// contract builder; an enabled composition materialises exactly the
-    /// registrations `PeerCompose.run` would compose, so a new
+    /// registrations `PeerCompose.withPeer` would compose, so a new
     /// registration surfaces with zero descriptor edits.
-    let describe (app: PeerServerApp) : PeerSurface =
-        match app.Base.Config.PeerSubstrate with
+    let describe (app: ServerApp, options: PeerOptions) : PeerSurface =
+        let config = ServerApp.effectiveConfig app
+
+        match config.PeerSubstrate with
         | NoPeerSubstrate -> empty
         | EnabledPeerSubstrate ->
-            // Mirror PeerCompose.run's scheduler gate: routines are
+            // Mirror the peer companion's scheduler gate: routines are
             // advertised only when they are actually dispatchable.
             let fusion =
-                if app.Base.Config.JobScheduler <> NoJobScheduler then
+                if config.JobScheduler <> NoJobScheduler then
                     Some probeFusion
                 else
                     None
 
-            let authored = app.Contracts |> List.map (servedContract fusion)
+            let authored = options.Contracts |> List.map (servedContract fusion)
 
             // Phase 18a — the audit-transparency opt-in registers the
             // SDK-shipped contract under the same reserved id + version
             // constants read here (`PeerAuditContractHost.registration`).
             let auditContract =
-                if app.AuditTransparency then
+                if options.AuditTransparency then
                     [
                         {
                             ContractId = PeerAudit.contractId
@@ -401,7 +403,7 @@ module PeerSurface =
             // approval *state* is live registry data, not a compose-time
             // registration, and is read through the contract itself.
             let approvalContract =
-                if app.TemplateApprovals.IsSome then
+                if options.TemplateApprovals.IsSome then
                     [
                         {
                             ContractId = TemplateApprovalContract.contractId
@@ -424,16 +426,16 @@ module PeerSurface =
 
             {
                 Enabled = true
-                LocalPeerId = app.LocalPeer |> Option.map _.PeerId
+                LocalPeerId = options.LocalPeer |> Option.map _.PeerId
                 Serves = {
                     Contracts = served
                     Endpoints = endpoints
                 }
-                Consumes = app.ConsumedContracts |> List.distinct |> List.sortBy _.ContractId
+                Consumes = options.ConsumedContracts |> List.distinct |> List.sortBy _.ContractId
                 TrustPosture =
                     Some {
                         AuthProfile = "jwt-hs256-bearer"
-                        AudienceBound = app.LocalPeer.IsSome
+                        AudienceBound = options.LocalPeer.IsSome
                         DelegationVerification = "per-peer-trust-anchor"
                         ReplayStance = "freshness-window"
                         TransportSecurity = "deployment-managed"
@@ -441,14 +443,14 @@ module PeerSurface =
                 Budgets =
                     Some {
                         CascadeGuard = "hop-budget-decrement-with-route-loop-detection"
-                        LongRunningEnabled = app.Base.Config.JobScheduler <> NoJobScheduler
+                        LongRunningEnabled = config.JobScheduler <> NoJobScheduler
                     }
                 // Phase 594 — the pinned data-vocabulary packs, hashed +
                 // sorted so the export is order-independent. A counterparty
                 // pins these to require compatible data semantics across the
                 // contract edge; empty when the deployment pins no pack.
                 PinnedVocabulary =
-                    app.Base.Config.PinnedVocabularyPacks
+                    config.PinnedVocabularyPacks
                     |> List.map DataVocabulary.pin
                     |> List.sortBy (fun p -> p.PackId, p.Version.Major, p.Version.Minor)
                 // Phase 642 — the composed declaration
@@ -458,14 +460,14 @@ module PeerSurface =
                 // states its grant once, at compose time, and the
                 // published label cannot disagree with what the seam
                 // enforces because both read this one value.
-                DataVisibility = PeerDataVisibilityLevel.label app.DataVisibility
+                DataVisibility = PeerDataVisibilityLevel.label options.DataVisibility
                 // Phase 644 — the composed grant
                 // (`withPeerTransitionAuthority`), which defaults to
                 // nothing. Derived from the composition like every other
                 // member, so the labels a counterparty pins and the
                 // targets the seam admits cannot disagree — both read
                 // this one value.
-                TransitionAuthority = ModelTransitionAuthority.labels app.TransitionAuthority
+                TransitionAuthority = ModelTransitionAuthority.labels options.TransitionAuthority
             }
 
     /// Canonical JSON of a surface: the universal `FableConverters` set,

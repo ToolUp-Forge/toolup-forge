@@ -1192,6 +1192,32 @@ ToolUp.InterPlatform.PeerCascadePolicyModule.withMaxHopsRemaining(System.Int32, 
 ToolUp.InterPlatform.PeerCascadePolicyModule.withMaxIdentifierLength(System.Int32, ToolUp.InterPlatform.PeerCascadePolicy) : ToolUp.InterPlatform.PeerCascadePolicy
 ToolUp.InterPlatform.PeerCascadePolicyModule.withMaxRouteLength(System.Int32, ToolUp.InterPlatform.PeerCascadePolicy) : ToolUp.InterPlatform.PeerCascadePolicy
 ToolUp.InterPlatform.PeerCompose (class)
+ToolUp.InterPlatform.PeerCompose.audienceBindingAdvisory : System.String { get }
+ToolUp.InterPlatform.PeerCompose.audienceBindingDiagnosis : System.String { get }
+ToolUp.InterPlatform.PeerCompose.audienceBindingRefusal : System.String { get }
+ToolUp.InterPlatform.PeerCompose.auditAudienceBinding(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding
+ToolUp.InterPlatform.PeerCompose.auditCleanRoomTemplates(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.PeerCompose.auditFederationGraph(System.DateTimeOffset, ToolUp.InterPlatform.PeerCompose+PeerOptions) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]
+ToolUp.InterPlatform.PeerCompose.auditNoisedRelease(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.PeerCompose.auditTemplateApprovals(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture
+ToolUp.InterPlatform.PeerCompose.cleanRoomTemplateMap(ToolUp.InterPlatform.PeerCompose+PeerOptions) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]
+ToolUp.InterPlatform.PeerCompose.cleanRoomTemplateRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.InterPlatform.PeerCompose.enforceAudienceBinding(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : System.Void
+ToolUp.InterPlatform.PeerCompose.enforceCleanRoomTemplates(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : System.Void
+ToolUp.InterPlatform.PeerCompose.enforceNoisedRelease(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : System.Void
+ToolUp.InterPlatform.PeerCompose.enforceTemplateApprovals(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : System.Void
+ToolUp.InterPlatform.PeerCompose.enforceTransportSecurity(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : System.Void
+ToolUp.InterPlatform.PeerCompose.federationPreflightInput(System.DateTimeOffset, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.FederationPreflightInput
+ToolUp.InterPlatform.PeerCompose.insecureTransportAdvisory : System.String { get }
+ToolUp.InterPlatform.PeerCompose.jobResultStore(ToolUp.InterPlatform.PeerCompose+PeerOptions, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.InterPlatform.IPeerJobResultStore
+ToolUp.InterPlatform.PeerCompose.noisedReleaseMap(ToolUp.InterPlatform.PeerCompose+PeerOptions) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.NoisedReleasePolicy]
+ToolUp.InterPlatform.PeerCompose.noisedReleaseRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.InterPlatform.PeerCompose.peerAuthProvider(ToolUp.InterPlatform.PeerCompose+PeerOptions, ToolUp.Platform.Secrets+ISecretStore) : ToolUp.InterPlatform.IPeerAuthProvider
+ToolUp.InterPlatform.PeerCompose.peerCompanion : ToolUp.Platform.ComponentId { get }
+ToolUp.InterPlatform.PeerCompose.roundOrchestrationServices(ToolUp.InterPlatform.PeerCompose+PeerOptions, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.InterPlatform.PeerCompose.templateApprovalRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.InterPlatform.PeerCompose.withCommutativeCipher(ToolUp.InterPlatform.ICommutativeCipher, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.InterPlatform.PeerCompose.withPeer(ToolUp.InterPlatform.PeerCompose+PeerOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding (class)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding.AudienceBindingIdle : ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding { get }
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding.AudienceBindingMissing : ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding { get }
@@ -1208,99 +1234,59 @@ ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingEnforce
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingIdle : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingMissing : System.Int32 (literal)
 ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding+Tags.AudienceBindingOff : System.Int32 (literal)
-ToolUp.InterPlatform.PeerCompose+PeerServerApp (class)
-ToolUp.InterPlatform.PeerCompose+PeerServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCascadePolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]], ToolUp.InterPlatform.PeerTransportPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy], ToolUp.InterPlatform.FederationPinStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PrivacyBudgetMeter], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.NoisedReleasePolicy]], ToolUp.InterPlatform.PeerJobRetentionPolicy, System.Boolean, ToolUp.InterPlatform.PeerTokenPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPeerGroupJobMap], ToolUp.InterPlatform.PeerDataVisibilityLevel, ToolUp.Platform.ModelTransitionAuthority)
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.AuditTransparency : System.Boolean { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.Base : ToolUp.Platform.ServerApp { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.CascadePolicy : ToolUp.InterPlatform.PeerCascadePolicy { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.CleanRoomTemplates : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.ConsumedContracts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.ContractProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.Contracts : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.DataVisibility : ToolUp.InterPlatform.PeerDataVisibilityLevel { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.FederationPins : ToolUp.InterPlatform.FederationPinStore { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.GroupJobMap : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPeerGroupJobMap] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.JobRetention : ToolUp.InterPlatform.PeerJobRetentionPolicy { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.LegacyProfileFallback : System.Boolean { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.LocalPeer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.NoisedReleases : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.NoisedReleasePolicy]] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.PrivacyBudget : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PrivacyBudgetMeter] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.RoundOrchestration : System.Boolean { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.StrictAudienceBinding : System.Boolean { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.TemplateApprovals : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy] { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.TokenPolicy : ToolUp.InterPlatform.PeerTokenPolicy { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.TransitionAuthority : ToolUp.Platform.ModelTransitionAuthority { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.TransportPolicy : ToolUp.InterPlatform.PeerTransportPolicy { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerApp.WireLimits : ToolUp.InterPlatform.PeerWireLimits { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule (class)
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.addModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.audienceBindingAdvisory : System.String { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.audienceBindingDiagnosis : System.String { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.audienceBindingRefusal : System.String { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerAudienceBinding
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditCleanRoomTemplates(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditFederationGraph(System.DateTimeOffset, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDefect]
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditNoisedRelease(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.auditTemplateApprovals(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.cleanRoomTemplateMap(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.cleanRoomTemplateRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.create() : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceCleanRoomTemplates(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceNoisedRelease(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceTemplateApprovals(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.enforceTransportSecurity(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Void
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.federationPreflightInput(System.DateTimeOffset, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.FederationPreflightInput
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.insecureTransportAdvisory : System.String { get }
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.jobResultStore(ToolUp.InterPlatform.PeerCompose+PeerServerApp, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.InterPlatform.IPeerJobResultStore
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.noisedReleaseMap(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.InterPlatform.NoisedReleasePolicy]
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.noisedReleaseRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.peerAuthProvider(ToolUp.InterPlatform.PeerCompose+PeerServerApp, ToolUp.Platform.Secrets+ISecretStore) : ToolUp.InterPlatform.IPeerAuthProvider
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.roundOrchestrationServices(ToolUp.InterPlatform.PeerCompose+PeerServerApp, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.run(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : System.Int32
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.templateApprovalRefusal(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCascadePolicy(ToolUp.InterPlatform.PeerCascadePolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCleanRoomTemplate(System.String, ToolUp.InterPlatform.CleanRoomTemplate, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withCommutativeCipher(ToolUp.InterPlatform.ICommutativeCipher, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withConsumedContract(ToolUp.InterPlatform.ConsumedContract, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withContract(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withContractBoundCalls(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withContractProfile(ToolUp.InterPlatform.ContractProfile, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withDataVisibility(ToolUp.InterPlatform.PeerDataVisibilityLevel, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withGroupJobMap(ToolUp.InterPlatform.IPeerGroupJobMap, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withHealthCheck(ToolUp.Platform.HealthChecks+IHealthCheck, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withInsecurePeerTransport(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withJobRetention(ToolUp.InterPlatform.PeerJobRetentionPolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLegacyProfileFallback(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLocalPeer(ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withLogger(ToolUp.Platform.ILogger, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withNoisedRelease(System.String, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withNotifications(ToolUp.Platform.INotificationChannel, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPeerAuditTransparency(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPeerTransitionAuthority(ToolUp.Platform.ModelTransitionAuthority, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPinnedCounterparty(ToolUp.InterPlatform.PinnedPeerSurface, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPinnedSurfaceMaxAge(System.TimeSpan, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPostMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPreMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withPrivacyBudget(ToolUp.Platform.PrivacyBudgetMeter, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withReplayGuard(ToolUp.InterPlatform.IPeerReplayGuard, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withRequiredPeerDataVisibility(ToolUp.InterPlatform.PeerDataVisibilityLevel, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withRequiredPeerTransitionAuthority(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withRequiredPeerTrust(ToolUp.InterPlatform.PeerTrustRequirement, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withRoundOrchestrator(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withStrictAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTemplateApprovals(ToolUp.InterPlatform.TemplateApprovalPolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTokenPolicy(ToolUp.InterPlatform.PeerTokenPolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withTransportPolicy(ToolUp.InterPlatform.PeerTransportPolicy, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
-ToolUp.InterPlatform.PeerCompose+PeerServerAppModule.withWireLimits(ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerCompose+PeerServerApp
+ToolUp.InterPlatform.PeerCompose+PeerOptions (class)
+ToolUp.InterPlatform.PeerCompose+PeerOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract], System.Boolean, System.Boolean, ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCascadePolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]], ToolUp.InterPlatform.PeerTransportPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy], ToolUp.InterPlatform.FederationPinStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PrivacyBudgetMeter], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.NoisedReleasePolicy]], ToolUp.InterPlatform.PeerJobRetentionPolicy, System.Boolean, ToolUp.InterPlatform.PeerTokenPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPeerGroupJobMap], ToolUp.InterPlatform.PeerDataVisibilityLevel, ToolUp.Platform.ModelTransitionAuthority)
+ToolUp.InterPlatform.PeerCompose+PeerOptions.AuditTransparency : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.CascadePolicy : ToolUp.InterPlatform.PeerCascadePolicy { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.CleanRoomTemplates : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.CleanRoomTemplate]] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.ConsumedContracts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ConsumedContract] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.ContractProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractProfile] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.Contracts : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost]] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.DataVisibility : ToolUp.InterPlatform.PeerDataVisibilityLevel { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.FederationPins : ToolUp.InterPlatform.FederationPinStore { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.GroupJobMap : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPeerGroupJobMap] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.JobRetention : ToolUp.InterPlatform.PeerJobRetentionPolicy { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.LegacyProfileFallback : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.LocalPeer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerIdentity] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.NoisedReleases : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.InterPlatform.NoisedReleasePolicy]] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.PrivacyBudget : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PrivacyBudgetMeter] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.RoundOrchestration : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.StrictAudienceBinding : System.Boolean { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.TemplateApprovals : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.TemplateApprovalPolicy] { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.TokenPolicy : ToolUp.InterPlatform.PeerTokenPolicy { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.TransitionAuthority : ToolUp.Platform.ModelTransitionAuthority { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.TransportPolicy : ToolUp.InterPlatform.PeerTransportPolicy { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptions.WireLimits : ToolUp.InterPlatform.PeerWireLimits { get }
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule (class)
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.create() : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withCascadePolicy(ToolUp.InterPlatform.PeerCascadePolicy, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withCleanRoomTemplate(System.String, ToolUp.InterPlatform.CleanRoomTemplate, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withConsumedContract(ToolUp.InterPlatform.ConsumedContract, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withContract(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost], ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withContractBoundCalls(ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withContractProfile(ToolUp.InterPlatform.ContractProfile, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withDataVisibility(ToolUp.InterPlatform.PeerDataVisibilityLevel, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withGroupJobMap(ToolUp.InterPlatform.IPeerGroupJobMap, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withInsecurePeerTransport(ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withJobRetention(ToolUp.InterPlatform.PeerJobRetentionPolicy, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withLegacyProfileFallback(ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withLocalPeer(ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withNoisedRelease(System.String, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withPeerAuditTransparency(ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withPeerTransitionAuthority(ToolUp.Platform.ModelTransitionAuthority, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withPinnedCounterparty(ToolUp.InterPlatform.PinnedPeerSurface, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withPinnedSurfaceMaxAge(System.TimeSpan, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withPrivacyBudget(ToolUp.Platform.PrivacyBudgetMeter, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withReplayGuard(ToolUp.InterPlatform.IPeerReplayGuard, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withRequiredPeerDataVisibility(ToolUp.InterPlatform.PeerDataVisibilityLevel, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withRequiredPeerTransitionAuthority(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withRequiredPeerTrust(ToolUp.InterPlatform.PeerTrustRequirement, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withRoundOrchestrator(ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withStrictAudienceBinding(ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withTemplateApprovals(ToolUp.InterPlatform.TemplateApprovalPolicy, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withTokenPolicy(ToolUp.InterPlatform.PeerTokenPolicy, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withTransportPolicy(ToolUp.InterPlatform.PeerTransportPolicy, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
+ToolUp.InterPlatform.PeerCompose+PeerOptionsModule.withWireLimits(ToolUp.InterPlatform.PeerWireLimits, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerCompose+PeerOptions
 ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture (class)
 ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.IsTemplateApprovalEnforced : System.Boolean { get }
 ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture.IsTemplateApprovalOff : System.Boolean { get }
@@ -1428,8 +1414,8 @@ ToolUp.InterPlatform.PeerFanout.create() : ToolUp.InterPlatform.IPeerFanout
 ToolUp.InterPlatform.PeerGateway (class)
 ToolUp.InterPlatform.PeerGateway.forwardingContract(ToolUp.InterPlatform.IPeerClient, ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.AggregateRoute) : ToolUp.InterPlatform.PeerContractHost
 ToolUp.InterPlatform.PeerGateway.forwardingContractWith(ToolUp.InterPlatform.IPeerClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IPeerGroupJobMap], ToolUp.InterPlatform.PeerIdentity, ToolUp.InterPlatform.AggregateRoute) : ToolUp.InterPlatform.PeerContractHost
-ToolUp.InterPlatform.PeerGateway.surface(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerSurface, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
-ToolUp.InterPlatform.PeerGateway.withAggregate(ToolUp.InterPlatform.IPeerClient, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure, ToolUp.InterPlatform.PeerCompose+PeerServerApp) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerCompose+PeerServerApp, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
+ToolUp.InterPlatform.PeerGateway.surface(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure, ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.PeerSurface, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
+ToolUp.InterPlatform.PeerGateway.withAggregate(ToolUp.InterPlatform.IPeerClient, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure, ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
 ToolUp.InterPlatform.PeerGroupJobBinding (class)
 ToolUp.InterPlatform.PeerGroupJobBinding..ctor(System.String, ToolUp.InterPlatform.TargetPeer, System.String, System.String, System.Guid, System.String)
 ToolUp.InterPlatform.PeerGroupJobBinding.ContractId : System.String { get }
@@ -1691,7 +1677,7 @@ ToolUp.InterPlatform.PeerSurfaceExport.SurfaceHash : System.String { get }
 ToolUp.InterPlatform.PeerSurfaceModule (class)
 ToolUp.InterPlatform.PeerSurfaceModule.consumes`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], System.String) : ToolUp.InterPlatform.ConsumedContract
 ToolUp.InterPlatform.PeerSurfaceModule.dataVisibility(ToolUp.InterPlatform.PeerSurface) : ToolUp.InterPlatform.PeerDataVisibilityLevel
-ToolUp.InterPlatform.PeerSurfaceModule.describe(ToolUp.InterPlatform.PeerCompose+PeerServerApp) : ToolUp.InterPlatform.PeerSurface
+ToolUp.InterPlatform.PeerSurfaceModule.describe(ToolUp.Platform.ServerApp, ToolUp.InterPlatform.PeerCompose+PeerOptions) : ToolUp.InterPlatform.PeerSurface
 ToolUp.InterPlatform.PeerSurfaceModule.empty : ToolUp.InterPlatform.PeerSurface { get }
 ToolUp.InterPlatform.PeerSurfaceModule.endpoints : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.PeerSurfaceModule.export(ToolUp.InterPlatform.PeerSurface) : ToolUp.InterPlatform.PeerSurfaceExport

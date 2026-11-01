@@ -114,7 +114,7 @@
     <Compile Include="Server\CleanRoomGate.fs" />
     <!-- Phase 483 — multi-round protocol orchestrator. Compiles AFTER
          PeerFanout.fs (a round's scatter IS an IPeerFanout call) and
-         before PeerCompose.fs; it is not composed by PeerServerApp.run,
+         before PeerCompose.fs; it is not composed by PeerCompose.withPeer,
          so nothing downstream depends on it (GP 13). -->
     <Compile Include="Server\RoundOrchestrator.fs" />
     <!-- Phase 18f — commutative cipher (OPRF) + two-party private set
@@ -124,8 +124,8 @@
          `PrivateSetIntersection.fs` depends on the seam and on
          `Shared/PeerTypes.fs` (`PeerError`) only — not on either backend,
          which is what keeps the protocol backend-agnostic. Nothing here is
-         composed by `PeerServerApp.run`; the opt-in hook is
-         `PeerServerApp.withCommutativeCipher` (GP 13). -->
+         composed by `PeerCompose.withPeer`; the opt-in hook is
+         `PeerCompose.withCommutativeCipher` (GP 13). -->
     <Compile Include="Server\CommutativeCipher.fs" />
     <Compile Include="Server\EcCommutativeCipher.fs" />
     <Compile Include="Server\PrivateSetIntersection.fs" />
@@ -174,14 +174,14 @@
     <Compile Include="Server\FederationPreflight.fs" />
     <Compile Include="Server\PeerCompose.fs" />
     <!-- Phase 590 — the deployment's cross-instance face as data,
-         derived from the composed PeerServerApp (compiles after it). -->
+         derived from the composed PeerOptions (compiles after it). -->
     <Compile Include="Server\PeerSurface.fs" />
     <!-- Phase 595 — aggregate peer surface + gateway composition: one
          collective PeerSurface over a set of member surfaces plus an
          explicit exposure selection, and the gateway shape that serves it
          by delegating to the owning member. Compiles after PeerSurface.fs
          (it derives a PeerSurface) and after PeerCompose.fs (the gateway
-         registers onto a PeerServerApp). Nothing composes it — the opt-in
+         registers onto a PeerOptions). Nothing composes it — the opt-in
          hook is PeerGateway.withAggregate (GP 13). -->
     <Compile Include="Server\AggregatePeerSurface.fs" />
     <!-- Phase 591 — the one road from a counterparty's published
@@ -200,7 +200,7 @@
 
          Appended at the END of the group rather than inserted beside the
          clean-room files, because nothing downstream depends on either:
-         the pipeline is not composed by `PeerServerApp.run` (GP 13, the
+         the pipeline is not composed by `PeerCompose.withPeer` (GP 13, the
          posture `RoundOrchestrator` takes), so its position only has to
          satisfy its own dependencies. Those are all far above —
          `CleanRoomBroker.fs` + `CleanRoomGate.fs` (it dispatches THROUGH
@@ -228,7 +228,7 @@
          feed spends continuously) and `NoiseMechanism.fs` (the
          per-emission calibration, mandatory here where Phase 490 leaves
          it optional). Nothing downstream depends on it: the feed is not
-         composed by `PeerServerApp.run` and starts no timer of its own
+         composed by `PeerCompose.withPeer` and starts no timer of its own
          (GP 13). -->
     <Compile Include="Server\OutboundSignalFeed.fs" />
     <!-- Phase 478 — the gated-output pipeline: an `Isolated`
@@ -239,7 +239,7 @@
          `CleanRoomBroker.fs` / `PrivacyBudgetLedger.fs` /
          `NoiseMechanism.fs` for the optional invariants it forwards) and
          nothing downstream depends on it — it is not composed by
-         `PeerServerApp.run` and a deployment that never calls `hold`
+         `PeerCompose.withPeer` and a deployment that never calls `hold`
          constructs none of it (GP 13). -->
     <Compile Include="Server\GatedComputeOutput.fs" />
     <!-- Phase 638 — the federated model-execution profile: the peer
@@ -252,7 +252,7 @@
          for the answer shape, `PeerJobHandler.fs` for the job-fusion
          pattern the long fit rides, and `IPlatformPeer.fs` for the
          registration shape) and nothing downstream depends on it — it is
-         not composed by `PeerServerApp.run`, so a deployment that never
+         not composed by `PeerCompose.withPeer`, so a deployment that never
          calls `host` or `governedDiagnostics` constructs none of it
          (GP 13). -->
     <!-- Phase 642 — the disclosure-plane route a level-gated federated

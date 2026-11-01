@@ -11,6 +11,7 @@ open Giraffe
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.InterPlatform.PeerCompose
 
 // ─── Phase 331 — receiver-side cascade-budget authority ──────────────
 //
@@ -138,7 +139,7 @@ let private issue (provider: IPeerAuthProvider) (caller: PeerIdentity) = async {
 /// and the DI set the handlers resolve from. `policy = None` is the
 /// composition that never called `withCascadePolicy` — the host must then
 /// fall back to `PeerCascadePolicy.defaults` rather than to no ceiling.
-/// `localPeerId` is what `PeerServerApp.run` passes; `""` is the pre-331
+/// `localPeerId` is what `PeerCompose.withPeer` passes; `""` is the pre-331
 /// parameterless shape.
 let private receiver (auth: IPeerAuthProvider) (policy: PeerCascadePolicy option) (localPeerId: string) =
     let captured = ResizeArray<PeerCallContext>()
@@ -727,12 +728,12 @@ let cascadeCompatibilityTests =
 
         testCase "the policy is a value a composition sets, and defaults when it does not"
         <| fun _ ->
-            let fresh = PeerCompose.PeerServerApp.create ()
+            let fresh = PeerOptions.create ()
 
             Expect.equal
                 fresh.CascadePolicy
                 PeerCascadePolicy.defaults
-                "a fresh PeerServerApp carries the defaults — no opt-in required for the derivation to bind"
+                "fresh PeerOptions carries the defaults — no opt-in required for the derivation to bind"
 
             Expect.equal
                 PeerCascadePolicy.defaults.LocalPeerId
@@ -746,9 +747,9 @@ let cascadeCompatibilityTests =
 
             let tightened =
                 fresh
-                |> PeerCompose.PeerServerApp.withCascadePolicy (
+                |> (PeerOptions.withCascadePolicy (
                     PeerCascadePolicy.defaults |> PeerCascadePolicy.withMaxHopsRemaining 4
-                )
+                ))
 
             Expect.equal
                 tightened.CascadePolicy.MaxHopsRemaining

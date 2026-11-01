@@ -178,7 +178,7 @@ type PinnedPeerSurface = {
 }
 
 /// One trust facet this deployment REQUIRES of every pinned counterparty
-/// it calls. Declared with `PeerServerApp.withRequiredPeerTrust`, built
+/// it calls. Declared with `PeerOptions.withRequiredPeerTrust`, built
 /// with the `PeerTrustRequirement` helpers.
 ///
 /// A requirement is a statement about the posture this deployment
@@ -241,7 +241,7 @@ module PeerTrustRequirement =
 /// it holds, how long a label stays acceptable, and what it requires of
 /// every counterparty it calls.
 ///
-/// One record rather than three fields on `PeerServerApp`, on the
+/// One record rather than three fields on `PeerOptions`, on the
 /// argument `ModuleGraphReferences` makes for the module-graph facts: the
 /// federation-preflight inputs extend as a family, and a family that
 /// grows inside its own record grows the compose record's constructor
@@ -352,7 +352,7 @@ type FederationPreflightInput = {
     /// vacuous anyway).
     LocalPeerId: string
     /// What this deployment declared it calls on counterparts
-    /// (`PeerServerApp.withConsumedContract`).
+    /// (`PeerOptions.withConsumedContract`).
     Consumes: ConsumedContract list
     /// The declared pin store.
     Pins: FederationPinStore
@@ -442,7 +442,7 @@ module FederationPreflight =
 
                 Some(
                     sprintf
-                        "Consumed peer contract '%s' (expected counterpart role '%s', versions %s) is served by no pinned counterparty. Every call this deployment makes against it would fail at dispatch with PeerContractNotFound. Pinned counterparties: %s; contracts they serve: %s. Pin the counterparty that serves '%s' (FederationPin.ofExportJson over its published PeerSurface export), correct the consumed contract id, or drop the PeerServerApp.withConsumedContract declaration."
+                        "Consumed peer contract '%s' (expected counterpart role '%s', versions %s) is served by no pinned counterparty. Every call this deployment makes against it would fail at dispatch with PeerContractNotFound. Pinned counterparties: %s; contracts they serve: %s. Pin the counterparty that serves '%s' (FederationPin.ofExportJson over its published PeerSurface export), correct the consumed contract id, or drop the PeerOptions.withConsumedContract declaration."
                         consumed.ContractId
                         consumed.CounterpartRole
                         (versionsText consumed.Versions)
@@ -509,7 +509,7 @@ module FederationPreflight =
                     | Some facet ->
                         Some(
                             sprintf
-                                "Pinned counterparty '%s' declares trust facet '%s' = '%s', but this deployment requires '%s'. The pinned label (%s, taken %s from %s) is the only statement of a counterparty's posture a federation has, so a call made under a posture it never claimed is made under an assumption nothing supports. Declared facets: %s. Take a fresher pin if the counterparty has since changed its posture, relax the requirement with PeerServerApp.withRequiredPeerTrust, or stop consuming this counterparty's contracts."
+                                "Pinned counterparty '%s' declares trust facet '%s' = '%s', but this deployment requires '%s'. The pinned label (%s, taken %s from %s) is the only statement of a counterparty's posture a federation has, so a call made under a posture it never claimed is made under an assumption nothing supports. Declared facets: %s. Take a fresher pin if the counterparty has since changed its posture, relax the requirement with PeerOptions.withRequiredPeerTrust, or stop consuming this counterparty's contracts."
                                 pin.CounterpartyId
                                 requirement.Facet
                                 facet.Value
@@ -522,7 +522,7 @@ module FederationPreflight =
                     | None ->
                         Some(
                             sprintf
-                                "Pinned counterparty '%s' declares no trust facet '%s', which this deployment requires at '%s'. A label that omits a facet asserts nothing about it — it is not a weaker claim, it is no claim. Declared facets: %s (label %s, taken %s from %s). Take a fresher pin if the counterparty's label predates the facet, relax the requirement with PeerServerApp.withRequiredPeerTrust, or stop consuming this counterparty's contracts."
+                                "Pinned counterparty '%s' declares no trust facet '%s', which this deployment requires at '%s'. A label that omits a facet asserts nothing about it — it is not a weaker claim, it is no claim. Declared facets: %s (label %s, taken %s from %s). Take a fresher pin if the counterparty's label predates the facet, relax the requirement with PeerOptions.withRequiredPeerTrust, or stop consuming this counterparty's contracts."
                                 pin.CounterpartyId
                                 requirement.Facet
                                 requirement.RequiredValue
@@ -562,7 +562,7 @@ module FederationPreflight =
             |> List.filter (fun pin -> not (PeerDataVisibilityLevel.admits pin.DataVisibility required))
             |> List.map (fun pin ->
                 sprintf
-                    "Pinned counterparty '%s' declares data-visibility authority '%s', and this deployment requires at least '%s'. Every request above the declared level is refused data-side with a typed authority refusal, so the calls this deployment federates on cannot succeed against this counterparty. A label that predates the authority-level facet declares nothing and therefore reads as '%s' — silence is not a grant. The label (%s, taken %s from %s) is the only statement of a counterparty's grant a federation has. Take a fresher pin if the counterparty has since widened its grant, lower the requirement with PeerServerApp.withRequiredPeerDataVisibility, or stop consuming this counterparty's contracts."
+                    "Pinned counterparty '%s' declares data-visibility authority '%s', and this deployment requires at least '%s'. Every request above the declared level is refused data-side with a typed authority refusal, so the calls this deployment federates on cannot succeed against this counterparty. A label that predates the authority-level facet declares nothing and therefore reads as '%s' — silence is not a grant. The label (%s, taken %s from %s) is the only statement of a counterparty's grant a federation has. Take a fresher pin if the counterparty has since widened its grant, lower the requirement with PeerOptions.withRequiredPeerDataVisibility, or stop consuming this counterparty's contracts."
                     pin.CounterpartyId
                     (PeerDataVisibilityLevel.label pin.DataVisibility)
                     (PeerDataVisibilityLevel.label required)
@@ -595,7 +595,7 @@ module FederationPreflight =
                 |> List.filter (fun target -> not (List.contains target pin.TransitionAuthority))
                 |> List.map (fun target ->
                     sprintf
-                        "Pinned counterparty '%s' does not admit the '%s' lifecycle transition from a peer, and this deployment requires it. Its label admits [%s]. Every invocation of an unadmitted transition is refused data-side with '%s', so the workflow this deployment federates on cannot complete against this counterparty — a fitted model with no way to promote it. A label that predates the transition-authority facet admits nothing: silence is not a grant. Take a fresher pin if the counterparty has since widened its grant, drop the requirement with PeerServerApp.withRequiredPeerTransitionAuthority, or stop consuming this counterparty's contracts. (Label %s, taken %s from %s.)"
+                        "Pinned counterparty '%s' does not admit the '%s' lifecycle transition from a peer, and this deployment requires it. Its label admits [%s]. Every invocation of an unadmitted transition is refused data-side with '%s', so the workflow this deployment federates on cannot complete against this counterparty — a fitted model with no way to promote it. A label that predates the transition-authority facet admits nothing: silence is not a grant. Take a fresher pin if the counterparty has since widened its grant, drop the requirement with PeerOptions.withRequiredPeerTransitionAuthority, or stop consuming this counterparty's contracts. (Label %s, taken %s from %s.)"
                         pin.CounterpartyId
                         target
                         (String.Join(", ", pin.TransitionAuthority))
@@ -615,7 +615,7 @@ module FederationPreflight =
             |> List.filter (fun pin -> input.Now - pin.PinnedAt > maxAge)
             |> List.map (fun pin ->
                 sprintf
-                    "Pinned surface for counterparty '%s' was taken %s (%.1f days ago) and the declared maximum pin age is %.1f days. Nothing here says the counterparty HAS drifted — an aged pin is the absence of fresh evidence, not evidence of a defect, which is why this reports rather than refuses. Re-fetch the counterparty's PeerSurface export from %s and re-pin it (its stamp at pinning time was %s), or raise the maximum age with PeerServerApp.withPinnedSurfaceMaxAge."
+                    "Pinned surface for counterparty '%s' was taken %s (%.1f days ago) and the declared maximum pin age is %.1f days. Nothing here says the counterparty HAS drifted — an aged pin is the absence of fresh evidence, not evidence of a defect, which is why this reports rather than refuses. Re-fetch the counterparty's PeerSurface export from %s and re-pin it (its stamp at pinning time was %s), or raise the maximum age with PeerOptions.withPinnedSurfaceMaxAge."
                     pin.CounterpartyId
                     (pin.PinnedAt.ToString "u")
                     (input.Now - pin.PinnedAt).TotalDays
@@ -737,7 +737,7 @@ module FederationPreflight =
     ///
     /// Structural-class (Phase 585): it carries the
     /// `IStructuralClassValidator` marker, so `ServerConfig.SkipPreflight`
-    /// does not bypass it. Registered by `PeerCompose.run` only when the
+    /// does not bypass it. Registered by `PeerCompose.withPeer` only when the
     /// composition pinned at least one counterparty, so a deployment that
     /// declared no federation graph pays not even a singleton (GP 13).
     ///

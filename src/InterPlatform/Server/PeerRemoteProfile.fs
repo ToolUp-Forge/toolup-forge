@@ -44,7 +44,7 @@ open ToolUp.Platform
 // itself.
 //
 // **The pre-343 behaviour survives as an explicit opt-in**
-// (`PeerServerApp.withLegacyProfileFallback`), for the one deployment
+// (`PeerOptions.withLegacyProfileFallback`), for the one deployment
 // shape it was written for: federating with a genuinely pre-18d peer that
 // cannot serve the route. Naming it is the whole value — a composition
 // that accepts lifecycle masking now says so in its own source, rather
@@ -65,7 +65,7 @@ type RemoteProfileFallback =
 /// the old behaviour. Deliberately does NOT echo the response body: it is
 /// remote-controlled text on its way into a log.
 let refusalMessage (statusCode: int) =
-    $"peer capability-profile fetch returned HTTP {statusCode}. Refusing to degrade to the bare capability list: that fallback drops every per-method lifecycle declaration, so a Deprecated or Removed method would be negotiated as though it were advertised — a downgrade the answering side (or anything on the path) can trigger by choosing a status code. Compose PeerServerApp.withLegacyProfileFallback to restore the pre-343 degrade for a peer that genuinely predates GET /peer/v1/capabilities/profile."
+    $"peer capability-profile fetch returned HTTP {statusCode}. Refusing to degrade to the bare capability list: that fallback drops every per-method lifecycle declaration, so a Deprecated or Removed method would be negotiated as though it were advertised — a downgrade the answering side (or anything on the path) can trigger by choosing a status code. Compose PeerOptions.withLegacyProfileFallback to restore the pre-343 degrade for a peer that genuinely predates GET /peer/v1/capabilities/profile."
 
 /// Decide what a non-2xx profile response means. `Some err` ⇒ fail
 /// closed with this error; `None` ⇒ the caller may degrade to the bare

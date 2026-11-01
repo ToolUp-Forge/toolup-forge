@@ -9,6 +9,7 @@ open ToolUp.Platform
 // cases stub, and the compose record the descriptor cases build.
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 
 // ─── Phase 638 — the federated model-execution profile ───────────────
@@ -1599,16 +1600,20 @@ let private declaredSurfaceTests =
     testList "the grant is declared once and published in the descriptor" [
         test "a composed declaration is what the surface publishes" {
             let surface =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
-                |> PeerServerApp.withLocalPeer {
-                    PeerId = "data-host"
-                    DisplayName = "Data host"
-                }
-                |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
+                PeerComposition.create ()
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            PeerSubstrate = EnabledPeerSubstrate
+                    }
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withLocalPeer {
+                        PeerId = "data-host"
+                        DisplayName = "Data host"
+                    }
+                )
+                |> PeerComposition.options (PeerOptions.withDataVisibility PeerDataVisibilityLevel.ViewOnly)
                 |> PeerSurface.describe
 
             Expect.equal surface.DataVisibility "ViewOnly" "the label a counterparty pins"
@@ -1621,11 +1626,13 @@ let private declaredSurfaceTests =
 
         test "a composition that declares nothing publishes the narrowest level, present rather than omitted" {
             let surface =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
+                PeerComposition.create ()
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            PeerSubstrate = EnabledPeerSubstrate
+                    }
+                )
                 |> PeerSurface.describe
 
             Expect.equal surface.DataVisibility "AggregatesOnly" "the shipped posture, named rather than changed"
@@ -2827,17 +2834,21 @@ let private transitionDeclarationTests =
     testList "the grant is declared, published and pinnable" [
         test "a deployment's composed grant is what its descriptor publishes" {
             let surface =
-                PeerServerApp.create ()
+                PeerComposition.create ()
                 // The descriptor is the empty label unless the peer
                 // substrate is on — a deployment with no wire face
                 // publishes no grant, which is itself the fail-closed
                 // shape and would make this assertion vacuously pass.
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
-                |> PeerServerApp.withPeerTransitionAuthority (
-                    ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ]
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            PeerSubstrate = EnabledPeerSubstrate
+                    }
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withPeerTransitionAuthority (
+                        ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ]
+                    )
                 )
                 |> PeerSurface.describe
 
@@ -2874,16 +2885,18 @@ let private transitionDeclarationTests =
             // row. If the grant were a rung on the visibility ladder,
             // this composition could not be written.
             let surface =
-                PeerServerApp.create ()
+                PeerComposition.create ()
                 // The descriptor is the empty label unless the peer
                 // substrate is on — a deployment with no wire face
                 // publishes no grant, which is itself the fail-closed
                 // shape and would make this assertion vacuously pass.
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
-                |> PeerServerApp.withPeerTransitionAuthority approveGrant
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            PeerSubstrate = EnabledPeerSubstrate
+                    }
+                )
+                |> PeerComposition.options (PeerOptions.withPeerTransitionAuthority approveGrant)
                 |> PeerSurface.describe
 
             Expect.equal

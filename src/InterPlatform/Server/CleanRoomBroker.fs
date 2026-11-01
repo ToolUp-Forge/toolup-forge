@@ -24,7 +24,7 @@ namespace ToolUp.InterPlatform
 // ship (GP 4: structural, not "remember to filter").
 //
 // The guarantee is real on the COMPOSED path:
-// `PeerServerApp.withCleanRoomTemplate contractId template` wraps the
+// `PeerOptions.withCleanRoomTemplate contractId template` wraps the
 // named contract's registration so `ICleanRoomBroker.Enforce` runs on
 // every answer of every method, the handler having no say in the matter
 // — see `CleanRoomGate.fs`. Calling `Enforce` by hand from a handler

@@ -783,6 +783,7 @@
              the tool-aware framing; not sealed (pre-860 canonical bytes pinned);
              readiness without RAG. After BuildTranscriptTests (StubSealer). -->
         <Compile Include="InProcess\CompositionManifestLiveInterfaceTests.fs" />
+        <Compile Include="InProcess\PeerTestComposition.fs" />
         <Compile Include="InProcess\PlatformPeerTests.fs" />
         <Compile Include="InProcess\PeerFederationTests.fs" />
         <Compile Include="InProcess\CleanRoomBrokerTests.fs" />

@@ -751,7 +751,7 @@ type MetricsEndpointMode =
 /// `IPeerAuthProvider` resolved in DI, no peer audit emission wired.
 /// Zero cost when not enabled (GP 13). Enable with
 /// `EnabledPeerSubstrate` to activate the substrate; contracts are
-/// hosted via `PeerServerApp.run` and the JSON-RPC 2.0 host.
+/// hosted via `PeerCompose.withPeer` and the JSON-RPC 2.0 host.
 ///
 /// Distinct from `PeerRoutePrefixes` (the simpler shared-bearer
 /// peer-call middleware) — the two coexist on different route
@@ -774,7 +774,7 @@ type PeerSubstrateMode =
     /// and handshake lifecycle events emitted via `IEventStore` under
     /// `SourceModule = "_platform.peer"`. Contracts are authored as
     /// `IPlatformPeer`-shaped records and hosted through
-    /// `PeerServerApp.run`.
+    /// `PeerCompose.withPeer`.
     | EnabledPeerSubstrate
 
 /// Phase 520 — selects whether a bitemporal fact store (the `ToolUp.Facts`

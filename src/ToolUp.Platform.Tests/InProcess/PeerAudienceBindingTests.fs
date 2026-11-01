@@ -5,6 +5,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 
 // ─── Phase 309 — audience binding for contract hosts ─────────────────
@@ -98,10 +99,12 @@ let private hostIdentity: PeerIdentity = {
 /// The shape the phase is about: a deployment that exposes a contract and
 /// never calls a peer, so `withLocalPeer` looks optional.
 let private hostOnlyApp () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<LedgerContract> "example.ledger" [ v1 ] fusion ledgerImpl)
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<LedgerContract> "example.ledger" [ v1 ] fusion ledgerImpl)
+    )
 
 // ─── 1. The exposure the phase closes ────────────────────────────────
 //
@@ -212,16 +215,18 @@ let postureTests =
 
         test "a contract host without LocalPeer classifies as missing" {
             Expect.equal
-                (PeerServerApp.auditAudienceBinding (hostOnlyApp ()))
+                (PeerCompose.auditAudienceBinding (hostOnlyApp ()))
                 AudienceBindingMissing
                 "contracts hosted, no local identity — the composition defect"
         }
 
         test "CONTROL — the same host WITH LocalPeer classifies as enforced" {
-            let app = hostOnlyApp () |> PeerServerApp.withLocalPeer hostIdentity
+            let app =
+                hostOnlyApp ()
+                |> PeerComposition.options (PeerOptions.withLocalPeer hostIdentity)
 
             Expect.equal
-                (PeerServerApp.auditAudienceBinding app)
+                (PeerCompose.auditAudienceBinding app)
                 (AudienceBindingEnforced hostIdentity.PeerId)
                 "composing withLocalPeer is the lever that activates the check"
         }
@@ -231,12 +236,12 @@ let postureTests =
             // reads audit rows, so it carries the same exposure as an
             // author contract even with `Contracts` empty.
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withPeerAuditTransparency
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (PeerOptions.withPeerAuditTransparency)
 
             Expect.equal
-                (PeerServerApp.auditAudienceBinding app)
+                (PeerCompose.auditAudienceBinding app)
                 AudienceBindingMissing
                 "the audit-transparency contract is exposed to peers like any other"
         }
@@ -247,22 +252,26 @@ let postureTests =
             // configured — the one shape a naive `IsSome` check misses.
             let app =
                 hostOnlyApp ()
-                |> PeerServerApp.withLocalPeer {
-                    PeerId = "   "
-                    DisplayName = "Blank"
-                }
+                |> PeerComposition.options (
+                    PeerOptions.withLocalPeer {
+                        PeerId = "   "
+                        DisplayName = "Blank"
+                    }
+                )
 
             Expect.equal
-                (PeerServerApp.auditAudienceBinding app)
+                (PeerCompose.auditAudienceBinding app)
                 AudienceBindingMissing
                 "a whitespace peer id cannot bind an audience, so it must not read as bound"
         }
 
         test "a deployment hosting nothing is idle, not defective" {
-            let app = PeerServerApp.create () |> PeerServerApp.withConfig enabledConfig
+            let app =
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
 
             Expect.equal
-                (PeerServerApp.auditAudienceBinding app)
+                (PeerCompose.auditAudienceBinding app)
                 AudienceBindingIdle
                 "no contract is exposed for a mis-addressed token to be spent against"
         }
@@ -271,21 +280,23 @@ let postureTests =
             // `PeerSubstrate = NoPeerSubstrate` validates no peer token
             // at all, so the question does not arise (GP 13).
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<LedgerContract> "example.ledger" [ v1 ] fusion ledgerImpl)
+                PeerComposition.create ()
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<LedgerContract> "example.ledger" [ v1 ] fusion ledgerImpl)
+                )
 
             Expect.equal
-                (PeerServerApp.auditAudienceBinding app)
+                (PeerCompose.auditAudienceBinding app)
                 AudienceBindingOff
                 "a deployment with the peer substrate disabled has nothing to bind"
         }
 
         test "enforcement logs the advisory for a contract host without LocalPeer" {
             let logger = RecordingLogger()
-            let app = hostOnlyApp () |> PeerServerApp.withLogger logger
+            let app = hostOnlyApp () |> PeerComposition.app (ServerApp.withLogger logger)
 
-            PeerServerApp.enforceAudienceBinding app
+            PeerCompose.enforceAudienceBinding app
 
             Expect.equal logger.Warnings.Length 1 "exactly one advisory, on the startup path"
 
@@ -300,10 +311,10 @@ let postureTests =
 
             let app =
                 hostOnlyApp ()
-                |> PeerServerApp.withLocalPeer hostIdentity
-                |> PeerServerApp.withLogger logger
+                |> PeerComposition.options (PeerOptions.withLocalPeer hostIdentity)
+                |> PeerComposition.app (ServerApp.withLogger logger)
 
-            PeerServerApp.enforceAudienceBinding app
+            PeerCompose.enforceAudienceBinding app
 
             Expect.isEmpty
                 logger.Warnings
@@ -314,18 +325,20 @@ let postureTests =
             let logger = RecordingLogger()
 
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withLogger logger
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.app (ServerApp.withLogger logger)
 
-            PeerServerApp.enforceAudienceBinding app
+            PeerCompose.enforceAudienceBinding app
             Expect.isEmpty logger.Warnings "nothing hosted, nothing to warn about"
         }
 
         test "strict mode refuses to start, naming the defect and the fix" {
-            let app = hostOnlyApp () |> PeerServerApp.withStrictAudienceBinding
+            let app =
+                hostOnlyApp ()
+                |> PeerComposition.options (PeerOptions.withStrictAudienceBinding)
 
-            Expect.throwsC (fun () -> PeerServerApp.enforceAudienceBinding app) (fun ex ->
+            Expect.throwsC (fun () -> PeerCompose.enforceAudienceBinding app) (fun ex ->
                 Expect.stringContains ex.Message "withLocalPeer" "the refusal names the lever that fixes it"
 
                 Expect.stringContains
@@ -342,11 +355,11 @@ let postureTests =
 
             let app =
                 hostOnlyApp ()
-                |> PeerServerApp.withLocalPeer hostIdentity
-                |> PeerServerApp.withStrictAudienceBinding
-                |> PeerServerApp.withLogger logger
+                |> PeerComposition.options (PeerOptions.withLocalPeer hostIdentity)
+                |> PeerComposition.options (PeerOptions.withStrictAudienceBinding)
+                |> PeerComposition.app (ServerApp.withLogger logger)
 
-            PeerServerApp.enforceAudienceBinding app
+            PeerCompose.enforceAudienceBinding app
             Expect.isEmpty logger.Warnings "a bound receiver passes the strict gate silently"
         }
 
@@ -354,15 +367,15 @@ let postureTests =
             // The same defective composition without the opt-in must not
             // throw: every existing host-only deployment keeps starting.
             let logger = RecordingLogger()
-            let app = hostOnlyApp () |> PeerServerApp.withLogger logger
+            let app = hostOnlyApp () |> PeerComposition.app (ServerApp.withLogger logger)
 
-            PeerServerApp.enforceAudienceBinding app
+            PeerCompose.enforceAudienceBinding app
             Expect.equal logger.Warnings.Length 1 "surfaced, but the deployment still starts"
         }
 
         test "strict mode is off on a freshly created composition" {
             Expect.isFalse
-                (PeerServerApp.create ()).StrictAudienceBinding
+                (snd (PeerComposition.create ())).StrictAudienceBinding
                 "opt-in — an upgrading deployment inherits the advisory, never the refusal"
         }
     ]

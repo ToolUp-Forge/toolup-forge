@@ -75,11 +75,11 @@ open System
 /// required registration (GP 11 / GP 13).
 type PeerCascadePolicy = {
     /// This deployment's own peer id, used to refuse a call whose route
-    /// already names the receiver. Filled in by `PeerServerApp.run` from
+    /// already names the receiver. Filled in by `PeerCompose.withPeer` from
     /// the composed `LocalPeer`; blank when no local identity was
     /// composed, in which case that one guard simply never fires — the
     /// same posture the audience-binding check takes for the same
-    /// reason (`PeerServerApp.auditAudienceBinding`).
+    /// reason (`PeerCompose.auditAudienceBinding`).
     LocalPeerId: string
     /// The largest hop budget the receiver will carry forward from a
     /// wire assertion. An inbound `HopsRemaining` above this is clamped
@@ -126,7 +126,7 @@ module PeerCascadePolicy =
         MaxIdentifierLength = defaultMaxIdentifierLength
     }
 
-    /// Declare the receiver's own peer id. `PeerServerApp.run` does this
+    /// Declare the receiver's own peer id. `PeerCompose.withPeer` does this
     /// from the composed `LocalPeer`; a hand-built host sets it here.
     let withLocalPeerId (peerId: string) (policy: PeerCascadePolicy) : PeerCascadePolicy = {
         policy with

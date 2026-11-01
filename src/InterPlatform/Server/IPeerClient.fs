@@ -63,7 +63,7 @@ type PeerTransportPolicy = {
     /// loopback host.
     ///
     /// **This is an opt-OUT of a security default, and it is on the
-    /// transport policy rather than on `PeerServerApp` deliberately.**
+    /// transport policy rather than on `PeerOptions` deliberately.**
     /// The bearer token rides every outbound leg — contract invoke,
     /// job poll, capability handshake, profile fetch — and a peer
     /// `TargetPeer` can arrive from the registry at runtime rather than
@@ -224,7 +224,7 @@ module PeerTransportSecurity =
     /// response body, which `PeerRemoteProfile.refusalMessage`
     /// deliberately does not echo.
     let refusalMessage (url: string) =
-        $"{RefusalPrefix}: '{url}' is not https and is not a loopback host, so the peer bearer token minted for this call would travel in cleartext. A peer token vouches for the whole deployment, so one observation on the path is peer impersonation until the signing key rotates. Use an https:// BaseUrl for this peer; for a genuinely local dev peer use http://localhost, which is accepted as-is. PeerTransportPolicy.allowInsecureTransport (PeerServerApp.withInsecurePeerTransport) restores the pre-339 behaviour."
+        $"{RefusalPrefix}: '{url}' is not https and is not a loopback host, so the peer bearer token minted for this call would travel in cleartext. A peer token vouches for the whole deployment, so one observation on the path is peer impersonation until the signing key rotates. Use an https:// BaseUrl for this peer; for a genuinely local dev peer use http://localhost, which is accepted as-is. PeerTransportPolicy.allowInsecureTransport (PeerOptions.withInsecurePeerTransport) restores the pre-339 behaviour."
 
     /// The refusal as the `PeerError` an outbound call reports.
     let refused (url: string) : PeerError = PeerTransport(refusalMessage url)

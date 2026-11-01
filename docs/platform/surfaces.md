@@ -354,9 +354,9 @@ ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withAuth authProvider
 |> ServerApp.addModules modules
-// Peers themselves are registered one tier up, on the `PeerServerApp`
-// wrapper (`PeerServerApp.withLocalPeer`); `ServerApp` only carries the
-// route prefixes the surface validator skips.
+// Peers themselves are registered by the peer companion
+// (`PeerCompose.withPeer` with `PeerOptions.withLocalPeer`); the config
+// only carries the route prefixes the surface validator skips.
 |> ServerApp.run
 ```
 

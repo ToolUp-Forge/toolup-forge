@@ -82,7 +82,7 @@ open ToolUp.Platform
 // ── Cost when unused (GP 13) ──
 //
 // Nothing in this file or `CohortActivation.fs` is composed by
-// `PeerServerApp.run`. A deployment that never calls
+// `PeerCompose.withPeer`. A deployment that never calls
 // `CohortActivation.activate` never constructs any of these types, and
 // its peer substrate is byte-for-byte what it was before this phase —
 // the same posture `RoundOrchestrator` takes.
