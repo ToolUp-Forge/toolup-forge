@@ -204,8 +204,176 @@ let private reflectingCors (app: WebApplication) =
     )
     |> ignore
 
+// ─── the placement table: where every unit of background work runs ────
+//
+// Every hosted-service registration site in the SDK and its companions,
+// keyed by its unit id, with the `Placement` its author declares and the
+// profile cells it registered under BEFORE `Hosting` (the matrix for the
+// platform's subsystems, "every profile" for an exemption, every Kestrel
+// profile for the ServerlessHost-gated observability drains). Each row's
+// cells under `Hosting.admitsPlacement` must equal its pre-change cells
+// except the rows declared changed — a placement that moved by accident
+// reddens a row. The composed harness's every registered unit must appear
+// here, so the table cannot silently miss one.
+
+/// Where a unit registered before `Hosting`.
+type private Before =
+    /// The matrix's subsystems: `AllInOne` and `WorkerOnly` on Kestrel.
+    | WorkerProfiles
+    /// The matrix's two outbound dispatchers: `WorkerProfiles` plus `DispatcherOnly`.
+    | WorkerAndDispatcher
+    /// Every Kestrel profile (gated off a serverless host only).
+    | KestrelProfiles
+    /// Every profile, a serverless host included (an exemption).
+    | EveryProfile
+
+type private PlacementRow = {
+    Unit: string
+    Placement: Placement
+    Outbound: bool
+    Before: Before
+    /// Why the row's cells differ from `Before`, when they do.
+    Changed: string option
+}
+
+let private row unit placement before = {
+    Unit = unit
+    Placement = placement
+    Outbound = false
+    Before = before
+    Changed = None
+}
+
+let private outboundRow unit before = {
+    row unit SharedWork before with
+        Outbound = true
+}
+
+let private changed (why: string) (r: PlacementRow) = { r with Changed = Some why }
+
+/// The approved placement table.
+let private placementTable: PlacementRow list = [
+    // ToolUp.Platform.Server — the 14 matrix sites.
+    row "job-scheduler" SharedWork WorkerProfiles
+    outboundRow "webhook-dispatcher" WorkerAndDispatcher
+    outboundRow "transactional-dispatcher" WorkerAndDispatcher
+    row "audit-replicator" SharedWork WorkerProfiles
+    row "audit-fallback-replay" SharedWork WorkerProfiles
+    row "entity-outbox-relay" SharedWork WorkerProfiles
+    row "lineage-outbox-relay" SharedWork WorkerProfiles
+    row "data-migration-sweep" SharedWork WorkerProfiles
+    row "usage-batch-flusher" SharedWork WorkerProfiles
+    row "health-state-tracker" SharedWork WorkerProfiles
+    row "alert-rule-engine" SharedWork WorkerProfiles
+    row "oauth-state-cleanup" SharedWork WorkerProfiles
+    row "oauth-refresher-recover" SharedWork WorkerProfiles
+    // The three reasoned exemptions: bound to this process.
+    row "log-store-retention" ProcessLocal KestrelProfiles
+    row "metrics-history-flusher" ProcessLocal KestrelProfiles
+    row "remoting-audit-drain" ProcessLocal KestrelProfiles
+    // The one-shot and scheduler-registration sites.
+    row "model-fit-handler-registration" OnceAtStart EveryProfile
+    row "dsr-handler-registration" OnceAtStart EveryProfile
+    row "tenant-lifecycle-handler-registration" OnceAtStart EveryProfile
+    row "backup-restore-drill" OnceAtStart EveryProfile
+    row "data-object-orphan-sweep" OnceAtStart EveryProfile
+    // The companions.
+    row "rag-ingestion" ProcessLocal EveryProfile
+    |> changed
+        "over the in-process queue only the accepting process can drain it, and a serverless host keeps no loop alive; over a shared queue store it is SharedWork (WorkerProfiles)"
+    row "rag-reembedding" SharedWork EveryProfile
+    |> changed "it scans the shared vector store, so a worker silo re-embeds for every silo"
+    row "rag-retrieval-store-flush" OnceAtStart EveryProfile
+    row "rag-ingestion-recovery-sweep" OnceAtStart EveryProfile
+    row "rag-tombstone-vacuum" OnceAtStart EveryProfile
+    row "ai-chat-worker" ProcessLocal EveryProfile
+    |> changed "a serverless host keeps no loop alive; the handler falls back to the unsupervised run"
+    row "ai-conversation-retention-sweep" OnceAtStart EveryProfile
+    row "narrative-regenerate-handler-registration" OnceAtStart EveryProfile
+    row "indexnow-startup-submission" OnceAtStart EveryProfile
+    row "indexnow-startup-submission:<site>" OnceAtStart EveryProfile
+    row "reactive-fact-recomputation" OnceAtStart EveryProfile
+    row "grounded-narrative-handler-registration" OnceAtStart EveryProfile
+    row "fact-coherence-check-scheduling" OnceAtStart EveryProfile
+    row "fact-publication-handler-registration" OnceAtStart EveryProfile
+    row "knowledge-base-retention-sweep" OnceAtStart EveryProfile
+    row "calendar-sync" OnceAtStart EveryProfile
+    row "google-calendar-channel-renewal" OnceAtStart EveryProfile
+    row "microsoft-graph-subscription-renewal" OnceAtStart EveryProfile
+    row "report-rendering-ai-tools" OnceAtStart EveryProfile
+    row "declared-data-sources" OnceAtStart EveryProfile
+]
+
+let private allCells: (ProcessProfile * ServerlessHostMode) list = [
+    for host in [ KestrelHost; ServerlessHost ] do
+        for profile in [ AllInOne; WebOnly; WorkerOnly; DispatcherOnly ] do
+            profile, host
+]
+
+let private cellConfig (profile, host) = {
+    ServerConfig.defaults with
+        ProcessProfile = profile
+        ServerlessHost = host
+}
+
+let private beforeCells (before: Before) : (ProcessProfile * ServerlessHostMode) list =
+    allCells
+    |> List.filter (fun (profile, host) ->
+        match before, host with
+        | EveryProfile, _ -> true
+        | _, ServerlessHost -> false
+        | KestrelProfiles, KestrelHost -> true
+        | WorkerProfiles, KestrelHost -> profile = AllInOne || profile = WorkerOnly
+        | WorkerAndDispatcher, KestrelHost -> profile = AllInOne || profile = WorkerOnly || profile = DispatcherOnly)
+
+let private afterCells (r: PlacementRow) : (ProcessProfile * ServerlessHostMode) list =
+    allCells
+    |> List.filter (fun cell -> Hosting.admitsPlacement (cellConfig cell) r.Placement r.Outbound)
+
+let placementTests =
+    testList "Hosting — the placement table" [
+        test "every row registers where it did before, except the declared changes" {
+            for r in placementTable do
+                match r.Changed with
+                | None -> Expect.equal (afterCells r) (beforeCells r.Before) (sprintf "%s keeps its cells" r.Unit)
+                | Some why ->
+                    Expect.notEqual
+                        (afterCells r)
+                        (beforeCells r.Before)
+                        (sprintf "%s is declared changed: %s" r.Unit why)
+        }
+
+        test "the declared changes are the rows the redesign names, and no others" {
+            let declared = placementTable |> List.filter _.Changed.IsSome |> List.map _.Unit
+
+            Expect.equal declared [ "rag-ingestion"; "rag-reembedding"; "ai-chat-worker" ] "the changed rows"
+        }
+
+        test "every unit the composed harness registers is a row, with the row's placement" {
+            for cell in allCells do
+                let config = HostedServiceGateTests.configFor (fst cell) (snd cell)
+
+                for record in Hosting.records (HostedServiceGateTests.composed config) do
+                    let unit = (ComponentId.value record.Id).Substring("hosted:".Length)
+
+                    match placementTable |> List.tryFind (fun r -> r.Unit = unit) with
+                    | None -> failtestf "unit %s is registered but has no row in the placement table" unit
+                    | Some r ->
+                        Expect.equal record.Placement r.Placement (sprintf "%s's placement" unit)
+                        Expect.equal record.Outbound r.Outbound (sprintf "%s's outbound tag" unit)
+        }
+
+        test "IndexNow submits once per replica start and never as a loop" {
+            for unit in [ "indexnow-startup-submission"; "indexnow-startup-submission:<site>" ] do
+                let r = placementTable |> List.find (fun r -> r.Unit = unit)
+                Expect.equal r.Placement OnceAtStart (sprintf "%s is a one-shot" unit)
+        }
+    ]
+
 let tests =
     testList "Phase 771 — the hardening baseline" [
+        placementTests
+
 
         testList "classification: each control observed on and off" [
 

@@ -690,7 +690,10 @@ module FactsCompose =
 
         services
 
-    let private registerReactiveRecomputation (services: IServiceCollection) : IServiceCollection =
+    let private registerReactiveRecomputation
+        (serverConfig: ServerConfig)
+        (services: IServiceCollection)
+        : IServiceCollection =
         // (1) The default recompute engine — TryAdd so a deployment-
         //     supplied `IFactRecomputer` registered anywhere in the
         //     compose chain takes precedence.
@@ -757,34 +760,31 @@ module FactsCompose =
         // (2) Register + schedule the recompute handler at startup, once
         //     the container that owns `IFactStore` / `IFactRecomputer`
         //     exists. `Trigger.Manual`: recompute jobs are fired on demand
-        //     by `reactToDataChange`, never on a cadence.
-        //     Exempt from the profile matrix (Phase 1051), like (3) below: a
-        //     scheduler registration, placed by the scheduler's own gate.
-        (services
-         |> ProcessProfileGate.exempt "Reactive fact recomputation" ProcessProfileGate.SchedulerRegistrationReason)
-            .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    DeferredScheduledJobDeclaration.hostedService
-                        "Reactive fact recomputation"
-                        [
-                            DeferredScheduledJobDeclaration.create (fun provider ->
-                                RecomputeJobHandler.declaration
-                                    (provider.GetRequiredService<IFactStore>())
-                                    (provider.GetRequiredService<IFactRecomputer>())
-                                    (provider.GetRequiredService<ILogger>()))
-                        ]
-                        sp)
-            )
+        //     by `reactToDataChange`, never on a cadence. Once at start,
+        //     like (3) below: a scheduler registration, placed by the
+        //     scheduler's own unit.
+        Hosting.register
+            services
+            serverConfig
+            (Hosting.deferredJobs "reactive-fact-recomputation" [
+                DeferredScheduledJobDeclaration.create (fun provider ->
+                    RecomputeJobHandler.declaration
+                        (provider.GetRequiredService<IFactStore>())
+                        (provider.GetRequiredService<IFactRecomputer>())
+                        (provider.GetRequiredService<ILogger>()))
+            ])
         |> ignore
 
-        // Phase 985 — the grounded-narrative job handler, registered with
-        // the scheduler at startup only when a run registry and a run are
-        // composed; otherwise the start is a DI lookup and nothing else.
-        services
-        |> ProcessProfileGate.addExempt
-            "Grounded-narrative handler registration"
-            ProcessProfileGate.SchedulerRegistrationReason
-            GroundedNarrativeTrigger.hostedService
+        // The grounded-narrative job handler, registered with the scheduler
+        // at startup only when a run registry and a run are composed;
+        // otherwise the start is a DI lookup and nothing else.
+        Hosting.register
+            services
+            serverConfig
+            (BackgroundUnit.create
+                "grounded-narrative-handler-registration"
+                OnceAtStart
+                GroundedNarrativeTrigger.hostedService)
         |> ignore
 
         services
@@ -823,7 +823,7 @@ module FactsCompose =
             // one registration pass: the store first, then the recompute
             // engine + handler + data-arrival hook over it.
             let register (s: IServiceCollection) =
-                registerReactiveRecomputation (registerTableChangeSignal (registerFactStore s))
+                registerReactiveRecomputation app.Config (registerTableChangeSignal (registerFactStore s))
                 // Phase 888 — the backend marker and, for a multi-replica
                 // deployment only, the blob store's scale guard.
                 |> registerBlobScaleGuard app.Config.ReplicaCount
@@ -1388,6 +1388,7 @@ module FactsCompose =
         }
 
     let private registerCoherenceChecks
+        (serverConfig: ServerConfig)
         (config: CoherenceConfig)
         (cadence: Trigger)
         (principals: DeclaredPrincipal list)
@@ -1409,90 +1410,83 @@ module FactsCompose =
             |> ignore
         | None -> ()
 
-        services
-            // Schedule the standing check on the opt-in cadence. The
-            // scheduler + metric registry are only resolvable from the built
-            // container, so registration happens in a startup hosted service
-            // — exempt from the profile matrix (Phase 1051): a scheduler
-            // registration, placed by the scheduler's own gate.
-            .AddSingleton<HostedServiceExemption>(
-                {
-                    Service = "Fact coherence check scheduling"
-                    Reason = ProcessProfileGate.SchedulerRegistrationReason
-                }
-            )
-            .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    { new Microsoft.Extensions.Hosting.IHostedService with
-                        // The schedule calls are awaited here, in the hosted
-                        // start, never run synchronously: a slow scheduler
-                        // delays this start step, not the thread that is
-                        // composing the container.
-                        member _.StartAsync(ct) =
-                            let logger = sp.GetRequiredService<ILogger>()
+        // Schedule the standing check on the opt-in cadence. The scheduler +
+        // metric registry are only resolvable from the built container, so
+        // registration happens in a startup hosted service — once at start:
+        // a scheduler registration, placed by the scheduler's own unit.
+        Hosting.register
+            services
+            serverConfig
+            (BackgroundUnit.create "fact-coherence-check-scheduling" OnceAtStart (fun sp ->
+                { new Microsoft.Extensions.Hosting.IHostedService with
+                    // The schedule calls are awaited here, in the hosted
+                    // start, never run synchronously: a slow scheduler
+                    // delays this start step, not the thread that is
+                    // composing the container.
+                    member _.StartAsync(ct) =
+                        let logger = sp.GetRequiredService<ILogger>()
 
-                            match tryService<IJobScheduler> sp with
-                            | Some scheduler ->
-                                let handler =
-                                    CoherenceJobHandler.create
-                                        (coherenceStore sp)
-                                        (tryService<Grounding.IMetricRegistry> sp)
-                                        (sp.GetRequiredService<INotificationChannel>())
-                                        (sp.GetRequiredService<IEventStore>())
-                                        config
-                                        (fun () -> DateTime.UtcNow)
-                                        logger
+                        match tryService<IJobScheduler> sp with
+                        | Some scheduler ->
+                            let handler =
+                                CoherenceJobHandler.create
+                                    (coherenceStore sp)
+                                    (tryService<Grounding.IMetricRegistry> sp)
+                                    (sp.GetRequiredService<INotificationChannel>())
+                                    (sp.GetRequiredService<IEventStore>())
+                                    config
+                                    (fun () -> DateTime.UtcNow)
+                                    logger
 
-                                scheduler.RegisterHandler(CoherenceJobHandler.HandlerName, handler)
+                            scheduler.RegisterHandler(CoherenceJobHandler.HandlerName, handler)
 
-                                let scheduleAll = async {
-                                    for principal in principals do
-                                        match! resolveDeclared sp principal with
-                                        | Error reason ->
-                                            logger.Warn(sprintf "The coherence check was not scheduled: %s" reason)
-                                        | Ok scope ->
-                                            let scopeId = scope.ScopeId
+                            let scheduleAll = async {
+                                for principal in principals do
+                                    match! resolveDeclared sp principal with
+                                    | Error reason ->
+                                        logger.Warn(sprintf "The coherence check was not scheduled: %s" reason)
+                                    | Ok scope ->
+                                        let scopeId = scope.ScopeId
 
-                                            let registration: JobRegistration = {
-                                                ScopeId = scopeId
-                                                Handler = CoherenceJobHandler.HandlerName
-                                                Payload = ""
-                                                Trigger = cadence
-                                                Idempotency =
-                                                    Some {
-                                                        Key = sprintf "coherence-%s" scopeId
-                                                        TtlSeconds = 60 * 60 * 24 * 365
-                                                    }
-                                                RetryPolicy = JobRetryPolicy.defaults
-                                                ShardKey = None
-                                                Precision = JobPrecision.Minute
-                                                CreatedBy = "_facts.coherence"
-                                                Tags = Map.ofList [ "origin", "fact-coherence" ]
-                                            }
+                                        let registration: JobRegistration = {
+                                            ScopeId = scopeId
+                                            Handler = CoherenceJobHandler.HandlerName
+                                            Payload = ""
+                                            Trigger = cadence
+                                            Idempotency =
+                                                Some {
+                                                    Key = sprintf "coherence-%s" scopeId
+                                                    TtlSeconds = 60 * 60 * 24 * 365
+                                                }
+                                            RetryPolicy = JobRetryPolicy.defaults
+                                            ShardKey = None
+                                            Precision = JobPrecision.Minute
+                                            CreatedBy = "_facts.coherence"
+                                            Tags = Map.ofList [ "origin", "fact-coherence" ]
+                                        }
 
-                                            match! scheduler.Schedule(scope, registration) with
-                                            | Ok _ -> ()
-                                            | Error err ->
-                                                logger.Warn(
-                                                    sprintf
-                                                        "Failed to schedule the coherence check in scope %s: %A"
-                                                        scopeId
-                                                        err
-                                                )
-                                }
+                                        match! scheduler.Schedule(scope, registration) with
+                                        | Ok _ -> ()
+                                        | Error err ->
+                                            logger.Warn(
+                                                sprintf
+                                                    "Failed to schedule the coherence check in scope %s: %A"
+                                                    scopeId
+                                                    err
+                                            )
+                            }
 
-                                Async.StartAsTask(scheduleAll, cancellationToken = ct) :> System.Threading.Tasks.Task
-                            | None ->
-                                logger.Warn(
-                                    "Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
-                                )
+                            Async.StartAsTask(scheduleAll, cancellationToken = ct) :> System.Threading.Tasks.Task
+                        | None ->
+                            logger.Warn(
+                                "Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
+                            )
 
-                                System.Threading.Tasks.Task.CompletedTask
-
-                        member _.StopAsync(_ct) =
                             System.Threading.Tasks.Task.CompletedTask
-                    })
-            )
+
+                    member _.StopAsync(_ct) =
+                        System.Threading.Tasks.Task.CompletedTask
+                }))
         |> ignore
 
         services
@@ -1526,7 +1520,7 @@ module FactsCompose =
         match app.Config.FactStore with
         | NoFactStore -> app
         | EnabledFactStore ->
-            let register = registerCoherenceChecks config cadence principals
+            let register = registerCoherenceChecks app.Config config cadence principals
 
             app |> contribute register
 
@@ -2060,33 +2054,30 @@ module FactsCompose =
                 // is scheduled by the source team's owner under the source's
                 // minted scope, and a refresh by the target's under its own
                 // (`FactPublicationJobs.schedulePublication` / `scheduleRefresh`).
-                // Exempt from the profile matrix (Phase 1051): a handler
-                // registration, placed by the scheduler's own gate.
-                (s
-                 |> ProcessProfileGate.exempt
-                     "Fact publication handler registration"
-                     ProcessProfileGate.SchedulerRegistrationReason)
-                    .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                        Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                            ProcessProfileGate.atStart (fun () ->
-                                // Resolving the service here surfaces a
-                                // declaration defect at startup, not at the
-                                // first publication.
-                                let publication = sp.GetRequiredService<IFactPublication>()
+                // Once at start: a handler registration, placed by the
+                // scheduler's own unit.
+                Hosting.register
+                    s
+                    app.Config
+                    (BackgroundUnit.create "fact-publication-handler-registration" OnceAtStart (fun sp ->
+                        Hosting.atStart (fun () ->
+                            // Resolving the service here surfaces a
+                            // declaration defect at startup, not at the
+                            // first publication.
+                            let publication = sp.GetRequiredService<IFactPublication>()
 
-                                match tryService<IJobScheduler> sp with
-                                | Some scheduler ->
-                                    scheduler.RegisterHandler(
-                                        FactPublicationJobs.PublishHandler,
-                                        FactPublicationJobs.publishHandler publication
-                                    )
+                            match tryService<IJobScheduler> sp with
+                            | Some scheduler ->
+                                scheduler.RegisterHandler(
+                                    FactPublicationJobs.PublishHandler,
+                                    FactPublicationJobs.publishHandler publication
+                                )
 
-                                    scheduler.RegisterHandler(
-                                        FactPublicationJobs.RefreshHandler,
-                                        FactPublicationJobs.refreshHandler publication
-                                    )
-                                | None -> ()))
-                    )
+                                scheduler.RegisterHandler(
+                                    FactPublicationJobs.RefreshHandler,
+                                    FactPublicationJobs.refreshHandler publication
+                                )
+                            | None -> ())))
                 |> ignore
 
                 s

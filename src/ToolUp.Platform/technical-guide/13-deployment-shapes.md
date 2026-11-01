@@ -9,14 +9,24 @@ Chapter [12](12-hosting-models.md) is the reference for *where* the SDK runs —
 
 The lever is `ServerConfig.ProcessProfile` ([`SDK.Shared.fs`](../../ToolUp.Platform.Core/Shared/SDK.Shared.fs)) — four cases, one decision per silo:
 
-| `ProcessProfile` | HTTP pipeline | Background subsystems |
+| `ProcessProfile` | HTTP pipeline | Background work it runs |
 |---|---|---|
-| `AllInOne` (default) | mounted | every subsystem ticks |
-| `WebOnly` | mounted | none — every `IHostedService` is gated off |
-| `WorkerOnly` | not mounted | every subsystem ticks |
-| `DispatcherOnly` | mounted | only the outbound dispatchers (transactional + webhook) |
+| `AllInOne` (default) | mounted | every unit |
+| `WebOnly` | mounted | `ProcessLocal` and `OnceAtStart` units — no shared work |
+| `WorkerOnly` | not mounted | every unit |
+| `DispatcherOnly` | mounted | `ProcessLocal` and `OnceAtStart` units, plus the two `Outbound` shared units (the transactional and webhook dispatchers) |
 
-The matrix is centralised in [`ProcessProfileGate.fs`](../../ToolUp.Platform.Server/Server/Compose/ProcessProfileGate.fs); every gate-site in `compose` and the per-concern Compose helpers calls one helper rather than re-deriving the rule. The `/dev/inspect` payload's `ProcessProfile` section reports the resolved matrix decisions for the running silo so operators can confirm "this silo is `WorkerOnly`; the web tier mounts at `/api/*` elsewhere" without reading source — see [Operator visibility](#operator-visibility) below.
+### The placement rule
+
+Every unit of background work — the platform's and every companion's — declares where it runs, as a `Placement`, and is registered through one function, `Hosting.register` ([`Hosting.fs`](../../ToolUp.Platform.Server/Server/Compose/Hosting.fs)). The deployment's shape admits a placement or it does not; a unit whose placement is not admitted registers nothing (GP 13):
+
+| `Placement` | What it is | `AllInOne` | `WorkerOnly` | `DispatcherOnly` | `WebOnly` | `ServerlessHost` |
+|---|---|---|---|---|---|---|
+| `SharedWork` | drains SHARED durable state, so one silo may do it for all (the scheduler, the replicator, the outbox relays, re-embedding, ingestion over a shared queue) | yes | yes | only `Outbound` | no | no |
+| `ProcessLocal` | bound to THIS process — its own memory, files or HTTP requests (the log-store retention, the metrics flush, the remoting audit drain, the AI chat worker, ingestion over the in-process queue) | yes | yes | yes | yes | no |
+| `OnceAtStart` | runs no loop — a one-shot at start, a scheduler registration, a stop hook (IndexNow's startup submission, every deferred job declaration) | yes | yes | yes | yes | yes |
+
+`Hosting.admits config unit` is the one answer to "which profile runs this?"; `Hosting.describe` lists every registered unit with whether this profile admits it, and is what the `/dev/inspect` `ProcessProfile` panel renders — see [Operator visibility](#operator-visibility) below. A companion holding a `ServerApp` can contribute a unit as a value (`ServerApp.addContribution (Contribution.hosted owner unit)`); it is admitted against the deployment's final configuration. The placement of every site is pinned by the placement table in `HostingBaselineTests.fs`.
 
 > **Scope split with chapter 12.** Chapter 12 covers the serverless-front-door deployment shapes (Azure Functions / AWS Lambda / Google Cloud Functions) and the [hybrid serverless + Kestrel worker silo](12-hosting-models.md#hybrid-serverless-front-door--kestrel-worker-silo). This chapter covers the pure-Kestrel deployment shapes (single-process / web+worker / web+worker+dispatcher) where every silo binds Kestrel and the partition lever is `ProcessProfile` only. The substrate contract and cross-silo coordination rules below apply identically to the hybrid case — read both.
 
@@ -60,7 +70,7 @@ ServerApp.empty
 
 **Persistence.** Whatever fits the deployment — `InMemoryEventStore` for dev / staging, `PersistentBlobBacked` for any deployment with retention requirements. No cross-process coordination needed because there is only one process.
 
-**Replica count.** `1` is the safe default. Two `AllInOne` replicas both run the scheduler's cron tick, so every due job is noticed twice; and each holds its own in-process webhook queue, so an event is dispatched only by whichever replica wrote it. Lift to `ReplicaCount > 1` only once the scheduler's tick election reaches a store-backed lease AND webhook events reach a durable queue — Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i), Phase 16a leased the webhook failure-state transition, and Phase 766 made the cron tick an [election](#the-cron-tick-is-an-election-phase-766) — but `compose` still binds the in-process lock into the scheduler and the queue is still per-replica, so the pin stands.
+**Replica count.** `1` is the safe default. Two `AllInOne` replicas both run the scheduler's cron tick, so every due job is noticed twice; and each holds its own in-process webhook queue, so an event is dispatched only by whichever replica wrote it. Lift to `ReplicaCount > 1` only once the scheduler's tick election reaches a store-backed lease AND webhook events reach a durable queue — Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i), Phase 16a leased the webhook failure-state transition, and Phase 766 made the cron tick an [election](#the-cron-tick-is-an-election-phase-766) — but the queue is still per-replica. `compose` takes the deployment's lock before it builds the scheduler (`ServerApp.withDistributedLock`), so with a shared lock the scheduler axis is lifted; the webhook queue keeps the pin at `1` for an `AllInOne` fleet that composes webhooks.
 
 ### Shape 2 — web + worker (`WebOnly` + `WorkerOnly`)
 
@@ -82,7 +92,7 @@ ServerApp.empty
                   + Redis channel   └─────────────────────────────┘
 ```
 
-**When it fits.** The default split when "we have any background work and we want to scale request handling horizontally without doubling the scheduler". Web silos scale freely (stateless under `WebOnly`); the worker silo is pinned to one replica until its tick election runs over a store-backed lease and its webhook queue is durable (Phase 9i shipped the `IDistributedLock` primitive; Phase 766 shipped the [election](#the-cron-tick-is-an-election-phase-766) over it; `compose` does not yet thread a companion lock into the scheduler, and the queue is still per-replica).
+**When it fits.** The default split when "we have any background work and we want to scale request handling horizontally without doubling the scheduler". Web silos scale freely (stateless under `WebOnly`); the worker silo's scheduler scales across replicas once the deployment composes a shared lock (`ServerApp.withDistributedLock` — the cron tick is an [election](#the-cron-tick-is-an-election-phase-766) over it, and `JobSchedulerInstanceValidator` admits `ReplicaCount > 1` with one); the webhook queue is still per-replica, so a second worker replica adds no outbound throughput.
 
 **Composition root — web silo.** `ProcessProfile = WebOnly`; cloud-backed persistence; distributed notification channel.
 
@@ -131,7 +141,7 @@ The worker silo's HTTP pipeline is not mounted (`ProcessProfileGate.shouldRegist
 | Silo | Replica count | Why |
 |---|---|---|
 | Web (`WebOnly`) | `≥ 1` — scale freely | Every `BackgroundService` is gated off; nothing to double-fire |
-| Worker (`WorkerOnly`) | `= 1` until the tick election runs over a store-backed lease and the webhook queue is durable | Every replica notices the same due job (the OAuth refresher rides that same tick as a scheduled job) — since Phase 766 the tick is an [election](#the-cron-tick-is-an-election-phase-766) and exactly one replica runs it, but only over a SHARED `IDistributedLock`, and `compose` still binds the in-process default into the scheduler; and each holds its own webhook queue, so events are owned per-replica. Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i) and Phase 16a leased the webhook failure-state transition, but there is still no durable queue |
+| Worker (`WorkerOnly`) | `≥ 1` on the scheduler axis with a shared lock composed (`ServerApp.withDistributedLock`), else `= 1`; the webhook queue adds no throughput past one | Every replica notices the same due job (the OAuth refresher rides that same tick as a scheduled job); the tick is an [election](#the-cron-tick-is-an-election-phase-766), and `compose` hands the scheduler the deployment's lock, so over a SHARED `IDistributedLock` exactly one replica runs each occurrence. Each replica still holds its own webhook queue, so events are owned per-replica — there is no durable queue yet |
 
 ### Shape 3 — web + worker + dispatcher (`WebOnly` + `WorkerOnly` + `DispatcherOnly`)
 
@@ -171,7 +181,7 @@ ServerApp.empty
 |> ServerApp.run
 ```
 
-The dispatcher silo mounts the HTTP pipeline so its admin endpoints (`/api/_platform/health`, `/dev/inspect`, etc.) are reachable; the worker silo's scheduler routes still register because the substrate is the same. `ProcessProfileGate.shouldRegisterBackgroundService` returns `true` only for `TransactionalDispatcherSubsystem` and `WebhookDispatcherSubsystem` under `DispatcherOnly`; every other background subsystem is gated off.
+The dispatcher silo mounts the HTTP pipeline so its admin endpoints (`/api/_platform/health`, `/dev/inspect`, etc.) are reachable; the worker silo's scheduler routes still register because the substrate is the same. Of the shared work, `DispatcherOnly` admits only the two units tagged `Outbound` — the transactional dispatcher and the webhook dispatcher. It is not a silo that runs no background work at all: like every Kestrel profile it runs the `ProcessLocal` units bound to its own process and every `OnceAtStart` registration, and a companion's ingestion over the in-process queue is `ProcessLocal` too. What it never runs is shared work that is not outbound — no scheduler tick, no replicator, no RAG re-embedding (and, over a shared queue store, no RAG ingestion).
 
 **Replica count.** `= 1` on the dispatcher silo. Not because retries double-fire — Phase 16a leased the failure-state transition, so two dispatcher replicas now count failures and auto-disable correctly against one subscription (see [the lease primitive](#idistributedlock--the-lease-primitive-phase-9i)) — but because webhook and transactional event OWNERSHIP is still a per-replica in-process queue. A second dispatcher replica does not share the load; it sits idle for every event the first one dequeued, and receives nothing at all for events written on another silo. The web silo is freely scalable (as in shape 2).
 
@@ -218,7 +228,7 @@ Phase 9i ships the **primitive**, not the adoption. Read the scope boundary befo
 
 - ✅ **Shipped** — `IDistributedLock` + `Lease`, the always-registered `InProcessDistributedLock` default, a `RedisDistributedLock` companion, an `IDistributedLockContract` conformance pack, and three migrated consumers: the job scheduler's per-`JobId` dispatch mutex, `BlobBackedPlatformAdminStore`'s write serialisation (both of which previously held a process-local `SemaphoreSlim` that stopped excluding anything the moment a second replica appeared), and — Phase 16a — the webhook dispatcher's failure-state read-modify-write, which held no `SemaphoreSlim` at all and was simply last-write-wins.
 - ✅ **Shipped — Phase 766** — **tick election.** The cron tick is an election over the per-`JobId` lease: the contended loser skips, and a loser admitted after the winner has released re-reads the job and skips if it is no longer due. The semantics are in [the section below](#the-cron-tick-is-an-election-phase-766). What is NOT shipped on this axis is the wiring: `compose` still binds `InProcessDistributedLock.shared` into the scheduler (the Phase 9c follow-on), so across a process boundary the election runs on two separate tables — which is no election at all — unless the deployment constructs the scheduler by hand with a store-backed lock.
-- ⛔ **Not shipped** — **event ownership.** The webhook dispatcher's event ownership still rests on a per-replica in-process queue. **`ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos therefore still stands** — for the queue on both, and for the lock wiring on `WorkerOnly`. Treat it as part of the deployment manifest, not as runtime config — the silo cannot detect the violation at compose time and a misconfigured `replicas = 2` still mis-fires silently.
+- ⛔ **Not shipped** — **event ownership.** The webhook dispatcher's event ownership still rests on a per-replica in-process queue. **`ReplicaCount = 1` on `DispatcherOnly` silos therefore still stands, and on `WorkerOnly` for outbound throughput** — the queue on both. The lock wiring on `WorkerOnly` is no longer a reason: `compose` resolves the deployment's lock before it builds the scheduler. Treat it as part of the deployment manifest, not as runtime config — the silo cannot detect the violation at compose time and a misconfigured `replicas = 2` still mis-fires silently.
 
 **Read the two items as different problems with different remedies**, because conflating them is what produced the phantom "webhook retry timer" above. Tick election was a LOCK problem: two replicas legitimately read the same due job from shared state and only one may act — Phase 766 closed it. Event ownership is a QUEUE problem: a webhook event enqueued in one replica's memory is invisible to every other, so no lease can hand it over — and, more sharply, an event written by a `WebOnly` silo is dispatched by nobody at all, because the web silo's dispatcher is gated off and the worker's queue never saw it. A durable, partition-keyed queue fixes that; a lease cannot.
 
@@ -233,7 +243,7 @@ The tick is now an election over the same lease, and a replica's tick SKIPS a du
 
 Both conditions are cron-only. A manual trigger, an event trigger, a drift back-fill and the external-retry continuation still take the lease with `acquireBlocking` and queue, because each is a request for THIS run rather than for the occurrence the clock produced; dropping one because a sibling dispatch was in flight would lose the request. A single replica is unchanged by construction: its own tick never contends with itself, and a job it has just advanced is no longer due.
 
-**What the election does and does not buy.** It guarantees that ONE replica runs each occurrence — provided the replicas share the lease store. It runs on whatever `IDistributedLock` the scheduler was constructed with, and `compose` constructs the scheduler with `InProcessDistributedLock.shared` (`SDK.Server.fs` documents this as the Phase 9c follow-on: threading a companion lock into the eagerly-composed subsystems needs the lock resolved before `compose` builds them). So today the election is effective across processes only for a scheduler constructed by hand over a store-backed lock such as `RedisDistributedLock`; under `compose`, two replicas still each hold their own table and each runs the job. That wiring, not the election, is what keeps the `WorkerOnly` pin at `1` on the scheduler axis.
+**What the election does and does not buy.** It guarantees that ONE replica runs each occurrence — provided the replicas share the lease store. It runs on whatever `IDistributedLock` the scheduler was constructed with, and `compose` constructs the scheduler with `InProcessDistributedLock.shared` (`SDK.Server.fs` documents this as the Phase 9c follow-on: threading a companion lock into the eagerly-composed subsystems needs the lock resolved before `compose` builds them). `compose` constructs the scheduler with the lock the deployment composed (`ServerApp.withDistributedLock`), falling back to `InProcessDistributedLock.shared` when it composed none. So with a shared lock such as `RedisDistributedLock` the election is effective across processes under `compose`, and `JobSchedulerInstanceValidator` admits `ReplicaCount > 1` for the in-process scheduler; without one, two replicas each hold their own table, each runs the job, and the validator keeps the pin.
 
 #### The shipped shape
 
@@ -345,28 +355,26 @@ The `/dev/inspect` JSON and HTML reports (chapter [6](06-jobs-ingestion-and-diag
     "Profile": "WorkerOnly",
     "ServerlessHost": "KestrelHost",
     "HttpPipelineMounted": false,
-    "Subsystems": [
-      { "Name": "Job scheduler",            "Registered": true,
-        "Reason": "WorkerOnly runs every background subsystem" },
-      { "Name": "Webhook dispatcher",       "Registered": true,
-        "Reason": "WorkerOnly runs every background subsystem" },
-      { "Name": "Transactional dispatcher", "Registered": true,
-        "Reason": "WorkerOnly runs every background subsystem" },
-      { "Name": "Audit replicator",         "Registered": true,
-        "Reason": "WorkerOnly runs every background subsystem" }
+    "Units": [
+      { "Unit": "hosted:job-scheduler", "Placement": "SharedWork", "Outbound": false,
+        "Admitted": true, "Reason": "shared work: this profile runs it for every silo" },
+      { "Unit": "hosted:webhook-dispatcher", "Placement": "SharedWork", "Outbound": true,
+        "Admitted": true, "Reason": "shared outbound work: this profile runs the outbound dispatchers" },
+      { "Unit": "hosted:log-store-retention", "Placement": "ProcessLocal", "Outbound": false,
+        "Admitted": true, "Reason": "bound to this process's own state, so every Kestrel profile runs it" }
       // ...
     ]
   }
 }
 ```
 
-The HTML view renders the same data as a table. The `Reason` column makes the gating matrix readable in-place — an operator inspecting a `WorkerOnly` silo confirms "the scheduler ticks here, the web tier mounts `/api/*` elsewhere" without reading [`ProcessProfileGate.fs`](../../ToolUp.Platform.Server/Server/Compose/ProcessProfileGate.fs). The same panel under `ServerlessHost = ServerlessHost` reports every `Registered = false` with reason `ServerlessHost short-circuits every background subsystem` — useful when diagnosing "why is my scheduled job not firing in this Azure Functions deployment?".
+The HTML view renders the same data as a table. Every registered unit is listed, admitted or not, with the placement its author declared — an operator inspecting a `WorkerOnly` silo confirms "the scheduler ticks here, the web tier mounts `/api/*` elsewhere" without reading [`Hosting.fs`](../../ToolUp.Platform.Server/Server/Compose/Hosting.fs). The same panel under `ServerlessHost = ServerlessHost` admits only the `OnceAtStart` units — useful when diagnosing "why is my scheduled job not firing in this Azure Functions deployment?".
 
 `/dev/inspect` is dev-gated via `ServerConfig.EnableDevEndpoints = true`. Production operators with Owner/Admin role read the same `ServerConfig` shape through the Platform Admin's deployment-shape panel (Phase 61 follow-up — surface and the same data path landed alongside Phase 16a's tail).
 
 ## Follow-ups (deferred)
 
-- ~~**Tick election over `IDistributedLock`**~~ — **Shipped, Phase 766**: the cron tick is an [election](#the-cron-tick-is-an-election-phase-766) with two skip conditions. What remains on this axis is the **compose wiring** (the Phase 9c follow-on): `compose` still binds `InProcessDistributedLock.shared` into the job scheduler, so a store-backed lock reaches the election only through a hand-constructed scheduler. Until that lands, the election is correct but unreachable under `compose` across a process boundary.
+- ~~**Tick election over `IDistributedLock`**~~ — **Shipped, Phase 766**: the cron tick is an [election](#the-cron-tick-is-an-election-phase-766) with two skip conditions. The compose wiring has landed too: `compose` resolves the deployment's lock (`ServerApp.withDistributedLock`) before it builds the scheduler, the webhook dispatcher and the platform-admin store.
 - **A durable webhook / transactional queue** — the other half of the multi-silo story, and not a lock problem at all (see the two ⛔ items above). Until it lands, a `WebOnly` silo's events are dispatched by nobody, and a second `WorkerOnly` / `DispatcherOnly` replica adds no outbound throughput.
 - **`WorkerOnly` → `Host.CreateApplicationBuilder()`** — the silo binds no port at all. The [`IServerHost.createWorkerHost`](../../ToolUp.Platform.Server/Server/IServerHost.fs) helper supports it; the compose-side construction-branch refactor is the follow-up commit on the Phase 16a body. Until it lands, sibling load balancers should not route HTTP at a `WorkerOnly` deployment (Kestrel binds the port but no Giraffe router responds).
 - **Per-silo Platform Admin surface (Phase 61)** — the production-safe equivalent of `/dev/inspect`'s `ProcessProfile` panel, accessible to Owner/Admin without enabling `EnableDevEndpoints`.

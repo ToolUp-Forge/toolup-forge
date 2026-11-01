@@ -1117,7 +1117,17 @@ let private newFitFixture (budget: ComputeBudget) (clock: TestClock) =
     let jobStore = JobStore.create schedStorage eventStore
 
     let scheduler =
-        JobScheduler.create jobStore eventStore silentChannel ServerConfig.defaults silentLogger (NoOpActivitySink())
+        JobScheduler.create
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink())
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
         :> IJobScheduler
 
     let providers = ModelFitProviderRegistry [ ReferenceModelFitProvider.create () ]

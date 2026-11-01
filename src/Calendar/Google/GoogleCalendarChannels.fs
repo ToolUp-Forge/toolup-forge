@@ -156,20 +156,18 @@ let withChannelRenewal
     (trigger: Trigger)
     (app: SchedulingServerApp)
     : SchedulingServerApp =
-    let register (services: IServiceCollection) =
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                DeferredScheduledJobDeclaration.hostedService
-                    "Phase 830 Google Calendar channel renewal"
-                    [ renewalDeclaration bridge scopes trigger ]
-                    sp)
-        )
-
-    let baseApp = app.Base
+    // Once at start: it hands the renewal job to the scheduler, whose own
+    // unit decides where the job runs.
+    let renewal =
+        Hosting.deferredJobs "google-calendar-channel-renewal" [ renewalDeclaration bridge scopes trigger ]
 
     {
         app with
-            Base = baseApp |> ServerApp.addServiceConfig register
+            Base =
+                app.Base
+                |> ServerApp.addContribution (
+                    Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Google") renewal
+                )
     }
 
 // ─── The notification route ─────────────────────────────────────────

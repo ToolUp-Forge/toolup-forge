@@ -140,23 +140,22 @@ type CompositionSeamSummary = {
     NotificationConsumers: string list
 }
 
-/// Phase 16a — one row in the "Process profile" panel. Per-subsystem
-/// gating outcome: whether `compose` registered the
-/// `IHostedService`, and a one-line reason citing which combination
-/// of `ServerlessHost` + `ProcessProfile` produced the outcome.
-/// Mirrors the matrix in `Server/Compose/ProcessProfileGate.fs` so
-/// operators see "this silo is `WorkerOnly`; the web tier mounts at
-/// `/api/*`" without reading source.
-type ProcessProfileSubsystemEntry = {
-    Name: string
-    Registered: bool
+/// One row in the "Process profile" panel: a registered unit of background
+/// work (`Hosting.register`), the `Placement` its author declared, and
+/// whether this silo's shape admits it (`Hosting.describe`) — so an
+/// operator sees what runs here, and why, without reading source.
+type ProcessProfileUnitEntry = {
+    Unit: string
+    Placement: string
+    Outbound: bool
+    Admitted: bool
     Reason: string
 }
 
-/// Phase 16a — process profile panel. Surfaces the active
-/// `ProcessProfile` + `ServerlessHost` selection, whether the HTTP
-/// pipeline is mounted in this silo, and the per-subsystem gating
-/// outcome derived from `ProcessProfileGate`. Source of truth for
+/// Process profile panel. Surfaces the active `ProcessProfile` +
+/// `ServerlessHost` selection, whether the HTTP pipeline is mounted in
+/// this silo, and every registered background unit with its placement and
+/// whether this silo admits it. Source of truth for
 /// "what is this silo doing?" diagnostics in a multi-silo deployment.
 /// See `technical-guide/13-deployment-shapes.md` for the three
 /// pure-Kestrel shapes and the cross-silo coordination contract.
@@ -164,7 +163,7 @@ type ProcessProfileSummary = {
     Profile: string
     ServerlessHost: string
     HttpPipelineMounted: bool
-    Subsystems: ProcessProfileSubsystemEntry list
+    Units: ProcessProfileUnitEntry list
 }
 
 type DevDiagnosticsReport = {
@@ -217,13 +216,10 @@ type DevDiagnosticsReport = {
     /// for the contributor contract.
     Contributors: Map<string, string>
 
-    /// Phase 16a tail — process-profile panel. Reports the resolved
-    /// `ProcessProfile` × `ServerlessHost` matrix decisions for the
-    /// running silo: whether HTTP is mounted here, and which
-    /// background subsystems registered. Empty `Subsystems` is
-    /// impossible — the nine subsystem rows are constants. Appended
-    /// at the end of the report so existing JSON consumers continue
-    /// to find every field they expect.
+    /// Process-profile panel: whether HTTP is mounted in the running
+    /// silo, and every registered background unit with its placement and
+    /// whether this silo admits it. Appended at the end of the report so
+    /// existing JSON consumers continue to find every field they expect.
     ProcessProfile: ProcessProfileSummary
 }
 
@@ -616,12 +612,10 @@ let private buildContributors (ctx: HttpContext) : Async<Map<string, string>> = 
         return results |> Array.toList |> List.choose id |> Map.ofList
 }
 
-/// Phase 16a tail — derive the per-silo `ProcessProfile` panel from
-/// `config`. Pure function over the config record; no DI, no I/O.
-/// Subsystem display order mirrors the `BackgroundSubsystem` DU
-/// declaration order in `ProcessProfileGate.fs` so the table reads
-/// "scheduler / dispatchers / drains / sweeps" top-down.
-let private buildProcessProfile (config: ServerConfig) : ProcessProfileSummary =
+/// Derive the per-silo `ProcessProfile` panel from `config` and the
+/// background units the composition registered (`Hosting.describe`), in
+/// registration order.
+let private buildProcessProfile (config: ServerConfig) (ctx: HttpContext) : ProcessProfileSummary =
     let serverlessName =
         match config.ServerlessHost with
         | KestrelHost -> "KestrelHost"
@@ -634,46 +628,36 @@ let private buildProcessProfile (config: ServerConfig) : ProcessProfileSummary =
         | WorkerOnly -> "WorkerOnly"
         | DispatcherOnly -> "DispatcherOnly"
 
-    let reasonFor (registered: bool) =
-        match config.ServerlessHost, config.ProcessProfile with
-        | ServerlessHost, _ -> "ServerlessHost short-circuits every background subsystem"
-        | KestrelHost, AllInOne -> "AllInOne runs every background subsystem"
-        | KestrelHost, WebOnly -> "WebOnly skips every background subsystem (sibling WorkerOnly drains)"
-        | KestrelHost, WorkerOnly -> "WorkerOnly runs every background subsystem"
-        | KestrelHost, DispatcherOnly ->
-            if registered then
-                "DispatcherOnly runs only the outbound dispatchers"
-            else
-                "DispatcherOnly skips this subsystem (outbound-delivery isolation)"
+    let placementName =
+        function
+        | SharedWork -> "SharedWork"
+        | ProcessLocal -> "ProcessLocal"
+        | OnceAtStart -> "OnceAtStart"
 
-    let subsystems =
-        [
-            JobSchedulerSubsystem, "Job scheduler"
-            WebhookDispatcherSubsystem, "Webhook dispatcher"
-            TransactionalDispatcherSubsystem, "Transactional dispatcher"
-            AuditReplicatorSubsystem, "Audit replicator"
-            AuditFallbackReplaySubsystem, "Audit fallback replay"
-            EntityOutboxRelaySubsystem, "Outbox relays (entity, lineage)"
-            UsageBatchFlusherSubsystem, "Usage batch flusher"
-            HealthStateTrackerSubsystem, "Health-state tracker"
-            AlertRuleEngineSubsystem, "Alert-rule engine"
-            OAuthStateCleanupSubsystem, "OAuth state-store cleanup"
-            OAuthRefresherRecoverSubsystem, "OAuth refresher startup-Recover"
-        ]
-        |> List.map (fun (subsystem, displayName) ->
-            let registered = ProcessProfileGate.shouldRegisterBackgroundService config subsystem
+    let reasonFor (row: HostingRow) =
+        match row.Unit.Placement, row.Admitted with
+        | OnceAtStart, _ -> "runs no loop, so every profile admits it"
+        | ProcessLocal, true -> "bound to this process's own state, so every Kestrel profile runs it"
+        | ProcessLocal, false -> "a serverless host keeps no loop alive"
+        | SharedWork, true when row.Unit.Outbound -> "shared outbound work: this profile runs the outbound dispatchers"
+        | SharedWork, true -> "shared work: this profile runs it for every silo"
+        | SharedWork, false -> "shared work: a sibling worker silo runs it"
 
-            {
-                Name = displayName
-                Registered = registered
-                Reason = reasonFor registered
-            })
+    let records = ctx.RequestServices.GetServices<BackgroundUnitRecord>()
 
     {
         Profile = profileName
         ServerlessHost = serverlessName
         HttpPipelineMounted = ProcessProfileGate.shouldRegisterHttpPipeline config
-        Subsystems = subsystems
+        Units =
+            Hosting.describe config records
+            |> List.map (fun row -> {
+                Unit = ComponentId.value row.Unit.Id
+                Placement = placementName row.Unit.Placement
+                Outbound = row.Unit.Outbound
+                Admitted = row.Admitted
+                Reason = reasonFor row
+            })
     }
 
 let buildReport
@@ -687,7 +671,7 @@ let buildReport
         let! healthChecks = buildHealthChecks ctx
         let validators = buildValidators ctx
         let! contributors = buildContributors ctx
-        let processProfile = buildProcessProfile config
+        let processProfile = buildProcessProfile config ctx
 
         let modules =
             capture.Modules
@@ -982,8 +966,8 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
     sb.AppendLine "</table>" |> ignore
 
-    // Process profile (Phase 16a tail) — surfaces the resolved
-    // ProcessProfile × ServerlessHost matrix decisions for this silo.
+    // Process profile — what this silo is, and which background units it
+    // admits.
     // Placed high in the page so an operator inspecting a multi-silo
     // deployment confirms "this is the worker, the web tier mounts
     // /api/* elsewhere" before reading anything else.
@@ -1013,15 +997,26 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
     sb.AppendLine "</table>" |> ignore
 
     sb.AppendLine
-        """<p class="muted">See <code>technical-guide/13-deployment-shapes.md</code> for the three pure-Kestrel deployment shapes and the cross-silo coordination contract. The gating matrix lives in <code>Server/Compose/ProcessProfileGate.fs</code>.</p>"""
+        """<p class="muted">See <code>technical-guide/13-deployment-shapes.md</code> for the three pure-Kestrel deployment shapes and the cross-silo coordination contract. Each unit declares its placement; the one rule that admits it lives in <code>Server/Compose/Hosting.fs</code>.</p>"""
     |> ignore
 
-    sb.AppendLine "<table><tr><th>Subsystem</th><th>Registered</th><th>Reason</th></tr>"
+    sb.AppendLine "<table><tr><th>Unit</th><th>Placement</th><th>Admitted</th><th>Reason</th></tr>"
     |> ignore
 
-    for s in report.ProcessProfile.Subsystems do
+    for u in report.ProcessProfile.Units do
+        let placement =
+            if u.Outbound then
+                u.Placement + " (outbound)"
+            else
+                u.Placement
+
         sb.AppendLine(
-            sprintf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" (encode s.Name) (mark s.Registered) (encode s.Reason)
+            sprintf
+                "<tr><td><code>%s</code></td><td>%s</td><td>%s</td><td>%s</td></tr>"
+                (encode u.Unit)
+                (encode placement)
+                (mark u.Admitted)
+                (encode u.Reason)
         )
         |> ignore
 

@@ -41,7 +41,7 @@ Cell vocabulary: ✅ supported · ⚠ supported with caveat · ❌ unsupported. 
 | `KestrelHost` (default) | ✅ | ❌ — Functions Worker provides its own HTTP listener; Kestrel binding would race | ❌ — Lambda has no port to bind; `app.Run()` blocks indefinitely | ❌ — Functions Framework provides its own HTTP listener |
 | `ServerlessHost` | ⚠ — composes but nothing drives `Invoke`; useful only when a hosting integration outside this SDK supplies the listener | ✅ | ✅ | ✅ |
 
-`ServerlessHost = ServerlessHost` short-circuits every background-subsystem `IHostedService` registration through [`ProcessProfileGate.shouldRegisterBackgroundService`](../../ToolUp.Platform.Server/Server/Compose/ProcessProfileGate.fs); the DI singletons (`IJobScheduler`, `IWebhookDispatcher`, `TransactionalDispatcher`, …) still register so admin routes resolve, but their run-loops never tick.
+`ServerlessHost = ServerlessHost` admits only `OnceAtStart` units of background work through [`Hosting.register`](../../ToolUp.Platform.Server/Server/Compose/Hosting.fs) (a one-shot or a scheduler registration still registers; no loop does); the DI singletons (`IJobScheduler`, `IWebhookDispatcher`, `TransactionalDispatcher`, …) still register so admin routes resolve, but their run-loops never tick.
 
 ### `ProcessProfile`
 

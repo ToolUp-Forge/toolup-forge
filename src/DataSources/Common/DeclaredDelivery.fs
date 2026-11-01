@@ -1236,12 +1236,13 @@ module DeclaredDelivery =
         }
 
     /// Compose a deployment's declared data sources: registers the startup
-    /// service, resolving what it needs from the deployment's container in
-    /// its registration factory.
+    /// service (`Hosting.register`, placed `OnceAtStart` — it seeds and
+    /// schedules, and runs no loop of its own), resolving what it needs from
+    /// the deployment's container in its registration factory.
     ///
     /// ```fsharp skip=fragment
     /// services
-    /// |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+    /// |> DeclaredDelivery.withDeclaredDataSources config declared DeclaredDelivery.DefaultWatchPoll
     /// |> ignore
     /// ```
     ///
@@ -1249,37 +1250,41 @@ module DeclaredDelivery =
     /// next start retires it. Stop registering the service only once a
     /// start with an empty `Sources` has retired everything.
     let withDeclaredDataSources
+        (config: ServerConfig)
         (declared: DeclaredDataSources)
         (watchPoll: string)
         (services: IServiceCollection)
         : IServiceCollection =
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: IServiceProvider) ->
-            let composed: DeclaredDeliveryServices = {
-                Configs =
-                    match sp.GetService(typeof<IDataSourceConfigStore>) with
-                    | :? IDataSourceConfigStore as store -> Some store
-                    | _ -> None
-                Ingestor =
-                    match sp.GetService(typeof<IDataIngestor>) with
-                    | :? IDataIngestor as ingestor -> Some ingestor
-                    | _ -> None
-                Scheduler =
-                    match sp.GetService(typeof<IJobScheduler>) with
-                    | :? IJobScheduler as scheduler -> Some scheduler
-                    | _ -> None
-                Storage =
-                    match sp.GetService(typeof<BlobStorage.IBlobStorage>) with
-                    | :? BlobStorage.IBlobStorage as storage -> Some storage
-                    | _ -> None
-                Connectors = sp.GetServices(typeof<IDataSource>) |> Seq.cast<IDataSource> |> List.ofSeq
-                Resolver =
-                    match sp.GetService(typeof<DeclaredPrincipalResolver>) with
-                    | :? DeclaredPrincipalResolver as resolver -> Some resolver
-                    | _ -> None
-                Logger =
-                    match sp.GetService(typeof<ILogger>) with
-                    | :? ILogger as logger -> logger
-                    | _ -> ConsoleLogger.ConsoleLogger() :> ILogger
-            }
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "declared-data-sources" OnceAtStart (fun sp ->
+                let composed: DeclaredDeliveryServices = {
+                    Configs =
+                        match sp.GetService(typeof<IDataSourceConfigStore>) with
+                        | :? IDataSourceConfigStore as store -> Some store
+                        | _ -> None
+                    Ingestor =
+                        match sp.GetService(typeof<IDataIngestor>) with
+                        | :? IDataIngestor as ingestor -> Some ingestor
+                        | _ -> None
+                    Scheduler =
+                        match sp.GetService(typeof<IJobScheduler>) with
+                        | :? IJobScheduler as scheduler -> Some scheduler
+                        | _ -> None
+                    Storage =
+                        match sp.GetService(typeof<BlobStorage.IBlobStorage>) with
+                        | :? BlobStorage.IBlobStorage as storage -> Some storage
+                        | _ -> None
+                    Connectors = sp.GetServices(typeof<IDataSource>) |> Seq.cast<IDataSource> |> List.ofSeq
+                    Resolver =
+                        match sp.GetService(typeof<DeclaredPrincipalResolver>) with
+                        | :? DeclaredPrincipalResolver as resolver -> Some resolver
+                        | _ -> None
+                    Logger =
+                        match sp.GetService(typeof<ILogger>) with
+                        | :? ILogger as logger -> logger
+                        | _ -> ConsoleLogger.ConsoleLogger() :> ILogger
+                }
 
-            startupService declared watchPoll composed)
+                startupService declared watchPoll composed))

@@ -41,6 +41,10 @@ type CodemodMigration =
     /// `IFactStore` and the fact-tier seams take a `ResolvedScope` only, and
     /// every fact-store member answers `Result<_, FactStoreError>`.
     | OneScopeForm
+    /// Every hosted service declares a `Placement` through
+    /// `Hosting.register`, and the in-process scheduler and the webhook
+    /// dispatcher are each built by one factory over an options record.
+    | BackgroundPlacement
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -60,6 +64,8 @@ module CodemodMigration =
         | CodemodMigration.ModelCapabilities ->
             "docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md"
         | CodemodMigration.OneScopeForm -> "docs/migrations/1157-one-scope-form.md"
+        | CodemodMigration.BackgroundPlacement ->
+            "docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -75,6 +81,7 @@ module CodemodMigration =
         | CodemodMigration.ModelCapabilities -> "Phase 1094"
         | CodemodMigration.RemotingLeftovers -> "Phase 1053"
         | CodemodMigration.OneScopeForm -> "Phase 1157"
+        | CodemodMigration.BackgroundPlacement -> "Phase 1067"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -638,6 +645,14 @@ module Codemod =
             @"\bCoverageNarrativeOptions\.sameContainer\b"
             "CoverageNarrativeOptions.everyScope"
             "`CoverageNarrativeOptions.sameContainer` → `CoverageNarrativeOptions.everyScope` (the narrative commits under the resolved scope's own container)"
+        // The startup-registration shape moved with the placement rule.
+        rewrite
+            "1067-at-start"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bProcessProfileGate\.atStart\b"
+            "Hosting.atStart"
+            "`ProcessProfileGate.atStart` → `Hosting.atStart`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -912,6 +927,50 @@ module Codemod =
             CodemodFileClass.Source
             @"\bWrite\.Fable\b"
             "`Write.Fable` no longer ships: no browser path writes MessagePack. Copy `src/ToolUp.AI.Client.Tests/Remoting/MsgPackWrite.fs` if you need the writer"
+        // A gated hosted service: the matrix is gone, and the unit's author
+        // declares where it runs.
+        review
+            "1067-should-register-background-service"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bProcessProfileGate\.shouldRegisterBackgroundService\b|\b\w+Subsystem\b(?=.*\bProcessProfileGate\b)|\bBackgroundSubsystem\b"
+            "the profile matrix is removed: register the hosted service with `Hosting.register services config (BackgroundUnit.create \"<name>\" <placement> factory)` (or `BackgroundUnit.ofInstance` for an instance) and drop the `if`. Every subsystem the matrix named is `SharedWork`; the webhook and transactional dispatchers add `|> BackgroundUnit.outbound`"
+        // A hosted service exempt from the matrix stated its placement in
+        // prose; it states it as a value now.
+        review
+            "1067-exempt-hosted-service"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bProcessProfileGate\.(?:addExempt|exempt|addDeferredJobs|SchedulerRegistrationReason)\b|\bHostedServiceExemption\b"
+            "exemptions are removed: register the service with `Hosting.register services config unit` and choose its `Placement` — `OnceAtStart` for a one-shot or a scheduler registration (`addDeferredJobs label decls` is `Hosting.deferredJobs label decls`), `ProcessLocal` for a loop over this process's own state, `SharedWork` for a loop draining shared state. A companion holding a `ServerApp` can contribute it as a value: `ServerApp.addContribution (Contribution.hosted owner unit)`"
+        // An ungated hosted service now goes through the one gate.
+        review
+            "1067-ungated-hosted-service"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bAdd(?:Singleton|HostedService)\s*<\s*(?:[\w.]+\.)?IHostedService\s*>|\bAddHostedService\s*<"
+            "every hosted service is registered through `Hosting.register services config unit` with a declared `Placement`: `OnceAtStart` for a one-shot, `SharedWork` for a store-draining loop, `ProcessLocal` for a loop bound to this process; a profile that does not admit the placement registers nothing"
+        // The four in-process scheduler factories are one.
+        review
+            "1067-scheduler-factory"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bJobScheduler\.(?:create|createWithCatchUp|createWithExternalCompute|createWithExternalCallback)\b|\bnew\s+(?:[\w.]+\.)?InProcessJobScheduler\s*\("
+            "`InProcessJobScheduler` has one factory: `JobScheduler.create { Store = …; EventStore = …; NotificationChannel = …; Config = …; Logger = …; ActivitySink = … } { SchedulerOptions.defaults with TriggerWatermark = Some w; ExternalDispatcher = Some d; ExternalHandleStore = Some h; DistributedLock = Some l; ProgressSink = JobScheduler.progressSinkFor deps; ScopeCarrier = Some c }` — set only the fields the old factory took (`createWithCatchUp` set the watermark, `createWithExternalCompute` the dispatcher, `createWithExternalCallback` the dispatcher and handle store). A progress sink is no longer derived from `JobProgress` inside the constructor: pass `JobScheduler.progressSinkFor deps`"
+        // The three webhook construction paths are one.
+        review
+            "1067-webhook-factory"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bWebhookDispatcher\.(?:create|createWithLock)\b|\bnew\s+(?:[\w.]+\.)?WebhookDispatcherService\s*\("
+            "`WebhookDispatcherService` has one factory: `WebhookDispatcher.create { Registry = …; DeliveryLog = …; EventStore = …; HttpClient = …; RetryPolicy = …; Logger = …; ActivitySink = …; SecretStore = …; GetRateLimiter = …; UrlPolicy = … } WebhookOptions.defaults`, with `{ WebhookOptions.defaults with DistributedLock = Some lock }` where `createWithLock` passed a lock"
+        // The declared-data-sources startup service goes through the gate.
+        review
+            "1067-declared-data-sources"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bwithDeclaredDataSources\s+(?!config\b)"
+            "`DeclaredDelivery.withDeclaredDataSources` takes the deployment's `ServerConfig` first (it registers through `Hosting.register`): `withDeclaredDataSources config declared watchPoll services`"
     ]
 
 

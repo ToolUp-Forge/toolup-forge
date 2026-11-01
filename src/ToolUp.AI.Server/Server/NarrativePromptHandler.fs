@@ -719,13 +719,15 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
 /// **Adds** one handler, and its registration through `ServerApp.addServiceConfig`.
 let withPromptAdmin (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
-        // Exempt from the profile matrix: a handler
-        // registration, placed by the scheduler's own gate.
-        s
-        |> ProcessProfileGate.addExempt
-            "Narrative regenerate handler registration"
-            ProcessProfileGate.SchedulerRegistrationReason
-            NarrativeRegenerateJob.hostedService
+        // Once at start: a handler registration, placed by the
+        // scheduler's own unit.
+        Hosting.register
+            s
+            app.Config
+            (BackgroundUnit.create
+                "narrative-regenerate-handler-registration"
+                OnceAtStart
+                NarrativeRegenerateJob.hostedService)
         |> ignore
 
         s

@@ -202,18 +202,23 @@ let private replicaOver (storage: IBlobStorage) (eventStore: IEventStore) (handl
     let logger = RecordingLogger()
 
     let scheduler =
-        new JobScheduler.InProcessJobScheduler(
-            store,
-            eventStore,
-            silentChannel,
+        JobScheduler.create
+            ({
+                Store = store
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = {
+                    ServerConfig.defaults with
+                        ProcessProfile = WorkerOnly
+                }
+                Logger = logger
+                ActivitySink = NoOpActivitySink() :> IActivitySink
+            }
+            : JobScheduler.SchedulerDeps)
             {
-                ServerConfig.defaults with
-                    ProcessProfile = WorkerOnly
-            },
-            logger,
-            NoOpActivitySink() :> IActivitySink,
-            distributedLock = lck
-        )
+                JobScheduler.SchedulerOptions.defaults with
+                    DistributedLock = Some lck
+            }
 
     (scheduler :> IJobScheduler).RegisterHandler("election-handler", handler)
 

@@ -103,6 +103,7 @@ let tests =
                         (throwingReads ())
                         (AuditLog.NoOpAuditLog() :> IAuditLog)
                         silentLogger
+                        InProcessDistributedLock.shared
                     |> ignore
 
                     match faultRows services with
@@ -128,6 +129,7 @@ let tests =
                     storage
                     (AuditLog.NoOpAuditLog() :> IAuditLog)
                     silentLogger
+                    InProcessDistributedLock.shared
                 |> ignore
 
                 Expect.isEmpty (faultRows services) "nothing to refuse"

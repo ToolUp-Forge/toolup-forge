@@ -24,50 +24,48 @@ open ToolUp.Platform.BlobEncryption
 // `OnDeprovisioned` is a no-op `Skipped`: destroying the key on offboard
 // is `EncryptionKeyLifecycle`'s job, not this provision-only hook's.
 
-type EncryptionKeyProvisionLifecycle(services: IServiceProvider) =
-    interface ITenantLifecycle with
-        member _.Name = "encryption-key-provision"
-
-        member _.OnProvisioned(scopeId, _actorUserId) = async {
+/// The first-party encryption-key provision hook, as a value. A
+/// platform-wide / KMS key is not minted per scope, so any resolver but the
+/// per-scope one counts as absent here.
+let hook: TenantHook<PerScopeKeyResolver.PerScopeKeyResolver> = {
+    Name = "encryption-key-provision"
+    Requires = "a PerScopeKeyResolver (per-scope encryption at rest)"
+    Resolve =
+        fun services ->
             match services.GetService(typeof<IBlobEncryptionKeyResolver>) with
-            | :? PerScopeKeyResolver.PerScopeKeyResolver as perScope ->
-                // The resolver keys on `StorageScope.ScopeId`; the offboard
-                // `DestroyKey` keys on the raw lifecycle `scopeId`, so mint
-                // under the same id for a symmetric provision/offboard pair.
-                let scope: StorageScope = {
-                    ScopeId = scopeId
-                    Container = scopeId
-                    Persist = true
-                }
+            | :? PerScopeKeyResolver.PerScopeKeyResolver as perScope -> Some perScope
+            | _ -> None
+    OnProvisioned =
+        Some(fun perScope context -> async {
+            let scopeId = context.ScopeId
 
-                try
-                    // ResolveKey auto-creates + persists on first call and
-                    // loads the existing key on subsequent calls (idempotent).
-                    let! _key = (perScope :> IBlobEncryptionKeyResolver).ResolveKey scope
-                    return LifecycleHookResult.Completed
-                with ex ->
-                    return
-                        LifecycleHookResult.Failed(
-                            sprintf "failed to pre-create per-scope key for %s: %s" scopeId ex.Message
-                        )
-            | null ->
-                return
-                    LifecycleHookResult.Skipped
-                        "no IBlobEncryptionKeyResolver registered (encryption-at-rest not enabled)"
-            | _ ->
-                return
-                    LifecycleHookResult.Skipped
-                        "encryption resolver is not PerScopeKeyResolver — no per-scope key to pre-create (a platform-wide / KMS key is not minted per scope)"
-        }
+            // The resolver keys on `StorageScope.ScopeId`; the offboard
+            // `DestroyKey` keys on the raw lifecycle `scopeId`, so mint
+            // under the same id for a symmetric provision/offboard pair.
+            let scope: StorageScope = {
+                ScopeId = scopeId
+                Container = scopeId
+                Persist = true
+            }
 
-        member _.OnDeprovisioned(_scopeId, _actorUserId) = async {
-            return
-                LifecycleHookResult.Skipped
-                    "no offboard action — the per-scope key is crypto-shredded by the encryption-key offboard hook, not this provision hook"
-        }
+            try
+                // ResolveKey auto-creates + persists on first call and
+                // loads the existing key on subsequent calls (idempotent).
+                let! _key = (perScope :> IBlobEncryptionKeyResolver).ResolveKey scope
+                return LifecycleHookResult.Completed
+            with ex ->
+                return
+                    LifecycleHookResult.Failed(
+                        sprintf "failed to pre-create per-scope key for %s: %s" scopeId ex.Message
+                    )
+        })
+    // The per-scope key is crypto-shredded by the encryption-key offboard
+    // hook, not this provision hook.
+    OnDeprovisioned = None
+    Preview = None
+}
 
 /// Construct the first-party encryption-key provision lifecycle hook. The
 /// hook resolves the active `IBlobEncryptionKeyResolver` from `services`
 /// on every call, so it picks up whatever resolver the deployment composed.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    EncryptionKeyProvisionLifecycle(services) :> ITenantLifecycle
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

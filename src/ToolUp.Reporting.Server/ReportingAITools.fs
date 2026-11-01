@@ -1201,14 +1201,15 @@ let withReportingAITools (deps: ReportingAIToolDeps) (app: ServerApp) : ServerAp
     let toolModule =
         ServerModule.create SourceModule |> ServerModule.withAITools (tools deps)
 
-    let register (s: IServiceCollection) =
-        // Phase 1051 — exempt from the profile matrix: a handler
-        // registration, placed by the scheduler's own gate.
-        s
-        |> ProcessProfileGate.addDeferredJobs "Report rendering (AI tools)" [
+    // Once at start: a handler registration, placed by the scheduler's own
+    // unit.
+    let rendering =
+        Hosting.deferredJobs "report-rendering-ai-tools" [
             DeferredScheduledJobDeclaration.ofHandler RenderJobHandlerName Manual (renderJobHandler deps)
         ]
 
-    let withJobs = app |> ServerApp.addServiceConfig register
+    let withJobs =
+        app
+        |> ServerApp.addContribution (Contribution.hosted (ComponentId.ofModule SourceModule) rendering)
 
     ServerApp.addModule toolModule withJobs

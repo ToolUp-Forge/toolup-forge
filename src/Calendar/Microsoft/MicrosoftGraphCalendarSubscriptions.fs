@@ -278,20 +278,18 @@ let withSubscriptionRenewal
     (trigger: Trigger)
     (app: SchedulingServerApp)
     : SchedulingServerApp =
-    let register (services: IServiceCollection) =
-        services.AddSingleton<IHostedService>(
-            Func<IServiceProvider, IHostedService>(fun sp ->
-                DeferredScheduledJobDeclaration.hostedService
-                    "Phase 831 Microsoft Graph subscription renewal"
-                    [ renewalDeclaration bridge scopes trigger ]
-                    sp)
-        )
-
-    let baseApp = app.Base
+    // Once at start: it hands the renewal job to the scheduler, whose own
+    // unit decides where the job runs.
+    let renewal =
+        Hosting.deferredJobs "microsoft-graph-subscription-renewal" [ renewalDeclaration bridge scopes trigger ]
 
     {
         app with
-            Base = baseApp |> ServerApp.addServiceConfig register
+            Base =
+                app.Base
+                |> ServerApp.addContribution (
+                    Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Microsoft") renewal
+                )
     }
 
 /// Compose the Microsoft Graph bridge and — when it declares change

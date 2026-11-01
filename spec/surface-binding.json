@@ -34,6 +34,7 @@
     "IAnonymousSessionMigrator": "A per-module data hook run when an anonymous session signs in; it is a module's contribution, not a substrate seam a composition binds.",
     "IBlobEncryptionKeyResolver": "Bound through the registered EncryptedBlobStorage setting (§P2.5), whose values name the key arrangement; the seam itself is not a second spelling of that choice.",
     "IConfigValidator": "Startup preflight probes contributed by companions; diagnostics, not composition.",
+    "IDistributedLock": "The lease primitive the eagerly composed subsystems take (ServerApp.withDistributedLock): it decides whether their exclusion spans replicas, a property of the deployment's topology, and composes no component a reader of the composition could select.",
     "IDataExporter": "A persistent subsystem's contribution to a data-subject export, registered by the subsystem; the composition selects data-subject requests through the DataSubjectRequests setting.",
     "IErasureHandler": "A persistent subsystem's contribution to a data-subject erasure, registered by the subsystem, as IDataExporter.",
     "IHealthCheck": "Liveness probes contributed by companions; diagnostics, not composition.",

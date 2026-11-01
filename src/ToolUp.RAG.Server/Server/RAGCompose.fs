@@ -1140,10 +1140,10 @@ let private minScoreSpaceValidator
 // dispose it themselves — disposing it here as well would make their own
 // `Dispose` the second one.
 //
-// Deliberately NOT gated by `ProcessProfileGate`, for `registerLogStore`'s
-// reason: the stores hold THIS process's acknowledged writes, so a silo that
-// skipped the flush would lose its own writes rather than let a peer cover
-// for it — and the service runs no loop, only a stop hook.
+// Placed `OnceAtStart`: it runs no loop, only a stop hook, and the stores
+// hold THIS process's acknowledged writes, so every profile that opened them
+// — a serverless host included, whose provider disposal is the hook's
+// fallback — must flush them rather than let a peer cover for it.
 type internal RetrievalStoreFlushService(owned: (string * System.IDisposable) list, logger: ILogger) =
     let mutable flushed = 0
 
@@ -1865,11 +1865,14 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             match owned with
             | [] -> s
             | _ ->
-                s
-                |> ProcessProfileGate.addExempt
-                    "RAG retrieval-store flush at stop"
-                    "flushes the stores THIS process opened, at its own graceful stop: a silo that skipped it would lose its own acknowledged writes, and it runs no loop"
-                    (fun _ -> new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService)
+                // No loop, only a stop hook flushing the stores THIS process
+                // opened: a silo that skipped it would lose its own
+                // acknowledged writes, so every profile runs it.
+                Hosting.register
+                    s
+                    config
+                    (BackgroundUnit.create "rag-retrieval-store-flush" OnceAtStart (fun _ ->
+                        new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService))
 
         // Phase 945 — the off-path trace queue, registered so `/health/rag`
         // can report its lost-trace count. Absent when traces are written
@@ -1911,18 +1914,23 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
                 s
             else
-                // Phase 1051 — both consumers are exempt from the profile
-                // matrix, with the reason the queue imposes.
-                let queueReason =
-                    "drains the in-process ingestion queue, which only the process that accepted the upload can drain: gating it off a profile would strand every job that profile's HTTP tier enqueued"
+                // Ingestion is shared work when the queue is durable (a
+                // composed `IIngestionQueueStore`: every replica drains ONE
+                // queue, so a worker silo drains it for a web silo). Over the
+                // historical in-process channel only the process that
+                // accepted the upload can drain it, so it is process-local
+                // there: gating it off a WebOnly silo would strand every job
+                // that silo's HTTP tier enqueued.
+                let ingestionPlacement =
+                    match app.IngestionQueueStore with
+                    | Some _ -> SharedWork
+                    | None -> ProcessLocal
 
-                (s
-                 |> ProcessProfileGate.exempt "RAG ingestion" queueReason
-                 |> ProcessProfileGate.exempt "RAG re-embedding" queueReason)
-                    // Phase 14t — factory registration so the ingestion service
-                    // captures the REAL host provider and can lazily resolve the
-                    // (downstream-built) `IJobScheduler` for durable retries.
-                    .AddSingleton<IHostedService>(fun (sp: System.IServiceProvider) ->
+                // The ingestion service is a factory registration so it
+                // captures the REAL host provider and can lazily resolve the
+                // (downstream-built) `IJobScheduler` for durable retries.
+                let ingestion =
+                    BackgroundUnit.create "rag-ingestion" ingestionPlacement (fun (sp: System.IServiceProvider) ->
                         let getJobScheduler () =
                             match sp.GetService(typeof<IJobScheduler>) with
                             | :? IJobScheduler as js -> Some js
@@ -1945,7 +1953,15 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                             getJobScheduler
                             registerRetryHandler
                         :> IHostedService)
-                    .AddSingleton<IHostedService>(reembedSvc)
+
+                // Re-embedding is shared work: it scans the SHARED vector
+                // store for chunks embedded under another model, and nothing
+                // outside the service enqueues to its queue, so one silo
+                // re-embeds for every silo (N replicas would pay the
+                // embedding API N times for the same corpus).
+                let reembedding = BackgroundUnit.ofInstance "rag-reembedding" SharedWork reembedSvc
+
+                Hosting.register (Hosting.register s config ingestion) config reembedding
 
         // Phase 509.C — startup recovery sweep for the per-file ingestion
         // status. A restart mid-ingestion leaves the DURABLE status entry
@@ -1985,20 +2001,16 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 let ragSurface: IIngestionRecoverySurface =
                     IngestionRecoverySweep.ofIngestionStatusStore ingestionStatusStore
 
-                // Phase 1051 — exempt from the profile matrix: it settles the
-                // jobs the in-process queue lost, so it belongs wherever the
-                // (exempt) ingestion consumer runs.
-                (s.AddSingleton<IIngestionRecoverySurface>(ragSurface)
-                 |> ProcessProfileGate.exempt
-                     "RAG ingestion recovery sweep"
-                     "a one-shot startup sweep settling the in-process ingestion jobs a restart lost, so it runs wherever the ingestion consumer runs, which is every profile")
-                    .AddSingleton<IHostedService>(
-                        System.Func<System.IServiceProvider, IHostedService>(fun sp ->
-                            IngestionRecoverySweep.hostedService
-                                ragLogger
-                                (fun () -> sp.GetServices<IIngestionRecoverySurface>() |> List.ofSeq)
-                                (fun () -> IngestionRecoverySweep.resolveScopes explicitScopes enumerator ragLogger))
-                    )
+                // Once at start: a one-shot sweep settling the ingestion
+                // jobs a restart lost.
+                Hosting.register
+                    (s.AddSingleton<IIngestionRecoverySurface>(ragSurface))
+                    config
+                    (BackgroundUnit.create "rag-ingestion-recovery-sweep" OnceAtStart (fun sp ->
+                        IngestionRecoverySweep.hostedService
+                            ragLogger
+                            (fun () -> sp.GetServices<IIngestionRecoverySurface>() |> List.ofSeq)
+                            (fun () -> IngestionRecoverySweep.resolveScopes explicitScopes enumerator ragLogger)))
 
         let s =
             match app.Reranker with
@@ -2029,11 +2041,12 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
                 let vacuumHandler = ToolUp.RAG.RAGVacuumJobHandler.create vacuumDeps
 
-                s
-                |> ProcessProfileGate.addExempt
-                    "RAG tombstone auto-vacuum"
-                    ProcessProfileGate.SchedulerRegistrationReason
-                    (fun (sp: System.IServiceProvider) ->
+                // Once at start: it hands the vacuum job to the scheduler,
+                // whose own unit decides where it runs.
+                Hosting.register
+                    s
+                    config
+                    (BackgroundUnit.create "rag-tombstone-vacuum" OnceAtStart (fun (sp: System.IServiceProvider) ->
                         { new IHostedService with
                             member _.StartAsync(_ct) =
                                 match sp.GetService(typeof<IJobScheduler>) with
@@ -2087,7 +2100,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
                             member _.StopAsync(_ct) =
                                 System.Threading.Tasks.Task.CompletedTask
-                        })
+                        }))
 
         // Phase 54d — RAG vector-store offboard purge hook, gated on the
         // same `TenantLifecycle = EnabledTenantLifecycle` switch the core

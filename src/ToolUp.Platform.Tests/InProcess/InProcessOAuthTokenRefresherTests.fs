@@ -117,7 +117,17 @@ let private mkSubstrate () =
     let config = ServerConfig.defaults
 
     let scheduler =
-        JobScheduler.create jobStore eventStore silentChannel config silentLogger (NoOpActivitySink() :> IActivitySink)
+        JobScheduler.create
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = config
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
         :> IJobScheduler
 
     // Pre-register the refresh job handler name so RegisterDescriptor's

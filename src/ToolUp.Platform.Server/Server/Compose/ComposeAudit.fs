@@ -122,14 +122,10 @@ let registerAuditReplicatorHosting
     | Some(replicator, _) ->
         services.AddSingleton<AuditReplicator.AuditReplicator>(replicator) |> ignore
 
-        // Phase 16 + 16a — gate replicator BackgroundService on the
-        // centralised matrix. ServerlessHost / WebOnly / DispatcherOnly
-        // skip; AllInOne / WorkerOnly register.
-        if ProcessProfileGate.shouldRegisterBackgroundService config AuditReplicatorSubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                replicator :> Microsoft.Extensions.Hosting.IHostedService
-            )
-            |> ignore
+        // Shared work: it drains the shared event store into the sinks, so a
+        // worker silo does it for every silo.
+        Hosting.register services config (BackgroundUnit.ofInstance "audit-replicator" SharedWork replicator)
+        |> ignore
 
         for sink in auditSinks do
             services.AddSingleton<IAuditSink>(sink) |> ignore

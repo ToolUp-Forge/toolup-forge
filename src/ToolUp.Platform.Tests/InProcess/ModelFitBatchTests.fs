@@ -84,7 +84,17 @@ let private buildScheduler () =
     let jobStore = JobStore.create storage eventStore
     let config = ServerConfig.defaults
 
-    JobScheduler.create jobStore eventStore silentChannel config silentLogger (NoOpActivitySink() :> IActivitySink)
+    JobScheduler.create
+        ({
+            Store = jobStore
+            EventStore = eventStore
+            NotificationChannel = silentChannel
+            Config = config
+            Logger = silentLogger
+            ActivitySink = (NoOpActivitySink() :> IActivitySink)
+        }
+        : JobScheduler.SchedulerDeps)
+        JobScheduler.SchedulerOptions.defaults
     :> IJobScheduler
 
 let private fitRequest (scope: string) (seed: int64) : FitRequest = {

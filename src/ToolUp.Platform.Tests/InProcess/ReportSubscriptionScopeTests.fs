@@ -146,12 +146,16 @@ type private World(producers: ReportProducerRegistry) =
 
     let scheduler =
         JobScheduler.create
-            (JobStore.create blobs events)
-            events
-            silentChannel
-            ServerConfig.defaults
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
+            ({
+                Store = (JobStore.create blobs events)
+                EventStore = events
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
 
     let subscriptions = ReportSubscriptionStore.create blobs
     let sink = RecordingSink()
@@ -650,12 +654,16 @@ let private deploy () : Deployment =
     // scheduler at boot; this pack does not exercise it.
     let bootScheduler =
         JobScheduler.create
-            (JobStore.create storage events)
-            events
-            silentChannel
-            ServerConfig.defaults
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
+            ({
+                Store = (JobStore.create storage events)
+                EventStore = events
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
 
     services.AddSingleton<IBlobStorage>(storage) |> ignore
     services.AddSingleton<IEventStore>(events) |> ignore
@@ -1010,12 +1018,16 @@ let private inProcessScheduler () =
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     JobScheduler.create
-        (JobStore.create blobs events)
-        events
-        silentChannel
-        ServerConfig.defaults
-        silentLogger
-        (NoOpActivitySink() :> IActivitySink)
+        ({
+            Store = (JobStore.create blobs events)
+            EventStore = events
+            NotificationChannel = silentChannel
+            Config = ServerConfig.defaults
+            Logger = silentLogger
+            ActivitySink = (NoOpActivitySink() :> IActivitySink)
+        }
+        : JobScheduler.SchedulerDeps)
+        JobScheduler.SchedulerOptions.defaults
 
 let private bindInto (scheduler: IJobScheduler) (carrier: ScopeCarrier) =
     (scheduler :?> IScopeCarrierBinding).BindScopeCarrier carrier

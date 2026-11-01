@@ -66,15 +66,19 @@ module ServiceConfig =
         | Some existing -> Some(fun services -> register (existing services))
 
 /// Phase 1052 — what a companion or builder adds to a deployment, as data:
-/// an owner and a kind. One case today. Phase 1067 adds `Hosted` (with its
-/// `Placement`); Phase 876 adds `Substrate` and the `Requires` / `Provides`
-/// ordering. Each widens this union rather than re-introducing a fold.
+/// an owner and a kind. A later kind (a substrate, with `Requires` /
+/// `Provides` ordering) widens this union rather than re-introducing a fold.
 [<NoEquality; NoComparison>]
 type ContributionKind =
     /// DI registrations, applied after the SDK's own and after the
     /// consumer's `ComposeExtensions.ServiceConfig`, in the order the
     /// contributions were added.
     | Service of (IServiceCollection -> IServiceCollection)
+    /// A unit of background work, registered through `Hosting.register`
+    /// against the deployment's final `ServerConfig` at the same fixed
+    /// point as a `Service` contribution — so whether it runs is decided by
+    /// its `Placement`, once, with the configuration `run` composes.
+    | Hosted of BackgroundUnit
 
 /// Phase 1052 — one contribution to a deployment. `Owner` is the
 /// contributing component's own `ComponentId` (GP 9: the contributor names
@@ -95,3 +99,6 @@ module Contribution =
         Owner = owner
         Kind = Service register
     }
+
+    /// A `Hosted` contribution: `owner` contributes the background `unit`.
+    let hosted (owner: ComponentId) (unit: BackgroundUnit) : Contribution = { Owner = owner; Kind = Hosted unit }

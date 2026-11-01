@@ -52,13 +52,9 @@ let decorateLogger (store: (ILogStore * LogStoreConfig) option) (logger: ILogger
 /// calling `compose` keeps it — the same courtesy every other store
 /// registration extends.
 ///
-/// The sweep is gated only on `ServerlessHost`, where no long-running tick
-/// can be kept alive. It is deliberately NOT gated on the `ProcessProfile`
-/// matrix that `ProcessProfileGate` applies to the outbound dispatchers:
-/// those drain a SHARED durable queue, so one silo may do the work for
-/// all. Retention bounds the store file THIS process opened, so a
-/// `WebOnly` silo that skipped the sweep would grow its own file without
-/// limit — the opposite of what the gate is for.
+/// Process-local: retention bounds the store file THIS process opened, so
+/// a `WebOnly` silo that skipped the sweep would grow its own file without
+/// limit. A serverless host keeps no long-running tick alive and runs none.
 let registerLogStore
     (services: IServiceCollection)
     (config: ServerConfig)
@@ -70,13 +66,13 @@ let registerLogStore
     | Some(logStore, storeConfig) ->
         services.TryAddSingleton<ILogStore>(logStore)
 
-        match config.ServerlessHost with
-        | ServerlessHost -> ()
-        | KestrelHost ->
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun _ ->
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "log-store-retention" ProcessLocal (fun _ ->
                 new SqliteLogStore.LogStoreRetentionService(logStore, storeConfig, resolvedLogger)
-                :> Microsoft.Extensions.Hosting.IHostedService)
-            |> ignore
+                :> Microsoft.Extensions.Hosting.IHostedService))
+        |> ignore
 
 /// Phase 829 — register the metrics-history flusher: the
 /// `BackgroundService` that samples the live metric registry into
@@ -92,24 +88,20 @@ let registerLogStore
 /// sink or store once at `Warn` rather than compose refusing a
 /// deployment whose store arrives later.
 ///
-/// Gated on `ServerlessHost`, where no long-running tick can be kept
-/// alive — and deliberately NOT on the `ProcessProfile` matrix, for the
-/// log store's reason: each process samples its OWN in-memory metric
-/// accumulators, so a silo that skipped the flush would simply lose its
-/// own metrics rather than let a peer cover for it.
+/// Process-local, for the log store's reason: each process samples its OWN
+/// in-memory metric accumulators, so a silo that skipped the flush would
+/// simply lose its own metrics rather than let a peer cover for it.
 let registerMetricsHistory (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
     match config.MetricsHistory with
     | NoMetricsHistory -> ()
     | EnabledMetricsHistory historyConfig ->
-        match config.ServerlessHost with
-        | ServerlessHost -> ()
-        | KestrelHost ->
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    new MetricsHistoryFlusher.MetricsHistoryFlusherService(sp, historyConfig, resolvedLogger)
-                    :> Microsoft.Extensions.Hosting.IHostedService)
-            )
-            |> ignore
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "metrics-history-flusher" ProcessLocal (fun sp ->
+                new MetricsHistoryFlusher.MetricsHistoryFlusherService(sp, historyConfig, resolvedLogger)
+                :> Microsoft.Extensions.Hosting.IHostedService))
+        |> ignore
 
 /// Phase 9x — register the alert-rule status board the alerts endpoint
 /// reads and the engine writes after every tick. Only when at least one

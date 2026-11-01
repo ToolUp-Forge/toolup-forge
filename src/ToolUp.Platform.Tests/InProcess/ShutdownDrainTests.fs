@@ -422,7 +422,17 @@ let private scheduler () =
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
 
-    JobScheduler.create jobStore eventStore silentChannel ServerConfig.defaults quietLogger (NoOpActivitySink())
+    JobScheduler.create
+        ({
+            Store = jobStore
+            EventStore = eventStore
+            NotificationChannel = silentChannel
+            Config = ServerConfig.defaults
+            Logger = quietLogger
+            ActivitySink = (NoOpActivitySink())
+        }
+        : JobScheduler.SchedulerDeps)
+        JobScheduler.SchedulerOptions.defaults
 
 let private manualJob (handler: string) : JobRegistration = {
     ScopeId = "scope-869"

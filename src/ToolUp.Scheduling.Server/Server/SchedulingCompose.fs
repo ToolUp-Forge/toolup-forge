@@ -357,10 +357,9 @@ module SchedulingServerApp =
                             CalendarSync.CalendarPollJobHandler(sync, entityStore) :> IJobHandler)
                 ]
 
-                // Phase 1051 — exempt from the profile matrix: the sync runs
-                // as scheduler jobs, placed by the scheduler's own gate.
-                services
-                |> ProcessProfileGate.addDeferredJobs "Phase 20a calendar sync" declarations
+                // Once at start: the sync runs as scheduler jobs, placed by
+                // the scheduler's own unit.
+                Hosting.register services app.Base.Config (Hosting.deferredJobs "calendar-sync" declarations)
 
         // 3. API handler. Resolves `IBookingScheduler` per request
         //    out of DI; the per-request `scopeId`/`userId` come from

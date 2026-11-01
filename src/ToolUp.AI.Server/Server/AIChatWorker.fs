@@ -51,17 +51,16 @@ open ToolUp.Platform
 // So this is option (a): in-process, co-located with the HTTP tier by
 // construction, and honest about it.
 //
-// ## Why it is NOT gated by ProcessProfileGate
+// ## Why it is placed `ProcessLocal`
 //
-// Every other background subsystem registers through
-// `ProcessProfileGate.shouldRegisterBackgroundService`, which returns
-// false for `WebOnly` on the principle that a sibling worker silo
-// drains the persistent stores. That principle does not apply here and
-// applying it would break chat outright: the work is bound to the
-// request's own process — its DI scope, its SSE manager, its
-// cancellation registry — so there is no sibling silo that could drain
-// it. A `WebOnly` deployment serves chat requests and must therefore
-// run this worker.
+// Shared work (`Placement.SharedWork`) is left off a `WebOnly` silo on
+// the principle that a sibling worker silo drains the persistent stores.
+// That principle does not apply here and applying it would break chat
+// outright: the work is bound to the request's own process — its DI
+// scope, its SSE manager, its cancellation registry — so there is no
+// sibling silo that could drain it. A `WebOnly` deployment serves chat
+// requests and must therefore run this worker, which is what
+// `ProcessLocal` admits.
 //
 // The corollary is `TryEnqueue` returning `NotRunning` rather than
 // throwing: in a composition where the worker was never started (a

@@ -42,117 +42,121 @@ open ToolUp.Platform.TeamManagement
 // `OnProvisioned` is a no-op `Skipped`: membership rows are created by
 // invitation / join flows, not by standing a user scope up.
 
-type UserMembershipTeardownLifecycle(services: IServiceProvider) =
+/// What the teardown acts with: the team store it purges, and the
+/// collaborators it uses when they are composed — the audit log (one
+/// `MemberRemoved` per stripped team), the user directory and the
+/// pending-invite store (the stale-invite sweep).
+type TeardownSubstrate = {
+    Teams: ITeamStore
+    Audit: IAuditLog option
+    Directory: IUserDirectory option
+    Invites: IPendingInviteStore option
+}
 
-    /// Resolve the user's email via the registered `IUserDirectory`,
-    /// best-effort. `None` when no directory is composed, the lookup
-    /// errors, or the directory holds no email for the id.
-    let resolveEmail (userId: string) : Async<string option> = async {
-        match services.GetService(typeof<IUserDirectory>) with
-        | :? IUserDirectory as directory ->
-            let! resolved = directory.ResolveUsers [ userId ]
+/// The user's email via the composed `IUserDirectory`, best-effort. `None`
+/// when no directory is composed, the lookup errors, or the directory holds
+/// no email for the id.
+let private resolveEmail (substrate: TeardownSubstrate) (userId: string) : Async<string option> = async {
+    match substrate.Directory with
+    | Some directory ->
+        let! resolved = directory.ResolveUsers [ userId ]
 
-            match resolved with
-            | Ok summaries -> return summaries |> List.tryPick (fun s -> if s.UserId = userId then s.Email else None)
-            | Error _ -> return None
-        | _ -> return None
-    }
+        match resolved with
+        | Ok summaries -> return summaries |> List.tryPick (fun s -> if s.UserId = userId then s.Email else None)
+        | Error _ -> return None
+    | None -> return None
+}
 
-    interface ITenantLifecycle with
-        member _.Name = "user-membership-teardown"
+let private optional<'T when 'T: not struct> (services: IServiceProvider) : 'T option =
+    match services.GetService(typeof<'T>) with
+    | :? 'T as service -> Some service
+    | _ -> None
 
-        member _.OnProvisioned(_scopeId, _actorUserId) = async {
-            return
-                LifecycleHookResult.Skipped
-                    "no provisioning action — membership rows are created by invitation / join flows"
-        }
+/// The first-party user-membership teardown hook, as a value. It acts on
+/// `user-{id}` offboards only; team scopes are handled by the team hooks.
+let hook: TenantHook<TeardownSubstrate> = {
+    Name = "user-membership-teardown"
+    Requires = "an ITeamStore (membership teardown)"
+    Resolve =
+        fun services ->
+            optional<ITeamStore> services
+            |> Option.map (fun teams -> {
+                Teams = teams
+                Audit = optional<IAuditLog> services
+                Directory = optional<IUserDirectory> services
+                Invites = optional<IPendingInviteStore> services
+            })
+    // Membership rows are created by invitation / join flows.
+    OnProvisioned = None
+    OnDeprovisioned =
+        Some(fun substrate scopeId actorUserId -> async {
+            match ScopeId.parse scopeId with
+            | ScopeKind.User userId ->
+                let store = substrate.Teams
 
-        member _.OnDeprovisioned(scopeId, actorUserId) = async {
-            match ScopeKey.tryParseContainer scopeId with
-            | Some(ScopeKey.User userId) ->
-                match services.GetService(typeof<ITeamStore>) with
-                | :? ITeamStore as store ->
-                    // Snapshot the affected teams BEFORE the purge — the
-                    // audit trail records one MemberRemoved per stripped
-                    // team, and the membership rows are gone afterwards.
-                    let! teams = store.GetTeamsForUser userId
+                // Snapshot the affected teams BEFORE the purge — the audit
+                // trail records one MemberRemoved per stripped team, and the
+                // membership rows are gone afterwards.
+                let! teams = store.GetTeamsForUser userId
 
-                    match! store.PurgeUser userId with
-                    | Error err -> return LifecycleHookResult.Failed err
-                    | Ok() ->
-                        match services.GetService(typeof<IAuditLog>) with
-                        | :? IAuditLog as auditLog ->
-                            for team in teams do
-                                do!
-                                    auditLog.Record(
-                                        team.TeamId,
-                                        MemberRemoved {
-                                            UserId = actorUserId
-                                            TeamId = team.TeamId
-                                            AffectedUserId = userId
-                                        }
+                match! store.PurgeUser userId with
+                | Error err -> return LifecycleHookResult.Failed err
+                | Ok() ->
+                    match substrate.Audit with
+                    | Some auditLog ->
+                        for team in teams do
+                            do!
+                                auditLog.Record(
+                                    team.TeamId,
+                                    MemberRemoved {
+                                        UserId = actorUserId
+                                        TeamId = team.TeamId
+                                        AffectedUserId = userId
+                                    }
+                                )
+                    | None -> ()
+
+                    // Pending-invite sweep — a purged user must not
+                    // auto-rejoin from a stale email invite on their next
+                    // sign-in.
+                    match! resolveEmail substrate userId with
+                    | None -> return LifecycleHookResult.Completed
+                    | Some address ->
+                        match substrate.Invites with
+                        | Some invites ->
+                            match! invites.Remove address with
+                            | Ok()
+                            | Error PendingInviteStoreError.NotFound -> return LifecycleHookResult.Completed
+                            | Error(PendingInviteStoreError.StorageFailed msg) ->
+                                return
+                                    LifecycleHookResult.Failed(
+                                        sprintf "membership purged, but the pending-invite sweep failed: %s" msg
                                     )
-                        | _ -> ()
-
-                        // Pending-invite sweep — a purged user must not
-                        // auto-rejoin from a stale email invite on their
-                        // next sign-in.
-                        match! resolveEmail userId with
+                            | Error PendingInviteStoreError.Conflict ->
+                                return
+                                    LifecycleHookResult.Failed
+                                        "membership purged, but the pending-invite sweep hit a concurrency conflict"
                         | None -> return LifecycleHookResult.Completed
-                        | Some address ->
-                            match services.GetService(typeof<IPendingInviteStore>) with
-                            | :? IPendingInviteStore as invites ->
-                                match! invites.Remove address with
-                                | Ok()
-                                | Error PendingInviteStoreError.NotFound -> return LifecycleHookResult.Completed
-                                | Error(PendingInviteStoreError.StorageFailed msg) ->
-                                    return
-                                        LifecycleHookResult.Failed(
-                                            sprintf "membership purged, but the pending-invite sweep failed: %s" msg
-                                        )
-                                | Error PendingInviteStoreError.Conflict ->
-                                    return
-                                        LifecycleHookResult.Failed
-                                            "membership purged, but the pending-invite sweep hit a concurrency conflict"
-                            | _ -> return LifecycleHookResult.Completed
-                | _ -> return LifecycleHookResult.Skipped "no ITeamStore resolvable — membership teardown not wired"
-            | _ ->
+            | ScopeKind.Team _
+            | ScopeKind.Other _ ->
                 return
                     LifecycleHookResult.Skipped
                         "not a user scope — membership teardown applies to user-{id} offboards only"
-        }
-
-    // Phase 54c — mutation-free preview: count the membership rows a
-    // user-scope offboard WOULD strip, via the read-only GetTeamsForUser.
-    interface ITenantLifecyclePreview with
-        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
-            match ScopeKey.tryParseContainer scopeId with
-            | Some(ScopeKey.User userId) ->
-                match services.GetService(typeof<ITeamStore>) with
-                | :? ITeamStore as store ->
-                    let! teams = store.GetTeamsForUser userId
-
-                    return
-                        LifecyclePreviewItem.affecting
-                            "user-membership-teardown"
-                            teams.Length
-                            (sprintf "%d team membership row(s) would be stripped" teams.Length)
-                | _ ->
-                    return
-                        LifecyclePreviewItem.affecting
-                            "user-membership-teardown"
-                            0
-                            "no ITeamStore resolvable — nothing to tear down"
-            | _ ->
-                return
-                    LifecyclePreviewItem.affecting
-                        "user-membership-teardown"
-                        0
-                        "not a user scope — nothing to tear down"
-        }
+        })
+    // Mutation-free preview: the membership rows a user-scope offboard
+    // WOULD strip, via the read-only GetTeamsForUser.
+    Preview =
+        Some(fun substrate scopeId _ -> async {
+            match ScopeId.parse scopeId with
+            | ScopeKind.User userId ->
+                let! teams = substrate.Teams.GetTeamsForUser userId
+                return teams.Length, sprintf "%d team membership row(s) would be stripped" teams.Length
+            | ScopeKind.Team _
+            | ScopeKind.Other _ -> return 0, "not a user scope — nothing to tear down"
+        })
+}
 
 /// Construct the first-party user-membership-teardown lifecycle hook.
 /// Resolves the team store (+ optional audit log / user directory /
 /// pending-invite store) from `services` on every call.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    UserMembershipTeardownLifecycle(services) :> ITenantLifecycle
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

@@ -295,20 +295,22 @@ let registerEntityOutbox (services: IServiceCollection) (config: ServerConfig) (
             ))
         |> ignore
 
-        if ProcessProfileGate.shouldRegisterBackgroundService config EntityOutboxRelaySubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "entity-outbox-relay" SharedWork (fun sp ->
                 new EntityOutboxRelayService.EntityOutboxRelayService(
                     sp.GetRequiredService<EntityOutbox.OutboxEntityStore>(),
                     resolvedLogger
                 )
-                :> Microsoft.Extensions.Hosting.IHostedService)
-            |> ignore
+                :> Microsoft.Extensions.Hosting.IHostedService))
+        |> ignore
 
 /// Phase 1027 — register the lineage outbox (its read surface: pending and
 /// dead-letter counts, the dead letters themselves) and its relay drain.
-/// No-op when `buildOptionalStoreValuesLogged` built none. The relay rides
-/// the `EntityOutboxRelaySubsystem` gate beside the entity-outbox relay, so
-/// a process profile that skips that subsystem skips lineage durability.
+/// No-op when `buildOptionalStoreValuesLogged` built none. The relay is
+/// shared work like the entity-outbox relay, so a process profile that
+/// skips one skips lineage durability too.
 let internal registerLineageOutbox
     (services: IServiceCollection)
     (config: ServerConfig)
@@ -338,16 +340,18 @@ let internal registerLineageOutbox
         )
         |> ignore
 
-        if ProcessProfileGate.shouldRegisterBackgroundService config EntityOutboxRelaySubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun _ ->
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "lineage-outbox-relay" SharedWork (fun _ ->
                 new EntityOutboxRelayService.OutboxRelayService(
                     "LineageOutbox",
                     outbox.RelayOnce,
                     outbox.PendingCount,
                     resolvedLogger
                 )
-                :> Microsoft.Extensions.Hosting.IHostedService)
-            |> ignore
+                :> Microsoft.Extensions.Hosting.IHostedService))
+        |> ignore
 
 /// Phase 161 — register the time-series store when
 /// `ServerConfig.TimeSeriesStore` selects a backend. `InMemoryTimeSeries`
@@ -415,21 +419,23 @@ let registerDataMigrations
             ))
         |> ignore
 
-        if
-            config.DataMigrations = EnabledDataMigrations
-            && ProcessProfileGate.shouldRegisterBackgroundService config DataMigrationSweepSubsystem
-        then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                // `ITeamStore` is optional: modes with no team concept
-                // register none, and the sweep then logs that it has no
-                // scope set rather than failing to construct.
-                let teamStore =
-                    match sp.GetService(typeof<TeamManagement.ITeamStore>) with
-                    | :? TeamManagement.ITeamStore as ts -> Some ts
-                    | _ -> None
+        if config.DataMigrations = EnabledDataMigrations then
+            // Shared work: the sweep upgrades shared stored objects, so a
+            // sibling worker silo does the upgrading for a WebOnly one.
+            Hosting.register
+                services
+                config
+                (BackgroundUnit.create "data-migration-sweep" SharedWork (fun sp ->
+                    // `ITeamStore` is optional: modes with no team concept
+                    // register none, and the sweep then logs that it has no
+                    // scope set rather than failing to construct.
+                    let teamStore =
+                        match sp.GetService(typeof<TeamManagement.ITeamStore>) with
+                        | :? TeamManagement.ITeamStore as ts -> Some ts
+                        | _ -> None
 
-                new MigrationRunnerService(sp.GetRequiredService<MigrationRunner>(), teamStore, resolvedLogger)
-                :> Microsoft.Extensions.Hosting.IHostedService)
+                    new MigrationRunnerService(sp.GetRequiredService<MigrationRunner>(), teamStore, resolvedLogger)
+                    :> Microsoft.Extensions.Hosting.IHostedService))
             |> ignore
 
 /// Phase 552 — register the consented-grant registry when
@@ -1070,9 +1076,8 @@ let registerBackupCoordinator
             | None -> ()
         ]
 
-        // Phase 1051 — exempt from the profile matrix: the snapshot and
-        // drill run as scheduler jobs, placed by the scheduler's own gate.
+        // Once at start: the snapshot and drill run as scheduler jobs, placed
+        // by the scheduler's own unit.
         if not declarations.IsEmpty then
-            services
-            |> ProcessProfileGate.addDeferredJobs "Phase 445 backup / restore drill" declarations
+            Hosting.register services config (Hosting.deferredJobs "backup-restore-drill" declarations)
             |> ignore

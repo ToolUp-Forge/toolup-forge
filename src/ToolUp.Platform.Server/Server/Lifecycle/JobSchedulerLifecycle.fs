@@ -24,46 +24,34 @@ open ToolUp.Platform
 // `OnProvisioned` is a no-op `Skipped`: modules schedule jobs on demand,
 // so provisioning has nothing to do.
 
-type JobSchedulerLifecycle(services: IServiceProvider) =
-    interface ITenantLifecycle with
-        member _.Name = "job-scheduler"
-
-        member _.OnProvisioned(_scopeId, _actorUserId) = async {
-            return LifecycleHookResult.Skipped "no provisioning action — modules schedule jobs on demand"
-        }
-
-        member _.OnDeprovisioned(scopeId, _actorUserId) = async {
+/// The first-party job-scheduler offboard hook, as a value.
+let hook: TenantHook<IJobScheduler> = {
+    Name = "job-scheduler"
+    Requires = "an IJobScheduler (background scheduling)"
+    Resolve =
+        fun services ->
             match services.GetService(typeof<IJobScheduler>) with
-            | :? IJobScheduler as scheduler ->
-                let! jobs = scheduler.ListJobs scopeId
+            | :? IJobScheduler as scheduler -> Some scheduler
+            | _ -> None
+    OnProvisioned = None
+    OnDeprovisioned =
+        Some(fun scheduler scopeId _ -> async {
+            let! jobs = scheduler.ListJobs scopeId
 
-                for job in jobs do
-                    do! scheduler.Cancel(scopeId, job.JobId)
+            for job in jobs do
+                do! scheduler.Cancel(scopeId, job.JobId)
 
-                return LifecycleHookResult.Completed
-            | _ -> return LifecycleHookResult.Skipped "no IJobScheduler registered (background scheduling not enabled)"
-        }
-
-    // Phase 54c — mutation-free preview: count the scope's scheduled jobs
-    // (the jobs that WOULD be cancelled) via the read-only ListJobs,
-    // without calling Cancel.
-    interface ITenantLifecyclePreview with
-        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
-            match services.GetService(typeof<IJobScheduler>) with
-            | :? IJobScheduler as scheduler ->
-                let! jobs = scheduler.ListJobs scopeId
-
-                return
-                    LifecyclePreviewItem.affecting
-                        "job-scheduler"
-                        jobs.Length
-                        (sprintf "%d scheduled job(s) would be cancelled" jobs.Length)
-            | _ ->
-                return
-                    LifecyclePreviewItem.affecting "job-scheduler" 0 "no IJobScheduler registered — no jobs to cancel"
-        }
+            return LifecycleHookResult.Completed
+        })
+    // Mutation-free preview: the scope's scheduled jobs (the jobs that
+    // WOULD be cancelled), via the read-only ListJobs.
+    Preview =
+        Some(fun scheduler scopeId _ -> async {
+            let! jobs = scheduler.ListJobs scopeId
+            return jobs.Length, sprintf "%d scheduled job(s) would be cancelled" jobs.Length
+        })
+}
 
 /// Construct the first-party job-scheduler lifecycle hook. Resolves the
 /// active `IJobScheduler` from `services` on every call.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    JobSchedulerLifecycle(services) :> ITenantLifecycle
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

@@ -43,15 +43,6 @@ open ToolUp.Platform.TeamManagement
 // already-deleted team — the Phase 54b resumable re-dispatch, or a double
 // offboard — is a clean no-op.
 
-/// Strip the `team-` container prefix if present so the hook accepts
-/// either the bare team id or the `team-{id}` container form (mirrors
-/// `MembershipCacheLifecycle.teamIdOf`). Returns `None` for a non-team
-/// scope, which the hook treats as "nothing to bootstrap".
-let private teamIdOf (scopeId: string) : string option =
-    match ScopeKey.tryParseContainer scopeId with
-    | Some(ScopeKey.Team teamId) -> Some teamId
-    | _ -> None
-
 /// Attach `actorUserId` as the team `Owner` if they are not already a
 /// member (idempotent). A blank actor is left unattached — the team row
 /// still exists, but there is no owner id to bind.
@@ -70,9 +61,10 @@ let private ensureOwner (store: ITeamStore) (teamId: string) (actorUserId: strin
 /// `ProvisioningRequest.OwnerUserId`, falling back to the actor). Both
 /// steps are read-guarded so re-provision is idempotent.
 let private bootstrap (store: ITeamStore) (scopeId: string) (ownerUserId: string) : Async<LifecycleHookResult> = async {
-    match teamIdOf scopeId with
-    | None -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to bootstrap"
-    | Some teamId ->
+    match ScopeId.parse scopeId with
+    | ScopeKind.User _
+    | ScopeKind.Other _ -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to bootstrap"
+    | ScopeKind.Team teamId ->
         let! existing = store.GetTeam teamId
 
         match existing with
@@ -98,9 +90,10 @@ let private bootstrap (store: ITeamStore) (scopeId: string) (ownerUserId: string
 /// offboard — is a no-op that still reports Completed. A non-team scope has
 /// no owner team to tear down (`Skipped`), mirroring `bootstrap`.
 let private teardown (store: ITeamStore) (scopeId: string) : Async<LifecycleHookResult> = async {
-    match teamIdOf scopeId with
-    | None -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to tear down"
-    | Some teamId ->
+    match ScopeId.parse scopeId with
+    | ScopeKind.User _
+    | ScopeKind.Other _ -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to tear down"
+    | ScopeKind.Team teamId ->
         match! store.GetTeam teamId with
         | None -> return LifecycleHookResult.Completed
         | Some _ ->
@@ -119,36 +112,22 @@ let private effectiveOwner (context: TenantProvisioningContext) : string =
     | Some req when not (String.IsNullOrWhiteSpace req.OwnerUserId) -> req.OwnerUserId
     | _ -> context.ActorUserId
 
-type OwnerTeamBootstrapLifecycle(services: IServiceProvider) =
-    interface ITenantLifecycle with
-        member _.Name = "owner-team-bootstrap"
-
-        member _.OnProvisioned(scopeId, actorUserId) = async {
+/// The first-party owner-team bootstrap hook, as a value: the team row and
+/// its owner at provisioning (the request's owner when it names one, else
+/// the acting admin), the team row's deletion at offboard.
+let hook: TenantHook<ITeamStore> = {
+    Name = "owner-team-bootstrap"
+    Requires = "an ITeamStore (teams)"
+    Resolve =
+        fun services ->
             match services.GetService(typeof<ITeamStore>) with
-            | :? ITeamStore as store -> return! bootstrap store scopeId actorUserId
-            | _ -> return LifecycleHookResult.Skipped "no ITeamStore registered (teams substrate not composed)"
-        }
+            | :? ITeamStore as store -> Some store
+            | _ -> None
+    OnProvisioned = Some(fun store context -> bootstrap store context.ScopeId (effectiveOwner context))
+    OnDeprovisioned = Some(fun store scopeId _ -> teardown store scopeId)
+    Preview = None
+}
 
-        // Phase 306 — offboard teardown: delete the owner-team row this
-        // hook created at provisioning (symmetry with the bootstrap).
-        member _.OnDeprovisioned(scopeId, _actorUserId) = async {
-            match services.GetService(typeof<ITeamStore>) with
-            | :? ITeamStore as store -> return! teardown store scopeId
-            | _ -> return LifecycleHookResult.Skipped "no ITeamStore registered (teams substrate not composed)"
-        }
-
-    // Phase 305 — request-aware provisioning: attach the request's explicit
-    // OwnerUserId (falling back to the acting admin) rather than always the
-    // actor. Falls back byte-identically to OnProvisioned when no request
-    // rides or its owner is blank.
-    interface ITenantLifecycleProvisionContext with
-        member _.OnProvisionedWith(context) = async {
-            match services.GetService(typeof<ITeamStore>) with
-            | :? ITeamStore as store -> return! bootstrap store context.ScopeId (effectiveOwner context)
-            | _ -> return LifecycleHookResult.Skipped "no ITeamStore registered (teams substrate not composed)"
-        }
-
-/// Construct the first-party owner-team bootstrap lifecycle hook.
-/// Resolves the active `ITeamStore` from `services` on every call.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    OwnerTeamBootstrapLifecycle(services) :> ITenantLifecycle
+/// Construct the first-party owner-team bootstrap lifecycle hook. Resolves
+/// the active `ITeamStore` from `services` on every call.
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

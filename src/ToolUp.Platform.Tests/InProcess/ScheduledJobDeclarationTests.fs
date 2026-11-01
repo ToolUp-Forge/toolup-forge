@@ -79,12 +79,16 @@ let private freshScheduler () =
 
     let scheduler =
         JobScheduler.create
-            jobStore
-            eventStore
-            silentChannel
-            ServerConfig.defaults
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
         :> IJobScheduler
 
     scheduler

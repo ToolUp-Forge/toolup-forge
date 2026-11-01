@@ -502,28 +502,38 @@ let private build (dispatcher: IExternalComputeDispatcher) (handleStore: IExtern
     let scheduler =
         match handleStore with
         | Some hs ->
-            new JobScheduler.InProcessJobScheduler(
-                jobStore,
-                eventStore,
-                channel,
-                ServerConfig.defaults,
-                silentLogger,
-                NoOpActivitySink() :> IActivitySink,
-                distributedLock = InProcessDistributedLock.create (),
-                externalDispatcher = dispatcher,
-                externalHandleStore = hs
-            )
+            JobScheduler.create
+                ({
+                    Store = jobStore
+                    EventStore = eventStore
+                    NotificationChannel = channel
+                    Config = ServerConfig.defaults
+                    Logger = silentLogger
+                    ActivitySink = NoOpActivitySink() :> IActivitySink
+                }
+                : JobScheduler.SchedulerDeps)
+                {
+                    JobScheduler.SchedulerOptions.defaults with
+                        DistributedLock = Some(InProcessDistributedLock.create ())
+                        ExternalDispatcher = Some dispatcher
+                        ExternalHandleStore = Some hs
+                }
         | None ->
-            new JobScheduler.InProcessJobScheduler(
-                jobStore,
-                eventStore,
-                channel,
-                ServerConfig.defaults,
-                silentLogger,
-                NoOpActivitySink() :> IActivitySink,
-                distributedLock = InProcessDistributedLock.create (),
-                externalDispatcher = dispatcher
-            )
+            JobScheduler.create
+                ({
+                    Store = jobStore
+                    EventStore = eventStore
+                    NotificationChannel = channel
+                    Config = ServerConfig.defaults
+                    Logger = silentLogger
+                    ActivitySink = NoOpActivitySink() :> IActivitySink
+                }
+                : JobScheduler.SchedulerDeps)
+                {
+                    JobScheduler.SchedulerOptions.defaults with
+                        DistributedLock = Some(InProcessDistributedLock.create ())
+                        ExternalDispatcher = Some dispatcher
+                }
 
     {
         Store = jobStore
@@ -563,32 +573,37 @@ let private buildPair
         let scheduler =
             match handleStore with
             | Some hs ->
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    eventStore,
-                    channel,
-                    ServerConfig.defaults,
-                    silentLogger,
-                    NoOpActivitySink() :> IActivitySink,
-                    // A DISTINCT lock per instance — two replicas do not
-                    // share an in-process mutex, and pretending they do is
-                    // how a single-instance test claims a distributed
-                    // guarantee.
-                    distributedLock = InProcessDistributedLock.create (),
-                    externalDispatcher = dispatcher,
-                    externalHandleStore = hs
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = eventStore
+                        NotificationChannel = channel
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink = NoOpActivitySink() :> IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    {
+                        JobScheduler.SchedulerOptions.defaults with
+                            ExternalDispatcher = Some dispatcher
+                            ExternalHandleStore = Some hs
+                    }
             | None ->
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    eventStore,
-                    channel,
-                    ServerConfig.defaults,
-                    silentLogger,
-                    NoOpActivitySink() :> IActivitySink,
-                    distributedLock = InProcessDistributedLock.create (),
-                    externalDispatcher = dispatcher
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = eventStore
+                        NotificationChannel = channel
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink = NoOpActivitySink() :> IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    {
+                        JobScheduler.SchedulerOptions.defaults with
+                            DistributedLock = Some(InProcessDistributedLock.create ())
+                            ExternalDispatcher = Some dispatcher
+                    }
 
         {
             Store = jobStore
@@ -1443,6 +1458,7 @@ let private composeTests =
                 (ref None)
                 (ref None)
                 None
+                InProcessDistributedLock.shared
             |> ignore
 
             let registered (t: Type) =
@@ -1482,6 +1498,7 @@ let private composeTests =
                 (ref None)
                 (ref None)
                 None
+                InProcessDistributedLock.shared
             |> ignore
 
             let registered (t: Type) =
@@ -1526,6 +1543,7 @@ let private composeTests =
                 (ref None)
                 (ref None)
                 None
+                InProcessDistributedLock.shared
             |> ignore
 
             let registered (t: Type) =

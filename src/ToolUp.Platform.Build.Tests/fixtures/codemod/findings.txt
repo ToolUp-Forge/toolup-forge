@@ -1,4 +1,4 @@
-Codemod: 45 site(s) in 12 file(s) need human review (not rewritten):
+Codemod: 51 site(s) in 13 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -40,6 +40,19 @@ Codemod: 45 site(s) in 12 file(s) need human review (not rewritten):
   src/Server/Guarded.fs
     L12 [815-remoting-permission-guarded-api] let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory
       -> Phase 815: `RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md
+  src/Server/Hosting.fs
+    L9 [1067-should-register-background-service] if ProcessProfileGate.shouldRegisterBackgroundService config AuditReplicatorSubsystem then
+      -> Phase 1067: the profile matrix is removed: register the hosted service with `Hosting.register services config (BackgroundUnit.create "<name>" <placement> factory)` (or `BackgroundUnit.ofInstance` for an instance) and drop the `if`. Every subsystem the matrix named is `SharedWork`; the webhook and transactional dispatchers add `|> BackgroundUnit.outbound`
+    L10 [1067-ungated-hosted-service] services.AddSingleton<IHostedService>(sweep) |> ignore
+      -> Phase 1067: every hosted service is registered through `Hosting.register services config unit` with a declared `Placement`: `OnceAtStart` for a one-shot, `SharedWork` for a store-draining loop, `ProcessLocal` for a loop bound to this process; a profile that does not admit the placement registers nothing
+    L15 [1067-exempt-hosted-service] |> ProcessProfileGate.addExempt "My handler registration" ProcessProfileGate.SchedulerRegistrationReason (fun _ ->
+      -> Phase 1067: exemptions are removed: register the service with `Hosting.register services config unit` and choose its `Placement` — `OnceAtStart` for a one-shot or a scheduler registration (`addDeferredJobs label decls` is `Hosting.deferredJobs label decls`), `ProcessLocal` for a loop over this process's own state, `SharedWork` for a loop draining shared state. A companion holding a `ServerApp` can contribute it as a value: `ServerApp.addContribution (Contribution.hosted owner unit)`
+    L20 [1067-scheduler-factory] JobScheduler.createWithCatchUp store events channel config logger sink watermark
+      -> Phase 1067: `InProcessJobScheduler` has one factory: `JobScheduler.create { Store = …; EventStore = …; NotificationChannel = …; Config = …; Logger = …; ActivitySink = … } { SchedulerOptions.defaults with TriggerWatermark = Some w; ExternalDispatcher = Some d; ExternalHandleStore = Some h; DistributedLock = Some l; ProgressSink = JobScheduler.progressSinkFor deps; ScopeCarrier = Some c }` — set only the fields the old factory took (`createWithCatchUp` set the watermark, `createWithExternalCompute` the dispatcher, `createWithExternalCallback` the dispatcher and handle store). A progress sink is no longer derived from `JobProgress` inside the constructor: pass `JobScheduler.progressSinkFor deps`
+    L23 [1067-webhook-factory] WebhookDispatcher.createWithLock registry log events http retry logger sink secrets limiter policy lck
+      -> Phase 1067: `WebhookDispatcherService` has one factory: `WebhookDispatcher.create { Registry = …; DeliveryLog = …; EventStore = …; HttpClient = …; RetryPolicy = …; Logger = …; ActivitySink = …; SecretStore = …; GetRateLimiter = …; UrlPolicy = … } WebhookOptions.defaults`, with `{ WebhookOptions.defaults with DistributedLock = Some lock }` where `createWithLock` passed a lock
+    L27 [1067-declared-data-sources] services |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+      -> Phase 1067: `DeclaredDelivery.withDeclaredDataSources` takes the deployment's `ServerConfig` first (it registers through `Hosting.register`): `withDeclaredDataSources config declared watchPoll services`
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
       -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once
@@ -104,6 +117,7 @@ Codemod: 45 site(s) in 12 file(s) need human review (not rewritten):
   Read:
     Phase 1053 — docs/migrations/1053-redesign-b-defects-remoting.md
     Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
+    Phase 1067 — docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md

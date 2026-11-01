@@ -536,16 +536,18 @@ let seedStandingSubscriptions
 /// what it lacks:
 ///
 /// ```fsharp skip=fragment
-/// services
-/// |> ProcessProfileGate.addExempt
-///     "Standing report subscriptions"
-///     ProcessProfileGate.SchedulerRegistrationReason
-///     (ReportingCompose.withStandingSubscriptions standing standingDeps)
+/// Hosting.register
+///     services
+///     config
+///     (BackgroundUnit.create
+///         "standing-report-subscriptions"
+///         OnceAtStart
+///         (ReportingCompose.withStandingSubscriptions standing standingDeps))
 /// ```
 ///
-/// It seeds scheduler jobs and runs no work of its own, so it is exempt
-/// from the profile matrix with the scheduler-registration reason (Phase
-/// 1051); registering it through `addExempt` writes that down.
+/// It seeds scheduler jobs and runs no work of its own, so it is placed
+/// `OnceAtStart`: every profile registers it, and the scheduler's own unit
+/// decides where the seeded jobs run.
 ///
 /// `deps.Api` must be the deps the subscription job handler's scheduler
 /// was built with, so a seeded job has a handler to dispatch to.

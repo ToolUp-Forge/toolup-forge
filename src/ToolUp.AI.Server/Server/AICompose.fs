@@ -568,15 +568,14 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // enqueue turns, the host drives Start/Stop through the
                 // interface.
                 //
-                // Deliberately NOT gated by `ProcessProfileGate`. Every
-                // other background subsystem is, on the principle that a
-                // `WebOnly` silo serves no background work because a
-                // sibling worker silo drains the persistent stores. That
-                // principle does not reach this one: an agent turn is
-                // bound to the process that accepted the request — its DI
-                // scope, its SSE manager, its cancellation registry — so
-                // there is no sibling silo that could drain it, and
-                // gating it would take chat out entirely on `WebOnly`.
+                // Process-local: an agent turn is bound to the process
+                // that accepted the request — its DI scope, its SSE
+                // manager, its cancellation registry — so no sibling silo
+                // could drain it, and every Kestrel profile that serves
+                // chat runs it (`WebOnly` included). A serverless host keeps
+                // no loop alive and admits none: `TryEnqueue` then answers
+                // `NotRunning` and the handler falls back to the
+                // unsupervised run (`AIChatWorker.fs`).
                 .AddSingleton<AIChatWorker.AIChatWorker>(
                     Func<IServiceProvider, AIChatWorker.AIChatWorker>(fun sp ->
                         let logger =
@@ -588,20 +587,16 @@ let composeAI (app: AIServerApp) : ServerApp =
                         // container owns the singleton's disposal.
                         new AIChatWorker.AIChatWorker(logger))
                 )
-                // The reason above, as the exemption the
-                // registration guard reads.
-                .AddSingleton<HostedServiceExemption>(
-                    {
-                        Service = "AI chat worker"
-                        Reason =
-                            "an agent turn is bound to the process that accepted the request (its DI scope, SSE manager and cancellation registry), so no sibling silo could drain it and gating it would take chat out on WebOnly"
-                    }
-                )
-                .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                    Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                        sp.GetRequiredService<AIChatWorker.AIChatWorker>()
-                        :> Microsoft.Extensions.Hosting.IHostedService)
-                )
+
+        let s =
+            Hosting.register
+                s
+                config
+                (BackgroundUnit.create "ai-chat-worker" ProcessLocal (fun sp ->
+                    sp.GetRequiredService<AIChatWorker.AIChatWorker>() :> Microsoft.Extensions.Hosting.IHostedService))
+
+        let s =
+            s
                 // Warn at startup when AI runs multi-instance with the
                 // in-process cancel / client-tool-dispatch registries
                 // (no cross-instance routing yet).
@@ -1262,17 +1257,19 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
         if ConversationRetentionPolicy.isInert policy || List.isEmpty scopes then
             withPolicy
         else
-            // Exempt from the profile matrix: the sweep runs as
-            // a scheduler job, placed by the scheduler's own gate.
-            withPolicy
-            |> ProcessProfileGate.addDeferredJobs "AI conversation retention sweep" [
-                DeferredScheduledJobDeclaration.create (fun provider ->
-                    ScheduledJobDeclaration.create
-                        ConversationRetention.SweepHandlerName
-                        (ConversationRetentionSweepJobHandler(provider, policy) :> IJobHandler)
-                        (Trigger.CronTrigger policy.SweepSchedule)
-                    |> ScheduledJobDeclaration.withScopes scopes)
-            ]
+            // Once at start: the sweep runs as a scheduler job, placed by
+            // the scheduler's own unit.
+            Hosting.register
+                withPolicy
+                app.Config
+                (Hosting.deferredJobs "ai-conversation-retention-sweep" [
+                    DeferredScheduledJobDeclaration.create (fun provider ->
+                        ScheduledJobDeclaration.create
+                            ConversationRetention.SweepHandlerName
+                            (ConversationRetentionSweepJobHandler(provider, policy) :> IJobHandler)
+                            (Trigger.CronTrigger policy.SweepSchedule)
+                        |> ScheduledJobDeclaration.withScopes scopes)
+                ])
 
     app |> contribute register
 

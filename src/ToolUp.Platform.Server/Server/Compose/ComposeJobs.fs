@@ -44,6 +44,10 @@ open ToolUp.Platform.WebhookDispatcher
 /// (chicken-and-egg break: the dispatcher constructs before the
 /// limiter, but only invokes `Wait` at request time, by which point the
 /// cell holds the configured limiter).
+///
+/// `distributedLock` is the deployment's composed lock (resolved by
+/// `compose` before any subsystem is built), so the failure-state lease
+/// excludes across replicas whenever the deployment composed a shared one.
 let buildWebhookSubsystem
     (config: ServerConfig)
     (resolvedBlobStorage: IBlobStorage)
@@ -52,6 +56,7 @@ let buildWebhookSubsystem
     (resolvedActivitySink: IActivitySink)
     (secretStore: Secrets.ISecretStore)
     (rateLimiterLookup: unit -> IRateLimiter)
+    (distributedLock: IDistributedLock)
     : (IWebhookRegistry * IWebhookDeliveryLog * WebhookDispatcher.WebhookDispatcherService * IEventStore) option =
     match config.Webhooks with
     | NoWebhooks -> None
@@ -89,16 +94,22 @@ let buildWebhookSubsystem
 
         let dispatcher =
             WebhookDispatcher.create
-                registry
-                deliveryLog
-                effectiveInnerEventStore
-                httpClient
-                WebhookRetryPolicy.defaults
-                resolvedLogger
-                resolvedActivitySink
-                secretStore
-                rateLimiterLookup
-                urlPolicy
+                {
+                    Registry = registry
+                    DeliveryLog = deliveryLog
+                    EventStore = effectiveInnerEventStore
+                    HttpClient = httpClient
+                    RetryPolicy = WebhookRetryPolicy.defaults
+                    Logger = resolvedLogger
+                    ActivitySink = resolvedActivitySink
+                    SecretStore = secretStore
+                    GetRateLimiter = rateLimiterLookup
+                    UrlPolicy = urlPolicy
+                }
+                {
+                    WebhookDispatcher.WebhookOptions.defaults with
+                        DistributedLock = Some distributedLock
+                }
 
         // Wrap the inner event store so every event written through the
         // DI-registered `IEventStore` triggers webhook fan-out. The
@@ -253,14 +264,14 @@ let registerWebhookSubsystem
         )
         |> ignore
 
-        // Phase 16 + 16a — gate dispatcher BackgroundService on the
-        // centralised process-profile matrix. ServerlessHost / WebOnly
-        // skip; AllInOne / WorkerOnly / DispatcherOnly register.
-        if ProcessProfileGate.shouldRegisterBackgroundService config WebhookDispatcherSubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                dispatcher :> Microsoft.Extensions.Hosting.IHostedService
-            )
-            |> ignore
+        // Shared, outbound work: one of the two dispatchers a DispatcherOnly
+        // silo exists to isolate.
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.ofInstance "webhook-dispatcher" SharedWork dispatcher
+             |> BackgroundUnit.outbound)
+        |> ignore
 
 /// Phase 9b — opt-in job scheduler. `NoJobScheduler` (default) skips
 /// registration entirely — no `IJobStore`, no `IJobScheduler`, no
@@ -322,7 +333,7 @@ let private tryResolveExternalDispatcher
         | Some _ -> found
         | None ->
             logger.Warn
-                "[ComposeJobs] event=external_dispatcher_not_introspectable ServerConfig.ExternalCompute = CustomExternalCompute but no instance-registered IExternalComputeDispatcher was found in the service collection, so the job scheduler's external hand-off reconciliation is DISABLED — a handler returning JobResult.HandedOff would leave its run AwaitingExternal forever. Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)) rather than a factory, or construct the scheduler yourself with JobScheduler.createWithExternalCompute."
+                "[ComposeJobs] event=external_dispatcher_not_introspectable ServerConfig.ExternalCompute = CustomExternalCompute but no instance-registered IExternalComputeDispatcher was found in the service collection, so the job scheduler's external hand-off reconciliation is DISABLED — a handler returning JobResult.HandedOff would leave its run AwaitingExternal forever. Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)) rather than a factory, or construct the scheduler yourself with JobScheduler.create deps { SchedulerOptions.defaults with ExternalDispatcher = Some dispatcher }."
 
             None
 
@@ -401,14 +412,24 @@ let private registeredInstances<'T when 'T: not struct> (services: IServiceColle
 let private tryRegisteredInstance<'T when 'T: not struct> (services: IServiceCollection) : 'T option =
     registeredInstances<'T> services |> List.tryHead
 
-/// Phase 935 — bind the deployment's `ScopeCarrier` (registered as an
-/// instance beside its DataProtection key ring) into a scheduler that
-/// carries scopes. A scheduler that is not an `IScopeCarrierBinding`, or a
-/// composition with no carrier, is left as it was.
+/// Bind the deployment's `ScopeCarrier` (registered as an instance beside
+/// its DataProtection key ring) into an ADOPTED companion scheduler that
+/// carries scopes. The in-process scheduler takes the carrier at
+/// construction (`SchedulerOptions.ScopeCarrier`); a companion compose did
+/// not construct can only be bound after the fact. A scheduler that is not
+/// an `IScopeCarrierBinding`, or a composition with no carrier, is left as
+/// it was.
 let private bindScopeCarrier (services: IServiceCollection) (scheduler: obj) : unit =
     match scheduler, tryRegisteredInstance<ScopeCarrier> services with
     | (:? IScopeCarrierBinding as binding), Some carrier -> binding.BindScopeCarrier carrier
     | _ -> ()
+
+/// The scheduler's unit of background work: shared, because the job store
+/// is shared and the cron tick is an election over the composed lock, so a
+/// worker silo runs it for every silo. `JobApiHandler` can still schedule
+/// jobs through `IJobStore` on a silo that does not run it.
+let private schedulerUnit (scheduler: Microsoft.Extensions.Hosting.IHostedService) : BackgroundUnit =
+    BackgroundUnit.ofInstance "job-scheduler" SharedWork scheduler
 
 let registerJobScheduler
     (services: IServiceCollection)
@@ -421,6 +442,7 @@ let registerJobScheduler
     (blobJobStoreInstance: JobStore.BlobJobStore option ref)
     (jobSchedulerCell: IJobScheduler option ref)
     (jobTriggerWatermark: JobTriggerWatermark.JobTriggerWatermark option)
+    (distributedLock: IDistributedLock)
     : IJobScheduler option =
     match config.JobScheduler with
     | NoJobScheduler -> None
@@ -429,113 +451,67 @@ let registerJobScheduler
         blobJobStoreInstance.Value <- Some blobJobStore
         let jobStore = blobJobStore :> IJobStore
 
-        // Phase 319 — the deployment's external-compute backend, when it
-        // composed one. `None` keeps the reconciliation pass off.
+        // The deployment's external-compute backend, when it composed one.
+        // `None` keeps the reconciliation pass off.
         let externalDispatcher = tryResolveExternalDispatcher services config resolvedLogger
 
-        // Phase 320 — the handle store behind the completion-callback
-        // ingress. Registered in DI (not merely handed to the scheduler)
-        // because the ingress handler resolves it per request.
+        // The handle store behind the completion-callback ingress,
+        // registered in DI (not merely handed to the scheduler) because the
+        // ingress handler resolves it per request.
         let externalHandleStore =
             tryResolveExternalHandleStore config resolvedBlobStorage resolvedLogger
 
         externalHandleStore
         |> Option.iter (fun store -> services.AddSingleton<IExternalHandleStore>(store) |> ignore)
 
+        let deps: JobScheduler.SchedulerDeps = {
+            Store = jobStore
+            EventStore = eventStore
+            NotificationChannel = resolvedNotificationChannel
+            Config = config
+            Logger = resolvedLogger
+            ActivitySink = resolvedActivitySink
+        }
+
+        // Each optional collaborator is a field of one options record: the
+        // backend, its handle store (meaningful only beside a backend), the
+        // shared trigger watermark (catch-up), the progress sink, the
+        // composed lock and the deployment's scope carrier.
         let scheduler =
-            // Phase 598 — hand the scheduler the shared trigger
-            // watermark when the deployment opted into catch-up;
-            // `JobNotifyEventStore` holds the same instance.
-            match externalDispatcher, jobTriggerWatermark with
-            | Some dispatcher, watermark ->
-                // Phase 319 — one arity covers both catch-up shapes, so
-                // the two features compose rather than excluding each
-                // other.
-                //
-                // Phase 320 — and one more arity for the handle store,
-                // so a deployment whose backend cannot support callbacks
-                // still gets the Phase 319 scheduler exactly as before.
-                match externalHandleStore with
-                | Some handleStore ->
-                    JobScheduler.createWithExternalCallback
-                        jobStore
-                        eventStore
-                        resolvedNotificationChannel
-                        config
-                        resolvedLogger
-                        resolvedActivitySink
-                        watermark
-                        dispatcher
-                        handleStore
-                | None ->
-                    JobScheduler.createWithExternalCompute
-                        jobStore
-                        eventStore
-                        resolvedNotificationChannel
-                        config
-                        resolvedLogger
-                        resolvedActivitySink
-                        watermark
-                        dispatcher
-            | None, Some watermark ->
-                JobScheduler.createWithCatchUp
-                    jobStore
-                    eventStore
-                    resolvedNotificationChannel
-                    config
-                    resolvedLogger
-                    resolvedActivitySink
-                    watermark
-            | None, None ->
-                JobScheduler.create
-                    jobStore
-                    eventStore
-                    resolvedNotificationChannel
-                    config
-                    resolvedLogger
-                    resolvedActivitySink
+            JobScheduler.create deps {
+                TriggerWatermark = jobTriggerWatermark
+                DistributedLock = Some distributedLock
+                ExternalDispatcher = externalDispatcher
+                ExternalHandleStore = externalDispatcher |> Option.bind (fun _ -> externalHandleStore)
+                ProgressSink = JobScheduler.progressSinkFor deps
+                ScopeCarrier = tryRegisteredInstance<ScopeCarrier> services
+            }
 
         jobSchedulerCell.Value <- Some(scheduler :> IJobScheduler)
-
-        // Phase 935 — the deployment's scope carrier, so a job scheduled
-        // under a resolved scope runs under it after a restart.
-        bindScopeCarrier services scheduler
 
         services.AddSingleton<IJobStore>(jobStore) |> ignore
         services.AddSingleton<IJobScheduler>(scheduler :> IJobScheduler) |> ignore
         services.AddSingleton<JobScheduler.InProcessJobScheduler>(scheduler) |> ignore
 
-        // Phase 321 — the progress sink, registered ONLY when the
-        // deployment opted in (`JobProgress = EnabledJobProgress`). Taken
-        // from the scheduler rather than constructed here, so DI and the
-        // scheduler share one instance and therefore one per-job
-        // rate-limit window — two instances would silently double the
-        // publish rate a chatty handler achieves.
-        //
-        // Nothing is registered under `NoJobProgress`: a resolvable no-op
-        // sink would invite consumer code to resolve and report against a
-        // deployment that asked for none, which is the opposite of GP 13.
-        // Handlers reach progress through `ctx.Progress` regardless, and
-        // that is a no-op when this is absent.
+        // The progress sink, registered ONLY when the deployment opted in
+        // (`JobProgress = EnabledJobProgress`), and the scheduler's own
+        // instance, so DI and the scheduler share one per-job rate-limit
+        // window. Nothing is registered under `NoJobProgress`: a resolvable
+        // no-op sink would invite consumer code to report against a
+        // deployment that asked for none (GP 13).
         scheduler.ProgressSink
         |> Option.iter (fun sink -> services.AddSingleton<IJobProgressSink>(sink) |> ignore)
 
-        // Phase 320 — the seam the completion-callback ingress drives a
-        // run through. Registered only when a handle store exists: with
-        // no store there is no way to authenticate or route a callback,
-        // so a registered sink would be a surface nothing can reach
-        // (GP 13). The in-process scheduler implements it.
+        // The seam the completion-callback ingress drives a run through.
+        // Registered only when a handle store exists: with none
+        // there is no way to authenticate or route a callback, so a
+        // registered sink would be a surface nothing can reach (GP 13).
         if externalHandleStore.IsSome then
             services.AddSingleton<IExternalCompletionSink>(scheduler :> IExternalCompletionSink)
             |> ignore
 
-        // Phase 9b.A — register the scheduler as the deployment's
-        // `IJobSchedulerTelemetry` source (the in-process default
-        // implements both interfaces) and add the `/dev/inspect` Job
-        // scheduler panel contributor. A future distributed companion
-        // (Akka, Orleans Reminders, Hangfire) provides its own
-        // `IJobSchedulerTelemetry` impl; the contributor is wired here
-        // because it depends on the in-process scheduler's telemetry.
+        // The scheduler as the deployment's `IJobSchedulerTelemetry` source,
+        // and the `/dev/inspect` Job scheduler panel over it.
         services.AddSingleton<IJobSchedulerTelemetry>(scheduler :> IJobSchedulerTelemetry)
         |> ignore
 
@@ -545,17 +521,7 @@ let registerJobScheduler
         )
         |> ignore
 
-        // Phase 16 + 16a — gate scheduler BackgroundService on the
-        // centralised matrix. ServerlessHost / WebOnly / DispatcherOnly
-        // skip; AllInOne / WorkerOnly register. `JobApiHandler` can
-        // still schedule jobs through `IJobStore` even when the
-        // scheduler isn't running locally — a sibling `WorkerOnly`
-        // silo picks them up.
-        if ProcessProfileGate.shouldRegisterBackgroundService config JobSchedulerSubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                scheduler :> Microsoft.Extensions.Hosting.IHostedService
-            )
-            |> ignore
+        Hosting.register services config (schedulerUnit scheduler) |> ignore
 
         Some(scheduler :> IJobScheduler)
 
@@ -598,18 +564,14 @@ let registerJobScheduler
                 resolvedLogger.Warn
                     "[ComposeJobs] event=quartz_job_store_not_registered ServerConfig.JobScheduler = QuartzJobScheduler and an IJobScheduler instance was found, but no IJobStore instance was. The scheduler dispatches, but the Job API, the service status board and the maintenance surface have no store to read. Register it: services.AddSingleton<IJobStore>(scheduler.JobStore)."
 
-            // Phase 16 + 16a — the same profile gate the in-process
-            // default goes through. A companion scheduler that is also an
-            // `IHostedService` (the shipped one is — that is how the
-            // Quartz scheduler starts and shuts down) is registered here
-            // so a `WebOnly` replica composes the scheduler surface
-            // without starting a dispatcher.
+            // The same unit the in-process default registers. A companion
+            // scheduler that is also an `IHostedService` (the shipped one
+            // is — that is how the Quartz scheduler starts and shuts down)
+            // is placed here, so a `WebOnly` replica composes the scheduler
+            // surface without starting a dispatcher.
             match scheduler with
-            | :? Microsoft.Extensions.Hosting.IHostedService as hosted when
-                ProcessProfileGate.shouldRegisterBackgroundService config JobSchedulerSubsystem
-                ->
-                services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(hosted)
-                |> ignore
+            | :? Microsoft.Extensions.Hosting.IHostedService as hosted ->
+                Hosting.register services config (schedulerUnit hosted) |> ignore
             | _ -> ()
 
             Some scheduler
@@ -692,15 +654,15 @@ let registerDataIngestion
         let oauthStateStore = InMemoryOAuthStateStore() :> IOAuthStateStore
         services.AddSingleton<IOAuthStateStore>(oauthStateStore) |> ignore
 
-        // Phase 16 + 16a — gate state-store cleanup BackgroundService on
-        // the centralised matrix. ServerlessHost / WebOnly / DispatcherOnly
-        // skip; AllInOne / WorkerOnly register. Per-invocation flows
-        // expire their own state-store entries; the periodic sweep is
-        // a long-running-process convenience, not a correctness gate.
-        if ProcessProfileGate.shouldRegisterBackgroundService config OAuthStateCleanupSubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun _ ->
-                new OAuthStateCleanupService(oauthStateStore) :> Microsoft.Extensions.Hosting.IHostedService)
-            |> ignore
+        // Shared work on a worker silo. Per-invocation flows expire their
+        // own state-store entries; the periodic sweep is a long-running-
+        // process convenience, not a correctness gate.
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "oauth-state-cleanup" SharedWork (fun _ ->
+                new OAuthStateCleanupService(oauthStateStore) :> Microsoft.Extensions.Hosting.IHostedService))
+        |> ignore
 
         // Phase 9m / Phase 10b — redirect-base validator. Registered
         // unconditionally as an instance with DataIngestion enabled. The
@@ -814,21 +776,22 @@ let registerOAuthRefresher
             // (`GetDescriptor` / `ListDescriptors`) see existing
             // descriptors immediately after process restart.
             //
-            // Phase 16 + 16a — gate the startup-Recover IHostedService on
-            // the centralised matrix. ServerlessHost / WebOnly /
-            // DispatcherOnly skip; AllInOne / WorkerOnly register.
-            // Serverless invocations are stateless per-call; descriptor
-            // cache rebuilding is a long-running-process optimisation.
-            if ProcessProfileGate.shouldRegisterBackgroundService config OAuthRefresherRecoverSubsystem then
-                services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun _ ->
+            // Shared work, placed with the scheduler whose jobs it
+            // recovers: serverless invocations are stateless per call, and
+            // descriptor-cache rebuilding is a long-running-process
+            // optimisation.
+            Hosting.register
+                services
+                config
+                (BackgroundUnit.create "oauth-refresher-recover" SharedWork (fun _ ->
                     { new Microsoft.Extensions.Hosting.IHostedService with
                         member _.StartAsync(_ct) =
                             refresher.Recover() |> Async.StartAsTask :> System.Threading.Tasks.Task
 
                         member _.StopAsync(_ct) =
                             System.Threading.Tasks.Task.CompletedTask
-                    })
-                |> ignore
+                    }))
+            |> ignore
 
 // ─── Phase 43.B / 43.C — provider-profile OAuth + status probe ────
 
@@ -934,15 +897,13 @@ let registerModelFitting
             // Register the handler with the scheduler at startup, once the
             // container (and every IModelFitProvider) is built. Resolving the
             // registry here triggers the duplicate-`Kind` validation, so a
-            // misconfigured deployment fails on startup. Exempt from the
-            // profile matrix (Phase 1051): a handler registration, placed by
-            // the scheduler's own gate.
-            (services
-             |> ProcessProfileGate.exempt
-                 "Phase 449 model-fit handler registration"
-                 ProcessProfileGate.SchedulerRegistrationReason)
-                .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: System.IServiceProvider) ->
-                    ProcessProfileGate.atStart (fun () ->
+            // misconfigured deployment fails on startup. Once at start: a
+            // handler registration, placed by the scheduler's own unit.
+            Hosting.register
+                services
+                config
+                (BackgroundUnit.create "model-fit-handler-registration" OnceAtStart (fun sp ->
+                    Hosting.atStart (fun () ->
                         let registry = sp.GetRequiredService<ModelFitProviderRegistry>()
                         let handler = ModelFitJobHandler.create registry auditLog resolvedLogger
                         scheduler.RegisterHandler(ModelFitJobHandler.HandlerName, handler)
@@ -952,7 +913,7 @@ let registerModelFitting
                                 "[Phase 449] ModelFit envelope registered — %d provider(s): %s"
                                 registry.Providers.Length
                                 (String.concat ", " registry.Kinds)
-                        )))
+                        ))))
             |> ignore
 
 /// Phase 9b.B — register and schedule module-/app-declared
@@ -1046,14 +1007,13 @@ let registerDataSubjectRequestJobs
 
             let audit = DataSubjectRequestApiHandler.auditToLog auditLog
 
-            // Exempt from the profile matrix (Phase 1051): a handler
-            // registration, placed by the scheduler's own gate.
-            (services
-             |> ProcessProfileGate.exempt
-                 "Phase 9h.A DSR export / erasure handler registration"
-                 ProcessProfileGate.SchedulerRegistrationReason)
-                .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: System.IServiceProvider) ->
-                    ProcessProfileGate.atStart (fun () ->
+            // Once at start: a handler registration, placed by the
+            // scheduler's own unit.
+            Hosting.register
+                services
+                config
+                (BackgroundUnit.create "dsr-handler-registration" OnceAtStart (fun sp ->
+                    Hosting.atStart (fun () ->
                         let exporters =
                             sp.GetServices(typeof<IDataExporter>) |> Seq.cast<IDataExporter> |> List.ofSeq
 
@@ -1082,6 +1042,6 @@ let registerDataSubjectRequestJobs
                                 "[Phase 9h.A] Registered DSR background export/erasure job handlers (%d exporter(s), %d erasure handler(s))."
                                 exporters.Length
                                 handlers.Length
-                        )))
+                        ))))
             |> ignore
     | _ -> ()

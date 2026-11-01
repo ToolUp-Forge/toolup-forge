@@ -2034,18 +2034,23 @@ let budgetTests =
             let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
 
             use scheduler =
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    events,
-                    { new INotificationChannel with
-                        member _.Publish(_, _) = async { return () }
-                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
-                        member _.Unsubscribe(_) = async { return () }
-                    },
-                    ServerConfig.defaults,
-                    silentLogger,
-                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = events
+                        NotificationChannel =
+                            { new INotificationChannel with
+                                member _.Publish(_, _) = async { return () }
+                                member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                                member _.Unsubscribe(_) = async { return () }
+                            }
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink =
+                            ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
 
             let jobs = scheduler :> IJobScheduler
 
@@ -2720,18 +2725,23 @@ let doubleRunTests =
             let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
 
             use scheduler =
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    events,
-                    { new INotificationChannel with
-                        member _.Publish(_, _) = async { return () }
-                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
-                        member _.Unsubscribe(_) = async { return () }
-                    },
-                    ServerConfig.defaults,
-                    silentLogger,
-                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = events
+                        NotificationChannel =
+                            { new INotificationChannel with
+                                member _.Publish(_, _) = async { return () }
+                                member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                                member _.Unsubscribe(_) = async { return () }
+                            }
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink =
+                            ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
 
             let jobs = scheduler :> IJobScheduler
             let registry = deployment.Services.GetRequiredService<GroundedNarrativeRegistry>()
@@ -3333,18 +3343,23 @@ let triggerNameTests =
             let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
 
             use scheduler =
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    events,
-                    { new INotificationChannel with
-                        member _.Publish(_, _) = async { return () }
-                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
-                        member _.Unsubscribe(_) = async { return () }
-                    },
-                    ServerConfig.defaults,
-                    silentLogger,
-                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = events
+                        NotificationChannel =
+                            { new INotificationChannel with
+                                member _.Publish(_, _) = async { return () }
+                                member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                                member _.Unsubscribe(_) = async { return () }
+                            }
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink =
+                            ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
 
             let jobs = scheduler :> IJobScheduler
 

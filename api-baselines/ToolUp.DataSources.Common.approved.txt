@@ -65,7 +65,7 @@ ToolUp.DataSources.Common.DeclaredDelivery.seed(Microsoft.FSharp.Core.FSharpOpti
 ToolUp.DataSources.Common.DeclaredDelivery.startupService(ToolUp.Platform.DeclaredDataSources, System.String, ToolUp.DataSources.Common.DeclaredDeliveryServices) : Microsoft.Extensions.Hosting.IHostedService
 ToolUp.DataSources.Common.DeclaredDelivery.tryParseIdempotencyKey(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[System.String, System.String, System.String]]
 ToolUp.DataSources.Common.DeclaredDelivery.watchHandler(ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
-ToolUp.DataSources.Common.DeclaredDelivery.withDeclaredDataSources(ToolUp.Platform.DeclaredDataSources, System.String, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.DataSources.Common.DeclaredDelivery.withDeclaredDataSources(ToolUp.Platform.ServerConfig, ToolUp.Platform.DeclaredDataSources, System.String, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.DataSources.Common.DeclaredDeliveryDeps (class)
 ToolUp.DataSources.Common.DeclaredDeliveryDeps..ctor(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.IJobScheduler, ToolUp.Platform.IDataIngestor, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.IDeclaredDeliveryLedger, System.String)
 ToolUp.DataSources.Common.DeclaredDeliveryDeps.Configs : ToolUp.Platform.IDataSourceConfigStore { get }

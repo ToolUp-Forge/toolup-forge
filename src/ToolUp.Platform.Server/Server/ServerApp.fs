@@ -1218,6 +1218,11 @@ type ServerApp = {
     /// SDK's file store keeps `IConfigValidator.defaultTimeout`. Wired via
     /// `ServerApp.withSecretStorePreflightTimeout`.
     SecretStorePreflightTimeout: TimeSpan option
+    /// The deployment's cross-instance lease primitive, resolved before any
+    /// subsystem is composed so the job scheduler, the webhook dispatcher
+    /// and the platform-admin store all take it. `None` (the default) is the
+    /// in-process lock. Wired via `ServerApp.withDistributedLock`.
+    DistributedLock: IDistributedLock option
     /// Phase 169 — per-module load outcome, accumulated in `addModule`
     /// order and emitted through `Logger` at `run`. Empty until the first
     /// `addModule`; a stock deployment accumulates only `ModuleRegistered`
@@ -1359,6 +1364,7 @@ module ServerApp =
         SecretResilience = NoResilience
         SecretStore = None
         SecretStorePreflightTimeout = None
+        DistributedLock = None
         ModuleLoadOutcomes = []
         ModuleComponentIds = []
         ModuleGrantPolicies = []
@@ -1409,7 +1415,8 @@ module ServerApp =
         |> List.fold
             (fun acc contribution ->
                 match contribution.Kind with
-                | Service register -> ServiceConfig.append register acc)
+                | Service register -> ServiceConfig.append register acc
+                | Hosted unit -> ServiceConfig.append (fun services -> Hosting.register services app.Config unit) acc)
             app.Extensions.ServiceConfig
 
     /// Phase 728 — compose the model-execution leg: register
@@ -2122,6 +2129,21 @@ module ServerApp =
                 SecretStorePreflightTimeout = Some timeout
         }
 
+    /// Compose the deployment's cross-instance lease primitive — a shared
+    /// lock such as `RedisDistributedLock`, or any `IDistributedLock` over a
+    /// store every replica reaches. `compose` resolves it before it builds
+    /// the job scheduler, the webhook dispatcher and the platform-admin
+    /// store, so the scheduler's cron tick is an election across replicas
+    /// and `ReplicaCount > 1` no longer pins the in-process scheduler
+    /// (`JobSchedulerInstanceValidator`); it is also the `IDistributedLock`
+    /// DI hands out. Not calling this keeps the in-process lock, which is
+    /// correct for one instance and excludes nothing across replicas.
+    /// **Sets** the lock; a later call replaces it.
+    let withDistributedLock (distributedLock: IDistributedLock) (app: ServerApp) : ServerApp = {
+        app with
+            DistributedLock = Some distributedLock
+    }
+
     /// Phase 9d — override the SDK default per-team compute quota
     /// policy. Deployments supply a custom `ITeamQuotaPolicy` to plug
     /// in a SaaS-billing-aware policy, a per-tier subscription gate, or
@@ -2797,7 +2819,7 @@ module ServerApp =
     /// composing `disabled` means.
     ///
     /// Registration is deferred to `IHostedService.StartAsync` via
-    /// `DeferredScheduledJobDeclaration` (Phase 623): the handler resolves
+    /// `DeferredScheduledJobDeclaration`: the handler resolves
     /// `IBlobStorage` / `IAuditLog` / `ILogger` from the built provider on
     /// every run, so nothing is captured at compose time and the handler
     /// stays stateless between invocations (GP 12 rule 4).
@@ -2806,26 +2828,28 @@ module ServerApp =
         (policy: DataObjectOrphanSweep.DataObjectOrphanSweepPolicy)
         (app: ServerApp)
         : ServerApp =
-        let register (s: IServiceCollection) =
-            let withPolicy =
-                s.AddSingleton<DataObjectOrphanSweep.DataObjectOrphanSweepPolicy>(policy)
+        let withPolicy =
+            app
+            |> addPlatformServices (fun s -> s.AddSingleton<DataObjectOrphanSweep.DataObjectOrphanSweepPolicy>(policy))
 
-            if DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.isInert policy then
-                withPolicy
-            else
-                // Phase 1051 — exempt from the profile matrix: the sweep runs
-                // as a scheduler job, placed by the scheduler's own gate.
-                withPolicy
-                |> ProcessProfileGate.addDeferredJobs "Data-object orphan sweep" [
-                    DeferredScheduledJobDeclaration.create (fun provider ->
-                        ScheduledJobDeclaration.create
-                            DataObjectOrphanSweep.SweepHandlerName
-                            (DataObjectOrphanSweep.DataObjectOrphanSweepJobHandler(provider, policy) :> IJobHandler)
-                            (Trigger.CronTrigger policy.Schedule)
-                        |> ScheduledJobDeclaration.withScopes policy.Scopes)
-                ]
-
-        app |> addPlatformServices register
+        if DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.isInert policy then
+            withPolicy
+        else
+            // A hosted contribution, once at start: the sweep runs as a
+            // scheduler job, placed by the scheduler's own unit.
+            withPolicy
+            |> addContribution (
+                Contribution.hosted
+                    EgressPolicy.platformComponent
+                    (Hosting.deferredJobs "data-object-orphan-sweep" [
+                        DeferredScheduledJobDeclaration.create (fun provider ->
+                            ScheduledJobDeclaration.create
+                                DataObjectOrphanSweep.SweepHandlerName
+                                (DataObjectOrphanSweep.DataObjectOrphanSweepJobHandler(provider, policy) :> IJobHandler)
+                                (Trigger.CronTrigger policy.Schedule)
+                            |> ScheduledJobDeclaration.withScopes policy.Scopes)
+                    ])
+            )
 
     /// Fan a `ServerModule`'s contributions into the app's accumulating lists.
     /// Honours `app.Config.ModuleFilter` — modules whose name doesn't match
@@ -3926,6 +3950,7 @@ module ServerApp =
                 app.SecretResilience
                 app.SecretStore
                 app.SecretStorePreflightTimeout
+                app.DistributedLock
 
         // Phase 801 — the remoting decode edge's coverage, one boot line:
         // how many of the API records this process mounted (every

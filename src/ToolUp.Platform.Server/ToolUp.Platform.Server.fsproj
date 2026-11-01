@@ -1269,13 +1269,10 @@
              After FileManagement + INarrativeStore (it delegates to both). -->
         <Compile Include="Server\ModuleApiFactory.fs" />
         <Compile Include="Server\ModuleQueryBus.fs" />
-        <!-- Centralised process-profile gating helper.
-             Lives first in the Compose chain so every Compose helper
-             (ComposeJobs, ComposeNotifications, ComposeAudit,...) can
-             use it; positioned before `DevDiagnosticsHandler.fs` so the
-             tail's `/dev/inspect` panel can reference the
-             same matrix without duplicating it. -->
-        <Compile Include="Server\Compose\ProcessProfileGate.fs" />
+        <!-- The one placement rule for background work (Hosting.register / admits /
+             describe). First in the Compose chain so every Compose helper, every
+             companion and the /dev/inspect panel (DevDiagnosticsHandler.fs) use it. -->
+        <Compile Include="Server\Compose\Hosting.fs" />
         <Compile Include="Server\DevDiagnosticsHandler.fs" />
         <Compile Include="Server\HealthMonitorApiHandler.fs" />
         <!-- Audit-trail viewer handler. After AuditLog.fs
@@ -1408,6 +1405,7 @@
              default. Before the aggregator (runGuarded acquires via it). -->
         <Compile Include="Server\ILifecycleLock.fs" />
         <Compile Include="Server\TenantLifecycleAggregator.fs" />
+        <Compile Include="Server\Lifecycle\TenantHook.fs" />
         <Compile Include="Server\Lifecycle\EncryptionKeyLifecycle.fs" />
         <Compile Include="Server\Lifecycle\MembershipCacheLifecycle.fs" />
         <Compile Include="Server\Lifecycle\JobSchedulerLifecycle.fs" />

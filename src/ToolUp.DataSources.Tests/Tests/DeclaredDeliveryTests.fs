@@ -60,12 +60,16 @@ type private World(?connectorStorage: IBlobStorage) =
 
     let scheduler =
         JobScheduler.create
-            (JobStore.create blobs events)
-            events
-            silentChannel
-            ServerConfig.defaults
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
+            ({
+                Store = (JobStore.create blobs events)
+                EventStore = events
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
 
     let configs = DataSourceConfigStore.create blobs
     let csv = CsvDataSource.create (defaultArg connectorStorage blobs)
@@ -452,7 +456,7 @@ let tests =
             services.AddSingleton<DeclaredPrincipalResolver>(world.Resolver) |> ignore
 
             services
-            |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+            |> DeclaredDelivery.withDeclaredDataSources ServerConfig.defaults declared DeclaredDelivery.DefaultWatchPoll
             |> ignore
 
             let service =

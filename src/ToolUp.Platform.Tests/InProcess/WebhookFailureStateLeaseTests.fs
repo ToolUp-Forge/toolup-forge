@@ -295,18 +295,24 @@ let private buildReplicas (replicaCount: int) (lockFor: int -> IDistributedLock)
         for i in 0 .. replicaCount - 1 ->
             let httpClient = new HttpClient(new AlwaysFailingHandler())
 
-            WebhookDispatcher.createWithLock
-                registry
-                deliveryLog
-                eventStore
-                httpClient
-                retryPolicy
-                silentLogger
-                (NoOpActivitySink() :> IActivitySink)
-                secretStore
-                (fun () -> permissiveRateLimiter)
-                urlPolicy
-                (lockFor i)
+            WebhookDispatcher.create
+                ({
+                    Registry = registry
+                    DeliveryLog = deliveryLog
+                    EventStore = eventStore
+                    HttpClient = httpClient
+                    RetryPolicy = retryPolicy
+                    Logger = silentLogger
+                    ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                    SecretStore = secretStore
+                    GetRateLimiter = (fun () -> permissiveRateLimiter)
+                    UrlPolicy = urlPolicy
+                }
+                : WebhookDispatcher.WebhookDeps)
+                {
+                    WebhookDispatcher.WebhookOptions.defaults with
+                        DistributedLock = Some(lockFor i)
+                }
     ]
 
     baseRegistry, rendezvous, deliveryLog, eventStore, dispatchers
@@ -428,18 +434,24 @@ let tests =
             let succeedingClient = new HttpClient(new AlwaysSucceedingHandler())
 
             let dispatcher =
-                WebhookDispatcher.createWithLock
-                    registry
-                    deliveryLog
-                    eventStore
-                    succeedingClient
-                    retryPolicy
-                    silentLogger
-                    (NoOpActivitySink() :> IActivitySink)
-                    (InMemorySecretStore() :> ISecretStore)
-                    (fun () -> permissiveRateLimiter)
-                    allowlistedPolicy
-                    (recording :> IDistributedLock)
+                WebhookDispatcher.create
+                    ({
+                        Registry = registry
+                        DeliveryLog = deliveryLog
+                        EventStore = eventStore
+                        HttpClient = succeedingClient
+                        RetryPolicy = retryPolicy
+                        Logger = silentLogger
+                        ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                        SecretStore = (InMemorySecretStore() :> ISecretStore)
+                        GetRateLimiter = (fun () -> permissiveRateLimiter)
+                        UrlPolicy = allowlistedPolicy
+                    }
+                    : WebhookDispatcher.WebhookDeps)
+                    {
+                        WebhookDispatcher.WebhookOptions.defaults with
+                            DistributedLock = Some(recording :> IDistributedLock)
+                    }
 
             async {
                 let! _ = registry.CreateSubscription(subscriptionFor subscriptionId)

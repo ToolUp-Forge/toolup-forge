@@ -260,12 +260,16 @@ let private scheduler () : IJobScheduler * ScopeCarrier =
 
     let scheduler =
         JobScheduler.create
-            (JobStore.create blobs events)
-            events
-            silentChannel
-            ServerConfig.defaults
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
+            ({
+                Store = (JobStore.create blobs events)
+                EventStore = events
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
         :> IJobScheduler
 
     let carrier = ScopeCarrier.ephemeral ()

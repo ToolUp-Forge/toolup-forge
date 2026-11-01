@@ -107,10 +107,13 @@ let registerPlatformAdminStore
     (resolvedBlobStorage: IBlobStorage)
     (auditLog: IAuditLog)
     (resolvedLogger: ILogger)
+    (distributedLock: IDistributedLock)
     : IPlatformAdminStore =
 
+    // The deployment's composed lock, so the admin store's write
+    // serialisation excludes across replicas whenever that lock is shared.
     let platformAdminStore: IPlatformAdminStore =
-        PlatformAdminStore.BlobBackedPlatformAdminStore(resolvedBlobStorage, auditLog) :> _
+        PlatformAdminStore.BlobBackedPlatformAdminStore(resolvedBlobStorage, auditLog, distributedLock) :> _
 
     services.AddSingleton<IPlatformAdminStore>(platformAdminStore) |> ignore
 

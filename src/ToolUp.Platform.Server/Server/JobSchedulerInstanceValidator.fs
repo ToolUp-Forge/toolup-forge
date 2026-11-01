@@ -3,6 +3,7 @@ module ToolUp.Platform.JobSchedulerInstanceValidator
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open Microsoft.Extensions.DependencyInjection
 
 // ─── Phase 6l.F — multi-instance + InProcessJobScheduler ────────────
 //
@@ -35,8 +36,28 @@ open ToolUp.Platform.ConfigValidation
 /// multi-instance deployments either configure a distributed
 /// scheduler companion (Phase 9c.A) or set the explicit-opt-in
 /// escape hatch.
-type JobSchedulerInstanceValidator(config: ServerConfig, ?timeout: TimeSpan) =
+///
+/// A deployment that composed a SHARED lock (`ServerApp.withDistributedLock`,
+/// visible here as the `IDistributedLock` instance compose registered in
+/// `services`) is accepted at any replica count: the scheduler's cron tick is
+/// an election over that lock, so N replicas run each due occurrence once.
+type JobSchedulerInstanceValidator(config: ServerConfig, ?timeout: TimeSpan, ?services: IServiceCollection) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    /// Whether the lock compose registered is anything but the in-process
+    /// default (the last unkeyed instance registration wins, as on resolve).
+    let sharedLockComposed () =
+        match services with
+        | None -> false
+        | Some services ->
+            services
+            |> Seq.filter (fun d ->
+                d.ServiceType = typeof<IDistributedLock>
+                && not d.IsKeyedService
+                && not (isNull d.ImplementationInstance))
+            |> Seq.tryLast
+            |> Option.exists (fun d ->
+                not (obj.ReferenceEquals(d.ImplementationInstance, InProcessDistributedLock.shared)))
 
     interface IConfigValidator with
         member _.Name = "job-scheduler-instance"
@@ -60,11 +81,11 @@ type JobSchedulerInstanceValidator(config: ServerConfig, ?timeout: TimeSpan) =
             let multiInstance = config.ReplicaCount > 1
             let escapeHatch = config.AcceptInProcessSchedulerInMultiInstance
 
-            if isInProcess && multiInstance && not escapeHatch then
+            if isInProcess && multiInstance && not escapeHatch && not (sharedLockComposed ()) then
                 return
                     Error(
                         sprintf
-                            "ServerConfig.JobScheduler = InProcessJobScheduler with ReplicaCount = %d. The in-process scheduler fires every cron job, every event-triggered job, and every webhook fan-out from every instance independently — N replicas means N times every job, every audit emission, every webhook delivery. Configure a distributed scheduler companion (Phase 9c.A Akka actor port) or set ServerConfig.AcceptInProcessSchedulerInMultiInstance = true if your jobs are idempotent and you accept the duplicate execution. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            "ServerConfig.JobScheduler = InProcessJobScheduler with ReplicaCount = %d. The in-process scheduler fires every cron job, every event-triggered job, and every webhook fan-out from every instance independently — N replicas means N times every job, every audit emission, every webhook delivery. Compose a shared IDistributedLock (ServerApp.withDistributedLock) so the cron tick is an election across replicas, configure a distributed scheduler companion (Phase 9c.A Akka actor port), or set ServerConfig.AcceptInProcessSchedulerInMultiInstance = true if your jobs are idempotent and you accept the duplicate execution. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             config.ReplicaCount
                     )
             else

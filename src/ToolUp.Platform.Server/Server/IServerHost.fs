@@ -140,8 +140,8 @@ module ServerHost =
                 )
         }
 
-// `BackgroundSubsystem` + `ProcessProfileGate` live in
-// `Server/Compose/ProcessProfileGate.fs` (earlier in the compile chain)
-// so every Compose helper can use them. This file's contribution is the
+// `Hosting` (background-work placement) and `ProcessProfileGate` (the
+// HTTP-pipeline question) live in `Server/Compose/Hosting.fs` (earlier in
+// the compile chain) so every Compose helper can use them. This file's contribution is the
 // IServerHost interface + `createWebHost` / `createWorkerHost` builders
 // — only consumed by `SDK.Server.compose`'s tail.

@@ -56,7 +56,7 @@ ToolUp.AuthProviders.Passkey.Client 6/32
 ToolUp.AuthProviders.Scim 61/275
 ToolUp.BrandKit 65/210
 ToolUp.Calendar.CalDAV 22/25
-ToolUp.Calendar.Google 86/102
+ToolUp.Calendar.Google 88/102
 ToolUp.Calendar.Microsoft 71/76
 ToolUp.Cli 167/332
 ToolUp.Client.ModelViewer 28/65
@@ -136,10 +136,10 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 333/603
+ToolUp.Platform.Build 334/606
 ToolUp.Platform.Client 2947/7264
 ToolUp.Platform.Core 7376/15580
-ToolUp.Platform.Server 7356/13352
+ToolUp.Platform.Server 7402/13425
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 72/184

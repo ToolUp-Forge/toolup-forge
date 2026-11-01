@@ -34,53 +34,48 @@ open ToolUp.Platform
 // `OnProvisioned` is a no-op `Skipped`: conversations are created on
 // demand by the AI handler, so provisioning has nothing to do.
 
-type ConversationStoreLifecycle(services: IServiceProvider) =
-    interface ITenantLifecycle with
-        member _.Name = "conversation-store"
-
-        member _.OnProvisioned(_scopeId, _actorUserId) = async {
-            return
-                LifecycleHookResult.Skipped
-                    "no provisioning action — conversations are created on demand by the AI handler"
-        }
-
-        member _.OnDeprovisioned(scopeId, _actorUserId) = async {
+/// The first-party conversation-store offboard hook, as a value.
+let hook: TenantHook<IConversationStore> = {
+    Name = "conversation-store"
+    Requires = "an IConversationStore (conversation persistence)"
+    Resolve =
+        fun services ->
             match services.GetService(typeof<IConversationStore>) with
-            | :? IConversationStore as store ->
-                let! conversations = store.ListByScope scopeId
+            | :? IConversationStore as store -> Some store
+            | _ -> None
+    OnProvisioned = None
+    OnDeprovisioned =
+        Some(fun store scopeId _ -> async {
+            let! conversations = store.ListByScope scopeId
 
-                // Distinct authors in the scope. The eraser is
-                // subject-keyed, so erasing every author hard-deletes
-                // every conversation in scope. Blank authors are skipped
-                // (the substrate treats a blank subject as a zero-count
-                // no-op anyway — the same over-erasure guard the other
-                // `IErasureHandler` participants apply).
-                let subjects =
-                    conversations
-                    |> List.map _.CreatedBy
-                    |> List.filter (String.IsNullOrWhiteSpace >> not)
-                    |> List.distinct
+            // Distinct authors in the scope. The eraser is subject-keyed,
+            // so erasing every author hard-deletes every conversation in
+            // scope. Blank authors are skipped (the substrate treats a blank
+            // subject as a zero-count no-op anyway — the same over-erasure
+            // guard the other `IErasureHandler` participants apply).
+            let subjects =
+                conversations
+                |> List.map _.CreatedBy
+                |> List.filter (String.IsNullOrWhiteSpace >> not)
+                |> List.distinct
 
-                let errors = ResizeArray<string>()
+            let errors = ResizeArray<string>()
 
-                for subject in subjects do
-                    let! result = store.Erase(scopeId, subject, ErasurePolicy.HardDelete, false)
+            for subject in subjects do
+                let! result = store.Erase(scopeId, subject, ErasurePolicy.HardDelete, false)
 
-                    match result with
-                    | Ok _ -> ()
-                    | Error err -> errors.Add(ErasureError.toMessage err)
+                match result with
+                | Ok _ -> ()
+                | Error err -> errors.Add(ErasureError.toMessage err)
 
-                if errors.Count > 0 then
-                    return LifecycleHookResult.Failed(String.Join("; ", errors))
-                else
-                    return LifecycleHookResult.Completed
-            | _ ->
-                return
-                    LifecycleHookResult.Skipped
-                        "no IConversationStore registered (conversation persistence not enabled)"
-        }
+            if errors.Count > 0 then
+                return LifecycleHookResult.Failed(String.Join("; ", errors))
+            else
+                return LifecycleHookResult.Completed
+        })
+    Preview = None
+}
 
 /// Construct the first-party conversation-store lifecycle hook. Resolves
 /// the active `IConversationStore` from `services` on every call.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    ConversationStoreLifecycle(services) :> ITenantLifecycle
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

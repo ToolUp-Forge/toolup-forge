@@ -413,16 +413,10 @@ let registerUsageMetering
     | Some flusher ->
         services.AddSingleton<UsageLog.UsageBatchFlusher>(flusher) |> ignore
 
-        // Phase 16 + 16a — gate flusher BackgroundService on the
-        // centralised matrix. ServerlessHost / WebOnly / DispatcherOnly
-        // skip; AllInOne / WorkerOnly register. Usage records still emit
-        // into the in-process queue (the `IUsageLog` singleton stays
-        // registered); a sibling worker silo drains the queue.
-        if ProcessProfileGate.shouldRegisterBackgroundService config UsageBatchFlusherSubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                flusher :> Microsoft.Extensions.Hosting.IHostedService
-            )
-            |> ignore
+        // Shared work on a worker silo. Usage records still emit into the
+        // in-process queue (the `IUsageLog` singleton stays registered).
+        Hosting.register services config (BackgroundUnit.ofInstance "usage-batch-flusher" SharedWork flusher)
+        |> ignore
 
     usageLogInstance
 
@@ -559,9 +553,8 @@ let registerOutboundRateLimiter
 /// `auditLog` and `resolvedLogger` (both local instances above) so
 /// the tracker uses the same audit-log impl wired through DI.
 ///
-/// Phase 16 + 16a — gate the tracker BackgroundService on the
-/// centralised matrix. ServerlessHost / WebOnly / DispatcherOnly skip;
-/// AllInOne / WorkerOnly register. The `/health` + `/ready` HTTP
+/// Shared work: AllInOne / WorkerOnly run the tracker; ServerlessHost /
+/// WebOnly / DispatcherOnly skip it. The `/health` + `/ready` HTTP
 /// endpoints still aggregate registered `IHealthCheck` instances
 /// on-demand; only the periodic-poll + audit-emit BackgroundService
 /// is gated.
@@ -571,25 +564,22 @@ let registerHealthStateTracker
     (auditLog: IAuditLog)
     (resolvedLogger: ILogger)
     : unit =
-    if
-        config.HealthStateTracking
-        && ProcessProfileGate.shouldRegisterBackgroundService config HealthStateTrackerSubsystem
-    then
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+    if config.HealthStateTracking then
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "health-state-tracker" SharedWork (fun sp ->
                 new HealthStateTracker.HealthStateTrackerService(sp, auditLog, resolvedLogger)
-                :> Microsoft.Extensions.Hosting.IHostedService)
-        )
+                :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
 
 /// Phase 856.C — the remoting audit queue and its drain, which take the
 /// default remoting audit write off the response path (`RemotingAuditQueue`
 /// in Api.fs says what that changes and what it never loses).
 ///
-/// NOT a `BackgroundSubsystem`, and deliberately not gated by that matrix:
-/// the queue is in-memory and fed by THIS process's HTTP requests, so it
-/// must drain wherever HTTP is served — `WebOnly` included, where a sibling
-/// worker could never reach it. Composed when an audit log is (nothing to
+/// Process-local: the queue is in-memory and fed by THIS process's HTTP
+/// requests, so it must drain wherever HTTP is served — `WebOnly` included,
+/// where a sibling worker could never reach it. Composed when an audit log is (nothing to
 /// write otherwise, GP 13), when the failure policy is not `RefuseAction`
 /// (whose caller must see the failure, which a write after the response
 /// cannot give), on a `KestrelHost` (a serverless host keeps no drain
@@ -603,30 +593,31 @@ let internal registerRemotingAuditQueue
     let composed =
         config.AuditLog = EnabledAuditLog
         && config.AuditFailurePolicy <> RefuseAction
-        && config.ServerlessHost = KestrelHost
+        && Hosting.admitsPlacement config ProcessLocal false
         && ProcessProfileGate.shouldRegisterHttpPipeline config
 
     if composed then
         let queue = RemotingAuditQueue(RemotingAuditQueue.DefaultCapacity)
         services.AddSingleton<RemotingAuditQueue>(queue) |> ignore
 
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "remoting-audit-drain" ProcessLocal (fun sp ->
                 let metrics () =
                     match sp.GetService(typeof<Metrics.IMetricsSink>) with
                     | :? Metrics.IMetricsSink as sink -> sink
                     | _ -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink
 
                 new RemotingAuditDrainService.RemotingAuditDrainService(queue, resolvedLogger, metrics)
-                :> Microsoft.Extensions.Hosting.IHostedService)
-        )
+                :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
 
 /// Phase 178 — opt-in alert-rule / threshold engine BackgroundService.
 /// Hosted only when `config.AlertRules` is non-empty (GP 13 — an empty
-/// set registers no service and pays no tick cost) AND the ProcessProfile
-/// matrix admits it (`AllInOne` / `WorkerOnly` run it; `WebOnly` /
-/// `DispatcherOnly` / `ServerlessHost` skip). The `notificationChannel`
+/// set registers no service and pays no tick cost); shared work, so
+/// `AllInOne` / `WorkerOnly` run it and `WebOnly` / `DispatcherOnly` /
+/// `ServerlessHost` skip it. The `notificationChannel`
 /// passed here is the compose-resolved (decorated) channel, so `ViaSink`
 /// deliveries route through `DispatchingNotificationChannel` to the
 /// registered `INotificationSink`. Registered as a factory so the
@@ -638,15 +629,13 @@ let registerAlertRuleEngine
     (notificationChannel: INotificationChannel)
     (resolvedLogger: ILogger)
     : unit =
-    if
-        not (List.isEmpty config.AlertRules)
-        && ProcessProfileGate.shouldRegisterBackgroundService config AlertRuleEngineSubsystem
-    then
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+    if not (List.isEmpty config.AlertRules) then
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "alert-rule-engine" SharedWork (fun sp ->
                 new AlertRuleEngine.AlertRuleEngineService(sp, notificationChannel, config.AlertRules, resolvedLogger)
-                :> Microsoft.Extensions.Hosting.IHostedService)
-        )
+                :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
 
 /// Phase 9 + Phase 56 — rate-limit middleware substrates. Phase 9 is a

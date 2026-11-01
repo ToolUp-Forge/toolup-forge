@@ -162,6 +162,11 @@
 @@ L6 [1157-same-container]
 -let options = CoverageNarrativeOptions.sameContainer "coverage-reader"
 +let options = CoverageNarrativeOptions.everyScope "coverage-reader"
+--- a/src/Server/Hosting.fs
++++ b/src/Server/Hosting.fs
+@@ L16 [1067-at-start]
+-        ProcessProfileGate.atStart (fun () -> scheduler.RegisterHandler("my-handler", handler)))
++        Hosting.atStart (fun () -> scheduler.RegisterHandler("my-handler", handler)))
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -249,4 +254,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 73 rewrite(s) across 12 file(s) pending.
+Codemod: 74 rewrite(s) across 13 file(s) pending.

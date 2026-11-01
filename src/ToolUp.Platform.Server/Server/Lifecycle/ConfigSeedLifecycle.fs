@@ -107,9 +107,10 @@ let private clampToKind (kind: ConfigFieldKind) (value: string) : string =
 /// scope), so the seed stays byte-identical to the schema-defaults write.
 let private platformOverrides (context: TenantProvisioningContext) : Map<string, string> =
     let isTeamScope =
-        match ScopeKey.tryParseContainer context.ScopeId with
-        | Some(ScopeKey.Team _) -> true
-        | _ -> false
+        match ScopeId.parse context.ScopeId with
+        | ScopeKind.Team _ -> true
+        | ScopeKind.User _
+        | ScopeKind.Other _ -> false
 
     match context.Request with
     | Some req when isTeamScope && not (String.IsNullOrWhiteSpace req.DisplayName) ->
@@ -180,27 +181,24 @@ let private seedModule
 /// Run the seed for a provisioning context — shared by the base
 /// `OnProvisioned` (`Request = None`, schema defaults only) and the
 /// Phase 305 `OnProvisionedWith` (per-request overrides applied).
-let private runSeed (services: IServiceProvider) (context: TenantProvisioningContext) : Async<LifecycleHookResult> = async {
-    match services.GetService(typeof<IConfigStore>) with
-    | :? IConfigStore as configStore ->
-        let scope: StorageScope = {
-            ScopeId = context.ScopeId
-            Container = context.ScopeId
-            Persist = true
-        }
+let private runSeed (configStore: IConfigStore) (context: TenantProvisioningContext) : Async<LifecycleHookResult> = async {
+    let scope: StorageScope = {
+        ScopeId = context.ScopeId
+        Container = context.ScopeId
+        Persist = true
+    }
 
-        let errors = ResizeArray<string>()
+    let errors = ResizeArray<string>()
 
-        for target in resolveTargets context do
-            match! seedModule configStore scope target with
-            | Ok _ -> ()
-            | Error e -> errors.Add(sprintf "%s: %s" target.ModuleKey e)
+    for target in resolveTargets context do
+        match! seedModule configStore scope target with
+        | Ok _ -> ()
+        | Error e -> errors.Add(sprintf "%s: %s" target.ModuleKey e)
 
-        if errors.Count > 0 then
-            return LifecycleHookResult.Failed(String.Join("; ", errors))
-        else
-            return LifecycleHookResult.Completed
-    | _ -> return LifecycleHookResult.Skipped "no IConfigStore registered (config substrate not composed)"
+    if errors.Count > 0 then
+        return LifecycleHookResult.Failed(String.Join("; ", errors))
+    else
+        return LifecycleHookResult.Completed
 }
 
 /// Phase 306 — tear down the provisioning-seeded `_platform` config
@@ -209,45 +207,35 @@ let private runSeed (services: IServiceProvider) (context: TenantProvisioningCon
 /// seeds (never a document another subsystem owns). `IConfigStore.Clear` is
 /// idempotent (a no-op when the document is already gone), so a re-run over
 /// an already-torn-down scope clears nothing and still reports Completed.
-let private runTeardown (services: IServiceProvider) (scopeId: string) : Async<LifecycleHookResult> = async {
-    match services.GetService(typeof<IConfigStore>) with
-    | :? IConfigStore as configStore ->
-        let scope: StorageScope = {
-            ScopeId = scopeId
-            Container = scopeId
-            Persist = true
-        }
+let private runTeardown (configStore: IConfigStore) (scopeId: string) : Async<LifecycleHookResult> = async {
+    let scope: StorageScope = {
+        ScopeId = scopeId
+        Container = scopeId
+        Persist = true
+    }
 
-        for moduleKey in seededModuleKeys do
-            do! configStore.Clear(scope, moduleKey)
+    for moduleKey in seededModuleKeys do
+        do! configStore.Clear(scope, moduleKey)
 
-        return LifecycleHookResult.Completed
-    | _ -> return LifecycleHookResult.Skipped "no IConfigStore registered (config substrate not composed)"
+    return LifecycleHookResult.Completed
 }
 
-type ConfigSeedLifecycle(services: IServiceProvider) =
-    interface ITenantLifecycle with
-        member _.Name = "config-seed"
-
-        member _.OnProvisioned(scopeId, actorUserId) =
-            runSeed services {
-                ScopeId = scopeId
-                ActorUserId = actorUserId
-                Request = None
-            }
-
-        // Phase 306 — offboard teardown: remove the seeded `_platform` docs
-        // this hook created at provisioning (symmetry with the seed).
-        member _.OnDeprovisioned(scopeId, _actorUserId) = runTeardown services scopeId
-
-    // Phase 305 — request-aware provisioning: overlay per-deployment values
-    // (the team app-name from the request's DisplayName) onto the schema
-    // defaults. Falls back byte-identically to OnProvisioned when no request
-    // rides or it carries no per-deployment override.
-    interface ITenantLifecycleProvisionContext with
-        member _.OnProvisionedWith(context) = runSeed services context
+/// The first-party config-seed hook, as a value: the schema-default
+/// `_platform` documents at provisioning (with the request's per-deployment
+/// values overlaid when one rides), their removal at offboard.
+let hook: TenantHook<IConfigStore> = {
+    Name = "config-seed"
+    Requires = "an IConfigStore (config)"
+    Resolve =
+        fun services ->
+            match services.GetService(typeof<IConfigStore>) with
+            | :? IConfigStore as store -> Some store
+            | _ -> None
+    OnProvisioned = Some runSeed
+    OnDeprovisioned = Some(fun store scopeId _ -> runTeardown store scopeId)
+    Preview = None
+}
 
 /// Construct the first-party config-seed lifecycle hook. Resolves the
 /// active `IConfigStore` from `services` on every call.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    ConfigSeedLifecycle(services) :> ITenantLifecycle
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

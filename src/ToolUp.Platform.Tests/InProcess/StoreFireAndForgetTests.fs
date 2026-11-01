@@ -410,19 +410,24 @@ let private webhookArm (mode: FailureMode) =
 
         let dispatcher =
             WebhookDispatcher.create
-                registry
-                (WebhookRegistry.createDeliveryLog storage)
-                (healthyEventStore ())
-                (new HttpClient())
-                WebhookRetryPolicy.defaults
-                logger
-                (NoOpActivitySink() :> IActivitySink)
-                (NoSecrets() :> ISecretStore)
-                (fun () ->
-                    { new IRateLimiter with
-                        member _.Wait _ = async { return Proceed }
-                    })
-                { AllowedHosts = [] }
+                ({
+                    Registry = registry
+                    DeliveryLog = (WebhookRegistry.createDeliveryLog storage)
+                    EventStore = (healthyEventStore ())
+                    HttpClient = (new HttpClient())
+                    RetryPolicy = WebhookRetryPolicy.defaults
+                    Logger = logger
+                    ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                    SecretStore = (NoSecrets() :> ISecretStore)
+                    GetRateLimiter =
+                        (fun () ->
+                            { new IRateLimiter with
+                                member _.Wait _ = async { return Proceed }
+                            })
+                    UrlPolicy = { AllowedHosts = [] }
+                }
+                : WebhookDispatcher.WebhookDeps)
+                WebhookDispatcher.WebhookOptions.defaults
 
         let hosted = dispatcher :> IHostedService
         do! hosted.StartAsync CancellationToken.None |> Async.AwaitTask

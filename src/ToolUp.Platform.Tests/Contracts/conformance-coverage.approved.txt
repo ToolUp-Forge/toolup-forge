@@ -98,7 +98,6 @@ ISigningKeyLedger
 ISparseAnalyzer
 IStorageScopeResolver
 ITeamStore
-ITenantLifecyclePreview
 ITenantLifecycleProvisionContext
 ITraceLogger
 ITranscriptionProvider

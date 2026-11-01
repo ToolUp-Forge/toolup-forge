@@ -347,7 +347,7 @@ One wiring caveat worth knowing, because it fails quietly otherwise: compose fin
 services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)
 ```
 
-If compose cannot find it, it logs a warning naming both remedies rather than silently leaving reconciliation off — the alternative being a deployment that hands off successfully and then waits forever. The other remedy is to construct the scheduler directly with `JobScheduler.createWithExternalCompute`.
+If compose cannot find it, it logs a warning naming both remedies rather than silently leaving reconciliation off — the alternative being a deployment that hands off successfully and then waits forever. The other remedy is to construct the scheduler directly: `JobScheduler.create deps { JobScheduler.SchedulerOptions.defaults with ExternalDispatcher = Some myDispatcher }`.
 
 Two operational notes. Reconciliation is batched per scope (`AwaitingExternalRuns`' `limit`) so one saturated scope cannot starve another's reconciliation; a scope with more outstanding hand-offs than the batch size gets the remainder on the next tick, and nothing is dropped. And each run is reconciled under its job's dispatch lease, so a deployment that composed a store-backed [`IDistributedLock`](../platform/jobs.md) gets multi-instance double-poll protection for free.
 

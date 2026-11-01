@@ -169,7 +169,23 @@ let compose
     // Phase 1038 — `ServerApp.withSecretStorePreflightTimeout`; `None` lets
     // the store's kind choose (`ConfigValidator.secretStorePreflightTimeout`).
     (secretStorePreflightTimeout: TimeSpan option)
+    // `ServerApp.withDistributedLock`; `None` is the in-process default.
+    (distributedLockOverride: IDistributedLock option)
     =
+
+    // The deployment's cross-instance lease primitive, resolved FIRST so
+    // every subsystem constructed eagerly below takes the same instance:
+    // the job scheduler's dispatch mutex and cron-tick election, the
+    // webhook dispatcher's failure-state lease and the platform-admin
+    // store's write lock. Registered in DI further down, so a module
+    // resolving `IDistributedLock` gets the same one. The in-process default
+    // is a correct answer for a single instance and excludes nothing across
+    // replicas; a shared one (`RedisDistributedLock`, or any implementation
+    // over a store every replica reaches) is what lets the scheduler run on
+    // more than one replica.
+    let distributedLock =
+        distributedLockOverride
+        |> Option.defaultValue (InProcessDistributedLock.shared :> IDistributedLock)
 
     // Phase 9l — resolve the deployment's distributed-tracing sink.
     // Wrap of `OtelActivitySink` (or any custom companion) is opt-in
@@ -488,6 +504,7 @@ let compose
             resolvedActivitySink
             secretStore
             rateLimiterLookup
+            distributedLock
 
     // Phase 9b — chicken-and-egg break for the job substrate. The
     // notify-wrapper needs the scheduler to forward events to; the
@@ -656,35 +673,18 @@ let compose
     // `ComposeEncryption.registerEncryptionResolver`).
     registerEncryptionResolver services encryptionKeyResolver
 
-    // Phase 9i — SDK-wide cross-instance lease primitive. Registered
-    // UNCONDITIONALLY (not behind a config mode) so any subsystem or
-    // module can resolve an `IDistributedLock` without first checking
-    // whether the deployment composed one: the in-process default is
-    // always a correct answer for a single instance, and asking every
-    // consumer to handle absence is how three subsystems ended up
-    // re-deriving their own `SemaphoreSlim` instead.
-    //
-    // `InProcessDistributedLock.shared` is the SAME instance the eagerly
-    // constructed subsystems default to (the job scheduler's per-`JobId`
-    // dispatch mutex, `BlobBackedPlatformAdminStore`'s write lock), so an
-    // in-process acquirer of a given lock id contends with every other
-    // regardless of which path handed it the lock.
-    //
-    // **Overriding it with a companion.** A distributed deployment
-    // registers its own `AddSingleton<IDistributedLock>` from
-    // `ComposeExtensions.ServiceConfig`, which runs after this block —
-    // last registration wins for `GetRequiredService`, so every
-    // DI-resolving consumer gets the companion. The two compose-time
-    // subsystems above bind this default instance; threading a companion
-    // lock into those is the Phase 9c follow-on (it needs the lock
-    // resolved BEFORE their construction, i.e. a `compose` signature
-    // change, which is not worth spending on until a distributed
-    // scheduler companion exists to need it).
+    // The deployment's lease primitive (resolved at the head of `compose`),
+    // registered UNCONDITIONALLY so any subsystem or module resolves an
+    // `IDistributedLock` without first checking whether the deployment
+    // composed one. A module registering its own from
+    // `ComposeExtensions.ServiceConfig` still wins for `GetRequiredService`
+    // (last registration wins), but the subsystems `compose` builds eagerly
+    // take the composed one, so a shared lock belongs on
+    // `ServerApp.withDistributedLock`.
     //
     // GP 13 — an unused registration is one singleton and no hosted
     // service, no middleware, no allocation on any request path.
-    services.AddSingleton<IDistributedLock>(InProcessDistributedLock.shared)
-    |> ignore
+    services.AddSingleton<IDistributedLock>(distributedLock) |> ignore
 
     // Phase 118 — degraded-capability registry. Registered
     // unconditionally (best-effort sites must be able to register into it)
@@ -1041,6 +1041,7 @@ let compose
             blobJobStoreInstance
             jobSchedulerCell
             jobTriggerWatermark
+            distributedLock
 
     // Phase 10 — opt-in data ingestion (extracted to
     // `ComposeJobs.registerDataIngestion`). Includes the Phase 10b
@@ -1200,7 +1201,7 @@ let compose
     // `TOOLUP_INITIAL_PLATFORM_ADMIN` (extracted to
     // `ComposeAuth.registerPlatformAdminStore`).
     let platformAdminStore =
-        registerPlatformAdminStore services config resolvedBlobStorage auditLog resolvedLogger
+        registerPlatformAdminStore services config resolvedBlobStorage auditLog resolvedLogger distributedLock
 
     // Phase 5f / 3d / 66 Stream B.2 — post-`PlatformAdminStore` config
     // validators (extracted to

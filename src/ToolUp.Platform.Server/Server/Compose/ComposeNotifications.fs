@@ -518,14 +518,14 @@ let registerTransactionalDispatcher
         services.AddSingleton<TransactionalDispatcher.TransactionalDispatcher>(dispatcher)
         |> ignore
 
-        // Phase 16 + 16a — gate transactional-dispatcher BackgroundService
-        // on the centralised matrix. ServerlessHost / WebOnly skip;
-        // AllInOne / WorkerOnly / DispatcherOnly register.
-        if ProcessProfileGate.shouldRegisterBackgroundService config TransactionalDispatcherSubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                dispatcher :> Microsoft.Extensions.Hosting.IHostedService
-            )
-            |> ignore
+        // Shared, outbound work: one of the two dispatchers a DispatcherOnly
+        // silo exists to isolate.
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.ofInstance "transactional-dispatcher" SharedWork dispatcher
+             |> BackgroundUnit.outbound)
+        |> ignore
 
         for sink in transactionalSinks do
             services.AddSingleton<INotificationSink>(sink) |> ignore
@@ -556,12 +556,11 @@ let registerTransactionalDispatcher
 
 /// Phase 9t — the `DegradeToFile` audit-spill replay drain. Registered
 /// only when the deployment opted into the policy (and audit is on) —
-/// every other policy pays nothing (GP 13). Gated by
-/// `AuditFallbackReplaySubsystem` on the centralised process-profile
-/// matrix: AllInOne / WorkerOnly run it; WebOnly / DispatcherOnly /
-/// ServerlessHost skip (a sibling worker drains the shared spill only
-/// when the fallback directory is shared — the default working-dir
-/// root is per-silo, matching the per-silo spill writer).
+/// every other policy pays nothing (GP 13). Shared work: AllInOne /
+/// WorkerOnly run it; WebOnly / DispatcherOnly / ServerlessHost skip (a
+/// sibling worker drains the shared spill only when the fallback directory
+/// is shared — the default working-dir root is per-silo, matching the
+/// per-silo spill writer).
 let registerAuditFallbackReplay
     (services: IServiceCollection)
     (config: ServerConfig)
@@ -569,19 +568,19 @@ let registerAuditFallbackReplay
     (resolvedLogger: ILogger)
     : unit =
     match config.AuditLog, config.AuditFailurePolicy with
-    | EnabledAuditLog, DegradeToFile when
-        ProcessProfileGate.shouldRegisterBackgroundService config AuditFallbackReplaySubsystem
-        ->
-        let root =
-            config.AuditFallbackDirectory
-            |> Option.defaultValue (AuditFallbackStore.defaultDirectory ())
+    | EnabledAuditLog, DegradeToFile ->
+        Hosting.register
+            services
+            config
+            (BackgroundUnit.create "audit-fallback-replay" SharedWork (fun _ ->
+                let root =
+                    config.AuditFallbackDirectory
+                    |> Option.defaultValue (AuditFallbackStore.defaultDirectory ())
 
-        let drainStore =
-            AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, resolvedLogger)
+                let drainStore =
+                    AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, resolvedLogger)
 
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            new AuditFallbackReplayService.AuditFallbackReplayService(drainStore, eventStore, resolvedLogger)
-            :> Microsoft.Extensions.Hosting.IHostedService
-        )
+                new AuditFallbackReplayService.AuditFallbackReplayService(drainStore, eventStore, resolvedLogger)
+                :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
     | _ -> ()

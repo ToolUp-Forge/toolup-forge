@@ -360,6 +360,48 @@ let private deliverOnce
 
 // ─── Background dispatcher service ───────────────────────────────
 
+/// What every webhook dispatcher is built over.
+type WebhookDeps = {
+    Registry: IWebhookRegistry
+    DeliveryLog: IWebhookDeliveryLog
+    EventStore: IEventStore
+    HttpClient: HttpClient
+    RetryPolicy: WebhookRetryPolicy
+    Logger: ILogger
+    ActivitySink: IActivitySink
+    /// Resolves a subscription's signing secret from encrypted-at-rest
+    /// storage immediately before HMAC signing. The subscription blob
+    /// carries only a `SecretRef`; the plaintext never lands in blob
+    /// storage. Resolved per delivery, never cached beyond the request.
+    SecretStore: ISecretStore
+    /// Resolved lazily because the limiter is constructed downstream of
+    /// the dispatcher in `compose` (it depends on the post-webhook
+    /// event-store decorator chain). By the time the `BackgroundService`'s
+    /// `ExecuteAsync` runs, compose has populated it.
+    GetRateLimiter: unit -> IRateLimiter
+    /// The SSRF policy (the operator allowlist from
+    /// `ServerConfig.WebhookUrlAllowedHosts`), re-applied at delivery time
+    /// to defeat DNS rebinding past the registration-time guard.
+    UrlPolicy: WebhookUrlValidator.WebhookUrlPolicy
+}
+
+/// The dispatcher's optional collaborators, as one record: a capability is
+/// a field, never another construction path.
+type WebhookOptions = {
+    /// The cross-instance lease for the failure-state read-modify-write
+    /// (see the type docstring). `None` is `InProcessDistributedLock.shared`,
+    /// the instance `compose` registers when the deployment composes no
+    /// other, so a hand-constructed dispatcher and a composed one contend on
+    /// one table.
+    DistributedLock: IDistributedLock option
+}
+
+[<RequireQualifiedAccess>]
+module WebhookOptions =
+
+    /// No optional collaborator: the single-instance dispatcher.
+    let defaults: WebhookOptions = { DistributedLock = None }
+
 /// `BackgroundService` that owns the in-process dispatch queue and the
 /// retry / dead-letter / auto-disable state machine.
 ///
@@ -403,51 +445,25 @@ let private deliverOnce
 /// dispatch-time snapshot (the job scheduler's `dispatchFrom` re-reads
 /// for the same reason).
 ///
-/// This leases the failure-state transition, **not tick election** — the
-/// scheduler's cron tick, per chapter 13, remains unleased.
-type WebhookDispatcherService
-    (
-        registry: IWebhookRegistry,
-        deliveryLog: IWebhookDeliveryLog,
-        eventStore: IEventStore,
-        httpClient: HttpClient,
-        retryPolicy: WebhookRetryPolicy,
-        logger: ILogger,
-        activitySink: IActivitySink,
-        // Phase 6d.A — resolves a subscription's signing secret from
-        // encrypted-at-rest storage immediately before HMAC signing. The
-        // subscription blob carries only a `SecretRef`; the plaintext
-        // never lands in blob storage. Resolved per delivery, never
-        // cached beyond the request.
-        secretStore: ISecretStore,
-        // Phase 9v — resolved lazily because the limiter is constructed
-        // downstream of the dispatcher in `compose` (transitive
-        // dependency on `auditLog` / `resolvedMetricsSink`, both of
-        // which depend on the post-webhook event-store decorator
-        // chain). Cell-and-lookup mirrors `jobSchedulerLookup` in
-        // `SDK.Server.fs`; by the time the BackgroundService's
-        // `ExecuteAsync` runs, compose has populated the cell.
-        getRateLimiter: unit -> IRateLimiter,
-        // SSRF policy (operator allowlist from ServerConfig.WebhookUrlAllowedHosts).
-        // Re-applied at delivery time to defeat DNS rebinding past the
-        // registration-time guard in WebhookApiHandler.
-        urlPolicy: WebhookUrlValidator.WebhookUrlPolicy,
-        // Phase 16a — the cross-instance lease seam for the failure-state
-        // read-modify-write (see the type docstring). Optional and
-        // defaulted exactly as `InProcessJobScheduler`'s is: absent means
-        // `InProcessDistributedLock.shared`, the SAME instance `compose`
-        // registers in DI, so a hand-constructed dispatcher and a composed
-        // one contend on one table. Threading a store-backed COMPANION in
-        // needs the lock resolved before compose constructs the subsystem
-        // — the Phase 9c follow-on `SDK.Server.fs` already defers for the
-        // scheduler and the platform-admin store; this parameter is the
-        // seam that follow-on will fill, and the override a test uses.
-        ?distributedLock: IDistributedLock
-    ) =
+/// This leases the failure-state transition, **not tick election**, which
+/// is the scheduler's own (chapter 13).
+type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptions) =
     inherit BackgroundService()
 
-    /// Phase 16a — the lease seam for the failure-state critical section.
-    let failureStateLock = defaultArg distributedLock InProcessDistributedLock.shared
+    let registry = deps.Registry
+    let deliveryLog = deps.DeliveryLog
+    let eventStore = deps.EventStore
+    let httpClient = deps.HttpClient
+    let retryPolicy = deps.RetryPolicy
+    let logger = deps.Logger
+    let activitySink = deps.ActivitySink
+    let secretStore = deps.SecretStore
+    let getRateLimiter = deps.GetRateLimiter
+    let urlPolicy = deps.UrlPolicy
+
+    /// The lease seam for the failure-state critical section.
+    let failureStateLock =
+        options.DistributedLock |> Option.defaultValue InProcessDistributedLock.shared
 
     /// Lock id for one subscription's failure-state transition.
     /// Namespaced (GP 12 rule 5 promises no ordering across ids, so a
@@ -871,39 +887,6 @@ type WebhookDispatcherService
             |> Async.Ignore
     }
 
-    /// Phase 16a — kept additive for the public-API approval gate: the
-    /// optional `distributedLock` parameter folds the primary constructor
-    /// into one widened arity, which would otherwise read as a REMOVAL of
-    /// the ten-argument token consumers construct against today. Declared
-    /// here rather than beside the primary constructor because F# requires
-    /// every `let` binding to precede the first member (FS0960).
-    new
-        (
-            registry,
-            deliveryLog,
-            eventStore,
-            httpClient,
-            retryPolicy,
-            logger,
-            activitySink,
-            secretStore,
-            getRateLimiter,
-            urlPolicy
-        ) =
-        new WebhookDispatcherService(
-            registry,
-            deliveryLog,
-            eventStore,
-            httpClient,
-            retryPolicy,
-            logger,
-            activitySink,
-            secretStore,
-            getRateLimiter,
-            urlPolicy,
-            ?distributedLock = None
-        )
-
     /// Phase 1064 — how many delivery-log writes have answered `Error` since
     /// the dispatcher started. Each one is also logged at Warning with the
     /// `best-effort-write` marker.
@@ -1072,65 +1055,9 @@ type WebhookDispatcherService
         }
         :> Tasks.Task
 
-// ─── Convenience constructor ─────────────────────────────────────
+// ─── The factory ─────────────────────────────────────────────────
 
-let create
-    (registry: IWebhookRegistry)
-    (deliveryLog: IWebhookDeliveryLog)
-    (eventStore: IEventStore)
-    (httpClient: HttpClient)
-    (retryPolicy: WebhookRetryPolicy)
-    (logger: ILogger)
-    (activitySink: IActivitySink)
-    (secretStore: ISecretStore)
-    (getRateLimiter: unit -> IRateLimiter)
-    (urlPolicy: WebhookUrlValidator.WebhookUrlPolicy)
-    : WebhookDispatcherService =
-    new WebhookDispatcherService(
-        registry,
-        deliveryLog,
-        eventStore,
-        httpClient,
-        retryPolicy,
-        logger,
-        activitySink,
-        secretStore,
-        getRateLimiter,
-        urlPolicy
-    )
-
-/// Phase 16a — `create` with an explicit `IDistributedLock` for the
-/// failure-state critical section (see `WebhookDispatcherService`).
-///
-/// Additive rather than a widened `create`: adding a parameter to the
-/// curried function above would retype its token and read as a removal at
-/// the public-API approval gate, breaking every consumer that composes a
-/// dispatcher by hand. `create` remains the path for the single-instance
-/// default; this one is for a deployment (or a test) that has a
-/// store-backed lock in hand.
-let createWithLock
-    (registry: IWebhookRegistry)
-    (deliveryLog: IWebhookDeliveryLog)
-    (eventStore: IEventStore)
-    (httpClient: HttpClient)
-    (retryPolicy: WebhookRetryPolicy)
-    (logger: ILogger)
-    (activitySink: IActivitySink)
-    (secretStore: ISecretStore)
-    (getRateLimiter: unit -> IRateLimiter)
-    (urlPolicy: WebhookUrlValidator.WebhookUrlPolicy)
-    (distributedLock: IDistributedLock)
-    : WebhookDispatcherService =
-    new WebhookDispatcherService(
-        registry,
-        deliveryLog,
-        eventStore,
-        httpClient,
-        retryPolicy,
-        logger,
-        activitySink,
-        secretStore,
-        getRateLimiter,
-        urlPolicy,
-        distributedLock = distributedLock
-    )
+/// The webhook dispatcher over `deps`, with `options`' collaborators. The
+/// one way to build one.
+let create (deps: WebhookDeps) (options: WebhookOptions) : WebhookDispatcherService =
+    new WebhookDispatcherService(deps, options)

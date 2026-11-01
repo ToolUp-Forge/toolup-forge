@@ -179,14 +179,13 @@ type private LoopState = {
 //      and a throw with no caller left to observe it must not become an
 //      unhandled thread-pool exception that takes the host down.
 //
-// **Single-instance limitation.** Two silos running this scheduler
-// against the same `IBlobStorage`-backed `IJobStore` would each fire
-// the same due jobs at the same minute. This is enforced at preflight
-// by `JobSchedulerInstanceValidator`: a deployment with
-// `ServerConfig.ReplicaCount > 1` and this scheduler fails config
-// validation unless `ServerConfig.AcceptInProcessSchedulerInMultiInstance`
-// is set. A distributed scheduler companion (Akka, Orleans Reminders,
-// Hangfire) is the migration path for multi-silo deployments.
+// **Replicas.** Two silos running this scheduler against the same
+// `IBlobStorage`-backed `IJobStore` both notice the same due job; the cron
+// tick is an election over `SchedulerOptions.DistributedLock`, so they run
+// it once only when that lock is SHARED. `JobSchedulerInstanceValidator`
+// refuses `ServerConfig.ReplicaCount > 1` with this scheduler unless the
+// deployment composed a shared lock (`ServerApp.withDistributedLock`) or
+// set `ServerConfig.AcceptInProcessSchedulerInMultiInstance`.
 //
 // **Dispatch concurrency.** Each in-flight job takes a
 // per-`JobId` lease on the injected `IDistributedLock` before any
@@ -221,26 +220,81 @@ type private LoopState = {
 // the tick does not gain a single extra listing. When it is present but
 // nothing has handed off, it costs one empty prefix listing per scope.
 
-type InProcessJobScheduler
-    (
-        store: IJobStore,
-        eventStore: IEventStore,
-        notificationChannel: INotificationChannel,
-        config: ServerConfig,
-        logger: ILogger,
-        activitySink: IActivitySink,
-        ?triggerWatermark: JobTriggerWatermark.JobTriggerWatermark,
-        ?distributedLock: IDistributedLock,
-        ?externalDispatcher: IExternalComputeDispatcher,
-        ?externalHandleStore: IExternalHandleStore,
-        ?progressSink: IJobProgressSink
-    ) =
+/// What every in-process scheduler is built over.
+type SchedulerDeps = {
+    Store: IJobStore
+    EventStore: IEventStore
+    NotificationChannel: INotificationChannel
+    Config: ServerConfig
+    Logger: ILogger
+    ActivitySink: IActivitySink
+}
+
+/// The scheduler's optional collaborators, as one record: a capability is a
+/// field, never another factory arity. `SchedulerOptions.defaults` is the
+/// single-instance, no-companion scheduler; set a field to opt in.
+type SchedulerOptions = {
+    /// The shared trigger watermark. Catch-up is live only when the
+    /// deployment opted in (`ServerConfig.EventTriggerCatchUp`) AND this is
+    /// set; the same instance must also be handed to `JobNotifyEventStore`
+    /// so live notifies advance the cursor the scans compare against.
+    TriggerWatermark: JobTriggerWatermark.JobTriggerWatermark option
+    /// The lease primitive behind the per-`JobId` dispatch mutex and the
+    /// cron-tick election. `None` is the process-wide in-process lock (the
+    /// instance `compose` registers when the deployment composes no other),
+    /// which excludes nothing across replicas.
+    DistributedLock: IDistributedLock option
+    /// The deployment's external-compute backend, enabling
+    /// `JobResult.HandedOff` and the per-tick reconciliation pass. Set it
+    /// only when a real backend is composed: `None` keeps the pass off, so
+    /// a deployment with no backend pays not one extra listing (GP 13).
+    ExternalDispatcher: IExternalComputeDispatcher option
+    /// The handle store behind the completion-callback ingress
+    /// (handle-to-run routing, the callback secret's hash, the atomic
+    /// `MarkTerminal` gate). Meaningful only beside `ExternalDispatcher`;
+    /// without it a hand-off resolves by the reconciliation poll alone.
+    ExternalHandleStore: IExternalHandleStore option
+    /// Where handlers' progress checkpoints go. `None` gives handlers
+    /// `JobProgressReporter.noOp` and writes nothing (GP 13);
+    /// `JobScheduler.progressSinkFor` builds the fan-out sink a deployment
+    /// with `JobProgress = EnabledJobProgress` wants.
+    ProgressSink: IJobProgressSink option
+    /// The carrier a typed `Schedule` stamps a job's scope with and a
+    /// dispatch redeems it through, bound at construction. `None` is a
+    /// carrier of the scheduler's own (`ScopeCarrier.ephemeral`): it
+    /// re-mints within the scheduler's lifetime, and a job it scheduled
+    /// runs anonymous after a restart.
+    ScopeCarrier: ScopeCarrier option
+}
+
+[<RequireQualifiedAccess>]
+module SchedulerOptions =
+
+    /// No optional collaborator: the single-instance scheduler.
+    let defaults: SchedulerOptions = {
+        TriggerWatermark = None
+        DistributedLock = None
+        ExternalDispatcher = None
+        ExternalHandleStore = None
+        ProgressSink = None
+        ScopeCarrier = None
+    }
+
+type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOptions) =
     inherit BackgroundService()
 
-    /// Catch-up is live only when the deployment opted in
-    /// AND compose supplied the shared watermark (the two arrive
-    /// together via `ComposeJobs.registerJobScheduler`; the guard
-    /// keeps a hand-constructed scheduler honest).
+    let store = deps.Store
+    let eventStore = deps.EventStore
+    let notificationChannel = deps.NotificationChannel
+    let config = deps.Config
+    let logger = deps.Logger
+    let activitySink = deps.ActivitySink
+    let triggerWatermark = options.TriggerWatermark
+    let externalDispatcher = options.ExternalDispatcher
+    let externalHandleStore = options.ExternalHandleStore
+
+    /// Catch-up is live only when the deployment opted in AND the options
+    /// carry the shared watermark.
     let catchUpEnabled = config.EventTriggerCatchUp && triggerWatermark.IsSome
 
     let handlers = ConcurrentDictionary<string, IJobHandler>()
@@ -250,53 +304,24 @@ type InProcessJobScheduler
     /// for it within the host's shutdown window.
     let dispatches = Background.DrainSet()
 
-    /// The carrier a typed `Schedule` stamps a job's scope with
-    /// and a dispatch redeems it through. Composition binds the
-    /// deployment's (over its key ring, so a restart re-mints); until then
-    /// this scheduler's own, so a hand-constructed one re-mints within its
-    /// lifetime and runs a restarted job anonymous.
-    let mutable scopeCarrier = ScopeCarrier.ephemeral ()
+    /// The carrier a typed `Schedule` stamps a job's scope with and a
+    /// dispatch redeems it through — the deployment's, bound at
+    /// construction (`SchedulerOptions.ScopeCarrier`), or this scheduler's
+    /// own. Mutable only for `IScopeCarrierBinding`, the seam the carrier
+    /// conformance packs (and an adopted companion scheduler) rebind
+    /// through; composition binds at construction and never rebinds.
+    let mutable scopeCarrier =
+        options.ScopeCarrier |> Option.defaultWith ScopeCarrier.ephemeral
 
-    /// The progress sink, when the deployment wants progress.
-    ///
-    /// **Derived from config rather than threaded through a new factory
-    /// arity**, and that is a deliberate departure from how the external
-    /// dispatcher and the handle store arrive. Those are *companion
-    /// instances* the deployment composes and the scheduler cannot build.
-    /// The fan-out sink is different: it needs only the channel, the event
-    /// store and the logger — all three of which this constructor already
-    /// holds — so a factory parameter would buy nothing except a
-    /// combinatorial explosion of arities (`create` × catch-up × external ×
-    /// callback × progress). The optional parameter stays as the override
-    /// seam for a test or a distributed replacement.
-    ///
-    /// `None` when `JobProgress = NoJobProgress` (the default): handlers get
-    /// `JobProgressReporter.noOp`, the reconciliation poll skips its
-    /// checkpoint emission, and not one notification or event is written
-    /// (GP 13).
-    let progressSink: IJobProgressSink option =
-        match progressSink with
-        | Some sink -> Some sink
-        | None ->
-            match config.JobProgress with
-            | NoJobProgress -> None
-            | EnabledJobProgress ->
-                // No `handlerFor` resolver is supplied: mapping a `JobId` to
-                // its registered handler name needs a store read, and this
-                // would run on the publish path of every checkpoint — a
-                // blob read per progress frame to populate a label. Payloads
-                // therefore carry `Handler = None` rather than a value
-                // bought at that price; a consumer that wants the label
-                // joins on `JobId` against the job it already has.
-                Some(FanOutJobProgressSink(notificationChannel, eventStore, logger) :> IJobProgressSink)
+    let progressSink: IJobProgressSink option = options.ProgressSink
 
     /// The lease primitive backing the per-`JobId` dispatch
     /// mutex. Defaults to the process-wide in-process lock (the same
-    /// instance `compose` registers in DI), so a hand-constructed
-    /// scheduler and a composed one contend on the same table; a
-    /// deployment wanting cross-instance exclusion passes a store-backed
-    /// companion.
-    let jobLock = defaultArg distributedLock InProcessDistributedLock.shared
+    /// instance `compose` registers in DI when nothing else is composed),
+    /// so a hand-constructed scheduler and a composed one contend on the
+    /// same table.
+    let jobLock =
+        options.DistributedLock |> Option.defaultValue InProcessDistributedLock.shared
 
     /// Lock id for a job's dispatch critical section. Namespaced so it
     /// cannot collide with another subsystem's ids in a shared store.
@@ -1868,130 +1893,26 @@ type InProcessJobScheduler
                     releaseJobLease lease
         }
 
-// ─── Convenience constructor ─────────────────────────────────────
+// ─── The factory ─────────────────────────────────────────────────
 
-let create
-    (store: IJobStore)
-    (eventStore: IEventStore)
-    (notificationChannel: INotificationChannel)
-    (config: ServerConfig)
-    (logger: ILogger)
-    (activitySink: IActivitySink)
-    : InProcessJobScheduler =
-    new InProcessJobScheduler(store, eventStore, notificationChannel, config, logger, activitySink)
+/// The in-process scheduler over `deps`, with `options`' collaborators.
+/// The one way to build one.
+let create (deps: SchedulerDeps) (options: SchedulerOptions) : InProcessJobScheduler =
+    new InProcessJobScheduler(deps, options)
 
-/// `create` plus the shared trigger watermark. Compose
-/// uses this arity when `ServerConfig.EventTriggerCatchUp = true`;
-/// the same `JobTriggerWatermark` instance must also be handed to
-/// `JobNotifyEventStore` so live notifies advance the cursor the
-/// scheduler's scans compare against.
-let createWithCatchUp
-    (store: IJobStore)
-    (eventStore: IEventStore)
-    (notificationChannel: INotificationChannel)
-    (config: ServerConfig)
-    (logger: ILogger)
-    (activitySink: IActivitySink)
-    (triggerWatermark: JobTriggerWatermark.JobTriggerWatermark)
-    : InProcessJobScheduler =
-    new InProcessJobScheduler(
-        store,
-        eventStore,
-        notificationChannel,
-        config,
-        logger,
-        activitySink,
-        triggerWatermark = triggerWatermark
-    )
-
-/// `create` / `createWithCatchUp` plus the deployment's
-/// `IExternalComputeDispatcher`, enabling `JobResult.HandedOff` and the
-/// per-tick reconciliation pass. `triggerWatermark` is `None` for a
-/// deployment that did not opt into event-trigger catch-up, so this one
-/// arity covers both shapes.
+/// The fan-out progress sink a deployment with
+/// `JobProgress = EnabledJobProgress` wants (`None` under `NoJobProgress`),
+/// for `SchedulerOptions.ProgressSink`. Built once by the caller so DI and
+/// the scheduler share one instance, and so one per-job rate-limit window:
+/// two instances would each keep their own and a chatty handler would
+/// publish at twice the configured rate.
 ///
-/// Compose calls this **only** when the deployment composed an actual
-/// backend (`ExternalComputeMode.CustomExternalCompute`). Passing the
-/// `NoExternalComputeDispatcher` here instead would be harmless in
-/// behaviour — nothing can hand off when every `Submit` refuses — but it
-/// would switch the reconciliation pass on for every deployment in
-/// existence, buying each one a per-scope index listing per minute
-/// forever to discover the empty set it will always discover (GP 13).
-let createWithExternalCompute
-    (store: IJobStore)
-    (eventStore: IEventStore)
-    (notificationChannel: INotificationChannel)
-    (config: ServerConfig)
-    (logger: ILogger)
-    (activitySink: IActivitySink)
-    (triggerWatermark: JobTriggerWatermark.JobTriggerWatermark option)
-    (externalDispatcher: IExternalComputeDispatcher)
-    : InProcessJobScheduler =
-    match triggerWatermark with
-    | Some watermark ->
-        new InProcessJobScheduler(
-            store,
-            eventStore,
-            notificationChannel,
-            config,
-            logger,
-            activitySink,
-            triggerWatermark = watermark,
-            externalDispatcher = externalDispatcher
-        )
-    | None ->
-        new InProcessJobScheduler(
-            store,
-            eventStore,
-            notificationChannel,
-            config,
-            logger,
-            activitySink,
-            externalDispatcher = externalDispatcher
-        )
-
-/// `createWithExternalCompute` plus the handle store that
-/// makes the completion-callback ingress work: handle-to-run routing, the
-/// callback secret's hash, and the atomic `MarkTerminal` gate.
-///
-/// A **separate arity** rather than an extra parameter on
-/// `createWithExternalCompute`, because that function is curried — adding
-/// a parameter would break every existing call site for a capability they
-/// do not use (GP 11). A scheduler built by the older factory carries no
-/// handle store, mints no secrets, registers no handles, and reconciles by
-/// polling alone.
-let createWithExternalCallback
-    (store: IJobStore)
-    (eventStore: IEventStore)
-    (notificationChannel: INotificationChannel)
-    (config: ServerConfig)
-    (logger: ILogger)
-    (activitySink: IActivitySink)
-    (triggerWatermark: JobTriggerWatermark.JobTriggerWatermark option)
-    (externalDispatcher: IExternalComputeDispatcher)
-    (externalHandleStore: IExternalHandleStore)
-    : InProcessJobScheduler =
-    match triggerWatermark with
-    | Some watermark ->
-        new InProcessJobScheduler(
-            store,
-            eventStore,
-            notificationChannel,
-            config,
-            logger,
-            activitySink,
-            triggerWatermark = watermark,
-            externalDispatcher = externalDispatcher,
-            externalHandleStore = externalHandleStore
-        )
-    | None ->
-        new InProcessJobScheduler(
-            store,
-            eventStore,
-            notificationChannel,
-            config,
-            logger,
-            activitySink,
-            externalDispatcher = externalDispatcher,
-            externalHandleStore = externalHandleStore
-        )
+/// No handler-name resolver is supplied: mapping a `JobId` to its handler
+/// needs a store read on the publish path of every checkpoint, so payloads
+/// carry `Handler = None` and a consumer that wants the label joins on
+/// `JobId` against the job it already has.
+let progressSinkFor (deps: SchedulerDeps) : IJobProgressSink option =
+    match deps.Config.JobProgress with
+    | NoJobProgress -> None
+    | EnabledJobProgress ->
+        Some(FanOutJobProgressSink(deps.NotificationChannel, deps.EventStore, deps.Logger) :> IJobProgressSink)
