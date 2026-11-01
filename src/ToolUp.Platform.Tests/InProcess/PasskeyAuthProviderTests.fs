@@ -421,4 +421,31 @@ let tests =
             let! secret = resolveSigningSecret racing
             Expect.equal secret "peer-secret" "converges on the persisted secret"
         }
+
+        test "builders applied after withPasskey reach the resolved app and the companion" {
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> ToolUp.AuthProviders.Passkey.PasskeyCompose.withPasskey baseConfig
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        ReplicaCount = 2
+                }
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
+
+            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+
+            Expect.isTrue
+                (resolved.Auth.Value :? ToolUp.AuthProviders.PasskeyAuthProvider.PasskeyAuthProvider)
+                "the companion set the passkey auth provider"
+
+            Expect.equal
+                (ServerApp.composedExtensions app).Handlers.Length
+                (ServerApp.empty.Extensions.Handlers.Length + 1)
+                "and contributed the ceremony routes"
+        }
     ]

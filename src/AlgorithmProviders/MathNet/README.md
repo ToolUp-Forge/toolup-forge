@@ -13,11 +13,11 @@ open ToolUp.AlgorithmProviders
 
 ServerApp.empty
 |> ServerApp.withConfig config
-|> AlgorithmsCompose.withAlgorithms MathNetAlgorithms.withMathNetAlgorithmProvider
+|> AlgorithmsCompose.withAlgorithms (AlgorithmsOptions.create () |> MathNetAlgorithms.withMathNetAlgorithmProvider)
 |> ServerApp.run
 ```
 
-`MathNetAlgorithms.withMathNetAlgorithms` is the one-call form for a deployment whose algorithms come entirely from this provider. Alongside other providers, chain the registrations in a single `withAlgorithms` call — registration is append-only and a second claim on any id fails at compose time rather than being resolved by registration order.
+`MathNetAlgorithms.withMathNetAlgorithms` is the one-call form for a deployment whose algorithms come entirely from this provider. Alongside other providers, chain the registrations in one `AlgorithmsOptions` — registration is append-only and a second claim on any id fails at compose time rather than being resolved by registration order.
 
 ## What the wrapper is actually for
 

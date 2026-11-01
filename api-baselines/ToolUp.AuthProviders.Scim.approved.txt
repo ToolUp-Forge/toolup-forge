@@ -39,26 +39,9 @@ ToolUp.AuthProviders.ScimRoutes (class)
 ToolUp.AuthProviders.ScimRoutes.ScimContentType : System.String (literal)
 ToolUp.AuthProviders.ScimRoutes.bearerToken(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AuthProviders.ScimRoutes.routes(ToolUp.AuthProviders.ScimHandler+ScimConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.AuthProviders.ScimRoutes.scimCompanion : ToolUp.Platform.ComponentId { get }
 ToolUp.AuthProviders.ScimRoutes.tokensMatch(System.String, System.String) : System.Boolean
-ToolUp.AuthProviders.ScimRoutes+ScimMode (class)
-ToolUp.AuthProviders.ScimRoutes+ScimMode.IsEnabledScim : System.Boolean { get }
-ToolUp.AuthProviders.ScimRoutes+ScimMode.IsNoScim : System.Boolean { get }
-ToolUp.AuthProviders.ScimRoutes+ScimMode.NoScim : ToolUp.AuthProviders.ScimRoutes+ScimMode { get }
-ToolUp.AuthProviders.ScimRoutes+ScimMode.Tag : System.Int32 { get }
-ToolUp.AuthProviders.ScimRoutes+ScimMode+EnabledScim (class)
-ToolUp.AuthProviders.ScimRoutes+ScimMode+EnabledScim.Item : ToolUp.AuthProviders.ScimHandler+ScimConfig { get }
-ToolUp.AuthProviders.ScimRoutes+ScimMode+Tags (class)
-ToolUp.AuthProviders.ScimRoutes+ScimMode+Tags.EnabledScim : System.Int32 (literal)
-ToolUp.AuthProviders.ScimRoutes+ScimMode+Tags.NoScim : System.Int32 (literal)
-ToolUp.AuthProviders.ScimRoutes+ScimServerApp (class)
-ToolUp.AuthProviders.ScimRoutes+ScimServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AuthProviders.ScimRoutes+ScimMode)
-ToolUp.AuthProviders.ScimRoutes+ScimServerApp.Base : ToolUp.Platform.ServerApp { get }
-ToolUp.AuthProviders.ScimRoutes+ScimServerApp.Mode : ToolUp.AuthProviders.ScimRoutes+ScimMode { get }
-ToolUp.AuthProviders.ScimRoutes+ScimServerAppModule (class)
-ToolUp.AuthProviders.ScimRoutes+ScimServerAppModule.create() : ToolUp.AuthProviders.ScimRoutes+ScimServerApp
-ToolUp.AuthProviders.ScimRoutes+ScimServerAppModule.ofServerApp(ToolUp.Platform.ServerApp) : ToolUp.AuthProviders.ScimRoutes+ScimServerApp
-ToolUp.AuthProviders.ScimRoutes+ScimServerAppModule.run(ToolUp.AuthProviders.ScimRoutes+ScimServerApp) : System.Int32
-ToolUp.AuthProviders.ScimRoutes+ScimServerAppModule.withScim(ToolUp.AuthProviders.ScimHandler+ScimConfig, ToolUp.AuthProviders.ScimRoutes+ScimServerApp) : ToolUp.AuthProviders.ScimRoutes+ScimServerApp
+ToolUp.AuthProviders.ScimRoutes.withScim(ToolUp.AuthProviders.ScimHandler+ScimConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AuthProviders.ScimTypes (class)
 ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping (class)
 ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping..ctor(ToolUp.AuthProviders.ScimTypes+ScimIdentitySource, ToolUp.AuthProviders.ScimTypes+ScimRoleMapping)

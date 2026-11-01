@@ -278,8 +278,8 @@ let private assertCompleteHandler: HttpHandler =
                     return! writeJson 200 session next ctx
     }
 
-/// The passkey ceremony routes. Mounted by `PasskeyCompose.run` onto the
-/// SDK's route chain via `ComposeExtensions.Handlers`. Every handler
+/// The passkey ceremony routes. Contributed by `PasskeyCompose.withPasskey` as a
+/// `Contribution.routes` on the SDK route chain. Every handler
 /// resolves its `PasskeyRuntime` + substrate services per-request from
 /// `ctx.RequestServices`.
 let routes: HttpHandler =

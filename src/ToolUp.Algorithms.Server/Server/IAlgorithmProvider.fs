@@ -17,7 +17,7 @@ open ToolUp.Algorithms.AlgorithmOperations
 // **This is the entire surface a vendor companion implements.** Adding
 // a provider requires no edit to any file in this package — only an
 // append-only registration at the consumer's composition root
-// (`AlgorithmsServerApp.withProvider`).
+// (`AlgorithmsOptions.withProvider`).
 //
 // **Why a `create`-from-parts helper rather than a bare interface.**
 // The four fitter interfaces are the useful decomposition — a provider

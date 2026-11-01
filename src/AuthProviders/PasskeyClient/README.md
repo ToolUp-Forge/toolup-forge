@@ -33,7 +33,7 @@ let clientConfig =
 | `ApiBase` | Base path for the server ceremony endpoints — the UI posts to `{ApiBase}/register/*` and `{ApiBase}/assert/*`. | `/api/passkey` |
 | `AllowRegistration` | Whether the sign-in screen offers a "Register a passkey" affordance (plus a bootstrap-token field for first-time setup). Registration is still gated server-side; this only controls the UI. | `true` |
 
-`PasskeyUIConfig.defaults` matches the server companion's default route mounting, so an app that composes `PasskeyServerApp` with SDK defaults needs no `ApiBase` override.
+`PasskeyUIConfig.defaults` matches the server companion's default route mounting, so an app that composes `PasskeyCompose.withPasskey` with SDK defaults needs no `ApiBase` override.
 
 ## The ceremony flow
 

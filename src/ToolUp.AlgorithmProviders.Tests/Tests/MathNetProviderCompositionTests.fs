@@ -4,6 +4,7 @@
 module ToolUp.AlgorithmProviders.Tests.MathNetProviderCompositionTests
 
 open Expecto
+open ToolUp.Platform
 open ToolUp.Algorithms
 open ToolUp.Algorithms.AlgorithmTypes
 open ToolUp.Algorithms.AlgorithmOperations
@@ -171,7 +172,7 @@ let private compositionTests =
 
         test "the compose helper registers the provider on an algorithms pipeline" {
             let app =
-                AlgorithmsCompose.AlgorithmsServerApp.create ()
+                AlgorithmsCompose.AlgorithmsOptions.create ()
                 |> MathNetAlgorithms.withMathNetAlgorithmProvider
 
             Expect.equal app.Providers.Length 1 "one provider registered"
@@ -186,6 +187,25 @@ let private compositionTests =
             Expect.throws
                 (fun () -> AlgorithmProviderRegistry doubled.Providers |> ignore)
                 "a second claim on the four canonical ids must fail compose, not pick a winner"
+        }
+        test "builders applied after withMathNetAlgorithms reach the resolved app and the companion" {
+            let app =
+                ServerApp.empty
+                |> MathNetAlgorithms.withMathNetAlgorithms
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        ReplicaCount = 2
+                }
+
+            let resolved = ServerApp.resolve app
+
+            Expect.contains resolved.ComposedCompanions "ToolUp.Algorithms" "the algorithms companion is composed"
+            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+
+            Expect.contains
+                (ServerApp.effectiveConfig app).ModuleNames
+                AlgorithmAITools.SourceModule
+                "and the tool module the companion added survives it"
         }
     ]
 

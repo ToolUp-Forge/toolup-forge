@@ -48,7 +48,7 @@ let ScimActorId = "_scim"
 // ─── Configuration ───────────────────────────────────────────────────
 
 /// One SCIM endpoint's configuration. Constructed by the deployment and
-/// handed to `ScimServerApp.withScim`; the companion never reads an env
+/// handed to `ScimRoutes.withScim`; the companion never reads an env
 /// var or a config file itself (companion-authoring rule).
 type ScimConfig = {
     /// The single team this endpoint provisions into. See the
