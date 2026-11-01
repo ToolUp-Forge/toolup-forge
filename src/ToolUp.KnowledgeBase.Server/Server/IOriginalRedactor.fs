@@ -312,8 +312,8 @@ let create (options: OriginalRedactorOptions) : IOriginalRedactor =
 /// every original this deployment serves. Threads the singleton
 /// registration through the shared `ComposeExtensions.ServiceConfig`
 /// seam — the same pattern as `withOriginalSourceResolver` /
-/// `withOriginalPreviewSeam` — so `AIServerApp` / `RAGServerApp` inherit
-/// it via their `Base` without a per-wrapper forwarder.
+/// `withOriginalPreviewSeam` — so it is part of the deployment the AI
+/// and RAG companions are composed onto, on either side of them.
 ///
 /// **Opt-in and zero-cost (GP 11 / GP 13):** an app that never calls
 /// this registers nothing, and `GetOriginalDocument` /

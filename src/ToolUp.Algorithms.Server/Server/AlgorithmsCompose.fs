@@ -157,8 +157,7 @@ module AlgorithmsServerApp =
 ///     |> ServerApp.withStorage storage
 ///     |> AlgorithmsCompose.withAlgorithms (fun a ->
 ///         a |> AlgorithmsServerApp.withProvider myProvider)
-///     |> AICompose.withAI factory profile (fun ai ->
-///         ai |> AIServerApp.withAIConfig assistant)
+///     |> AICompose.withAI (AIOptions.create factory profile |> AIOptions.withAIConfig assistant)
 ///     |> ServerApp.run
 ///
 /// Calling it twice on one pipeline composes the companion twice — the

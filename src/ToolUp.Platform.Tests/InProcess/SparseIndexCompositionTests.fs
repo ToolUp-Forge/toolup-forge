@@ -166,16 +166,24 @@ let private newHnswStore () =
     )
 
 let private newApp () =
-    RAGServerApp.create stubFactory stubProfile constantEmbedder
-    |> RAGServerApp.withStorage (InMemoryBlobStorage() :> BlobStorage.IBlobStorage)
+    RagOptions.create stubFactory stubProfile constantEmbedder
 
-let private withReplicas (count: int) (app: RAGServerApp) : RAGServerApp = {
-    app with
-        AI.Base.Config.ReplicaCount = count
-}
+/// The deployment `rag` composes onto: in-memory storage, `replicas`
+/// replicas, resolved as `run` resolves it.
+let private composedAt (replicas: int) (rag: RagOptions) : ServerApp =
+    ServerApp.empty
+    |> ServerApp.withConfig {
+        ServerConfig.defaults with
+            ReplicaCount = replicas
+    }
+    |> ServerApp.withStorage (InMemoryBlobStorage() :> BlobStorage.IBlobStorage)
+    |> withRAG rag
+    |> ServerApp.resolve
 
-let private provider (app: RAGServerApp) : ServiceProvider =
-    let composed = composeRAG app
+let private composed (rag: RagOptions) : ServerApp = composedAt 1 rag
+
+let private provider (app: RagOptions) : ServiceProvider =
+    let composed = composed app
     let services = ServiceCollection() :> IServiceCollection
 
     let services =
@@ -185,7 +193,7 @@ let private provider (app: RAGServerApp) : ServiceProvider =
 
     services.BuildServiceProvider()
 
-let private resolvedSparse (app: RAGServerApp) : ISparseIndex option =
+let private resolvedSparse (app: RagOptions) : ISparseIndex option =
     use sp = provider app
 
     match sp.GetService typeof<ISparseIndex> with
@@ -193,8 +201,8 @@ let private resolvedSparse (app: RAGServerApp) : ISparseIndex option =
     | o -> Some(o :?> ISparseIndex)
 
 /// Run the replica validator exactly as `composeRAG` registered it.
-let private replicaVerdict (app: RAGServerApp) : ConfigValidation.ValidationResult =
-    let composed = composeRAG app
+let private replicaVerdict (replicas: int) (app: RagOptions) : ConfigValidation.ValidationResult =
+    let composed = composedAt replicas app
 
     let v =
         composed.ConfigValidators
@@ -252,8 +260,7 @@ let private lexicalEmbedder =
     }
 
 let private lexicalApp () =
-    RAGServerApp.create stubFactory stubProfile lexicalEmbedder
-    |> RAGServerApp.withStorage (InMemoryBlobStorage() :> BlobStorage.IBlobStorage)
+    RagOptions.create stubFactory stubProfile lexicalEmbedder
 
 let private teamScope = Team "t1"
 
@@ -381,8 +388,8 @@ let private retrieveIds (pipeline: IRetrievalPipeline) = async {
 }
 
 /// Run the MinScore-space validator exactly as `composeRAG` registered it.
-let private scoreSpaceVerdict (app: RAGServerApp) : ConfigValidation.ValidationResult =
-    let composed = composeRAG app
+let private scoreSpaceVerdict (app: RagOptions) : ConfigValidation.ValidationResult =
+    let composed = composed app
 
     let v =
         composed.ConfigValidators |> List.find (fun v -> v.Name = "rag-min-score-space")
@@ -455,7 +462,7 @@ let tests =
 
             test "withSparseIndex registers the supplied index verbatim" {
                 let supplied = externalIndex ()
-                let app = newApp () |> RAGServerApp.withSparseIndex supplied
+                let app = newApp () |> RagOptions.withSparseIndex supplied
 
                 match resolvedSparse app with
                 | Some index -> Expect.isTrue (obj.ReferenceEquals(index, supplied)) "the composed instance"
@@ -468,10 +475,10 @@ let tests =
 
                 let app =
                     newApp ()
-                    |> RAGServerApp.withSparseAnalyzer analyzer
-                    |> RAGServerApp.withSparseIndex (externalIndex ())
+                    |> RagOptions.withSparseAnalyzer analyzer
+                    |> RagOptions.withSparseIndex (externalIndex ())
 
-                let ex = Expect.throwsC (fun () -> composeRAG app |> ignore) id
+                let ex = Expect.throwsC (fun () -> composed app |> ignore) id
                 Expect.stringContains ex.Message "custom-analyzer-7" "the refusal names the analyzer"
                 Expect.stringContains ex.Message "withAnalyzedSparseIndex" "and the builder that serves the case"
             }
@@ -485,12 +492,12 @@ let tests =
 
                 let app =
                     newApp ()
-                    |> RAGServerApp.withSparseAnalyzer analyzer
-                    |> RAGServerApp.withAnalyzedSparseIndex (fun a ->
+                    |> RagOptions.withSparseAnalyzer analyzer
+                    |> RagOptions.withAnalyzedSparseIndex (fun a ->
                         seen <- seen @ [ a.Id ]
                         supplied)
 
-                composeRAG app |> ignore
+                composed app |> ignore
                 Expect.equal seen [ "custom-analyzer-9" ] "built once, at composition, for the composed analyzer"
 
                 match resolvedSparse app with
@@ -503,31 +510,31 @@ let tests =
 
                 let app =
                     newApp ()
-                    |> RAGServerApp.withAnalyzedSparseIndex (fun a ->
+                    |> RagOptions.withAnalyzedSparseIndex (fun a ->
                         seen <- a.Id
                         externalIndex ())
 
-                composeRAG app |> ignore
+                composed app |> ignore
                 Expect.equal seen ToolUp.RAG.SparseAnalysis.IdentityAnalyzerId "the identity analyzer"
             }
 
             test "a refusal inside the builder surfaces at composition" {
                 let app =
                     newApp ()
-                    |> RAGServerApp.withAnalyzedSparseIndex (fun a ->
+                    |> RagOptions.withAnalyzedSparseIndex (fun a ->
                         invalidOp (sprintf "no configuration for analyzer '%s'" a.Id))
 
-                let ex = Expect.throwsC (fun () -> composeRAG app |> ignore) id
+                let ex = Expect.throwsC (fun () -> composed app |> ignore) id
                 Expect.stringContains ex.Message "identity" "the builder's refusal, naming the analyzer"
             }
 
             test "withoutSparseIndex registers no keyword index" {
-                let app = newApp () |> RAGServerApp.withoutSparseIndex
+                let app = newApp () |> RagOptions.withoutSparseIndex
                 Expect.isNone (resolvedSparse app) "dense only: nothing registered"
             }
 
             testAsync "withoutSparseIndex retrieves the dense list, unfused" {
-                let app = newApp () |> RAGServerApp.withoutSparseIndex
+                let app = newApp () |> RagOptions.withoutSparseIndex
                 use sp = provider app
                 let store = sp.GetRequiredService<IVectorStore>()
                 let pipeline = sp.GetRequiredService<IRetrievalPipeline>()
@@ -561,7 +568,7 @@ let tests =
 
         testList "InProcessIndexReplicaValidator" [
             test "fires at two replicas over the in-process stores, naming both and their replacements" {
-                let message = newApp () |> withReplicas 2 |> replicaVerdict |> warningText
+                let message = newApp () |> replicaVerdict 2 |> warningText
                 Expect.stringContains message "InMemoryVectorStore" "names the vector store"
                 Expect.stringContains message "ToolUp.VectorStores.Pgvector" "and the companion replacing it"
                 Expect.stringContains message "InMemoryBM25Index" "names the keyword index"
@@ -570,7 +577,7 @@ let tests =
 
             test "is silent at one replica" {
                 Expect.equal
-                    (newApp () |> withReplicas 1 |> replicaVerdict)
+                    (newApp () |> replicaVerdict 1)
                     ConfigValidation.ValidationResult.Ok
                     "one replica has nothing to diverge"
             }
@@ -578,10 +585,9 @@ let tests =
             test "is lifted when both composed stores span replicas" {
                 let verdict =
                     newApp ()
-                    |> RAGServerApp.withVectorStore (externalVectorStore ())
-                    |> RAGServerApp.withSparseIndex (externalIndex ())
-                    |> withReplicas 3
-                    |> replicaVerdict
+                    |> RagOptions.withVectorStore (externalVectorStore ())
+                    |> RagOptions.withSparseIndex (externalIndex ())
+                    |> replicaVerdict 3
 
                 Expect.equal verdict ConfigValidation.ValidationResult.Ok "the premise no longer holds"
             }
@@ -589,9 +595,8 @@ let tests =
             test "names only the store that is still in-process" {
                 let message =
                     newApp ()
-                    |> RAGServerApp.withVectorStore (externalVectorStore ())
-                    |> withReplicas 2
-                    |> replicaVerdict
+                    |> RagOptions.withVectorStore (externalVectorStore ())
+                    |> replicaVerdict 2
                     |> warningText
 
                 Expect.isFalse (message.Contains "InMemoryVectorStore") "the external vector store is not named"
@@ -604,10 +609,9 @@ let tests =
 
                 let message =
                     newApp ()
-                    |> RAGServerApp.withVectorStore (externalVectorStore ())
-                    |> RAGServerApp.withSparseIndex handComposed
-                    |> withReplicas 2
-                    |> replicaVerdict
+                    |> RagOptions.withVectorStore (externalVectorStore ())
+                    |> RagOptions.withSparseIndex handComposed
+                    |> replicaVerdict 2
                     |> warningText
 
                 Expect.stringContains message "InMemoryBM25Index" "still per-process"
@@ -615,11 +619,7 @@ let tests =
 
             test "dense-only at two replicas warns about the vector store alone" {
                 let message =
-                    newApp ()
-                    |> RAGServerApp.withoutSparseIndex
-                    |> withReplicas 2
-                    |> replicaVerdict
-                    |> warningText
+                    newApp () |> RagOptions.withoutSparseIndex |> replicaVerdict 2 |> warningText
 
                 Expect.stringContains message "InMemoryVectorStore" "the in-process vector store"
                 Expect.isFalse (message.Contains "InMemoryBM25Index") "no keyword index is composed"
@@ -632,10 +632,9 @@ let tests =
 
                 let message =
                     newApp ()
-                    |> RAGServerApp.withVectorStore (TracingVectorStore(hnsw) :> IVectorStore)
-                    |> RAGServerApp.withSparseIndex (externalIndex ())
-                    |> withReplicas 2
-                    |> replicaVerdict
+                    |> RagOptions.withVectorStore (TracingVectorStore(hnsw) :> IVectorStore)
+                    |> RagOptions.withSparseIndex (externalIndex ())
+                    |> replicaVerdict 2
                     |> warningText
 
                 Expect.stringContains
@@ -653,10 +652,9 @@ let tests =
 
                 let verdict =
                     newApp ()
-                    |> RAGServerApp.withVectorStore impostor
-                    |> RAGServerApp.withSparseIndex (externalIndex ())
-                    |> withReplicas 2
-                    |> replicaVerdict
+                    |> RagOptions.withVectorStore impostor
+                    |> RagOptions.withSparseIndex (externalIndex ())
+                    |> replicaVerdict 2
 
                 Expect.equal verdict ConfigValidation.ValidationResult.Ok "no in-process index is composed"
             }
@@ -710,10 +708,9 @@ let tests =
 
                 let message =
                     newApp ()
-                    |> RAGServerApp.withVectorStore (externalVectorStore ())
-                    |> RAGServerApp.withSparseIndex wrapped
-                    |> withReplicas 2
-                    |> replicaVerdict
+                    |> RagOptions.withVectorStore (externalVectorStore ())
+                    |> RagOptions.withSparseIndex wrapped
+                    |> replicaVerdict 2
                     |> warningText
 
                 Expect.stringContains message "InMemoryBM25Index" "the keyword half of the warning fires"
@@ -903,14 +900,14 @@ let tests =
 
             test "the validator is silent for the default composition with a reachable threshold" {
                 Expect.equal
-                    (lexicalApp () |> RAGServerApp.withMinScore (Some 0.5) |> scoreSpaceVerdict)
+                    (lexicalApp () |> RagOptions.withMinScore (Some 0.5) |> scoreSpaceVerdict)
                     ConfigValidation.ValidationResult.Ok
                     "fused scores reach 1.0; 0.5 can be met"
             }
 
             test "the validator is silent with no threshold, whatever is composed" {
                 Expect.equal
-                    (lexicalApp () |> RAGServerApp.withReranker stubReranker |> scoreSpaceVerdict)
+                    (lexicalApp () |> RagOptions.withReranker stubReranker |> scoreSpaceVerdict)
                     ConfigValidation.ValidationResult.Ok
                     "no gate, nothing to reach"
             }
@@ -918,8 +915,8 @@ let tests =
             test "the validator warns when a reranker owns the scale the threshold reads" {
                 let message =
                     lexicalApp ()
-                    |> RAGServerApp.withReranker stubReranker
-                    |> RAGServerApp.withMinScore (Some 0.5)
+                    |> RagOptions.withReranker stubReranker
+                    |> RagOptions.withMinScore (Some 0.5)
                     |> scoreSpaceVerdict
                     |> warningText
 
@@ -930,8 +927,8 @@ let tests =
             test "the validator warns when a supplied pipeline owns retrieval" {
                 let message =
                     lexicalApp ()
-                    |> RAGServerApp.withRetrievalPipeline (externalPipeline ())
-                    |> RAGServerApp.withMinScore (Some 0.5)
+                    |> RagOptions.withRetrievalPipeline (externalPipeline ())
+                    |> RagOptions.withMinScore (Some 0.5)
                     |> scoreSpaceVerdict
                     |> warningText
 

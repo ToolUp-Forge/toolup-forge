@@ -601,8 +601,8 @@ let tests =
 
             /// Compose the app, apply the RAG service-config to a fresh
             /// container, and list the resolved hosted-service type names.
-            let hostedServiceNames (app: RAGServerApp) : string list =
-                let composed = composeRAG app
+            let hostedServiceNames (app: RagOptions) : string list =
+                let composed = ServerApp.empty |> withRAG app
                 let sc = ServiceCollection() :> IServiceCollection
 
                 let sc =
@@ -618,8 +618,8 @@ let tests =
 
             test "withRetrievalPipeline + no VectorisationHandler suppresses the ingestion services (63.A)" {
                 let app =
-                    RAGServerApp.create stubFactory stubProfile embedder
-                    |> RAGServerApp.withRetrievalPipeline emptyStaticPipeline
+                    RagOptions.create stubFactory stubProfile embedder
+                    |> RagOptions.withRetrievalPipeline emptyStaticPipeline
 
                 let names = hostedServiceNames app
 
@@ -633,7 +633,7 @@ let tests =
             }
 
             test "the default pipeline (no override) registers the ingestion service" {
-                let app = RAGServerApp.create stubFactory stubProfile embedder
+                let app = RagOptions.create stubFactory stubProfile embedder
                 let names = hostedServiceNames app
 
                 Expect.isTrue

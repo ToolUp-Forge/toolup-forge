@@ -10,11 +10,11 @@ Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1312/2422
 ToolUp.AI.Client 135/671
 ToolUp.AI.Core 452/924
-ToolUp.AI.McpHost 144/247
+ToolUp.AI.McpHost 142/245
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 4/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 928/1508
+ToolUp.AI.Server 914/1481
 ToolUp.AI.UiAwareness.Client 6/8
 ToolUp.AI.UiAwareness.Core 6/7
 ToolUp.AI.UiAwareness.Server 6/9
@@ -115,7 +115,7 @@ ToolUp.IngestionQueues.Redis 27/39
 ToolUp.JobSchedulers.Quartz 26/35
 ToolUp.KnowledgeBase.Client 52/395
 ToolUp.KnowledgeBase.Core 192/454
-ToolUp.KnowledgeBase.Server 201/337
+ToolUp.KnowledgeBase.Server 202/337
 ToolUp.Media.CloudTranscode 2/3
 ToolUp.Media.FFmpeg 4/5
 ToolUp.MediaLibrary 276/665
@@ -136,7 +136,7 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 334/606
+ToolUp.Platform.Build 335/609
 ToolUp.Platform.Client 2947/7264
 ToolUp.Platform.Core 7376/15580
 ToolUp.Platform.Server 7445/13560
@@ -145,7 +145,7 @@ ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 72/184
 ToolUp.PublicRendering 656/1148
 ToolUp.RAG.Core 82/133
-ToolUp.RAG.Server 294/515
+ToolUp.RAG.Server 281/488
 ToolUp.RAG.StaticCorpus.Build 23/40
 ToolUp.RAG.StaticCorpus.Core 5/19
 ToolUp.RAG.StaticCorpus.Server 7/9

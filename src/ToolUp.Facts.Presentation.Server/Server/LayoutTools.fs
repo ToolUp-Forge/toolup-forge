@@ -2679,6 +2679,6 @@ module LayoutTools =
             })
         )
 
-    /// All nine tools, as `AIServerApp.withAIAnsweringTools` takes them.
+    /// All nine tools, as `AIOptions.withAIAnsweringTools` takes them.
     let tools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list =
         all |> List.map (fun tool -> definition tool, answer tool)

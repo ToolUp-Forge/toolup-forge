@@ -366,7 +366,7 @@ LIMIT @top_k;"""
 
 /// `ISparseIndex` over a PostgreSQL table with a `tsvector` column and a
 /// GIN index. Construct through `create` / `createWithDataSource` (or
-/// `factory` for `RAGServerApp.withAnalyzedSparseIndex`), which validate the
+/// `factory` for `RagOptions.withAnalyzedSparseIndex`), which validate the
 /// options, resolve the text-search configuration and probe the database
 /// before returning.
 type PostgresFullTextIndex
@@ -747,7 +747,7 @@ let create
         dataSource.Dispose()
         reraise ()
 
-/// The composition-time factory for `RAGServerApp.withAnalyzedSparseIndex`:
+/// The composition-time factory for `RagOptions.withAnalyzedSparseIndex`:
 /// the composition passes the analyzer it composed (the identity analyzer
 /// when none), and the index is built for it — or refused, naming it.
 let factory

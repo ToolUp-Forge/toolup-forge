@@ -112,6 +112,8 @@ ToolUp.AI.McpHost.McpAuthorization.servicePrincipal(Microsoft.AspNetCore.Http.Ht
 ToolUp.AI.McpHost.McpAuthorization.toolView(ToolUp.AI.AIToolRegistry+RegisteredTool) : ToolUp.AI.McpHost.McpProtocol+McpToolView
 ToolUp.AI.McpHost.McpAuthorization.visibleTools(ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.AI.McpHost.AgentPrincipal) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.McpHost.McpCompose (class)
+ToolUp.AI.McpHost.McpCompose.composeMcp(ToolUp.AI.McpHost.McpCompose+McpOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.McpHost.McpCompose.withMcp(ToolUp.AI.McpHost.McpCompose+McpOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.McpHost.McpCompose+McpHostMode (class)
 ToolUp.AI.McpHost.McpCompose+McpHostMode.EnabledMcpHost : ToolUp.AI.McpHost.McpCompose+McpHostMode { get }
 ToolUp.AI.McpHost.McpCompose+McpHostMode.IsEnabledMcpHost : System.Boolean { get }
@@ -121,25 +123,21 @@ ToolUp.AI.McpHost.McpCompose+McpHostMode.Tag : System.Int32 { get }
 ToolUp.AI.McpHost.McpCompose+McpHostMode+Tags (class)
 ToolUp.AI.McpHost.McpCompose+McpHostMode+Tags.EnabledMcpHost : System.Int32 (literal)
 ToolUp.AI.McpHost.McpCompose+McpHostMode+Tags.NoMcpHost : System.Int32 (literal)
-ToolUp.AI.McpHost.McpCompose+McpServerApp (class)
-ToolUp.AI.McpHost.McpCompose+McpServerApp..ctor(ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.McpHost.McpCompose+McpHostMode, ToolUp.AI.McpHost.McpHost+McpHostOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.IAgentToolGrantStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBudgetLedger])
-ToolUp.AI.McpHost.McpCompose+McpServerApp.Base : ToolUp.AI.AICompose+AIServerApp { get }
-ToolUp.AI.McpHost.McpCompose+McpServerApp.BudgetLedger : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBudgetLedger] { get }
-ToolUp.AI.McpHost.McpCompose+McpServerApp.GrantStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.IAgentToolGrantStore] { get }
-ToolUp.AI.McpHost.McpCompose+McpServerApp.Mode : ToolUp.AI.McpHost.McpCompose+McpHostMode { get }
-ToolUp.AI.McpHost.McpCompose+McpServerApp.Options : ToolUp.AI.McpHost.McpHost+McpHostOptions { get }
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule (class)
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.compose(ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.Platform.ServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.create(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.over(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.AICompose+AIServerApp], ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.run(ToolUp.AI.McpHost.McpCompose+McpServerApp) : System.Int32
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.withAgentPolicy(System.String, ToolUp.AI.McpHost.AgentPolicy, ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.withBudgetLedger(ToolUp.Platform.IBudgetLedger, ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.withDefaultPolicy(ToolUp.AI.McpHost.AgentPolicy, ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.withGrantStore(ToolUp.AI.McpHost.IAgentToolGrantStore, ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.withMcpHost(ToolUp.AI.McpHost.McpCompose+McpHostMode, ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.withRoute(System.String, ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
-ToolUp.AI.McpHost.McpCompose+McpServerAppModule.withServerVersion(System.String, ToolUp.AI.McpHost.McpCompose+McpServerApp) : ToolUp.AI.McpHost.McpCompose+McpServerApp
+ToolUp.AI.McpHost.McpCompose+McpOptions (class)
+ToolUp.AI.McpHost.McpCompose+McpOptions..ctor(ToolUp.AI.McpHost.McpCompose+McpHostMode, ToolUp.AI.McpHost.McpHost+McpHostOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.IAgentToolGrantStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBudgetLedger])
+ToolUp.AI.McpHost.McpCompose+McpOptions.BudgetLedger : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBudgetLedger] { get }
+ToolUp.AI.McpHost.McpCompose+McpOptions.GrantStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.IAgentToolGrantStore] { get }
+ToolUp.AI.McpHost.McpCompose+McpOptions.Mode : ToolUp.AI.McpHost.McpCompose+McpHostMode { get }
+ToolUp.AI.McpHost.McpCompose+McpOptions.Options : ToolUp.AI.McpHost.McpHost+McpHostOptions { get }
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule (class)
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.create() : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withAgentPolicy(System.String, ToolUp.AI.McpHost.AgentPolicy, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withBudgetLedger(ToolUp.Platform.IBudgetLedger, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withDefaultPolicy(ToolUp.AI.McpHost.AgentPolicy, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withGrantStore(ToolUp.AI.McpHost.IAgentToolGrantStore, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withMcpHost(ToolUp.AI.McpHost.McpCompose+McpHostMode, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withRoute(System.String, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withServerVersion(System.String, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
 ToolUp.AI.McpHost.McpError (class)
 ToolUp.AI.McpHost.McpError.IsBudgetExhausted : System.Boolean { get }
 ToolUp.AI.McpHost.McpError.IsInvalidParams : System.Boolean { get }

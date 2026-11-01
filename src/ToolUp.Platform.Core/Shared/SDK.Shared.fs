@@ -871,7 +871,7 @@ type ServerConfig = {
     /// to accept best-effort per-replica hit-rate and silence the
     /// warning. Phase 633 — the better answer is usually to remove the
     /// divergence instead: compose a cross-replica cache via
-    /// `RAGServerApp.withEmbeddingCache` (the shipped backing is the
+    /// `RagOptions.withEmbeddingCache` (the shipped backing is the
     /// `ToolUp.EmbeddingCaches.Redis` companion), which LIFTS the warning
     /// rather than suppressing it, and leaves this flag `false`.
     AcceptSharedEmbeddingCacheInTeamMode: bool

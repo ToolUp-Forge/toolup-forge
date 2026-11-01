@@ -213,8 +213,8 @@ module CompositionPlan =
 /// `HeaderAuthProviderModeValidator` refuses startup in any
 /// auth-requiring Mode, and `SkipPreflight` cannot bypass it).
 ///
-/// **Advanced.** Apps should use the `ServerApp` / `AIServerApp` /
-/// `RAGServerApp` record-based fluent API instead — `compose` is the
+/// **Advanced.** Apps should use the `ServerApp` record-based fluent API (with
+/// `AICompose.withAI` / `RAGCompose.withRAG` for the companions) instead — `compose` is the
 /// low-level entry point and its positional signature changes whenever
 /// new SDK features land. Hidden from IntelliSense via
 /// `[<EditorBrowsable>]`.

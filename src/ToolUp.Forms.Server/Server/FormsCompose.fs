@@ -885,8 +885,7 @@ module FormsServerApp =
 ///         |> FormsServerApp.withFormSchema mySchema
 ///         |> FormsServerApp.withWorkflow myWorkflow
 ///         |> FormsServerApp.withAction "stampJob" stampJobAction)
-///     |> AICompose.withAI factory providerProfile (fun ai ->
-///         ai |> AIServerApp.withAIConfig assistant)
+///     |> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig assistant)
 ///     |> ServerApp.run
 /// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
 let withForms (configure: FormsServerApp -> FormsServerApp) (app: ServerApp) : ServerApp =

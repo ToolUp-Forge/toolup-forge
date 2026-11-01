@@ -296,11 +296,11 @@ ToolUp.Facts.Presentation.PipelineAnsweringTool.rerunWith(ToolUp.Facts.FactBrows
 ToolUp.Facts.Presentation.PipelineAnsweringTool.resultOf(ToolUp.Facts.PipelineToolResult) : ToolUp.Facts.Presentation.PipelineBlockResult
 ToolUp.Facts.Presentation.PipelineAnsweringTool.tool : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.Facts.Presentation.PresentationCompose (class)
-ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
-ToolUp.Facts.Presentation.PresentationCompose.withLayoutTools(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withLayoutTools(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
 ToolUp.Facts.Presentation.PresentationCompose.withPageRequests(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
-ToolUp.Facts.Presentation.PresentationCompose.withPipelineTool(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
-ToolUp.Facts.Presentation.PresentationCompose.withRenderTools(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.Facts.Presentation.PresentationCompose.withPipelineTool(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withRenderTools(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
 ToolUp.Facts.Presentation.RenderTool (class)
 ToolUp.Facts.Presentation.RenderTool.Chart : ToolUp.Facts.Presentation.RenderTool { get }
 ToolUp.Facts.Presentation.RenderTool.IsChart : System.Boolean { get }

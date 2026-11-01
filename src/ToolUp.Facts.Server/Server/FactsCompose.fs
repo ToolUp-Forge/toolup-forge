@@ -1592,14 +1592,14 @@ module FactsCompose =
     /// and `withFactTableWriter` over it. Because it sets the knob itself,
     /// it does not depend on a `withConfig` having run first.
     ///
-    /// For a RAG app, hand it to `RAGServerApp.withFacts`, which applies it
+    /// For a RAG app, hand it to `RagOptions.withFacts`, which applies it
     /// when the app is composed — after every `withConfig`, wherever the
     /// call sits in the pipeline:
     ///
     /// ```fsharp
-    /// RAGServerApp.create factory providerProfile embedder
-    /// |> RAGServerApp.withFacts FactsCompose.withFactTier
-    /// |> RAGServerApp.withConfig config
+    /// RagOptions.create factory providerProfile embedder
+    /// |> RagOptions.withFacts FactsCompose.withFactTier
+    /// |> ServerApp.withConfig config
     /// ```
     ///
     /// What it arms: the fact tools (`query_facts` and its siblings, once

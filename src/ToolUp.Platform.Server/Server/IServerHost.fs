@@ -15,8 +15,7 @@ open Microsoft.Extensions.Hosting
 // future Lambda / GCF) drive the same configured pipeline through this
 // seam:
 //
-//   - `ServerApp.run` (and `AIServerApp.run`, `RAGServerApp.run`,
-//     companion `run` helpers) call `RunBlocking()` — today's Kestrel
+//   - `ServerApp.run` (and the companion `run` helpers that remain) call `RunBlocking()` — today's Kestrel
 //     `app.Run()` behaviour, returns the process exit code.
 //
 //   - Serverless host adapters resolve the `IServerHost` from the
@@ -55,8 +54,8 @@ type IServerHost =
     /// `IHostApplicationLifetime.StopApplication`). Returns the
     /// process exit code — today always `0` because process-fatal
     /// exceptions escape earlier and the runtime sets a non-zero
-    /// code on its own. Called by `ServerApp.run` / `AIServerApp.run`
-    /// / `RAGServerApp.run` and every per-companion wrapper. The
+    /// code on its own. Called by `ServerApp.run` and every per-companion
+    /// `run` that remains. The
     /// Kestrel default; serverless host adapters do NOT call this.
     abstract RunBlocking: unit -> int
 

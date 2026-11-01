@@ -427,7 +427,7 @@ let providerProfileApi (providerProfile: IProviderProfile) (ctx: HttpContext) : 
 /// Called once, from `compose`, on the SAME gate that registers the
 /// `IProviderProfile` DI singleton — which is why composing twice (the
 /// AI path mirrors the store onto the base app, and
-/// `AIServerApp.withProviderProfile` may override it) still mounts one.
+/// `AIOptions.withProviderProfile` may override it) still mounts one.
 let routeHandlers (store: IProviderProfile option) : HttpHandler list =
     match store with
     | None -> []

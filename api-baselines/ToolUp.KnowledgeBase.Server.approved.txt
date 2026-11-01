@@ -335,7 +335,7 @@ KnowledgeBase.ServerUploadPolicy.withKnowledgeUsageEndpoint(ToolUp.Platform.Serv
 KnowledgeBase.ServerUploadPolicy.withObjectStoreRetention(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 KnowledgeBase.ServerUploadPolicy.withUploadPolicy(SharedTypes+KnowledgeUploadPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.KnowledgeBase.Server.AICompose (class)
-ToolUp.KnowledgeBase.Server.AICompose.register(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.KnowledgeBase.Server.AICompose.register(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle (class)
 ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle+KnowledgeBaseLifecycle (class)

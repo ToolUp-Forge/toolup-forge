@@ -148,7 +148,7 @@ module StaticCorpusRetrievalPipeline =
 
     /// Build a pipeline over an already-deserialised corpus + the query
     /// embedder (the same `IEmbeddingProvider` the deployment composes via
-    /// `RAGServerApp.create`).
+    /// `RagOptions.create`).
     let create (embedder: IEmbeddingProvider) (corpus: StaticCorpus) : IRetrievalPipeline =
         StaticPipeline(corpus, embedder) :> IRetrievalPipeline
 

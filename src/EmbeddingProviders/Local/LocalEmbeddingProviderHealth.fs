@@ -67,7 +67,7 @@ type LocalEmbeddingProviderHealthCheck(productionShaped: bool) =
             if productionShaped then
                 return
                     Degraded(
-                        "LocalEmbeddingProvider is serving a production-shaped deployment. The local TF-IDF embedder is dev-only and process-stateful: its IDF dictionary evolves with the corpus in this process, so the same document re-ingested later embeds differently and a second replica embeds it differently again — retrieval quality drifts over time and diverges across instances. The provider is reachable and answering; this is a suitability signal, not an outage (Degraded does not trip /ready). Wire a stateless embedder (OpenAI / Cohere / Anthropic embeddings) into RAGServerApp.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true (TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off."
+                        "LocalEmbeddingProvider is serving a production-shaped deployment. The local TF-IDF embedder is dev-only and process-stateful: its IDF dictionary evolves with the corpus in this process, so the same document re-ingested later embeds differently and a second replica embeds it differently again — retrieval quality drifts over time and diverges across instances. The provider is reachable and answering; this is a suitability signal, not an outage (Degraded does not trip /ready). Wire a stateless embedder (OpenAI / Cohere / Anthropic embeddings) into RagOptions.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true (TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off."
                     )
             else
                 return Healthy

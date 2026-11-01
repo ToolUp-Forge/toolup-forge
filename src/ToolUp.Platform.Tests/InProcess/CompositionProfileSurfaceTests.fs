@@ -1011,7 +1011,7 @@ let tests =
                 "a layer reducing to no type",
                 surfaceFindings
                     (withBinding (fun t ->
-                        t.Replace("ToolUp.RAG.RAGCompose.RAGServerApp", "ToolUp.RAG.RAGCompose.Planted")))
+                        t.Replace("ToolUp.RAG.RAGCompose.RagOptions", "ToolUp.RAG.RAGCompose.Planted")))
                     surface
                 // the document drops a registered token.
                 "a document missing a token",

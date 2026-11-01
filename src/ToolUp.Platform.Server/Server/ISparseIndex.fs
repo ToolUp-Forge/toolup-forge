@@ -7,7 +7,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// `src/SparseIndices/` (e.g. `ToolUp.SparseIndices.Postgres`, which holds
 /// the index in the database so it is the same on every replica); the
 /// in-process default is `ToolUp.RAG.InMemoryBM25Index`. A composition picks
-/// one with `RAGServerApp.withSparseIndex` / `withAnalyzedSparseIndex`, or
+/// one with `RagOptions.withSparseIndex` / `withAnalyzedSparseIndex`, or
 /// none with `withoutSparseIndex` (Phase 893).
 ///
 /// `VectorMatch.Score` is on the implementation's own scale — BM25 for the

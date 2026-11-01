@@ -528,7 +528,7 @@ let capabilityProbeTests =
         }
 
         test "the family composes AS an IEmbeddingProvider, reporting the Deployment scope's identity" {
-            // It has to be an `IEmbeddingProvider` at all — `RAGServerApp.create`
+            // It has to be an `IEmbeddingProvider` at all — `RagOptions.create`
             // takes one — and any caller that does not probe (a health check,
             // a diagnostic) must get a working embedder rather than a throw.
             let family = LocalEmbeddingProvider.createScoped ()

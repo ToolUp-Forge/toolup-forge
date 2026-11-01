@@ -20,7 +20,7 @@ module PageAmbient =
         failwith "ambient"
 
     /// The team app's AI provider wiring — what a RAG deployment's
-    /// composition root already builds (`RAGCompose.withRAG`'s inputs).
+    /// composition root already builds (`RagOptions.create`'s inputs).
     let factory: ToolUp.AI.IAIProviderFactory = failwith "ambient"
 
     let providerProfile: ToolUp.Platform.Providers.IProviderProfile = failwith "ambient"

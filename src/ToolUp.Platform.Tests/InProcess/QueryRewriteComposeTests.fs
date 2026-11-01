@@ -25,7 +25,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // looks for a registered `IQueryRewriter` and threads it into the pipeline
 // constructor. Until this file, that step was covered only by "it compiles".
 //
-// The probe is deliberately a probe rather than a `RAGServerApp` field (the
+// The probe is deliberately a probe rather than a `RagOptions` field (the
 // opt-in already has a home in DI, so the compose surface grows no knob),
 // which is precisely why it needs a test of its own: there is no builder
 // call whose absence would be noticed. Dropped, mistyped, or ordered after

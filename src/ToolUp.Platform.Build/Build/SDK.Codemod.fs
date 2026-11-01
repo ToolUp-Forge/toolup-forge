@@ -45,6 +45,9 @@ type CodemodMigration =
     /// `Hosting.register`, and the in-process scheduler and the webhook
     /// dispatcher are each built by one factory over an options record.
     | BackgroundPlacement
+    /// A companion root is an options record composed onto a `ServerApp`
+    /// with one `withX options` entry point, not a record wrapping it.
+    | CompanionOptions
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -66,6 +69,7 @@ module CodemodMigration =
         | CodemodMigration.OneScopeForm -> "docs/migrations/1157-one-scope-form.md"
         | CodemodMigration.BackgroundPlacement ->
             "docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md"
+        | CodemodMigration.CompanionOptions -> "docs/migrations/876-composition-contributions.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -82,6 +86,7 @@ module CodemodMigration =
         | CodemodMigration.RemotingLeftovers -> "Phase 1053"
         | CodemodMigration.OneScopeForm -> "Phase 1157"
         | CodemodMigration.BackgroundPlacement -> "Phase 1067"
+        | CodemodMigration.CompanionOptions -> "Phase 876"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -971,6 +976,20 @@ module Codemod =
             CodemodFileClass.Source
             @"\bwithDeclaredDataSources\s+(?!config\b)"
             "`DeclaredDelivery.withDeclaredDataSources` takes the deployment's `ServerConfig` first (it registers through `Hosting.register`): `withDeclaredDataSources config declared watchPoll services`"
+        // The AI companion root no longer wraps the deployment.
+        review
+            "876-ai-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bAIServerApp\b|\bwithAI\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_(]"
+            "`AIServerApp` is gone: the AI tier is a companion composed onto the `ServerApp`. Build its options with `AIOptions.create factory providerProfile` and the AI-only setters (`AIOptions.withAIConfig`, `withModuleAIContexts`, `withToolEffects`, `withReflectionTools`, `withAIAnsweringTools`, `withPlatformProvider`, …), and compose it with `app |> AICompose.withAI options |> ServerApp.run`. An `AIServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment, on either side of `withAI`; `withAnswerVerifier`, `withNumericFidelityGate`, `withAnswerProvenanceAnchors` and `withFastPathTriage` are `AICompose.withX` over the `ServerApp`; `AIServerApp.run` is `ServerApp.run`; `createFrom` and the old `withAI factory providerProfile configure` are `withAI (AIOptions.create factory providerProfile |> …)`; a `.Base` read is the `ServerApp` itself"
+        // The RAG companion root no longer wraps the AI root.
+        review
+            "876-rag-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bRAGServerApp\b|\bwithRAG\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_(]"
+            "`RAGServerApp` is gone: RAG is a companion composed onto the `ServerApp`. Build its options with `RagOptions.create factory providerProfile embedder` and the RAG setters (`RagOptions.withTopK`, `withVectorStore`, `withFacts`, …; the AI tier's options through `RagOptions.withAIOptions`, `withAIConfig`, `withModuleAIContexts`), and compose it with `app |> RAGCompose.withRAG options |> ServerApp.run`, which composes the AI tier too — do not also call `AICompose.withAI`. A `RAGServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment, on either side of `withRAG`; `mapAI f` that edited the AI layer's `Base` is a `ServerApp` builder (a companion's `register` now takes the `ServerApp`), and one that edited AI settings is `RagOptions.withAIOptions`; `RAGServerApp.run` is `ServerApp.run`; `createFrom` and the old `withRAG factory providerProfile embedder configure` are `withRAG (RagOptions.create factory providerProfile embedder |> …)`"
     ]
 
 

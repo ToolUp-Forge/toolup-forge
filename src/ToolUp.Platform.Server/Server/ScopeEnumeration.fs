@@ -14,7 +14,7 @@ open DataManagementTypes
 // Several SDK sweeps need the same answer and none of them can compute
 // it: *what storage scopes does this deployment hold?* `IBlobStorage`
 // has no cross-container enumeration, so the restart-recovery sweeps
-// (`RAGServerApp.withIngestionRecoverySweep`, KB's
+// (`RagOptions.withIngestionRecoverySweep`, KB's
 // `recoverStuckDocumentsAtStartup`) and the retention sweep each take a
 // hand-written container list from the consumer.
 //

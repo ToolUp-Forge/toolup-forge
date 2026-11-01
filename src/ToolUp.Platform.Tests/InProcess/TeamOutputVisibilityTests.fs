@@ -915,7 +915,7 @@ let private recordTests =
             let! world = newWorld ()
 
             // The assistant's conversation declaration (the unrestricted
-            // default), as `AIServerApp` registers it.
+            // default), as the AI tier registers it.
             let validate (output: TeamOutputVisibilitySettings) =
                 let services = ServiceCollection()
 
@@ -1054,7 +1054,7 @@ let private legacyBlobName = "team-policies/ai-conversation-visibility.json"
 /// A composition with the fact store's gate and team output visibility
 /// declared at `defaultLevel`. `conversation` stands in for the AI
 /// assistant: `Some` registers its conversation declaration the way
-/// `AIServerApp` does, `None` is a facts-only deployment. `conversationFirst`
+/// the AI tier does, `None` is a facts-only deployment. `conversationFirst`
 /// picks which of the two is registered first.
 let private composeWith
     (world: World)

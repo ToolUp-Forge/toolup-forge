@@ -2009,7 +2009,9 @@ let private coHostApp (port: int) (contentRoot: string) (publicDir: string) (ext
     |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
     |> ServerApp.withLogger coHostLogger
     |> ServerApp.withAuth auth
-    |> ToolUp.RAG.RAGCompose.withRAG ragStubFactory ragStubProfile ragStubEmbedder id
+    |> ToolUp.RAG.RAGCompose.withRAG (
+        ToolUp.RAG.RAGCompose.RagOptions.create ragStubFactory ragStubProfile ragStubEmbedder
+    )
     |> ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn (new Net.Http.HttpClient()) signIn
     |> PublicRenderingCompose.withPublicRendering (
         PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
@@ -2156,7 +2158,9 @@ let private ragCoHostTests =
                 |> PublicRenderingCompose.withPublicRendering (
                     PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
                 )
-                |> ToolUp.RAG.RAGCompose.withRAG ragStubFactory ragStubProfile ragStubEmbedder id
+                |> ToolUp.RAG.RAGCompose.withRAG (
+                    ToolUp.RAG.RAGCompose.RagOptions.create ragStubFactory ragStubProfile ragStubEmbedder
+                )
 
             Expect.isTrue
                 (reversed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")

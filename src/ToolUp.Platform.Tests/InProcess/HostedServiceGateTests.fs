@@ -98,29 +98,24 @@ let composedWith (durableQueue: bool) (config: ServerConfig) : IServiceCollectio
     let services = ServiceCollection() :> IServiceCollection
 
     let rag =
-        ToolUp.RAG.RAGCompose.RAGServerApp.create stubAiFactory stubProviderProfile embedder
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withConfig config
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withStorage storage
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionRecoverySweep [ "_platform" ]
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withVacuumSchedule
+        ToolUp.RAG.RAGCompose.RagOptions.create stubAiFactory stubProviderProfile embedder
+        |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionRecoverySweep [ "_platform" ]
+        |> ToolUp.RAG.RAGCompose.RagOptions.withVacuumSchedule
 
     let rag =
         if durableQueue then
-            ToolUp.RAG.RAGCompose.RAGServerApp.withDurableIngestionQueue sharedQueue rag
+            ToolUp.RAG.RAGCompose.RagOptions.withDurableIngestionQueue sharedQueue rag
         else
             rag
 
     let app =
-        rag
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.mapAI (fun ai -> {
-            ai with
-                Base =
-                    ai.Base
-                    |> ServerApp.withDataObjectOrphanSweep (
-                        DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.forScopes [ "_platform" ]
-                    )
-        })
-        |> ToolUp.RAG.RAGCompose.composeRAG
+        ServerApp.empty
+        |> ServerApp.withConfig config
+        |> ServerApp.withStorage storage
+        |> ToolUp.RAG.RAGCompose.withRAG rag
+        |> ServerApp.withDataObjectOrphanSweep (
+            DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.forScopes [ "_platform" ]
+        )
 
     let services =
         match ServerApp.serviceConfig app with

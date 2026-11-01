@@ -946,12 +946,12 @@ type ServerApp = {
     /// provider-profile store. The deferred 42.B composition seam: the
     /// AI cutover (Phase 43.A) is its first real caller. When `Some`,
     /// `run` registers it as the `IProviderProfile` DI singleton so any
-    /// BYOK consumer (the AI assistant via `AIServerApp`, a rental
+    /// BYOK consumer (the AI assistant via `AIOptions`, a rental
     /// gateway, any future app) resolves "which provider / which key"
     /// without depending on the AI assistant companion. `None` (the
     /// default) registers nothing — GP 13 zero footprint; deployments
     /// with no BYOK surface pay no runtime cost. The AI path supplies
-    /// this via `AIServerApp.create` / `RAGServerApp.create` (a required
+    /// this via `AIOptions.create` / `RagOptions.create` (a required
     /// dependency there); non-AI BYOK consumers opt in via
     /// `ServerApp.withProviderProfile`.
     ProviderProfile: IProviderProfile option
@@ -2145,8 +2145,8 @@ module ServerApp =
     /// are folded into the aggregated `Content-Security-Policy` at
     /// compose time. Threads the singleton registration through the
     /// shared `ComposeExtensions.ServiceConfig` (the same seam
-    /// companions use directly), so `AIServerApp` / `RAGServerApp`
-    /// inherit it without a per-wrapper forwarder. Use for a
+    /// companions use directly), so the AI and RAG companions see
+    /// it on either side of them. Use for a
     /// CDN-delivered bundle host (`AgGridCdnCspContributor`), a hosted
     /// embed origin, or any deployment-specific origin the first-party
     /// defaults don't cover. **Adds** one registration to the
@@ -2173,7 +2173,7 @@ module ServerApp =
     ///
     /// Threads the singleton registration through the shared
     /// `ComposeExtensions.ServiceConfig` (like `withCspContributor`), so
-    /// `aggregate` reads it and `AIServerApp` / `RAGServerApp` inherit it.
+    /// `aggregate` reads it and the AI and RAG companions see it.
     /// Only meaningful alongside `withSecurityHardening` (the source mode
     /// shapes the hardening CSP that `CspMiddleware` stamps). Omitting this
     /// call leaves the resolved header byte-for-byte pre-156 (GP 11).
@@ -2315,8 +2315,8 @@ module ServerApp =
     /// set, `run` registers the instance as the `IProviderProfile` DI
     /// singleton so any in-process BYOK consumer resolves it.
     ///
-    /// The AI path supplies this through `AIServerApp.create` /
-    /// `RAGServerApp.create` (a required dependency there, mirrored back
+    /// The AI path supplies this through `AIOptions.create` /
+    /// `RagOptions.create` (a required dependency there, mirrored back
     /// onto this field by their `run`), so AI apps need not call this
     /// directly. Non-AI BYOK consumers (a rental gateway, a future app
     /// reading provider profiles without the AI assistant companion)
@@ -3718,7 +3718,7 @@ module ServerApp =
 
         // Phase 43.A — when a canonical BYOK provider-profile store is
         // registered (via `withProviderProfile`, or mirrored from
-        // `AIServerApp.create` / `RAGServerApp.create`), fold its
+        // `AIOptions.create` / `RagOptions.create`), fold its
         // `IProviderProfile` DI singleton into the extension's
         // `ServiceConfig` so in-process consumers resolve it. `None`
         // leaves `Extensions` untouched — zero footprint (GP 13).

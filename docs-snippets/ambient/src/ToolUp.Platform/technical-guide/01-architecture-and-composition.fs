@@ -28,6 +28,7 @@ open ToolUp.Platform.TeamManagement
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.AI
 open ToolUp.AI.AICompose
+open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 
 [<AutoOpen>]
@@ -69,9 +70,6 @@ module PageAmbient =
     let blobStorage: IBlobStorage = failwith "ambient"
 
     let modules: ServerModule list = failwith "ambient"
-
-    /// An already-built base the `AIServerApp.createFrom` block layers on.
-    let baseServerApp: ServerApp = failwith "ambient"
 
     /// The AI / RAG substrate the two upper tiers take at construction.
     let aiProviderFactory: IAIProviderFactory = failwith "ambient"

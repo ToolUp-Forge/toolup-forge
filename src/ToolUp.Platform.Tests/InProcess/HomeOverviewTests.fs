@@ -266,7 +266,7 @@ let overviewScopeAiTests =
 // ─── Phase 171 — overview surfaces the platform provider (probe present) ─
 //
 // The converse of Test 3's absence assertion. A RAG-composed deployment
-// (every `RAGServerApp.run` consumer) registers
+// (every `RAGCompose.withRAG` consumer) registers
 // `IActiveAiProbe` via `composeAI` — which `composeRAG` composes over
 // (forge `3bf611b`). When the probe is in DI, the Home overview's
 // `ActiveAi` must surface the deployment's wired platform provider, NOT

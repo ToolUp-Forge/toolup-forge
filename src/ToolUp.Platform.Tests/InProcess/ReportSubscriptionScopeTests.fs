@@ -634,10 +634,12 @@ let private deploy () : Deployment =
     let model = NarratingModel()
 
     let app =
-        RAGServerApp.create (ScriptedFactory(model)) stubProfile constantEmbedder
-        |> RAGServerApp.withStorage storage
-        |> RAGServerApp.withFacts FactsCompose.withFactTier
-        |> composeRAG
+        ServerApp.empty
+        |> ServerApp.withStorage storage
+        |> withRAG (
+            RagOptions.create (ScriptedFactory(model)) stubProfile constantEmbedder
+            |> RagOptions.withFacts FactsCompose.withFactTier
+        )
         |> GroundedNarratives.compose (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools) [ summaryRun ]
 
     let services = ServiceCollection() :> IServiceCollection

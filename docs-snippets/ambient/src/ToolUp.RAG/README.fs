@@ -59,7 +59,7 @@ module RagReadmeAmbient =
     let customTelemetry: IRagTelemetry = failwith "ambient"
 
     /// The DI collection a custom `IRetrievalTracer` registers into,
-    /// ahead of `RAGServerApp.run`.
+    /// before the RAG composition runs.
     let services: IServiceCollection = failwith "ambient"
 
     // ─── The chunker's inputs ─────────────────────────────────────

@@ -149,7 +149,7 @@ let private structuralTests =
                 let analyzer = cjk ()
 
                 let app =
-                    ToolUp.RAG.RAGCompose.RAGServerApp.create
+                    ToolUp.RAG.RAGCompose.RagOptions.create
                         { new ToolUp.AI.IAIProviderFactory with
                             member _.Available = []
                             member _.PlatformDescriptors = []
@@ -166,13 +166,16 @@ let private structuralTests =
                             member _.SetEntryHealth(_, _, _) = async { return Ok() }
                         }
                         hashingEmbedder
-                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withSparseAnalyzer analyzer
-                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withAnalyzedSparseIndex (
+                    |> ToolUp.RAG.RAGCompose.RagOptions.withSparseAnalyzer analyzer
+                    |> ToolUp.RAG.RAGCompose.RagOptions.withAnalyzedSparseIndex (
                         factory "Host=unreachable.invalid;Database=none" PostgresFullTextOptions.defaults silent
                     )
 
                 expectRefusalNaming analyzer.Id "composition refuses and names the analyzer" (fun () ->
-                    ToolUp.RAG.RAGCompose.composeRAG app |> ignore)
+                    ServerApp.empty
+                    |> ToolUp.RAG.RAGCompose.withRAG app
+                    |> ServerApp.resolve
+                    |> ignore)
             }
 
             test "an explicit configuration is the operator's choice and bypasses the mapping" {

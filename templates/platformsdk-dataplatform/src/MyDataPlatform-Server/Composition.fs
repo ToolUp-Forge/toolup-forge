@@ -49,24 +49,23 @@ let configure (config: ServerConfig) (contentRoot: string) : ServerConfig = {
 /// `ServerApp`; the caller runs it.
 let build (deps: Dependencies) : ServerApp =
     let app =
-        RAGServerApp.create deps.AIProviderFactory deps.ProviderProfile deps.Embedder
-        |> RAGServerApp.withConfig deps.Config
-        |> RAGServerApp.withStorage deps.Storage
-        |> RAGServerApp.mapAI (fun ai -> {
-            ai with
-                Base = ServerApp.withSecretStore deps.Secrets ai.Base
-        })
-        |> RAGServerApp.withVectorStore (ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.create deps.Storage None)
-        |> RAGServerApp.withAuth deps.Auth
-        |> RAGServerApp.withFacts FactsCompose.withFactTier
-        |> RAGServerApp.mapAI ToolUp.KnowledgeBase.Server.AICompose.register
-        |> RAGServerApp.addModules [
+        ServerApp.empty
+        |> ServerApp.withConfig deps.Config
+        |> ServerApp.withStorage deps.Storage
+        |> ServerApp.withSecretStore deps.Secrets
+        |> ServerApp.withAuth deps.Auth
+        |> ToolUp.KnowledgeBase.Server.AICompose.register
+        |> ServerApp.addModules [
             DailyTrade.Server.serverModule ReferenceData.fiscalWeek [ Narratives.DailyReport ]
             // The knowledge base's AI tools name this module id as their source.
             ServerModule.create "ToolUp.KnowledgeBase"
             |> ServerModule.withGuardedApi KnowledgeBase.Server.knowledgeApi
         ]
-        |> composeRAG
+        |> withRAG (
+            RagOptions.create deps.AIProviderFactory deps.ProviderProfile deps.Embedder
+            |> RagOptions.withVectorStore (ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.create deps.Storage None)
+            |> RagOptions.withFacts FactsCompose.withFactTier
+        )
         |> Narratives.compose
         |> PublishedPages.captureServices
 

@@ -19,7 +19,7 @@ module ToolUp.Platform.Tests.InProcess.GroundedNarrativeTests
 //   B. the fact-tier gate over a real store, and the certificate it issues
 //      over a published narrative;
 //   C. the run end to end on a RAG app composed with
-//      `RAGServerApp.withFacts FactsCompose.withFactTier`: a scripted model
+//      `RagOptions.withFacts FactsCompose.withFactTier`: a scripted model
 //      that reads a fact through `query_facts` and then writes each defeat
 //      case — every one refused before publication and logged, and the
 //      grounded one published, indexed, certified, and marked stale when its
@@ -831,10 +831,12 @@ let private deployShaped
     let model = ScriptedModel write
 
     let app =
-        RAGServerApp.create (factoryFor model) stubProfile constantEmbedder
-        |> RAGServerApp.withStorage storage
-        |> RAGServerApp.withFacts FactsCompose.withFactTier
-        |> composeRAG
+        ServerApp.empty
+        |> ServerApp.withStorage storage
+        |> withRAG (
+            RagOptions.create (factoryFor model) stubProfile constantEmbedder
+            |> RagOptions.withFacts FactsCompose.withFactTier
+        )
         |> GroundedNarratives.compose options [ definition ]
         |> NarrativePromptHandler.withPromptAdmin
 

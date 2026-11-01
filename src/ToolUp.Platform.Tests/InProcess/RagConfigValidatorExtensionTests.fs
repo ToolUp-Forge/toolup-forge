@@ -141,7 +141,7 @@ let private localEmbedderTests =
             |> expectWarningNaming [
                 "Individual"
                 "process-stateful"
-                "RAGServerApp.create"
+                "RagOptions.create"
                 "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1"
             ]
         }
@@ -318,7 +318,7 @@ let private boundsTests =
         test "RED — withTopK 200 refuses boot with a bounds message (the acceptance criterion)" {
             RAGConfigBoundsValidator { inBounds with TopK = 200 }
             |> run
-            |> expectErrorNaming [ "TopK = 200"; "outside [1, 100]"; "RAGServerApp.withTopK" ]
+            |> expectErrorNaming [ "TopK = 200"; "outside [1, 100]"; "RagOptions.withTopK" ]
         }
 
         test "WARN — TopK above 50 is legal but flagged, not refused" {
@@ -433,9 +433,9 @@ let private stubProfile =
     }
 
 let private newApp () =
-    ToolUp.RAG.RAGCompose.RAGServerApp.create stubFactory stubProfile hostedEmbedder
+    ToolUp.RAG.RAGCompose.RagOptions.create stubFactory stubProfile hostedEmbedder
 
-let private boundsOf (app: ToolUp.RAG.RAGCompose.RAGServerApp) : RagConfigBounds = {
+let private boundsOf (app: ToolUp.RAG.RAGCompose.RagOptions) : RagConfigBounds = {
     TopK = app.RetrievalDefaults.TopK
     MinScore = app.RetrievalDefaults.MinScore
     MmrLambda = app.MmrLambda
@@ -450,10 +450,10 @@ let private clampTests =
         test "a lower-bound value through a setter is clamped and warned, never errored" {
             let app =
                 newApp ()
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withTopK 0
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withMinScore (Some -0.5)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withMmrLambda -2.0
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionConcurrency 0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withTopK 0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withMinScore (Some -0.5)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withMmrLambda -2.0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionConcurrency 0
 
             Expect.equal (run (RAGConfigBoundsValidator(boundsOf app))) Ok "the clamped values are in bounds"
 
@@ -465,7 +465,7 @@ let private clampTests =
         }
 
         test "a value set by record update reaches the arm the setter would have clamped" {
-            // `RAGServerApp` is a public record, so `{ app with ... }` sets a
+            // `RagOptions` is a public record, so `{ app with ... }` sets a
             // knob without its setter. These arms are what refuses it.
             let app = {
                 newApp () with
@@ -482,9 +482,9 @@ let private clampTests =
         test "the live upper bounds still refuse through the setters" {
             let app =
                 newApp ()
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withTopK 200
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withSnippetCharLimit 99999
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionQueueCapacity 10
+                |> ToolUp.RAG.RAGCompose.RagOptions.withTopK 200
+                |> ToolUp.RAG.RAGCompose.RagOptions.withSnippetCharLimit 99999
+                |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionQueueCapacity 10
 
             RAGConfigBoundsValidator(boundsOf app)
             |> run
@@ -514,7 +514,7 @@ let private localityTests =
 
             let app =
                 newApp ()
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (ForwardingCache inner)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withEmbeddingCache (ForwardingCache inner)
 
             Expect.isFalse
                 (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)

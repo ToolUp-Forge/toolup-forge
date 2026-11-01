@@ -10,13 +10,14 @@ module ToolUp.Platform.Tests.InProcess.RagFactTierTests
 // registers an `IAIProviderFactory` and nothing else, so the planner fell
 // back to the no-compiler refusal, no question ever compiled into a fact
 // clause, and no fact was ever pushed into the prompt. And the only way to
-// put the tier onto a RAG app was a `mapAI` lambda that silently did
-// nothing unless `withConfig` had already switched the fact store on.
+// put the tier onto a RAG app was a lambda over the AI layer that silently
+// did nothing unless `withConfig` had already switched the fact store on.
 //
 // What this pack pins:
 //
-//   1. `RAGServerApp.withFacts FactsCompose.withFactTier` composes the tier
-//      on EITHER side of `withConfig`, and the `mapAI` route still works.
+//   1. `RagOptions.withFacts FactsCompose.withFactTier` composes the tier
+//      on EITHER side of `withConfig`, and a tier composed by hand on the
+//      deployment still works.
 //   2. End to end, with no test-only `IAIProvider`: a fact written through
 //      a DECLARED fact table reaches the prompt under the verified-facts
 //      header, compiled through the AI tier's own provider factory, under
@@ -173,10 +174,13 @@ let private constantEmbedder =
         member _.Dimensions = 8
     }
 
-/// A RAG app as a deployment writes one, over `factory`.
-let private ragApp (factory: ToolUp.AI.IAIProviderFactory) (storage: IBlobStorage) : RAGServerApp =
-    RAGServerApp.create factory stubProfile constantEmbedder
-    |> RAGServerApp.withStorage storage
+/// The RAG options a deployment writes, over `factory`.
+let private ragApp (factory: ToolUp.AI.IAIProviderFactory) : RagOptions =
+    RagOptions.create factory stubProfile constantEmbedder
+
+/// The deployment over `storage` with `rag` composed onto it.
+let private deploy (storage: IBlobStorage) (rag: RagOptions) : ServerApp =
+    ServerApp.empty |> ServerApp.withStorage storage |> withRAG rag
 
 /// Build the composed provider the way the host does: the substrate the
 /// platform registers first, then the composition's own service config.
@@ -288,13 +292,14 @@ let compositionTests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
 
             let app =
-                ragApp (RecordingFactory(CompilingProvider "{}")) storage
-                |> RAGServerApp.withFacts FactsCompose.withFactTier
-                |> RAGServerApp.withConfig config
+                ragApp (RecordingFactory(CompilingProvider "{}"))
+                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> deploy storage
+                |> ServerApp.withConfig config
 
-            Expect.equal app.AI.Base.Config.FactStore NoFactStore "the later withConfig did reset the knob"
+            Expect.equal app.Config.FactStore NoFactStore "the later withConfig did reset the knob"
 
-            let _, sp = build storage (composeRAG app)
+            let _, sp = build storage app
 
             Expect.isNotNull (box (sp.GetService<IFactClausePlanner>())) "the clause planner is composed anyway"
             Expect.isNotNull (box (sp.GetService<IFactTableWriter>())) "and so is the fact-table writer"
@@ -305,11 +310,15 @@ let compositionTests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
 
             let app =
-                ragApp (RecordingFactory(CompilingProvider "{}")) storage
-                |> RAGServerApp.withConfig config
-                |> RAGServerApp.withFacts FactsCompose.withFactTier
+                ServerApp.empty
+                |> ServerApp.withStorage storage
+                |> ServerApp.withConfig config
+                |> withRAG (
+                    ragApp (RecordingFactory(CompilingProvider "{}"))
+                    |> RagOptions.withFacts FactsCompose.withFactTier
+                )
 
-            let _, sp = build storage (composeRAG app)
+            let _, sp = build storage app
 
             Expect.isNotNull (box (sp.GetService<IFactClausePlanner>())) "the clause planner is composed"
             Expect.isNotNull (box (sp.GetService<IFactTableWriter>())) "and the fact-table writer"
@@ -319,27 +328,27 @@ let compositionTests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
 
             let _, sp =
-                build storage (composeRAG (ragApp (RecordingFactory(CompilingProvider "{}")) storage))
+                build storage (deploy storage (ragApp (RecordingFactory(CompilingProvider "{}"))))
 
             Expect.isNull (sp.GetService(typeof<IFactClausePlanner>)) "no clause planner"
             Expect.isNull (sp.GetService(typeof<IFactTableWriter>)) "no fact-table writer"
         }
 
-        test "the mapAI route keeps working when the knob is set first" {
+        test "a fact tier composed by hand on the deployment keeps working when the knob is set first" {
             let storage = InMemoryBlobStorage() :> IBlobStorage
 
             let app =
-                ragApp (RecordingFactory(CompilingProvider "{}")) storage
-                |> RAGServerApp.withConfig {
+                ServerApp.empty
+                |> ServerApp.withStorage storage
+                |> ServerApp.withConfig {
                     config with
                         FactStore = EnabledFactStore
                 }
-                |> RAGServerApp.mapAI (fun ai -> {
-                    ai with
-                        Base = ai.Base |> FactsCompose.withFactStore |> FactsCompose.withFactTableWriter
-                })
+                |> FactsCompose.withFactStore
+                |> FactsCompose.withFactTableWriter
+                |> withRAG (ragApp (RecordingFactory(CompilingProvider "{}")))
 
-            let _, sp = build storage (composeRAG app)
+            let _, sp = build storage app
 
             Expect.isNotNull (box (sp.GetService<IFactClausePlanner>())) "the hand-wired route composes"
         }
@@ -356,11 +365,12 @@ let pushDoorTests =
             let factory = RecordingFactory model
 
             let app =
-                ragApp factory storage
-                |> RAGServerApp.withFacts FactsCompose.withFactTier
-                |> RAGServerApp.withConfig config
+                ragApp factory
+                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> deploy storage
+                |> ServerApp.withConfig config
 
-            let _, sp = build storage (composeRAG app)
+            let _, sp = build storage app
 
             Expect.isNull
                 (sp.GetService(typeof<IAIProvider>))
@@ -403,9 +413,11 @@ let pushDoorTests =
                 }
 
             let app =
-                ragApp refusing storage |> RAGServerApp.withFacts FactsCompose.withFactTier
+                ragApp refusing
+                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> deploy storage
 
-            let _, sp = build storage (composeRAG app)
+            let _, sp = build storage app
             let teamId = Guid.NewGuid().ToString "N"
             writeThroughTable sp teamId 21800m
 
@@ -430,13 +442,14 @@ let pushDoorTests =
             let factory = RecordingFactory model
 
             let app =
-                ragApp factory storage
-                |> RAGServerApp.withFacts (
+                ragApp factory
+                |> RagOptions.withFacts (
                     FactsCompose.withFactTier
                     >> FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler
                 )
+                |> deploy storage
 
-            let services, sp = build storage (composeRAG app)
+            let services, sp = build storage app
             let teamId = Guid.NewGuid().ToString "N"
             writeThroughTable sp teamId 21800m
 
@@ -478,10 +491,11 @@ let warningTests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
 
             let app =
-                ragApp (RecordingFactory(CompilingProvider "{}")) storage
-                |> RAGServerApp.withFacts FactsCompose.withFactTier
+                ragApp (RecordingFactory(CompilingProvider "{}"))
+                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> deploy storage
 
-            let services, _ = build storage (composeRAG app)
+            let services, _ = build storage app
 
             Expect.equal
                 (compilerVerdict services)
@@ -511,5 +525,112 @@ let warningTests =
         }
     ]
 
+// ── The AI and RAG companions reach every base builder ────────────
+//
+// The wrapper records the two companions used to be could not reach the
+// `ServerApp` builders they did not mirror, and a builder applied before
+// the companion was the only one it saw. As companions they are composed
+// when the deployment resolves, so a builder applied AFTER `withAI` /
+// `withRAG` reaches both the resolved app and the tier composed onto it.
+
+/// A team deployment, so the AI tier's budget schema is composed, over two
+/// replicas.
+let private teamConfig: ServerConfig = {
+    config with
+        Surfaces = Surfaces.team
+        ReplicaCount = 2
+}
+
+/// Whether the resolved configuration carries the AI tier's budget schema,
+/// which the tier adds only when the configuration it reads is team-scoped.
+let private hasBudgetSchema (app: ServerApp) =
+    (ServerApp.effectiveConfig app).ModuleConfigs
+    |> List.exists (fun e -> e.ModuleKey = ToolUp.AI.AIBudgetConfigKey.value)
+
+let reachabilityTests =
+    testList "the AI and RAG companions reach the base builders applied after them" [
+
+        test "builders applied after withAI reach the resolved app and the AI tier" {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> ToolUp.AI.AICompose.withAI (
+                    ToolUp.AI.AICompose.AIOptions.create (RecordingFactory(CompilingProvider "{}")) stubProfile
+                )
+                |> ServerApp.withConfig teamConfig
+                |> ServerApp.withStorage storage
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
+
+            Expect.contains resolved.ComposedCompanions "ToolUp.AI" "the AI tier is composed"
+            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Storage.Value, storage)) "and the later withStorage"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+            Expect.isTrue (hasBudgetSchema app) "the AI tier read the final, team-scoped configuration"
+        }
+
+        test "builders applied after withRAG reach the resolved app and both tiers" {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> withRAG (ragApp (RecordingFactory(CompilingProvider "{}")))
+                |> ServerApp.withConfig teamConfig
+                |> ServerApp.withStorage storage
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
+
+            Expect.equal
+                (resolved.ComposedCompanions |> List.filter ((=) "ToolUp.AI"))
+                [ "ToolUp.AI" ]
+                "RAG composes the AI tier, once"
+
+            Expect.isTrue (obj.ReferenceEquals(resolved.Storage.Value, storage)) "the later withStorage reaches the app"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+            Expect.isTrue (hasBudgetSchema app) "the AI tier RAG composed read the final configuration"
+
+            Expect.exists
+                resolved.ConfigValidators
+                (fun v -> v.Name = "rag-in-process-index-replicas")
+                "the RAG tier is composed onto the same app"
+        }
+
+        test "withRAG supersedes an earlier withAI and refuses a later one, so the AI tier is never composed twice" {
+            let aiOptions =
+                ToolUp.AI.AICompose.AIOptions.create (RecordingFactory(CompilingProvider "{}")) stubProfile
+
+            let rag = ragApp (RecordingFactory(CompilingProvider "{}"))
+
+            let earlier =
+                ServerApp.empty
+                |> ToolUp.AI.AICompose.withAI aiOptions
+                |> withRAG rag
+                |> ServerApp.resolve
+
+            Expect.equal
+                (earlier.ComposedCompanions |> List.filter ((=) "ToolUp.AI"))
+                [ "ToolUp.AI" ]
+                "an earlier withAI is superseded by the AI tier RAG composes"
+
+            Expect.throwsC
+                (fun () ->
+                    ServerApp.empty
+                    |> withRAG rag
+                    |> ToolUp.AI.AICompose.withAI aiOptions
+                    |> ServerApp.resolve
+                    |> ignore)
+                (fun ex ->
+                    Expect.stringContains
+                        ex.Message
+                        "ToolUp.AI: companion already composed"
+                        "a later withAI would compose the AI tier a second time, and is refused when the app resolves")
+        }
+    ]
+
 let tests =
-    testList "Phase 986 RAG fact tier" [ compositionTests; pushDoorTests; warningTests ]
+    testList "Phase 986 RAG fact tier" [ compositionTests; pushDoorTests; warningTests; reachabilityTests ]

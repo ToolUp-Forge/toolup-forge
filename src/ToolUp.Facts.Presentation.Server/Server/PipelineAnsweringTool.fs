@@ -174,7 +174,7 @@ module PipelineAnsweringTool =
                 Parts = []
             }
 
-    /// The tool, as `AIServerApp.withAIAnsweringTools` takes it.
+    /// The tool, as `AIOptions.withAIAnsweringTools` takes it.
     let tool: AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>) =
         PipelineTool.definition, answer
 

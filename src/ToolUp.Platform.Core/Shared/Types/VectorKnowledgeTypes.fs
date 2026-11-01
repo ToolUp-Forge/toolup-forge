@@ -905,7 +905,7 @@ module RetrievalRequest =
 /// Per-deployment defaults applied by `RAGPromptBuilder.withRetrieval`. Lets
 /// operators tune retrieval shape (top-K, score gate, merge strategy,
 /// snippet budget, origin filter) without recompiling — wired via
-/// `RAGServerApp.withRetrievalDefaults`.
+/// `RagOptions.withRetrievalDefaults`.
 type RetrievalDefaults = {
     /// Number of matches to include in the system-prompt context block.
     /// Higher lets the model ground in more material; too high crowds the

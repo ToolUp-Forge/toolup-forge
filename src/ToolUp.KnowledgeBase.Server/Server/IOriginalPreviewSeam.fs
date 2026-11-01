@@ -346,8 +346,8 @@ let previewOriginal
 /// open-at-and-highlight previews of KB originals. Threads the
 /// singleton registration through the shared
 /// `ComposeExtensions.ServiceConfig` seam — the same pattern as
-/// `withOriginalSourceResolver` — so `AIServerApp` / `RAGServerApp`
-/// inherit it via their `Base` without a per-wrapper forwarder.
+/// `withOriginalSourceResolver` — so it is part of the deployment the
+/// AI and RAG companions are composed onto, on either side of them.
 ///
 /// **Opt-in and zero-cost (GP 13):** an app that never calls this
 /// registers nothing. There is no default seam in DI, no hosted

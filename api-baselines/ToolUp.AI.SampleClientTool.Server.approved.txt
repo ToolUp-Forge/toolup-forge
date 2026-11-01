@@ -4,6 +4,6 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.AI.SampleClientTool.Server.Compose (class)
-ToolUp.AI.SampleClientTool.Server.Compose.register(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
-ToolUp.AI.SampleClientTool.Server.Compose.registerWithPolicy(ToolUp.AI.IClientToolAuthorizer, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.SampleClientTool.Server.Compose.register(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.SampleClientTool.Server.Compose.registerWithPolicy(ToolUp.AI.IClientToolAuthorizer, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.SampleClientTool.Server.Compose.toolDefinition : ToolUp.Platform.AIToolDefinition { get }

@@ -8,7 +8,7 @@ module ToolUp.Platform.Tests.InProcess.SampleClientToolDispatchTests
 // Two responsibilities in one file:
 //
 //   1. Compose-shape checks — `Compose.register` appends the sample's
-//      `_sample.calc` tool to `AIServerApp.Base.AITools`;
+//      `_sample.calc` tool to the deployment's `AITools`;
 //      `Compose.registerWithPolicy` additionally wires the
 //      operator-supplied `IClientToolAuthorizer` into the composition
 //      root's `ServiceConfig`.
@@ -63,10 +63,10 @@ type private StubProviderProfile() =
         member _.ResolveEntry(_, _, _) = async { return None }
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
 
-let private buildBaseApp () : AIServerApp =
+let private buildBaseApp () : ServerApp =
     let factory = StubProviderFactory() :> IAIProviderFactory
     let profile = StubProviderProfile() :> IProviderProfile
-    AIServerApp.create factory profile
+    ServerApp.empty |> withAI (AIOptions.create factory profile)
 
 // ─── Authorizer for the contract-pack binding ────────────────────────
 
@@ -109,11 +109,11 @@ let private composeShapeTests =
     testList "Phase 46.B — sample compose shape" [
         test "register appends _sample.calc with Location = ClientResident" {
             let app = buildBaseApp () |> Compose.register
-            let toolNames = app.Base.AITools |> List.map (fun (def, _) -> def.Name)
+            let toolNames = app.AITools |> List.map (fun (def, _) -> def.Name)
             Expect.contains toolNames SampleCalcToolName "sample tool must land in AITools"
 
             let def =
-                app.Base.AITools
+                app.AITools
                 |> List.tryFind (fun (d, _) -> d.Name = SampleCalcToolName)
                 |> Option.map fst
 
@@ -138,7 +138,7 @@ let private composeShapeTests =
             // on our authorizer.
             let services = ServiceCollection() :> IServiceCollection
 
-            match ServerApp.serviceConfig app.Base with
+            match ServerApp.serviceConfig app with
             | None -> failtest "Compose.registerWithPolicy must install a ServiceConfig delegate"
             | Some configure -> configure services |> ignore
 

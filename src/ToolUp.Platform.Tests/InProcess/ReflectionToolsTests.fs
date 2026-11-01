@@ -407,8 +407,12 @@ let private gateTests =
 
 // ─── 4. Registration ──────────────────────────────────────────────────
 
-let private baseApp () : AIServerApp =
-    AIServerApp.create (StubProviderFactory() :> IAIProviderFactory) (StubProviderProfile() :> IProviderProfile)
+let private aiOptions () : AIOptions =
+    AIOptions.create (StubProviderFactory() :> IAIProviderFactory) (StubProviderProfile() :> IProviderProfile)
+
+/// The deployment with the AI tier `options` describes composed, resolved.
+let private composedWith (options: AIOptions) : ServerApp =
+    ServerApp.empty |> withAI options |> ServerApp.resolve
 
 let private registrationTests =
     testList "Phase 782 — reflection tools are an AI composition's opt-in" [
@@ -420,20 +424,17 @@ let private registrationTests =
 
         test "an AI composition that does not opt in carries none either (GP 11)" {
             Expect.isEmpty
-                (Set.intersect (toolNames (baseApp ()).Base.AITools) (Set.ofList reflectionNames))
-                "AIServerApp without withReflectionTools"
+                (Set.intersect (toolNames (composedWith (aiOptions ())).AITools) (Set.ofList reflectionNames))
+                "the AI tier without withReflectionTools"
         }
 
         test "withReflectionTools registers the three through the ordinary registry path" {
-            let app = baseApp () |> AIServerApp.withReflectionTools
-            Expect.equal (toolNames app.Base.AITools) (Set.ofList reflectionNames) "the three, once each"
+            let app = composedWith (aiOptions () |> AIOptions.withReflectionTools)
+            Expect.equal (toolNames app.AITools) (Set.ofList reflectionNames) "the three, once each"
 
             let registry = AIToolRegistry.AIToolRegistry()
 
-            registry.RegisterAll(
-                app.Base.AITools
-                |> List.map (fun (def, exec) -> AIToolRegistry.createTool def exec)
-            )
+            registry.RegisterAll(app.AITools |> List.map (fun (def, exec) -> AIToolRegistry.createTool def exec))
 
             for name in reflectionNames do
                 match registry.FindByName name with

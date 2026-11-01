@@ -109,14 +109,13 @@ let main _ =
 
     // Canonical BYOK provider-profile store. Registered as the
     // `IProviderProfile` DI singleton so the AI factory + settings
-    // handler resolve it; also passed to `withAI` below as the
+    // handler resolve it; also passed to `AIOptions.create` below as the
     // required AI dependency.
     let providerProfile = BlobProviderProfile.create blobStorage
 
-    // The Phase 1h pipeline. Note the single `ServerApp.empty |> ... |>
-    // ServerApp.run` shape — no terminal `FormsServerApp.run` or
-    // `AIServerApp.run`. Pre-Phase-1h, a deployment that wanted both
-    // Forms and AI had to pick one root and drop the other.
+    // One `ServerApp.empty |> ... |> ServerApp.run` pipeline: each
+    // companion is composed onto the same root, with no terminal
+    // companion `run`.
     ServerApp.empty
     |> ServerApp.withConfig config
     |> ServerApp.withLogger logger
@@ -126,8 +125,10 @@ let main _ =
         |> ToolUp.Forms.FormsCompose.FormsServerApp.withFormSchema demoSchema
         |> ToolUp.Forms.FormsCompose.FormsServerApp.withWorkflow demoWorkflow
         |> ToolUp.Forms.FormsCompose.FormsServerApp.withAction "stampSubmission" stampSubmission)
-    |> ToolUp.AI.AICompose.withAI aiFactory providerProfile (fun ai ->
-        ai |> ToolUp.AI.AICompose.AIServerApp.withAIConfig aiAssistantConfig)
+    |> ToolUp.AI.AICompose.withAI (
+        ToolUp.AI.AICompose.AIOptions.create aiFactory providerProfile
+        |> ToolUp.AI.AICompose.AIOptions.withAIConfig aiAssistantConfig
+    )
     // |> ToolUp.Forms.FormsCompose.withForms (fun f -> f)
     //   ^ Phase 1h conflict validator — uncomment to see the
     //     compose-time failure:

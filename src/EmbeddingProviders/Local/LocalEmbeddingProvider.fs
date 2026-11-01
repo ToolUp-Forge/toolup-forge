@@ -145,7 +145,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // production embedder keeps exactly one query vector on a byte-identical
 // path. The family below implements that capability (and
 // `IEmbeddingProvider`, so it composes directly into
-// `RAGServerApp.create`).
+// `RagOptions.create`).
 //
 // The ORIGINAL motivation for that design was sharper than it is now:
 // under ranked vocabularies dimension `i` denoted a different term in
@@ -823,7 +823,7 @@ type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
     // ─── The composable surfaces (Phase 14z, Option 1) ───────────
     //
     // The family is itself an `IEmbeddingProvider` so a deployment can
-    // hand it straight to `RAGServerApp.create`, and an
+    // hand it straight to `RagOptions.create`, and an
     // `IScopedEmbeddingProviderFactory` so the RAG pipeline's capability
     // probe finds the per-scope embedders behind it. Every caller that
     // does NOT probe (a health check, a diagnostic, a consumer holding

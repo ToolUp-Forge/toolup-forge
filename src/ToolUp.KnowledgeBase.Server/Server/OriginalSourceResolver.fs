@@ -218,8 +218,8 @@ let createDefault () : IOriginalSourceResolver = DefaultOriginalSourceResolver()
 /// extend original resolution to a custom source kind (or rewire the
 /// built-in branches). Threads the singleton registration through the
 /// shared `ComposeExtensions.ServiceConfig` seam — the same pattern as
-/// `ServerApp.withCspContributor` — so `AIServerApp` / `RAGServerApp`
-/// inherit it via their `Base` without a per-wrapper forwarder. Apps
+/// `ServerApp.withCspContributor` — so it is part of the deployment the
+/// AI and RAG companions are composed onto, on either side of them. Apps
 /// that never call this get `DefaultOriginalSourceResolver` (GP 11).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withOriginalSourceResolver (resolver: IOriginalSourceResolver) (app: ServerApp) : ServerApp =

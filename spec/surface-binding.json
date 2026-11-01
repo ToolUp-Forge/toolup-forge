@@ -7,8 +7,8 @@
     "publicRenderingServerApp": { "assembly": "ToolUp.PublicRendering", "type": "ToolUp.PublicRendering.PublicRenderingCompose.PublicRenderingServerApp" }
   },
   "layers": {
-    "ai": { "assembly": "ToolUp.AI.Server", "type": "ToolUp.AI.AICompose.AIServerApp" },
-    "rag": { "assembly": "ToolUp.RAG.Server", "type": "ToolUp.RAG.RAGCompose.RAGServerApp" },
+    "ai": { "assembly": "ToolUp.AI.Server", "type": "ToolUp.AI.AICompose.AIOptions" },
+    "rag": { "assembly": "ToolUp.RAG.Server", "type": "ToolUp.RAG.RAGCompose.RagOptions" },
     "forms": { "assembly": "ToolUp.Forms.Server", "type": "ToolUp.Forms.FormsCompose.FormsServerApp" },
     "peer": { "assembly": "InterPlatform", "type": "ToolUp.InterPlatform.PeerCompose.PeerServerApp" },
     "extensions": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.ComposeExtensions" },

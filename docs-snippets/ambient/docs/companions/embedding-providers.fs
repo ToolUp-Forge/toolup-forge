@@ -3,7 +3,8 @@
 // The page is a cross-cutting tour of the shipped embedding-provider
 // companions, so nearly every block is an excerpt from a composition
 // root it never shows in full: the `aiProviderFactory` /
-// `providerProfile` every `RAGServerApp.create` is threaded, the
+// `providerProfile` every `RagOptions.create` is threaded (the blocks
+// spell the entry point `RAGCompose.withRAG`, hence `open ToolUp.RAG`), the
 // substrate a companion's `create` / `fromEnv` takes (`secretStore` for
 // the API-keyed one, `blobStorage` for the persistent local one), the
 // `logger` the env-var resolver announces through, the built
@@ -26,6 +27,7 @@ open ToolUp.Platform.EmbeddingProviderEnv
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
+open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 
 [<AutoOpen>]

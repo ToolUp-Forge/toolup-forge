@@ -476,7 +476,7 @@ let update msg model =
                     // its pre-502.D shape. A deployment wanting "answer from
                     // this document only" sets it from its own submit path,
                     // or sets a deployment-wide bound with
-                    // `RAGServerApp.withRetrievalFilters`.
+                    // `RagOptions.withRetrievalFilters`.
                     RetrievalFilters = None
                 }
 

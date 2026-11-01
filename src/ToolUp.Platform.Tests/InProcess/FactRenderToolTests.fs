@@ -515,22 +515,29 @@ let private profile =
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
     }
 
-let private aiApp (factStore: FactStoreMode) : AIServerApp =
-    AIServerApp.createFrom factory profile {
+/// A deployment under `factStore` and the options of the AI tier the tools
+/// join, as the presentation builders take them.
+let private aiApp (factStore: FactStoreMode) : ServerApp * AIOptions =
+    {
         ServerApp.empty with
             Config = {
                 ServerConfig.defaults with
                     FactStore = factStore
             }
-    }
+    },
+    AIOptions.create factory profile
 
-let private answeringNames (app: AIServerApp) =
-    app.AIAnsweringTools |> List.map (fun (d, _) -> d.Name)
+let private answeringNames ((_, ai): ServerApp * AIOptions) =
+    ai.AIAnsweringTools |> List.map (fun (d, _) -> d.Name)
+
+/// Both halves are the very values passed in: nothing was rebuilt.
+let private unchanged ((app, ai): ServerApp * AIOptions) ((app', ai'): ServerApp * AIOptions) =
+    obj.ReferenceEquals(app, app') && obj.ReferenceEquals(ai, ai')
 
 /// The registry `composeAI` registers, read back out of the composition's
 /// own service registrations.
-let private composedRegistry (app: AIServerApp) : AIToolRegistry.AIToolRegistry =
-    let composed = composeAI app
+let private composedRegistry ((app, ai): ServerApp * AIOptions) : AIToolRegistry.AIToolRegistry =
+    let composed = app |> withAI ai
     let services = ServiceCollection() :> IServiceCollection
 
     match ServerApp.serviceConfig composed with
@@ -559,7 +566,7 @@ let private compositionTests =
         test "without the fact store withRenderTools changes nothing" {
             let before = aiApp NoFactStore
             let after = before |> PresentationCompose.withRenderTools
-            Expect.isTrue (obj.ReferenceEquals(before, after)) "the app itself, unchanged"
+            Expect.isTrue (unchanged before after) "the app itself, unchanged"
         }
 
         test
@@ -582,9 +589,11 @@ let private compositionTests =
         }
 
         test "composeAI refuses an answering tool whose name collides with a string tool" {
+            let app, ai = aiApp EnabledFactStore
+
             let colliding =
-                aiApp EnabledFactStore
-                |> AIServerApp.withAIAnsweringTools [
+                ai
+                |> AIOptions.withAIAnsweringTools [
                     {
                         RenderTools.definition RenderTool.Chart with
                             Name = "query_facts"
@@ -593,14 +602,11 @@ let private compositionTests =
                 ]
 
             let withStringTool = {
-                colliding with
-                    Base = {
-                        colliding.Base with
-                            AITools = colliding.Base.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
-                    }
+                app with
+                    AITools = app.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
             }
 
-            Expect.throwsC (fun () -> composeAI withStringTool |> ignore) (fun ex ->
+            Expect.throwsC (fun () -> withStringTool |> withAI colliding |> ServerApp.resolve |> ignore) (fun ex ->
                 Expect.stringContains ex.Message "query_facts" "the collision names the tool")
         }
 
@@ -610,12 +616,12 @@ let private compositionTests =
             Expect.equal (answeringNames once) [ PipelineTool.Name ] "the tool"
 
             Expect.equal
-                (List.length once.Base.Extensions.Handlers)
-                (List.length before.Base.Extensions.Handlers + 1)
+                (List.length (fst once).Extensions.Handlers)
+                (List.length (fst before).Extensions.Handlers + 1)
                 "one handler: the re-run a reader's panel draws the block from"
 
             let twice = once |> PresentationCompose.withPipelineTool
-            Expect.isTrue (obj.ReferenceEquals(once, twice)) "idempotent: the app itself, unchanged"
+            Expect.isTrue (unchanged once twice) "idempotent: the app itself, unchanged"
 
             let beside =
                 before
@@ -631,7 +637,7 @@ let private compositionTests =
         test "without the fact store withPipelineTool changes nothing" {
             let before = aiApp NoFactStore
             let after = before |> PresentationCompose.withPipelineTool
-            Expect.isTrue (obj.ReferenceEquals(before, after)) "the app itself, unchanged"
+            Expect.isTrue (unchanged before after) "the app itself, unchanged"
         }
 
         test "composeAI registers evaluate_pipeline in the record form only when it is composed" {
@@ -743,7 +749,7 @@ let private composedContext () : HttpContext =
 /// results the model read, and the loop state.
 let private scriptedTurn
     (ctx: HttpContext)
-    (app: AIServerApp)
+    ((_, ai): ServerApp * AIOptions)
     (question: string)
     (toolName: string)
     (args: string)
@@ -776,7 +782,7 @@ let private scriptedTurn
         let registry = AIToolRegistry.AIToolRegistry()
 
         registry.RegisterAll(
-            app.AIAnsweringTools
+            ai.AIAnsweringTools
             |> List.map (fun (definition, answer) -> AIToolRegistry.createAnsweringTool definition answer)
         )
 

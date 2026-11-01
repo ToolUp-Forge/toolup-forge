@@ -102,15 +102,18 @@ let private stubProfile =
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
     }
 
-let private ragApp (storage: IBlobStorage) =
-    RAGServerApp.create stubFactory stubProfile constantEmbedder
-    |> RAGServerApp.withStorage storage
+let private ragApp () =
+    RagOptions.create stubFactory stubProfile constantEmbedder
+
+/// The deployment over `storage` with `rag` composed onto it.
+let private composedOn (storage: IBlobStorage) (rag: RagOptions) : ServerApp =
+    ServerApp.empty |> ServerApp.withStorage storage |> withRAG rag
 
 /// A real generic host over exactly what `composeRAG` registers — so the stop
 /// is the host's own: hosted services stopped in reverse order, then the
 /// lifecycle hooks, inside `HostOptions.ShutdownTimeout`.
-let private ragHost (app: RAGServerApp) : IHost =
-    let composed = composeRAG app
+let private ragHost (storage: IBlobStorage) (app: RagOptions) : IHost =
+    let composed = composedOn storage app
     let builder = Host.CreateEmptyApplicationBuilder(HostApplicationBuilderSettings())
 
     match ServerApp.serviceConfig composed with
@@ -127,8 +130,8 @@ let private chunk: TextChunk = {
     Metadata = Map.empty
 }
 
-let private hostedServiceTypeNames (app: RAGServerApp) =
-    let composed = composeRAG app
+let private hostedServiceTypeNames (app: RagOptions) =
+    let composed = composedOn (InMemoryBlobStorage() :> IBlobStorage) app
     let services = ServiceCollection() :> IServiceCollection
 
     let services =
@@ -160,7 +163,7 @@ let private retrievalStores =
         testCaseAsync "a chunk upserted inside the flush window is present after a graceful stop and a restart"
         <| async {
             let storage = InMemoryBlobStorage() :> IBlobStorage
-            use host = ragHost (ragApp storage)
+            use host = ragHost storage (ragApp ())
             do! host.StartAsync() |> Async.AwaitTask
 
             // Both writes land inside the stores' two-second flush window:
@@ -190,13 +193,13 @@ let private retrievalStores =
         }
 
         test "a composition that constructs no in-process store registers no flush service (GP 13)" {
-            let owned = hostedServiceTypeNames (ragApp (InMemoryBlobStorage() :> IBlobStorage))
+            let owned = hostedServiceTypeNames (ragApp ())
 
             let supplied =
                 hostedServiceTypeNames (
-                    ragApp (InMemoryBlobStorage() :> IBlobStorage)
-                    |> RAGServerApp.withVectorStore (externalVectorStore ())
-                    |> RAGServerApp.withoutSparseIndex
+                    ragApp ()
+                    |> RagOptions.withVectorStore (externalVectorStore ())
+                    |> RagOptions.withoutSparseIndex
                 )
 
             Expect.contains

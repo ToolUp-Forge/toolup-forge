@@ -51,8 +51,8 @@ type private UploadPolicyValidator(serverConfig: ServerConfig, policy: Knowledge
 /// by `KnowledgeApiDeps.resolve`) plus a startup preflight validator that
 /// emits a `Warning` on an uncapped Team / MultiTeam deployment. Threads
 /// through the shared `ComposeExtensions.ServiceConfig` seam (the same
-/// pattern as `withOriginalSourceResolver`) so `AIServerApp` /
-/// `RAGServerApp` inherit it via their `Base`. Apps that never call this
+/// pattern as `withOriginalSourceResolver`) so the AI and RAG
+/// companions see it on either side of them. Apps that never call this
 /// get `KnowledgeUploadPolicy.permissive` — no caps, pre-119 behaviour
 /// (GP 11 / GP 13).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
@@ -75,7 +75,7 @@ let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerAp
 /// record); the opt-out restores the pre-14x upload path byte-for-byte
 /// (GP 11 — no hash computed, no ref written). Threads through the same
 /// `ComposeExtensions.ServiceConfig` seam as `withUploadPolicy`, so
-/// `AIServerApp` / `RAGServerApp` inherit it via their `Base`.
+/// the AI and RAG companions see it on either side of them.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
     let policy: KnowledgeDedupPolicy = { DedupUploads = enabled }
@@ -107,8 +107,8 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
 /// byte-identical re-upload still dedups (nothing changed, so there is
 /// no version to mint) and only a byte-different one supersedes.
 /// Threads through the same `ComposeExtensions.ServiceConfig` seam as
-/// `withUploadPolicy`, so `AIServerApp` / `RAGServerApp` inherit it via
-/// their `Base`.
+/// `withUploadPolicy`, so the AI and RAG companions see it on either
+/// side of them.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
     let policy: KnowledgeVersioningPolicy = { VersionUploads = enabled }

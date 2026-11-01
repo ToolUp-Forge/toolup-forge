@@ -274,7 +274,7 @@ let withUrlContentFetcher = KnowledgeBase.ServerBulkImport.withUrlContentFetcher
 /// progressing; retrieval misses its chunks; the user has no signal.
 ///
 /// Call this once from the consumer's composition root *before*
-/// `RAGServerApp.run`, passing the list of containers the deployment
+/// `ServerApp.run`, passing the list of containers the deployment
 /// manages (typically `ITeamStore.ListTeams` results plus any `_platform`
 /// / `_deployment` containers the consumer uses). Stuck documents are
 /// marked Failed with a clear remediation reason so the KB UI surfaces a
@@ -288,7 +288,7 @@ let recoverStuckDocumentsAtStartup =
 ///
 /// Registers KB's `IIngestionRecoverySurface` adapter; the sweep that
 /// visits it is the hosted service `composeWithRAG` registers once the
-/// deployment composes `RAGServerApp.withScopeEnumerator` (or an
+/// deployment composes `RagOptions.withScopeEnumerator` (or an
 /// explicit `withIngestionRecoverySweep` list). Composing this alone
 /// sweeps nothing — the declaration and the decision to run are
 /// deliberately separate (GP 11 / GP 13). Defined in

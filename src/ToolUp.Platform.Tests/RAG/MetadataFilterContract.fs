@@ -260,7 +260,7 @@ let private filterBehaviours (bind: unit -> Bound) =
 // 502.A taught both pipelines to HONOUR `Filters`; it did not make the
 // field reachable from the AI path. `RAGPromptBuilder.withRetrievalToolAware`
 // constructs its own `RetrievalRequest`, so a deployment composing
-// `RAGServerApp` — and the AI panel talking to it — could not scope a query
+// RAG — and the AI panel talking to it — could not scope a query
 // however willing the pipeline was. The behaviours below pin the two
 // carriers that close that (`RetrievalDefaults.Filters`, the operator's
 // deployment-wide bound; `PromptContext.RetrievalFilters`, the per-turn one

@@ -385,7 +385,7 @@ module RenderTools =
                 refusal tool "the fact store is not composed in this deployment, so there are no facts to draw"
             )
 
-    /// Both tools, as `AIServerApp.withAIAnsweringTools` takes them.
+    /// Both tools, as `AIOptions.withAIAnsweringTools` takes them.
     let tools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list = [
         definition RenderTool.Chart, answer RenderTool.Chart
         definition RenderTool.Table, answer RenderTool.Table

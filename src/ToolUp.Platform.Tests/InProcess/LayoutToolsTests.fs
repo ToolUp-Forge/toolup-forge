@@ -1042,8 +1042,8 @@ let private tabTests =
 
 let private aiApp = AIToolSchemaTests.LayoutCensus.aiApp
 
-let private names (app: AIServerApp) =
-    app.AIAnsweringTools |> List.map (fun (d, _) -> d.Name)
+let private names ((_, ai): ServerApp * AIOptions) =
+    ai.AIAnsweringTools |> List.map (fun (d, _) -> d.Name)
 
 let private compositionTests =
     testList "the composition" [
@@ -1054,20 +1054,25 @@ let private compositionTests =
             let twice = once |> PresentationCompose.withLayoutTools
             Expect.equal (names twice) (names once) "idempotent"
 
-            let again = twice.Base |> PresentationCompose.withPageRequests
-            Expect.isTrue (obj.ReferenceEquals(again, twice.Base)) "the page request resolvers are composed once"
+            let again = fst twice |> PresentationCompose.withPageRequests
+            Expect.isTrue (obj.ReferenceEquals(again, fst twice)) "the page request resolvers are composed once"
         }
 
         test "no fact store, or no page store, registers nothing and returns the app itself" {
             for factStore, pageStore in [ NoFactStore, true; EnabledFactStore, false; NoFactStore, false ] do
                 let before = aiApp factStore pageStore
                 let after = before |> PresentationCompose.withLayoutTools
-                Expect.isTrue (obj.ReferenceEquals(before, after)) (sprintf "%A, page store %b" factStore pageStore)
+
+                Expect.isTrue
+                    (obj.ReferenceEquals(fst before, fst after)
+                     && obj.ReferenceEquals(snd before, snd after))
+                    (sprintf "%A, page store %b" factStore pageStore)
         }
 
         test "the runtime is registered in a factory over the page store and the resolvers" {
             let app =
-                aiApp EnabledFactStore true |> PresentationCompose.withLayoutTools |> composeAI
+                let app, ai = aiApp EnabledFactStore true |> PresentationCompose.withLayoutTools
+                app |> withAI ai
 
             let services = ServiceCollection() :> IServiceCollection
 

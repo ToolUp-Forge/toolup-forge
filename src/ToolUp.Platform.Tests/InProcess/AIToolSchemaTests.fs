@@ -564,7 +564,7 @@ module LayoutCensus =
         }
 
     /// An AI composition with or without the fact store and the page store.
-    let aiApp (factStore: FactStoreMode) (pageStore: bool) : AIServerApp =
+    let aiApp (factStore: FactStoreMode) (pageStore: bool) : ServerApp * AIOptions =
         let app = {
             ServerApp.empty with
                 Config = {
@@ -573,20 +573,18 @@ module LayoutCensus =
                 }
         }
 
-        AIServerApp.createFrom
-            factory
-            profile
-            (if pageStore then
-                 PageDocumentStoreCompose.withPageDocumentStore PageStoreOptions.defaults app
-             else
-                 app)
+        (if pageStore then
+             PageDocumentStoreCompose.withPageDocumentStore PageStoreOptions.defaults app
+         else
+             app),
+        AIOptions.create factory profile
 
     /// Every provider definition the composed registry lists, as the text a
     /// provider receives, in order.
-    let providerDefinitions (app: AIServerApp) : string list =
+    let providerDefinitions ((app, ai): ServerApp * AIOptions) : string list =
         let services = ServiceCollection() :> IServiceCollection
 
-        match ServerApp.serviceConfig (composeAI app) with
+        match ServerApp.serviceConfig (app |> withAI ai) with
         | Some configure -> configure services |> ignore
         | None -> failtest "composeAI registers its services"
 

@@ -1972,8 +1972,8 @@ let main args =
             |> Map.ofList
 
         // F# appends `Module` to a module that shares its name with a type
-        // in the same scope, so `RAGServerAppModule` IS what a doc calls
-        // `RAGServerApp`. The alias is ADDITIVE, never a replacement:
+        // in the same scope, so `RagOptionsModule` IS what a doc calls
+        // `RagOptions`. The alias is ADDITIVE, never a replacement:
         // `ServerModule` is a TYPE whose own name ends in `Module`, and
         // replacing would file it under `Server` and lose it.
         let docFacingNamesOf (full: string) =

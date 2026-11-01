@@ -348,9 +348,9 @@ let private queryPath =
             Expect.isNonEmpty after "and there is something to compare"
         }
 
-        test "RAGServerApp composes the default budgets and an off-path trace queue" {
+        test "RagOptions composes the default budgets and an off-path trace queue" {
             let app =
-                ToolUp.RAG.RAGCompose.RAGServerApp.create
+                ToolUp.RAG.RAGCompose.RagOptions.create
                     Unchecked.defaultof<_>
                     Unchecked.defaultof<_>
                     (DelayedEmbedder TimeSpan.Zero)
@@ -360,11 +360,11 @@ let private queryPath =
 
             let tuned =
                 app
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withQueryEmbedTimeout (TimeSpan.FromSeconds 1.0)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withQueryEmbedAttempts 2
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withQueryEmbedConcurrency 16
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withFactStageTimeout (TimeSpan.FromMilliseconds 750.0)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withRetrievalTraceQueueCapacity 0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withQueryEmbedTimeout (TimeSpan.FromSeconds 1.0)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withQueryEmbedAttempts 2
+                |> ToolUp.RAG.RAGCompose.RagOptions.withQueryEmbedConcurrency 16
+                |> ToolUp.RAG.RAGCompose.RagOptions.withFactStageTimeout (TimeSpan.FromMilliseconds 750.0)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withRetrievalTraceQueueCapacity 0
 
             Expect.equal
                 tuned.RetrievalBudgets
@@ -1010,14 +1010,17 @@ let private lostTraces =
                 }
 
             let app =
-                ToolUp.RAG.RAGCompose.RAGServerApp.create
+                ToolUp.RAG.RAGCompose.RagOptions.create
                     stubAiFactory
                     stubProviderProfile
                     (DelayedEmbedder TimeSpan.Zero)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withStorage (InMemoryBlobStorage() :> IBlobStorage)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withRetrievalTraceQueueCapacity 1
+                |> ToolUp.RAG.RAGCompose.RagOptions.withRetrievalTraceQueueCapacity 1
 
-            let composed = ToolUp.RAG.RAGCompose.composeRAG app
+            let composed =
+                ServerApp.empty
+                |> ServerApp.withStorage (InMemoryBlobStorage() :> IBlobStorage)
+                |> ToolUp.RAG.RAGCompose.withRAG app
+                |> ServerApp.resolve
 
             let services =
                 Microsoft.Extensions.DependencyInjection.ServiceCollection()

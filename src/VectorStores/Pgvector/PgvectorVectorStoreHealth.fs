@@ -35,8 +35,8 @@ open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 // Usage from a deployment that wires Pgvector:
 //   let vectorStore = PgvectorVectorStore.createTuned connStr options PgvectorTuning.recommended (Some logger)
 //   ...
-//   |> RAGServerApp.withHealthCheck (Health.create vectorStore)
-//   |> RAGServerApp.withConfigValidator (Health.validator vectorStore)
+//   |> ServerApp.withHealthCheck (Health.create vectorStore)
+//   |> ServerApp.withConfigValidator (Health.validator vectorStore)
 
 /// The configured approximate index, as an operator reads it.
 let private indexKind (options: PgvectorOptions) : string =

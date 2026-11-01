@@ -17,7 +17,7 @@ open ToolUp.Platform.IVectorStore
 // Usage from a deployment that wires HNSW:
 //   let vectorStore = HnswVectorStore.create blobStorage (Some logger)
 //   ...
-//   |> RAGServerApp.withHealthCheck (HnswVectorStoreHealth.create vectorStore)
+//   |> ServerApp.withHealthCheck (HnswVectorStoreHealth.create vectorStore)
 
 type HnswVectorStoreHealthCheck(store: IVectorStore) =
     interface IHealthCheck with

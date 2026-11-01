@@ -53,11 +53,16 @@ type private StubProviderProfile() =
         member _.ResolveEntry(_, _, _) = async { return None }
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
 
-let private baseApp () : AIServerApp =
-    AIServerApp.create (StubProviderFactory() :> IAIProviderFactory) (StubProviderProfile() :> IProviderProfile)
+let private baseApp () : ServerApp =
+    ServerApp.empty
+    |> ToolUp.AI.AICompose.withAI (
+        ToolUp.AI.AICompose.AIOptions.create
+            (StubProviderFactory() :> IAIProviderFactory)
+            (StubProviderProfile() :> IProviderProfile)
+    )
 
-let private listDefs (app: AIServerApp) =
-    app.Base.AITools
+let private listDefs (app: ServerApp) =
+    app.AITools
     |> List.map fst
     |> List.filter (fun d -> d.Name = ListActiveActionsToolName)
 
@@ -90,7 +95,7 @@ let private composeTests =
 
         test "register also still appends the inspect tool — both companion tools land together" {
             let app = baseApp () |> AICompose.register
-            let names = app.Base.AITools |> List.map (fun (d, _) -> d.Name)
+            let names = app.AITools |> List.map (fun (d, _) -> d.Name)
             Expect.contains names InspectActiveModuleToolName "inspect_active_module is unaffected"
             Expect.contains names ListActiveActionsToolName "list_active_actions is appended"
         }
@@ -99,11 +104,13 @@ let private composeTests =
             let once = baseApp () |> AICompose.register
             let twice = once |> AICompose.register
             Expect.equal (List.length (listDefs twice)) 1 "a second register appends nothing"
-            Expect.equal (List.length twice.Base.AITools) (List.length once.Base.AITools) "tool count unchanged"
+            Expect.equal (List.length twice.AITools) (List.length once.AITools) "tool count unchanged"
         }
 
         test "an app that does not compose the companion carries no list_active_actions tool" {
-            Expect.isEmpty (listDefs (baseApp ())) "composeAI must not auto-wire the companion (GP 13)"
+            Expect.isEmpty
+                (listDefs (ServerApp.resolve (baseApp ())))
+                "composeAI must not auto-wire the companion (GP 13)"
         }
     ]
 
