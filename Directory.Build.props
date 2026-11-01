@@ -989,7 +989,7 @@
       `ServerModule.describeSubjects`, `ServerApp.metricRegistry`, `MetricRegistry.buildDescribed`,
       `MetricRegistry.trySubjectDescription`. Recipe: `docs/migrations/1150-fact-table-descriptions.md`.
     -->
-    <Version>0.38.0</Version>
+    <Version>0.38.1</Version>
     <!--
       The draft note is APPEND-ONLY. A change that rides or advances the
       <Version> above appends ONE line at the END of the list below the
