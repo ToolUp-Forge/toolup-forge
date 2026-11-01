@@ -43,14 +43,16 @@ At no point does any analytical module reference the DataManager or any other mo
 Hooks are registered in DI at startup, not per-request:
 
 ```fsharp
+open Microsoft.Extensions.DependencyInjection
 open ProcessedDataTypes
 
 // A companion registers a hook by factory, so it is built from the
 // services the running app composed. The fourth tuple element is the
 // uploading user's id (`AddFile`'s `createdBy`), distinct from
 // `StorageScope.ScopeId`, which is the team in team scopes.
-services.AddSingleton<PostSaveHook>(fun (sp: IServiceProvider) ->
-    PostSaveHook(fun (processed, entry, scope, createdBy) -> async { () }))
+let registerHook (services: IServiceCollection) =
+    services.AddSingleton<FileManagement.PostSaveHook>(fun (sp: System.IServiceProvider) ->
+        FileManagement.PostSaveHook(fun (processed, entry, scope, createdBy) -> async { () }))
 ```
 
 The RAG tier (composed by `RAGCompose.withRAG`) registers its vectorisation hook this way. `compose` registers the `FileManagementRuntime` record by factory, and the container folds every registered `PostSaveHook` into it (`PostSaveHooks`, plus `PostSaveHooksLogger = Some resolvedLogger`), in registration order. Everything the hooks pipeline reads at request time comes off that record, not off a mutable; `FileManagementRuntime.empty` is what a harness bypassing `compose` sees.
