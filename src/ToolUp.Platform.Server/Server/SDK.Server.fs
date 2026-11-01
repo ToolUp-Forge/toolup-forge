@@ -1305,6 +1305,13 @@ let compose (plan: CompositionPlan) =
     // `ServerApp.run` this is the consumer's own `ServiceConfig` followed by
     // every contribution on the app, in the order added
     // (`ServerApp.serviceConfig`), then the platform's run-time families.
+    // The notification channel DI consumers resolve is composed by factory
+    // (consent and send-policy filters over the stack's channel), so it
+    // exists once the container is built; the substrate hands companions a
+    // channel that forwards to it from that stage on.
+    let composedNotifications =
+        LateBound<INotificationChannel>("composed notification channel", resolvedNotificationChannel)
+
     // Every stage is built: hand the substrate to the staged contributions,
     // which read it at this fixed point (`Contribution.staged`).
     Substrate.register
@@ -1315,7 +1322,7 @@ let compose (plan: CompositionPlan) =
             Logger = resolvedLogger
             EventStore = eventStore
             AuditLog = auditLog
-            Notifications = resolvedNotificationChannel
+            Notifications = ComposedNotificationChannel(composedNotifications)
             MetricsSink = resolvedMetricsSink
             RateLimiter = rateLimiter
             JobScheduler = jobSchedulerInstance
@@ -1619,3 +1626,4 @@ let compose (plan: CompositionPlan) =
             extensions
             routeHandlers.Router
             devRoutes
+            (fun provider -> composedNotifications.Bind(provider.GetRequiredService<INotificationChannel>()))

@@ -49,6 +49,22 @@ type LateBound<'T>(name: string, dormant: 'T) =
         | Some _ -> invalidOp (sprintf "the substrate slot '%s' is bound once, by its stage; it was bound again" name)
         | None -> bound <- Some value
 
+/// The deployment's notification channel as every consumer resolves it
+/// from the container — consent and send-policy filters included, which
+/// are composed by factory and so exist only once the container is built.
+/// Until that stage binds the slot (nothing publishes during composition),
+/// it forwards to the channel the notification stack built.
+[<Sealed>]
+type ComposedNotificationChannel(slot: LateBound<INotificationChannel>) =
+    interface INotificationChannel with
+        member _.Publish(scopeId, notification) =
+            slot.Current.Publish(scopeId, notification)
+
+        member _.Subscribe(scopeId, handler) =
+            slot.Current.Subscribe(scopeId, handler)
+
+        member _.Unsubscribe subscriptionId = slot.Current.Unsubscribe subscriptionId
+
 /// The values `compose` built, handed to a staged contribution.
 [<NoEquality; NoComparison>]
 type Substrate = {
@@ -60,6 +76,9 @@ type Substrate = {
     /// The outermost link of the composed event-store chain.
     EventStore: IEventStore
     AuditLog: IAuditLog
+    /// The channel DI consumers resolve (a `ComposedNotificationChannel`
+    /// in a composed deployment), so a companion's publishes pass the same
+    /// consent and send-policy filters as everyone else's.
     Notifications: INotificationChannel
     MetricsSink: Metrics.IMetricsSink
     RateLimiter: IRateLimiter

@@ -195,10 +195,12 @@ let buildAndRunHost
     (extensions: ComposeExtensions)
     (router: HttpHandler list -> HttpHandler)
     (devRoutes: HttpHandler list)
+    (onBuilt: System.IServiceProvider -> unit)
     : IServerHost =
     match webBuilder, workerBuilder with
     | Some wb, _ ->
         let app = wb.Build()
+        onBuilt app.Services
 
         // Startup validation — `logApiError` resolves `ILogger` per request
         // via `GetRequiredService`. Asserting it once here trades a missing-
@@ -264,6 +266,7 @@ let buildAndRunHost
         // sibling `WebOnly` silos own the HTTP surface and point at
         // the same persistence stores.
         let host = hb.Build()
+        onBuilt host.Services
 
         host.Services.GetRequiredService<ILogger>() |> ignore
 
