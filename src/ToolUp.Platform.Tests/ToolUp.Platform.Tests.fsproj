@@ -736,6 +736,7 @@
         <Compile Include="InProcess\HomeOverviewTests.fs" />
         <Compile Include="InProcess\SubjectKindClientFlowTests.fs" />
         <Compile Include="InProcess\ServerConfigFromEnvTests.fs" />
+        <Compile Include="InProcess\ServerConfigSnapshotTests.fs" />
         <Compile Include="InProcess\ClientBrandLiftTests.fs" />
         <Compile Include="InProcess\CellProvenanceTests.fs" />
         <Compile Include="InProcess\AgChartExportTests.fs" />

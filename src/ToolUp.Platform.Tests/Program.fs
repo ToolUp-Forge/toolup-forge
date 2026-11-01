@@ -185,6 +185,7 @@ let private registeredTests =
         FlagEvaluatorTests.tests
         StorageScopeResolverTests.tests
         ServerConfigFromEnvTests.tests
+        ServerConfigSnapshotTests.tests
         ClientBrandLiftTests.tests
         CellProvenanceTests.tests
         AgChartExportTests.tests
