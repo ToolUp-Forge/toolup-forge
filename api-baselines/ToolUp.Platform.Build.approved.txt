@@ -16,6 +16,18 @@ ToolUp.Platform.Build+BuildConfig.ServerProject : System.String { get }
 ToolUp.Platform.Build+BuildConfig.TestPacks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TestPack] { get }
 ToolUp.Platform.Build+BuildConfigModule (class)
 ToolUp.Platform.Build+BuildConfigModule.defaults : ToolUp.Platform.Build+BuildConfig { get }
+ToolUp.Platform.Build+Census (class)
+ToolUp.Platform.Build+Census.assemble(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProjectCost], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CensusEntry]
+ToolUp.Platform.Build+Census.buildArgs(System.String, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Census.check(System.String, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Census.compileItems(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Census.fileName : System.String { get }
+ToolUp.Platform.Build+Census.machine() : System.String
+ToolUp.Platform.Build+Census.projectGraph(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]]
+ToolUp.Platform.Build+Census.projectSet(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]
+ToolUp.Platform.Build+Census.readSummary(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProjectCost]
+ToolUp.Platform.Build+Census.references(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Census.render(ToolUp.Platform.BuildCensus) : System.String
 ToolUp.Platform.Build+Flags (class)
 ToolUp.Platform.Build+Flags.has(System.String, ToolUp.Platform.Flags) : System.Boolean
 ToolUp.Platform.Build+Flags.lenient(ToolUp.Platform.FlagSpec, System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.Flags
@@ -163,12 +175,28 @@ ToolUp.Platform.Build+TemplateGate+TemplateGateSpec.Scaffold : ToolUp.Platform.B
 ToolUp.Platform.Build+VerifyLeg (class)
 ToolUp.Platform.Build+VerifyLeg.register(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : System.Void
 ToolUp.Platform.Build+VerifyLeg.registeredLegs() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]]]
+ToolUp.Platform.BuildCensus (class)
+ToolUp.Platform.BuildCensus..ctor(System.String, System.String, System.String, System.Double, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CensusEntry])
+ToolUp.Platform.BuildCensus.Command : System.String { get }
+ToolUp.Platform.BuildCensus.Machine : System.String { get }
+ToolUp.Platform.BuildCensus.MeasuredAt : System.String { get }
+ToolUp.Platform.BuildCensus.Projects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CensusEntry] { get }
+ToolUp.Platform.BuildCensus.TreeSha : System.String { get }
+ToolUp.Platform.BuildCensus.WallSeconds : System.Double { get }
 ToolUp.Platform.BuildOutput (class)
 ToolUp.Platform.BuildOutput..ctor(System.String, System.String)
 ToolUp.Platform.BuildOutput.ClientBundlePath : System.String { get }
 ToolUp.Platform.BuildOutput.ServerPublishPath : System.String { get }
 ToolUp.Platform.BuildOutputModule (class)
 ToolUp.Platform.BuildOutputModule.defaults : ToolUp.Platform.BuildOutput { get }
+ToolUp.Platform.CensusEntry (class)
+ToolUp.Platform.CensusEntry..ctor(System.String, System.Double, System.Double, System.Int32, System.Int32, System.Int32)
+ToolUp.Platform.CensusEntry.CompileSeconds : System.Double { get }
+ToolUp.Platform.CensusEntry.EvaluationSeconds : System.Double { get }
+ToolUp.Platform.CensusEntry.FanIn : System.Int32 { get }
+ToolUp.Platform.CensusEntry.FanOut : System.Int32 { get }
+ToolUp.Platform.CensusEntry.Lines : System.Int32 { get }
+ToolUp.Platform.CensusEntry.Project : System.String { get }
 ToolUp.Platform.Codemod (class)
 ToolUp.Platform.Codemod.analyseFile(System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
 ToolUp.Platform.Codemod.apply(ToolUp.Platform.CodemodPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
@@ -695,6 +723,11 @@ ToolUp.Platform.ProcResult.Elapsed : System.TimeSpan { get }
 ToolUp.Platform.ProcResult.ExitCode : System.Int32 { get }
 ToolUp.Platform.ProcResult.StdErr : System.String { get }
 ToolUp.Platform.ProcResult.StdOut : System.String { get }
+ToolUp.Platform.ProjectCost (class)
+ToolUp.Platform.ProjectCost..ctor(System.String, System.Double, System.Double)
+ToolUp.Platform.ProjectCost.CompileSeconds : System.Double { get }
+ToolUp.Platform.ProjectCost.EvaluationSeconds : System.Double { get }
+ToolUp.Platform.ProjectCost.Project : System.String { get }
 ToolUp.Platform.RenderMetricsSnapshot (class)
 ToolUp.Platform.RenderMetricsSnapshot..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.RenderMetricsSnapshot.ConditionalGet200 : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }

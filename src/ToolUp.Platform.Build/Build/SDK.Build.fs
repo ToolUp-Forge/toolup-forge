@@ -515,6 +515,262 @@ module Gate =
         | [] -> Ok()
         | found -> Error found
 
+// ─── Build census ────────────────────────────────────────────────────
+
+/// The per-project build census: what each solution project
+/// costs to build, how big it is and where it sits in the reference graph,
+/// written to `build-census.json` so a split or a gate budget follows
+/// measured cost rather than folder size.
+///
+/// The reader takes MSBuild's `-clp:PerformanceSummary` text rather than a
+/// binary log, so the package takes no MSBuild reader dependency. That text
+/// is only per-project when the build runs with `-graph`: in a plain
+/// solution build a project's time includes every second it spent blocked
+/// on an unbuilt reference, which on this tree put most leaves near the
+/// whole build's wall clock. `buildArgs` is therefore the one command whose
+/// summary `readSummary` is valid for.
+module Census =
+
+    /// The census file, at the repository root.
+    let fileName = "build-census.json"
+
+    /// The `dotnet` arguments of the census build: the whole solution,
+    /// rebuilt from scratch as a graph build, the summary written to
+    /// `logFile` and nothing else to the console.
+    let buildArgs (solution: string) (logFile: string) : string list = [
+        "build"
+        solution
+        "-graph"
+        "--no-incremental"
+        "-nologo"
+        "-v:q"
+        sprintf "-flp:PerformanceSummary;Verbosity=quiet;LogFile=%s" logFile
+    ]
+
+    let private row =
+        Text.RegularExpressions.Regex(@"^\s*(\d+) ms\s+(\S.*?\.\w+proj)\s+\d+ calls\s*$")
+
+    let private key (path: string) =
+        path.Replace('\\', '/').ToLowerInvariant()
+
+    /// The project rows under `heading`, summed per project. A section ends
+    /// at a blank line or the next summary heading; its target rows name no
+    /// project file and are skipped.
+    let private section (heading: string) (lines: string list) : (string * float) list =
+        match lines |> List.skipWhile (fun l -> l.Trim() <> heading) with
+        | [] -> []
+        | _ :: body ->
+            body
+            |> List.takeWhile (fun l -> l.Trim() <> "" && not (l.TrimEnd().EndsWith "Summary:"))
+            |> List.choose (fun l ->
+                let m = row.Match l
+
+                if m.Success then
+                    Some(m.Groups[2].Value, float m.Groups[1].Value / 1000.0)
+                else
+                    None)
+            |> List.groupBy (fst >> key)
+            |> List.map (fun (_, rows) -> fst rows.Head, List.sumBy snd rows)
+
+    /// Every project the `Project Performance Summary` names, with its
+    /// evaluation time from the `Project Evaluation Performance Summary`.
+    /// Text with no summary reads as no projects.
+    let readSummary (text: string) : ProjectCost list =
+        let lines = text.Replace("\r\n", "\n").Split('\n') |> List.ofArray
+
+        let evaluation =
+            section "Project Evaluation Performance Summary:" lines
+            |> List.map (fun (p, s) -> key p, s)
+            |> Map.ofList
+
+        section "Project Performance Summary:" lines
+        |> List.map (fun (project, seconds) -> {
+            Project = project
+            CompileSeconds = seconds
+            EvaluationSeconds = evaluation.TryFind(key project) |> Option.defaultValue 0.0
+        })
+
+    let private includes (item: string) (projectXml: string) : string list =
+        Xml.Linq.XDocument.Parse(projectXml).Descendants()
+        |> Seq.filter (fun e -> e.Name.LocalName = item)
+        |> Seq.choose (fun e -> e.Attribute(Xml.Linq.XName.Get "Include") |> Option.ofObj)
+        |> Seq.map _.Value
+        |> List.ofSeq
+
+    /// The `Include` of every `ProjectReference` in a project file's text.
+    let references (projectXml: string) : string list = includes "ProjectReference" projectXml
+
+    /// The `Include` of every `Compile` item in a project file's text that
+    /// names one file: no wildcard, no property.
+    let compileItems (projectXml: string) : string list =
+        includes "Compile" projectXml
+        |> List.filter (fun i -> not (i.Contains "*" || i.Contains "$("))
+
+    /// The census rows. `projects` is each solution project's repo-relative
+    /// path with the repo-relative projects it references and its line
+    /// count; `costs` are matched to it through their path relative to
+    /// `root`. A project the summary does not name costs 0. Fan-in and
+    /// fan-out count solution projects only. Most expensive first, then by
+    /// path.
+    let assemble
+        (root: string)
+        (costs: ProjectCost list)
+        (projects: (string * string list * int) list)
+        : CensusEntry list =
+        let rootKey = (key root).TrimEnd('/') + "/"
+
+        // A string prefix rather than `Path.GetRelativePath`, so a summary
+        // written on one OS reads the same on another.
+        let relativeKey (path: string) =
+            let k = key path
+
+            if k.StartsWith(rootKey, StringComparison.Ordinal) then
+                k.Substring rootKey.Length
+            else
+                k
+
+        let costOf = costs |> List.map (fun c -> relativeKey c.Project, c) |> Map.ofList
+
+        let inSolution = projects |> List.map (fun (p, _, _) -> key p) |> Set.ofList
+
+        let referencesOf =
+            projects
+            |> List.map (fun (p, refs, _) ->
+                key p, refs |> List.map key |> List.filter inSolution.Contains |> Set.ofList)
+            |> Map.ofList
+
+        projects
+        |> List.map (fun (project, _, lines) ->
+            let k = key project
+            let cost = costOf.TryFind k
+
+            {
+                Project = Paths.toSlash project
+                CompileSeconds = cost |> Option.map _.CompileSeconds |> Option.defaultValue 0.0
+                EvaluationSeconds = cost |> Option.map _.EvaluationSeconds |> Option.defaultValue 0.0
+                Lines = lines
+                FanIn = referencesOf |> Map.filter (fun _ refs -> refs.Contains k) |> Map.count
+                FanOut = referencesOf[k].Count
+            })
+        |> List.sortBy (fun e -> -e.CompileSeconds, e.Project)
+
+    /// Each solution project of the repository at `root` with its
+    /// references (repo-relative) and the lines in its `Compile` items, the
+    /// input `assemble` takes. A missing source file counts 0 lines.
+    let projectGraph (root: string) (solutionProjects: string list) : (string * string list * int) list =
+        solutionProjects
+        |> List.map (fun project ->
+            let path = IO.Path.Combine(root, project)
+            let dir = IO.Path.GetDirectoryName path
+            let xml = IO.File.ReadAllText path
+
+            let local (inc: string) =
+                IO.Path.Combine(dir, inc.Replace('\\', '/'))
+
+            let relative (inc: string) =
+                IO.Path.GetRelativePath(root, IO.Path.GetFullPath(local inc)) |> Paths.toSlash
+
+            let lines =
+                compileItems xml
+                |> List.sumBy (fun inc ->
+                    let file = local inc
+
+                    if IO.File.Exists file then
+                        Seq.length (IO.File.ReadLines file)
+                    else
+                        0)
+
+            Paths.toSlash project, references xml |> List.map relative, lines)
+
+    /// This machine as the census records it: OS, architecture and logical
+    /// processor count. Never the host name — the file is committed, and a
+    /// host name identifies a private machine without saying anything a
+    /// reader of the figures can use.
+    let machine () : string =
+        sprintf
+            "%s %s, %d logical processors"
+            Runtime.InteropServices.RuntimeInformation.OSDescription
+            (string Runtime.InteropServices.RuntimeInformation.OSArchitecture)
+            System.Environment.ProcessorCount
+
+    let private round1 (x: float) = Math.Round(x, 1)
+
+    /// The census as `build-census.json` text: indented, rows in the order
+    /// given, seconds to one decimal place, LF line ends.
+    let render (census: BuildCensus) : string =
+        use stream = new IO.MemoryStream()
+
+        do
+            use w =
+                new Text.Json.Utf8JsonWriter(
+                    stream,
+                    Text.Json.JsonWriterOptions(
+                        Indented = true,
+                        Encoder = Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                    )
+                )
+
+            w.WriteStartObject()
+            w.WriteString("treeSha", census.TreeSha)
+            w.WriteString("machine", census.Machine)
+            w.WriteString("measuredAt", census.MeasuredAt)
+            w.WriteNumber("wallSeconds", round1 census.WallSeconds)
+            w.WriteNumber("totalCompileSeconds", round1 (census.Projects |> List.sumBy _.CompileSeconds))
+            w.WriteString("command", census.Command)
+            w.WriteStartArray("projects")
+
+            for e in census.Projects do
+                w.WriteStartObject()
+                w.WriteString("project", e.Project)
+                w.WriteNumber("compileSeconds", round1 e.CompileSeconds)
+                w.WriteNumber("evaluationSeconds", round1 e.EvaluationSeconds)
+                w.WriteNumber("lines", e.Lines)
+                w.WriteNumber("fanIn", e.FanIn)
+                w.WriteNumber("fanOut", e.FanOut)
+                w.WriteEndObject()
+
+            w.WriteEndArray()
+            w.WriteEndObject()
+
+        Text.Encoding.UTF8.GetString(stream.ToArray()).Replace("\r\n", "\n") + "\n"
+
+    /// The project paths a `build-census.json` text names, or why it names
+    /// none.
+    let projectSet (censusJson: string) : Result<string list, string> =
+        try
+            use doc = Text.Json.JsonDocument.Parse censusJson
+
+            match doc.RootElement.TryGetProperty "projects" with
+            | true, projects when projects.ValueKind = Text.Json.JsonValueKind.Array ->
+                projects.EnumerateArray()
+                |> Seq.map (fun p -> p.GetProperty("project").GetString())
+                |> List.ofSeq
+                |> Ok
+            | _ -> Error "it has no `projects` array"
+        with ex ->
+            Error(sprintf "it does not parse (%s)" ex.Message)
+
+    /// The `--check` verdict: findings, empty when the census names exactly
+    /// the solution's projects. Timings are not compared — they move machine
+    /// to machine; a project added or removed is what makes the file stale.
+    let check (censusJson: string) (solutionText: string) : string list =
+        match projectSet censusJson with
+        | Error why -> [ sprintf "%s cannot be read: %s." fileName why ]
+        | Ok named ->
+            let current = Gate.solutionProjects solutionText
+            let keys (ps: string list) = ps |> List.map key |> Set.ofList
+            let missing = Set.difference (keys current) (keys named)
+            let gone = Set.difference (keys named) (keys current)
+
+            [
+                for p in current do
+                    if missing.Contains(key p) then
+                        yield sprintf "%s is in the solution but not in %s." p fileName
+                for p in named do
+                    if gone.Contains(key p) then
+                        yield sprintf "%s is in %s but no longer in the solution." p fileName
+            ]
+
 // ─── Aggregating gate runner ─────────────────────────────────────────
 
 /// Runs a set of INDEPENDENT gate legs and reports on all of them.

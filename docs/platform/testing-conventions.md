@@ -265,6 +265,39 @@ copy, so an internal edit leaves every baseline unchanged and a public addition 
 build, the floor for a fresh checkout, is still the 4m18s quiet-machine figure. The measurements are in
 [`docs/migrations/1195-compiler-levers.md`](../migrations/1195-compiler-levers.md).
 
+## The build census: what each project costs to build
+
+[`build-census.json`](../../build-census.json) at the repository root records, for every project in
+`ToolUp.Forge.sln`, its build seconds, its evaluation seconds, the lines in its `Compile` items, its fan-in (solution
+projects that reference it) and its fan-out (solution projects it references). It also records the tree SHA, the
+machine, the UTC time of the measurement, the wall clock of the build and the command that produced it. Rows are
+sorted by build seconds, most expensive first. Read it before you plan a project split or size a gate's build budget,
+so the plan follows measured cost rather than folder size.
+
+**The figures are one machine's, and they are dated.** They come from a single clean graph build on the machine the
+file names, at the time it names, and that machine may have been busy. Compare projects against each other within
+one file, and prefer their ranking to an exact ratio. Contention moves the totals most, but a busy run also stretches
+the projects that build in the wide middle of the graph more than the ones that build early. Do not compare a total
+from one census with a total from another machine. A per-project figure is that project's own build time under
+`-graph`, so it never includes time spent waiting for a reference. Because projects build in parallel, the per-project
+seconds add up to several times the wall clock.
+
+**Regenerate it** whenever the project set changes, and whenever you need current figures:
+
+```powershell
+dotnet run --project Build.fsproj -- Census
+```
+
+That target rebuilds the whole solution once from scratch (`dotnet build ToolUp.Forge.sln -graph --no-incremental`).
+It takes as long as a clean build and leaves every project rebuilt. Commit the regenerated file.
+
+**The file cannot go silently stale.** `dotnet run --project Build.fsproj -- Census --check` builds nothing. It is red
+when the file's project set differs from the solution's, and it names each project added or removed. The Build pack
+runs the same check over the committed file (`BuildCensusTests.fs`), so adding a project to the solution without
+regenerating the census reddens `VerifyAll`. Timings are never compared, because they differ from machine to machine.
+Why the census reads a graph build's performance summary, not a binary log or a plain solution build, is in
+[`docs/migrations/1199-build-census.md`](../migrations/1199-build-census.md).
+
 ## Testing client-tier MVU update functions
 
 Client-tier modules (`ToolUp.Platform.Client`, `ToolUp.AI.Client`, etc.) cannot be exercised by the `.NET` Expecto runners. The blocker is module-level construction of ToolUp.Remoting proxies:
