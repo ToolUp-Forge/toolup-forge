@@ -21,10 +21,11 @@
     test packs, commercial-internal) opt out with <IsPackable>false</IsPackable>
     in their own fsproj.
 
-    Initial version 0.1.0 across the board. SemVer-on-0.x policy: minor
-    bumps may include breaking changes during 0.x; patch bumps remain
-    non-breaking. Per-package <Version> overrides where a package needs
-    to advance independently.
+    SemVer-on-0.x policy: minor bumps may include breaking changes during
+    0.x; patch bumps remain non-breaking. The <Version> below is the CORE
+    line's; each companion family packs at its own version group's line,
+    assigned in the region generated from version-groups.json further
+    down (docs/platform/release-process.md).
   -->
   <!--
     Phase 624 (2026-07-31) — FS0025 (incomplete pattern match) is an
@@ -1068,6 +1069,7 @@
       - 1195 (0.39.0): none — `ProduceReferenceAssembly` is declared `true` (the SDK default for net7.0+ .fsproj, now held by CompilerLeversTests) and `ParallelCompilation` is measured and left off (docs/migrations/1195-compiler-levers.md); no package surface moves.
       - 875 (0.39.0): breaking (rides the draft 876 made breaking; no version move) — the config-key registry is typed: `ConfigKeys.keys` holds one `ConfigKey` per key with a closed `ConfigKeyKind` (`BoolKey` / `IntKey` / `EnumKey` / `StringKey`, each with a typed default), a `Direction` on every boolean and union key, `IntBounds` on every integer key and a `SealPosture` on every key; `ConfigKeys.all` and `intKeyRules` keep their types and are derived from it; `ConfigKeys.key`, `trueTokens` / `falseTokens`, `ConfigKeySeal` and `DeploymentDoc` are new; `SERVER_PORT` and `SERVER_BIND_ADDRESS` join the registry and the manifest-bindable set; `ServerConfig.fromEnv` reads every key through its entry (parser, default, bounds) and binds the same record and values (pinned by a snapshot taken before the change); a positive-only integer key now refuses `0` or a negative value at preflight, and an out-of-range value binds the default with a warning; the composition manifest records the seal-relevant keys at schema 5 (`SealedConfigKeys`, `withConfigKeys`, `recordsConfigKeys`, `sealedConfigKeys`) and the boot seal frames them, schema-4 seals byte-pinned; `CompositionDrift.ConfigKeyChanged` and `CompositionUnrecorded.ConfigKeysUnrecorded` are new cases; the reference's documented defaults are corrected for TOOLUP_TRUST_FORWARDED_HEADERS, TOOLUP_MODULE_BINDING_ALLOW_UNBOUND and TOOLUP_LDAP_NESTED_GROUPS (true) and TOOLUP_ENABLE_CITATION_DEV_ENDPOINT (unset); `GenerateConfigReference` regenerates every projection, DEPLOYMENT.md's directions and seal-coverage region included.
       - 877 (0.39.0): breaking (rides the same draft; no version move) — `ServerConfig` is nested by concern: `SecurityPosture` (the HTTP edge: `RequireHttps`, `TrustForwardedHeaders`, `TrustedProxyCidrs`, `SecurityHeaders`, `SecurityHardening`, `Cors`, `SseAuthMode`, `AuthCookieIssuance`, `MaxRequestBodyBytes`, `WebhookUrlAllowedHosts`), `RiskAcknowledgements` (the twenty `Accept*` escape hatches — the registry's escape-hatch category), `MultiInstance` (`ReplicaCount`, `ProcessProfile`, `PeerRoutePrefixes`, `PeerSubstrate`), `Observability` (`LogLevel`, `TraceCategories`, `HealthStateTracking`, `MetricsEndpoint`, `MetricsSink`, `MetricsHistory`, `TelemetrySink`, `SlowRequestThreshold`, `SlowRequestThresholdOverrides`, `AlertRules`, `LogStore`, `DatadogReadback`) and `Stores` (`EventStore`, `ResultStore`, `ShareTokenStore`, `ServiceAccounts`, `EntityStore`, `EntityOutbox`, `GraphStore`, `TimeSeriesStore`, `Datasets`, `SessionRegistry`, `ConversationStore`, `AssetStore`, `RateLimitStore`, `ConsentStateStore`, `ExternalContactStore`, `FactStore`), each with its own `defaults`; the thirty-seven payload-free two-case `*Mode` unions (`AuditLogMode`, `EntityStoreMode`, `WebhookMode`, `PresenceMode`, `ExternalComputeMode`, `TelemetrySinkMode`, …) are deleted for the one `FeatureMode = Disabled | Enabled` (`FeatureMode.isEnabled` / `ofBool`), and `ServerConfigOverrides` takes it where it took them; every environment key and accepted token is unchanged (`ServerConfig.fromEnv` binds the same effective configuration, pinned field by field against the pre-877 snapshot through the flat-to-nested projection); `ConfigKey.readBool` / `readPermissiveBool` are new and the seven boolean readers outside the binder resolve through them; `ToolUp.Platform.Build` gains `Codemod.featureModes`, `concernFields`, `planFor`, `rewriteTextFor`, `reviewTextFor`, `analyseFileFor`, `migrationOfPhase` and the Codemod target's per-phase option (codemod rules 877-*, docs/migrations/877-nested-server-config.md).
+      - 1196 (0.39.0): none — version groups: version-groups.json puts every packable project on one line (the core lockstep at this <Version>, each companion family on its own), VerifySemVerBump rolls up per group, and the ToolUp.Sdk manifest resolves each package through its group property, defaulted so a consumer pinning only ToolUpSdkVersion restores everything; the Stripe, Workflow, Experiments, Webhooks and OpenFeature entries now resolve at the versions they publish (docs/migrations/1196-version-groups.md)
     -->
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
@@ -1095,6 +1097,231 @@
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
+  <!-- BEGIN GENERATED VERSION GROUPS - do not hand-edit below this line.
+       Rendered from version-groups.json by the GenerateSdkManifest target of
+       Build.fsproj; SdkManifestTests fails when the two disagree. Each
+       companion family packs at its own group's version; the core packs at
+       the <Version> above. On a release-candidate run (Directory.Build.targets)
+       every companion group is made non-packable: a candidate is the core's,
+       and the companions ride the core's stable release instead.
+  -->
+  <PropertyGroup>
+    <ToolUpProjectRelativePath>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectFullPath)').Replace('\', '/'))</ToolUpProjectRelativePath>
+    <ToolUpAIProvidersVersion>0.39.0</ToolUpAIProvidersVersion>
+    <ToolUpAlgorithmProvidersVersion>0.39.0</ToolUpAlgorithmProvidersVersion>
+    <ToolUpArtefactSigningVersion>0.39.0</ToolUpArtefactSigningVersion>
+    <ToolUpAuditSinksVersion>0.39.0</ToolUpAuditSinksVersion>
+    <ToolUpAuthProvidersVersion>0.39.0</ToolUpAuthProvidersVersion>
+    <ToolUpCalendarVersion>0.39.0</ToolUpCalendarVersion>
+    <ToolUpCloudVersion>0.39.0</ToolUpCloudVersion>
+    <ToolUpContainerSchedulersVersion>0.39.0</ToolUpContainerSchedulersVersion>
+    <ToolUpContentScannersVersion>0.39.0</ToolUpContentScannersVersion>
+    <ToolUpDataSourcesVersion>0.39.0</ToolUpDataSourcesVersion>
+    <ToolUpEmbeddingCachesVersion>0.39.0</ToolUpEmbeddingCachesVersion>
+    <ToolUpEmbeddingProvidersVersion>0.39.0</ToolUpEmbeddingProvidersVersion>
+    <ToolUpEncryptionVersion>0.39.0</ToolUpEncryptionVersion>
+    <ToolUpEntityStoresVersion>0.39.0</ToolUpEntityStoresVersion>
+    <ToolUpFactStoresVersion>0.39.0</ToolUpFactStoresVersion>
+    <ToolUpFeatureFlagProvidersVersion>0.1.1-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpHostsVersion>0.39.0</ToolUpHostsVersion>
+    <ToolUpIngestionQueuesVersion>0.39.0</ToolUpIngestionQueuesVersion>
+    <ToolUpJobSchedulersVersion>0.39.0</ToolUpJobSchedulersVersion>
+    <ToolUpMediaVersion>0.39.0</ToolUpMediaVersion>
+    <ToolUpMetricsVersion>0.39.0</ToolUpMetricsVersion>
+    <ToolUpModelProvidersVersion>0.39.0</ToolUpModelProvidersVersion>
+    <ToolUpNotificationChannelsVersion>0.39.0</ToolUpNotificationChannelsVersion>
+    <ToolUpObservabilityVersion>0.39.0</ToolUpObservabilityVersion>
+    <ToolUpOcrProvidersVersion>0.39.0</ToolUpOcrProvidersVersion>
+    <ToolUpRateLimitVersion>0.39.0</ToolUpRateLimitVersion>
+    <ToolUpReportRenderersVersion>0.39.0</ToolUpReportRenderersVersion>
+    <ToolUpRerankersVersion>0.39.0</ToolUpRerankersVersion>
+    <ToolUpSecretsVersion>0.39.0</ToolUpSecretsVersion>
+    <ToolUpShareTokenStoreDecoratorsVersion>0.39.0</ToolUpShareTokenStoreDecoratorsVersion>
+    <ToolUpSparseIndicesVersion>0.39.0</ToolUpSparseIndicesVersion>
+    <ToolUpStorageVersion>0.39.0</ToolUpStorageVersion>
+    <ToolUpSvgRasterizersVersion>0.39.0</ToolUpSvgRasterizersVersion>
+    <ToolUpTelemetrySinksVersion>0.39.0</ToolUpTelemetrySinksVersion>
+    <ToolUpTimeSeriesStoresVersion>0.39.0</ToolUpTimeSeriesStoresVersion>
+    <ToolUpVectorStoresVersion>0.39.0</ToolUpVectorStoresVersion>
+    <ToolUpVoiceProvidersVersion>0.39.0</ToolUpVoiceProvidersVersion>
+    <ToolUpExperimentsVersion>0.1.0-alpha</ToolUpExperimentsVersion>
+    <ToolUpStripeVersion>0.2.1</ToolUpStripeVersion>
+    <ToolUpWorkflowVersion>0.1.0-alpha</ToolUpWorkflowVersion>
+    <ToolUpWebhooksVersion>0.1.0-alpha</ToolUpWebhooksVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Platform\.[^/]*/.*\z|^src/ToolUp\.AI\.[^/]*/.*\z|^src/ToolUp\.Algorithms\.[^/]*/.*\z|^src/ToolUp\.ArtefactSigning/.*\z|^src/ToolUp\.AssetStore/.*\z|^src/ToolUp\.BrandKit/.*\z|^src/ToolUp\.Cli/.*\z|^src/ToolUp\.Client\.ModelViewer/.*\z|^src/ToolUp\.Companions\.Isolation/.*\z|^src/ToolUp\.Facts\.[^/]*/.*\z|^src/ToolUp\.Forms\.[^/]*/.*\z|^src/ToolUp\.Graph\.[^/]*/.*\z|^src/ToolUp\.KnowledgeBase\.[^/]*/.*\z|^src/ToolUp\.Offline\.[^/]*/.*\z|^src/ToolUp\.OpenXml/.*\z|^src/ToolUp\.OpenXml\.[^/]*/.*\z|^src/ToolUp\.PublicRendering/.*\z|^src/ToolUp\.RAG\.[^/]*/.*\z|^src/ToolUp\.Remoting\.[^/]*/.*\z|^src/ToolUp\.Reporting\.[^/]*/.*\z|^src/ToolUp\.Scheduling\.[^/]*/.*\z|^src/ToolUp\.Sdk/.*\z|^src/ToolUp\.Tabular/.*\z|^src/ToolUp\.Voice\.[^/]*/.*\z|^src/Feliz\.[^/]*/.*\z|^src/AI\.Samples/.*\z|^src/AIExtensions/.*\z|^src/AICookbooks/.*\z|^src/ContentAuthoring/.*\z|^src/ExternalCompute/.*\z|^src/InterPlatform/.*\z'))">
+    <ToolUpVersionGroup>core</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AIProviders/.*\z'))">
+    <ToolUpVersionGroup>ai-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AlgorithmProviders/.*\z'))">
+    <ToolUpVersionGroup>algorithm-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ArtefactSigning/.*\z'))">
+    <ToolUpVersionGroup>artefact-signing</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AuditSinks/.*\z'))">
+    <ToolUpVersionGroup>audit-sinks</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AuthProviders/.*\z|^src/ToolUp\.AuthProviders\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>auth-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Calendar/.*\z'))">
+    <ToolUpVersionGroup>calendar</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Cloud/.*\z'))">
+    <ToolUpVersionGroup>cloud</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ContainerSchedulers/.*\z'))">
+    <ToolUpVersionGroup>container-schedulers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ContentScanners/.*\z'))">
+    <ToolUpVersionGroup>content-scanners</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/DataSources/.*\z'))">
+    <ToolUpVersionGroup>data-sources</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/EmbeddingCaches/.*\z'))">
+    <ToolUpVersionGroup>embedding-caches</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/EmbeddingProviders/.*\z'))">
+    <ToolUpVersionGroup>embedding-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Encryption/.*\z'))">
+    <ToolUpVersionGroup>encryption</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/EntityStores/.*\z'))">
+    <ToolUpVersionGroup>entity-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/FactStores/.*\z'))">
+    <ToolUpVersionGroup>fact-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/FeatureFlagProviders/.*\z'))">
+    <ToolUpVersionGroup>feature-flag-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Hosts/.*\z'))">
+    <ToolUpVersionGroup>hosts</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/IngestionQueues/.*\z'))">
+    <ToolUpVersionGroup>ingestion-queues</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/JobSchedulers/.*\z'))">
+    <ToolUpVersionGroup>job-schedulers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Media/.*\z'))">
+    <ToolUpVersionGroup>media</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Metrics/.*\z'))">
+    <ToolUpVersionGroup>metrics</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ModelProviders/.*\z'))">
+    <ToolUpVersionGroup>model-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/NotificationChannels/.*\z'))">
+    <ToolUpVersionGroup>notification-channels</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Observability/.*\z'))">
+    <ToolUpVersionGroup>observability</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/OcrProviders/.*\z'))">
+    <ToolUpVersionGroup>ocr-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/RateLimit/.*\z'))">
+    <ToolUpVersionGroup>rate-limit</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Reporting/.*\z'))">
+    <ToolUpVersionGroup>report-renderers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Rerankers/.*\z'))">
+    <ToolUpVersionGroup>rerankers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Secrets/.*\z'))">
+    <ToolUpVersionGroup>secrets</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ShareTokenStoreDecorators/.*\z'))">
+    <ToolUpVersionGroup>share-token-store-decorators</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/SparseIndices/.*\z'))">
+    <ToolUpVersionGroup>sparse-indices</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Storage/.*\z'))">
+    <ToolUpVersionGroup>storage</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/SvgRasterizers/.*\z'))">
+    <ToolUpVersionGroup>svg-rasterizers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/TelemetrySinks/.*\z'))">
+    <ToolUpVersionGroup>telemetry-sinks</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/TimeSeriesStores/.*\z'))">
+    <ToolUpVersionGroup>time-series-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/VectorStores/.*\z'))">
+    <ToolUpVersionGroup>vector-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/VoiceProviders/.*\z'))">
+    <ToolUpVersionGroup>voice-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Experiments\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>experiments</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Stripe\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>stripe</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Workflow\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>workflow</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Webhooks/.*\z'))">
+    <ToolUpVersionGroup>webhooks</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'ai-providers'">$(ToolUpAIProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'algorithm-providers'">$(ToolUpAlgorithmProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'artefact-signing'">$(ToolUpArtefactSigningVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'audit-sinks'">$(ToolUpAuditSinksVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'auth-providers'">$(ToolUpAuthProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'calendar'">$(ToolUpCalendarVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'cloud'">$(ToolUpCloudVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'container-schedulers'">$(ToolUpContainerSchedulersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'content-scanners'">$(ToolUpContentScannersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'data-sources'">$(ToolUpDataSourcesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'embedding-caches'">$(ToolUpEmbeddingCachesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'embedding-providers'">$(ToolUpEmbeddingProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'encryption'">$(ToolUpEncryptionVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'entity-stores'">$(ToolUpEntityStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'fact-stores'">$(ToolUpFactStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'feature-flag-providers'">$(ToolUpFeatureFlagProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'hosts'">$(ToolUpHostsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'ingestion-queues'">$(ToolUpIngestionQueuesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'job-schedulers'">$(ToolUpJobSchedulersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'media'">$(ToolUpMediaVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'metrics'">$(ToolUpMetricsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'model-providers'">$(ToolUpModelProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'notification-channels'">$(ToolUpNotificationChannelsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'observability'">$(ToolUpObservabilityVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'ocr-providers'">$(ToolUpOcrProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'rate-limit'">$(ToolUpRateLimitVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'report-renderers'">$(ToolUpReportRenderersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'rerankers'">$(ToolUpRerankersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'secrets'">$(ToolUpSecretsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'share-token-store-decorators'">$(ToolUpShareTokenStoreDecoratorsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'sparse-indices'">$(ToolUpSparseIndicesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'storage'">$(ToolUpStorageVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'svg-rasterizers'">$(ToolUpSvgRasterizersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'telemetry-sinks'">$(ToolUpTelemetrySinksVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'time-series-stores'">$(ToolUpTimeSeriesStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'vector-stores'">$(ToolUpVectorStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'voice-providers'">$(ToolUpVoiceProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'experiments'">$(ToolUpExperimentsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'stripe'">$(ToolUpStripeVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'workflow'">$(ToolUpWorkflowVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'webhooks'">$(ToolUpWebhooksVersion)</Version>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TOOLUP_RELEASE_PRERELEASE)' != '' And '$(ToolUpVersionGroup)' != '' And '$(ToolUpVersionGroup)' != 'core'">
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <!-- END GENERATED VERSION GROUPS - do not hand-edit above this line. -->
   <!--
     Auto-include a sibling README.md for packable projects that have
     one. Cross-tier companions (where README.md lives in the parent

@@ -6,11 +6,12 @@
 ///
 /// **What this decides.** Given the api-baselines as they stood at the
 /// last release and as they stand now, it classifies each package's
-/// surface change (unchanged / additive / breaking), rolls those up to
-/// the one lockstep SDK version, and says which bump that demands. The
-/// `VerifySemVerBump` target (root `Build.fs`) then checks the
-/// `<Version>` in `Directory.Build.props` against it and fails when the
-/// declared version implies a SMALLER bump than the surface moved by.
+/// surface change (unchanged / additive / breaking), rolls those up per
+/// version group (`version-groups.json`), and says which bump each demands. The
+/// `VerifySemVerBump` target (root `Build.fs`) then checks each group's
+/// declared version (the core's is the `<Version>` in `Directory.Build.props`)
+/// against it and fails a group whose version implies a SMALLER bump than its
+/// own packages moved by.
 /// It never edits the version: the proposal is advice, the check is a
 /// floor.
 ///
@@ -132,22 +133,11 @@ let parseVersion (text: string) : Result<Version, string> =
 /// itself, because the one thing it must refuse — a prerelease label
 /// written into the tree rather than onto the tag — is exactly what
 /// `parseVersion` discards.
+///
+/// One reader, shared with the version-group checks: `SdkManifest` holds it,
+/// because the groups' agreement with `<Version>` is checked there.
 let declaredVersionTextIn (propsText: string) : Result<string, string> =
-    let uncommented =
-        Regex.Replace(propsText, @"<!--.*?-->", "", RegexOptions.Singleline)
-
-    let matches = Regex.Matches(uncommented, @"<Version>\s*([^<]+?)\s*</Version>")
-
-    match matches |> Seq.map (fun m -> m.Groups[1].Value) |> List.ofSeq with
-    | [ one ] -> Ok one
-    | [] -> Error "Directory.Build.props declares no <Version> element outside a comment"
-    | many ->
-        Error(
-            sprintf
-                "Directory.Build.props declares %d <Version> elements (%s) — the lockstep SDK version must be a single declaration"
-                many.Length
-                (String.concat ", " many)
-        )
+    SdkManifest.declaredVersionTextIn propsText
 
 /// The `<Version>` declared in `Directory.Build.props`, parsed.
 let declaredVersionIn (propsText: string) : Result<Version, string> =
@@ -312,10 +302,9 @@ let classifyPackage (package: string) (released: string option) (current: string
         Introduced = released.IsNone && current.IsSome
     }
 
-/// The lockstep roll-up: the highest class any package reached. The SDK
-/// versions in lockstep — one `<Version>` for every package — so one
-/// breaking package makes the whole release breaking, however many others
-/// did not move.
+/// The roll-up over one version line: the highest class any of its packages
+/// reached. One breaking package makes its whole line breaking, however many
+/// others did not move; `assessGroups` applies it per line.
 let rollUp (changes: PackageChange list) : SurfaceClass =
     changes |> List.fold (fun acc c -> SurfaceClass.max acc c.Class) Unchanged
 
@@ -522,7 +511,7 @@ let private evidenceFor (a: Assessment) =
 /// of a red release check is about to edit a version number under time
 /// pressure — that this is a floor and not an instruction. A version
 /// ABOVE the demand is always fine.
-let defect (a: Assessment) : string option =
+let defectFrom (source: string) (a: Assessment) : string option =
     if meetsDemand a then
         None
     else
@@ -531,16 +520,18 @@ let defect (a: Assessment) : string option =
             match a.Advance with
             | None ->
                 sprintf
-                    "UNDER-BUMP: Directory.Build.props declares %s, which does not advance past the last release %s (%s)."
+                    "UNDER-BUMP: %s declares %s, which does not advance past the last release %s (%s)."
+                    source
                     (Version.render a.Declared)
                     a.ReleaseTag
                     (Version.render a.Released)
             | Some actual ->
                 sprintf
-                    "UNDER-BUMP: the public surface changed by a %s since %s, which demands a %s bump; Directory.Build.props declares %s, a %s."
+                    "UNDER-BUMP: the public surface changed by a %s since %s, which demands a %s bump; %s declares %s, a %s."
                     (SurfaceClass.name a.Class)
                     a.ReleaseTag
                     (Bump.name a.Demanded)
+                    source
                     (Version.render a.Declared)
                     (Bump.name actual)
 
@@ -553,6 +544,9 @@ let defect (a: Assessment) : string option =
                 a.ReleaseTag
                 (describe a)
         )
+
+/// `defectFrom` for the core's single declaration in `Directory.Build.props`.
+let defect (a: Assessment) : string option = defectFrom "Directory.Build.props" a
 
 /// The precondition report for a tree this check cannot measure — no
 /// release tag below the declared version is visible.
@@ -576,6 +570,145 @@ let behindReleaseReport (declared: Version) (ahead: (string * Version) list) =
         (Version.render declared)
         ahead.Length
         (ahead |> List.map fst |> String.concat ", ")
+
+// ─── Version groups ──────────────────────────────────────────────────
+//
+// The roll-up is per GROUP (`version-groups.json`), not per repository: each
+// line's own packages decide its own floor, so a break in one companion family
+// demands a bump of that family alone. The core is still one lockstep line,
+// and still advances at every release, because the tag names it. A companion
+// line that did not move is not re-released, unless a line it depends on
+// broke: its published packages were compiled against the surface that broke,
+// so it must ship again, at least as a patch.
+
+/// What the check knows about one group.
+type GroupInput = {
+    Group: string
+    Lockstep: bool
+    /// The group's version at the release point; `None` when the group did
+    /// not exist there.
+    Released: Version option
+    Declared: Version
+    /// The packages of this group whose baseline moved.
+    Changes: PackageChange list
+    /// The groups this group's projects reference.
+    DependsOn: string list
+}
+
+type GroupVerdict =
+    /// A line that did not exist at the release point: no promise to keep.
+    | NewGroup
+    /// A companion line whose packages did not move, and none of whose
+    /// dependencies broke, at the version it was released at.
+    | Unmoved
+    | Assessed of Assessment
+
+type GroupAssessment = {
+    Group: string
+    Lockstep: bool
+    Declared: Version
+    /// Dependencies of this group whose own surface broke.
+    BrokenDependencies: string list
+    Verdict: GroupVerdict
+}
+
+/// One assessment per group, from the same `assess` the single line used.
+let assessGroups (releaseTag: string) (inputs: GroupInput list) : GroupAssessment list =
+    let classOf = inputs |> List.map (fun i -> i.Group, rollUp i.Changes) |> Map.ofList
+
+    inputs
+    |> List.map (fun i ->
+        let broken =
+            i.DependsOn |> List.filter (fun d -> Map.tryFind d classOf = Some Breaking)
+
+        let verdict =
+            match i.Released with
+            | None -> NewGroup
+            | Some released when
+                not i.Lockstep
+                && rollUp i.Changes = Unchanged
+                && List.isEmpty broken
+                && Version.compare released i.Declared = 0
+                ->
+                Unmoved
+            | Some released -> Assessed(assess releaseTag released i.Declared i.Changes)
+
+        {
+            Group = i.Group
+            Lockstep = i.Lockstep
+            Declared = i.Declared
+            BrokenDependencies = broken
+            Verdict = verdict
+        })
+
+/// Where a group's version is declared, for the reports.
+let private sourceOf (g: GroupAssessment) =
+    if g.Lockstep then
+        "Directory.Build.props"
+    else
+        sprintf "version-groups.json (group `%s`)" g.Group
+
+/// One group's account, always printed.
+let describeGroup (g: GroupAssessment) : string =
+    let name =
+        if g.Lockstep then
+            sprintf "Group `%s` (lockstep)" g.Group
+        else
+            sprintf "Group `%s`" g.Group
+
+    let deps =
+        match g.BrokenDependencies with
+        | [] -> ""
+        | broken -> sprintf "\n  It depends on %s, which broke, so it must re-release." (String.concat ", " broken)
+
+    match g.Verdict with
+    | NewGroup -> sprintf "%s: new at %s; no earlier release to keep a promise to." name (Version.render g.Declared)
+    | Unmoved ->
+        sprintf
+            "%s: unchanged at %s; not re-released, and its published packages stay current."
+            name
+            (Version.render g.Declared)
+    | Assessed a -> sprintf "%s:\n%s%s" name (describe a) deps
+
+/// The group's FAILURE, or `None` when its declared version meets its floor.
+let groupDefect (g: GroupAssessment) : string option =
+    match g.Verdict with
+    | NewGroup
+    | Unmoved -> None
+    | Assessed a ->
+        defectFrom (sourceOf g) a
+        |> Option.map (fun d ->
+            match g.BrokenDependencies with
+            | [] -> d
+            | broken ->
+                sprintf
+                    "%s\n\n  Its own surface may not have moved: it depends on %s, whose surface broke, and its published packages were compiled against the old one."
+                    d
+                    (String.concat ", " broken))
+
+/// The version a group carried at the release point. A tag that carries
+/// `version-groups.json` says so directly (`None`: the group did not exist).
+/// A tag from before groups versioned everything at the tag's version except
+/// the projects that declared their own `<Version>`: a group whose every
+/// project did, alike, was on that version.
+let releasedGroupVersion
+    (tagVersion: Version)
+    (groupsAtTag: SdkManifest.VersionGroup list option)
+    (groupId: string)
+    (ownVersionsAtTag: string option list)
+    : Version option =
+    match groupsAtTag with
+    | Some groups ->
+        groups
+        |> List.tryFind (fun g -> g.Id = groupId)
+        |> Option.bind (fun g -> parseVersion g.Version |> Result.toOption)
+    | None ->
+        match ownVersionsAtTag |> List.distinct with
+        | [ Some own ] ->
+            match parseVersion own with
+            | Ok v -> Some v
+            | Error _ -> Some tagVersion
+        | _ -> Some tagVersion
 
 // ─── Filesystem side (still `git`-free) ──────────────────────────────
 

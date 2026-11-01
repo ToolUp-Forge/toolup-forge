@@ -264,4 +264,237 @@ let tests =
                 preamble
                 "a regeneration must reproduce the hand-authored preamble byte-for-byte ahead of the generated region"
         }
+
+        // ── Version groups ────────────────────────────────────────────
+
+        test "every packable project is on exactly one version line, and both projections agree" {
+            // The live property: version-groups.json places all of the tree
+            // (no project in no group, none in two, no dead glob, every own
+            // <Version> equal to its group's, the core at <Version>, no core
+            // package depending on a companion), and the Directory.Build.props
+            // region is its render.
+            match SdkManifest.groupFindings (repoRoot ()) with
+            | [] -> ()
+            | findings ->
+                failtestf
+                    "the version groups do not describe this tree:\n  - %s\n\nRegenerate with: %s"
+                    (String.concat "\n  - " findings)
+                    SdkManifest.regenerateCommand
+        }
+
+        test "the committed manifest is the render of the groups" {
+            Expect.isTrue
+                (SdkManifest.manifestIsCurrent (repoRoot ()))
+                (sprintf
+                    "src/ToolUp.Sdk/build/ToolUp.Sdk.props is not what version-groups.json renders (a package moved group, or a family's default version moved). Regenerate with: %s"
+                    SdkManifest.regenerateCommand)
+        }
+
+        test "every manifest package resolves through exactly one property, its group's" {
+            let root = repoRoot ()
+
+            let groups =
+                match SdkManifest.loadVersionGroups root with
+                | Ok g -> g
+                | Error e -> failtestf "%s" e
+
+            let text =
+                SdkManifest.blankComments (File.ReadAllText(SdkManifest.manifestPath root))
+
+            let entries =
+                Text.RegularExpressions.Regex.Matches(
+                    text,
+                    "<PackageVersion\\s+Include=\"([^\"]+)\"\\s+Version=\"([^\"]*)\""
+                )
+                |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value)
+                |> List.ofSeq
+
+            Expect.isGreaterThan entries.Length 100 "the manifest's entries were read"
+
+            let byId =
+                SdkManifest.discover root |> List.map (fun p -> p.PackageId, p) |> Map.ofList
+
+            for id, version in entries do
+                let group =
+                    match
+                        byId.TryFind id
+                        |> Option.bind (fun p -> SdkManifest.groupOf groups p.ProjectPath)
+                    with
+                    | Some g -> g
+                    | None -> failtestf "%s is in the manifest and in no single group" id
+
+                Expect.equal
+                    version
+                    (sprintf "$(%s)" group.Property)
+                    (sprintf "%s must resolve through its group `%s`'s property alone" id group.Id)
+
+            // A consumer pinning only the core property resolves everything:
+            // each companion property the entries read has one default, and
+            // the core property has none (the consumer's pin is the only one).
+            let defaults =
+                Text.RegularExpressions.Regex.Matches(text, "<(ToolUp[A-Za-z0-9]+Version) Condition=")
+                |> Seq.map _.Groups[1].Value
+                |> List.ofSeq
+
+            for _, version in entries do
+                let property = version.Trim('$', '(', ')')
+
+                if property = "ToolUpSdkVersion" then
+                    Expect.isFalse (List.contains property defaults) "the core property is the consumer's to set"
+                else
+                    Expect.equal
+                        (defaults |> List.filter ((=) property) |> List.length)
+                        1
+                        (sprintf "%s needs exactly one default for a core-only consumer to resolve it" property)
+        }
+
+        test "the core's <Version> is read past the conditioned per-group assignments" {
+            // The generated region assigns <Version> per companion group with a
+            // Condition attribute; the single bare element stays the one
+            // declaration, which the version ledger edits and the tag names.
+            let props = File.ReadAllText(Path.Combine(repoRoot (), "Directory.Build.props"))
+
+            Expect.stringContains
+                props
+                "<Version Condition="
+                "the generated region assigns companion versions (else this test is vacuous)"
+
+            Expect.isOk (SdkManifest.declaredVersionTextIn props) "exactly one bare <Version> is declared"
+        }
+
+        // ── The groups check's own failure paths ──────────────────────
+
+        let project path own refs : SdkManifest.PackableProject = {
+            PackageId = Path.GetFileNameWithoutExtension(path: string)
+            ProjectPath = path
+            ProjectDir = path
+            PacksAsTool = false
+            AssemblyName = Path.GetFileNameWithoutExtension path
+            OwnVersion = own
+            ProjectReferences = refs
+        }
+
+        let group id lockstep version globs : SdkManifest.VersionGroup = {
+            Id = id
+            Property =
+                (if lockstep then
+                     "ToolUpSdkVersion"
+                 else
+                     "ToolUpSinksVersion")
+            Version = version
+            Lockstep = lockstep
+            Projects = globs
+        }
+
+        let core = group "core" true "0.39.0" [ "src/ToolUp.Platform.*/**" ]
+        let sinks = group "audit-sinks" false "0.39.0" [ "src/AuditSinks/**" ]
+        let corePkg = project "src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj" None []
+        let sinkPkg = project "src/AuditSinks/Cef/ToolUp.AuditSinks.Cef.fsproj" None []
+
+        test "a clean fixture has no findings" {
+            Expect.isEmpty
+                (SdkManifest.versionGroupFindings [ core; sinks ] [ corePkg; sinkPkg ] (Some "0.39.0"))
+                "the fixture the failure cases below perturb is itself clean"
+        }
+
+        test "a packable project in no group is red" {
+            let stray = project "src/Elsewhere/X/X.fsproj" None []
+
+            let findings =
+                SdkManifest.versionGroupFindings [ core; sinks ] [ corePkg; sinkPkg; stray ] (Some "0.39.0")
+
+            Expect.exists findings (fun f -> f.Contains "in no version group") "the stray project is named"
+        }
+
+        test "a project two groups claim, a dead glob, and a disagreeing own version are red" {
+            let greedy = group "greedy" false "0.1.0" [ "src/**" ]
+
+            Expect.exists
+                (SdkManifest.versionGroupFindings
+                    [
+                        core
+                        {
+                            sinks with
+                                Property = "ToolUpOtherVersion"
+                        }
+                        {
+                            greedy with
+                                Property = "ToolUpGreedyVersion"
+                        }
+                    ]
+                    [ corePkg; sinkPkg ]
+                    (Some "0.39.0"))
+                (fun f -> f.Contains "claimed by")
+                "a project two globs claim"
+
+            Expect.exists
+                (SdkManifest.versionGroupFindings
+                    [
+                        core
+                        {
+                            sinks with
+                                Projects = [ "src/AuditSinks/**"; "src/Gone/**" ]
+                        }
+                    ]
+                    [ corePkg; sinkPkg ]
+                    (Some "0.39.0"))
+                (fun f -> f.Contains "matches no packable project")
+                "a glob that claims nothing"
+
+            Expect.exists
+                (SdkManifest.versionGroupFindings
+                    [ core; sinks ]
+                    [
+                        corePkg
+                        {
+                            sinkPkg with
+                                OwnVersion = Some "0.1.0-alpha"
+                        }
+                    ]
+                    (Some "0.39.0"))
+                (fun f -> f.Contains "move the group, not the project")
+                "a project-level <Version> its group does not carry"
+
+            Expect.exists
+                (SdkManifest.versionGroupFindings [ core; sinks ] [ corePkg; sinkPkg ] (Some "0.40.0"))
+                (fun f -> f.Contains "They are one number")
+                "a core group the declared <Version> has moved past"
+        }
+
+        test "a core package depending on a companion line is red, unless it is a tool" {
+            let coreOnSink = {
+                corePkg with
+                    ProjectReferences = [ sinkPkg.ProjectPath ]
+            }
+
+            Expect.exists
+                (SdkManifest.versionGroupFindings [ core; sinks ] [ coreOnSink; sinkPkg ] (Some "0.39.0"))
+                (fun f -> f.Contains "never depends on a companion line")
+                "the lockstep line pinning a companion line"
+
+            Expect.isEmpty
+                (SdkManifest.versionGroupFindings
+                    [ core; sinks ]
+                    [ { coreOnSink with PacksAsTool = true }; sinkPkg ]
+                    (Some "0.39.0"))
+                "a dotnet tool bundles what it references and declares no dependency"
+        }
+
+        test "a glob star stays in one segment and a double star crosses them" {
+            Expect.isTrue
+                (SdkManifest.globMatches "src/ToolUp.AI.*/**" "src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj")
+                "one segment"
+
+            Expect.isFalse
+                (SdkManifest.globMatches "src/ToolUp.AI.*/**" "src/ToolUp.AIProviders/X/X.fsproj")
+                "the literal dot after AI is not a wildcard"
+
+            Expect.isFalse
+                (SdkManifest.globMatches "src/AuditSinks/*.fsproj" "src/AuditSinks/Cef/ToolUp.AuditSinks.Cef.fsproj")
+                "a single star does not cross a slash"
+
+            Expect.isTrue
+                (SdkManifest.globMatches "src/NotificationChannels/**" "src/NotificationChannels/Email/Smtp/X.fsproj")
+                "a double star crosses any depth"
+        }
     ]
