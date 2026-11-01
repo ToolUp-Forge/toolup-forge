@@ -88,7 +88,7 @@ type CitationNormalisation = {
 
 /// AI-side seam for the RAG-supplied post-stream citation
 /// normaliser. The implementation closes over the active
-/// `RagCitationPolicy` (configured by `RAGServerApp.withCitationPolicy`)
+/// `RagCitationPolicy` (configured by `RagOptions.withCitationPolicy`)
 /// + the per-deployment counter store, and emits one
 /// `CitationEvent` per recognised drift variant.
 ///

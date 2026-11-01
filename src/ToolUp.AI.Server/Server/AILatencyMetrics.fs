@@ -13,7 +13,7 @@ open ToolUp.Platform.Metrics
 // `12ae4a9`. This module registers the three `toolup.ai.*` SDK-owned
 // metrics that the in-process `PrometheusMetricsSink` (and any
 // companion sinks like `OtelMetricsSink`) require for emission to
-// flow rather than silently drop. `AIServerApp.create` adds the
+// flow rather than silently drop. `AICompose.withAI` adds the
 // list to `ServerApp.MetricRegistrations` so any AI-using deployment
 // has the metrics declared the moment it composes — no consumer
 // opt-in needed.
@@ -77,7 +77,7 @@ let ProviderFailover = "toolup.ai.provider.failover"
 /// system prompt + tools).
 let cachedPromptRatioBuckets: float list = [ 0.0; 0.1; 0.25; 0.5; 0.75; 0.9; 1.0 ]
 
-/// SDK-owned AI latency registrations. Wired by `AIServerApp.create`
+/// SDK-owned AI latency registrations. Wired by `AICompose.withAI`
 /// into `ServerApp.MetricRegistrations` so the in-process
 /// `PrometheusMetricsSink` allocates the series at compose time and
 /// the agent loop's per-turn latency emissions (`AIAgentEngine.Loop.run`) flow.
@@ -115,7 +115,7 @@ let registrations: MetricRegistration list = [
     // ── Phase 6j.B — Tier-3 fast-path triage ──────────────────────
     //
     // Appended here rather than in a second registration list because
-    // `AIServerApp.create` folds exactly one AI list into
+    // composing the AI tier folds exactly one AI list into
     // `ServerApp.MetricRegistrations`; a parallel list would need a
     // second fold and would be silently unregistered if anyone forgot
     // it, which is the failure mode a metric series has (emissions
@@ -164,7 +164,7 @@ let registrations: MetricRegistration list = [
     // ── Phase 709 — per-tool result context budget ─────────────────
     //
     // Appended to this one list for the same reason the triage series
-    // were: `AIServerApp.create` folds exactly one AI list into
+    // were: composing the AI tier folds exactly one AI list into
     // `ServerApp.MetricRegistrations`, and an unregistered series fails
     // by silently dropping emissions rather than by erroring.
     //
@@ -187,7 +187,7 @@ let registrations: MetricRegistration list = [
     // ── Phase 498 — provider fallback / failover routing ──────────
     //
     // Appended to the same one list, for the same reason as the two
-    // groups above: `AIServerApp.create` folds exactly one AI list into
+    // groups above: composing the AI tier folds exactly one AI list into
     // `ServerApp.MetricRegistrations`, and an unregistered series fails
     // by silently dropping emissions rather than by erroring.
     {

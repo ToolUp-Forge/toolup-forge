@@ -23,65 +23,53 @@ open ToolUp.AI.AISettingsHandler
 open ToolUp.AI.SSEHandler
 open ToolUp.AI.SystemPromptBuilder
 
-// ─── AIServerApp — record-based superset of `ServerApp` with AI ─────
+// ─── The AI companion: `AIOptions` + `withAI` ───────────────────────
 //
-// `AIServerApp` wraps a `ServerApp` in its `Base` field, and some
-// `ServerApp.with*` helpers have a delegating counterpart here that lifts
-// the operation onto `Base`. It is NOT a flat superset, and says so
-// because a reader would assume it: 41 of the
-// 68 `ServerApp.with*` / `add*` builders have no counterpart. Apply those
-// to the `Base` field directly — the wrappers are retired by the
-// composition-as-contributions model rather than completed. AI-specific
-// fields (provider factory, config store, tool registry, branding,
-// module contexts) sit alongside.
+// The AI assistant is a companion composed onto a `ServerApp`, not a
+// record that wraps one. `AIOptions` holds what only the AI tier knows
+// (provider factory, BYOK store, assistant config, module contexts, tool
+// policy, …); `withAI options` registers the tier with
+// `ServerApp.withCompanion`, so it is applied once, when the deployment
+// resolves, to the deployment as every builder left it. Every
+// `ServerApp` builder stays reachable on either side of it.
 //
-// Required fields (`AIProviderFactory`, `ProviderProfile`) are
-// constructor parameters on `AIServerApp.create` rather than mutable
-// record fields — the SDK refuses to start without both, so making
-// them required at compile time replaces a runtime `failwith`. Phase
-// 43.A: the second required dependency is now the canonical platform
-// `IProviderProfile` store (was the removed `IUserAIConfigStore`).
-//
-// Composition root pattern (single-superset, terminal `run`):
-//
-//     AIServerApp.create factory providerProfile
-//     |> AIServerApp.withConfig config         // delegates to base
-//     |> AIServerApp.withAuth auth             // delegates to base
-//     |> AIServerApp.withStorage blobStorage   // delegates to base
-//     |> AIServerApp.addModules modules        // delegates to base
-//     |> AIServerApp.withAIConfig assistant    // AI-specific
-//     |> AIServerApp.run
+// Required inputs (`AIProviderFactory`, `ProviderProfile`) are the
+// parameters of `AIOptions.create`: the SDK refuses to start without
+// both, so requiring them at compile time replaces a runtime `failwith`.
 //
 // Composition root pattern:
 //
 //     ServerApp.empty
 //     |> ServerApp.withConfig config
 //     |> ServerApp.withStorage blobStorage
-//     |> FormsCompose.withForms (fun f -> f |> FormsServerApp.withFormSchema schema)
-//     |> AICompose.withAI factory providerProfile (fun ai -> ai |> AIServerApp.withAIConfig assistant)
+//     |> ServerApp.addModules modules
+//     |> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig assistant)
 //     |> ServerApp.run
 
-/// Phase 1052 — the AI companion's identity: every DI registration it makes
-/// is a `Contribution.service` under it.
-let private owner: ComponentId = ComponentId.forCompanionSlot "ToolUp.AI"
+/// The AI companion's identity: the slot `withAI` composes under, and the
+/// owner of every DI registration it makes (each a `Contribution.service`
+/// under it). A companion that composes the AI tier itself (RAG) claims
+/// this slot so the tier is never composed twice.
+let aiCompanion: ComponentId = ComponentId.forCompanionSlot "ToolUp.AI"
+
+let private owner = aiCompanion
 
 let private contribute (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp =
     ServerApp.addContribution (Contribution.service owner register) app
 
-/// Record form of AI compose arguments. Wraps a base `ServerApp` and
-/// adds AI-specific extension points. The required AI fields
-/// (`AIProviderFactory`, `ProviderProfile`) are constructor parameters
-/// on `AIServerApp.create`, not optional fields. AI tools come from
-/// each module's `ServerModule.withAITools` and are aggregated on the
-/// inner `Base.AITools` — there is no AI-level tools field.
-type AIServerApp = {
-    Base: ServerApp
+/// What the AI companion composes: the required AI inputs
+/// (`AIProviderFactory`, `ProviderProfile`, the parameters of
+/// `AIOptions.create`) and the AI tier's own settings. AI tools come from
+/// each module's `ServerModule.withAITools` and are read off the
+/// deployment's `AITools` when the tier is composed — there is no
+/// AI-level tools field.
+type AIOptions = {
     AIProviderFactory: IAIProviderFactory
     /// Canonical platform-wide BYOK store. The AI factory
     /// resolves providers against this; the settings handler + usage-
-    /// metering wrapper read it. Mirrored onto `Base.ProviderProfile`
-    /// by `create` / `createFrom` so a non-AI handler in the same app
-    /// can resolve it from DI too.
+    /// metering wrapper read it. Mirrored onto the deployment's
+    /// `ProviderProfile` when the tier is composed, so a non-AI handler in
+    /// the same app can resolve it from DI too.
     ProviderProfile: IProviderProfile
     /// Platform-Admin-managed AI key store. `None` lets the
     /// composer auto-promote `BlobPlatformAIKeyStore.create secretStore`
@@ -116,7 +104,7 @@ type AIServerApp = {
     /// `None` (the default) registers no monitor at all: a deployment
     /// that has not opted in pays one failed `GetService` per agent
     /// turn and nothing else (GP 13). Set via
-    /// `AIServerApp.withDenialRateAlert`.
+    /// `AIOptions.withDenialRateAlert`.
     DenialRateAlert: AIDenialRateMonitor.AIDenialRateAlertPolicy option
     /// Whether, and how often, the user is asked before a
     /// `_platform.ai.*` tool reads from a module they did not name.
@@ -140,28 +128,28 @@ type AIServerApp = {
     /// `Some` composes the policy and, under `CompositionProfile.Verified`,
     /// refuses any registered tool that declares no effects.
     ToolEffects: ToolEffectEnvelope.ToolEffectComposition option
-    /// Phase 1132 — server-resident tools whose executor answers the record
+    /// Server-resident tools whose executor answers the record
     /// form (`ToolHelpers.ToolAnswer`): the text the model reads and the
     /// parts the assistant message carries. The sibling of
     /// `ServerApp.AITools`, which holds string executors only; `composeAI`
     /// registers each entry through `AIToolRegistry.createAnsweringTool`,
     /// under the same tool-name collision check. Empty (the default)
-    /// registers nothing. Append with `AIServerApp.withAIAnsweringTools`.
+    /// registers nothing. Append with `AIOptions.withAIAnsweringTools`.
     AIAnsweringTools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list
+    /// Whether the three read-only reflection tools are offered to the
+    /// model (`AIOptions.withReflectionTools`). `false` (the default)
+    /// offers exactly the module tools (GP 11).
+    ReflectionTools: bool
 }
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
 //
-// The seam: `composeAI : AIServerApp -> ServerApp` lifts every
-// AI-specific contribution (DI registrations, agent-loop handlers,
-// tool registry, dev endpoints, notification-consumer declaration,
-// SDK config validators) onto the inner `ServerApp.Extensions`,
-// returning the composed `ServerApp` without driving it.
-//
-// `AIServerApp.run` is now `composeAI >> ServerApp.run`; the additive
-// `withAI` extension calls `composeAI` from inside a `ServerApp`-
-// shaped pipeline so AI contributions stack with Forms / RAG / future
-// companions on one composition root.
+// `composeAI options` is the AI companion's `apply`: it lifts every
+// AI-specific contribution (DI registrations, agent-loop handlers, tool
+// registry, dev endpoints, notification-consumer declaration, SDK config
+// validators) onto the `ServerApp` it is given, returning the composed
+// `ServerApp` without driving it. `withAI` registers it as a companion,
+// so it runs once, at resolve, over the finished deployment.
 //
 // **`SSEConnectionManager`** is registered by `compose` in core (it is
 // shared with the generic `INotificationChannel` path) and resolved
@@ -178,27 +166,38 @@ type AIServerApp = {
 
 /// Apply every AI-specific contribution (DI registrations, agent-loop
 /// handlers, tool registry, dev endpoints, notification-consumer
-/// declaration, SDK config validators) onto the inner `ServerApp`,
-/// returning the composed result without driving it. `AIServerApp.run`
-/// calls this and then `ServerApp.run`; the `withAI` additive
-/// extension calls this from inside a `ServerApp`-shaped pipeline so
-/// AI contributions stack with Forms / RAG contributions onto one
-/// composition root.
+/// declaration, SDK config validators) onto `app`, returning the composed
+/// result without driving it. Refuses a deployment the AI tier was
+/// already composed onto.
 ///
-/// **Advanced.** Consumers should use `AIServerApp.run` unless they
-/// are stacking multiple companion supersets — in which case use the
-/// `withAI` additive extension. Hidden from IntelliSense via
-/// `[<EditorBrowsable>]`.
+/// **Advanced.** Consumers compose the AI tier with `withAI`; a companion
+/// that composes AI as part of itself (RAG) calls this from its own
+/// `apply`. Hidden from IntelliSense via `[<EditorBrowsable>]`.
 [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
-let composeAI (app: AIServerApp) : ServerApp =
-    let b = app.Base
-    let config = b.Config
+let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
+    ServerApp.ensureCompanionNotAlreadyComposed "ToolUp.AI" app
+
+    let b =
+        let withProfile =
+            app
+            |> ServerApp.withProviderProfile options.ProviderProfile
+            |> ServerApp.withMetricRegistrations AILatencyMetrics.registrations
+
+        if options.ReflectionTools then
+            {
+                withProfile with
+                    AITools = withProfile.AITools @ ReflectionTools.tools
+            }
+        else
+            withProfile
+
+    let config = ServerApp.effectiveConfig b
     let baseExtensions = b.Extensions
-    let aiProviderFactory = app.AIProviderFactory
-    let providerProfile = app.ProviderProfile
+    let aiProviderFactory = options.AIProviderFactory
+    let providerProfile = options.ProviderProfile
     let moduleTools = b.AITools
-    let aiConfig = app.AIConfig
-    let moduleAIContexts = app.ModuleAIContexts
+    let aiConfig = options.AIConfig
+    let moduleAIContexts = options.ModuleAIContexts
 
     // Declare the trace categories this package emits under,
     // so `TraceCategoriesValidator` can tell an operator that
@@ -224,7 +223,7 @@ let composeAI (app: AIServerApp) : ServerApp =
 
     let moduleToolNames =
         (moduleTools |> List.map (fun (def, _) -> def.Name))
-        @ (app.AIAnsweringTools |> List.map (fun (def, _) -> def.Name))
+        @ (options.AIAnsweringTools |> List.map (fun (def, _) -> def.Name))
 
     let duplicateNames =
         (builtInToolNames @ moduleToolNames)
@@ -238,16 +237,16 @@ let composeAI (app: AIServerApp) : ServerApp =
             (System.String.Join(", ", builtInToolNames))
 
     // When the consumer declared platform providers via
-    // `AIServerApp.withPlatformProvider`, verify the accumulated list
+    // `AIOptions.withPlatformProvider`, verify the accumulated list
     // matches what `factory.PlatformDescriptors` reports. A divergence
     // means the consumer wired providers via the builder but passed a
     // different list (or none) to `DefaultAIProviderFactory.create` —
     // a class of bug that otherwise surfaces only at first request as
-    // a mysterious `NoProviderConfigured`. Empty `app.PlatformProviders`
+    // a mysterious `NoProviderConfigured`. Empty `options.PlatformProviders`
     // disables the check (back-compat with consumers that haven't
     // adopted the builder).
-    if not app.PlatformProviders.IsEmpty then
-        let declaredIds = app.PlatformProviders |> List.map _.Descriptor.Id
+    if not options.PlatformProviders.IsEmpty then
+        let declaredIds = options.PlatformProviders |> List.map _.Descriptor.Id
         let factoryIds = aiProviderFactory.PlatformDescriptors |> List.map _.Id
 
         // Compare as sets — the validator's purpose is to catch
@@ -260,7 +259,7 @@ let composeAI (app: AIServerApp) : ServerApp =
         // builder but forgot" message.
         if Set.ofList declaredIds <> Set.ofList factoryIds then
             failwithf
-                "AI platform-provider declaration mismatch. AIServerApp.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
+                "AI platform-provider declaration mismatch. AIOptions.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
                 (System.String.Join(", ", declaredIds))
                 (System.String.Join(", ", factoryIds))
 
@@ -272,18 +271,18 @@ let composeAI (app: AIServerApp) : ServerApp =
     // `ServerApp.AITools` and registers them here. Built-ins reserve
     // platform-prefixed names so they cannot collide with module tools.
     //
-    // Phase 1132 — the record-form tools ride beside them, registered
+    // The record-form tools ride beside them, registered
     // through `createAnsweringTool`, which refuses a client-resident
     // definition here, at compose time.
     let registeredModuleTools =
         (moduleTools |> List.map (fun (def, exec) -> createTool def exec))
-        @ (app.AIAnsweringTools
+        @ (options.AIAnsweringTools
            |> List.map (fun (def, answer) -> createAnsweringTool def answer))
 
     // The registry lists and dispatches under the deployment's
     // `ToolPolicy`; none declared is `ToolPolicy.unrestricted` (GP 11).
     let toolPolicy =
-        app.ToolEffects
+        options.ToolEffects
         |> Option.map (fun (composition: ToolEffectEnvelope.ToolEffectComposition) -> composition.Policy)
         |> Option.defaultValue ToolPolicy.unrestricted
 
@@ -295,7 +294,7 @@ let composeAI (app: AIServerApp) : ServerApp =
     // envelope with nothing to check against would admit everything while
     // presenting as enforcement. Refused here, at compose, beside the
     // tool-name collision check, and never at the first turn.
-    match app.ToolEffects with
+    match options.ToolEffects with
     | Some composition ->
         match ToolEffectEnvelope.refuseUndeclared composition.Profile (registry.GetAll() |> List.map _.Definition) with
         | Ok() -> ()
@@ -539,7 +538,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // via DI.
                 .AddSingleton<IPlatformAIKeyStore>(
                     System.Func<IServiceProvider, IPlatformAIKeyStore>(fun sp ->
-                        match app.PlatformKeyStore with
+                        match options.PlatformKeyStore with
                         | Some store -> store
                         | None ->
                             let secretStore = sp.GetService(typeof<ISecretStore>) :?> ISecretStore
@@ -554,7 +553,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // reads it per invocation and an absent registration would
                 // read as the default anyway, so registering it always is
                 // what makes `TrustEverything` actually reachable.
-                .AddSingleton<AIConsentMode>(app.ConsentMode)
+                .AddSingleton<AIConsentMode>(options.ConsentMode)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
                 // The services an agent turn reads, resolved once per turn
                 // (transient: one resolution each time a turn asks), so the
@@ -629,10 +628,10 @@ let composeAI (app: AIServerApp) : ServerApp =
 
         // The sustained-denial rate monitor. Registered ONLY
         // when the deployment declared a policy via
-        // `AIServerApp.withDenialRateAlert`; otherwise nothing exists to
+        // `AIOptions.withDenialRateAlert`; otherwise nothing exists to
         // resolve and the agent loop's probe returns null (GP 13).
         let s =
-            match app.DenialRateAlert with
+            match options.DenialRateAlert with
             | None -> s
             | Some policy ->
                 s.AddSingleton<AIDenialRateMonitor.AIDenialRateMonitor>(
@@ -675,20 +674,18 @@ let composeAI (app: AIServerApp) : ServerApp =
     // reason the DI registration above is, and gated on nothing else —
     // the field defaults to 0 = unbounded, so a deployment that never
     // opens the tab is unchanged (GP 11).
-    let configWithBudgetSchema =
+    let withBudgetSchema (app: ServerApp) =
         if DeploymentConfig.hasTeamScope config then
-            {
-                config with
-                    ModuleConfigs = AIBudgetEnforcer.mergeAIBudgetSchema config.ModuleConfigs
-            }
+            app
+            |> ServerApp.addOverride (nameof ServerConfig.defaults.ModuleConfigs) (fun c -> {
+                c with
+                    ModuleConfigs = AIBudgetEnforcer.mergeAIBudgetSchema c.ModuleConfigs
+            })
         else
-            config
+            app
 
-    {
-        b with
-            Extensions = extensions
-            Config = configWithBudgetSchema
-    }
+    { b with Extensions = extensions }
+    |> withBudgetSchema
     |> contribute aiServiceConfig
     // The chat worker's hosted service, as a `Hosted` contribution: the
     // root admits it once, against the deployment's final configuration,
@@ -699,20 +696,16 @@ let composeAI (app: AIServerApp) : ServerApp =
             (BackgroundUnit.create "ai-chat-worker" ProcessLocal (fun sp ->
                 sp.GetRequiredService<AIChatWorker.AIChatWorker>() :> Microsoft.Extensions.Hosting.IHostedService))
     )
+    |> ServerApp.withCompanionMarker "ToolUp.AI"
 
-module AIServerApp =
-    /// Construct an `AIServerApp` from scratch with the two required AI
-    /// dependencies: the provider factory and the canonical platform
-    /// `IProviderProfile` BYOK store. The store is mirrored onto
-    /// `Base.ProviderProfile` so it is also the `IProviderProfile` DI
-    /// singleton. All other fields default to the empty / `None`
-    /// values; chain `with*` helpers (delegating to `ServerApp` or
-    /// AI-specific) to configure further.
-    let create (factory: IAIProviderFactory) (providerProfile: IProviderProfile) : AIServerApp = {
-        Base =
-            ServerApp.empty
-            |> ServerApp.withProviderProfile providerProfile
-            |> ServerApp.withMetricRegistrations AILatencyMetrics.registrations
+module AIOptions =
+    /// The AI companion's options with the two required AI inputs: the
+    /// provider factory and the canonical platform `IProviderProfile` BYOK
+    /// store (mirrored onto the deployment's `ProviderProfile` when the
+    /// tier is composed, so it is also the `IProviderProfile` DI
+    /// singleton). Every other field takes its default; chain the
+    /// `AIOptions.with*` setters to configure further.
+    let create (factory: IAIProviderFactory) (providerProfile: IProviderProfile) : AIOptions = {
         AIProviderFactory = factory
         ProviderProfile = providerProfile
         PlatformKeyStore = None
@@ -723,340 +716,31 @@ module AIServerApp =
         ConsentMode = RememberPerConversation
         ToolEffects = None
         AIAnsweringTools = []
+        ReflectionTools = false
     }
 
-    /// The composition seam — lift an existing `ServerApp` into an
-    /// `AIServerApp` so the additive `AICompose.withAI` extension can
-    /// stack AI contributions onto whatever the input `ServerApp`
-    /// already carries. `Base.ProviderProfile` is mirrored to the
-    /// supplied store (overriding any previous `withProviderProfile`
-    /// on the same pipeline — last-write-wins), and
-    /// `AILatencyMetrics.registrations` are appended (calling `withAI`
-    /// twice on the same pipeline would re-append and fail at sink
-    /// construction — the conflict validator catches this).
-    let createFrom
-        (factory: IAIProviderFactory)
-        (providerProfile: IProviderProfile)
-        (baseApp: ServerApp)
-        : AIServerApp =
-        {
-            Base =
-                baseApp
-                |> ServerApp.withProviderProfile providerProfile
-                |> ServerApp.withMetricRegistrations AILatencyMetrics.registrations
-            AIProviderFactory = factory
-            ProviderProfile = providerProfile
-            PlatformKeyStore = None
-            PlatformProviders = []
-            AIConfig = None
-            ModuleAIContexts = []
-            DenialRateAlert = None
-            ConsentMode = RememberPerConversation
-            ToolEffects = None
-            AIAnsweringTools = []
-        }
-
-    // ─── Delegating helpers (mirror every `ServerApp.with*` / `add*`) ───
-
-    let withConfig (c: ServerConfig) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withConfig c app.Base
-    }
-
-    let withAuth (a: IAuthProvider) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withAuth a app.Base
-    }
-
-    let withLogger (l: ILogger) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withLogger l app.Base
-    }
-
-    let withStorage (s: IBlobStorage) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withStorage s app.Base
-    }
-
-    let withNotifications (n: INotificationChannel) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withNotifications n app.Base
-    }
-
-    /// Register an `IUserDirectory` for invite-form typeahead + email-
-    /// address resolution. Delegates to `ServerApp.withUserDirectory` so
-    /// a RAG/AI composition root no longer has to reach into the raw
-    /// `withExtensions` DI seam to register one.
-    let withUserDirectory (directory: IUserDirectory) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withUserDirectory directory app.Base
-    }
-
-    /// Register an additional `ICspContributor` (a webfont / CDN / embed
-    /// origin the first-party CSP defaults don't cover). Delegates to
-    /// `ServerApp.withCspContributor`.
-    let withCspContributor (contributor: ICspContributor) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withCspContributor contributor app.Base
-    }
-
-    /// Register an out-of-band transactional notification
-    /// sink. Delegates to `ServerApp.withTransactionalSink`. See that
-    /// helper's docstring for the full contract; this mirror exists
-    /// so the AI fluent pipeline reads the same as the core one.
-    let withTransactionalSink (sink: INotificationSink) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withTransactionalSink sink app.Base
-    }
-
-    /// Register a companion-contributed health probe.
-    /// Delegates to `ServerApp.withHealthCheck`.
-    let withHealthCheck (check: HealthChecks.IHealthCheck) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withHealthCheck check app.Base
-    }
-
-    /// Register a companion-contributed startup config
-    /// validator. Delegates to `ServerApp.withConfigValidator`.
-    let withConfigValidator (validator: ConfigValidation.IConfigValidator) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withConfigValidator validator app.Base
-    }
-
-    /// Opt into AES-GCM envelope encryption for the
-    /// registered IBlobStorage. Delegates to
-    /// `ServerApp.withEncryptedBlobStorage`. See that helper's
-    /// docstring for the resolver-choice contract.
-    let withEncryptedBlobStorage (resolver: IBlobEncryptionKeyResolver) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withEncryptedBlobStorage resolver app.Base
-    }
-
-    /// Register a companion-contributed metrics sink
-    /// (e.g. OpenTelemetry exporter) alongside the in-process
-    /// Prometheus default. Delegates to `ServerApp.withMetricsSink`.
-    let withMetricsSink (sink: Metrics.IMetricsSink) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withMetricsSink sink app.Base
-    }
-
-    /// Declare an outbound rate-limit window for one
-    /// upstream provider. Delegates to `ServerApp.withRateLimitDescriptor`.
-    let withRateLimitDescriptor (descriptor: RateLimitDescriptor) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withRateLimitDescriptor descriptor app.Base
-    }
-
-    /// Register an entity type with the typed entity store.
-    /// Delegates to `ServerApp.withEntity`.
-    let withEntity<'T> (registration: EntityTypes.EntityRegistration<'T>) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withEntity registration app.Base
-    }
-
-    /// Declare a composition-root-owned background job.
-    /// Delegates to `ServerApp.withJobHandler`. See that helper's
-    /// docstring for the full contract; this mirror exists so the AI
-    /// fluent pipeline reads the same as the core one.
-    let withJobHandler (handlerName: string, handler: IJobHandler, trigger: Trigger) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withJobHandler (handlerName, handler, trigger) app.Base
-    }
-
-    /// Declare a composition-root-owned background job
-    /// with full control over every `JobRegistration` knob. Delegates
-    /// to `ServerApp.withScheduledJob`.
-    let withScheduledJob (declaration: ScheduledJobDeclaration) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withScheduledJob declaration app.Base
-    }
-
-    /// Opt into back-fill of `OnEvent` jobs on detected
-    /// scheduler tick drift. Delegates to `ServerApp.withBackfillMissedTicks`.
-    let withBackfillMissedTicks (enabled: bool) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withBackfillMissedTicks enabled app.Base
-    }
-
-    /// Opt into the event-trigger catch-up watermark.
-    /// Delegates to `ServerApp.withEventTriggerCatchUp`.
-    let withEventTriggerCatchUp (enabled: bool) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withEventTriggerCatchUp enabled app.Base
-    }
-
-    /// Audit-write failure policy. Delegates to
-    /// `ServerApp.withAuditFailurePolicy`.
-    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withAuditFailurePolicy policy app.Base
-    }
-
-    /// Opt into the entity-write outbox. Delegates to
-    /// `ServerApp.withEntityOutbox`.
-    let withEntityOutbox (enabled: bool) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withEntityOutbox enabled app.Base
-    }
-
-    /// Opt into durable lineage. Delegates to
-    /// `ServerApp.withDurableLineage`.
-    let withDurableLineage (enabled: bool) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withDurableLineage enabled app.Base
-    }
-
-    let withExtensions (e: ComposeExtensions) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withExtensions e app.Base
-    }
-
-    let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withPreMiddleware f app.Base
-    }
-
-    let withPostMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.withPostMiddleware f app.Base
-    }
-
-    let addModule (m: ServerModule) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.addModule m app.Base
-    }
-
-    let addModules (modules: ServerModule list) (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = ServerApp.addModules modules app.Base
-    }
-
-    // ─── AI-specific helpers ───────────────────────────────────────────
-
-    let withAIConfig (config: AIAssistantServerConfig) (app: AIServerApp) : AIServerApp = {
-        app with
+    /// **Sets** the assistant's server config; a later call replaces it.
+    let withAIConfig (config: AIAssistantServerConfig) (options: AIOptions) : AIOptions = {
+        options with
             AIConfig = Some config
     }
 
-    let withModuleAIContexts (contexts: ModuleAIContext list) (app: AIServerApp) : AIServerApp = {
-        app with
+    /// **Sets** the per-module AI contexts; a later call replaces them.
+    let withModuleAIContexts (contexts: ModuleAIContext list) (options: AIOptions) : AIOptions = {
+        options with
             ModuleAIContexts = contexts
     }
 
-    /// Opt into the numeric-fidelity answer gate with a custom
-    /// verifier (the seat for the future LLM-judge qualitative tier, which
-    /// implements the same `IAnswerVerifier` seam). Registers the composed
-    /// `AnswerVerifier.AnswerGate` as a DI singleton (resolved by the chat
-    /// handler's post-response stage) and appends the verified/unmatched
-    /// counter registrations so the metrics sink pre-allocates their series.
-    ///
-    /// `AnswerGateOff` (or not calling this at all) leaves the answer path
-    /// byte-for-byte as it is without the gate — no DI registration, no metric series, no
-    /// per-turn verification (GP 11 / GP 13). Threads the singleton through
-    /// the shared `ComposeExtensions.ServiceConfig` exactly like
-    /// `ServerApp.withCspContributor`, so `RAGServerApp` inherits it.
-    let withAnswerVerifier
-        (mode: AnswerVerifier.AnswerGateMode)
-        (verifier: AnswerVerifier.IAnswerVerifier)
-        (app: AIServerApp)
-        : AIServerApp =
-        match mode with
-        | AnswerVerifier.AnswerGateOff -> app
-        | _ ->
-            let gate: AnswerVerifier.AnswerGate = { Mode = mode; Verifier = verifier }
-
-            let register (s: IServiceCollection) =
-                s.AddSingleton<AnswerVerifier.AnswerGate>(gate)
-
-            let baseWithMetrics =
-                app.Base |> ServerApp.withMetricRegistrations AnswerVerifier.registrations
-
-            {
-                app with
-                    Base = baseWithMetrics |> contribute register
-            }
-
-    /// Opt into the numeric-fidelity answer gate with the
-    /// default deterministic verifier (`NumericFidelityVerifier`). See
-    /// `withAnswerVerifier` for the gate semantics; `AnswerGateOff` is the
-    /// byte-identical no-op default (GP 13).
-    let withNumericFidelityGate (mode: AnswerVerifier.AnswerGateMode) (app: AIServerApp) : AIServerApp =
-        withAnswerVerifier mode (AnswerVerifier.NumericFidelityVerifier() :> AnswerVerifier.IAnswerVerifier) app
-
-    /// Declare the deployment-side anchors the answer-
-    /// verification audit row names: the sealed composition this process
-    /// affirmed at boot, and the grounding certificate covering an answer's
-    /// chain where one exists.
-    ///
-    /// Registers the `IAnswerProvenanceAnchors` singleton the chat
-    /// handler's post-response stage resolves. **Nothing composes this by
-    /// default**: not calling it leaves both join fields `None` on the
-    /// recorded row — an honest absence — while the row's own counts and
-    /// cited fact ids are unaffected, because those are derived from the
-    /// verdict rather than from any anchor (GP 11 / GP 13).
-    ///
-    /// The row itself rides `IAuditLog`, which the platform composes
-    /// already; a deployment wanting the join with no anchors to declare
-    /// needs nothing here at all.
-    let withAnswerProvenanceAnchors (anchors: IAnswerProvenanceAnchors) (app: AIServerApp) : AIServerApp =
-        let register (s: IServiceCollection) =
-            s.AddSingleton<IAnswerProvenanceAnchors>(anchors)
-
-        {
-            app with
-                Base = app.Base |> contribute register
-        }
-
-    /// Opt into Tier-3 fast-path triage. Registers the
-    /// `FastPathTriageConfig` singleton the agent loop's intercept
-    /// resolves; NOT calling this (or passing a config with
-    /// `Enabled = false`) leaves the chat path byte-for-byte as it is without triage —
-    /// no triage call, no attempt row, no emission (GP 11 / GP 13).
-    ///
-    /// The metric series ride `AILatencyMetrics.registrations`, which
-    /// `create` already folds in, so there is nothing to add here: a
-    /// deployment that opts in mid-life does not need its metric
-    /// registrations re-derived.
-    ///
-    /// This is deliberately a team-level switch rather than a default.
-    /// Triage trades a small per-instruction token cost for latency,
-    /// and whether that trade is worth making depends on a measurement
-    /// the SDK cannot make for the deployment — the share of its
-    /// instruction traffic that Tier 1's declared patterns already
-    /// catch. Turning it on before that is known buys an unknown
-    /// amount of latency for a known cost.
-    ///
-    /// Leave `config.TriageProvider` as `None` and triage runs on the
-    /// turn's own provider at its declared `Capabilities.TriageModelId`
-    /// through the per-call model override — the cheap tier
-    /// with nothing extra wired. `FastPathTriageConfig.withTriageProvider`
-    /// is the explicit escape hatch for routing triage somewhere the turn
-    /// provider's own family cannot reach; it wins outright when set.
-    let withFastPathTriage (config: FastPathTriageResolver.FastPathTriageConfig) (app: AIServerApp) : AIServerApp =
-        if not config.Enabled then
-            app
-        else
-            let register (s: IServiceCollection) =
-                s.AddSingleton<FastPathTriageResolver.FastPathTriageConfig>(config)
-
-            {
-                app with
-                    Base = app.Base |> contribute register
-            }
-
-    /// Swap the canonical BYOK provider-profile store
-    /// after `create`. Mirrors `ServerApp.withProviderProfile` (the
-    /// deferred 42.B seam) onto the AI superset: rebinds both the
-    /// required AI field (what `composeAI` threads to the factory's
-    /// settings handler + metering wrapper) and `Base.ProviderProfile`
-    /// (the DI singleton) so the two never diverge.
-    let withProviderProfile (store: IProviderProfile) (app: AIServerApp) : AIServerApp = {
-        app with
+    /// **Sets** the canonical BYOK provider-profile store, replacing the one
+    /// `create` took. The tier mirrors it onto the deployment's
+    /// `ProviderProfile` (the DI singleton) when composed, so the two never
+    /// diverge.
+    let withProviderProfile (store: IProviderProfile) (options: AIOptions) : AIOptions = {
+        options with
             ProviderProfile = store
-            Base = ServerApp.withProviderProfile store app.Base
     }
 
-    /// Supply a Platform-Admin-managed AI key store. When
+    /// **Sets** a Platform-Admin-managed AI key store. When
     /// omitted, `composeAI` auto-promotes `BlobPlatformAIKeyStore.create`
     /// over the registered `ISecretStore` so the Platform Admin keys
     /// module works out of the box. Override when you want a custom
@@ -1065,12 +749,12 @@ module AIServerApp =
     /// `IPlatformAIKeyStore` in DI and surfaces to the factory's
     /// resolution chain via the consumer's `DefaultAIProviderFactory.create`
     /// call.
-    let withPlatformAIKeyStore (store: IPlatformAIKeyStore) (app: AIServerApp) : AIServerApp = {
-        app with
+    let withPlatformAIKeyStore (store: IPlatformAIKeyStore) (options: AIOptions) : AIOptions = {
+        options with
             PlatformKeyStore = Some store
     }
 
-    /// Opt into sustained-action-denial alerting. When a
+    /// **Sets** sustained-action-denial alerting. When a
     /// scope's refused client-tool calls cross `Threshold` within
     /// `Window`, one Owner/Admin `SystemMessage` is published (then
     /// suppressed for `Cooldown`), because a prompt-injection campaign
@@ -1084,16 +768,15 @@ module AIServerApp =
     /// counting caveat before sizing a threshold on a multi-silo
     /// deployment.
     ///
-    ///     AIServerApp.withDenialRateAlert
+    ///     AIOptions.withDenialRateAlert
     ///         { AIDenialRateMonitor.AIDenialRateAlertPolicy.defaults with
     ///             AlertScopeId = Some "_platform" }
-    let withDenialRateAlert (policy: AIDenialRateMonitor.AIDenialRateAlertPolicy) (app: AIServerApp) : AIServerApp = {
-        app with
+    let withDenialRateAlert (policy: AIDenialRateMonitor.AIDenialRateAlertPolicy) (options: AIOptions) : AIOptions = {
+        options with
             DenialRateAlert = Some policy
     }
 
-    /// Declare how the cross-module read-consent gate
-    /// behaves.
+    /// **Sets** how the cross-module read-consent gate behaves.
     ///
     /// `RememberPerConversation` (the default) prompts once per target
     /// module per conversation. `AlwaysAsk` prompts on every read.
@@ -1102,21 +785,21 @@ module AIServerApp =
     /// person who owns the data are the same person, and the ONLY way back
     /// to a flow with no consent prompt.
     ///
-    ///     AIServerApp.withAIConsentMode TrustEverything
-    let withAIConsentMode (mode: AIConsentMode) (app: AIServerApp) : AIServerApp = { app with ConsentMode = mode }
+    ///     AIOptions.withAIConsentMode TrustEverything
+    let withAIConsentMode (mode: AIConsentMode) (options: AIOptions) : AIOptions = { options with ConsentMode = mode }
 
-    /// Compose the tool effect policy. `policy` is what the
+    /// **Sets** the tool effect policy. `policy` is what the
     /// registry lists and dispatches under (`ToolPolicy.readOnly`,
     /// `ToolPolicy.bounded [ … ]`, or `ToolPolicy.unrestricted` narrowed
     /// with `withApprovalFor` / `withExternalPrincipalCeiling`); `profile`
     /// decides whether a tool that declares no effects is a composition
     /// error (`Verified`) or a per-tool policy question (`Standard`).
-    let withToolEffects (profile: CompositionProfile) (policy: ToolPolicy) (app: AIServerApp) : AIServerApp = {
-        app with
+    let withToolEffects (profile: CompositionProfile) (policy: ToolPolicy) (options: AIOptions) : AIOptions = {
+        options with
             ToolEffects = Some { Profile = profile; Policy = policy }
     }
 
-    /// Compose the three read-only reflection tools
+    /// **Sets** the three read-only reflection tools on
     /// (`_platform.reflection.describe_composition`, `.verification_report`,
     /// `.module_reach`): the deployment's own self-description, offered to
     /// the model behind the composition inspector's Owner/Admin gate (and
@@ -1126,19 +809,13 @@ module AIServerApp =
     ///
     /// Opt-in: an AI composition that does not call this offers the model
     /// exactly the tools it offered before (GP 11), and a composition with
-    /// no AI provider has no `AIServerApp` to call it on, so it registers
-    /// nothing (GP 13). The tools ride the ordinary module-tool accumulator,
-    /// so the tool-name collision check and the effect envelope see them as
-    /// they see every other tool.
-    let withReflectionTools (app: AIServerApp) : AIServerApp = {
-        app with
-            Base = {
-                app.Base with
-                    AITools = app.Base.AITools @ ReflectionTools.tools
-            }
-    }
+    /// no AI tier registers nothing (GP 13). The tools join the
+    /// deployment's module tools when the tier is composed, so the
+    /// tool-name collision check and the effect envelope see them as they
+    /// see every other tool.
+    let withReflectionTools (options: AIOptions) : AIOptions = { options with ReflectionTools = true }
 
-    /// Phase 1132 — expose server-resident tools whose executor answers the
+    /// Expose server-resident tools whose executor answers the
     /// record form (`ToolHelpers.ToolAnswer`): the text the model reads and
     /// the parts the assistant message carries after its own text. The
     /// sibling of `ServerModule.withAITools` for string executors;
@@ -1148,16 +825,15 @@ module AIServerApp =
     /// every other tool. **Adds** to the list.
     let withAIAnsweringTools
         (tools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list)
-        (app: AIServerApp)
-        : AIServerApp =
+        (options: AIOptions)
+        : AIOptions =
         {
-            app with
-                AIAnsweringTools = app.AIAnsweringTools @ tools
+            options with
+                AIAnsweringTools = options.AIAnsweringTools @ tools
         }
 
-    /// Additively declare a platform provider on the
-    /// `AIServerApp` pipeline. Each call appends to
-    /// `app.PlatformProviders`; `composeAI` cross-checks the
+    /// **Adds** a platform provider declaration. Each call appends to
+    /// `PlatformProviders`; `composeAI` cross-checks the
     /// accumulated list against `factory.PlatformDescriptors` at
     /// compose time and fails with a clear diagnostic when they
     /// diverge (the consumer wired a provider via the builder but
@@ -1173,66 +849,114 @@ module AIServerApp =
     /// `DefaultAIProviderFactory.create`. The builder's call shape and
     /// semantics stay byte-identical across that transition; consumers
     /// adopting the builder today are forward-compatible.
-    let withPlatformProvider (provider: DefaultAIProviderFactory.AIPlatformProvider) (app: AIServerApp) : AIServerApp = {
-        app with
-            PlatformProviders = app.PlatformProviders @ [ provider ]
+    let withPlatformProvider (provider: DefaultAIProviderFactory.AIPlatformProvider) (options: AIOptions) : AIOptions = {
+        options with
+            PlatformProviders = options.PlatformProviders @ [ provider ]
     }
 
-    /// Drive the final composition. Returns the process exit code.
-    /// Implementation is now `composeAI >> ServerApp.run`;
-    /// consumers needing to stack AI with Forms / RAG companions on
-    /// one composition root use the additive `AICompose.withAI`
-    /// extension instead.
-    let run (app: AIServerApp) : int = composeAI app |> ServerApp.run
+// ─── The AI companion on a `ServerApp` ─────────────────────────────
 
-// ─── Additive companion-set extension `withAI` ───────────
-//
-// Stack AI contributions onto an existing `ServerApp` pipeline
-// alongside Forms / RAG / future companions, without forcing the
-// deployment to commit to `AIServerApp.run` as the terminal call.
-
-/// Stack the AI assistant onto an existing `ServerApp`
-/// pipeline. Consumes the required AI dependencies (`factory` +
-/// `providerProfile`) and a `configure` function that builds AI-
-/// specific state (assistant config, module AI contexts) on a fresh
-/// `AIServerApp` whose `Base` is the input `ServerApp`.
-///
-/// The configurator should call only AI-specific helpers
-/// (`AIServerApp.withAIConfig` / `withModuleAIContexts`); the
-/// delegating helpers (`withConfig` / `withAuth` / …) exist on
-/// `AIServerApp` for backcompat but calling them inside the
-/// configurator overwrites the base `ServerApp`'s existing
-/// configuration. Set base configuration on the outer pipeline before
-/// calling `withAI`.
-///
-/// Calling `withAI` twice on the same pipeline re-appends
-/// `AILatencyMetrics.registrations` and re-registers AI's DI services;
-/// the conflict validator surfaces this at compose
-/// time.
-///
-/// Example — Forms + AI in one composition root:
+/// **Sets** the AI companion: the assistant tier `options` describes is
+/// composed once, when the deployment resolves, onto the deployment as
+/// every builder left it — so a `ServerApp` builder applied after this
+/// call still reaches the AI tier. A second call replaces the first.
 ///
 ///     ServerApp.empty
 ///     |> ServerApp.withConfig config
 ///     |> ServerApp.withStorage storage
-///     |> FormsCompose.withForms (fun f ->
-///         f |> FormsServerApp.withFormSchema mySchema)
-///     |> AICompose.withAI factory providerProfile (fun ai ->
-///         ai |> AIServerApp.withAIConfig assistant)
+///     |> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig assistant)
 ///     |> ServerApp.run
-/// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
-let withAI
-    (factory: IAIProviderFactory)
-    (providerProfile: IProviderProfile)
-    (configure: AIServerApp -> AIServerApp)
+let withAI (options: AIOptions) (app: ServerApp) : ServerApp =
+    ServerApp.withCompanion owner (composeAI options) app
+
+/// Opt into the numeric-fidelity answer gate with a custom
+/// verifier (the seat for the future LLM-judge qualitative tier, which
+/// implements the same `IAnswerVerifier` seam). Registers the composed
+/// `AnswerVerifier.AnswerGate` as a DI singleton (resolved by the chat
+/// handler's post-response stage) and appends the verified/unmatched
+/// counter registrations so the metrics sink pre-allocates their series.
+///
+/// `AnswerGateOff` (or not calling this at all) leaves the answer path
+/// byte-for-byte as it is without the gate — no DI registration, no metric series, no
+/// per-turn verification (GP 11 / GP 13). **Adds** its registration as a
+/// contribution under the AI companion's id.
+let withAnswerVerifier
+    (mode: AnswerVerifier.AnswerGateMode)
+    (verifier: AnswerVerifier.IAnswerVerifier)
     (app: ServerApp)
     : ServerApp =
-    AIServerApp.createFrom factory providerProfile app |> configure |> composeAI
+    match mode with
+    | AnswerVerifier.AnswerGateOff -> app
+    | _ ->
+        let gate: AnswerVerifier.AnswerGate = { Mode = mode; Verifier = verifier }
+
+        app
+        |> ServerApp.withMetricRegistrations AnswerVerifier.registrations
+        |> contribute (fun s -> s.AddSingleton<AnswerVerifier.AnswerGate>(gate))
+
+/// Opt into the numeric-fidelity answer gate with the
+/// default deterministic verifier (`NumericFidelityVerifier`). See
+/// `withAnswerVerifier` for the gate semantics; `AnswerGateOff` is the
+/// byte-identical no-op default (GP 13). **Adds**, as `withAnswerVerifier`.
+let withNumericFidelityGate (mode: AnswerVerifier.AnswerGateMode) (app: ServerApp) : ServerApp =
+    withAnswerVerifier mode (AnswerVerifier.NumericFidelityVerifier() :> AnswerVerifier.IAnswerVerifier) app
+
+/// Declare the deployment-side anchors the answer-
+/// verification audit row names: the sealed composition this process
+/// affirmed at boot, and the grounding certificate covering an answer's
+/// chain where one exists.
+///
+/// Registers the `IAnswerProvenanceAnchors` singleton the chat
+/// handler's post-response stage resolves. **Nothing composes this by
+/// default**: not calling it leaves both join fields `None` on the
+/// recorded row — an honest absence — while the row's own counts and
+/// cited fact ids are unaffected, because those are derived from the
+/// verdict rather than from any anchor (GP 11 / GP 13).
+///
+/// The row itself rides `IAuditLog`, which the platform composes
+/// already; a deployment wanting the join with no anchors to declare
+/// needs nothing here at all. **Adds** its registration as a contribution
+/// under the AI companion's id.
+let withAnswerProvenanceAnchors (anchors: IAnswerProvenanceAnchors) (app: ServerApp) : ServerApp =
+    app |> contribute (fun s -> s.AddSingleton<IAnswerProvenanceAnchors>(anchors))
+
+/// Opt into Tier-3 fast-path triage. Registers the
+/// `FastPathTriageConfig` singleton the agent loop's intercept
+/// resolves; NOT calling this (or passing a config with
+/// `Enabled = false`) leaves the chat path byte-for-byte as it is without triage —
+/// no triage call, no attempt row, no emission (GP 11 / GP 13).
+///
+/// The metric series ride `AILatencyMetrics.registrations`, which the AI
+/// tier already folds in, so there is nothing to add here: a
+/// deployment that opts in mid-life does not need its metric
+/// registrations re-derived.
+///
+/// This is deliberately a team-level switch rather than a default.
+/// Triage trades a small per-instruction token cost for latency,
+/// and whether that trade is worth making depends on a measurement
+/// the SDK cannot make for the deployment — the share of its
+/// instruction traffic that Tier 1's declared patterns already
+/// catch. Turning it on before that is known buys an unknown
+/// amount of latency for a known cost.
+///
+/// Leave `config.TriageProvider` as `None` and triage runs on the
+/// turn's own provider at its declared `Capabilities.TriageModelId`
+/// through the per-call model override — the cheap tier
+/// with nothing extra wired. `FastPathTriageConfig.withTriageProvider`
+/// is the explicit escape hatch for routing triage somewhere the turn
+/// provider's own family cannot reach; it wins outright when set.
+/// **Adds** its registration as a contribution under the AI companion's id.
+let withFastPathTriage (config: FastPathTriageResolver.FastPathTriageConfig) (app: ServerApp) : ServerApp =
+    if not config.Enabled then
+        app
+    else
+        app
+        |> contribute (fun s -> s.AddSingleton<FastPathTriageResolver.FastPathTriageConfig>(config))
 
 // ─── Conversation retention / TTL policy ─────────────
 
-/// Compose a scheduled retention sweep over AI conversations (Phase
-/// 504.B). `scopes` are the scope ids the sweep visits, one job per
+/// Compose a scheduled retention sweep over AI conversations.
+/// `scopes` are the scope ids the sweep visits, one job per
 /// scope — the same list `withKnowledgeRetention` takes, because a
 /// job handler cannot discover the containers it should visit. An
 /// empty list schedules nothing, which is honest.

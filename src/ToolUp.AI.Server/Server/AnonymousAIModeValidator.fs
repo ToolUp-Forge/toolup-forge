@@ -9,7 +9,7 @@ open ToolUp.Platform.ConfigValidation
 //
 // `src/ToolUp.AI/README.md` has carried "ToolUp.AI is designed for
 // authenticated platform modes" as a documented design PRINCIPLE since
-// the companion shipped, with the explicit caveat that `AIServerApp.run`
+// the companion shipped, with the explicit caveat that composing the AI tier
 // does not refuse to start. An operator could therefore deploy the
 // wide-open shape — no sign-in, no limiter, the deployment's own
 // provider key — with no signal at all until the invoice arrived. This
