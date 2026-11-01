@@ -74,7 +74,8 @@ open ToolUp.Platform
 // exists to prevent. So the decorator carries the ORIGIN's scope instead,
 // through `currentScope`: the scope the platform resolved for the request
 // making the write, or the scope the job runner re-minted for the job making
-// it (`ScopeResolution.current`). When that scope names the shard the write
+// it (`ScopeResolution.forRequest` on the request path, `JobContext.Scope` on
+// the job path). When that scope names the shard the write
 // landed in, it rides the change, the recompute is scheduled under it, and
 // the job runs under it. The equality test SELECTS the resolved scope; it
 // never builds one.

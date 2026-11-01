@@ -50,7 +50,7 @@ type PublicContentApiImpl
     ///
     /// - `Narrative` body — `Title` / `Description` come from the
     ///   document's `Title` / `Subtitle`, and `PublishedAt` from its
-    ///   `Provenance.GeneratedAt`. The `<head>` (canonical, OG, JSON-LD)
+    ///   `NarrativeProvenance.GeneratedAt`. The `<head>` (canonical, OG, JSON-LD)
     ///   is then driven by `NarrativeLayout.headTags` off this same
     ///   `Narrative` body at render time (Phase 83 "page metadata from
     ///   data" — no frontmatter file needed).
@@ -110,7 +110,7 @@ type PublicContentApiImpl
     /// - `Head.OgImage` is mirrored to the conventional `og:image`
     ///   frontmatter key so the shipped `StructuredDataHelpers` read it
     ///   unchanged.
-    /// - `Provenance.GeneratedAt` fills `PublishedAt` when the body
+    /// - `NarrativeProvenance.GeneratedAt` fills `PublishedAt` when the body
     ///   itself didn't (a `Narrative` body's own provenance wins).
     static member private pageFromResolved(slug: string, rc: ResolvedContent) : PublicPage =
         let baseline = PublicContentApiImpl.pageFromBody (slug, rc.Body)

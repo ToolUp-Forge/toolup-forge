@@ -31,7 +31,8 @@ open ToolUp.ModelProviders.Reference
 //   * a batch-of-one item is semantically identical to the single-item
 //     envelope path (same composite key, diagnostics, verdicts).
 //
-// Item execution drives `ModelFitBatchItemJobHandler.Execute` directly
+// Item execution drives the handler `ModelFitBatchItemJobHandler.create`
+// builds through `IJobHandler.Execute` directly
 // with synthesised `JobContext`s (the IModelFitProviderContract pattern) —
 // the scheduler's dispatch loop is hosting-only and not started in tests.
 

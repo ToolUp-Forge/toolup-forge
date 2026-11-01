@@ -28,7 +28,7 @@ module NarrativePrerender =
     /// (first-paragraph excerpt, frontmatter override) should
     /// post-process the returned record.
     ///
-    /// `Provenance.GeneratedAt` contributes
+    /// `NarrativeProvenance.GeneratedAt` contributes
     /// `og:article:published_time` and the corresponding
     /// schema.org Article JSON-LD via
     /// `StructuredDataHelpers.articleFromNarrative` with a
