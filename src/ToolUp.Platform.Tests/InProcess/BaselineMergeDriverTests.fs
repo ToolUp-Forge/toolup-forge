@@ -1020,20 +1020,31 @@ let private draftNoteTests =
         }
 
         test "two different <Version> lines stay a conflict, even with the notes resolved" {
-            let bump (v: string) (p: string) =
-                p.Replace("<Version>0.38.0</Version>", sprintf "<Version>%s</Version>" v)
+            // The fixture is the live root props, so the standing <Version> is read off it rather
+            // than written here: a literal went red at the first version cut after it was written.
+            let current =
+                System.Text.RegularExpressions.Regex.Match(rootProps.Value, @"<Version>([0-9][^<]*)</Version>")
 
-            Expect.stringContains rootProps.Value "<Version>0.38.0</Version>" "precondition: the fixture's version line"
+            Expect.isTrue current.Success "precondition: the fixture declares a <Version> line"
+            let currentLine = current.Value
+
+            let bump (v: string) (p: string) =
+                p.Replace(currentLine, sprintf "<Version>%s</Version>" v)
+
+            let parts = current.Groups[1].Value.Split('.')
+            let major, minor, patch = int parts[0], int parts[1], int parts[2]
+            let oursVersion = sprintf "%d.%d.0" major (minor + 1)
+            let theirsVersion = sprintf "%d.%d.%d" major minor (patch + 1)
 
             let exit, merged =
-                mergeProps true (fun p -> appendNote (bump "0.39.0" p) oursNote) (fun p ->
-                    appendNote (bump "0.38.1" p) theirsNote)
+                mergeProps true (fun p -> appendNote (bump oursVersion p) oursNote) (fun p ->
+                    appendNote (bump theirsVersion p) theirsNote)
 
             Expect.notEqual exit 0 "a version disagreement is not the driver's to decide"
 
             Expect.stringContains
                 merged
-                "<<<<<<< ours\n    <Version>0.39.0</Version>"
+                (sprintf "<<<<<<< ours\n    <Version>%s</Version>" oursVersion)
                 "the version line keeps its markers"
 
             Expect.stringContains merged ("      " + oursNote + "\n      " + theirsNote) "the notes are still joined"
