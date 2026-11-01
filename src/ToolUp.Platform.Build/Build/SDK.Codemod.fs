@@ -990,6 +990,61 @@ module Codemod =
             CodemodFileClass.Source
             @"\bRAGServerApp\b|\bwithRAG\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_(]"
             "`RAGServerApp` is gone: RAG is a companion composed onto the `ServerApp`. Build its options with `RagOptions.create factory providerProfile embedder` and the RAG setters (`RagOptions.withTopK`, `withVectorStore`, `withFacts`, …; the AI tier's options through `RagOptions.withAIOptions`, `withAIConfig`, `withModuleAIContexts`), and compose it with `app |> RAGCompose.withRAG options |> ServerApp.run`, which composes the AI tier too — do not also call `AICompose.withAI`. A `RAGServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment, on either side of `withRAG`; `mapAI f` that edited the AI layer's `Base` is a `ServerApp` builder (a companion's `register` now takes the `ServerApp`), and one that edited AI settings is `RagOptions.withAIOptions`; `RAGServerApp.run` is `ServerApp.run`; `createFrom` and the old `withRAG factory providerProfile embedder configure` are `withRAG (RagOptions.create factory providerProfile embedder |> …)`"
+        // The remaining companion roots no longer wrap the deployment either.
+        review
+            "876-forms-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bFormsServerApp\b|\bwithForms\s+\(fun\b"
+            "`FormsServerApp` is gone: Forms is a companion composed onto the `ServerApp`. Build its options with `FormsOptions.create ()` and the Forms setters (`FormsOptions.withFormSchema`, `withWorkflow`, `withGuard`, `withAction`, `withActionPolicy`, `withActionLedger`, …), and compose it with `app |> FormsCompose.withForms options |> ServerApp.run`. A `FormsServerApp.withX` delegator (`withConfig`, `withAuth`, `addModules`, …) is the `ServerApp.withX` builder applied to the deployment, on either side of `withForms`; `FormsServerApp.run` is `ServerApp.run`; `createFrom` and the old `withForms (fun f -> …)` configurator are `withForms (FormsOptions.create () |> …)`. A second `withForms` replaces the first"
+        review
+            "876-scheduling-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bSchedulingServerApp\b"
+            "`SchedulingServerApp` is gone: scheduling is a companion composed onto the `ServerApp`. Build its options with `SchedulingOptions.create ()` and `SchedulingOptions.withCalendarBridge` / `withCalendarPollTrigger` / `withReminders`, and compose it with `app |> SchedulingCompose.withScheduling options |> ServerApp.run`. A `SchedulingServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment; `SchedulingServerApp.run` is `ServerApp.run`. The calendar renewal helpers (`withChannelRenewal`, `withSubscriptionRenewal`) take the `ServerApp`; `MicrosoftGraphSubscriptions.compose` takes and returns `ServerApp * SchedulingOptions`"
+        review
+            "876-peer-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bPeerServerApp\b"
+            "`PeerServerApp` is gone: the peer substrate is a companion composed onto the `ServerApp`. Build its options with `PeerOptions.create ()` and the peer setters (`PeerOptions.withLocalPeer`, `withContract`, `withCleanRoomTemplate`, …), and compose it with `app |> PeerCompose.withPeer options |> ServerApp.run`. A `PeerServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment; `PeerServerApp.run` is `ServerApp.run`; `withCommutativeCipher` is `PeerCompose.withCommutativeCipher` over the `ServerApp`. The audits (`PeerCompose.auditAudienceBinding`, `enforce*`, …), `PeerSurface.describe` and `PeerGateway.surface` take the `(app, options)` pair; `PeerGateway.withAggregate` takes and returns it; the option-only helpers (`cleanRoomTemplateMap`, `jobResultStore`, `peerAuthProvider`, `federationPreflightInput`, …) take `PeerOptions`"
+        review
+            "876-public-rendering-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bPublicRenderingServerApp\b|\bwithPublicRendering\s+\(fun\b"
+            "`PublicRenderingServerApp` is gone: public rendering is a companion composed onto the `ServerApp`. Build its options with `PublicRenderingOptions.create ()` and the setters (`PublicRenderingOptions.withLayout`, `withSite`, `withFeed`, `withRenderCache`, …), and compose it with `app |> withPublicRendering options |> ServerApp.run`. A `PublicRenderingServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment; `PublicRenderingServerApp.run` is `ServerApp.run`; `createFrom` and the old `withPublicRendering (fun pr -> …)` configurator are `withPublicRendering (PublicRenderingOptions.create () |> …)`; `exportStatic*` is `PublicRenderingExport.exportStatic*` over the `(app, options)` pair. A second `withPublicRendering` replaces the first"
+        review
+            "876-asset-store-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bAssetStoreServerApp(Module)?\b"
+            "`AssetStoreServerApp` is gone: the asset store is a companion composed onto the `ServerApp`. Build its options with `AssetStoreCompanionOptions.create ()` and its setters (`withOptions`, `withRenderer`, `withDerivativeProfile`, `withAssetStore`, `withAsyncDerivation`, `withDerivativeDlq`, …), and compose it with `app |> AssetCompose.withAssetStore options |> ServerApp.run`. A delegator is the `ServerApp.withX` builder applied to the deployment; `AssetStoreServerApp.run` is `ServerApp.run`"
+        review
+            "876-media-library-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bMediaLibraryServerApp\b"
+            "`MediaLibraryServerApp` is gone: the media library is a companion composed onto the `ServerApp`. Build its options with `MediaLibraryCompanionOptions.create ()` and its setters (`withOptions`, `withDerivation`, `withTranscoder`, `withMediaLibrary`, `withEdgeCache`, `withDelegatedUrlSigner`), and compose it with `app |> MediaCompose.withMediaLibrary options |> ServerApp.run`. A delegator is the `ServerApp.withX` builder applied to the deployment; `MediaLibraryServerApp.run` is `ServerApp.run`"
+        review
+            "876-algorithms-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bAlgorithmsServerApp\b|\bwithAlgorithms\s+\(fun\b"
+            "`AlgorithmsServerApp` is gone: the algorithms catalog is a companion composed onto the `ServerApp`. Build its options with `AlgorithmsOptions.create ()` and `AlgorithmsOptions.withProvider` / `withProviders` / `withoutAITools` / `withoutCatalogApi`, and compose it with `app |> AlgorithmsCompose.withAlgorithms options`. The old `withAlgorithms (fun a -> …)` configurator is `withAlgorithms (AlgorithmsOptions.create () |> …)`; `AlgorithmsServerApp.run` is `ServerApp.run`. A second `withAlgorithms` replaces the first"
+        review
+            "876-passkey-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bPasskeyServerApp\b|\bPasskeyCompose\.(create|run|withBase|withConfig)\b"
+            "the passkey wrapper is gone: the passkey ceremonies are a companion composed onto the `ServerApp`. `PasskeyCompose.create config |> PasskeyCompose.run` is `app |> PasskeyCompose.withPasskey config |> ServerApp.run`; `withBase` is the `ServerApp` itself and `withConfig` is a new `PasskeyConfig` passed to `withPasskey`"
+        review
+            "876-scim-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bScimServerApp\b|\bScimMode\b|\bEnabledScim\b|\bNoScim\b"
+            "`ScimServerApp` and `ScimMode` are gone: the SCIM endpoint is a companion composed onto the `ServerApp`. `ScimServerApp.ofServerApp app |> ScimServerApp.withScim config |> ScimServerApp.run` is `app |> ScimRoutes.withScim config |> ServerApp.run`; a deployment that does not call `withScim` mounts nothing"
     ]
 
 

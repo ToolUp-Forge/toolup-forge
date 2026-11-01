@@ -78,3 +78,136 @@ A `PromptContext` record literal (tests) adds the provider:
 Pin 0.38.0. Nothing is persisted differently. The composed application is the same in the order the builders'
 docs used to require (`withConfig` first). Only compositions that broke that order behave differently, and they
 now get the writes they asked for.
+
+## The companion roots are options records
+
+Each companion root that wrapped `ServerApp` (`{ Base: ServerApp; … }`) and mirrored its builders is now an options
+record composed onto the `ServerApp` by one `withX`, through `ServerApp.withCompanion`. The companion is applied once,
+when the deployment resolves, so every `ServerApp` builder works on either side of it. The delegators, `createFrom` and
+the wrapper's `run` are gone: base configuration goes on the `ServerApp`, and the pipeline ends in `ServerApp.run`. A
+second `withX` replaces the first. The codemod's review report names every site (rules `876-*-options`).
+
+### Forms
+
+```diff
+-FormsServerApp.create ()
+-|> FormsServerApp.withConfig config
+-|> FormsServerApp.withFormSchema schema
+-|> FormsServerApp.run
++ServerApp.empty
++|> ServerApp.withConfig config
++|> FormsCompose.withForms (FormsOptions.create () |> FormsOptions.withFormSchema schema)
++|> ServerApp.run
+```
+
+The configurator form `withForms (fun f -> f |> …)` becomes `withForms (FormsOptions.create () |> …)`.
+
+### Scheduling
+
+```diff
+-SchedulingServerApp.create ()
+-|> SchedulingServerApp.withConfig config
+-|> SchedulingServerApp.withCalendarBridge bridge
+-|> SchedulingServerApp.run
++ServerApp.empty
++|> ServerApp.withConfig config
++|> SchedulingCompose.withScheduling (SchedulingOptions.create () |> SchedulingOptions.withCalendarBridge bridge)
++|> ServerApp.run
+```
+
+`GoogleCalendarChannels.withChannelRenewal` and `MicrosoftGraphSubscriptions.withSubscriptionRenewal` take the
+`ServerApp`. `MicrosoftGraphSubscriptions.compose` takes and returns `ServerApp * SchedulingOptions`.
+
+### Peer substrate
+
+```diff
+-PeerServerApp.create ()
+-|> PeerServerApp.withConfig config
+-|> PeerServerApp.withLocalPeer identity
+-|> PeerServerApp.withContract host
+-|> PeerServerApp.run
++ServerApp.empty
++|> ServerApp.withConfig config
++|> PeerCompose.withPeer (PeerOptions.create () |> PeerOptions.withLocalPeer identity |> PeerOptions.withContract host)
++|> ServerApp.run
+```
+
+`withCommutativeCipher` is `PeerCompose.withCommutativeCipher` over the `ServerApp`. The audits
+(`PeerCompose.auditAudienceBinding`, `enforce*`), `PeerSurface.describe` and `PeerGateway.surface` take the
+`(app, options)` pair, and `PeerGateway.withAggregate` takes and returns it. The option-only helpers
+(`cleanRoomTemplateMap`, `noisedReleaseMap`, `jobResultStore`, `peerAuthProvider`, `roundOrchestrationServices`,
+`federationPreflightInput`, `auditFederationGraph`) take `PeerOptions`.
+
+### Public rendering
+
+```diff
+-PublicRenderingServerApp.create ()
+-|> PublicRenderingServerApp.withConfig config
+-|> PublicRenderingServerApp.withLayout (LayoutName "page") layout
+-|> PublicRenderingServerApp.run
++ServerApp.empty
++|> ServerApp.withConfig config
++|> withPublicRendering (PublicRenderingOptions.create () |> PublicRenderingOptions.withLayout (LayoutName "page") layout)
++|> ServerApp.run
+```
+
+The configurator form `withPublicRendering (fun pr -> pr |> …)` becomes
+`withPublicRendering (PublicRenderingOptions.create () |> …)`. The static export is
+`PublicRenderingExport.exportStatic outputDir (app, options)` (and `exportStaticWith` / `exportStaticAll` /
+`exportStaticAllWith`). `HostRouteRegistration.register` takes and returns `PublicRenderingOptions`.
+
+### Asset store
+
+```diff
+-AssetStoreServerApp.create ()
+-|> AssetStoreServerApp.withConfig config
+-|> AssetStoreServerApp.withRenderer renderer
+-|> AssetStoreServerApp.run
++ServerApp.empty
++|> ServerApp.withConfig config
++|> AssetCompose.withAssetStore (AssetStoreCompanionOptions.create () |> AssetStoreCompanionOptions.withRenderer renderer)
++|> ServerApp.run
+```
+
+The options record is `AssetStoreCompanionOptions`: `AssetStoreOptions` already names the store's limits record, which it
+carries as its `Options` field.
+
+### Media library
+
+```diff
+-MediaLibraryServerApp.create ()
+-|> MediaLibraryServerApp.withConfig config
+-|> MediaLibraryServerApp.withTranscoder transcoder
+-|> MediaLibraryServerApp.run
++ServerApp.empty
++|> ServerApp.withConfig config
++|> MediaCompose.withMediaLibrary (MediaLibraryCompanionOptions.create () |> MediaLibraryCompanionOptions.withTranscoder transcoder)
++|> ServerApp.run
+```
+
+The options record is `MediaLibraryCompanionOptions`, for the same reason: `MediaLibraryOptions` is its `Options` field.
+
+### Algorithms
+
+```diff
+-app |> AlgorithmsCompose.withAlgorithms (fun a -> a |> AlgorithmsServerApp.withProvider provider)
++app |> AlgorithmsCompose.withAlgorithms (AlgorithmsOptions.create () |> AlgorithmsOptions.withProvider provider)
+```
+
+`MathNetAlgorithms.withMathNetAlgorithmProvider` is `AlgorithmsOptions -> AlgorithmsOptions`.
+
+### Passkeys
+
+```diff
+-app |> PasskeyCompose.create config |> PasskeyCompose.run
++app |> PasskeyCompose.withPasskey config |> ServerApp.run
+```
+
+### SCIM
+
+```diff
+-app |> ScimServerApp.ofServerApp |> ScimServerApp.withScim config |> ScimServerApp.run
++app |> ScimRoutes.withScim config |> ServerApp.run
+```
+
+`ScimMode` is gone: a deployment that does not call `withScim` mounts nothing.

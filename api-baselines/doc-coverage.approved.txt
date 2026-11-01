@@ -7,7 +7,7 @@
 Feliz.AgCharts 41/335
 Feliz.AgGrid 66/695
 Feliz.AgGrid.Enterprise 45/667
-InterPlatform 1312/2422
+InterPlatform 1314/2408
 ToolUp.AI.Client 135/671
 ToolUp.AI.Core 452/924
 ToolUp.AI.McpHost 142/245
@@ -29,12 +29,12 @@ ToolUp.AIProviders.OpenAI 16/23
 ToolUp.AlgorithmProviders.MathNet 22/31
 ToolUp.Algorithms.Client 4/5
 ToolUp.Algorithms.Core 118/346
-ToolUp.Algorithms.Server 58/81
+ToolUp.Algorithms.Server 56/78
 ToolUp.ArtefactSigning 156/323
 ToolUp.ArtefactSigning.AwsKms 2/4
 ToolUp.ArtefactSigning.AzureKeyVault 3/5
 ToolUp.ArtefactSigning.GoogleCloudKms 3/5
-ToolUp.AssetStore 189/438
+ToolUp.AssetStore 192/429
 ToolUp.AuditSinks.AzureBlobArchive 7/11
 ToolUp.AuditSinks.Cef 69/107
 ToolUp.AuditSinks.ChainedLedger 188/324
@@ -51,9 +51,9 @@ ToolUp.AuthProviders.LdapActiveDirectory 73/127
 ToolUp.AuthProviders.Oidc 70/90
 ToolUp.AuthProviders.Oidc.Client 130/336
 ToolUp.AuthProviders.Oidc.Shared 33/52
-ToolUp.AuthProviders.Passkey 75/150
+ToolUp.AuthProviders.Passkey 72/144
 ToolUp.AuthProviders.Passkey.Client 6/32
-ToolUp.AuthProviders.Scim 61/275
+ToolUp.AuthProviders.Scim 58/258
 ToolUp.BrandKit 65/210
 ToolUp.Calendar.CalDAV 22/25
 ToolUp.Calendar.Google 88/102
@@ -100,7 +100,7 @@ ToolUp.Facts.Shared 270/302
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
 ToolUp.Forms.Core 169/533
-ToolUp.Forms.Server 63/136
+ToolUp.Forms.Server 56/113
 ToolUp.Graph.AGE 47/75
 ToolUp.Graph.Core 39/133
 ToolUp.Graph.InMemory 6/14
@@ -118,7 +118,7 @@ ToolUp.KnowledgeBase.Core 192/454
 ToolUp.KnowledgeBase.Server 202/337
 ToolUp.Media.CloudTranscode 2/3
 ToolUp.Media.FFmpeg 4/5
-ToolUp.MediaLibrary 276/665
+ToolUp.MediaLibrary 279/658
 ToolUp.Metrics.OpenTelemetry 4/10
 ToolUp.ModelProviders.Reference 7/12
 ToolUp.NotificationChannels.Email.SendGrid 6/17
@@ -143,7 +143,7 @@ ToolUp.Platform.Server 7448/13564
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 72/184
-ToolUp.PublicRendering 656/1148
+ToolUp.PublicRendering 657/1133
 ToolUp.RAG.Core 82/133
 ToolUp.RAG.Server 281/488
 ToolUp.RAG.StaticCorpus.Build 23/40
@@ -159,7 +159,7 @@ ToolUp.Reporting.Server 183/327
 ToolUp.Reporting.Xlsx 6/11
 ToolUp.Rerankers.Local 9/19
 ToolUp.Scheduling.Core 96/324
-ToolUp.Scheduling.Server 79/154
+ToolUp.Scheduling.Server 75/134
 ToolUp.Sdk 0/0
 ToolUp.Secrets.AwsSecretsManager 6/11
 ToolUp.Secrets.AzureKeyVault 6/12

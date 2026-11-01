@@ -4,13 +4,13 @@
   "note": "forge's binding of the profile's registered tokens to its own composable surface. Not part of the wire format and not normative for any other evaluator: a token is a wire spelling, and this file says which forge type, field or builder each one reduces to. It also names the parts of forge's reflected surface the profile deliberately does not register, each with its reason, so a forge release that grows its surface fails the surface check until the profile either registers the addition or says here why it does not.",
   "bases": {
     "serverApp": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.ServerApp" },
-    "publicRenderingServerApp": { "assembly": "ToolUp.PublicRendering", "type": "ToolUp.PublicRendering.PublicRenderingCompose.PublicRenderingServerApp" }
+    "publicRenderingServerApp": { "assembly": "ToolUp.PublicRendering", "type": "ToolUp.PublicRendering.PublicRenderingCompose.PublicRenderingOptions" }
   },
   "layers": {
     "ai": { "assembly": "ToolUp.AI.Server", "type": "ToolUp.AI.AICompose.AIOptions" },
     "rag": { "assembly": "ToolUp.RAG.Server", "type": "ToolUp.RAG.RAGCompose.RagOptions" },
-    "forms": { "assembly": "ToolUp.Forms.Server", "type": "ToolUp.Forms.FormsCompose.FormsServerApp" },
-    "peer": { "assembly": "InterPlatform", "type": "ToolUp.InterPlatform.PeerCompose.PeerServerApp" },
+    "forms": { "assembly": "ToolUp.Forms.Server", "type": "ToolUp.Forms.FormsCompose.FormsOptions" },
+    "peer": { "assembly": "InterPlatform", "type": "ToolUp.InterPlatform.PeerCompose.PeerOptions" },
     "extensions": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.ComposeExtensions" },
     "knowledgeBase": { "assembly": "ToolUp.KnowledgeBase.Server", "type": "ToolUp.KnowledgeBase.Server.AICompose", "member": "register" },
     "publicRendering": { "assembly": "ToolUp.PublicRendering", "type": "ToolUp.PublicRendering.PublicRenderingCompose", "member": "withPublicRendering" }

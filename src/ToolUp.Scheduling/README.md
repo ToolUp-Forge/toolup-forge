@@ -107,7 +107,7 @@ scheduler.RegisterResource("team-acme", alice)
 Reminder fusion is **opt-in** and currently a no-op flag (`SchedulingOptions.withReminders`). When the feature lands, the consumer enables it via:
 
 ```fsharp
-app
+ServerApp.empty
 |> SchedulingCompose.withScheduling (
     SchedulingOptions.create ()
     |> SchedulingOptions.withReminders        // future: lead-time + transport config
