@@ -17,9 +17,15 @@
     (no Version attribute — versions live centrally) and resolves through
     this manifest at restore time.
 
-    Phase 11.C.2 (2026-05-08): every package shipped from this monorepo
-    is listed below. Bumping <ToolUpSdkVersion> in the consumer's
-    Directory.Packages.props upgrades all of them in lockstep. Per-package
+    Every package shipped from this monorepo is listed below, each on
+    its version group's line. Bumping <ToolUpSdkVersion> in the consumer's
+    Directory.Packages.props upgrades the core in lockstep and moves every
+    companion family to the version it shipped at beside that core release.
+    To hold or advance one family on its own, set that family's property
+    (for example <ToolUpAuditSinksVersion>) in the same PropertyGroup as
+    <ToolUpSdkVersion>, ABOVE the Import: the manifest only supplies a
+    family's version when the property is still empty. The families and
+    their properties are in the generated region below. Per-package
     overrides are still possible — declaring a more specific
     <PackageVersion Include="ToolUp.X" Version="..." /> later in the
     consumer's Directory.Packages.props takes precedence.
@@ -117,7 +123,57 @@
          - ToolUp.Cli: <PackAsTool> — installed from a tool manifest (`dotnet tool install`), never a <PackageReference>, so central package management never consults a version for it
          - ToolUp.RAG.StaticCorpus.Build: <PackAsTool> — installed from a tool manifest (`dotnet tool install`), never a <PackageReference>, so central package management never consults a version for it
          - ToolUp.Sdk: the meta-package that SHIPS this manifest — a consumer must already pin it in their own Directory.Packages.props for the import to resolve, so an entry here could never be the one that resolves it
+
+       Each id resolves through ONE property, its version group's (declared in
+       version-groups.json). Core packages read ToolUpSdkVersion, which the
+       consumer sets. Each companion family reads its own property, defaulted
+       to the version that family carried when this manifest was released, so a
+       consumer pinning only ToolUpSdkVersion resolves every package; setting a
+       family's property in Directory.Packages.props moves that family alone.
   -->
+  <PropertyGroup>
+    <ToolUpAIProvidersVersion Condition="'$(ToolUpAIProvidersVersion)' == ''">0.39.0</ToolUpAIProvidersVersion>
+    <ToolUpAlgorithmProvidersVersion Condition="'$(ToolUpAlgorithmProvidersVersion)' == ''">0.39.0</ToolUpAlgorithmProvidersVersion>
+    <ToolUpArtefactSigningVersion Condition="'$(ToolUpArtefactSigningVersion)' == ''">0.39.0</ToolUpArtefactSigningVersion>
+    <ToolUpAuditSinksVersion Condition="'$(ToolUpAuditSinksVersion)' == ''">0.39.0</ToolUpAuditSinksVersion>
+    <ToolUpAuthProvidersVersion Condition="'$(ToolUpAuthProvidersVersion)' == ''">0.39.0</ToolUpAuthProvidersVersion>
+    <ToolUpCalendarVersion Condition="'$(ToolUpCalendarVersion)' == ''">0.39.0</ToolUpCalendarVersion>
+    <ToolUpCloudVersion Condition="'$(ToolUpCloudVersion)' == ''">0.39.0</ToolUpCloudVersion>
+    <ToolUpContainerSchedulersVersion Condition="'$(ToolUpContainerSchedulersVersion)' == ''">0.39.0</ToolUpContainerSchedulersVersion>
+    <ToolUpContentScannersVersion Condition="'$(ToolUpContentScannersVersion)' == ''">0.39.0</ToolUpContentScannersVersion>
+    <ToolUpDataSourcesVersion Condition="'$(ToolUpDataSourcesVersion)' == ''">0.39.0</ToolUpDataSourcesVersion>
+    <ToolUpEmbeddingCachesVersion Condition="'$(ToolUpEmbeddingCachesVersion)' == ''">0.39.0</ToolUpEmbeddingCachesVersion>
+    <ToolUpEmbeddingProvidersVersion Condition="'$(ToolUpEmbeddingProvidersVersion)' == ''">0.39.0</ToolUpEmbeddingProvidersVersion>
+    <ToolUpEncryptionVersion Condition="'$(ToolUpEncryptionVersion)' == ''">0.39.0</ToolUpEncryptionVersion>
+    <ToolUpEntityStoresVersion Condition="'$(ToolUpEntityStoresVersion)' == ''">0.39.0</ToolUpEntityStoresVersion>
+    <ToolUpExperimentsVersion Condition="'$(ToolUpExperimentsVersion)' == ''">0.1.0-alpha</ToolUpExperimentsVersion>
+    <ToolUpFactStoresVersion Condition="'$(ToolUpFactStoresVersion)' == ''">0.39.0</ToolUpFactStoresVersion>
+    <ToolUpFeatureFlagProvidersVersion Condition="'$(ToolUpFeatureFlagProvidersVersion)' == ''">0.1.0-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpHostsVersion Condition="'$(ToolUpHostsVersion)' == ''">0.39.0</ToolUpHostsVersion>
+    <ToolUpIngestionQueuesVersion Condition="'$(ToolUpIngestionQueuesVersion)' == ''">0.39.0</ToolUpIngestionQueuesVersion>
+    <ToolUpJobSchedulersVersion Condition="'$(ToolUpJobSchedulersVersion)' == ''">0.39.0</ToolUpJobSchedulersVersion>
+    <ToolUpMediaVersion Condition="'$(ToolUpMediaVersion)' == ''">0.39.0</ToolUpMediaVersion>
+    <ToolUpMetricsVersion Condition="'$(ToolUpMetricsVersion)' == ''">0.39.0</ToolUpMetricsVersion>
+    <ToolUpModelProvidersVersion Condition="'$(ToolUpModelProvidersVersion)' == ''">0.39.0</ToolUpModelProvidersVersion>
+    <ToolUpNotificationChannelsVersion Condition="'$(ToolUpNotificationChannelsVersion)' == ''">0.39.0</ToolUpNotificationChannelsVersion>
+    <ToolUpObservabilityVersion Condition="'$(ToolUpObservabilityVersion)' == ''">0.39.0</ToolUpObservabilityVersion>
+    <ToolUpOcrProvidersVersion Condition="'$(ToolUpOcrProvidersVersion)' == ''">0.39.0</ToolUpOcrProvidersVersion>
+    <ToolUpRateLimitVersion Condition="'$(ToolUpRateLimitVersion)' == ''">0.39.0</ToolUpRateLimitVersion>
+    <ToolUpReportRenderersVersion Condition="'$(ToolUpReportRenderersVersion)' == ''">0.39.0</ToolUpReportRenderersVersion>
+    <ToolUpRerankersVersion Condition="'$(ToolUpRerankersVersion)' == ''">0.39.0</ToolUpRerankersVersion>
+    <ToolUpSecretsVersion Condition="'$(ToolUpSecretsVersion)' == ''">0.39.0</ToolUpSecretsVersion>
+    <ToolUpShareTokenStoreDecoratorsVersion Condition="'$(ToolUpShareTokenStoreDecoratorsVersion)' == ''">0.39.0</ToolUpShareTokenStoreDecoratorsVersion>
+    <ToolUpSparseIndicesVersion Condition="'$(ToolUpSparseIndicesVersion)' == ''">0.39.0</ToolUpSparseIndicesVersion>
+    <ToolUpStorageVersion Condition="'$(ToolUpStorageVersion)' == ''">0.39.0</ToolUpStorageVersion>
+    <ToolUpStripeVersion Condition="'$(ToolUpStripeVersion)' == ''">0.2.0</ToolUpStripeVersion>
+    <ToolUpSvgRasterizersVersion Condition="'$(ToolUpSvgRasterizersVersion)' == ''">0.39.0</ToolUpSvgRasterizersVersion>
+    <ToolUpTelemetrySinksVersion Condition="'$(ToolUpTelemetrySinksVersion)' == ''">0.39.0</ToolUpTelemetrySinksVersion>
+    <ToolUpTimeSeriesStoresVersion Condition="'$(ToolUpTimeSeriesStoresVersion)' == ''">0.39.0</ToolUpTimeSeriesStoresVersion>
+    <ToolUpVectorStoresVersion Condition="'$(ToolUpVectorStoresVersion)' == ''">0.39.0</ToolUpVectorStoresVersion>
+    <ToolUpVoiceProvidersVersion Condition="'$(ToolUpVoiceProvidersVersion)' == ''">0.39.0</ToolUpVoiceProvidersVersion>
+    <ToolUpWebhooksVersion Condition="'$(ToolUpWebhooksVersion)' == ''">0.1.0-alpha</ToolUpWebhooksVersion>
+    <ToolUpWorkflowVersion Condition="'$(ToolUpWorkflowVersion)' == ''">0.1.0-alpha</ToolUpWorkflowVersion>
+  </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="ToolUp.AI.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
@@ -132,82 +188,82 @@
     <PackageVersion Include="ToolUp.AI.Wire" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AICookbooks.AgChart" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AICookbooks.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AIProviders.Copilot" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AIProviders.Gemini" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AIProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AlgorithmProviders.MathNet" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpAIProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpAIProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Copilot" Version="$(ToolUpAIProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Gemini" Version="$(ToolUpAIProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.OpenAI" Version="$(ToolUpAIProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AlgorithmProviders.MathNet" Version="$(ToolUpAlgorithmProvidersVersion)" />
     <PackageVersion Include="ToolUp.Algorithms.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Algorithms.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Algorithms.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.ArtefactSigning" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.ArtefactSigning.AwsKms" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.ArtefactSigning.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.ArtefactSigning.GoogleCloudKms" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ArtefactSigning.AwsKms" Version="$(ToolUpArtefactSigningVersion)" />
+    <PackageVersion Include="ToolUp.ArtefactSigning.AzureKeyVault" Version="$(ToolUpArtefactSigningVersion)" />
+    <PackageVersion Include="ToolUp.ArtefactSigning.GoogleCloudKms" Version="$(ToolUpArtefactSigningVersion)" />
     <PackageVersion Include="ToolUp.AssetStore" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.AzureBlobArchive" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.Cef" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.ChainedLedger" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.DatadogLogs" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.GcsArchive" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.SplunkHec" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.ClerkUI" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.EntraDirectory" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.GitHub" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.GoogleDirectory" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.GoogleIdentity.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.LdapActiveDirectory" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.Oidc" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Shared" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.Passkey" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.Passkey.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.Scim" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.AzureBlobArchive" Version="$(ToolUpAuditSinksVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.Cef" Version="$(ToolUpAuditSinksVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.ChainedLedger" Version="$(ToolUpAuditSinksVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.DatadogLogs" Version="$(ToolUpAuditSinksVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.GcsArchive" Version="$(ToolUpAuditSinksVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.S3Archive" Version="$(ToolUpAuditSinksVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.SplunkHec" Version="$(ToolUpAuditSinksVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.ClerkUI" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.EntraDirectory" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.GitHub" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.GoogleDirectory" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.GoogleIdentity.Client" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.LdapActiveDirectory" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Client" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Shared" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Passkey" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Passkey.Client" Version="$(ToolUpAuthProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Scim" Version="$(ToolUpAuthProvidersVersion)" />
     <PackageVersion Include="ToolUp.BrandKit" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Calendar.CalDAV" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Calendar.Google" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Calendar.Microsoft" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Calendar.CalDAV" Version="$(ToolUpCalendarVersion)" />
+    <PackageVersion Include="ToolUp.Calendar.Google" Version="$(ToolUpCalendarVersion)" />
+    <PackageVersion Include="ToolUp.Calendar.Microsoft" Version="$(ToolUpCalendarVersion)" />
     <PackageVersion Include="ToolUp.Client.ModelViewer" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Cloud.Aws" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Cloud.Azure" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Cloud.Gcp" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Aws" Version="$(ToolUpCloudVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Azure" Version="$(ToolUpCloudVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Gcp" Version="$(ToolUpCloudVersion)" />
     <PackageVersion Include="ToolUp.Companions.Isolation" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.ContainerSchedulers.DockerLocal" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ContainerSchedulers.DockerLocal" Version="$(ToolUpContainerSchedulersVersion)" />
     <PackageVersion Include="ToolUp.ContentAuthoring" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.ContentScanners.ClamAv" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Athena" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.BigQuery" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Common" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Csv" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Excel" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.GitHub" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.GoogleAnalytics" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.GoogleAnalytics.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Parquet" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Redshift" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Snowflake" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Sql" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.DataSources.Synapse" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.EmbeddingCaches.Redis" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.EmbeddingProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Encryption.AwsKms" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Encryption.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Encryption.GoogleCloudKms" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.EntityStores.Postgres" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Experiments.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Experiments.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ContentScanners.ClamAv" Version="$(ToolUpContentScannersVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Athena" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.BigQuery" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Common" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Csv" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Excel" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.GitHub" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.GoogleAnalytics" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.GoogleAnalytics.Client" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Parquet" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Redshift" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Snowflake" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Sql" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Synapse" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingCaches.Redis" Version="$(ToolUpEmbeddingCachesVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpEmbeddingProvidersVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingProviders.OpenAI" Version="$(ToolUpEmbeddingProvidersVersion)" />
+    <PackageVersion Include="ToolUp.Encryption.AwsKms" Version="$(ToolUpEncryptionVersion)" />
+    <PackageVersion Include="ToolUp.Encryption.AzureKeyVault" Version="$(ToolUpEncryptionVersion)" />
+    <PackageVersion Include="ToolUp.Encryption.GoogleCloudKms" Version="$(ToolUpEncryptionVersion)" />
+    <PackageVersion Include="ToolUp.EntityStores.Postgres" Version="$(ToolUpEntityStoresVersion)" />
+    <PackageVersion Include="ToolUp.Experiments.Core" Version="$(ToolUpExperimentsVersion)" />
+    <PackageVersion Include="ToolUp.Experiments.Server" Version="$(ToolUpExperimentsVersion)" />
     <PackageVersion Include="ToolUp.ExternalCompute.Http" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.FactStores.Postgres" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.FactStores.Postgres" Version="$(ToolUpFactStoresVersion)" />
     <PackageVersion Include="ToolUp.Facts.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Presentation" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Presentation.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Shared" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.FeatureFlagProviders.OpenFeature" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.FeatureFlagProviders.OpenFeature" Version="$(ToolUpFeatureFlagProvidersVersion)" />
     <PackageVersion Include="ToolUp.Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
@@ -219,38 +275,38 @@
     <PackageVersion Include="ToolUp.Graph.InMemory" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Graph.Neo4j" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Graph.Projection" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Hosts.AwsLambda" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Hosts.AzureFunctions" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Hosts.DeliveredEgress" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Hosts.Docker" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Hosts.EdgeCache" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Hosts.GoogleCloudFunctions" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.IngestionQueues.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.AwsLambda" Version="$(ToolUpHostsVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.AzureFunctions" Version="$(ToolUpHostsVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.DeliveredEgress" Version="$(ToolUpHostsVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.Docker" Version="$(ToolUpHostsVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.EdgeCache" Version="$(ToolUpHostsVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.GoogleCloudFunctions" Version="$(ToolUpHostsVersion)" />
+    <PackageVersion Include="ToolUp.IngestionQueues.Redis" Version="$(ToolUpIngestionQueuesVersion)" />
     <PackageVersion Include="ToolUp.InterPlatform" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.JobSchedulers.Quartz" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.JobSchedulers.Quartz" Version="$(ToolUpJobSchedulersVersion)" />
     <PackageVersion Include="ToolUp.KnowledgeBase.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.KnowledgeBase.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.KnowledgeBase.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Media.CloudTranscode" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Media.FFmpeg" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.MediaLibrary" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.ModelProviders.Reference" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Email.SendGrid" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Email.Smtp" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.WhatsApp.MetaCloud" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.WhatsApp.Twilio" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Observability.Datadog" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.OcrProviders.Tesseract" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Media.CloudTranscode" Version="$(ToolUpMediaVersion)" />
+    <PackageVersion Include="ToolUp.Media.FFmpeg" Version="$(ToolUpMediaVersion)" />
+    <PackageVersion Include="ToolUp.MediaLibrary" Version="$(ToolUpMediaVersion)" />
+    <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpMetricsVersion)" />
+    <PackageVersion Include="ToolUp.ModelProviders.Reference" Version="$(ToolUpModelProvidersVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.SendGrid" Version="$(ToolUpNotificationChannelsVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.Smtp" Version="$(ToolUpNotificationChannelsVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpNotificationChannelsVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpNotificationChannelsVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpNotificationChannelsVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.WhatsApp.MetaCloud" Version="$(ToolUpNotificationChannelsVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.WhatsApp.Twilio" Version="$(ToolUpNotificationChannelsVersion)" />
+    <PackageVersion Include="ToolUp.Observability.Datadog" Version="$(ToolUpObservabilityVersion)" />
+    <PackageVersion Include="ToolUp.OcrProviders.Tesseract" Version="$(ToolUpOcrProvidersVersion)" />
     <PackageVersion Include="ToolUp.Offline.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Offline.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Offline.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.OpenXml" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.OpenXml.Spreadsheet" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.OpenXml.SvgRasterizer.Skia" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.OpenXml.SvgRasterizer.Skia" Version="$(ToolUpSvgRasterizersVersion)" />
     <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
@@ -263,45 +319,45 @@
     <PackageVersion Include="ToolUp.RAG.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.RAG.StaticCorpus.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.RAG.StaticCorpus.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.RateLimit.AzureTableStorage" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.RateLimit.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RateLimit.AzureTableStorage" Version="$(ToolUpRateLimitVersion)" />
+    <PackageVersion Include="ToolUp.RateLimit.Redis" Version="$(ToolUpRateLimitVersion)" />
     <PackageVersion Include="ToolUp.Remoting.Analyzers" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Remoting.Generator" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Reporting.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Reporting.Docx" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Reporting.HtmlPdf" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.Docx" Version="$(ToolUpReportRenderersVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.HtmlPdf" Version="$(ToolUpReportRenderersVersion)" />
     <PackageVersion Include="ToolUp.Reporting.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Reporting.Xlsx" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Rerankers.Local" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.Xlsx" Version="$(ToolUpReportRenderersVersion)" />
+    <PackageVersion Include="ToolUp.Rerankers.Local" Version="$(ToolUpRerankersVersion)" />
     <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Secrets.AwsSecretsManager" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Secrets.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Secrets.GcpSecretManager" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Secrets.HashiCorpVault" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.SparseIndices.Cjk" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.SparseIndices.Postgres" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.SparseIndices.Snowball" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Storage.GoogleCloud" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Stripe.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Stripe.TierToken" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Stripe.Webhook" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.AwsSecretsManager" Version="$(ToolUpSecretsVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.AzureKeyVault" Version="$(ToolUpSecretsVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.GcpSecretManager" Version="$(ToolUpSecretsVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.HashiCorpVault" Version="$(ToolUpSecretsVersion)" />
+    <PackageVersion Include="ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved" Version="$(ToolUpShareTokenStoreDecoratorsVersion)" />
+    <PackageVersion Include="ToolUp.SparseIndices.Cjk" Version="$(ToolUpSparseIndicesVersion)" />
+    <PackageVersion Include="ToolUp.SparseIndices.Postgres" Version="$(ToolUpSparseIndicesVersion)" />
+    <PackageVersion Include="ToolUp.SparseIndices.Snowball" Version="$(ToolUpSparseIndicesVersion)" />
+    <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpStorageVersion)" />
+    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpStorageVersion)" />
+    <PackageVersion Include="ToolUp.Storage.GoogleCloud" Version="$(ToolUpStorageVersion)" />
+    <PackageVersion Include="ToolUp.Stripe.Server" Version="$(ToolUpStripeVersion)" />
+    <PackageVersion Include="ToolUp.Stripe.TierToken" Version="$(ToolUpStripeVersion)" />
+    <PackageVersion Include="ToolUp.Stripe.Webhook" Version="$(ToolUpStripeVersion)" />
     <PackageVersion Include="ToolUp.Tabular" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.TelemetrySinks.Ga4" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.TimeSeriesStores.Timescale" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.VectorStores.Pgvector" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.TelemetrySinks.Ga4" Version="$(ToolUpTelemetrySinksVersion)" />
+    <PackageVersion Include="ToolUp.TimeSeriesStores.Timescale" Version="$(ToolUpTimeSeriesStoresVersion)" />
+    <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpVectorStoresVersion)" />
+    <PackageVersion Include="ToolUp.VectorStores.Pgvector" Version="$(ToolUpVectorStoresVersion)" />
     <PackageVersion Include="ToolUp.Voice.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Voice.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.VoiceProviders.AzureSpeech" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.VoiceProviders.Whisper" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Webhooks.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Webhooks.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Workflow.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Workflow.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VoiceProviders.AzureSpeech" Version="$(ToolUpVoiceProvidersVersion)" />
+    <PackageVersion Include="ToolUp.VoiceProviders.Whisper" Version="$(ToolUpVoiceProvidersVersion)" />
+    <PackageVersion Include="ToolUp.Webhooks.Core" Version="$(ToolUpWebhooksVersion)" />
+    <PackageVersion Include="ToolUp.Webhooks.Server" Version="$(ToolUpWebhooksVersion)" />
+    <PackageVersion Include="ToolUp.Workflow.Core" Version="$(ToolUpWorkflowVersion)" />
+    <PackageVersion Include="ToolUp.Workflow.Server" Version="$(ToolUpWorkflowVersion)" />
   </ItemGroup>
   <!-- END GENERATED - do not hand-edit above this line. -->
 </Project>

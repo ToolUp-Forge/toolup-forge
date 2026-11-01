@@ -1,0 +1,374 @@
+{
+  "kind": "versionGroups",
+  "comment": "Phase 1196. Which version line each packable project ships on. Membership is by repo-relative project-file glob ('*' within one path segment, '**' across segments); every packable project matches exactly one group (SdkManifestTests). The single lockstep group is the core: its version IS <Version> in Directory.Build.props, the number the release tag names. Every other group is a companion family on its own line. Edit a version or a glob here, then run the GenerateSdkManifest target: it rewrites the generated regions of Directory.Build.props and src/ToolUp.Sdk/build/ToolUp.Sdk.props. Model and rulings: docs/platform/release-process.md.",
+  "groups": [
+    {
+      "id": "core",
+      "property": "ToolUpSdkVersion",
+      "version": "0.39.0",
+      "lockstep": true,
+      "projects": [
+        "src/ToolUp.Platform.*/**",
+        "src/ToolUp.AI.*/**",
+        "src/ToolUp.Algorithms.*/**",
+        "src/ToolUp.ArtefactSigning/**",
+        "src/ToolUp.AssetStore/**",
+        "src/ToolUp.BrandKit/**",
+        "src/ToolUp.Cli/**",
+        "src/ToolUp.Client.ModelViewer/**",
+        "src/ToolUp.Companions.Isolation/**",
+        "src/ToolUp.Facts.*/**",
+        "src/ToolUp.Forms.*/**",
+        "src/ToolUp.Graph.*/**",
+        "src/ToolUp.KnowledgeBase.*/**",
+        "src/ToolUp.Offline.*/**",
+        "src/ToolUp.OpenXml/**",
+        "src/ToolUp.OpenXml.*/**",
+        "src/ToolUp.PublicRendering/**",
+        "src/ToolUp.RAG.*/**",
+        "src/ToolUp.Remoting.*/**",
+        "src/ToolUp.Reporting.*/**",
+        "src/ToolUp.Scheduling.*/**",
+        "src/ToolUp.Sdk/**",
+        "src/ToolUp.Tabular/**",
+        "src/ToolUp.Voice.*/**",
+        "src/Feliz.*/**",
+        "src/AI.Samples/**",
+        "src/AIExtensions/**",
+        "src/AICookbooks/**",
+        "src/ContentAuthoring/**",
+        "src/ExternalCompute/**",
+        "src/InterPlatform/**"
+      ]
+    },
+    {
+      "id": "ai-providers",
+      "property": "ToolUpAIProvidersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/AIProviders/**"
+      ]
+    },
+    {
+      "id": "algorithm-providers",
+      "property": "ToolUpAlgorithmProvidersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/AlgorithmProviders/**"
+      ]
+    },
+    {
+      "id": "artefact-signing",
+      "property": "ToolUpArtefactSigningVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/ArtefactSigning/**"
+      ]
+    },
+    {
+      "id": "audit-sinks",
+      "property": "ToolUpAuditSinksVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/AuditSinks/**"
+      ]
+    },
+    {
+      "id": "auth-providers",
+      "property": "ToolUpAuthProvidersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/AuthProviders/**",
+        "src/ToolUp.AuthProviders.*/**"
+      ]
+    },
+    {
+      "id": "calendar",
+      "property": "ToolUpCalendarVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Calendar/**"
+      ]
+    },
+    {
+      "id": "cloud",
+      "property": "ToolUpCloudVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Cloud/**"
+      ]
+    },
+    {
+      "id": "container-schedulers",
+      "property": "ToolUpContainerSchedulersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/ContainerSchedulers/**"
+      ]
+    },
+    {
+      "id": "content-scanners",
+      "property": "ToolUpContentScannersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/ContentScanners/**"
+      ]
+    },
+    {
+      "id": "data-sources",
+      "property": "ToolUpDataSourcesVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/DataSources/**"
+      ]
+    },
+    {
+      "id": "embedding-caches",
+      "property": "ToolUpEmbeddingCachesVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/EmbeddingCaches/**"
+      ]
+    },
+    {
+      "id": "embedding-providers",
+      "property": "ToolUpEmbeddingProvidersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/EmbeddingProviders/**"
+      ]
+    },
+    {
+      "id": "encryption",
+      "property": "ToolUpEncryptionVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Encryption/**"
+      ]
+    },
+    {
+      "id": "entity-stores",
+      "property": "ToolUpEntityStoresVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/EntityStores/**"
+      ]
+    },
+    {
+      "id": "fact-stores",
+      "property": "ToolUpFactStoresVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/FactStores/**"
+      ]
+    },
+    {
+      "id": "feature-flag-providers",
+      "property": "ToolUpFeatureFlagProvidersVersion",
+      "version": "0.1.0-alpha",
+      "projects": [
+        "src/FeatureFlagProviders/**"
+      ]
+    },
+    {
+      "id": "hosts",
+      "property": "ToolUpHostsVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Hosts/**"
+      ]
+    },
+    {
+      "id": "ingestion-queues",
+      "property": "ToolUpIngestionQueuesVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/IngestionQueues/**"
+      ]
+    },
+    {
+      "id": "job-schedulers",
+      "property": "ToolUpJobSchedulersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/JobSchedulers/**"
+      ]
+    },
+    {
+      "id": "media",
+      "property": "ToolUpMediaVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Media/**"
+      ]
+    },
+    {
+      "id": "metrics",
+      "property": "ToolUpMetricsVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Metrics/**"
+      ]
+    },
+    {
+      "id": "model-providers",
+      "property": "ToolUpModelProvidersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/ModelProviders/**"
+      ]
+    },
+    {
+      "id": "notification-channels",
+      "property": "ToolUpNotificationChannelsVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/NotificationChannels/**"
+      ]
+    },
+    {
+      "id": "observability",
+      "property": "ToolUpObservabilityVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Observability/**"
+      ]
+    },
+    {
+      "id": "ocr-providers",
+      "property": "ToolUpOcrProvidersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/OcrProviders/**"
+      ]
+    },
+    {
+      "id": "rate-limit",
+      "property": "ToolUpRateLimitVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/RateLimit/**"
+      ]
+    },
+    {
+      "id": "report-renderers",
+      "property": "ToolUpReportRenderersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Reporting/**"
+      ]
+    },
+    {
+      "id": "rerankers",
+      "property": "ToolUpRerankersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Rerankers/**"
+      ]
+    },
+    {
+      "id": "secrets",
+      "property": "ToolUpSecretsVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Secrets/**"
+      ]
+    },
+    {
+      "id": "share-token-store-decorators",
+      "property": "ToolUpShareTokenStoreDecoratorsVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/ShareTokenStoreDecorators/**"
+      ]
+    },
+    {
+      "id": "sparse-indices",
+      "property": "ToolUpSparseIndicesVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/SparseIndices/**"
+      ]
+    },
+    {
+      "id": "storage",
+      "property": "ToolUpStorageVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/Storage/**"
+      ]
+    },
+    {
+      "id": "svg-rasterizers",
+      "property": "ToolUpSvgRasterizersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/SvgRasterizers/**"
+      ]
+    },
+    {
+      "id": "telemetry-sinks",
+      "property": "ToolUpTelemetrySinksVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/TelemetrySinks/**"
+      ]
+    },
+    {
+      "id": "time-series-stores",
+      "property": "ToolUpTimeSeriesStoresVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/TimeSeriesStores/**"
+      ]
+    },
+    {
+      "id": "vector-stores",
+      "property": "ToolUpVectorStoresVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/VectorStores/**"
+      ]
+    },
+    {
+      "id": "voice-providers",
+      "property": "ToolUpVoiceProvidersVersion",
+      "version": "0.39.0",
+      "projects": [
+        "src/VoiceProviders/**"
+      ]
+    },
+    {
+      "id": "experiments",
+      "property": "ToolUpExperimentsVersion",
+      "version": "0.1.0-alpha",
+      "projects": [
+        "src/ToolUp.Experiments.*/**"
+      ]
+    },
+    {
+      "id": "stripe",
+      "property": "ToolUpStripeVersion",
+      "version": "0.2.0",
+      "projects": [
+        "src/ToolUp.Stripe.*/**"
+      ]
+    },
+    {
+      "id": "workflow",
+      "property": "ToolUpWorkflowVersion",
+      "version": "0.1.0-alpha",
+      "projects": [
+        "src/ToolUp.Workflow.*/**"
+      ]
+    },
+    {
+      "id": "webhooks",
+      "property": "ToolUpWebhooksVersion",
+      "version": "0.1.0-alpha",
+      "projects": [
+        "src/Webhooks/**"
+      ]
+    }
+  ]
+}

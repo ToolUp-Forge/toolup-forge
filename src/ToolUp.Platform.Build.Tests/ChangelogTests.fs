@@ -60,6 +60,7 @@ let private release (entries: PackageEntry list) (docs: string list) : Release =
     Since = Some "v0.1.0"
     Surface = Baselines entries
     MigrationDocs = docs
+    Groups = []
 }
 
 let private renderOne (r: Release) = renderRelease defaultLimits r
@@ -217,6 +218,52 @@ let tests =
                 Expect.isFalse (List.contains "### Changed" ls) "no Changed"
                 Expect.isFalse (List.contains "### Removed" ls) "no Removed"
                 Expect.stringContains s "**additive**" "class"
+        ]
+
+        testList "one section per version group that moved" [
+            let line group shippedAt lockstep packages = {
+                Group = group
+                ShippedAt = shippedAt
+                Lockstep = lockstep
+                Packages = Set.ofList packages
+            }
+
+            let core = {
+                mixed with
+                    Package = "ToolUp.Platform.Core"
+            }
+
+            let sink = {
+                mixed with
+                    Package = "ToolUp.AuditSinks.Cef"
+            }
+
+            let grouped =
+                renderOne {
+                    release [ entryOf sink; entryOf core ] [] with
+                        Groups = [
+                            line "audit-sinks" "0.40.0" false [ "ToolUp.AuditSinks.Cef" ]
+                            line "core" "0.39.1" true [ "ToolUp.Platform.Core" ]
+                            line "storage" "0.39.0" false [ "ToolUp.Storage.AwsS3" ]
+                        ]
+                }
+
+            testCase "each moved group is headed by its id and the version it shipped at, core first"
+            <| fun () ->
+                let ls = linesOf grouped
+                let coreAt = List.findIndex ((=) "### `core` 0.39.1") ls
+                let sinksAt = List.findIndex ((=) "### `audit-sinks` 0.40.0") ls
+                Expect.isLessThan coreAt sinksAt "the lockstep line leads"
+                Expect.contains ls "#### Removed" "a group's lists sit one level below its heading"
+
+            testCase "a group whose packages did not move has no section"
+            <| fun () -> Expect.isFalse (grouped.Contains "`storage`") "storage did not move"
+
+            testCase "a release from before groups renders as the one line it was"
+            <| fun () ->
+                let ls = linesOf (renderOne (release [ entryOf sink; entryOf core ] []))
+                Expect.contains ls "### Removed" "the ungrouped headings are unchanged"
+                Expect.isFalse (ls |> List.exists (fun l -> l.StartsWith "#### ")) "no group level"
         ]
 
         testList "idempotence" [

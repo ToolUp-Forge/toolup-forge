@@ -5027,6 +5027,51 @@ let main args =
         for exclusion in reconciliation.Excluded do
             Trace.tracefn "GenerateSdkManifest: excluding %s — %s" exclusion.PackageId exclusion.Rationale
 
+        // The version groups first: both generated regions are projections
+        // of `version-groups.json`, so a file the tree disagrees with is
+        // refused before either is written. The props region is rewritten
+        // here (outside `--check`) before its own agreement is judged.
+        let groups =
+            match SdkManifest.loadVersionGroups root with
+            | Ok groups -> groups
+            | Error e -> failwithf "GenerateSdkManifest: %s" e
+
+        let propsPath = SdkManifest.buildPropsPath root
+
+        if not checkOnly then
+            let props = File.readAsString propsPath
+
+            let rendered =
+                SdkManifest.spliceRegion
+                    SdkManifest.propsRegionBeginMarker
+                    SdkManifest.propsRegionEndMarker
+                    (SdkManifest.renderPropsRegion groups)
+                    (props.Replace("\r\n", "\n"))
+
+            if rendered <> props then
+                File.writeString false propsPath rendered
+                Trace.tracefn "GenerateSdkManifest: rewrote the version-group region of %s." propsPath
+
+        match SdkManifest.groupFindings root with
+        | [] ->
+            Trace.tracefn
+                "GenerateSdkManifest: %d version group(s) place every packable project exactly once."
+                (List.length groups)
+        | findings ->
+            failwithf
+                "GenerateSdkManifest: the version groups do not describe this tree:\n  - %s"
+                (String.concat "\n  - " findings)
+
+        if
+            checkOnly
+            && not (SdkManifest.manifestIsCurrent root)
+            && SdkManifest.describe reconciliation = None
+        then
+            failwithf
+                "GenerateSdkManifest --check: %s lists the right ids but is not the render of version-groups.json (a package moved group, or a family's version moved). Regenerate with: %s"
+                (SdkManifest.manifestPath root)
+                SdkManifest.regenerateCommand
+
         match SdkManifest.describe reconciliation, checkOnly with
         | None, _ ->
             Trace.tracefn
@@ -5532,6 +5577,65 @@ let main args =
                 taggedText
                 (SemVerBump.currentBaseline root path))
 
+    // What a release tag's project files said, read in two git calls rather
+    // than one per project: the paths, then every `<AssemblyName>` and
+    // `<Version>` line among them. Feeds the per-group bump check, which must
+    // place a package withdrawn since the tag and must know which projects
+    // declared their own version before version groups existed.
+    let projectFactsAt (root: string) (tag: string) : SdkManifest.ProjectFacts list =
+        let paths =
+            Git.read root [ "ls-tree"; "-r"; "--name-only"; tag; "--"; "src" ]
+            |> Lines.ofOutput
+            |> List.filter (fun p -> p.EndsWith ".fsproj")
+
+        let grep =
+            Git.run root [ "grep"; "-E"; "<(AssemblyName|Version)>"; tag; "--"; "src/*.fsproj" ]
+
+        if grep.ExitCode > 1 then
+            failwithf "git grep over %s's project files failed (exit %d)." tag grep.ExitCode
+
+        let tagged =
+            Lines.ofOutput grep.StdOut
+            |> List.choose (fun line ->
+                // `<tag>:<path>:<line>`
+                let rest = line.Substring(tag.Length + 1)
+
+                match rest.IndexOf ':' with
+                | -1 -> None
+                | i ->
+                    let m =
+                        System.Text.RegularExpressions.Regex.Match(
+                            rest.Substring(i + 1),
+                            @"<(AssemblyName|Version)>\s*([^<\s][^<]*?)\s*</"
+                        )
+
+                    if m.Success then
+                        Some(rest.Substring(0, i), m.Groups[1].Value, m.Groups[2].Value)
+                    else
+                        None)
+
+        paths
+        |> List.map (fun path ->
+            let valueOf tagName =
+                tagged
+                |> List.tryPick (fun (p, t, v) -> if p = path && t = tagName then Some v else None)
+
+            {
+                SdkManifest.ProjectFacts.Path = path
+                SdkManifest.ProjectFacts.AssemblyName =
+                    defaultArg (valueOf "AssemblyName") (Path.GetFileNameWithoutExtension path)
+                SdkManifest.ProjectFacts.OwnVersion = valueOf "Version"
+            })
+
+    // `version-groups.json` as a tag recorded it; `None` before groups existed.
+    let versionGroupsAt (root: string) (tag: string) : string option =
+        let spec = sprintf "%s:%s" tag SdkManifest.versionGroupsFileName
+
+        if (Git.run root [ "cat-file"; "-e"; spec ]).ExitCode = 0 then
+            Some(Git.read root [ "show"; spec ])
+        else
+            None
+
     Target.create "VerifySemVerBump" (fun _ ->
         let root = Path.getFullName "."
         let proposeOnly = Flags.has "--propose" flags
@@ -5581,22 +5685,96 @@ let main args =
 
         let changes = surfaceChangesSince root releaseTag
 
-        let assessment = SemVerBump.assess releaseTag released declared changes
+        // Per version group (`version-groups.json`): each line's packages
+        // decide that line's floor. A group the file cannot place, or a tree
+        // the groups do not describe, is refused before anything is measured.
+        let groups =
+            match SdkManifest.loadVersionGroups root with
+            | Ok groups -> groups
+            | Error e -> failwithf "VerifySemVerBump: %s" e
 
-        Trace.tracefn "%s" (SemVerBump.describe assessment)
+        match SdkManifest.groupFindings root with
+        | [] -> ()
+        | findings ->
+            failwithf
+                "VerifySemVerBump: the version groups do not describe this tree:\n  - %s\n\nRegenerate with: %s"
+                (String.concat "\n  - " findings)
+                SdkManifest.regenerateCommand
 
-        match SemVerBump.defect assessment, proposeOnly with
-        | None, _ ->
+        let core = (SdkManifest.coreGroup groups).Value
+        let projects = SdkManifest.discover root
+        let atTag = projectFactsAt root releaseTag
+
+        // A baseline traces to its project through the assembly name. The
+        // tag's projects are read too, so a package withdrawn since the tag
+        // still lands on its line; one nothing places is counted to the core,
+        // the line whose promise is widest.
+        let groupOfPackage =
+            let byAssembly =
+                SdkManifest.groupsByAssembly
+                    groups
+                    (Seq.append
+                        (atTag |> Seq.map (fun f -> f.Path, f.AssemblyName))
+                        (projects |> Seq.map (fun p -> p.ProjectPath, p.AssemblyName)))
+
+            fun (package: string) -> byAssembly.TryFind package |> Option.defaultValue core
+
+        let groupsAtTag =
+            match versionGroupsAt root releaseTag with
+            | None -> None
+            | Some text ->
+                match SdkManifest.parseVersionGroups text with
+                | Ok g -> Some g
+                | Error e -> failwithf "VerifySemVerBump: %s at %s: %s" SdkManifest.versionGroupsFileName releaseTag e
+
+        let ownAtTag = atTag |> List.map (fun f -> f.Path, f.OwnVersion) |> Map.ofList
+
+        let dependencies = SdkManifest.groupDependencies groups projects
+
+        let inputs =
+            groups
+            |> List.map (fun g ->
+                let declaredHere =
+                    if g.Lockstep then
+                        declared
+                    else
+                        match SemVerBump.parseVersion g.Version with
+                        | Ok v -> v
+                        | Error e -> failwithf "VerifySemVerBump: group `%s`: %s" g.Id e
+
+                let members =
+                    projects
+                    |> List.filter (fun p -> SdkManifest.groupOf groups p.ProjectPath = Some g)
+                    |> List.map (fun p -> ownAtTag.TryFind p.ProjectPath |> Option.flatten)
+
+                {
+                    SemVerBump.GroupInput.Group = g.Id
+                    SemVerBump.GroupInput.Lockstep = g.Lockstep
+                    SemVerBump.GroupInput.Released = SemVerBump.releasedGroupVersion released groupsAtTag g.Id members
+                    SemVerBump.GroupInput.Declared = declaredHere
+                    SemVerBump.GroupInput.Changes =
+                        changes |> List.filter (fun c -> (groupOfPackage c.Package).Id = g.Id)
+                    SemVerBump.GroupInput.DependsOn = defaultArg (dependencies.TryFind g.Id) []
+                })
+
+        let assessments = SemVerBump.assessGroups releaseTag inputs
+
+        for a in assessments do
+            Trace.tracefn "%s" (SemVerBump.describeGroup a)
+
+        match assessments |> List.choose SemVerBump.groupDefect, proposeOnly with
+        | [], _ ->
             Trace.tracefn
-                "▶ VerifySemVerBump: %s meets the %s bump the surface diff since %s demands."
-                (SemVerBump.Version.render declared)
-                (SemVerBump.Bump.name assessment.Demanded)
+                "▶ VerifySemVerBump: every one of %d version group(s) meets the bump its own surface diff since %s demands."
+                assessments.Length
                 releaseTag
-        | Some report, true ->
+        | reports, true ->
             Trace.traceImportantfn
-                "VerifySemVerBump --propose: %s\n\n(--propose reports only; the same run without it FAILS.)"
-                report
-        | Some report, false -> failwithf "VerifySemVerBump: %s" report)
+                "VerifySemVerBump --propose: %d group(s) under-bumped:\n\n%s\n\n(--propose reports only; the same run without it FAILS.)"
+                reports.Length
+                (String.concat "\n\n" reports)
+        | reports, false ->
+            failwithf "VerifySemVerBump: %d group(s) under-bumped:\n\n%s" reports.Length (String.concat "\n\n" reports))
 
 
     // Phase 805 — register the generated files' three-way merge drivers in
@@ -6224,6 +6402,20 @@ let main args =
                 SemVerBump.classifyPackage (SemVerBump.packageOfBaselinePath path) (readSince path) (readCurrent path)
                 |> Changelog.entryOf)
 
+        // The version lines a tag shipped, from the `version-groups.json` it
+        // carried; none for a tag from before groups, whose section renders
+        // as the one line it was.
+        let groupLinesAt (tag: string) =
+            match versionGroupsAt root tag with
+            | None -> []
+            | Some text ->
+                match SdkManifest.parseVersionGroups text with
+                | Ok groups ->
+                    Changelog.groupLinesOf
+                        groups
+                        (projectFactsAt root tag |> List.map (fun f -> f.Path, f.AssemblyName))
+                | Error e -> failwithf "Changelog: %s at %s: %s" SdkManifest.versionGroupsFileName tag e
+
         let releases () =
             tags
             |> List.mapi (fun i (tag, version) ->
@@ -6270,6 +6462,7 @@ let main args =
                     Changelog.Since = since
                     Changelog.Surface = surface
                     Changelog.MigrationDocs = docs
+                    Changelog.Groups = groupLinesAt tag
                 })
 
         // ── the draft: the declared version since the newest tag ──
@@ -6326,6 +6519,13 @@ let main args =
                         Changelog.Since = Some newest
                         Changelog.Surface = surface
                         Changelog.MigrationDocs = docs
+                        Changelog.Groups =
+                            match SdkManifest.loadVersionGroups root with
+                            | Ok groups ->
+                                Changelog.groupLinesOf
+                                    groups
+                                    (SdkManifest.discover root |> List.map (fun p -> p.ProjectPath, p.AssemblyName))
+                            | Error e -> failwithf "Changelog: %s" e
                     }
 
         if draftOnly then
@@ -6458,9 +6658,24 @@ let main args =
                 ReleaseChannel.PromotionEvidence.Publication = candidatePublication (tag.Substring 1)
                 // The doc-coverage sidecar moves with documentation, not
                 // with the surface — excluded as the scorecard excludes it.
+                // The soak is the core's (docs/platform/release-process.md):
+                // a companion line rides the core's release act and is not
+                // held to a candidate's surface, so only core packages count.
                 ReleaseChannel.PromotionEvidence.SurfaceSinceCandidate =
+                    let companionAssemblies =
+                        match SdkManifest.loadVersionGroups root with
+                        | Ok groups ->
+                            SdkManifest.discover root
+                            |> List.filter (fun p ->
+                                SdkManifest.groupOf groups p.ProjectPath
+                                |> Option.exists (fun g -> not g.Lockstep))
+                            |> List.map _.AssemblyName
+                            |> Set.ofList
+                        | Error e -> failwithf "promotion: %s" e
+
                     surfaceChangesSince root tag
                     |> List.filter (fun c -> c.Package <> "doc-coverage")
+                    |> ReleaseChannel.coreSurfaceOnly companionAssemblies
                 ReleaseChannel.PromotionEvidence.Now = now
             }
 

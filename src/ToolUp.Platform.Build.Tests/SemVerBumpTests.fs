@@ -406,4 +406,172 @@ let tests =
             | None -> failtest "a withdrawal under a patch bump must fail"
             | Some report ->
                 Expect.stringContains report "withdrawn" "the report says the package stopped being produced")
+
+        // ── Version groups: the roll-up is per line ───────────────────
+
+        testCase "a companion break demands a minor of its own group only; the core's patch passes" (fun _ ->
+            // The fixture the acceptance names: one companion family breaks,
+            // the core only grows. Rolled up as one line, the core would be
+            // dragged to a minor by an audit sink; per group, it is not.
+            let coreGrows =
+                classifyPackage "ToolUp.Platform.Core" (Some(baseline [ alpha ])) (Some(baseline [ alpha; gamma ]))
+
+            let sinkBreaks =
+                classifyPackage "ToolUp.AuditSinks.Cef" (Some(baseline [ alpha; beta ])) (Some(baseline [ alpha ]))
+
+            let input group lockstep declared changes = {
+                Group = group
+                Lockstep = lockstep
+                Released = Some(v (0, 39, 0))
+                Declared = declared
+                Changes = changes
+                DependsOn = (if lockstep then [] else [ "core" ])
+            }
+
+            let underPatch =
+                assessGroups "v0.39.0" [
+                    input "core" true (v (0, 39, 1)) [ coreGrows ]
+                    input "audit-sinks" false (v (0, 39, 1)) [ sinkBreaks ]
+                ]
+
+            let defectOf id =
+                underPatch |> List.find (fun g -> g.Group = id) |> groupDefect
+
+            Expect.isNone (defectOf "core") "the core grew additively; its declared patch meets the 0.x floor"
+
+            match defectOf "audit-sinks" with
+            | None -> failtest "the breaking companion must demand more than a patch"
+            | Some report ->
+                Expect.stringContains report "minor" "the companion's floor is a minor on 0.x"
+                Expect.stringContains report "audit-sinks" "and the report names the group, not the repository"
+
+            let atMinor =
+                assessGroups "v0.39.0" [
+                    input "core" true (v (0, 39, 1)) [ coreGrows ]
+                    input "audit-sinks" false (v (0, 40, 0)) [ sinkBreaks ]
+                ]
+
+            Expect.isEmpty (atMinor |> List.choose groupDefect) "a minor on the companion alone satisfies both lines")
+
+        testCase "a companion line that did not move is not re-released" (fun _ ->
+            let a =
+                assessGroups "v0.39.0" [
+                    {
+                        Group = "storage"
+                        Lockstep = false
+                        Released = Some(v (0, 39, 0))
+                        Declared = v (0, 39, 0)
+                        Changes = []
+                        DependsOn = [ "core" ]
+                    }
+                ]
+
+            Expect.equal a.Head.Verdict Unmoved "unchanged at its released version"
+            Expect.isNone (groupDefect a.Head) "and nothing to fail")
+
+        testCase "the core line advances at every release, moved or not" (fun _ ->
+            // The tag names the core's version, so a release with no core
+            // advance has no number to tag: the lockstep line never reads
+            // as unmoved.
+            let a =
+                assessGroups "v0.39.0" [
+                    {
+                        Group = "core"
+                        Lockstep = true
+                        Released = Some(v (0, 39, 0))
+                        Declared = v (0, 39, 0)
+                        Changes = []
+                        DependsOn = []
+                    }
+                ]
+
+            Expect.isSome (groupDefect a.Head) "the core declaring its released version is an under-bump")
+
+        testCase "a companion whose dependency broke must re-release, even unmoved" (fun _ ->
+            let coreBreaks =
+                classifyPackage "ToolUp.Platform.Core" (Some(baseline [ alpha; beta ])) (Some(baseline [ alpha ]))
+
+            let groups declaredStorage = [
+                {
+                    Group = "core"
+                    Lockstep = true
+                    Released = Some(v (0, 39, 0))
+                    Declared = v (0, 40, 0)
+                    Changes = [ coreBreaks ]
+                    DependsOn = []
+                }
+                {
+                    Group = "storage"
+                    Lockstep = false
+                    Released = Some(v (0, 39, 0))
+                    Declared = declaredStorage
+                    Changes = []
+                    DependsOn = [ "core" ]
+                }
+            ]
+
+            let storage declared =
+                assessGroups "v0.39.0" (groups declared)
+                |> List.find (fun g -> g.Group = "storage")
+
+            let held = storage (v (0, 39, 0))
+            Expect.equal held.BrokenDependencies [ "core" ] "the broken dependency is named"
+
+            match groupDefect held with
+            | None -> failtest "a line compiled against a surface that broke must ship again"
+            | Some report -> Expect.stringContains report "core" "the report says which dependency broke"
+
+            Expect.isNone (groupDefect (storage (v (0, 39, 1)))) "a patch re-release is enough")
+
+        testCase "a group new since the release point has no promise to keep" (fun _ ->
+            let a =
+                assessGroups "v0.39.0" [
+                    {
+                        Group = "brand-new"
+                        Lockstep = false
+                        Released = None
+                        Declared = v (0, 1, 0)
+                        Changes = [ classifyPackage "ToolUp.New" None (Some(baseline [ alpha ])) ]
+                        DependsOn = []
+                    }
+                ]
+
+            Expect.equal a.Head.Verdict NewGroup "no release point for the line"
+            Expect.isNone (groupDefect a.Head) "and nothing to fail")
+
+        testCase "a group's released version comes from the tag's groups file, else from the tag" (fun _ ->
+            let group id version : SdkManifest.VersionGroup = {
+                Id = id
+                Property = "ToolUpXVersion"
+                Version = version
+                Lockstep = false
+                Projects = [ "src/X/**" ]
+            }
+
+            let tag = v (0, 38, 1)
+
+            Expect.equal
+                (releasedGroupVersion tag (Some [ group "storage" "0.38.0" ]) "storage" [])
+                (Some(v (0, 38, 0)))
+                "a tag that recorded groups says the line's version directly"
+
+            Expect.equal
+                (releasedGroupVersion tag (Some [ group "storage" "0.38.0" ]) "stripe" [])
+                None
+                "a group the tag's file does not hold did not exist there"
+
+            Expect.equal
+                (releasedGroupVersion tag None "stripe" [ Some "0.2.0"; Some "0.2.0" ])
+                (Some(v (0, 2, 0)))
+                "before groups, a line whose every project declared one version was on it"
+
+            Expect.equal
+                (releasedGroupVersion tag None "storage" [ None; None ])
+                (Some tag)
+                "before groups, everything else shipped at the tag's version"
+
+            Expect.equal
+                (releasedGroupVersion tag None "mixed" [ Some "0.2.0"; None ])
+                (Some tag)
+                "a line only some of whose projects declared a version was not on it")
     ]

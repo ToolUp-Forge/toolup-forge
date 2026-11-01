@@ -517,6 +517,15 @@ type PromotionEvidence = {
     Now: DateTimeOffset
 }
 
+/// The surface the soak judges: the core line's. A candidate is the core's
+/// (operator ruling, docs/platform/release-process.md), and a companion line
+/// rides the core's release act without a soak of its own, so a companion's
+/// break does not re-roll the core's candidate. Only the packages KNOWN to be
+/// on a companion line are dropped: a package nothing places (one withdrawn
+/// since the candidate) still counts, because a withdrawal is a break.
+let coreSurfaceOnly (companionAssemblies: Set<string>) (changes: PackageChange list) =
+    changes |> List.filter (fun c -> not (companionAssemblies.Contains c.Package))
+
 let private days (t: TimeSpan) =
     t.TotalDays.ToString("0.#", CultureInfo.InvariantCulture)
 

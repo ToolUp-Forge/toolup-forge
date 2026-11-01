@@ -149,11 +149,24 @@ let awaitedIds (expectedIds: string seq) (independentlyVersioned: string seq) (p
     |> Seq.distinctBy (fun id -> id.ToLowerInvariant())
     |> List.ofSeq
 
-/// The published ids under `root` whose project declares its own
-/// `<Version>`. A text read, like `SdkManifest.discover` that it rides on.
+/// The published ids under `root` that are off the release's line: every
+/// package on a companion version group (`version-groups.json`), which
+/// carries its own number and may not be re-released at all, and any project
+/// that declares its own `<Version>`. A text read, like `SdkManifest.discover`
+/// that it rides on. The core never depends on a companion line (the groups
+/// check refuses it), so leaving these out cannot drop a dependency a probe
+/// restores at the tag's version.
 let independentlyVersionedIn (root: string) : string list =
+    let groups =
+        match SdkManifest.loadVersionGroups root with
+        | Ok groups -> groups
+        | Error e -> failwithf "VerifyPublishedPackages: %s" e
+
     SdkManifest.discover root
-    |> List.filter (fun p -> declaresOwnVersion (IO.File.ReadAllText(IO.Path.Combine(root, p.ProjectPath))))
+    |> List.filter (fun p ->
+        SdkManifest.groupOf groups p.ProjectPath
+        |> Option.exists (fun g -> not g.Lockstep)
+        || declaresOwnVersion (IO.File.ReadAllText(IO.Path.Combine(root, p.ProjectPath))))
     |> List.map _.PackageId
 
 /// `awaitedIds` over the tree at `root` — the one call the target makes.

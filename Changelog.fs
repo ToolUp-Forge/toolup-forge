@@ -151,6 +151,33 @@ type Surface =
     | NoBaselines
     | Baselines of PackageEntry list
 
+/// One version line's part in a release: the version it shipped at, and the
+/// packages (by baseline name) that are its.
+type GroupLine = {
+    Group: string
+    /// The version the line shipped at in this release.
+    ShippedAt: string
+    Lockstep: bool
+    Packages: Set<string>
+}
+
+/// The lines `groups` declares, each holding the packages whose project
+/// (`path`, `assembly`) its globs claim.
+let groupLinesOf (groups: SdkManifest.VersionGroup list) (projects: (string * string) seq) : GroupLine list =
+    let byAssembly = SdkManifest.groupsByAssembly groups projects
+
+    groups
+    |> List.map (fun g -> {
+        Group = g.Id
+        ShippedAt = g.Version
+        Lockstep = g.Lockstep
+        Packages =
+            byAssembly
+            |> Map.filter (fun _ owner -> owner.Id = g.Id)
+            |> Map.keys
+            |> Set.ofSeq
+    })
+
 /// One section's worth of data. `Tag = None` is the draft at the top —
 /// the declared version's movement since the newest tag, over the
 /// WORKING tree's baselines — and carries no date by construction.
@@ -166,6 +193,10 @@ type Release = {
     Surface: Surface
     /// Repo-relative, forward-slash paths under `docs/migrations/`.
     MigrationDocs: string list
+    /// The version lines the release shipped, from the `version-groups.json`
+    /// it carried; empty for a release from before version groups, whose
+    /// section renders as one line.
+    Groups: GroupLine list
 }
 
 /// The per-package listing caps; see the header for why they differ.
@@ -297,17 +328,116 @@ let private baselineDiffHint (r: Release) (package: string) =
     | Some since, None -> sprintf "git diff %s -- api-baselines/%s.approved.txt" since package
     | None, _ -> sprintf "api-baselines/%s.approved.txt" package
 
-let private renderSection (sb: StringBuilder) (title: string) (items: string list) =
+let private renderSection (sb: StringBuilder) (level: string) (title: string) (items: string list) =
     if not (List.isEmpty items) then
-        sb.Append("### ").Append(title).Append("\n\n") |> ignore
+        sb.Append(level).Append(' ').Append(title).Append("\n\n") |> ignore
 
         for line in items do
             sb.Append(line).Append('\n') |> ignore
 
         sb.Append('\n') |> ignore
 
+/// The surface lines for one set of package entries: the one-line summary,
+/// then Added / Changed / Removed under headings at `level`.
+let private renderSurface
+    (sb: StringBuilder)
+    (limits: Limits)
+    (level: string)
+    (r: Release)
+    (since: string)
+    (entries: PackageEntry list)
+    =
+    let added =
+        entries |> List.sumBy (fun e -> if e.Introduced then 0 else e.Added.Length)
+
+    let changed = entries |> List.sumBy (fun e -> e.Changed.Length)
+
+    let removed =
+        entries |> List.sumBy (fun e -> if e.Withdrawn then 0 else e.Removed.Length)
+
+    let introduced = entries |> List.filter _.Introduced |> List.length
+    let withdrawn = entries |> List.filter _.Withdrawn |> List.length
+
+    let packages =
+        [
+            if introduced > 0 then
+                sprintf "%s new" (plural introduced "package")
+            if withdrawn > 0 then
+                sprintf "%s withdrawn" (plural withdrawn "package")
+        ]
+        |> String.concat ", "
+
+    sb.AppendFormat(
+        "_Surface {0}: **{1}** — {2} moved; {3} added, {4} changed, {5} removed{6}._\n\n",
+        since,
+        SurfaceClass.name (classOf entries),
+        plural entries.Length "package",
+        plural added "member",
+        plural changed "member",
+        plural removed "member",
+        (if packages = "" then "" else "; " + packages)
+    )
+    |> ignore
+
+    // One package's list under a heading: the count in full, the
+    // members up to the cap, and the diff that shows the rest.
+    let listed (package: string) (count: string) (cap: int) (items: 'a list) (line: 'a -> string) =
+        let shown = items |> List.truncate cap
+        let rest = items.Length - shown.Length
+
+        [
+            sprintf "- %s — %s:" (code package) count
+            for m in shown do
+                "  - " + line m
+            if rest > 0 then
+                sprintf "  - … and %d more — %s" rest (code (baselineDiffHint r package))
+        ]
+
+    let addedLines =
+        entries
+        |> List.collect (fun e ->
+            if e.Introduced then
+                [
+                    sprintf "- %s — new package (%s)" (code e.Package) (plural e.Added.Length "public member")
+                ]
+            elif List.isEmpty e.Added then
+                []
+            else
+                listed e.Package (plural e.Added.Length "member") limits.AddedPerPackage e.Added code)
+
+    let changedLines =
+        entries
+        |> List.collect (fun e ->
+            if List.isEmpty e.Changed then
+                []
+            else
+                listed e.Package (plural e.Changed.Length "member") limits.ChangedPerPackage e.Changed (fun m ->
+                    sprintf "%s — %s → %s" (code m.Key) (code m.Before) (code m.After)))
+
+    let removedLines =
+        entries
+        |> List.collect (fun e ->
+            if e.Withdrawn then
+                [
+                    sprintf
+                        "- %s — package withdrawn (%s); a consumer must drop the `PackageReference` before raising its pin"
+                        (code e.Package)
+                        (plural e.Removed.Length "public member")
+                ]
+            elif List.isEmpty e.Removed then
+                []
+            else
+                listed e.Package (plural e.Removed.Length "member") limits.RemovedPerPackage e.Removed code)
+
+    renderSection sb level "Added" addedLines
+    renderSection sb level "Changed" changedLines
+    renderSection sb level "Removed" removedLines
+
 /// One release's section. Packages sort ordinally; members within a
 /// package are already ordinal from `entryOf`. Nothing here reads a clock.
+/// A release that carried version groups renders one subsection per group
+/// whose packages moved, headed by the group and the version it shipped at;
+/// an earlier release renders as the one line it was.
 let renderRelease (limits: Limits) (r: Release) : string =
     let sb = StringBuilder()
 
@@ -342,95 +472,22 @@ let renderRelease (limits: Limits) (r: Release) : string =
         if List.isEmpty entries then
             sb.AppendFormat("_No public-surface change {0}._\n\n", since) |> ignore
         else
-            let added =
-                entries |> List.sumBy (fun e -> if e.Introduced then 0 else e.Added.Length)
+            match r.Groups |> List.sortBy (fun g -> not g.Lockstep, g.Group) with
+            | [] -> renderSurface sb limits "###" r since entries
+            | groups ->
+                let lockstep = groups |> List.tryFind _.Lockstep
 
-            let changed = entries |> List.sumBy (fun e -> e.Changed.Length)
+                let owner (e: PackageEntry) =
+                    match groups |> List.tryFind (fun g -> g.Packages.Contains e.Package) with
+                    | Some g -> Some g
+                    | None -> lockstep
 
-            let removed =
-                entries |> List.sumBy (fun e -> if e.Withdrawn then 0 else e.Removed.Length)
-
-            let introduced = entries |> List.filter _.Introduced |> List.length
-            let withdrawn = entries |> List.filter _.Withdrawn |> List.length
-
-            let packages =
-                [
-                    if introduced > 0 then
-                        sprintf "%s new" (plural introduced "package")
-                    if withdrawn > 0 then
-                        sprintf "%s withdrawn" (plural withdrawn "package")
-                ]
-                |> String.concat ", "
-
-            sb.AppendFormat(
-                "_Surface {0}: **{1}** — {2} moved; {3} added, {4} changed, {5} removed{6}._\n\n",
-                since,
-                SurfaceClass.name (classOf entries),
-                plural entries.Length "package",
-                plural added "member",
-                plural changed "member",
-                plural removed "member",
-                (if packages = "" then "" else "; " + packages)
-            )
-            |> ignore
-
-            // One package's list under a heading: the count in full, the
-            // members up to the cap, and the diff that shows the rest.
-            let listed (package: string) (count: string) (cap: int) (items: 'a list) (line: 'a -> string) =
-                let shown = items |> List.truncate cap
-                let rest = items.Length - shown.Length
-
-                [
-                    sprintf "- %s — %s:" (code package) count
-                    for m in shown do
-                        "  - " + line m
-                    if rest > 0 then
-                        sprintf "  - … and %d more — %s" rest (code (baselineDiffHint r package))
-                ]
-
-            let addedLines =
-                entries
-                |> List.collect (fun e ->
-                    if e.Introduced then
-                        [
-                            sprintf "- %s — new package (%s)" (code e.Package) (plural e.Added.Length "public member")
-                        ]
-                    elif List.isEmpty e.Added then
-                        []
-                    else
-                        listed e.Package (plural e.Added.Length "member") limits.AddedPerPackage e.Added code)
-
-            let changedLines =
-                entries
-                |> List.collect (fun e ->
-                    if List.isEmpty e.Changed then
-                        []
-                    else
-                        listed
-                            e.Package
-                            (plural e.Changed.Length "member")
-                            limits.ChangedPerPackage
-                            e.Changed
-                            (fun m -> sprintf "%s — %s → %s" (code m.Key) (code m.Before) (code m.After)))
-
-            let removedLines =
-                entries
-                |> List.collect (fun e ->
-                    if e.Withdrawn then
-                        [
-                            sprintf
-                                "- %s — package withdrawn (%s); a consumer must drop the `PackageReference` before raising its pin"
-                                (code e.Package)
-                                (plural e.Removed.Length "public member")
-                        ]
-                    elif List.isEmpty e.Removed then
-                        []
-                    else
-                        listed e.Package (plural e.Removed.Length "member") limits.RemovedPerPackage e.Removed code)
-
-            renderSection sb "Added" addedLines
-            renderSection sb "Changed" changedLines
-            renderSection sb "Removed" removedLines
+                for g in groups do
+                    match entries |> List.filter (fun e -> owner e = Some g) with
+                    | [] -> ()
+                    | mine ->
+                        sb.AppendFormat("### {0} {1}\n\n", code g.Group, g.ShippedAt) |> ignore
+                        renderSurface sb limits "####" r since mine
 
     sb.ToString()
 
