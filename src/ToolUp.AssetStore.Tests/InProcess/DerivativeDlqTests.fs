@@ -418,11 +418,11 @@ let tests =
 
         testCase "the compose surface defaults to off and turns everything on when taken"
         <| fun () ->
-            let app = AssetStoreServerApp.create ()
+            let app = AssetStoreCompanionOptions.create ()
             Expect.isNone app.DerivativeDlq "default-off at compose"
 
             let composed =
-                AssetStoreServerApp.withDerivativeDlq DerivativeDlqOptions.defaults app
+                AssetStoreCompanionOptions.withDerivativeDlq DerivativeDlqOptions.defaults app
 
             match composed.DerivativeDlq with
             | Some options ->
@@ -449,4 +449,27 @@ let tests =
             Expect.notEqual statusKey dlqKey "distinct keys"
             Expect.stringStarts dlqKey "assets/derivative-dlq/" "own prefix"
             Expect.isFalse (dlqKey.StartsWith "assets/derivative-status/") "not under the status prefix"
+        testCase "builders applied after withAssetStore reach the resolved app and the companion"
+        <| fun () ->
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> withAssetStore (AssetStoreCompanionOptions.create ())
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        AssetStore = ToolUp.Platform.AssetStoreMode.EnabledAssetStore
+                        ReplicaCount = 2
+                }
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
+
+            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+
+            Expect.equal
+                (ServerApp.composedExtensions app).Handlers.Length
+                (ServerApp.empty.Extensions.Handlers.Length + 2)
+                "the companion read the final configuration and contributed the upload and API handlers"
     ]

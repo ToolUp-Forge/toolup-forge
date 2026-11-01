@@ -3,8 +3,8 @@
 // The page teaches one companion end to end, so almost every block is an
 // excerpt from a composition root it never shows in full: the substrate
 // the enabling block composes (`blobStorage` / `authProvider` /
-// `notifications`), the half-built `app` every later `withOptions`
-// example pipes into, the resolved `mediaLibrary` a serving example
+// `notifications`), the half-built companion options every later
+// `withOptions` example pipes into, the resolved `mediaLibrary` a serving example
 // probes, and the item / scope / window a range or signed-URL call is
 // about. Declared here so the blocks compile exactly as a reader would
 // copy them, with no `open`-ceremony added to the markdown.
@@ -24,10 +24,10 @@ module PageAmbient =
 
     let notifications: INotificationChannel = failwith "ambient"
 
-    /// The partly-built app every later `withOptions` / `withTranscoder`
-    /// example pipes into — the value the "Enabling" block is holding
-    /// mid-pipeline.
-    let app: MediaLibraryServerApp = failwith "ambient"
+    /// The partly-built companion options every later `withOptions` /
+    /// `withTranscoder` example pipes into — the value the "Enabling" block
+    /// is building mid-pipeline.
+    let mediaOptions: MediaLibraryCompanionOptions = failwith "ambient"
 
     /// The composed library, and the item / scope a serving example is
     /// about. `container` is the resolved `StorageScope.Container`.

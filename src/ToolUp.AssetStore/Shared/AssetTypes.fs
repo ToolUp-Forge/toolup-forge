@@ -705,7 +705,7 @@ type GeneralDerivativeSpec = {
     /// (`assets/derivatives/{hash}/{name}.{ext}`).
     FileExtension: string
     /// Key into the deployment's MIME-renderer registry
-    /// (`AssetCompose.withMimeRenderer`). Renderer implementations
+    /// (`AssetStoreCompanionOptions.withMimeRenderer`). Renderer implementations
     /// carrying vendor dependencies stay in companions (GP 1).
     RendererKey: string
     Mode: DerivationMode

@@ -86,7 +86,7 @@ type DerivativeReadyNotification = {
 // `DerivativeObservability`. Every field of that record is off in
 // `DerivativeObservability.disabled`, which is what the Phase 127
 // handler constructor supplies, so a deployment that does not opt in
-// through `AssetStoreServerAppModule.withDerivativeDlq` runs the
+// through `AssetStoreCompanionOptions.withDerivativeDlq` runs the
 // unchanged Phase 127 path: no extra blob write, no extra publish,
 // no sink resolution (GP 11 / GP 13).
 
@@ -271,7 +271,7 @@ module DerivativeJobs =
         }
 
 /// Enqueue seam between the request path and the scheduler. One
-/// instance per deployment (constructed by `AssetCompose.run` when
+/// instance per deployment (constructed by `AssetCompose.withAssetStore` when
 /// async derivation is opted in — GP 13: no opt-in, no instance,
 /// no job registration, no channel traffic).
 type DerivativeJobCoordinator

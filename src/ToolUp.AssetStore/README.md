@@ -9,7 +9,7 @@ Phase 39 `IAssetStore` companion. Image-first asset substrate for ToolUp.Platfor
 - `IDerivativeRenderer` — pluggable image renderer. Default `SkiaSharpDerivativeRenderer` handles JPEG / PNG / WebP natively; AVIF returns `UnsupportedFormat` (needs a SkiaSharp AVIF plug-in not bundled).
 - `AssetUploadHandler` — ToolUp.Remoting handler + multipart endpoint at `/api/assets/upload`. Mandatory alt-text validation.
 - `AssetApi` — ToolUp.Remoting `IAssetApi` contract; mounted at `/api/assets/` when `ServerConfig.AssetStore = EnabledAssetStore`.
-- `AssetCompose` — `AssetStoreServerApp` shape; `withAssetStore` registration; `withDerivativeRenderer` / `withDerivativeProfile` / `withAcceptedMimeTypes` / `withMaxUploadBytes` / `withAssetStoreOverride` builders. Strip-imports byte-for-byte equivalent to `ServerApp` when `AssetStore = NoAssetStore`.
+- `AssetCompose` — `withAssetStore`, the companion entry point over `ServerApp`, taking `AssetStoreCompanionOptions` (`withOptions` / `withRenderer` / `withDerivativeProfile` / `withDerivativeProfileEntries` / `withMimeRenderer` / `withAssetStore` / `withAsyncDerivation` / `withDerivativeDlq`). Contributes nothing when `AssetStore = NoAssetStore`.
 - `DerivativeProfiles` — compose-time registry seeded with `web-default` (thumbnail / medium / OG / webp-medium). Deployments add profiles via `withDerivativeProfile`.
 
 ## How to enable
@@ -35,9 +35,11 @@ Phase 39 `IAssetStore` companion. Image-first asset substrate for ToolUp.Platfor
    ServerApp.empty
    |> ServerApp.withConfig config
    |> ServerApp.withStorage blobStorage
-   |> AssetStoreServerApp.create
-   |> AssetStoreServerApp.withDerivativeProfile DerivativeProfiles.webDefault
-   |> AssetStoreServerApp.run
+   |> AssetCompose.withAssetStore (
+       AssetStoreCompanionOptions.create ()
+       |> AssetStoreCompanionOptions.withDerivativeProfile DerivativeProfiles.webDefault
+   )
+   |> ServerApp.run
    ```
 
 4. Client-side, browsers POST multipart to `/api/assets/upload` with the file part + alt-text + caption + profile id fields. Server validates alt-text non-empty + ≤ 1024 chars + MIME on the accept-list.
@@ -63,15 +65,15 @@ Windows + macOS dev environments pull the native assets transitively — no extr
 **Arbitrary-MIME profile entries.** A profile is now a list of `ProfileEntry` — the image specs you already register (`ImageDerivative`, what `withDerivativeProfile` produces) and `GeneralDerivative` entries declaring accepted input MIME(s), output MIME, a cache file extension, and a renderer key resolved against the deployment's `MimeRendererRegistry`:
 
 ```fsharp skip=fragment
-AssetStoreServerApp.create ()
-|> AssetStoreServerApp.withDerivativeProfileEntries (DerivativeProfileId "media") [
+AssetStoreCompanionOptions.create ()
+|> AssetStoreCompanionOptions.withDerivativeProfileEntries (DerivativeProfileId "media") [
     GeneralDerivative {
         Name = "poster"; AcceptedInputMimes = [ "video/*" ]
         OutputMime = "image/jpeg"; FileExtension = "jpg"
         RendererKey = "video-poster"; Mode = AsyncJob; Parameters = Map.empty
     }
   ]
-|> AssetStoreServerApp.withMimeRenderer "video-poster" posterRenderer  // IMimeDerivativeRenderer
+|> AssetStoreCompanionOptions.withMimeRenderer "video-poster" posterRenderer  // IMimeDerivativeRenderer
 ```
 
 Renderer implementations carrying vendor dependencies ship as companions (GP 1); `IMimeDerivativeRenderer` is a new sibling interface — `IDerivativeRenderer` and its implementations are untouched.

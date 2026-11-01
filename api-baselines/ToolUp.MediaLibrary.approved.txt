@@ -210,31 +210,24 @@ ToolUp.MediaLibrary.MediaApi.beaconRoute : System.String (literal)
 ToolUp.MediaLibrary.MediaApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.MediaLibrary.MediaApi.routeBuilderPrefix : System.String (literal)
 ToolUp.MediaLibrary.MediaCompose (class)
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp (class)
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.MediaLibrary.MediaLibraryOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaDerivation], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaTranscoder], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaLibrary], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.SignedUrl+IDelegatedUrlSigner])
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp.Base : ToolUp.Platform.ServerApp { get }
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp.DelegatedUrlSigner : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.SignedUrl+IDelegatedUrlSigner] { get }
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp.DerivationOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaDerivation] { get }
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp.EdgeCache : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache] { get }
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp.Options : ToolUp.MediaLibrary.MediaLibraryOptions { get }
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp.StoreOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaLibrary] { get }
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp.TranscoderOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaTranscoder] { get }
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule (class)
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.addModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.create() : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.run(ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : System.Int32
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withDelegatedUrlSigner(ToolUp.MediaLibrary.SignedUrl+IDelegatedUrlSigner, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withDerivation(ToolUp.MediaLibrary.IMediaDerivation, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withEdgeCache(ToolUp.Platform.IEdgeCache, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withLogger(ToolUp.Platform.ILogger, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withMediaLibrary(ToolUp.MediaLibrary.IMediaLibrary, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withNotifications(ToolUp.Platform.INotificationChannel, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withOptions(ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
-ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerAppModule.withTranscoder(ToolUp.MediaLibrary.IMediaTranscoder, ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryServerApp
+ToolUp.MediaLibrary.MediaCompose.mediaLibraryCompanion : ToolUp.Platform.ComponentId { get }
+ToolUp.MediaLibrary.MediaCompose.withMediaLibrary(ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions (class)
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions..ctor(ToolUp.MediaLibrary.MediaLibraryOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaDerivation], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaTranscoder], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaLibrary], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.SignedUrl+IDelegatedUrlSigner])
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions.DelegatedUrlSigner : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.SignedUrl+IDelegatedUrlSigner] { get }
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions.DerivationOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaDerivation] { get }
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions.EdgeCache : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache] { get }
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions.Options : ToolUp.MediaLibrary.MediaLibraryOptions { get }
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions.StoreOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaLibrary] { get }
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions.TranscoderOverride : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.IMediaTranscoder] { get }
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule (class)
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule.create() : ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule.withDelegatedUrlSigner(ToolUp.MediaLibrary.SignedUrl+IDelegatedUrlSigner, ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule.withDerivation(ToolUp.MediaLibrary.IMediaDerivation, ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule.withEdgeCache(ToolUp.Platform.IEdgeCache, ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule.withMediaLibrary(ToolUp.MediaLibrary.IMediaLibrary, ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule.withOptions(ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions
+ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptionsModule.withTranscoder(ToolUp.MediaLibrary.IMediaTranscoder, ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions) : ToolUp.MediaLibrary.MediaCompose+MediaLibraryCompanionOptions
 ToolUp.MediaLibrary.MediaConfigValidator (class)
 ToolUp.MediaLibrary.MediaConfigValidator.create(ToolUp.MediaLibrary.MediaLibraryOptions) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.MediaLibrary.MediaConfigValidator.createComposeProbe(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.ConfigValidation+IConfigValidator

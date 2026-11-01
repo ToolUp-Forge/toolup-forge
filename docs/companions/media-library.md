@@ -16,8 +16,8 @@ that a media item serves into.
 
 ## Enabling
 
-`ToolUp.MediaLibrary` is opt-in (GP 13). Set the mode and compose with
-`MediaLibraryServerApp` instead of `ServerApp`:
+`ToolUp.MediaLibrary` is opt-in (GP 13). Set the mode and compose the
+companion onto your `ServerApp` with `MediaCompose.withMediaLibrary`:
 
 ```fsharp
 open ToolUp.MediaLibrary
@@ -25,18 +25,20 @@ open ToolUp.MediaLibrary.MediaCompose
 
 let config = { ServerConfig.defaults with MediaLibrary = EnabledMediaLibrary }
 
-MediaLibraryServerApp.create ()
-|> MediaLibraryServerApp.withConfig config
-|> MediaLibraryServerApp.withStorage blobStorage
-|> MediaLibraryServerApp.withAuth authProvider
-|> MediaLibraryServerApp.withNotifications notifications   // optional — ingestion status
-|> MediaLibraryServerApp.withOptions { MediaLibraryOptions.defaults with MaxBytes = 4L * 1024L * 1024L * 1024L }
-|> MediaLibraryServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withStorage blobStorage
+|> ServerApp.withAuth authProvider
+|> ServerApp.withNotifications notifications   // optional — ingestion status
+|> withMediaLibrary (
+    MediaLibraryCompanionOptions.create ()
+    |> MediaLibraryCompanionOptions.withOptions { MediaLibraryOptions.defaults with MaxBytes = 4L * 1024L * 1024L * 1024L }
+)
+|> ServerApp.run
 ```
 
-When `MediaLibrary = NoMediaLibrary` (the default), `run` short-circuits
-byte-for-byte to `ServerApp.run` — no handlers, no DI, no signing key, no
-probe. A deployment that doesn't host media pays nothing.
+When `MediaLibrary = NoMediaLibrary` (the default), the companion contributes
+nothing — no handlers, no DI, no signing key, no probe. A deployment that doesn't host media pays nothing.
 
 ## Endpoints
 
@@ -243,8 +245,8 @@ sweeps sessions whose last append is older than
 session runs no sweep at all (GP 13).
 
 ```fsharp
-app
-|> MediaLibraryServerApp.withOptions
+mediaOptions
+|> MediaLibraryCompanionOptions.withOptions
     { MediaLibraryOptions.defaults with
         MaxChunkBytes = 4 * 1024 * 1024
         UploadSessionTtl = TimeSpan.FromHours 2.0 }
@@ -288,9 +290,9 @@ Shells out to the system `ffmpeg` / `ffprobe` binaries (must be on
 ```fsharp
 open ToolUp.Media.FFmpeg
 
-app
-|> MediaLibraryServerApp.withDerivation (FFmpegMediaProvider.create None None)        // poster + probe
-|> MediaLibraryServerApp.withTranscoder (FFmpegMediaProvider.createTranscoder None)   // HLS package
+mediaOptions
+|> MediaLibraryCompanionOptions.withDerivation (FFmpegMediaProvider.create None None)        // poster + probe
+|> MediaLibraryCompanionOptions.withTranscoder (FFmpegMediaProvider.createTranscoder None)   // HLS package
 ```
 
 `ExtractPoster` grabs frame 1 as a JPEG; `Probe` reads duration +
@@ -316,7 +318,7 @@ let transcoder =
         return Ok producedFiles
     })
 
-app |> MediaLibraryServerApp.withTranscoder transcoder
+mediaOptions |> MediaLibraryCompanionOptions.withTranscoder transcoder
 ```
 
 `CloudTranscodeProvider.notConfigured ()` is the placeholder until a
@@ -333,9 +335,9 @@ route auth is no longer on the path. The bytes are simply there.
 So the segments are encrypted and the **key** is what stays gated:
 
 ```fsharp
-app
-|> MediaLibraryServerApp.withTranscoder (FFmpegMediaProvider.createTranscoder None)
-|> MediaLibraryServerApp.withOptions
+mediaOptions
+|> MediaLibraryCompanionOptions.withTranscoder (FFmpegMediaProvider.createTranscoder None)
+|> MediaLibraryCompanionOptions.withOptions
     { MediaLibraryOptions.defaults with EncryptHlsByDefault = true }
 ```
 
@@ -455,8 +457,8 @@ Raising it trades peak memory per in-flight response for fewer round
 trips; lowering it does the reverse:
 
 ```fsharp
-app
-|> MediaLibraryServerApp.withOptions
+mediaOptions
+|> MediaLibraryCompanionOptions.withOptions
     { MediaLibraryOptions.defaults with RangeChunkBytes = 4 * 1024 * 1024 }
 ```
 
@@ -501,7 +503,7 @@ answer stays silent rather than guessing.
 
 Deployments that need both encryption and cheap seeking have two levers
 today: keep large media in an unencrypted scope container, or supply a
-custom `IMediaLibrary` via `MediaLibraryServerApp.withMediaLibrary` that
+custom `IMediaLibrary` via `MediaLibraryCompanionOptions.withMediaLibrary` that
 brokers a signed direct URL. A chunked encryption envelope — which would
 make mid-blob ranges decryptable — is a separate, larger piece of work.
 
@@ -653,7 +655,7 @@ To receive both, compose them as usual:
 ```
 
 The two metric series are declared into `ServerApp.MetricRegistrations` by
-`MediaLibraryServerApp.run`, so a composed sink pre-allocates them and the
+the companion (`withMediaLibrary`), so a composed sink pre-allocates them and the
 emissions flow rather than being dropped as unregistered.
 
 ## See also

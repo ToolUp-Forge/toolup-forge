@@ -255,7 +255,7 @@ let SemanticsUnknown = "unknown"
 let byteSemanticsTokens: string list = [ SemanticsBodyOnly; SemanticsIncludesHeaders; SemanticsUnknown ]
 
 /// Metric declarations, wired into `ServerApp.MetricRegistrations` by
-/// `MediaCompose.run` so a media-composing deployment has both series
+/// `MediaCompose.withMediaLibrary` so a media-composing deployment has both series
 /// declared the moment it composes — the `AILatencyMetrics` /
 /// `ActionLedgerMetrics` pattern. An unregistered series is dropped by
 /// the sink, so declaring them at compose time is what makes the

@@ -257,7 +257,7 @@ type DefaultAssetStore
                                 return
                                     Error(
                                         AssetDerivativeError.RenderFailed(
-                                            "async derivation is not enabled — compose with AssetCompose.withAsyncDerivation"
+                                            "async derivation is not enabled — compose with AssetStoreCompanionOptions.withAsyncDerivation"
                                         )
                                     )
                             | Some coordinator ->

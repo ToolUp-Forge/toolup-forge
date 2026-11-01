@@ -292,7 +292,7 @@ type SignedUrlTtlPrecision =
 
 /// Mint a CDN-native signed URL for a media item, verified at the edge
 /// rather than at this origin. Composed via
-/// `MediaLibraryServerApp.withDelegatedUrlSigner`; absent it, media URL
+/// `MediaLibraryCompanionOptions.withDelegatedUrlSigner`; absent it, media URL
 /// minting takes the origin HMAC path exactly as before (GP 11).
 type IDelegatedUrlSigner =
     /// Stable name for diagnostics and audit lines (e.g.

@@ -19,7 +19,7 @@ the bytes; **host-authored** means the deployment produced them.
 | Companion / native library | Reached from | Bytes chosen by | Class | Isolated path |
 |---|---|---|---|---|
 | `ToolUp.OcrProviders.Tesseract` — Leptonica `Pix.LoadFromMemory` + Tesseract | KB document upload / reprocess → `Extractors` → `TesseractOcrProvider` | the uploading user | **Untrusted** | `TesseractOcrIsolation.createIsolated` |
-| `ToolUp.AssetStore` — SkiaSharp `SKBitmap.Decode` / `SKCodec.Create` | `POST /api/assets/upload` → `DefaultAssetStore` upload + derivative render | the uploading user | **Untrusted** | `IsolatedSkiaDerivativeRenderer.create` via `AssetCompose.withRenderer` |
+| `ToolUp.AssetStore` — SkiaSharp `SKBitmap.Decode` / `SKCodec.Create` | `POST /api/assets/upload` → `DefaultAssetStore` upload + derivative render | the uploading user | **Untrusted** | `IsolatedSkiaDerivativeRenderer.create` via `AssetStoreCompanionOptions.withRenderer` |
 | `ToolUp.Media.FFmpeg` — the `ffmpeg` executable | media transcode | the uploading user | Untrusted, **already a child process** (no cap / timeout / typed crash before 687) | seam-shaped follow-up: wrap the launch in `IsolationLimits` |
 | Svg.Skia rasteriser (Phase 576) | server-produced figures | the host | Host-authored | none needed |
 | ONNX Runtime — local reranker / local embeddings | operator-installed model; user text is tokenised managed-side before it reaches native | the operator | Host-authored | none needed |

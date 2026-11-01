@@ -85,7 +85,7 @@ the composed mode cannot be honoured on the host.
 - `ToolUp.OcrProviders.Tesseract` — `TesseractOcrIsolation.createIsolated` runs Leptonica's image decode
   and Tesseract's recognition of uploaded documents in the worker.
 - `ToolUp.AssetStore` — `IsolatedSkiaDerivativeRenderer.create` runs SkiaSharp's decode of
-  uploaded images in the worker, composed through `AssetCompose.withRenderer`.
+  uploaded images in the worker, composed through `AssetStoreCompanionOptions.withRenderer`.
 
 See `docs/companions/native-boundary-isolation.md` for the inventory of native boundaries, the
 classification of each, and the migration recipe.

@@ -3307,8 +3307,45 @@ let phase971Tests =
 
 
 [<Tests>]
+// ── The media companion reaches every base builder ─────────────────
+//
+// As a companion composed when the deployment resolves, a builder applied
+// AFTER `withMediaLibrary` reaches both the resolved app and the media
+// tier: the tier reads the final configuration and storage.
+let private companionReachTests =
+    testList "the media companion reaches the base builders applied after it" [
+        test "builders applied after withMediaLibrary reach the resolved app and the media tier" {
+            let storage = makeStore ()
+
+            let app =
+                ServerApp.empty
+                |> MediaCompose.withMediaLibrary (MediaCompose.MediaLibraryCompanionOptions.create ())
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        MediaLibrary = EnabledMediaLibrary
+                        ReplicaCount = 2
+                }
+                |> ServerApp.withStorage storage
+
+            let resolved = ServerApp.resolve app
+
+            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Storage.Value, storage)) "and the later withStorage"
+
+            Expect.isGreaterThan
+                (ServerApp.composedExtensions app).Handlers.Length
+                ServerApp.empty.Extensions.Handlers.Length
+                "the media tier read the final configuration and contributed its handlers"
+
+            Expect.isTrue
+                (resolved.HealthChecks.Length > ServerApp.empty.HealthChecks.Length)
+                "and read the later storage, adding its health probe"
+        }
+    ]
+
 let tests =
     testList "MediaLibrary (Phase 88)" [
+        companionReachTests
         rangeTests
         signedUrlTests
         IMediaLibraryContract.tests "DefaultMediaLibrary" makeLibrary
