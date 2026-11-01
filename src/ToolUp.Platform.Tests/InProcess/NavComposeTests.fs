@@ -19,18 +19,16 @@ let tests =
     testList "Phase 100 nav/taxonomy compose" [
 
         test "withTaxonomy flips the TaxonomyEnabled gate" {
-            let app =
-                PublicRenderingServerApp.create () |> PublicRenderingServerApp.withTaxonomy
+            let app = PublicRenderingOptions.create () |> PublicRenderingOptions.withTaxonomy
 
             Expect.isTrue app.TaxonomyEnabled "taxonomy enabled"
-            Expect.isFalse (PublicRenderingServerApp.create ()).TaxonomyEnabled "off by default (GP 11)"
+            Expect.isFalse (PublicRenderingOptions.create ()).TaxonomyEnabled "off by default (GP 11)"
         }
 
         test "withNavTree stores a pre-parsed nav tree" {
             let nav = [ NavTree.leaf "Home" "home"; NavTree.leaf "About" "about" ]
 
-            let app =
-                PublicRenderingServerApp.create () |> PublicRenderingServerApp.withNavTree nav
+            let app = PublicRenderingOptions.create () |> PublicRenderingOptions.withNavTree nav
 
             Expect.equal app.Nav nav "nav tree stored on the record"
         }
@@ -48,8 +46,7 @@ let tests =
             )
 
             try
-                let app =
-                    PublicRenderingServerApp.create () |> PublicRenderingServerApp.withNav path
+                let app = PublicRenderingOptions.create () |> PublicRenderingOptions.withNav path
 
                 Expect.equal (List.length app.Nav) 2 "two top-level nodes parsed"
                 Expect.equal (List.head app.Nav).Label "Home" "first node parsed"
@@ -59,8 +56,8 @@ let tests =
 
         test "withNav on a missing file registers an empty nav (no error)" {
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withNav "/no/such/nav.yaml"
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withNav "/no/such/nav.yaml"
 
             Expect.isEmpty app.Nav "missing file → empty nav, not a throw"
         }

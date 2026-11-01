@@ -333,7 +333,7 @@ module PublicRenderingNarrativePagePublisher =
 // ─── Phase 80b — Layout catalog ────────────────────────────────
 
 /// `ILayoutCatalog` impl backed by the layouts registered on
-/// `PublicRenderingServerApp` at compose time. Read-only; the
+/// `PublicRenderingOptions` at compose time. Read-only; the
 /// catalog snapshot is captured at construction and doesn't track
 /// later additions (compose-time registration is final after
 /// `PublicRenderingCompose.run` runs).

@@ -18,7 +18,7 @@ The SDK collapses the "render markdown pages, emit a sitemap, honour legacy URLs
 | Sitemap | [`Server/SitemapGenerator.fs`](Server/SitemapGenerator.fs) | `/sitemap.xml`; `Frontmatter["sitemap"] = "exclude"` honoured |
 | JSON-LD | [`Server/StructuredDataHelpers.fs`](Server/StructuredDataHelpers.fs) | `Article` / `Person` / `Event` / `Organization` / `BreadcrumbList` emitters |
 | Page handler | [`Server/PublicPageHandler.fs`](Server/PublicPageHandler.fs) | catch-all `GET /{slug}` → resolve → render → redirect → 404 |
-| Compose pipeline | [`Server/PublicRenderingCompose.fs`](Server/PublicRenderingCompose.fs) | `PublicRenderingServerApp` record + `run` |
+| Compose pipeline | [`Server/PublicRenderingCompose.fs`](Server/PublicRenderingCompose.fs) | `PublicRenderingOptions` + `withPublicRendering`, `PublicRenderingExport` |
 
 ## Minimal compose
 
@@ -38,12 +38,15 @@ let baseLayout (page: PublicPage) : XmlNode =
         ]
     ]
 
-PublicRenderingServerApp.create ()
-|> PublicRenderingServerApp.withConfig
+ServerApp.empty
+|> ServerApp.withConfig
     { ServerConfig.defaults with
         PublicRendering = EnabledPublicRendering (ContentRoot "content") }
-|> PublicRenderingServerApp.withLayout (LayoutName "base") baseLayout
-|> PublicRenderingServerApp.run
+|> withPublicRendering (
+    PublicRenderingOptions.create ()
+    |> PublicRenderingOptions.withLayout (LayoutName "base") baseLayout
+)
+|> ServerApp.run
 ```
 
 ## Six portability rules

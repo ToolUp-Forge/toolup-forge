@@ -20,7 +20,7 @@ module Slug =
     let value (Slug s) = s
 
 /// Layout key registered at compose time via
-/// `PublicRenderingServerApp.withLayout`. Layouts are F# functions —
+/// `PublicRenderingOptions.withLayout`. Layouts are F# functions —
 /// `PublicPage -> XmlNode` — not file paths. Unknown names fall back
 /// to the first-registered layout at render time.
 type LayoutName = LayoutName of string

@@ -436,7 +436,7 @@ let private publishDefinition: AIToolDefinition = {
             Name = "layout"
             Type = "string"
             Description =
-                "Optional layout name to render under. Must match a layout registered via `PublicRenderingServerApp.withLayout`. Omitted → the deployment's default layout; a name that is not registered is refused."
+                "Optional layout name to render under. Must match a layout registered via `PublicRenderingOptions.withLayout`. Omitted → the deployment's default layout; a name that is not registered is refused."
             Required = false
             Default = None
         }

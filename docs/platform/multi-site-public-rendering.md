@@ -25,19 +25,22 @@ let config = {
         PublicRendering = EnabledPublicRendering (ContentRoot mainContent)
 }
 
-PublicRenderingServerApp.create ()
-|> PublicRenderingServerApp.withConfig config
-|> PublicRenderingServerApp.withLayout (LayoutName "page") Layouts.page
-// Satellite 1 — its own content + base URL, inheriting the shared layouts.
-|> PublicRenderingServerApp.withSite
-    (PublicSite.create "docs" [ "docs.example.org"; "www.docs.example.org" ]
-        "https://docs.example.org" (ContentRoot docsContent))
-// Satellite 2 — bespoke layouts.
-|> PublicRenderingServerApp.withSite
-    { PublicSite.create "blog" [ "blog.example.net" ]
-        "https://blog.example.net" (ContentRoot blogContent) with
-        Layouts = Map [ LayoutName "page", Layouts.blogPage ] }
-|> PublicRenderingServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withPublicRendering (
+    PublicRenderingOptions.create ()
+    |> PublicRenderingOptions.withLayout (LayoutName "page") Layouts.page
+    // Satellite 1 — its own content + base URL, inheriting the shared layouts.
+    |> PublicRenderingOptions.withSite
+        (PublicSite.create "docs" [ "docs.example.org"; "www.docs.example.org" ]
+            "https://docs.example.org" (ContentRoot docsContent))
+    // Satellite 2 — bespoke layouts.
+    |> PublicRenderingOptions.withSite
+        { PublicSite.create "blog" [ "blog.example.net" ]
+            "https://blog.example.net" (ContentRoot blogContent) with
+            Layouts = Map [ LayoutName "page", Layouts.blogPage ] }
+)
+|> ServerApp.run
 ```
 
 Front the process with any host-routing reverse proxy (Caddy, nginx,
@@ -63,17 +66,18 @@ domain points at the same listener.
 
 ```fsharp skip=fragment
 // Feeds per site:
-|> PublicRenderingServerApp.withSite
+|> PublicRenderingOptions.withSite
     { PublicSite.create "blog" [ "blog.example.net" ]
         "https://blog.example.net" (ContentRoot blogContent) with
         Feeds = [ { NarrativeFeedConfig.defaults with Title = "Blog"; SelfUrl = "/feed.atom" } ] }
 
 // IndexNow — one `withIndexNow` activates the default site AND every satellite,
 // each with its own host, key, and resumable submission state:
-|> PublicRenderingServerApp.withIndexNow IndexNowOptions.enabled
+|> PublicRenderingOptions.withIndexNow IndexNowOptions.enabled
 
 // Multi-site static export (build-time terminus):
-PublicRenderingServerApp.exportStaticAllWith options "dist" app
+// the deployment and the companion options, as a pair:
+PublicRenderingExport.exportStaticAllWith exportOptions "dist" (app, publicRenderingOptions)
 ```
 
 Per-site IndexNow notes: a satellite's host derives from its `BaseUrl`; its

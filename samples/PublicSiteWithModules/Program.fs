@@ -56,7 +56,8 @@ let main _ =
     |> ServerApp.withConfig config
     |> ServerApp.withLogger logger
     |> ServerApp.addModule Notes.serverModule
-    |> PublicRenderingCompose.withPublicRendering (fun pr ->
-        pr
-        |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") Layouts.landingPage)
+    |> PublicRenderingCompose.withPublicRendering (
+        PublicRenderingOptions.create ()
+        |> PublicRenderingOptions.withLayout (LayoutName "page") Layouts.landingPage
+    )
     |> ServerApp.run

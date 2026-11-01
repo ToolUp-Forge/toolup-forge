@@ -113,11 +113,14 @@ PublicPage.hasTag "Product" page   // true (case-insensitive)
 `TaxonomyHandler.tagIndexSource` is an [`IContentSource`](../platform/dynamic-ssr.md) that serves `/tag/{slug}` pages listing every page carrying that tag, as a `NarrativeDocument` (rendered through the existing Phase 80 renderers — no hand-rolled markup). It composes through the existing `withContentSource` seam:
 
 ```fsharp
-PublicRenderingServerApp.create ()
-|> PublicRenderingServerApp.withConfig config
-|> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout
-|> PublicRenderingServerApp.withContentSource (TaxonomyHandler.tagIndexSource (fun () -> api.ListPages ""))
-|> PublicRenderingServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withPublicRendering (
+    PublicRenderingOptions.create ()
+    |> PublicRenderingOptions.withLayout (LayoutName "page") pageLayout
+    |> PublicRenderingOptions.withContentSource (TaxonomyHandler.tagIndexSource (fun () -> api.ListPages ""))
+)
+|> ServerApp.run
 ```
 
 The provider thunk (`fun () -> api.ListPages ""`) enumerates the candidate set from the file + entity-overlay tiers (never the source tier, so no resolution recursion). The **source gates that set itself** (Phase 632) — it applies `PublicPage.isPubliclyDiscoverable` to whatever the thunk returns, on both the resolve arm and the sitemap-enumerate arm — so passing the ungated `ListPages` here is safe, and a `Draft` page carrying the default `Audience = Public` cannot leak its title into `/tag/{slug}` or its tag into `sitemap.xml`. An unknown tag degrades to a thoughtful empty-state body, not a 404. A non-`tag/...` slug falls through without invoking the provider. `TaxonomyHandler.tagIndexSourceFromApi api` is the same wiring in one call, and `withTaxonomy` (below) does it for you.
@@ -136,9 +139,9 @@ let facets = TaxonomyHandler.tagCounts allPages            // [ ("news", 12); ("
 `withTaxonomy` enables the `/tag/{slug}` surface with no hand-wired `listPages` thunk — compose registers `TaxonomyHandler.tagIndexSource` against the default content API automatically. `withNav` loads a `nav.yaml` file at startup and registers the parsed tree as a `NavCatalog` DI singleton (also stored on `app.Nav` for a layout to capture); `withNavTree` registers a code-built tree directly.
 
 ```fsharp
-app                                          // the compose pipeline so far
-|> PublicRenderingServerApp.withTaxonomy
-|> PublicRenderingServerApp.withNav "content/nav.yaml"
+options                                      // the companion options so far
+|> PublicRenderingOptions.withTaxonomy
+|> PublicRenderingOptions.withNav "content/nav.yaml"
 ```
 
 ## Faceted browse (Phase 99)
@@ -146,8 +149,8 @@ app                                          // the compose pipeline so far
 `TaxonomyHandler.facetedBrowseSource` serves `/browse/{tags}` where `{tags}` is a `+`-separated tag list (AND semantics) — the "filter by topic + type" interaction. It renders the matching pages plus a **facet sidebar** (each remaining tag + the count it would yield, narrowing as tags are added), excluding gated and non-published pages (GP 4). The pure `TaxonomyHandler.facetedBrowse matchAll tags pages` (AND when `matchAll`, OR otherwise) returns `(results, facets)` for custom wiring, and composes with the Phase 98 pager.
 
 ```fsharp
-app
-|> PublicRenderingServerApp.withContentSource (TaxonomyHandler.facetedBrowseSource (fun () -> api.ListPages ""))
+options
+|> PublicRenderingOptions.withContentSource (TaxonomyHandler.facetedBrowseSource (fun () -> api.ListPages ""))
 // GET /browse/news+product  → pages tagged both, + facet counts
 ```
 
@@ -166,13 +169,13 @@ NavLayout.pager (sprintf "/docs?page=%d") slice
 A reader can subscribe to a topic: `withTagFeed` registers a feed filtered to one tag (the taxonomy-axis extension of the Phase 80b `withFeed`), reusing the same Atom renderer:
 
 ```fsharp
-app
-|> PublicRenderingServerApp.withTagFeed "news"
+options
+|> PublicRenderingOptions.withTagFeed "news"
     { NarrativeFeedConfig.defaults with Title = "News"; SelfUrl = "/tag/news/feed.atom" }
 
 // or fan out one feed per tag:
-app
-|> PublicRenderingServerApp.withTagFeeds "Topics" NarrativeFeedConfig.defaults [ "news"; "events"; "product" ]
+options
+|> PublicRenderingOptions.withTagFeeds "Topics" NarrativeFeedConfig.defaults [ "news"; "events"; "product" ]
 ```
 
 A tag feed surfaces the Narrative-bodied pages carrying that tag, newest-first, capped at `MaxEntries`; gated pages never appear. A deployment that registers no tag feed emits nothing (GP 11). The `Tag` filter composes with `Collection` (both apply).

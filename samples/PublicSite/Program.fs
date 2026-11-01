@@ -28,20 +28,19 @@ let main _ =
 
     let logger = ConsoleLogger.ConsoleLogger() :> ILogger
 
-    PublicRenderingCompose.PublicRenderingServerApp.create ()
-    |> PublicRenderingCompose.PublicRenderingServerApp.withConfig config
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLogger logger
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") Layouts.PageLayout.render
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "article") Layouts.ArticleLayout.render
-    // Phase 92 — BrandKit layout library (the ~20-line brand-correct
-    // page) + a Feliz-DSL layout via the dual-registration helper.
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout
-        (LayoutName "bk-article")
-        Layouts.BrandKitArticleLayout.render
-    |> PublicRenderingCompose.PublicRenderingServerApp.withFelizLayout
-        (LayoutName "feliz")
-        Layouts.FelizPageLayout.render
-    // Phase 1039 — with several layouts registered, the one a page naming
-    // none is framed in is declared, never picked by name order.
-    |> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "page")
-    |> PublicRenderingCompose.PublicRenderingServerApp.run
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withLogger logger
+    |> PublicRenderingCompose.withPublicRendering (
+        PublicRenderingOptions.create ()
+        |> PublicRenderingOptions.withLayout (LayoutName "page") Layouts.PageLayout.render
+        |> PublicRenderingOptions.withLayout (LayoutName "article") Layouts.ArticleLayout.render
+        // Phase 92 — BrandKit layout library (the ~20-line brand-correct
+        // page) + a Feliz-DSL layout via the dual-registration helper.
+        |> PublicRenderingOptions.withLayout (LayoutName "bk-article") Layouts.BrandKitArticleLayout.render
+        |> PublicRenderingOptions.withFelizLayout (LayoutName "feliz") Layouts.FelizPageLayout.render
+        // Phase 1039 — with several layouts registered, the one a page naming
+        // none is framed in is declared, never picked by name order.
+        |> PublicRenderingOptions.withDefaultLayout (LayoutName "page")
+    )
+    |> ServerApp.run

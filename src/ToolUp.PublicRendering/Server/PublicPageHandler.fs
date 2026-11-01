@@ -39,7 +39,7 @@ module LayoutRefusal =
             sprintf "layout '%s' is not registered (registered: %s)" (LayoutName.value requested) (names registered)
         | LayoutRefusal.NoDefaultLayout registered ->
             sprintf
-                "the page names no layout and no default layout is declared among the registered layouts (%s); declare one with PublicRenderingServerApp.withDefaultLayout"
+                "the page names no layout and no default layout is declared among the registered layouts (%s); declare one with PublicRenderingOptions.withDefaultLayout"
                 (names registered)
         | LayoutRefusal.UnknownDefaultLayout(declared, registered) ->
             sprintf

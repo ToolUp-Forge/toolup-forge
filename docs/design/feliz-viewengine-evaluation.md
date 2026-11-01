@@ -9,7 +9,7 @@
 **Decision: ADOPT, as an opt-in.** `Feliz.ViewEngine` is referenced by
 `ToolUp.PublicRendering` and surfaced through one adapter
 (`FelizLayout.toGiraffe`) and one compose helper
-(`PublicRenderingServerApp.withFelizLayout`). Giraffe.ViewEngine remains
+(`PublicRenderingOptions.withFelizLayout`). Giraffe.ViewEngine remains
 the default layout DSL for every documented path; a deployment that
 never calls `withFelizLayout` is behaviourally unchanged (GP 11) and
 pays only the package's presence in the dependency graph.

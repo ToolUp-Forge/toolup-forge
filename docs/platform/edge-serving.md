@@ -65,14 +65,14 @@ anything is scheduled, so an unconfigured deployment pays nothing.
 
 ```fsharp skip=fragment
 // Public rendering: a publish purges the origin render cache, then the edge.
-PublicRenderingServerApp.create ()
-|> PublicRenderingServerApp.withRenderCache (InMemoryRenderCache.create ())
-|> PublicRenderingServerApp.withEdgeCache edge
+PublicRenderingOptions.create ()
+|> PublicRenderingOptions.withRenderCache (InMemoryRenderCache.create ())
+|> PublicRenderingOptions.withEdgeCache edge
 |> ...
 
 // Media: an upload or a delete purges the item's edge objects.
-MediaLibraryServerApp.create ()
-|> MediaLibraryServerApp.withEdgeCache edge
+MediaLibraryCompanionOptions.create ()
+|> MediaLibraryCompanionOptions.withEdgeCache edge
 |> ...
 ```
 

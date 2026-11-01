@@ -39,6 +39,6 @@ module PageAmbient =
     /// The 1-based page number a paginated menu is rendering.
     let pageNumber: int = failwith "ambient"
 
-    /// The compose pipeline so far — the value each `PublicRenderingServerApp.with*`
+    /// The companion options so far — the value each `PublicRenderingOptions.with*`
     /// excerpt below is threading through.
-    let app: PublicRenderingServerApp = failwith "ambient"
+    let options: PublicRenderingOptions = failwith "ambient"

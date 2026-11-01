@@ -29,7 +29,7 @@ open ToolUp.Platform.ConfigValidation
 // need it.
 
 /// A satellite website served by this instance, keyed by host name.
-/// Register via `PublicRenderingServerApp.withSite`. The default site
+/// Register via `PublicRenderingOptions.withSite`. The default site
 /// (the `ServerConfig`-level `EnabledPublicRendering` content root +
 /// compose-registered layouts + `PublicBaseUrl`) is NOT a
 /// `PublicSiteDef` — it is the fallback every unmatched host serves.

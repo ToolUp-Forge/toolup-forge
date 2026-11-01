@@ -74,4 +74,7 @@ let build (deps: Dependencies) : ServerApp =
         | Some signIn -> app |> OidcSsrSignIn.withInteractiveSignIn (new HttpClient()) signIn
         | None -> app
 
-    app |> PublicRenderingCompose.withPublicRendering PublishedPages.install
+    app
+    |> PublicRenderingCompose.withPublicRendering (
+        PublicRenderingOptions.create () |> PublishedPages.install deps.Config
+    )

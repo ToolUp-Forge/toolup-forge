@@ -72,10 +72,9 @@ let tests =
         testCase "withFelizLayout: registers into the same registry as Giraffe layouts"
         <| fun _ ->
             let app =
-                PublicRenderingCompose.PublicRenderingServerApp.create ()
-                |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") (fun p ->
-                    html [] [ body [] [ str p.Title ] ])
-                |> PublicRenderingCompose.PublicRenderingServerApp.withFelizLayout (LayoutName "feliz") felizLayout
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withLayout (LayoutName "page") (fun p -> html [] [ body [] [ str p.Title ] ])
+                |> PublicRenderingOptions.withFelizLayout (LayoutName "feliz") felizLayout
 
             Expect.equal (Map.count app.Layouts) 2 "both layouts registered"
 

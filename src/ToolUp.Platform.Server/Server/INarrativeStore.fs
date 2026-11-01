@@ -266,7 +266,7 @@ type INarrativePagePublisher =
 /// Compose-time catalog of registered layout names. Lets read-only
 /// consumers (the `list_layouts` AI tool, future admin UIs) discover
 /// which layouts a deployment has wired without coupling to the
-/// `PublicRenderingServerApp` record shape.
+/// `PublicRenderingOptions` record shape.
 ///
 /// Implementations are pure read views over the registered map; calls
 /// are cheap and stateless.

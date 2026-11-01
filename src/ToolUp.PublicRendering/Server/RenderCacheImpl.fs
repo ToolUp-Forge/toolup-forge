@@ -261,7 +261,7 @@ type NoopRenderCacheInvalidation() =
 
 /// Purge the origin render cache, then fan the affected edge paths out
 /// to the composed `IEdgeCache`. Composed by
-/// `PublicRenderingServerApp.withEdgeCache`; absent it, the pre-472
+/// `PublicRenderingOptions.withEdgeCache`; absent it, the pre-472
 /// invalidator is registered unwrapped and nothing about publishing
 /// changes (GP 11).
 type EdgeAwareRenderCacheInvalidation

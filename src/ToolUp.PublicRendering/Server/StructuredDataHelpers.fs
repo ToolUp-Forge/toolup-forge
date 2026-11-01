@@ -12,7 +12,7 @@ open ToolUp.Platform.Narrative
 /// All emitters read from `PublicPage.Frontmatter`; missing keys
 /// degrade to empty strings rather than throwing. Layout authors
 /// register them by name via
-/// `PublicRenderingServerApp.withStructuredDataBuilder` and call
+/// `PublicRenderingOptions.withStructuredDataBuilder` and call
 /// out from the layout body.
 module StructuredDataHelpers =
     let private opt = Option.defaultValue ""

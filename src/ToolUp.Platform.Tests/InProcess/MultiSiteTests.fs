@@ -411,14 +411,13 @@ let private exportTests =
                 Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
 
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withConfig config
-                |> PublicRenderingServerApp.withLayout (LayoutName "page") (fun p ->
-                    html [] [ body [] [ str p.Title ] ])
-                |> PublicRenderingServerApp.withSite (mkSite "siteb" [ "b.example" ] "https://b.example" "B Home")
+                ServerApp.empty |> ServerApp.withConfig config,
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withLayout (LayoutName "page") (fun p -> html [] [ body [] [ str p.Title ] ])
+                |> PublicRenderingOptions.withSite (mkSite "siteb" [ "b.example" ] "https://b.example" "B Home")
 
             let total =
-                PublicRenderingServerApp.exportStaticAll outDir app |> Async.RunSynchronously
+                PublicRenderingExport.exportStaticAll outDir app |> Async.RunSynchronously
 
             Expect.isGreaterThanOrEqual total 2 "both trees rendered pages"
 
@@ -453,12 +452,11 @@ let private exportTests =
                 Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
 
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withConfig config
-                |> PublicRenderingServerApp.withLayout (LayoutName "page") (fun p ->
-                    html [] [ body [] [ str p.Title ] ])
+                ServerApp.empty |> ServerApp.withConfig config,
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withLayout (LayoutName "page") (fun p -> html [] [ body [] [ str p.Title ] ])
 
-            PublicRenderingServerApp.exportStaticAll outDir app
+            PublicRenderingExport.exportStaticAll outDir app
             |> Async.RunSynchronously
             |> ignore
 

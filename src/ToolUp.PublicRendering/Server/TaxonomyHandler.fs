@@ -6,7 +6,7 @@
 /// `tagIndexSource` is an `IContentSource` ([Phase 83](IContentSource.fs))
 /// that serves `/tag/{slug}` pages listing every page carrying that tag
 /// (tags are frontmatter-derived — see `PublicPage.tags`). It composes
-/// through the existing `PublicRenderingServerApp.withContentSource` seam;
+/// through the existing `PublicRenderingOptions.withContentSource` seam;
 /// no new compose plumbing is needed. `relatedByTag` and `tagCounts` are
 /// pure helpers a layout / module uses for related-content blocks and
 /// faceted-browse sidebars.
