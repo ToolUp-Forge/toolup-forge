@@ -60,8 +60,8 @@ let buildRouteHandlers
     (transactionalSinks: INotificationSink list)
     (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
     (effectiveNotifications: NotificationMode)
-    (persistentEventStoreInstance: PersistentEventStore.PersistentEventStore option ref)
-    (blobJobStoreInstance: JobStore.BlobJobStore option ref)
+    (persistentEventStore: PersistentEventStore.PersistentEventStore option)
+    (blobJobStore: JobStore.BlobJobStore option)
     : RouteHandlers =
 
     let fileApiMounted = fileManagementMounted dataTypes
@@ -316,14 +316,13 @@ let buildRouteHandlers
         | QuartzJobScheduler _ -> [ makeApi JobApiHandler.jobApi ]
 
     // MaintenanceApi always registered. Each method reads the
-    // typed-store cells at request time via the thunk arguments and
+    // typed stores compose built via the thunk arguments and
     // returns a clear error when the corresponding store mode is
     // disabled. Owner/Admin gated server-side.
     let maintenanceApiHandler: HttpHandler list = [
         makeApi (
-            MaintenanceApiHandler.maintenanceApi
-                (fun () -> persistentEventStoreInstance.Value |> Option.map _.Rebuild)
-                (fun () -> blobJobStoreInstance.Value |> Option.map _.Rebuild)
+            MaintenanceApiHandler.maintenanceApi (fun () -> persistentEventStore |> Option.map _.Rebuild) (fun () ->
+                blobJobStore |> Option.map _.Rebuild)
         )
     ]
 

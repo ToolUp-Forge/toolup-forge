@@ -1257,7 +1257,6 @@ module DeclaredDelivery =
         : IServiceCollection =
         Hosting.register
             services
-            config
             (BackgroundUnit.create "declared-data-sources" OnceAtStart (fun sp ->
                 let composed: DeclaredDeliveryServices = {
                     Configs =

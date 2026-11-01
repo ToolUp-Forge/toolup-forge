@@ -723,7 +723,6 @@ let withPromptAdmin (app: ServerApp) : ServerApp =
         // scheduler's own unit.
         Hosting.register
             s
-            app.Config
             (BackgroundUnit.create
                 "narrative-regenerate-handler-registration"
                 OnceAtStart

@@ -1455,8 +1455,8 @@ let private composeTests =
                 channel
                 silentLogger
                 (NoOpActivitySink() :> IActivitySink)
-                (ref None)
-                (ref None)
+                None
+                (LateBound<IJobScheduler option>("job scheduler", None))
                 None
                 InProcessDistributedLock.shared
             |> ignore
@@ -1495,8 +1495,8 @@ let private composeTests =
                 channel
                 silentLogger
                 (NoOpActivitySink() :> IActivitySink)
-                (ref None)
-                (ref None)
+                None
+                (LateBound<IJobScheduler option>("job scheduler", None))
                 None
                 InProcessDistributedLock.shared
             |> ignore
@@ -1540,8 +1540,8 @@ let private composeTests =
                 channel
                 silentLogger
                 (NoOpActivitySink() :> IActivitySink)
-                (ref None)
-                (ref None)
+                None
+                (LateBound<IJobScheduler option>("job scheduler", None))
                 None
                 InProcessDistributedLock.shared
             |> ignore

@@ -210,42 +210,19 @@ let private composeWithPreflightTimeout
     }
 
     try
-        ToolUp.Platform.Server.compose
-            []
-            []
-            (authConfig ())
-            None
-            extensions
-            (Some(logger :> ILogger))
-            (Some(ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage() :> BlobStorage.IBlobStorage))
-            None
-            []
-            []
-            []
-            []
-            []
-            None
-            []
-            None
-            []
-            []
-            None
-            []
-            None
-            []
-            []
-            None
-            None
-            []
-            []
-            []
-            []
-            []
-            NoResilience
-            resilience
-            supplied
-            preflightTimeout
-            None
+        ToolUp.Platform.Server.compose {
+            ToolUp.Platform.Server.CompositionPlan.ofConfig (authConfig ()) with
+                Extensions = extensions
+                Logger = Some(logger :> ILogger)
+                BlobStorage =
+                    Some(
+                        ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
+                        :> BlobStorage.IBlobStorage
+                    )
+                SecretResilience = resilience
+                SecretStore = supplied
+                SecretStorePreflightTimeout = preflightTimeout
+        }
         |> ignore<IServerHost> // typed: a compose arity change must not compile into a silently-ignored partial application
     with :? ConfigValidatorAggregator.ConfigPreflightFailedException ->
         ()

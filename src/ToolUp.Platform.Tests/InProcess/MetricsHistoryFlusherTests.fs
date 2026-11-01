@@ -109,6 +109,7 @@ let private valuesOf (store: ITimeSeriesStore) (series: string) = async {
 let private hostedServicesFor (config: ServerConfig) =
     let services = ServiceCollection()
     ComposeObservability.registerMetricsHistory (services :> IServiceCollection) config noopLogger
+    Hosting.admit services config |> ignore
 
     services
     |> Seq.filter (fun d -> d.ServiceType = typeof<Microsoft.Extensions.Hosting.IHostedService>)

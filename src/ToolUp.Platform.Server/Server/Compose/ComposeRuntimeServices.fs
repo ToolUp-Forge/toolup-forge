@@ -415,7 +415,7 @@ let registerUsageMetering
 
         // Shared work on a worker silo. Usage records still emit into the
         // in-process queue (the `IUsageLog` singleton stays registered).
-        Hosting.register services config (BackgroundUnit.ofInstance "usage-batch-flusher" SharedWork flusher)
+        Hosting.register services (BackgroundUnit.ofInstance "usage-batch-flusher" SharedWork flusher)
         |> ignore
 
     usageLogInstance
@@ -436,39 +436,46 @@ let registerUsageMetering
 ///
 /// Returns the resolved `IMetricsSink` instance so the outbound
 /// `IRateLimiter` constructor downstream picks up the same instance.
-let registerMetricsAndObservability
-    (services: IServiceCollection)
+/// The deployment's metrics sink, built before the audit log that counts
+/// its write failures through it: the Prometheus default when the
+/// endpoint is enabled (fanned out to any companion sinks), `NoOpMetricsSink`
+/// otherwise. Builds; registers nothing (`registerMetricsAndObservability`).
+let buildMetricsSink
     (config: ServerConfig)
     (companionMetricsSinks: Metrics.IMetricsSink list)
     (moduleMetricRegistrations: Metrics.MetricRegistration list)
-    (resolvedActivitySink: IActivitySink)
     (resolvedLogger: ILogger)
+    : Metrics.IMetricsSink * Metrics.PrometheusMetricsSink option =
+    match config.MetricsEndpoint with
+    | NoMetricsEndpoint -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink, None
+    | EnabledMetricsEndpoint ->
+        let promSink =
+            Metrics.PrometheusMetricsSink(
+                config.MetricsSink,
+                Metrics.StandardMetrics.registrations @ moduleMetricRegistrations,
+                resolvedLogger
+            )
+
+        // Companion sinks (e.g. OtelMetricsSink) fold into a
+        // FanOutMetricsSink alongside the in-process default so a
+        // single emission dispatches to every sink. The Prometheus
+        // sink is always at the head of the list so /metrics keeps
+        // returning current values even if a companion sink fails.
+        let consumerSink: Metrics.IMetricsSink =
+            if List.isEmpty companionMetricsSinks then
+                promSink :> Metrics.IMetricsSink
+            else
+                let sinks = (promSink :> Metrics.IMetricsSink) :: companionMetricsSinks
+                Metrics.FanOutMetricsSink(sinks, resolvedLogger) :> Metrics.IMetricsSink
+
+        consumerSink, Some promSink
+
+
+let registerMetricsAndObservability
+    (services: IServiceCollection)
+    (resolvedMetricsSink: Metrics.IMetricsSink, prometheusSink: Metrics.PrometheusMetricsSink option)
+    (resolvedActivitySink: IActivitySink)
     : Metrics.IMetricsSink =
-
-    let (resolvedMetricsSink: Metrics.IMetricsSink), (prometheusSink: Metrics.PrometheusMetricsSink option) =
-        match config.MetricsEndpoint with
-        | NoMetricsEndpoint -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink, None
-        | EnabledMetricsEndpoint ->
-            let promSink =
-                Metrics.PrometheusMetricsSink(
-                    config.MetricsSink,
-                    Metrics.StandardMetrics.registrations @ moduleMetricRegistrations,
-                    resolvedLogger
-                )
-
-            // Companion sinks (e.g. OtelMetricsSink) fold into a
-            // FanOutMetricsSink alongside the in-process default so a
-            // single emission dispatches to every sink. The Prometheus
-            // sink is always at the head of the list so /metrics keeps
-            // returning current values even if a companion sink fails.
-            let consumerSink: Metrics.IMetricsSink =
-                if List.isEmpty companionMetricsSinks then
-                    promSink :> Metrics.IMetricsSink
-                else
-                    let sinks = (promSink :> Metrics.IMetricsSink) :: companionMetricsSinks
-                    Metrics.FanOutMetricsSink(sinks, resolvedLogger) :> Metrics.IMetricsSink
-
-            consumerSink, Some promSink
 
     services.AddSingleton<Metrics.IMetricsSink>(resolvedMetricsSink) |> ignore
 
@@ -504,9 +511,9 @@ let registerMetricsAndObservability
 /// `auditLog`, `resolvedMetricsSink`, and the configured
 /// `SlowRateLimitThreshold`.
 ///
-/// Populates `rateLimiterCell` so the webhook dispatcher's per-attempt
-/// `Wait` calls (registered upstream with the cell's lookup) see the
-/// configured limiter instead of the pass-through default.
+/// Binds `rateLimiterSlot`, so the webhook dispatcher's per-attempt
+/// `Wait` calls (built at an earlier stage, holding the slot) see the
+/// configured limiter instead of the dormant pass-through.
 ///
 /// Returns the resolved `IRateLimiter` so downstream registrations
 /// (e.g. the OAuth refresher in `ComposeJobs`) can capture it.
@@ -517,7 +524,7 @@ let registerOutboundRateLimiter
     (resolvedMetricsSink: Metrics.IMetricsSink)
     (auditLog: IAuditLog)
     (resolvedLogger: ILogger)
-    (rateLimiterCell: IRateLimiter ref)
+    (rateLimiterSlot: LateBound<IRateLimiter>)
     : IRateLimiter =
 
     let rateLimiter: IRateLimiter =
@@ -533,7 +540,7 @@ let registerOutboundRateLimiter
             )
             :> IRateLimiter
 
-    rateLimiterCell.Value <- rateLimiter
+    rateLimiterSlot.Bind rateLimiter
 
     services.AddSingleton<IRateLimiter>(rateLimiter) |> ignore
 
@@ -567,7 +574,6 @@ let registerHealthStateTracker
     if config.HealthStateTracking then
         Hosting.register
             services
-            config
             (BackgroundUnit.create "health-state-tracker" SharedWork (fun sp ->
                 new HealthStateTracker.HealthStateTrackerService(sp, auditLog, resolvedLogger)
                 :> Microsoft.Extensions.Hosting.IHostedService))
@@ -602,7 +608,6 @@ let internal registerRemotingAuditQueue
 
         Hosting.register
             services
-            config
             (BackgroundUnit.create "remoting-audit-drain" ProcessLocal (fun sp ->
                 let metrics () =
                     match sp.GetService(typeof<Metrics.IMetricsSink>) with
@@ -632,7 +637,6 @@ let registerAlertRuleEngine
     if not (List.isEmpty config.AlertRules) then
         Hosting.register
             services
-            config
             (BackgroundUnit.create "alert-rule-engine" SharedWork (fun sp ->
                 new AlertRuleEngine.AlertRuleEngineService(sp, notificationChannel, config.AlertRules, resolvedLogger)
                 :> Microsoft.Extensions.Hosting.IHostedService))

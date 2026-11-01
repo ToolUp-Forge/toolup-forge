@@ -124,7 +124,7 @@ let registerAuditReplicatorHosting
 
         // Shared work: it drains the shared event store into the sinks, so a
         // worker silo does it for every silo.
-        Hosting.register services config (BackgroundUnit.ofInstance "audit-replicator" SharedWork replicator)
+        Hosting.register services (BackgroundUnit.ofInstance "audit-replicator" SharedWork replicator)
         |> ignore
 
         for sink in auditSinks do

@@ -934,7 +934,7 @@ module Codemod =
             CodemodMigration.BackgroundPlacement
             CodemodFileClass.Source
             @"\bProcessProfileGate\.shouldRegisterBackgroundService\b|\b\w+Subsystem\b(?=.*\bProcessProfileGate\b)|\bBackgroundSubsystem\b"
-            "the profile matrix is removed: register the hosted service with `Hosting.register services config (BackgroundUnit.create \"<name>\" <placement> factory)` (or `BackgroundUnit.ofInstance` for an instance) and drop the `if`. Every subsystem the matrix named is `SharedWork`; the webhook and transactional dispatchers add `|> BackgroundUnit.outbound`"
+            "the profile matrix is removed: register the hosted service with `Hosting.register services (BackgroundUnit.create \"<name>\" <placement> factory)` (or `BackgroundUnit.ofInstance` for an instance) and drop the `if`. Every subsystem the matrix named is `SharedWork`; the webhook and transactional dispatchers add `|> BackgroundUnit.outbound`"
         // A hosted service exempt from the matrix stated its placement in
         // prose; it states it as a value now.
         review
@@ -942,14 +942,14 @@ module Codemod =
             CodemodMigration.BackgroundPlacement
             CodemodFileClass.Source
             @"\bProcessProfileGate\.(?:addExempt|exempt|addDeferredJobs|SchedulerRegistrationReason)\b|\bHostedServiceExemption\b"
-            "exemptions are removed: register the service with `Hosting.register services config unit` and choose its `Placement` — `OnceAtStart` for a one-shot or a scheduler registration (`addDeferredJobs label decls` is `Hosting.deferredJobs label decls`), `ProcessLocal` for a loop over this process's own state, `SharedWork` for a loop draining shared state. A companion holding a `ServerApp` can contribute it as a value: `ServerApp.addContribution (Contribution.hosted owner unit)`"
+            "exemptions are removed: register the service with `Hosting.register services unit` and choose its `Placement` — `OnceAtStart` for a one-shot or a scheduler registration (`addDeferredJobs label decls` is `Hosting.deferredJobs label decls`), `ProcessLocal` for a loop over this process's own state, `SharedWork` for a loop draining shared state. A companion holding a `ServerApp` can contribute it as a value: `ServerApp.addContribution (Contribution.hosted owner unit)`"
         // An ungated hosted service now goes through the one gate.
         review
             "1067-ungated-hosted-service"
             CodemodMigration.BackgroundPlacement
             CodemodFileClass.Source
             @"\bAdd(?:Singleton|HostedService)\s*<\s*(?:[\w.]+\.)?IHostedService\s*>|\bAddHostedService\s*<"
-            "every hosted service is registered through `Hosting.register services config unit` with a declared `Placement`: `OnceAtStart` for a one-shot, `SharedWork` for a store-draining loop, `ProcessLocal` for a loop bound to this process; a profile that does not admit the placement registers nothing"
+            "every hosted service is registered through `Hosting.register services unit` with a declared `Placement`: `OnceAtStart` for a one-shot, `SharedWork` for a store-draining loop, `ProcessLocal` for a loop bound to this process; a profile that does not admit the placement registers nothing"
         // The four in-process scheduler factories are one.
         review
             "1067-scheduler-factory"

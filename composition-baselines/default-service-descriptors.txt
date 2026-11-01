@@ -249,6 +249,7 @@ ToolUp.Platform.IConfigStore	Singleton
 ToolUp.Platform.IModuleQueryBus	Singleton
 ToolUp.Platform.IFeatureFlagStore	Singleton
 ToolUp.Platform.FlagEvaluator+FlagEvaluator	Singleton
+ToolUp.Platform.Substrate	Singleton
 Microsoft.Extensions.Hosting.IHostedService	Singleton
 ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot	Singleton

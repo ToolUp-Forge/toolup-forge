@@ -297,7 +297,6 @@ let registerEntityOutbox (services: IServiceCollection) (config: ServerConfig) (
 
         Hosting.register
             services
-            config
             (BackgroundUnit.create "entity-outbox-relay" SharedWork (fun sp ->
                 new EntityOutboxRelayService.EntityOutboxRelayService(
                     sp.GetRequiredService<EntityOutbox.OutboxEntityStore>(),
@@ -342,7 +341,6 @@ let internal registerLineageOutbox
 
         Hosting.register
             services
-            config
             (BackgroundUnit.create "lineage-outbox-relay" SharedWork (fun _ ->
                 new EntityOutboxRelayService.OutboxRelayService(
                     "LineageOutbox",
@@ -424,7 +422,6 @@ let registerDataMigrations
             // sibling worker silo does the upgrading for a WebOnly one.
             Hosting.register
                 services
-                config
                 (BackgroundUnit.create "data-migration-sweep" SharedWork (fun sp ->
                     // `ITeamStore` is optional: modes with no team concept
                     // register none, and the sweep then logs that it has no
@@ -1079,5 +1076,5 @@ let registerBackupCoordinator
         // Once at start: the snapshot and drill run as scheduler jobs, placed
         // by the scheduler's own unit.
         if not declarations.IsEmpty then
-            Hosting.register services config (Hosting.deferredJobs "backup-restore-drill" declarations)
+            Hosting.register services (Hosting.deferredJobs "backup-restore-drill" declarations)
             |> ignore

@@ -76,16 +76,7 @@ let private devRoutesFor (enableDevEndpoints: bool) : HttpHandler list =
     }
 
     let routeHandlers =
-        BuildRouteHandlers.buildRouteHandlers
-            config
-            []
-            []
-            ComposeExtensions.empty
-            []
-            None
-            NoNotifications
-            (ref None)
-            (ref None)
+        BuildRouteHandlers.buildRouteHandlers config [] [] ComposeExtensions.empty [] None NoNotifications None None
 
     routeHandlers.DevDiagnosticsRoutes emptyCapture
 

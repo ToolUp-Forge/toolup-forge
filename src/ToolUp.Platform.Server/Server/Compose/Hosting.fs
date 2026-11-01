@@ -12,10 +12,11 @@ open Microsoft.Extensions.Hosting
 // "Which process profile runs this?" has one answer, `Hosting.admits`, read
 // off a `Placement` the work's AUTHOR declares. Every hosted service in the
 // SDK and in its companions is registered through `Hosting.register`, which
-// registers it when the deployment's shape admits its placement and
-// registers nothing otherwise (GP 13: zero background services unless the
-// deployment asks). The composition root places a unit; the unit says what
-// kind of work it is.
+// takes no configuration: the composition root decides admission ONCE, with
+// `Hosting.admit`, against the deployment's final configuration, after every
+// registration has run, and removes every unit the shape does not admit
+// (GP 13: zero background services unless the deployment asks). A unit says
+// what kind of work it is; only the root says whether it runs here.
 //
 // The three placements, and the shapes that admit them:
 //
@@ -96,6 +97,14 @@ type BackgroundUnitRecord = {
     Outbound: bool
 }
 
+/// A registered unit whose admission `Hosting.admit` has not decided yet:
+/// its record and the hosted-service descriptor admission keeps or removes.
+[<NoEquality; NoComparison>]
+type PendingAdmission = {
+    Record: BackgroundUnitRecord
+    Hosted: ServiceDescriptor
+}
+
 /// One row of `Hosting.describe`: a unit and whether this
 /// deployment's shape admits it.
 type HostingRow = {
@@ -157,18 +166,41 @@ module Hosting =
     let admits (config: ServerConfig) (unit: BackgroundUnit) : bool =
         admitsPlacement config unit.Placement unit.Outbound
 
-    /// Register `unit`: its record always, its hosted service only when
-    /// `config` admits it. The one entry point for an `IHostedService`.
-    let register (services: IServiceCollection) (config: ServerConfig) (unit: BackgroundUnit) : IServiceCollection =
-        services.AddSingleton<BackgroundUnitRecord>(BackgroundUnit.record unit)
-        |> ignore
+    /// Register `unit`: its record and its hosted service. The one entry
+    /// point for an `IHostedService`. Whether the unit runs is not decided
+    /// here: `admit` decides it once, against the final configuration.
+    let register (services: IServiceCollection) (unit: BackgroundUnit) : IServiceCollection =
+        let record = BackgroundUnit.record unit
 
-        if admits config unit then
+        let hosted =
             match unit.Service with
-            | Built factory -> services.AddSingleton<IHostedService>(Func<IServiceProvider, IHostedService>(factory))
-            | Existing service -> services.AddSingleton<IHostedService>(service)
-        else
+            | Built factory ->
+                ServiceDescriptor.Singleton<IHostedService>(Func<IServiceProvider, IHostedService>(factory))
+            | Existing service -> ServiceDescriptor.Singleton<IHostedService>(service)
+
+        services.AddSingleton<BackgroundUnitRecord>(record) |> ignore
+        services.Add hosted
+        services.AddSingleton<PendingAdmission>({ Record = record; Hosted = hosted })
+
+    /// Decide every registered unit's admission against `config` — the
+    /// deployment's final configuration — and remove the hosted service of
+    /// each unit its shape does not admit. The composition root runs it
+    /// once, after every registration; running it again changes nothing.
+    let admit (services: IServiceCollection) (config: ServerConfig) : IServiceCollection =
+        let pending =
             services
+            |> Seq.filter (fun d -> d.ServiceType = typeof<PendingAdmission> && not d.IsKeyedService)
+            |> List.ofSeq
+
+        for marker in pending do
+            services.Remove marker |> ignore
+
+            match marker.ImplementationInstance with
+            | :? PendingAdmission as p when not (admitsPlacement config p.Record.Placement p.Record.Outbound) ->
+                services.Remove p.Hosted |> ignore
+            | _ -> ()
+
+        services
 
     /// The registered units, each with whether `config` admits it, in
     /// registration order. What `/dev/inspect`'s hosting panel renders.

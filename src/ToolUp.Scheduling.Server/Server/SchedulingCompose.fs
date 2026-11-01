@@ -359,7 +359,7 @@ module SchedulingServerApp =
 
                 // Once at start: the sync runs as scheduler jobs, placed by
                 // the scheduler's own unit.
-                Hosting.register services app.Base.Config (Hosting.deferredJobs "calendar-sync" declarations)
+                Hosting.register services (Hosting.deferredJobs "calendar-sync" declarations)
 
         // 3. API handler. Resolves `IBookingScheduler` per request
         //    out of DI; the per-request `scopeId`/`userId` come from

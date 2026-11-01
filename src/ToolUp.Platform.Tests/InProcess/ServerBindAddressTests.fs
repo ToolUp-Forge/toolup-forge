@@ -125,45 +125,15 @@ let private composedVerdict (config: ServerConfig) : string * string list =
         Directory.SetCurrentDirectory dir
 
         try
-            ToolUp.Platform.Server.compose
-                []
-                []
-                config
-                None
-                ComposeExtensions.empty
-                (Some(logger :> ILogger))
-                (Some(
-                    ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
-                    :> BlobStorage.IBlobStorage
-                ))
-                None
-                []
-                []
-                []
-                []
-                []
-                None
-                []
-                None
-                []
-                []
-                None
-                []
-                None
-                []
-                []
-                None
-                None
-                []
-                []
-                []
-                []
-                []
-                NoResilience
-                NoResilience
-                None
-                None
-                None
+            ToolUp.Platform.Server.compose {
+                ToolUp.Platform.Server.CompositionPlan.ofConfig config with
+                    Logger = Some(logger :> ILogger)
+                    BlobStorage =
+                        Some(
+                            ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
+                            :> BlobStorage.IBlobStorage
+                        )
+            }
             |> ignore<IServerHost> // typed: a compose arity change must not compile into a silently-ignored partial application
         with :? ConfigValidatorAggregator.ConfigPreflightFailedException ->
             ()

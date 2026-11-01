@@ -765,7 +765,6 @@ module FactsCompose =
         //     scheduler's own unit.
         Hosting.register
             services
-            serverConfig
             (Hosting.deferredJobs "reactive-fact-recomputation" [
                 DeferredScheduledJobDeclaration.create (fun provider ->
                     RecomputeJobHandler.declaration
@@ -780,7 +779,6 @@ module FactsCompose =
         // otherwise the start is a DI lookup and nothing else.
         Hosting.register
             services
-            serverConfig
             (BackgroundUnit.create
                 "grounded-narrative-handler-registration"
                 OnceAtStart
@@ -1416,7 +1414,6 @@ module FactsCompose =
         // a scheduler registration, placed by the scheduler's own unit.
         Hosting.register
             services
-            serverConfig
             (BackgroundUnit.create "fact-coherence-check-scheduling" OnceAtStart (fun sp ->
                 { new Microsoft.Extensions.Hosting.IHostedService with
                     // The schedule calls are awaited here, in the hosted
@@ -2058,7 +2055,6 @@ module FactsCompose =
                 // scheduler's own unit.
                 Hosting.register
                     s
-                    app.Config
                     (BackgroundUnit.create "fact-publication-handler-registration" OnceAtStart (fun sp ->
                         Hosting.atStart (fun () ->
                             // Resolving the service here surfaces a

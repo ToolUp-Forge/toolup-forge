@@ -188,16 +188,7 @@ let private datadogPaths = [
 /// value a minimal deployment passes.
 let private composedRouter (config: ServerConfig) : HttpHandler list =
     let handlers =
-        BuildRouteHandlers.buildRouteHandlers
-            config
-            []
-            []
-            ComposeExtensions.empty
-            []
-            None
-            NoNotifications
-            (ref None)
-            (ref None)
+        BuildRouteHandlers.buildRouteHandlers config [] [] ComposeExtensions.empty [] None NoNotifications None None
 
     [ handlers.Router [] ]
 

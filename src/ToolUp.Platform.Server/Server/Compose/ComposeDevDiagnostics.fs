@@ -27,8 +27,8 @@ let buildDevDiagnosticsCapture
     (handlers: HttpHandler list)
     (extensions: ComposeExtensions)
     (effectiveNotifications: NotificationMode)
-    (persistentEventStoreInstance: PersistentEventStore.PersistentEventStore option ref)
-    (blobJobStoreInstance: JobStore.BlobJobStore option ref)
+    (persistentEventStore: PersistentEventStore.PersistentEventStore option)
+    (blobJobStore: JobStore.BlobJobStore option)
     (services: IServiceCollection)
     : DevDiagnosticsHandler.DevDiagnosticsCapture =
 
@@ -54,11 +54,11 @@ let buildDevDiagnosticsCapture
     // a `DevDiagnosticsHandler.IIndexConsistencyInspector`, which the
     // handler runs beside these (Phase 946).
     let inspectors = [
-        match persistentEventStoreInstance.Value with
+        match persistentEventStore with
         | Some s -> yield (fun (scopeId: string) -> s.IndexConsistencyCheck(scopeId, 20))
         | None -> ()
 
-        match blobJobStoreInstance.Value with
+        match blobJobStore with
         | Some s -> yield (fun (scopeId: string) -> s.IndexConsistencyCheck(scopeId, 20))
         | None -> ()
     ]

@@ -68,7 +68,6 @@ let registerLogStore
 
         Hosting.register
             services
-            config
             (BackgroundUnit.create "log-store-retention" ProcessLocal (fun _ ->
                 new SqliteLogStore.LogStoreRetentionService(logStore, storeConfig, resolvedLogger)
                 :> Microsoft.Extensions.Hosting.IHostedService))
@@ -97,7 +96,6 @@ let registerMetricsHistory (services: IServiceCollection) (config: ServerConfig)
     | EnabledMetricsHistory historyConfig ->
         Hosting.register
             services
-            config
             (BackgroundUnit.create "metrics-history-flusher" ProcessLocal (fun sp ->
                 new MetricsHistoryFlusher.MetricsHistoryFlusherService(sp, historyConfig, resolvedLogger)
                 :> Microsoft.Extensions.Hosting.IHostedService))

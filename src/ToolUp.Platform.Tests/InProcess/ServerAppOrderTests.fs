@@ -323,6 +323,8 @@ let tests =
             | Some configure -> configure services |> ignore
             | None -> failtest "the hosted contribution registers its record"
 
+            Hosting.admit services (ServerApp.effectiveConfig app) |> ignore
+
             Expect.hasLength (Hosting.records services) 1 "the unit is recorded"
 
             Expect.isFalse

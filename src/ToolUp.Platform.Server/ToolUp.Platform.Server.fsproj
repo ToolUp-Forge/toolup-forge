@@ -1385,6 +1385,7 @@
         <!-- Reference-app probe + validator list helpers. -->
         <Compile Include="Server\HealthChecksFromEnv.fs" />
         <Compile Include="Server\ConfigValidatorsFromEnv.fs" />
+        <Compile Include="Server\Compose\Substrate.fs" />
         <Compile Include="Server\Compose\ComposeExtensions.fs" />
         <Compile Include="Server\Compose\ConfigurePipeline.fs" />
         <!-- Tenant-lifecycle substrate (server tier). The

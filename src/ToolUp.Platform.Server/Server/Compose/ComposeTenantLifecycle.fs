@@ -138,7 +138,6 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         // registration, placed by the scheduler's own unit.
         Hosting.register
             services
-            config
             (BackgroundUnit.create "tenant-lifecycle-handler-registration" OnceAtStart (fun sp ->
                 Hosting.atStart (fun () ->
                     match sp.GetService(typeof<IJobScheduler>) with

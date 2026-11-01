@@ -1870,7 +1870,6 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // acknowledged writes, so every profile runs it.
                 Hosting.register
                     s
-                    config
                     (BackgroundUnit.create "rag-retrieval-store-flush" OnceAtStart (fun _ ->
                         new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService))
 
@@ -1961,7 +1960,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // embedding API N times for the same corpus).
                 let reembedding = BackgroundUnit.ofInstance "rag-reembedding" SharedWork reembedSvc
 
-                Hosting.register (Hosting.register s config ingestion) config reembedding
+                Hosting.register (Hosting.register s ingestion) reembedding
 
         // Phase 509.C — startup recovery sweep for the per-file ingestion
         // status. A restart mid-ingestion leaves the DURABLE status entry
@@ -2005,7 +2004,6 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // jobs a restart lost.
                 Hosting.register
                     (s.AddSingleton<IIngestionRecoverySurface>(ragSurface))
-                    config
                     (BackgroundUnit.create "rag-ingestion-recovery-sweep" OnceAtStart (fun sp ->
                         IngestionRecoverySweep.hostedService
                             ragLogger
@@ -2045,7 +2043,6 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 // whose own unit decides where it runs.
                 Hosting.register
                     s
-                    config
                     (BackgroundUnit.create "rag-tombstone-vacuum" OnceAtStart (fun (sp: System.IServiceProvider) ->
                         { new IHostedService with
                             member _.StartAsync(_ct) =

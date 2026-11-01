@@ -334,7 +334,6 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
             // the scheduler's own unit.
             Hosting.register
                 withPolicy
-                app.Config
                 (Hosting.deferredJobs "knowledge-base-retention-sweep" [
                     DeferredScheduledJobDeclaration.create (fun provider ->
                         ScheduledJobDeclaration.create

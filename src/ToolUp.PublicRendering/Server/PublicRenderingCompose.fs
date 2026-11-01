@@ -1562,7 +1562,6 @@ module PublicRenderingServerApp =
                             if indexNowOptions.SubmitOnStartup then
                                 Hosting.register
                                     s
-                                    config
                                     (BackgroundUnit.create "indexnow-startup-submission" OnceAtStart (fun sp ->
                                         let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
 
@@ -1594,7 +1593,6 @@ module PublicRenderingServerApp =
 
                                 Hosting.register
                                     s
-                                    config
                                     (BackgroundUnit.create
                                         (sprintf "indexnow-startup-submission:%s" safeName)
                                         OnceAtStart

@@ -268,7 +268,6 @@ let registerWebhookSubsystem
         // silo exists to isolate.
         Hosting.register
             services
-            config
             (BackgroundUnit.ofInstance "webhook-dispatcher" SharedWork dispatcher
              |> BackgroundUnit.outbound)
         |> ignore
@@ -279,11 +278,11 @@ let registerWebhookSubsystem
 /// `IJobScheduler` from DI then receive `null` and must handle absence
 /// explicitly.
 ///
-/// `blobJobStoreInstance` is populated here in the `InProcessJobScheduler`
-/// branch so the MaintenanceApi thunks (captured in `buildRouteHandlers`)
-/// can read it. `jobSchedulerCell` is populated so subsequent writes
-/// through the notify-wrapper see the scheduler and dispatch `OnEvent`
-/// triggers.
+/// `blobJobStore` is the store compose built for the `InProcessJobScheduler`
+/// case (the MaintenanceApi and `/dev/inspect` hold the same instance).
+/// The scheduler stage binds `jobScheduler`, so writes through the
+/// notify-wrapper — dormant until then — see the scheduler and dispatch
+/// `OnEvent` triggers.
 /// Phase 319 — find the deployment's own `IExternalComputeDispatcher` in
 /// the service collection, so the job scheduler can reconcile
 /// `JobResult.HandedOff` runs against it.
@@ -439,16 +438,18 @@ let registerJobScheduler
     (resolvedNotificationChannel: INotificationChannel)
     (resolvedLogger: ILogger)
     (resolvedActivitySink: IActivitySink)
-    (blobJobStoreInstance: JobStore.BlobJobStore option ref)
-    (jobSchedulerCell: IJobScheduler option ref)
+    (blobJobStore: JobStore.BlobJobStore option)
+    (jobScheduler: LateBound<IJobScheduler option>)
     (jobTriggerWatermark: JobTriggerWatermark.JobTriggerWatermark option)
     (distributedLock: IDistributedLock)
     : IJobScheduler option =
     match config.JobScheduler with
     | NoJobScheduler -> None
     | InProcessJobScheduler ->
-        let blobJobStore = JobStore.BlobJobStore(resolvedBlobStorage, eventStore)
-        blobJobStoreInstance.Value <- Some blobJobStore
+        let blobJobStore =
+            blobJobStore
+            |> Option.defaultWith (fun () -> JobStore.BlobJobStore(resolvedBlobStorage, eventStore))
+
         let jobStore = blobJobStore :> IJobStore
 
         // The deployment's external-compute backend, when it composed one.
@@ -487,7 +488,7 @@ let registerJobScheduler
                 ScopeCarrier = tryRegisteredInstance<ScopeCarrier> services
             }
 
-        jobSchedulerCell.Value <- Some(scheduler :> IJobScheduler)
+        jobScheduler.Bind(Some(scheduler :> IJobScheduler))
 
         services.AddSingleton<IJobStore>(jobStore) |> ignore
         services.AddSingleton<IJobScheduler>(scheduler :> IJobScheduler) |> ignore
@@ -521,7 +522,7 @@ let registerJobScheduler
         )
         |> ignore
 
-        Hosting.register services config (schedulerUnit scheduler) |> ignore
+        Hosting.register services (schedulerUnit scheduler) |> ignore
 
         Some(scheduler :> IJobScheduler)
 
@@ -549,7 +550,7 @@ let registerJobScheduler
 
             None
         | Some scheduler ->
-            jobSchedulerCell.Value <- Some scheduler
+            jobScheduler.Bind(Some scheduler)
 
             // Phase 935 — the companion redeems its jobs' scope tokens
             // through the deployment's carrier, as the default does.
@@ -571,7 +572,7 @@ let registerJobScheduler
             // surface without starting a dispatcher.
             match scheduler with
             | :? Microsoft.Extensions.Hosting.IHostedService as hosted ->
-                Hosting.register services config (schedulerUnit hosted) |> ignore
+                Hosting.register services (schedulerUnit hosted) |> ignore
             | _ -> ()
 
             Some scheduler
@@ -659,7 +660,6 @@ let registerDataIngestion
         // process convenience, not a correctness gate.
         Hosting.register
             services
-            config
             (BackgroundUnit.create "oauth-state-cleanup" SharedWork (fun _ ->
                 new OAuthStateCleanupService(oauthStateStore) :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
@@ -782,7 +782,6 @@ let registerOAuthRefresher
             // optimisation.
             Hosting.register
                 services
-                config
                 (BackgroundUnit.create "oauth-refresher-recover" SharedWork (fun _ ->
                     { new Microsoft.Extensions.Hosting.IHostedService with
                         member _.StartAsync(_ct) =
@@ -901,7 +900,6 @@ let registerModelFitting
             // handler registration, placed by the scheduler's own unit.
             Hosting.register
                 services
-                config
                 (BackgroundUnit.create "model-fit-handler-registration" OnceAtStart (fun sp ->
                     Hosting.atStart (fun () ->
                         let registry = sp.GetRequiredService<ModelFitProviderRegistry>()
@@ -1011,7 +1009,6 @@ let registerDataSubjectRequestJobs
             // scheduler's own unit.
             Hosting.register
                 services
-                config
                 (BackgroundUnit.create "dsr-handler-registration" OnceAtStart (fun sp ->
                     Hosting.atStart (fun () ->
                         let exporters =

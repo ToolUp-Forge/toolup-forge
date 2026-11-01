@@ -99,6 +99,11 @@ type ContributionKind =
     /// applied after the consumer's `ComposeExtensions` thunks at the same
     /// position, in plan order.
     | Middleware of MiddlewarePosition * (IApplicationBuilder -> IApplicationBuilder)
+    /// DI registrations that need values `compose` built — the event
+    /// store, the audit log, the notification channel — handed over as the
+    /// `Substrate` at the same fixed point as a `Service` contribution, so a
+    /// companion never builds a second container to find them.
+    | Staged of (Substrate -> IServiceCollection -> IServiceCollection)
 
 /// Phase 1052 — one contribution to a deployment. `Owner` is the
 /// contributing component's own `ComponentId` (GP 9: the contributor names
@@ -132,6 +137,11 @@ module Contribution =
     /// A `Service` contribution: `owner` registers `register`'s services.
     let service (owner: ComponentId) (register: IServiceCollection -> IServiceCollection) : Contribution =
         ofKind owner (Service register)
+
+    /// A `Staged` contribution: `owner` registers services built from the
+    /// substrate `compose` hands over.
+    let staged (owner: ComponentId) (register: Substrate -> IServiceCollection -> IServiceCollection) : Contribution =
+        ofKind owner (Staged register)
 
     /// A `Hosted` contribution: `owner` contributes the background `unit`.
     let hosted (owner: ComponentId) (unit: BackgroundUnit) : Contribution = ofKind owner (Hosted unit)

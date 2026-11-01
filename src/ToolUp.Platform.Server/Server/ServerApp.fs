@@ -1332,6 +1332,20 @@ type ServerApp = {
     /// order made. Folded onto `Config` once, by `effectiveConfig`, so a
     /// `withConfig` on either side of them keeps them.
     Overrides: ConfigOverride list
+    /// The companions composed onto the deployment, in the order added:
+    /// each is applied once, by `resolve`, to the deployment as every
+    /// builder left it, so a companion sees the final configuration, the
+    /// final module set and every builder's work whichever side of them it
+    /// was added. A companion is `ServerApp -> ServerApp`; it never wraps
+    /// the record.
+    Companions: CompanionTier list
+}
+
+/// One companion composed onto a deployment: its identity, and what it
+/// adds — applied by `ServerApp.resolve` to the finished deployment.
+and [<NoEquality; NoComparison>] CompanionTier = {
+    Owner: ComponentId
+    Apply: ServerApp -> ServerApp
 }
 
 module ServerApp =
@@ -1400,7 +1414,36 @@ module ServerApp =
         TeamOutputVisibility = None
         Contributions = []
         Overrides = []
+        Companions = []
     }
+
+    /// **Sets** the companion `owner` composes: `apply` runs once, when the
+    /// deployment is resolved, over the deployment as the builders left it.
+    /// A second call with the same `owner` replaces the first in place.
+    let withCompanion (owner: ComponentId) (apply: ServerApp -> ServerApp) (app: ServerApp) : ServerApp =
+        let tier = { Owner = owner; Apply = apply }
+
+        {
+            app with
+                Companions =
+                    if app.Companions |> List.exists (fun t -> t.Owner = owner) then
+                        app.Companions |> List.map (fun t -> if t.Owner = owner then tier else t)
+                    else
+                        app.Companions @ [ tier ]
+        }
+
+    /// The deployment with every companion applied, in the order added, to
+    /// the deployment as the builders left it. A companion that composes
+    /// another is applied after it. Resolving a resolved deployment changes
+    /// nothing; `run`, `serviceConfig`, `effectiveConfig` and the manifest
+    /// all read the resolved deployment.
+    let rec resolve (app: ServerApp) : ServerApp =
+        match app.Companions with
+        | [] -> app
+        | tiers ->
+            tiers
+            |> List.fold (fun acc tier -> tier.Apply acc) { app with Companions = [] }
+            |> resolve
 
     /// Phase 1052 — **adds** a contribution. Contributions are applied by
     /// `run` in the order they were added, after the consumer's
@@ -1428,6 +1471,7 @@ module ServerApp =
     /// builder's write back through this, never off `app.Config` — which
     /// holds only what `withConfig` set.
     let effectiveConfig (app: ServerApp) : ServerConfig =
+        let app = resolve app
         let config = app.Overrides |> List.fold (fun config o -> o.Apply config) app.Config
 
         {
@@ -1445,6 +1489,8 @@ module ServerApp =
     /// the order added otherwise (`ContributionPlan.order`). An unmet
     /// requirement or a cycle refuses the composition, naming both ends.
     let contributionPlan (app: ServerApp) : Contribution list =
+        let app = resolve app
+
         match ContributionPlan.order app.Contributions with
         | Ok plan -> plan
         | Error refusal -> failwith (ContributionRefusal.describe refusal)
@@ -1475,14 +1521,16 @@ module ServerApp =
     /// app applies (reading `Extensions.ServiceConfig` alone misses every
     /// contribution).
     let serviceConfig (app: ServerApp) : (IServiceCollection -> IServiceCollection) option =
-        let config = effectiveConfig app
+        let app = resolve app
 
         contributionPlan app
         |> List.fold
             (fun acc contribution ->
                 match contribution.Kind with
                 | Service register -> ServiceConfig.append register acc
-                | Hosted unit -> ServiceConfig.append (fun services -> Hosting.register services config unit) acc
+                | Hosted unit -> ServiceConfig.append (fun services -> Hosting.register services unit) acc
+                | Staged register ->
+                    ServiceConfig.append (fun services -> register (Substrate.find services) services) acc
                 | Routes _
                 | Validator _
                 | Middleware _ -> acc)
@@ -1494,6 +1542,7 @@ module ServerApp =
     /// order. A later `withExtensions` therefore never discards what a
     /// builder or companion contributed.
     let composedExtensions (app: ServerApp) : ComposeExtensions =
+        let app = resolve app
         let plan = contributionPlan app
 
         let pick (choose: ContributionKind -> 'T list) =
@@ -1523,6 +1572,8 @@ module ServerApp =
     /// deployment's own (`withConfigValidator`), then every `Validator`
     /// contribution in plan order.
     let composedValidators (app: ServerApp) : ConfigValidation.IConfigValidator list =
+        let app = resolve app
+
         app.ConfigValidators
         @ (contributionPlan app
            |> List.choose (fun contribution ->
@@ -3321,6 +3372,7 @@ module ServerApp =
     /// populated; multi-impl lists contribute one entry per impl, keyed by
     /// the impl's own sub-id (sink `Name` / `Kind`), never its position.
     let compositionManifest (app: ServerApp) : CompositionManifest =
+        let app = resolve app
         let modules = app.ModuleComponentIds |> List.map CompositionManifest.moduleEntry
 
         let dataTypes =
@@ -3594,6 +3646,10 @@ module ServerApp =
     /// configs) and invoke the underlying `compose`. Returns the process exit
     /// code — `0` for graceful shutdown. Suitable as the body of an `[<EntryPoint>]`.
     let run (app: ServerApp) : int =
+        // Every companion is applied first, to the deployment as the
+        // builders left it; everything below reads the resolved deployment.
+        let app = resolve app
+
         // Phase 279 — fail fast on a duplicate module ComponentId before
         // anything binds. Identity collisions break every introspection /
         // telemetry-correlation surface that keys on the id, so they are a
@@ -4004,42 +4060,44 @@ module ServerApp =
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default
         // chains `RunBlocking()` to preserve `int` exit code semantics.
         let host =
-            compose
-                handlersWithCompositionInspector
-                app.DataTypes
-                config
-                app.Auth
-                extensions
-                app.Logger
-                app.Storage
-                app.Notifications
-                app.QueryHandlerRegistrations
-                app.DataTypeRegistrations
-                app.TransactionalSinks
-                app.HealthChecks
-                (composedValidators app)
-                app.EncryptionKeyResolver
-                app.EntityRegistrations
-                app.QuotaPolicy
-                app.MetricsSinks
-                app.AuditSinks
-                app.AuditReplicator
-                app.MetricRegistrations
-                app.ActivitySink
-                app.RateLimitDescriptors
-                app.SmokeTests
-                app.PendingInviteStore
-                app.SubjectMigrator
-                app.ShareTokenStoreDecorators
-                app.ModuleSurfaceDefaults
-                app.RouteSurfaceOverrides
-                app.ModuleRoutePrefixes
-                app.ScheduledJobs
-                app.StorageResilience
-                app.SecretResilience
-                app.SecretStore
-                app.SecretStorePreflightTimeout
-                app.DistributedLock
+            compose {
+                Handlers = handlersWithCompositionInspector
+                DataTypes = app.DataTypes
+                Config = config
+                AuthProvider = app.Auth
+                Extensions = extensions
+                Logger = app.Logger
+                BlobStorage = app.Storage
+                NotificationChannel = app.Notifications
+                QueryHandlers = app.QueryHandlerRegistrations
+                DataTypeRegistrations = app.DataTypeRegistrations
+                TransactionalSinks = app.TransactionalSinks
+                HealthChecks = app.HealthChecks
+                ConfigValidators = (composedValidators app)
+                EncryptionKeyResolver = app.EncryptionKeyResolver
+                EntityRegistrations = app.EntityRegistrations
+                QuotaPolicyOverride = app.QuotaPolicy
+                CompanionMetricsSinks = app.MetricsSinks
+                AuditSinks = app.AuditSinks
+                AuditReplicatorOptions = app.AuditReplicator
+                ModuleMetricRegistrations = app.MetricRegistrations
+                ActivitySinkOverride = app.ActivitySink
+                RateLimitDescriptors = app.RateLimitDescriptors
+                SmokeTests = app.SmokeTests
+                PendingInviteStoreOverride = app.PendingInviteStore
+                SubjectMigratorOverride = app.SubjectMigrator
+                ShareTokenStoreDecorators = app.ShareTokenStoreDecorators
+                ModuleSurfaceDefaults = app.ModuleSurfaceDefaults
+                RouteSurfaceOverrides = app.RouteSurfaceOverrides
+                ModuleRoutePrefixes = app.ModuleRoutePrefixes
+                ScheduledJobDeclarations = app.ScheduledJobs
+                StorageResilience = app.StorageResilience
+                SecretResilience = app.SecretResilience
+                SecretStore = app.SecretStore
+                SecretStorePreflightTimeout = app.SecretStorePreflightTimeout
+                DistributedLockOverride = app.DistributedLock
+                Contributions = contributionPlan app
+            }
 
         // Phase 801 — the remoting decode edge's coverage, one boot line:
         // how many of the API records this process mounted (every

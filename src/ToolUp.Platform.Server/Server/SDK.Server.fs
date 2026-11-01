@@ -73,6 +73,96 @@ let composeSecretStore
     |> Option.defaultWith (fun () -> FileSecretStore.FileSecretStore() :> Secrets.ISecretStore)
     |> applySecretResilience secretResilience
 
+/// What `compose` builds a deployment from: the plan `ServerApp.run`
+/// resolves — the deployment's final configuration (every override folded),
+/// its accumulated registrations, and its contributions in plan order
+/// (`Contributions`, already folded into `Extensions` and
+/// `ConfigValidators`, carried so the manifest and `/dev/inspect` can
+/// project them).
+[<NoEquality; NoComparison>]
+type CompositionPlan = {
+    Handlers: HttpHandler list
+    DataTypes: DataType list
+    Config: ServerConfig
+    AuthProvider: IAuthProvider option
+    Extensions: ComposeExtensions
+    Logger: ILogger option
+    BlobStorage: IBlobStorage option
+    NotificationChannel: INotificationChannel option
+    QueryHandlers: (string * ModuleQueryHandler) list
+    DataTypeRegistrations: (string * DataType) list
+    TransactionalSinks: INotificationSink list
+    HealthChecks: HealthChecks.IHealthCheck list
+    ConfigValidators: ConfigValidation.IConfigValidator list
+    EncryptionKeyResolver: IBlobEncryptionKeyResolver option
+    EntityRegistrations: (EntityStore.EntityRegistry -> unit) list
+    QuotaPolicyOverride: ITeamQuotaPolicy option
+    CompanionMetricsSinks: Metrics.IMetricsSink list
+    AuditSinks: IAuditSink list
+    AuditReplicatorOptions: AuditReplicatorOptions option
+    ModuleMetricRegistrations: Metrics.MetricRegistration list
+    ActivitySinkOverride: IActivitySink option
+    RateLimitDescriptors: RateLimitDescriptor list
+    SmokeTests: SmokeTests.ISmokeTest list
+    PendingInviteStoreOverride: IPendingInviteStore option
+    SubjectMigratorOverride: IAnonymousSessionMigrator option
+    ShareTokenStoreDecorators: (IShareTokenStore -> IShareTokenStore) list
+    ModuleSurfaceDefaults: (string * SurfaceRequirement) list
+    RouteSurfaceOverrides: ((string * string) * SurfaceRequirement) list
+    ModuleRoutePrefixes: (string * string) list
+    ScheduledJobDeclarations: ScheduledJobDeclaration list
+    StorageResilience: ResilienceMode
+    SecretResilience: ResilienceMode
+    SecretStore: Secrets.ISecretStore option
+    SecretStorePreflightTimeout: TimeSpan option
+    DistributedLockOverride: IDistributedLock option
+    Contributions: Contribution list
+}
+
+[<RequireQualifiedAccess>]
+module CompositionPlan =
+
+    /// A plan composing `config` and nothing else: no handlers, no
+    /// registrations, no contributions, the default substrate choices.
+    let ofConfig (config: ServerConfig) : CompositionPlan = {
+        Handlers = []
+        DataTypes = []
+        Config = config
+        AuthProvider = None
+        Extensions = ComposeExtensions.empty
+        Logger = None
+        BlobStorage = None
+        NotificationChannel = None
+        QueryHandlers = []
+        DataTypeRegistrations = []
+        TransactionalSinks = []
+        HealthChecks = []
+        ConfigValidators = []
+        EncryptionKeyResolver = None
+        EntityRegistrations = []
+        QuotaPolicyOverride = None
+        CompanionMetricsSinks = []
+        AuditSinks = []
+        AuditReplicatorOptions = None
+        ModuleMetricRegistrations = []
+        ActivitySinkOverride = None
+        RateLimitDescriptors = []
+        SmokeTests = []
+        PendingInviteStoreOverride = None
+        SubjectMigratorOverride = None
+        ShareTokenStoreDecorators = []
+        ModuleSurfaceDefaults = []
+        RouteSurfaceOverrides = []
+        ModuleRoutePrefixes = []
+        ScheduledJobDeclarations = []
+        StorageResilience = NoResilience
+        SecretResilience = NoResilience
+        SecretStore = None
+        SecretStorePreflightTimeout = None
+        DistributedLockOverride = None
+        Contributions = []
+    }
+
 /// Compose a list of pre-built Giraffe HttpHandlers into a Saturn application.
 /// When dataTypes is non-empty, the file management API is auto-injected.
 /// PlatformApi is always auto-injected (provides mode info and team management).
@@ -129,49 +219,42 @@ let composeSecretStore
 /// new SDK features land. Hidden from IntelliSense via
 /// `[<EditorBrowsable>]`.
 [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
-let compose
-    (handlers: HttpHandler list)
-    (dataTypes: DataType list)
-    (config: ServerConfig)
-    (authProvider: IAuthProvider option)
-    (extensions: ComposeExtensions)
-    (logger: ILogger option)
-    (blobStorage: IBlobStorage option)
-    (notificationChannel: INotificationChannel option)
-    (queryHandlers: (string * ModuleQueryHandler) list)
-    (dataTypeRegistrations: (string * DataType) list)
-    (transactionalSinks: INotificationSink list)
-    (healthChecks: HealthChecks.IHealthCheck list)
-    (configValidators: ConfigValidation.IConfigValidator list)
-    (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
-    (entityRegistrations: (EntityStore.EntityRegistry -> unit) list)
-    (quotaPolicyOverride: ITeamQuotaPolicy option)
-    (companionMetricsSinks: Metrics.IMetricsSink list)
-    (auditSinks: IAuditSink list)
-    (auditReplicatorOptions: AuditReplicatorOptions option)
-    (moduleMetricRegistrations: Metrics.MetricRegistration list)
-    (activitySinkOverride: IActivitySink option)
-    (rateLimitDescriptors: RateLimitDescriptor list)
-    (smokeTests: SmokeTests.ISmokeTest list)
-    (pendingInviteStoreOverride: IPendingInviteStore option)
-    (subjectMigratorOverride: IAnonymousSessionMigrator option)
-    (shareTokenStoreDecorators: (IShareTokenStore -> IShareTokenStore) list)
-    (moduleSurfaceDefaults: (string * SurfaceRequirement) list)
-    (routeSurfaceOverrides: ((string * string) * SurfaceRequirement) list)
-    // Phase 637 — `(moduleId, routePrefix)` attribution for opt-in
-    // module-visibility route hardening. Same declarations as
-    // `moduleSurfaceDefaults`, keyed by module rather than requirement.
-    (moduleRoutePrefixes: (string * string) list)
-    (scheduledJobDeclarations: ScheduledJobDeclaration list)
-    (storageResilience: ResilienceMode)
-    (secretResilience: ResilienceMode)
-    (secretStore: Secrets.ISecretStore option)
-    // Phase 1038 — `ServerApp.withSecretStorePreflightTimeout`; `None` lets
-    // the store's kind choose (`ConfigValidator.secretStorePreflightTimeout`).
-    (secretStorePreflightTimeout: TimeSpan option)
-    // `ServerApp.withDistributedLock`; `None` is the in-process default.
-    (distributedLockOverride: IDistributedLock option)
-    =
+let compose (plan: CompositionPlan) =
+    let handlers = plan.Handlers
+    let dataTypes = plan.DataTypes
+    let config = plan.Config
+    let authProvider = plan.AuthProvider
+    let extensions = plan.Extensions
+    let logger = plan.Logger
+    let blobStorage = plan.BlobStorage
+    let notificationChannel = plan.NotificationChannel
+    let queryHandlers = plan.QueryHandlers
+    let dataTypeRegistrations = plan.DataTypeRegistrations
+    let transactionalSinks = plan.TransactionalSinks
+    let healthChecks = plan.HealthChecks
+    let configValidators = plan.ConfigValidators
+    let encryptionKeyResolver = plan.EncryptionKeyResolver
+    let entityRegistrations = plan.EntityRegistrations
+    let quotaPolicyOverride = plan.QuotaPolicyOverride
+    let companionMetricsSinks = plan.CompanionMetricsSinks
+    let auditSinks = plan.AuditSinks
+    let auditReplicatorOptions = plan.AuditReplicatorOptions
+    let moduleMetricRegistrations = plan.ModuleMetricRegistrations
+    let activitySinkOverride = plan.ActivitySinkOverride
+    let rateLimitDescriptors = plan.RateLimitDescriptors
+    let smokeTests = plan.SmokeTests
+    let pendingInviteStoreOverride = plan.PendingInviteStoreOverride
+    let subjectMigratorOverride = plan.SubjectMigratorOverride
+    let shareTokenStoreDecorators = plan.ShareTokenStoreDecorators
+    let moduleSurfaceDefaults = plan.ModuleSurfaceDefaults
+    let routeSurfaceOverrides = plan.RouteSurfaceOverrides
+    let moduleRoutePrefixes = plan.ModuleRoutePrefixes
+    let scheduledJobDeclarations = plan.ScheduledJobDeclarations
+    let storageResilience = plan.StorageResilience
+    let secretResilience = plan.SecretResilience
+    let secretStore = plan.SecretStore
+    let secretStorePreflightTimeout = plan.SecretStorePreflightTimeout
+    let distributedLockOverride = plan.DistributedLockOverride
 
     // The deployment's cross-instance lease primitive, resolved FIRST so
     // every subsystem constructed eagerly below takes the same instance:
@@ -218,29 +301,6 @@ let compose
             config.JobScheduler
             (DeploymentConfig.hasMultiTeamSwitcher config)
             extensions.NotificationConsumers
-
-    // Typed cells for the concrete `PersistentEventStore` /
-    // `BlobJobStore` instances. `ref` (not `let mutable`) so
-    // `buildRouteHandlers` can capture them by reference for the
-    // MaintenanceApi thunks while the event-store / job-scheduler
-    // builders below populate them. Remain `None` when the deployment
-    // uses in-memory event store / no scheduler.
-    let persistentEventStoreInstance: PersistentEventStore.PersistentEventStore option ref =
-        ref None
-
-    let blobJobStoreInstance: JobStore.BlobJobStore option ref = ref None
-
-    let routeHandlers =
-        buildRouteHandlers
-            config
-            handlers
-            dataTypes
-            extensions
-            transactionalSinks
-            encryptionKeyResolver
-            effectiveNotifications
-            persistentEventStoreInstance
-            blobJobStoreInstance
 
     let serverPort =
         match Environment.GetEnvironmentVariable "SERVER_PORT" with
@@ -425,20 +485,18 @@ let compose
     // - PersistentBlobBacked: blob-backed append-only store using
     //   the registered IBlobStorage (LocalFileStorage on disk by
     //   default; Azure / S3 / GCS when the app opts in).
-    // The `persistentEventStoreInstance` cell is hoisted to the top
-    // of `compose` (alongside `blobJobStoreInstance`) so the
-    // MaintenanceApi handler and the /dev/inspect index inspector
-    // can both capture it via thunks. Populate here in the
-    // `PersistentBlobBacked` branch.
-    let innerEventStore: IEventStore =
+    // The persistent store is kept as a value: the MaintenanceApi handler
+    // and the /dev/inspect index inspector hold the same instance.
+    let persistentEventStore =
         match config.EventStore with
-        | InMemoryOnly -> InMemoryEventStore.InMemoryEventStore() :> _
+        | InMemoryOnly -> None
         | PersistentBlobBacked retention ->
-            let store =
-                PersistentEventStore.PersistentEventStore(resolvedBlobStorage, retention)
+            Some(PersistentEventStore.PersistentEventStore(resolvedBlobStorage, retention))
 
-            persistentEventStoreInstance.Value <- Some store
-            store :> _
+    let innerEventStore: IEventStore =
+        match persistentEventStore with
+        | Some store -> store :> _
+        | None -> InMemoryEventStore.InMemoryEventStore() :> _
 
     // Phase 6d / Phase 1g webhook subsystem. Registry + delivery log
     // are blob-backed against the registered `IBlobStorage`; the
@@ -480,19 +538,15 @@ let compose
     let effectiveInnerEventStore =
         effectiveInnerEventStore innerEventStore auditReplicatorSubsystem
 
-    // Phase 9v — chicken-and-egg break for the outbound rate limiter.
-    // The real `IRateLimiter` is constructed further down (after
-    // `auditLog` / `resolvedMetricsSink`, both of which transitively
-    // depend on the post-webhook event-store decorator chain), but the
-    // webhook dispatcher needs a stable reference now so its retry
-    // loop can call `Wait` per attempt. Mirrors the `jobSchedulerCell`
-    // pattern below: initialise with a pass-through (`NoOpRateLimiter`)
-    // so any `Wait` call during compose is silent; overwrite with the
-    // real instance once compose has built it. By the time the
-    // dispatcher's `BackgroundService.ExecuteAsync` actually invokes
-    // `Wait`, the cell holds the configured limiter.
-    let rateLimiterCell: IRateLimiter ref = ref (NoOpRateLimiter() :> IRateLimiter)
-    let rateLimiterLookup () = rateLimiterCell.Value
+    // The outbound rate limiter is built at a later stage than the webhook
+    // dispatcher that waits on it (the limiter needs the audit log and the
+    // metrics sink, which need the event-store chain the webhook decorator
+    // is part of). The dispatcher holds the slot; until the limiter's stage
+    // binds it, a `Wait` passes straight through.
+    let outboundRateLimiter =
+        LateBound<IRateLimiter>("outbound rate limiter", NoOpRateLimiter() :> IRateLimiter)
+
+    let rateLimiterLookup () = outboundRateLimiter.Current
 
     let webhookSubsystem =
         buildWebhookSubsystem
@@ -505,15 +559,14 @@ let compose
             rateLimiterLookup
             distributedLock
 
-    // Phase 9b — chicken-and-egg break for the job substrate. The
-    // notify-wrapper needs the scheduler to forward events to; the
-    // scheduler needs the (notifying) event store for its own
-    // emissions. Use a mutable cell that compose populates after
-    // constructing the scheduler — every Write *during compose*
-    // sees `None` and skips the notify, every Write *after compose*
-    // sees the registered scheduler and dispatches OnEvent triggers.
-    let jobSchedulerCell: IJobScheduler option ref = ref None
-    let jobSchedulerLookup () = jobSchedulerCell.Value
+    // The job scheduler and the job-notify event-store decorator need each
+    // other: the scheduler writes through the notifying store, and the
+    // store forwards events to the scheduler. The decorator holds the
+    // scheduler's slot and is dormant until the scheduler's stage binds it
+    // (a write during composition skips the notify).
+    let jobScheduler = LateBound<IJobScheduler option>("job scheduler", None)
+
+    let jobSchedulerLookup () = jobScheduler.Current
 
     // Phase 598 — one shared trigger watermark when the deployment
     // opted into event-trigger catch-up: `JobNotifyEventStore`
@@ -552,19 +605,13 @@ let compose
             jobSchedulerLookup
             jobTriggerWatermark
 
-    // Phase 114 — chicken-and-egg break for the audit-write-failure
-    // metric. The `EventStoreAuditLog` is constructed inside
-    // `buildNotificationStack` (below), but the resolved `IMetricsSink`
-    // is built further down (after `services` exists). Same pattern as
-    // `rateLimiterCell` / `jobSchedulerCell`: hand the audit log a
-    // reader over a cell holding a `NoOpMetricsSink` now; overwrite the
-    // cell with the resolved sink once compose builds it. The audit log
-    // reads the cell lazily and only on the failure path, so by the time
-    // a real write fails at runtime the cell holds the configured sink.
-    let metricsSinkCell: Metrics.IMetricsSink ref =
-        ref (Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink)
+    // The metrics sink depends on nothing composed after it, so it is built
+    // here, before the audit log whose write-failure counter it receives,
+    // and registered with the other observability services below.
+    let metricsSinks =
+        buildMetricsSink config companionMetricsSinks moduleMetricRegistrations resolvedLogger
 
-    let metricsSinkLookup () = metricsSinkCell.Value
+    let metricsSinkLookup () = fst metricsSinks
 
     // Build the notification-stack substrate (extracted to
     // `ComposeNotifications.buildNotificationStack`). Pre-DI
@@ -898,19 +945,7 @@ let compose
     // Returns the resolved `IMetricsSink` so the outbound rate
     // limiter downstream picks up the same instance.
     let resolvedMetricsSink =
-        registerMetricsAndObservability
-            services
-            config
-            companionMetricsSinks
-            moduleMetricRegistrations
-            resolvedActivitySink
-            resolvedLogger
-
-    // Phase 114 — populate the deferred metrics cell now that the real
-    // sink is resolved, so the audit log's write-failure counter
-    // (`toolup.audit.write_failures_total`) flows to the configured sink
-    // instead of the bootstrap no-op.
-    metricsSinkCell.Value <- resolvedMetricsSink
+        registerMetricsAndObservability services metricsSinks resolvedActivitySink
 
     // Core SDK singleton registrations (extracted to
     // `ComposeRuntimeServices.registerCoreSdkSingletons`).
@@ -948,10 +983,9 @@ let compose
     registerCrdtDocumentStore services notificationStack.CrdtDocumentStore
 
     // Phase 9v — outbound `IRateLimiter` registration (extracted to
-    // `ComposeRuntimeServices.registerOutboundRateLimiter`). Populates
-    // `rateLimiterCell` so the webhook dispatcher's per-attempt `Wait`
-    // calls (registered above with `rateLimiterLookup`) see the
-    // configured limiter instead of the pass-through default.
+    // `ComposeRuntimeServices.registerOutboundRateLimiter`). This stage
+    // binds `outboundRateLimiter`, so the webhook dispatcher's per-attempt
+    // `Wait` sees the configured limiter instead of the dormant pass-through.
     let rateLimiter =
         registerOutboundRateLimiter
             services
@@ -960,7 +994,7 @@ let compose
             resolvedMetricsSink
             auditLog
             resolvedLogger
-            rateLimiterCell
+            outboundRateLimiter
 
     // Phase 6h follow-up — SSE `IDevDiagnosticsContributor` (extracted
     // to `ComposeRuntimeServices.registerSseDevDiagnosticsContributor`).
@@ -1025,9 +1059,14 @@ let compose
     registerAlertRuleEngine services config resolvedNotificationChannel resolvedLogger
 
     // Phase 9b — opt-in job scheduler (extracted to
-    // `ComposeJobs.registerJobScheduler`). Populates `jobSchedulerCell`
-    // so subsequent writes through the notify-wrapper forward to the
-    // scheduler.
+    // `ComposeJobs.registerJobScheduler`). This stage binds `jobScheduler`,
+    // so writes through the notify-wrapper forward to the scheduler.
+    let blobJobStore =
+        match config.JobScheduler with
+        | InProcessJobScheduler -> Some(JobStore.BlobJobStore(resolvedBlobStorage, eventStore))
+        | NoJobScheduler
+        | QuartzJobScheduler _ -> None
+
     let jobSchedulerInstance =
         registerJobScheduler
             services
@@ -1037,10 +1076,23 @@ let compose
             resolvedNotificationChannel
             resolvedLogger
             resolvedActivitySink
-            blobJobStoreInstance
-            jobSchedulerCell
+            blobJobStore
+            jobScheduler
             jobTriggerWatermark
             distributedLock
+
+    // The routes are built once the stores they inspect exist.
+    let routeHandlers =
+        buildRouteHandlers
+            config
+            handlers
+            dataTypes
+            extensions
+            transactionalSinks
+            encryptionKeyResolver
+            effectiveNotifications
+            persistentEventStore
+            blobJobStore
 
     // Phase 10 — opt-in data ingestion (extracted to
     // `ComposeJobs.registerDataIngestion`). Includes the Phase 10b
@@ -1253,6 +1305,25 @@ let compose
     // `ServerApp.run` this is the consumer's own `ServiceConfig` followed by
     // every contribution on the app, in the order added
     // (`ServerApp.serviceConfig`), then the platform's run-time families.
+    // Every stage is built: hand the substrate to the staged contributions,
+    // which read it at this fixed point (`Contribution.staged`).
+    Substrate.register
+        {
+            Config = config
+            Storage = resolvedBlobStorage
+            SecretStore = secretStore
+            Logger = resolvedLogger
+            EventStore = eventStore
+            AuditLog = auditLog
+            Notifications = resolvedNotificationChannel
+            MetricsSink = resolvedMetricsSink
+            RateLimiter = rateLimiter
+            JobScheduler = jobSchedulerInstance
+            ActivitySink = resolvedActivitySink
+        }
+        services
+    |> ignore
+
     match extensions.ServiceConfig with
     | Some cfg -> cfg services |> ignore
     | None -> ()
@@ -1293,6 +1364,13 @@ let compose
         moduleRoutePrefixes
         subjectMigratorOverride
 
+    // Every unit of background work is registered by now — the SDK's own,
+    // the consumer's and every contribution's. Admission is decided here,
+    // once, against the deployment's final configuration (`Hosting.admit`),
+    // so no registration site's view of the configuration decides whether
+    // its unit runs.
+    Hosting.admit services config |> ignore
+
     // Phase 9a — capture the `IServiceCollection` descriptors before
     // `Build()` (extracted to
     // `ComposeDevDiagnostics.buildDevDiagnosticsCapture`). The capture
@@ -1306,8 +1384,8 @@ let compose
             handlers
             extensions
             effectiveNotifications
-            persistentEventStoreInstance
-            blobJobStoreInstance
+            persistentEventStore
+            blobJobStore
             services
 
     let devRoutes = routeHandlers.DevDiagnosticsRoutes devDiagnosticsCapture

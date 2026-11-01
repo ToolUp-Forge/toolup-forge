@@ -149,7 +149,9 @@ let composedWith (durableQueue: bool) (config: ServerConfig) : IServiceCollectio
         storage
         None
 
-    services
+    // Admission is decided once, against the final configuration — the
+    // step `compose` runs after every registration.
+    Hosting.admit services config
 
 /// The composition over the historical in-process ingestion queue.
 let composed (config: ServerConfig) : IServiceCollection = composedWith false config

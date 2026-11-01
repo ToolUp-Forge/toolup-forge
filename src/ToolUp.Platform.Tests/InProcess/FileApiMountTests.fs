@@ -71,8 +71,8 @@ let private composedRouter (dataTypes: DataType list) : HttpHandler list =
             []
             None
             NoNotifications
-            (ref None)
-            (ref None)
+            None
+            None
 
     [ handlers.Router [] ]
 

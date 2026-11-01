@@ -522,7 +522,6 @@ let registerTransactionalDispatcher
         // silo exists to isolate.
         Hosting.register
             services
-            config
             (BackgroundUnit.ofInstance "transactional-dispatcher" SharedWork dispatcher
              |> BackgroundUnit.outbound)
         |> ignore
@@ -571,7 +570,6 @@ let registerAuditFallbackReplay
     | EnabledAuditLog, DegradeToFile ->
         Hosting.register
             services
-            config
             (BackgroundUnit.create "audit-fallback-replay" SharedWork (fun _ ->
                 let root =
                     config.AuditFallbackDirectory
