@@ -14,8 +14,8 @@ open ToolUp.AI.SystemPromptBuilder
 open ToolUp.AI.DefaultAIProviderFactory
 
 // Phase 1h reference composition root — Forms AND AI on the same
-// `ServerApp` pipeline via the additive `withForms` / `withAI`
-// extensions. See `samples/FormsAndAI/README.md` for the demo's scope
+// `ServerApp` pipeline via the `withForms` / `withAI`
+// companions. See `samples/FormsAndAI/README.md` for the demo's scope
 // (compile-target sample; not directly runnable without
 // `TOOLUP_ENTITY_STORE` enabled + a real `IAIProvider` companion).
 
@@ -120,20 +120,14 @@ let main _ =
     |> ServerApp.withConfig config
     |> ServerApp.withLogger logger
     |> ServerApp.withStorage blobStorage
-    |> ToolUp.Forms.FormsCompose.withForms (fun f ->
-        f
-        |> ToolUp.Forms.FormsCompose.FormsServerApp.withFormSchema demoSchema
-        |> ToolUp.Forms.FormsCompose.FormsServerApp.withWorkflow demoWorkflow
-        |> ToolUp.Forms.FormsCompose.FormsServerApp.withAction "stampSubmission" stampSubmission)
+    |> ToolUp.Forms.FormsCompose.withForms (
+        ToolUp.Forms.FormsCompose.FormsOptions.create ()
+        |> ToolUp.Forms.FormsCompose.FormsOptions.withFormSchema demoSchema
+        |> ToolUp.Forms.FormsCompose.FormsOptions.withWorkflow demoWorkflow
+        |> ToolUp.Forms.FormsCompose.FormsOptions.withAction "stampSubmission" stampSubmission
+    )
     |> ToolUp.AI.AICompose.withAI (
         ToolUp.AI.AICompose.AIOptions.create aiFactory providerProfile
         |> ToolUp.AI.AICompose.AIOptions.withAIConfig aiAssistantConfig
     )
-    // |> ToolUp.Forms.FormsCompose.withForms (fun f -> f)
-    //   ^ Phase 1h conflict validator — uncomment to see the
-    //     compose-time failure:
-    //       "ToolUp.Forms: companion already composed on this
-    //        ServerApp pipeline. ..."
-    //     instead of the pre-Phase-1h cascading
-    //     duplicate-entity-registration / double-mounted-route errors.
     |> ServerApp.run

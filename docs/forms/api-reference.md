@@ -254,7 +254,7 @@ module ActionLedger =
 
 ### `IFormApi` (`module ToolUp.Forms.FormApi`)
 
-The authenticated ToolUp.Remoting wire contract. Mounted by `FormsServerApp.run` at `/api/IFormApi/<MethodName>`.
+The authenticated ToolUp.Remoting wire contract. Mounted by `FormsCompose.withForms` at `/api/IFormApi/<MethodName>`.
 
 ```fsharp skip=signature
 open System
@@ -600,16 +600,15 @@ module FormValidator =
 
 ### `IActionLedger` impls
 
-- **`InMemoryActionLedger`** (`module ToolUp.Forms.InMemoryActionLedger`) — process-local thread-safe dictionary. Auto-defaulted by `FormsServerApp.run` when no explicit ledger is wired. Correct for dev / single-process deployments; does NOT survive a process restart.
-- **Distributed impls** — supply via `FormsServerApp.withActionLedger`; conformance against the `IActionLedgerContract` test pack is the bar.
+- **`InMemoryActionLedger`** (`module ToolUp.Forms.InMemoryActionLedger`) — process-local thread-safe dictionary. Auto-defaulted by `FormsCompose.withForms` when no explicit ledger is wired. Correct for dev / single-process deployments; does NOT survive a process restart.
+- **Distributed impls** — supply via `FormsOptions.withActionLedger`; conformance against the `IActionLedgerContract` test pack is the bar.
 
-### `FormsServerApp` (`module ToolUp.Forms.FormsCompose`)
+### `FormsOptions` + `withForms` (`module ToolUp.Forms.FormsCompose`)
 
-`FormsServerApp` wraps a base `ServerApp` and adds the form-specific compose helpers.
+Forms is a companion composed onto a `ServerApp`. `FormsOptions` holds the form-specific compose-time registrations; `withForms options` sets the companion, which is composed once, when the deployment resolves. Every `ServerApp` builder (`withConfig`, `withAuth`, `addModules`, …) works on either side of it.
 
 ```fsharp skip=signature
-type FormsServerApp = {
-    Base: ServerApp
+type FormsOptions = {
     Schemas: Map<FormSchemaId, FormSchema>
     Workflows: Map<WorkflowId, WorkflowDefinition>
     CustomValidators: CustomValidatorRegistry
@@ -618,55 +617,38 @@ type FormsServerApp = {
     AnalyserCache: IAnalyserCache option
     ActionLedger: IActionLedger option
     ActionPolicies: Map<string, ActionFailurePolicy>
+    ShareTokenRateLimiter: IShareTokenRateLimiter option
 }
 
-module FormsServerApp =
-    val create : unit -> FormsServerApp
+module FormsOptions =
+    val create : unit -> FormsOptions
 
-    // Delegating helpers (every `ServerApp.with*`).
-    val withConfig : ServerConfig -> FormsServerApp -> FormsServerApp
-    val withAuth : IAuthProvider -> FormsServerApp -> FormsServerApp
-    val withLogger : ILogger -> FormsServerApp -> FormsServerApp
-    val withStorage : IBlobStorage -> FormsServerApp -> FormsServerApp
-    val withNotifications : INotificationChannel -> FormsServerApp -> FormsServerApp
-    val withTransactionalSink : INotificationSink -> FormsServerApp -> FormsServerApp
-    val withHealthCheck : IHealthCheck -> FormsServerApp -> FormsServerApp
-    val withConfigValidator : IConfigValidator -> FormsServerApp -> FormsServerApp
-    val withEncryptedBlobStorage : IBlobEncryptionKeyResolver -> FormsServerApp -> FormsServerApp
-    val withEntity<'T> : EntityRegistration<'T> -> FormsServerApp -> FormsServerApp
-    val withPreMiddleware :
-        (IApplicationBuilder -> IApplicationBuilder) -> FormsServerApp -> FormsServerApp
-    val withPostMiddleware :
-        (IApplicationBuilder -> IApplicationBuilder) -> FormsServerApp -> FormsServerApp
-    val addModule : ServerModule -> FormsServerApp -> FormsServerApp
-    val addModules : ServerModule list -> FormsServerApp -> FormsServerApp
-
-    // Forms-specific helpers.
     /// Register a compose-time default schema available in every
     /// scope. Boot-time rejection of duplicate `FieldSchema.Key`.
-    val withFormSchema : FormSchema -> FormsServerApp -> FormsServerApp
+    val withFormSchema : FormSchema -> FormsOptions -> FormsOptions
 
-    val withWorkflow : WorkflowDefinition -> FormsServerApp -> FormsServerApp
+    val withWorkflow : WorkflowDefinition -> FormsOptions -> FormsOptions
 
     val withCustomValidator :
-        name: string -> CustomValidator -> FormsServerApp -> FormsServerApp
+        name: string -> CustomValidator -> FormsOptions -> FormsOptions
 
     val withGuard :
-        name: string -> WorkflowGuard -> FormsServerApp -> FormsServerApp
+        name: string -> WorkflowGuard -> FormsOptions -> FormsOptions
 
     val withAction :
-        name: string -> WorkflowAction -> FormsServerApp -> FormsServerApp
+        name: string -> WorkflowAction -> FormsOptions -> FormsOptions
 
-    val withAnalyserCache : IAnalyserCache -> FormsServerApp -> FormsServerApp
+    val withAnalyserCache : IAnalyserCache -> FormsOptions -> FormsOptions
 
-    val withActionLedger : IActionLedger -> FormsServerApp -> FormsServerApp
+    val withActionLedger : IActionLedger -> FormsOptions -> FormsOptions
     val withActionPolicy :
         actionName: string ->
         policy: ActionFailurePolicy ->
-        FormsServerApp ->
-        FormsServerApp
+        FormsOptions ->
+        FormsOptions
+    val withShareTokenRateLimiter : IShareTokenRateLimiter -> FormsOptions -> FormsOptions
 
-    val run : FormsServerApp -> int
+val withForms : FormsOptions -> ServerApp -> ServerApp
 ```
 
 ### `DefaultedFormStore`
@@ -676,11 +658,11 @@ Decorator over `IFormStore` that overlays compose-time-registered schemas as sco
 1. Inner `IFormStore` — if a schema exists with the requested `FormSchemaId` in scope, return it.
 2. Compose-time registered defaults — if the inner store returned `NotFound`, fall back to the matching default schema (provided its version is requested or no version was specified).
 
-Tenants get override capability for free; deployments without per-tenant overrides see the compose-time default. `SaveSchema` always writes to the inner store. Wired automatically by `FormsServerApp.run`.
+Tenants get override capability for free; deployments without per-tenant overrides see the compose-time default. `SaveSchema` always writes to the inner store. Wired automatically by `FormsCompose.withForms`.
 
 ### `PublishableFormConfigValidator`
 
-`IConfigValidator` impl. Emits `Warning` when a Publishable schema lacks `PublicBaseUrl` / `ShareTokenStore` / `INotificationSink`. Registered automatically by `FormsServerApp.run`. See [concepts.md](concepts.md).
+`IConfigValidator` impl. Emits `Warning` when a Publishable schema lacks `PublicBaseUrl` / `ShareTokenStore` / `INotificationSink`. Registered automatically by `FormsCompose.withForms`. See [concepts.md](concepts.md).
 
 ### `IFormSubmissionAnalyser` (extension stub)
 
@@ -695,7 +677,7 @@ type IFormSubmissionAnalyser =
             Async<AnalyserOutput option>
 ```
 
-No default impl ships. Consumers register custom analysers in the DI container; `FormsServerApp.run` resolves the list per-request and composes them. `IAnalyserCache` memoises the results across calls.
+No default impl ships. Consumers register custom analysers in the DI container; `FormsCompose.withForms` resolves the list per-request and composes them. `IAnalyserCache` memoises the results across calls.
 
 ## `ToolUp.Forms.Client`
 
@@ -783,7 +765,7 @@ Each event carries actor (`AuthenticatedUser` or `InvitedRespondent`), schema id
 
 ## HTTP endpoints
 
-Auto-injected by `FormsServerApp.run`:
+Auto-injected by `FormsCompose.withForms`:
 
 - `POST /api/IFormApi/*` — every `IFormApi` method.
 - `POST /api/public/forms/*` — every `IPublicFormApi` method (anonymous route — exempt from auth middleware).
@@ -796,7 +778,7 @@ The browser-facing `/r/{token}` route for `PublicEmbed` is owned by the consumer
 - `ServerConfig.AuditLogMode = EnabledAuditLog` — required for audit emission.
 - `ServerConfig.ShareTokenStore = EnabledShareTokenStore { Secret = ... }` — required for `Publishable` schemas.
 - `ServerConfig.PublicBaseUrl = Some "https://my-app.example.com"` — required for `IssueTokens` URL composition.
-- `ServerConfig.AnonymousRoutePrefixes` — `/api/public/forms/` is appended automatically by `FormsServerApp.run`.
+- `ServerConfig.AnonymousRoutePrefixes` — `/api/public/forms/` is appended automatically by `FormsCompose.withForms`.
 
 ## Conformance test packs
 

@@ -55,9 +55,10 @@ Wire:
 // `IBookingScheduler` out of `RequestServices` per request.
 services.AddSingleton<IBookingScheduler>(redisLockedScheduler)
 
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withConfig config
-|> SchedulingServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withScheduling (SchedulingOptions.create ())
+|> ServerApp.run
 ```
 
 Run `IBookingSchedulerContract` against your impl to verify conformance.
@@ -221,10 +222,10 @@ External events come back as **bookings** on the linked resource, so they block 
 Composition is one call per provider; a deployment that never makes it registers no link entities, builds no sync engine and schedules no job (GP 13):
 
 ```fsharp
-let withMirroring (app: SchedulingServerApp) (bridge: ToolUp.Scheduling.ICalendarBridge.ICalendarBridge) =
+let withMirroring (app: ServerApp) (bridge: ToolUp.Scheduling.ICalendarBridge.ICalendarBridge) =
     app
-    |> SchedulingServerApp.withConfig config
-    |> SchedulingServerApp.withCalendarBridge bridge
+    |> ServerApp.withConfig config
+    |> withScheduling (SchedulingOptions.create () |> SchedulingOptions.withCalendarBridge bridge)
 ```
 
 A resource is then linked through the sync engine, naming the provider by its `Kind`, the external calendar, the user whose credentials authorise the mirror, and the conflict policy:
@@ -325,13 +326,14 @@ type WaitListPromoter(schedulingApi: ISchedulingApi) =
 Register it against the event the scheduler writes — `SchedulingEvents.BookingCancelled`, under `SourceModule = "_scheduling"`:
 
 ```fsharp
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withJobHandler (
+ServerApp.empty
+|> ServerApp.withJobHandler (
     "wait-list-promoter",
     WaitListPromoter(schedulingApi) :> IJobHandler,
     OnEvent SchedulingEvents.BookingCancelled
 )
-|> SchedulingServerApp.run
+|> withScheduling (SchedulingOptions.create ())
+|> ServerApp.run
 ```
 
 The wait-list itself is a custom entity store; the `OnEvent` job drives the promotion logic.

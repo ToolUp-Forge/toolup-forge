@@ -129,12 +129,12 @@ let settings = {
 
 let bridge = GoogleCalendarBridge(tokens, secretStore, settings)
 
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withConfig config
-|> SchedulingServerApp.withCalendarBridge bridge
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withScheduling (SchedulingOptions.create () |> SchedulingOptions.withCalendarBridge bridge)
 |> withChannelRenewal bridge [ "team-a"; "team-b" ] (Trigger.CronTrigger DefaultRenewalCron)
-|> SchedulingServerApp.withHealthCheck (GoogleCalendarBridgeHealth(tokens, settings, "_platform", "rooms"))
-|> SchedulingServerApp.run
+|> ServerApp.withHealthCheck (GoogleCalendarBridgeHealth(tokens, settings, "_platform", "rooms"))
+|> ServerApp.run
 ```
 
 Mount `GoogleCalendarChannels.handler` (a Giraffe `HttpHandler`, `POST`) at the

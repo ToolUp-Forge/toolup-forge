@@ -262,50 +262,47 @@ let renewalDeclaration
                     member _.Execute _ = async {
                         return
                             JobResult.PermanentFailure
-                                "Microsoft Graph subscription renewal needs the calendar sync engine — compose the bridge with SchedulingServerApp.withCalendarBridge"
+                                "Microsoft Graph subscription renewal needs the calendar sync engine — compose the bridge with SchedulingOptions.withCalendarBridge"
                     }
                 }
 
         ScheduledJobDeclaration.create RenewalHandlerName jobHandler trigger
         |> ScheduledJobDeclaration.withScopes scopes)
 
-/// Compose the subscription-renewal job onto a scheduling app. Pair with
-/// `SchedulingServerApp.withCalendarBridge` for the same bridge — or use
+/// **Adds** the subscription-renewal job to the deployment. Pair with
+/// `SchedulingOptions.withCalendarBridge` for the same bridge — or use
 /// `compose`, which does both.
 let withSubscriptionRenewal
     (bridge: ICalendarBridge)
     (scopes: string list)
     (trigger: Trigger)
-    (app: SchedulingServerApp)
-    : SchedulingServerApp =
+    (app: ServerApp)
+    : ServerApp =
     // Once at start: it hands the renewal job to the scheduler, whose own
     // unit decides where the job runs.
     let renewal =
         Hosting.deferredJobs "microsoft-graph-subscription-renewal" [ renewalDeclaration bridge scopes trigger ]
 
-    {
-        app with
-            Base =
-                app.Base
-                |> ServerApp.addContribution (
-                    Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Microsoft") renewal
-                )
-    }
+    app
+    |> ServerApp.addContribution (
+        Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Microsoft") renewal
+    )
 
 /// Compose the Microsoft Graph bridge and — when it declares change
 /// notifications — the hourly subscription-renewal job over `scopes`. A
 /// polling-only bridge needs no renewal: the sync engine's own poll job
 /// drives it, so nothing extra is registered (GP 13). The notification
-/// route is NOT mounted here; see `handler`.
+/// route is NOT mounted here; see `handler`. The bridge joins the
+/// scheduling companion's options; the renewal job joins the deployment.
 let compose
     (bridge: MicrosoftGraphCalendarBridge)
     (scopes: string list)
-    (app: SchedulingServerApp)
-    : SchedulingServerApp =
+    (app: ServerApp, scheduling: SchedulingOptions)
+    : ServerApp * SchedulingOptions =
     let asBridge = bridge :> ICalendarBridge
-    let withBridge = SchedulingServerApp.withCalendarBridge asBridge app
+    let withBridge = SchedulingOptions.withCalendarBridge asBridge scheduling
 
     if asBridge.Capabilities.SupportsWebhooks then
-        withSubscriptionRenewal asBridge scopes (Trigger.CronTrigger DefaultRenewalCron) withBridge
+        withSubscriptionRenewal asBridge scopes (Trigger.CronTrigger DefaultRenewalCron) app, withBridge
     else
-        withBridge
+        app, withBridge

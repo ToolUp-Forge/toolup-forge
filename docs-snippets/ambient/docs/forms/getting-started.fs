@@ -42,7 +42,7 @@ module PageAmbient =
     let npsSchema: FormSchema = failwith "ambient"
 
     /// What the composition root already holds by the time it reaches
-    /// `FormsServerApp`.
+    /// the Forms companion.
     let authProvider: IAuthProvider = failwith "ambient"
 
     let modules: ServerModule list = failwith "ambient"

@@ -691,7 +691,7 @@ type private Reply = {
 }
 
 /// The Google Calendar `ICalendarBridge`. Construct one per deployment
-/// and compose it with `SchedulingServerApp.withCalendarBridge`.
+/// and compose it with `SchedulingOptions.withCalendarBridge`.
 ///
 /// `tokens` resolves the bearer token per call (see
 /// `GoogleCalendarTokenSource`); `secretStore` holds the per-link sync

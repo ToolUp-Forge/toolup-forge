@@ -138,7 +138,7 @@ Three SDK helpers — `BundleConstants`, `ClientConfigDefaults.fromBundleConstan
 
 ## Combining companions on one pipeline
 
-The pipeline above composes one companion. When the deployment needs **two or more** companion surfaces side-by-side — e.g. Forms with a `WorkflowDefinition` AND an AI assistant — stack the additive `withForms` / `withAI` extensions on the same single `ServerApp` pipeline:
+The pipeline above composes one companion. When the deployment needs **two or more** companion surfaces side-by-side — e.g. Forms with a `WorkflowDefinition` AND an AI assistant — compose the `withForms` / `withAI` companions on the same single `ServerApp` pipeline:
 
 ```fsharp
 open ToolUp.Platform
@@ -151,11 +151,12 @@ ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withLogger logger
 |> ServerApp.withStorage blobStorage
-|> FormsCompose.withForms (fun f ->
-    f
-    |> FormsServerApp.withFormSchema mySchema
-    |> FormsServerApp.withWorkflow myWorkflow
-    |> FormsServerApp.withAction "stampJob" stampJobAction)
+|> FormsCompose.withForms (
+    FormsOptions.create ()
+    |> FormsOptions.withFormSchema mySchema
+    |> FormsOptions.withWorkflow myWorkflow
+    |> FormsOptions.withAction "stampJob" stampJobAction
+)
 |> AICompose.withAI (
     AIOptions.create factory providerProfile
     |> AIOptions.withAIConfig aiAssistantConfig
@@ -164,9 +165,9 @@ ServerApp.empty
 |> ServerApp.run
 ```
 
-The pipeline reads top-down: substrate setup on the outer `ServerApp`, then each companion contributes its own config, then `ServerApp.run` drives the final composition. The AI companion takes an `AIOptions` record carrying only AI knobs; `withAI` sets the companion, and the AI tier is composed once, when the deployment resolves, onto the deployment as every builder left it — so a `ServerApp.withX` builder reaches it whichever side of `withAI` it sits. The Forms configurator should call only companion-specific helpers (`FormsServerApp.withFormSchema` / etc.); the delegating helpers (`withConfig` / `withAuth` / `withStorage` / …) exist on the inner type for backward compatibility but calling them overwrites the outer pipeline's existing configuration — set base configuration on the outer pipeline before invoking `withForms`.
+The pipeline reads top-down: substrate setup on the `ServerApp`, then each companion's own options, then `ServerApp.run` drives the final composition. Every companion — AI, RAG, MCP, Forms, Scheduling, the asset store, the media library, public rendering, the peer substrate, algorithms, passkeys, SCIM — takes an options record carrying only its own knobs, and its `withX` sets the companion with `ServerApp.withCompanion`. The companion is composed once, when the deployment resolves, onto the deployment as every builder left it, so a `ServerApp.withX` builder reaches it whichever side of `withX` it sits.
 
-**DI access in workflow guards / actions.** `WorkflowGuard` / `WorkflowAction` receive a `WorkflowContext` record carrying the resolved `IServiceProvider` (an earlier signature took `Submission * AccessContext` and predated combinable composition roots). Actions registered via `FormsServerApp.withAction` resolve `IEntityStore` / `INotificationChannel` / any DI-registered service directly:
+**DI access in workflow guards / actions.** `WorkflowGuard` / `WorkflowAction` receive a `WorkflowContext` record carrying the resolved `IServiceProvider` (an earlier signature took `Submission * AccessContext` and predated combinable composition roots). Actions registered via `FormsOptions.withAction` resolve `IEntityStore` / `INotificationChannel` / any DI-registered service directly:
 
 ```fsharp skip=fragment
 let stampSubmission: WorkflowAction =
@@ -178,9 +179,9 @@ let stampSubmission: WorkflowAction =
     }
 ```
 
-The provider is resolved per `IWorkflowEngine.Apply` invocation, so actions safely capture transient services without leaking lifetimes across calls. Production deployments using `FormsServerApp.run` (the single-companion terminal shape) pick this up transparently — no consumer change beyond updating guards / actions from the tuple shape to the `WorkflowContext` shape. See [`../migrations/01h-combinable-composition-roots.md`](../migrations/01h-combinable-composition-roots.md) for the consumer-side diff.
+The provider is resolved per `IWorkflowEngine.Apply` invocation, so actions safely capture transient services without leaking lifetimes across calls. See [`../migrations/01h-combinable-composition-roots.md`](../migrations/01h-combinable-composition-roots.md) for the consumer-side diff.
 
-**Companion-conflict diagnostics.** Calling `withForms` (or any opted-in companion's compose seam) twice on the same pipeline fails fast at compose time with a single-line diagnostic:
+**One companion, one slot.** A second `withForms` (or any `withX`) replaces the first, so put every schema / workflow / action in one `FormsOptions`. `withRAG` claims the AI slot — RAG composes the AI tier itself, so an earlier `withAI` is superseded by the RAG options' AI tier and a later one is refused when the deployment resolves. A companion's compose seam applied by hand to a deployment it was already composed onto fails fast with a single-line diagnostic:
 
 ```
 ToolUp.Forms: companion already composed on this ServerApp pipeline.
@@ -192,8 +193,6 @@ single call (e.g. one withForms invocation that builds up every
 schema/workflow/action), or rebuild the pipeline from
 ServerApp.empty.
 ```
-
-Before the explicit validator landed, the same misuse surfaced as a duplicate-entity-registration crash deep inside `compose` or a route-double-mount at first request; the validator catches it at the second `withForms` call. AI and RAG are companion slots: a second `withAI` (or `withRAG`) replaces the first, and `withRAG` claims the AI slot — RAG composes the AI tier itself, so an earlier `withAI` is superseded by the RAG options' AI tier and a later one is refused when the deployment resolves. Scheduling / Asset / PublicRendering still rely on their existing duplicate-detection paths (metric-sink construction / DI-singleton replace / route-double-mount); they may opt in to the same marker convention in a follow-up.
 
 **RAG.** `RAGCompose.withRAG` takes a `RagOptions` record and stacks on the same pipeline as `withForms`. A RAG deployment does not also call `withAI`: the AI tier's settings ride `RagOptions` (`RagOptions.withAIConfig`, `RagOptions.withModuleAIContexts`, or `RagOptions.withAIOptions` to set the whole `AIOptions` record).
 

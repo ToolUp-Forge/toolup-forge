@@ -20,7 +20,7 @@ open ToolUp.PublicRendering
 // (wired by a deployment as a recurring `IJobScheduler` job).
 
 /// Name of the registered approval guard. A deployment registers the
-/// predicate via `FormsServerApp.withGuard ContentLifecycle.approveGuard
+/// predicate via `FormsOptions.withGuard ContentLifecycle.approveGuard
 /// (fun ctx -> ...)`, gating who may approve / unpublish / archive
 /// (GP 4 — role-gated transitions).
 ///
@@ -37,7 +37,7 @@ let approveGuard = "content:can-approve"
 
 /// The canonical editorial workflow: `draft → in-review → published`,
 /// with unpublish / archive / restore. Register with
-/// `FormsServerApp.withWorkflow ContentLifecycle.editorialWorkflow`.
+/// `FormsOptions.withWorkflow ContentLifecycle.editorialWorkflow`.
 let editorialWorkflow: WorkflowDefinition = {
     Id = "content-editorial"
     InitialState = "draft"

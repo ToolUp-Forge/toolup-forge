@@ -46,7 +46,7 @@ open ToolUp.Platform.ConfigValidation
 
 /// Refuses (Error) / warns on the in-memory `IShareTokenRateLimiter`
 /// paired with a scale-out-shaped deployment. The escape hatch is a
-/// distributed limiter (`FormsServerApp.withShareTokenRateLimiter` over
+/// distributed limiter (`FormsOptions.withShareTokenRateLimiter` over
 /// a Redis / `IRateLimitStore`-backed companion) or
 /// `ServerConfig.AcceptInMemoryShareTokenRateLimiterInMultiInstance =
 /// true`.
@@ -84,14 +84,14 @@ type ShareTokenRateLimiterDistributionValidator
                     return
                         Error(
                             sprintf
-                                "ServerConfig.ReplicaCount = %d with the in-memory IShareTokenRateLimiter (IsDistributed = false). Each per-token sliding window is held in a process-local dictionary, so every replica enforces ShareTokenRateLimit.MaxUses independently — a leaked share-token's effective per-window cap across the deployment is %d× the configured value. Wire a distributed limiter via FormsServerApp.withShareTokenRateLimiter (a Redis / IRateLimitStore-backed companion, Phase 56) so per-token windows are shared across replicas, run a single instance, or set ServerConfig.AcceptInMemoryShareTokenRateLimiterInMultiInstance = true (TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE=1) if share-token traffic is pinned to one replica or the N× burst is knowingly accepted. The absolute persisted UseLimit cap still holds. After fixing, verify in the HealthMonitorUI Preflight tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                                "ServerConfig.ReplicaCount = %d with the in-memory IShareTokenRateLimiter (IsDistributed = false). Each per-token sliding window is held in a process-local dictionary, so every replica enforces ShareTokenRateLimit.MaxUses independently — a leaked share-token's effective per-window cap across the deployment is %d× the configured value. Wire a distributed limiter via FormsOptions.withShareTokenRateLimiter (a Redis / IRateLimitStore-backed companion, Phase 56) so per-token windows are shared across replicas, run a single instance, or set ServerConfig.AcceptInMemoryShareTokenRateLimiterInMultiInstance = true (TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE=1) if share-token traffic is pinned to one replica or the N× burst is knowingly accepted. The absolute persisted UseLimit cap still holds. After fixing, verify in the HealthMonitorUI Preflight tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                                 config.ReplicaCount
                                 config.ReplicaCount
                         )
                 elif inferredScaleOut then
                     return
                         Warning(
-                            "ServerConfig.PublicBaseUrl is set (a public share-link surface) with the in-memory IShareTokenRateLimiter (IsDistributed = false). ReplicaCount = 1 today, so per-token rate limits are exact — but if this deployment is ever scaled out behind a load balancer, each replica will enforce ShareTokenRateLimit.MaxUses independently and a leaked token's effective per-window cap becomes N× the configured value. Before scaling out, wire a distributed limiter via FormsServerApp.withShareTokenRateLimiter (Redis / IRateLimitStore-backed). Set ServerConfig.AcceptInMemoryShareTokenRateLimiterInMultiInstance = true to silence this notice once the topology is confirmed single-instance."
+                            "ServerConfig.PublicBaseUrl is set (a public share-link surface) with the in-memory IShareTokenRateLimiter (IsDistributed = false). ReplicaCount = 1 today, so per-token rate limits are exact — but if this deployment is ever scaled out behind a load balancer, each replica will enforce ShareTokenRateLimit.MaxUses independently and a leaked token's effective per-window cap becomes N× the configured value. Before scaling out, wire a distributed limiter via FormsOptions.withShareTokenRateLimiter (Redis / IRateLimitStore-backed). Set ServerConfig.AcceptInMemoryShareTokenRateLimiterInMultiInstance = true to silence this notice once the topology is confirmed single-instance."
                         )
                 else
                     return Ok

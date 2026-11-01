@@ -6,7 +6,7 @@ module ToolUp.Forms.Workflow
 // ─── Phase 21 — Forms companion workflow types ──────────────────────
 //
 // Small state-machine primitive over named transitions. Workflows are
-// registered server-side via `FormsServerApp.withWorkflow`; the client
+// registered server-side via `FormsOptions.withWorkflow`; the client
 // only sees state names + transition events for badge rendering.
 //
 // Departure from the design spec: `Guard` and `Action` are name-keyed
@@ -49,14 +49,14 @@ type Transition = {
     /// `IEntityStore`, `INotificationChannel`, etc. directly).
     /// Actions run after persistence; the action ledger (Phase 21d)
     /// guards exactly-once invocation, and the per-action failure
-    /// policy registered via `FormsServerApp.withActionPolicy` decides
+    /// policy registered via `FormsOptions.withActionPolicy` decides
     /// whether an exception aborts the transition, dead-letters the
     /// invocation, or is logged best-effort.
     Action: string option
 }
 
 /// A complete workflow. Registered at compose time via
-/// `FormsServerApp.withWorkflow`; immutable thereafter for the
+/// `FormsOptions.withWorkflow`; immutable thereafter for the
 /// lifetime of the process.
 type WorkflowDefinition = {
     Id: WorkflowId
@@ -71,7 +71,7 @@ type WorkflowDefinition = {
 //
 // Per-action policy controlling what happens when a workflow action
 // throws. Registered alongside actions via
-// `FormsServerApp.withActionPolicy actionName policy`. Actions
+// `FormsOptions.withActionPolicy actionName policy`. Actions
 // without an explicit policy use the engine default (`DeadLetter`).
 // The pre-21d "swallow + warn" posture is opt-in under `LogOnly` —
 // callers migrating from Phase 21 who want to preserve byte-for-byte

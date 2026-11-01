@@ -5,7 +5,7 @@ open ToolUp.Platform.Metrics
 // ─── Phase 21d — Workflow-action outcome metric registrations ──────
 //
 // The `WorkflowEngine` emits one `Increment` per action outcome
-// through `IMetricsSink`. Wired through `FormsCompose.run` into
+// through `IMetricsSink`. Wired through `FormsCompose.withForms` into
 // `ServerApp.MetricRegistrations` so `PrometheusMetricsSink` /
 // `OtelMetricsSink` pre-allocate the series at compose time and
 // emissions flow rather than silently drop. Same pattern as
@@ -19,7 +19,7 @@ open ToolUp.Platform.Metrics
 [<Literal>]
 let ActionOutcomeTotal = "toolup.forms.workflow.action.outcome"
 
-/// SDK-owned forms-action registrations. Wired by `FormsCompose.run`
+/// SDK-owned forms-action registrations. Wired by `FormsCompose.withForms`
 /// into `ServerApp.MetricRegistrations` so any Forms-using
 /// deployment has the counter declared the moment it composes — no
 /// consumer opt-in needed.

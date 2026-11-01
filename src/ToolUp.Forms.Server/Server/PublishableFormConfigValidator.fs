@@ -12,7 +12,7 @@ open ToolUp.Forms.FormSchema
 // coherent. Catches the two most common operator misconfigurations:
 //
 //   1. A `Publishable` form schema is registered (via
-//      `FormsServerApp.withFormSchema`) but `ServerConfig.PublicBaseUrl`
+//      `FormsOptions.withFormSchema`) but `ServerConfig.PublicBaseUrl`
 //      is `None` — `IssueTokens` will fail at runtime with "PublicBaseUrl
 //      not set"; surfacing the same fact at startup means operators see
 //      it before respondents try to load the link.

@@ -97,7 +97,7 @@ let formApi
     (notificationChannel: INotificationChannel option)
     /// Phase 21b (slice 6) — passed through for synthesised-respondent
     /// address-book writes. Always `Some` for any deployment that
-    /// uses `FormsServerApp` (the base SDK requires `IBlobStorage`),
+    /// composes the Forms companion (the base SDK requires `IBlobStorage`),
     /// but typed `option` here lets the handler refuse cleanly if
     /// somehow absent rather than null-ref'ing.
     (blobStorage: IBlobStorage option)

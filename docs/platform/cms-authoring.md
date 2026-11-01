@@ -108,7 +108,7 @@ side:
   `draft → in-review → published` (+ unpublish / archive / restore), with
   the approval transitions guarded by the registered `approveGuard`
   predicate (role-gating, GP 4). Register with
-  `FormsServerApp.withWorkflow` / `withGuard`.
+  `FormsOptions.withWorkflow` / `withGuard`.
 - Pure transitions — `publishAt` / `schedule` / `archive` / `toDraft`,
   and `statusForState` mapping a workflow state to a `PublishStatus`.
 - `runScheduledPublishSweep store actor now` — promotes every `Scheduled`-and-due

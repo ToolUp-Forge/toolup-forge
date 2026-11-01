@@ -1023,7 +1023,7 @@ type ServerConfig = {
     /// Default `false` — `ShareTokenRateLimiterDistributionValidator`
     /// refuses startup when `ReplicaCount > 1`. The fix is wiring a
     /// distributed companion (Redis / `IRateLimitStore`-backed, Phase
-    /// 56) via `FormsServerApp.withShareTokenRateLimiter`. Set `true`
+    /// 56) via `FormsOptions.withShareTokenRateLimiter`. Set `true`
     /// (or `TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE=1`)
     /// only when the deployment pins share-token traffic to one replica,
     /// or knowingly accepts the `N × MaxUses` burst (the absolute

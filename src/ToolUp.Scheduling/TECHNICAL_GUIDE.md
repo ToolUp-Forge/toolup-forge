@@ -113,12 +113,12 @@ These are the known boundaries. Each is a single-bullet "follow-up" rather than 
 - **Multi-day bookings** — `BookingConflictDetector` checks only the start date's local window. Bookings that span midnight are not v1.
 - **Wrapping availability windows** (night shifts, `EndTime <= StartTime`) — treated as "fits any time on this day". No false-positive conflicts but no enforcement on true mid-night-gap bookings either.
 - **Owner/Admin gating on writes** — the v1 handler treats every authenticated user as a writer. `AccessContext` carries the role bits; tightening the handler to consult them is a single-line change once a deployment concretely needs it.
-- **Reminder fusion** — `SchedulingServerApp.withReminders` is a no-op flag in v1. The plumbing for one-off `IJobScheduler` jobs exists already; wiring is a follow-up.
+- **Reminder fusion** — `SchedulingOptions.withReminders` is a no-op flag in v1. The plumbing for one-off `IJobScheduler` jobs exists already; wiring is a follow-up.
 - **Range queries on `(ResourceId, StartUtc)` compound** — the compound index is registered but `ListBookings` filters in memory after the `ResourceId` index hit. Phase 19a's relational layer would need range predicates on compound keys to lift this; today it only matches `And`-of-`Eq`.
 - **iCalendar X-property preservation** — silently dropped on parse, never emitted. A round-trip-stable encoding for `Booking.Metadata` via `X-TOOLUP-META-*` is a follow-up.
 - **Multi-resource booking** — one booking → many resources is not v1. Caller composes via N parallel single-resource bookings; if many fail, caller handles rollback.
 - **Full RFC 5545** — VTODO / VJOURNAL / VFREEBUSY / VTIMEZONE definitions / positional `BYDAY` / `BYMONTHDAY` / `BYSETPOS` / sub-day frequencies are out of scope. CalDAV companion can extend later.
-- **`ServerConfig.EntityStore = EnabledEntityStore` enforcement** — `SchedulingServerApp.run` doesn't validate that the user enabled the entity store. Forgetting yields a null-reference at first dispatch. Explicit fail-loud-at-compose-time is a follow-up.
+- **`ServerConfig.EntityStore = EnabledEntityStore` enforcement** — `withScheduling` doesn't validate that the user enabled the entity store. Forgetting yields a null-reference at first dispatch. Explicit fail-loud-at-compose-time is a follow-up.
 
 ## Test surface
 

@@ -193,7 +193,7 @@ let classifyStatus (status: HttpStatusCode) (body: string) : BridgeError =
 // ─── The bridge ─────────────────────────────────────────────────────
 
 /// Generic CalDAV `ICalendarBridge`. Construct one per deployment and
-/// compose it with `SchedulingServerApp.withCalendarBridge`.
+/// compose it with `SchedulingOptions.withCalendarBridge`.
 ///
 /// `handler` is the transport. The parameterless-transport constructor
 /// builds the platform's own egress-policy-wrapped client, which is

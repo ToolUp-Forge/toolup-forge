@@ -251,7 +251,7 @@ module ConflictPolicy =
 ///
 /// Implementations are stateless adapters: construct one per process,
 /// per provider, at compose time and register it with
-/// `SchedulingServerApp.withCalendarBridge`. Registration is keyed by
+/// `SchedulingOptions.withCalendarBridge`. Registration is keyed by
 /// `Kind`, so a deployment composes at most one bridge per provider and
 /// a duplicate is refused at compose time naming the contested kind.
 type ICalendarBridge =

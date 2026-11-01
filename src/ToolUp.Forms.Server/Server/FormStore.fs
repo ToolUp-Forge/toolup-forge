@@ -51,7 +51,7 @@ let private ListSchemasFailedIdSampleLimit = 5
 
 /// SDK-owned metric registrations for `FormStore` so deployment-side
 /// sinks pre-allocate the series at compose time. Wired through
-/// `FormsCompose.run` into `ServerApp.MetricRegistrations`. Same
+/// `FormsCompose.withForms` into `ServerApp.MetricRegistrations`. Same
 /// pattern as `ActionLedgerMetrics.registrations`.
 let metricRegistrations: MetricRegistration list = [
     {

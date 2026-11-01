@@ -154,15 +154,21 @@ open ToolUp.Scheduling.SchedulingCompose
 let settings = MicrosoftGraphCalendarSettings.fromEnv ()
 let bridge = MicrosoftGraphCalendarBridge(secretStore, refresher, settings)
 
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withConfig config
-|> MicrosoftGraphSubscriptions.compose bridge [ "team-a"; "team-b" ]   // the scopes that link calendars
-|> SchedulingServerApp.withHealthCheck
+// The bridge joins the scheduling options; the renewal job joins the deployment.
+let app, scheduling =
+    MicrosoftGraphSubscriptions.compose
+        bridge
+        [ "team-a"; "team-b" ]   // the scopes that link calendars
+        (ServerApp.empty |> ServerApp.withConfig config, SchedulingOptions.create ())
+
+app
+|> withScheduling scheduling
+|> ServerApp.withHealthCheck
     (MicrosoftGraphCalendarBridgeHealth(secretStore, refresher, settings, "_platform", "calendar-probe"))
-|> SchedulingServerApp.run
+|> ServerApp.run
 ```
 
-`compose` is `SchedulingServerApp.withCalendarBridge` plus, when notifications are on, the
+`compose` is `SchedulingOptions.withCalendarBridge` plus, when notifications are on, the
 renewal job. A polling-only bridge is driven by the sync engine's own poll job and adds nothing
 else (GP 13). Link a resource through the sync engine with `kind = "Microsoft"` and the Graph
 calendar id as the external calendar id.

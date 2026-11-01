@@ -1512,22 +1512,22 @@ let private subscriptionTests =
         test "compose registers the bridge and, with notifications on, the renewal job" {
             let f = fixtureWith webhookSettings
 
-            let composed =
+            let composedApp, composed =
                 ToolUp.Calendar.MicrosoftGraphSubscriptions.compose
                     f.Bridge
                     [ "team-a" ]
-                    (SchedulingServerApp.create ())
+                    (ServerApp.empty, SchedulingOptions.create ())
 
             Expect.equal (composed.CalendarBridges |> List.map _.Kind) [ KindName ] "the bridge is composed"
-            Expect.isSome (ServerApp.serviceConfig composed.Base) "the renewal hosted service is registered"
+            Expect.isSome (ServerApp.serviceConfig composedApp) "the renewal hosted service is registered"
 
-            let polling =
+            let pollingApp, _ =
                 ToolUp.Calendar.MicrosoftGraphSubscriptions.compose
                     (fixtureWith settings).Bridge
                     [ "team-a" ]
-                    (SchedulingServerApp.create ())
+                    (ServerApp.empty, SchedulingOptions.create ())
 
-            Expect.isNone (ServerApp.serviceConfig polling.Base) "a polling-only bridge adds nothing (GP 13)"
+            Expect.isNone (ServerApp.serviceConfig pollingApp) "a polling-only bridge adds nothing (GP 13)"
         }
     ]
 

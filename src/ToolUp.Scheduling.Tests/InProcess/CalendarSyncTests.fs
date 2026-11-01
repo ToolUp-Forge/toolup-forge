@@ -79,19 +79,18 @@ let tests =
 
         testList "compose" [
             test "a deployment that composes no bridge has none" {
-                let app = SchedulingServerApp.create ()
+                let app = SchedulingOptions.create ()
                 Expect.isEmpty app.CalendarBridges "no bridge is composed by default"
 
                 Expect.isNone
                     app.CalendarPollTrigger
-                    "no poll trigger is declared by default — `run` short-circuits the whole calendar block, so nothing is registered, built or scheduled"
+                    "no poll trigger is declared by default — the companion skips the whole calendar block, so nothing is registered, built or scheduled"
             }
 
             test "composing a bridge records it in order" {
                 let bridge = InMemoryCalendarBridge [ CalendarId ] :> ICalendarBridge
 
-                let app =
-                    SchedulingServerApp.create () |> SchedulingServerApp.withCalendarBridge bridge
+                let app = SchedulingOptions.create () |> SchedulingOptions.withCalendarBridge bridge
 
                 Expect.equal (List.length app.CalendarBridges) 1 "one bridge composed"
                 Expect.equal app.CalendarBridges.Head.Kind "InMemory" "and it is the one composed"
@@ -99,9 +98,9 @@ let tests =
 
             test "two bridges of different kinds both compose" {
                 let app =
-                    SchedulingServerApp.create ()
-                    |> SchedulingServerApp.withCalendarBridge (InMemoryCalendarBridge [ CalendarId ])
-                    |> SchedulingServerApp.withCalendarBridge (SecondBridge())
+                    SchedulingOptions.create ()
+                    |> SchedulingOptions.withCalendarBridge (InMemoryCalendarBridge [ CalendarId ])
+                    |> SchedulingOptions.withCalendarBridge (SecondBridge())
 
                 Expect.equal
                     (app.CalendarBridges |> List.map _.Kind)
@@ -111,9 +110,9 @@ let tests =
 
             test "a second bridge of the same kind is refused, naming the kind" {
                 let compose () =
-                    SchedulingServerApp.create ()
-                    |> SchedulingServerApp.withCalendarBridge (InMemoryCalendarBridge [ CalendarId ])
-                    |> SchedulingServerApp.withCalendarBridge (InMemoryCalendarBridge [ CalendarId ])
+                    SchedulingOptions.create ()
+                    |> SchedulingOptions.withCalendarBridge (InMemoryCalendarBridge [ CalendarId ])
+                    |> SchedulingOptions.withCalendarBridge (InMemoryCalendarBridge [ CalendarId ])
                     |> ignore
 
                 let ex = Expect.throws compose "a duplicate kind must be refused at compose"
@@ -122,8 +121,8 @@ let tests =
 
             test "the poll trigger is overridable" {
                 let app =
-                    SchedulingServerApp.create ()
-                    |> SchedulingServerApp.withCalendarPollTrigger (CronTrigger "*/5 * * * *")
+                    SchedulingOptions.create ()
+                    |> SchedulingOptions.withCalendarPollTrigger (CronTrigger "*/5 * * * *")
 
                 Expect.equal app.CalendarPollTrigger (Some(CronTrigger "*/5 * * * *")) "the override is recorded"
             }
@@ -131,6 +130,34 @@ let tests =
             test "the default poll cron is a valid five-field expression" {
                 let fields = DefaultCalendarPollCron.Split ' '
                 Expect.equal fields.Length 5 "a standard five-field cron"
+            }
+
+            test "builders applied after withScheduling reach the resolved app and the scheduling tier" {
+                let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+                let app =
+                    ServerApp.empty
+                    |> withScheduling (
+                        SchedulingOptions.create ()
+                        |> SchedulingOptions.withCalendarBridge (InMemoryCalendarBridge [ CalendarId ])
+                    )
+                    |> ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            ReplicaCount = 2
+                    }
+                    |> ServerApp.withLogger logger
+
+                let resolved = ServerApp.resolve app
+
+                Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+                Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+
+                Expect.equal
+                    (ServerApp.composedExtensions app).Handlers.Length
+                    (ServerApp.empty.Extensions.Handlers.Length + 1)
+                    "the scheduling tier contributed its API handler"
+
+                Expect.isSome (ServerApp.serviceConfig app) "and its registrations"
             }
         ]
 

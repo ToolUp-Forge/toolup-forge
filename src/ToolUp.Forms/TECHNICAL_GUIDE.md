@@ -155,7 +155,7 @@ The SDK ships only the primitives; navigation between surveys (sidebar entries, 
 
 ### Compose-time wiring summary
 
-For the public-survey surface, `FormsCompose.run` performs three
+For the public-survey surface, `FormsCompose.withForms` performs three
 additional setup steps beyond the baseline schema-storage wiring:
 
 1. Registers `/api/public/forms/` as an anonymous route via `ServerApp.withAnonymousRoute` so `AuthEnforcementMiddleware` lets unauthenticated submissions through
@@ -185,7 +185,7 @@ A few shapes ship differently from the textbook "predicates as closures" pattern
   transitions** — opt-in via `withTransactionalSink`; concrete
   dispatch deferred. Mirrors Scheduling's `withReminders` no-op
   shipping pattern.
-- **`FormsServerApp.withCustomValidator` / `withGuard` / `withAction`**
+- **`FormsOptions.withCustomValidator` / `withGuard` / `withAction`**
   added to the compose root (not in the spec) so callers register
   predicates without subclassing.
 - **`DefaultedFormStore` decorator** on `IFormStore` overlays

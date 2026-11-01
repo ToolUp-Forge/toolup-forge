@@ -45,9 +45,10 @@ let private dummyClaim: ShareTokenClaim = {
 }
 
 let private composedFormsApp () : ServerApp =
-    FormsServerApp.create ()
-    |> FormsServerApp.withConfig anonymousConfig
-    |> FormsServerApp.composeForms
+    ServerApp.empty
+    |> withForms (FormsOptions.create ())
+    |> ServerApp.withConfig anonymousConfig
+    |> ServerApp.resolve
 
 let tests =
     testList "Phase 66 Stream B.6 — Forms public-submit surface declarations" [
@@ -144,5 +145,43 @@ let tests =
             match SurfaceEnforcement.evaluate teamMember req with
             | Reject(403, "team_member_not_admitted", None) -> ()
             | other -> failtestf "team member: expected 403 team_member_not_admitted, got %A" other
+        }
+        test "builders applied after withForms reach the resolved app and the Forms tier" {
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> withForms (FormsOptions.create ())
+                |> ServerApp.withConfig {
+                    anonymousConfig with
+                        ReplicaCount = 2
+                        PublicBaseUrl = Some "https://forms.example.com"
+                }
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
+
+            Expect.contains resolved.ComposedCompanions "ToolUp.Forms" "the Forms tier is composed"
+            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+
+            Expect.equal
+                (ServerApp.composedExtensions app).Handlers.Length
+                (ServerApp.empty.Extensions.Handlers.Length + 2)
+                "the Forms tier contributed its two API handlers"
+        }
+
+        test "a second withForms replaces the first rather than composing Forms twice" {
+            let resolved =
+                ServerApp.empty
+                |> withForms (FormsOptions.create ())
+                |> withForms (FormsOptions.create ())
+                |> ServerApp.withConfig anonymousConfig
+                |> ServerApp.resolve
+
+            Expect.equal
+                (resolved.ComposedCompanions |> List.filter ((=) "ToolUp.Forms"))
+                [ "ToolUp.Forms" ]
+                "Forms is composed once"
         }
     ]

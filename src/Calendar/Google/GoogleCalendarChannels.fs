@@ -140,35 +140,24 @@ let renewalDeclaration (bridge: ICalendarBridge) (scopes: string list) (trigger:
                     member _.Execute _ = async {
                         return
                             JobResult.PermanentFailure
-                                "Google channel renewal needs the calendar sync engine — compose the bridge with SchedulingServerApp.withCalendarBridge"
+                                "Google channel renewal needs the calendar sync engine — compose the bridge with SchedulingOptions.withCalendarBridge"
                     }
                 }
 
         ScheduledJobDeclaration.create RenewalHandlerName handler trigger
         |> ScheduledJobDeclaration.withScopes scopes)
 
-/// Compose the renewal job onto a scheduling app. Pair with
-/// `SchedulingServerApp.withCalendarBridge` for the same bridge; a bridge
+/// **Adds** the renewal job to the deployment. Pair with
+/// `SchedulingOptions.withCalendarBridge` for the same bridge; a bridge
 /// with no webhook address needs neither this nor a route.
-let withChannelRenewal
-    (bridge: ICalendarBridge)
-    (scopes: string list)
-    (trigger: Trigger)
-    (app: SchedulingServerApp)
-    : SchedulingServerApp =
+let withChannelRenewal (bridge: ICalendarBridge) (scopes: string list) (trigger: Trigger) (app: ServerApp) : ServerApp =
     // Once at start: it hands the renewal job to the scheduler, whose own
     // unit decides where the job runs.
     let renewal =
         Hosting.deferredJobs "google-calendar-channel-renewal" [ renewalDeclaration bridge scopes trigger ]
 
-    {
-        app with
-            Base =
-                app.Base
-                |> ServerApp.addContribution (
-                    Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Google") renewal
-                )
-    }
+    app
+    |> ServerApp.addContribution (Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Google") renewal)
 
 // ─── The notification route ─────────────────────────────────────────
 

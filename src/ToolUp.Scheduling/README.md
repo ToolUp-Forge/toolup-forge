@@ -19,7 +19,7 @@ Shipped surface (commit-stable across Phase 20):
 | Pure conflict detection | [`Server/BookingConflictDetector.fs`](Server/BookingConflictDetector.fs) | `detect`, `DetectorInputs` |
 | Default impl | [`Server/BookingScheduler.fs`](Server/BookingScheduler.fs) | `BookingScheduler` over `IEntityStore` + `IEventStore` |
 | API handler | [`Server/SchedulingApiHandler.fs`](Server/SchedulingApiHandler.fs) | `schedulingApi` ToolUp.Remoting handler |
-| Compose pipeline | [`Server/SchedulingCompose.fs`](Server/SchedulingCompose.fs) | `SchedulingServerApp` record + `run` |
+| Compose pipeline | [`Server/SchedulingCompose.fs`](Server/SchedulingCompose.fs) | `SchedulingOptions` + `withScheduling` |
 
 ## Why a companion, not core SDK
 
@@ -55,15 +55,16 @@ let config = {
 
 [<EntryPoint>]
 let main _ =
-    SchedulingServerApp.create ()
-    |> SchedulingServerApp.withConfig config
-    |> SchedulingServerApp.withAuth (StaticJwtAuthProvider(...))
-    |> SchedulingServerApp.withStorage (LocalFileStorage("data"))
-    |> SchedulingServerApp.addModules myModules
-    |> SchedulingServerApp.run
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withAuth (StaticJwtAuthProvider(...))
+    |> ServerApp.withStorage (LocalFileStorage("data"))
+    |> ServerApp.addModules myModules
+    |> SchedulingCompose.withScheduling (SchedulingOptions.create ())
+    |> ServerApp.run
 ```
 
-`SchedulingServerApp.run`:
+`SchedulingCompose.withScheduling`, when the deployment resolves:
 1. Registers three entity types with `IEntityStore` via `ServerApp.withEntity`:
    - `BookableResource` (index on `ResourceType`)
    - `Booking` (indexes on `ResourceId`, `Status`, compound `(ResourceId, StartUtc)`)
@@ -103,12 +104,15 @@ scheduler.RegisterResource("team-acme", alice)
 
 ## How to configure reminders
 
-Reminder fusion is **opt-in** and currently a no-op flag (`SchedulingServerApp.withReminders`). When the feature lands, the consumer enables it via:
+Reminder fusion is **opt-in** and currently a no-op flag (`SchedulingOptions.withReminders`). When the feature lands, the consumer enables it via:
 
 ```fsharp
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withReminders        // future: lead-time + transport config
-|> SchedulingServerApp.run
+app
+|> SchedulingCompose.withScheduling (
+    SchedulingOptions.create ()
+    |> SchedulingOptions.withReminders        // future: lead-time + transport config
+)
+|> ServerApp.run
 ```
 
 Until then, deployments that want booking reminders dispatch them themselves via `IJobScheduler` against `_scheduling` events — same plumbing the future fusion will use.

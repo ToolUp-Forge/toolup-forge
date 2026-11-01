@@ -841,7 +841,7 @@ type private GraphResponse = {
 }
 
 /// Microsoft Graph `ICalendarBridge`. Construct one per deployment and
-/// compose it with `SchedulingServerApp.withCalendarBridge` (or
+/// compose it with `SchedulingOptions.withCalendarBridge` (or
 /// `MicrosoftGraphSubscriptions.compose`, which also registers the
 /// subscription-renewal job).
 ///

@@ -164,7 +164,7 @@ let private bodySection (schema: FormSchema) (values: Map<string, FieldValue>) (
 /// fields into a `NarrativeDocument` and wrap it in a `PublicPage`.
 ///
 /// `validators` is the deployment's `CustomValidatorRegistry` (the same
-/// one `FormsServerApp` holds); pass `Map.empty` when the schema uses no
+/// one `FormsOptions` holds); pass `Map.empty` when the schema uses no
 /// named custom validators.
 let project
     (validators: CustomValidatorRegistry)

@@ -125,35 +125,15 @@ ToolUp.Scheduling.SchedulingApiHandler (class)
 ToolUp.Scheduling.SchedulingApiHandler.schedulingApi(ToolUp.Scheduling.IBookingScheduler+IBookingScheduler, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Scheduling.SchedulingApi+ISchedulingApi
 ToolUp.Scheduling.SchedulingCompose (class)
 ToolUp.Scheduling.SchedulingCompose.DefaultCalendarPollCron : System.String (literal)
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp (class)
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp..ctor(ToolUp.Platform.ServerApp, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Trigger])
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.Base : ToolUp.Platform.ServerApp { get }
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.CalendarBridges : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge] { get }
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.CalendarPollTrigger : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Trigger] { get }
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.RemindersEnabled : System.Boolean { get }
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule (class)
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.addModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.create() : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.run(ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : System.Int32
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withAuditFailurePolicy(ToolUp.Platform.AuditFailurePolicy, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withBackfillMissedTicks(System.Boolean, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withCalendarBridge(ToolUp.Scheduling.ICalendarBridge+ICalendarBridge, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withCalendarPollTrigger(ToolUp.Platform.Trigger, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withEntityOutbox(System.Boolean, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withEventTriggerCatchUp(System.Boolean, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withHealthCheck(ToolUp.Platform.HealthChecks+IHealthCheck, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withJobHandler(System.String, ToolUp.Platform.IJobHandler, ToolUp.Platform.Trigger, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withLogger(ToolUp.Platform.ILogger, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withNotifications(ToolUp.Platform.INotificationChannel, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withPostMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withPreMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withReminders(ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withScheduledJob(ToolUp.Platform.ScheduledJobDeclaration, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
+ToolUp.Scheduling.SchedulingCompose.schedulingCompanion : ToolUp.Platform.ComponentId { get }
+ToolUp.Scheduling.SchedulingCompose.withScheduling(ToolUp.Scheduling.SchedulingCompose+SchedulingOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptions (class)
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptions..ctor(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Trigger])
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptions.CalendarBridges : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge] { get }
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptions.CalendarPollTrigger : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Trigger] { get }
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptions.RemindersEnabled : System.Boolean { get }
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptionsModule (class)
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptionsModule.create() : ToolUp.Scheduling.SchedulingCompose+SchedulingOptions
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptionsModule.withCalendarBridge(ToolUp.Scheduling.ICalendarBridge+ICalendarBridge, ToolUp.Scheduling.SchedulingCompose+SchedulingOptions) : ToolUp.Scheduling.SchedulingCompose+SchedulingOptions
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptionsModule.withCalendarPollTrigger(ToolUp.Platform.Trigger, ToolUp.Scheduling.SchedulingCompose+SchedulingOptions) : ToolUp.Scheduling.SchedulingCompose+SchedulingOptions
+ToolUp.Scheduling.SchedulingCompose+SchedulingOptionsModule.withReminders(ToolUp.Scheduling.SchedulingCompose+SchedulingOptions) : ToolUp.Scheduling.SchedulingCompose+SchedulingOptions

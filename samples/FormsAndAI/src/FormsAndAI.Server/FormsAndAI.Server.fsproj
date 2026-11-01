@@ -2,19 +2,15 @@
 <!--
     Phase 1h reference. Anonymous-mode composition root stacking Forms
     AND AI side-by-side on a single ServerApp pipeline via the
-    `withForms` / `withAI` additive extensions. Demonstrates:
+    `withForms` / `withAI` companions. Demonstrates:
 
       * One `ServerApp.empty |> ... |> ServerApp.run` pipeline shared
-        between the two companions (instead of choosing one terminal
-        `FormsServerApp.run` / `AIServerApp.run` and dropping the
-        other).
+        between the two companions, each composed from its own options
+        record.
       * A workflow `Action` resolving `IEntityStore` from
         `ctx.Services` (the Phase 1h guard/action DI change) — proving
         the action reaches the same provider every other handler in
         the app sees, including the AI agent loop.
-      * The Phase 1h conflict validator: calling `withForms` twice
-        fails fast with a clear diagnostic at compose time (commented-
-        out demo in Server.fs).
 
     Server-only by design — same posture as `samples/MinimalApp`. The
     sample's job is to verify the composition shape compiles and is

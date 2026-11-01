@@ -19,7 +19,7 @@ module PageAmbient =
     // ─── The deployment's composition root ────────────────────────
 
     /// The DI collection a consumer registers its own
-    /// `IBookingScheduler` into, before `SchedulingServerApp.run`.
+    /// `IBookingScheduler` into, before the scheduling companion resolves.
     let services: IServiceCollection = failwith "ambient"
 
     let config: ServerConfig = failwith "ambient"
