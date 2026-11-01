@@ -10,6 +10,9 @@ open ToolUp.Platform.Build
 // SdkManifest.fs, compiled ahead of this file).
 open ToolUp.Forge
 
+/// Wait for `task`. A build driver may block; this is the one place it does.
+let private block (task: System.Threading.Tasks.Task<'T>) : 'T = task.GetAwaiter().GetResult()
+
 let config = {
     BuildConfig.defaults with
         Port = 5000
@@ -319,6 +322,15 @@ type DocDeclKind =
 
 [<EntryPoint>]
 let main args =
+    // The command line, parsed once against every option a target here reads;
+    // an option no target declares is refused by name rather than ignored.
+    let flags =
+        match Flags.parse VerifyGate.driverFlags args with
+        | Ok flags -> flags
+        | Error why ->
+            eprintfn "Build.fs: %s" why
+            exit 2
+
     init args
 
     // Phase 762 — name the lane once, so a log cannot be mistaken for a
@@ -331,7 +343,7 @@ let main args =
     // The `affected` lane says what it did not run, in the gate output,
     // before anything runs — so a log cannot be mistaken for a full run.
     match affectedPlan with
-    | _ when not (Array.contains "VerifyAll" args) -> ()
+    | _ when flags.Target <> "VerifyAll" -> ()
     | None -> ()
     | Some(Error why) ->
         eprintfn "VerifyAll: %s" why
@@ -380,11 +392,6 @@ let main args =
     Target.create "Select" (fun _ ->
         let root = Path.getFullName "."
 
-        let value (name: string) =
-            match args |> Array.tryFindIndex ((=) name) with
-            | Some i when i + 1 < args.Length -> Some args[i + 1]
-            | _ -> None
-
         let lines (path: string) =
             File.ReadAllLines path
             |> Array.map _.Trim()
@@ -407,27 +414,17 @@ let main args =
             | _ -> TestLane.Selection.normalise raw
 
         let baseSha, headSha, paths =
-            match value "--base", value "--head", value "--paths" with
+            match Flags.value "--base" flags, Flags.value "--head" flags, Flags.value "--paths" flags with
             | Some b, Some h, None ->
-                let result =
-                    CreateProcess.fromRawCommand "git" [ "diff"; "--name-only"; "--no-renames"; b; h ]
-                    |> CreateProcess.withWorkingDirectory root
-                    |> CreateProcess.redirectOutput
-                    |> CreateProcess.ensureExitCode
-                    |> Proc.run
-
                 let changed =
-                    result.Result.Output.Replace("\r\n", "\n").Split('\n')
-                    |> Array.map _.Trim()
-                    |> Array.filter ((<>) "")
-                    |> List.ofArray
+                    Git.read root [ "diff"; "--name-only"; "--no-renames"; b; h ] |> Lines.ofOutput
 
                 Some b, Some h, changed
             | None, None, Some file -> None, None, lines file |> List.map reroot
             | _ -> failwith "Select: give exactly one of `--base <sha> --head <sha>` or `--paths <file>`."
 
         let out =
-            match value "--out" with
+            match Flags.value "--out" flags with
             | Some o -> Path.GetFullPath o
             | None -> failwith "Select: `--out <manifest>` is required."
 
@@ -438,7 +435,7 @@ let main args =
                 Base = baseSha
                 Head = headSha
                 Paths = paths
-                Declared = value "--declared" |> Option.map lines |> Option.defaultValue []
+                Declared = Flags.value "--declared" flags |> Option.map lines |> Option.defaultValue []
                 Packs = config.TestPacks |> List.map _.Name
                 Read =
                     fun relative ->
@@ -498,34 +495,31 @@ let main args =
     let runVerifyFable () =
         let testDir = Path.getFullName "src/ToolUp.AI.Client.Tests"
 
-        let onPath name =
-            match ProcessUtils.tryFindFileOnPath name with
-            | Some path -> path
-            | None ->
-                failwithf
+        let onPath =
+            Proc.onPath (
+                sprintf
                     "VerifyFable: `%s` was not found on PATH. The Fable-tier harness needs the .NET SDK and Node.js (>= 20)."
-                    name
-
-        let proc exe args =
-            CreateProcess.fromRawCommand exe args
-            |> CreateProcess.withWorkingDirectory testDir
-
-        let runChecked exe args =
-            proc exe args |> CreateProcess.ensureExitCode |> Proc.run |> ignore
+            )
 
         let npm = onPath "npm"
         let node = onPath "node"
 
         Trace.tracefn "▶ VerifyFable (1/4): dotnet tool restore"
-        runChecked "dotnet" [ "tool"; "restore" ]
+        Proc.exec "dotnet" [ "tool"; "restore" ] testDir |> Proc.ensure |> ignore
 
         // `ci`, not `install` — the lockfile is committed, so this is the
         // reproducible form and it is the same one CI runs.
         Trace.tracefn "▶ VerifyFable (2/4): npm ci"
-        runChecked npm [ "ci"; "--no-fund"; "--no-audit" ]
+
+        Proc.exec npm [ "ci"; "--no-fund"; "--no-audit" ] testDir
+        |> Proc.ensure
+        |> ignore
 
         Trace.tracefn "▶ VerifyFable (3/4): dotnet fable -o output --noCache"
-        runChecked "dotnet" [ "fable"; "-o"; "output"; "--noCache" ]
+
+        Proc.exec "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] testDir
+        |> Proc.ensure
+        |> ignore
 
         Trace.tracefn "▶ VerifyFable (4/4): node --test output/Program.js"
 
@@ -533,17 +527,18 @@ let main args =
         // picks `spec` on a TTY and `tap` otherwise, and the summary
         // counts parsed below only exist in the TAP form.
         let result =
-            proc node [
-                "--import"
-                "./register-loader.mjs"
-                "--test"
-                "--test-reporter=tap"
-                "output/Program.js"
-            ]
-            |> CreateProcess.redirectOutput
-            |> Proc.run
+            Proc.redirected
+                node
+                [
+                    "--import"
+                    "./register-loader.mjs"
+                    "--test"
+                    "--test-reporter=tap"
+                    "output/Program.js"
+                ]
+                testDir
 
-        let output = result.Result.Output + result.Result.Error
+        let output = result.StdOut + result.StdErr
         printfn "%s" output
 
         let tapCount (label: string) =
@@ -646,12 +641,6 @@ let main args =
         for ex in SampleGate.excluded do
             Trace.tracefn "▶ VerifySamples: excluding %s — %s" ex.Project ex.Reason
 
-        let run workDir exe args =
-            CreateProcess.fromRawCommand exe args
-            |> CreateProcess.withWorkingDirectory workDir
-            |> Proc.run
-            |> _.ExitCode
-
         // A Fable transpile of one sample costs ~1.5-2 minutes (it cracks
         // and compiles the whole client tier, ~400 source files), so the
         // six Fable samples are ~10 minutes: the FULL lane only. The fast
@@ -691,7 +680,8 @@ let main args =
                     Trace.tracefn "▶ VerifySamples: building %s" proj
                     built.Add proj
 
-                    let build = run root "dotnet" [ "build"; proj; "-m:1"; "--nologo"; "-v:q" ]
+                    let build =
+                        (Proc.exec "dotnet" [ "build"; proj; "-m:1"; "--nologo"; "-v:q" ] root).ExitCode
 
                     if build <> 0 then
                         build
@@ -715,7 +705,7 @@ let main args =
 
                             1
                         else
-                            run projDir "dotnet" [ "tool"; "restore" ] |> ignore
+                            Proc.exec "dotnet" [ "tool"; "restore" ] projDir |> ignore
                             Trace.tracefn "▶ VerifySamples: transpiling %s (Fable)" proj
 
                             // `-o output`, relative, and nothing else: an
@@ -729,7 +719,7 @@ let main args =
                             Shell.deleteDir outDir
 
                             try
-                                run projDir "dotnet" [ "fable"; "-o"; "output"; "--noCache" ]
+                                (Proc.exec "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] projDir).ExitCode
                             finally
                                 Shell.deleteDir outDir
                     else
@@ -778,7 +768,7 @@ let main args =
                |> List.map (fun r ->
                    Aggregate.leg ("run " + r.Project) (fun () ->
                        Trace.tracefn "▶ VerifySamples: running %s — %s" r.Project r.Reason
-                       run root "dotnet" (SampleGate.runArguments r))))
+                       (Proc.exec "dotnet" (SampleGate.runArguments r) root).ExitCode)))
 
         Aggregate.runAll "VerifySamples" "sample leg" legs
 
@@ -826,11 +816,7 @@ let main args =
         | Error message ->
             Trace.traceError (sprintf "VerifyAll: Analyzers — %s" message)
             1
-        | Ok dll ->
-            CreateProcess.fromRawCommand "dotnet" [ dll; "--scan-tree"; Path.getFullName "." ]
-            |> CreateProcess.withWorkingDirectory "."
-            |> Proc.run
-            |> _.ExitCode
+        | Ok dll -> (Proc.exec "dotnet" [ dll; "--scan-tree"; Path.getFullName "." ] ".").ExitCode
 
     // Usage: `dotnet run --project Build.fsproj -- VerifyAnalyzers`, after a
     // build of the RemotingAnalyzers pack.
@@ -889,20 +875,11 @@ let main args =
         let harnessProject =
             Path.getFullName "tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/ToolUp.BrowserSmoke.Tests.fsproj"
 
-        let onPath name =
-            match ProcessUtils.tryFindFileOnPath name with
-            | Some path -> path
-            | None ->
-                failwithf
+        let onPath =
+            Proc.onPath (
+                sprintf
                     "VerifyBrowserSmoke: `%s` was not found on PATH. The harness needs the .NET SDK, Node.js (>= 20) and PowerShell 7 (for Playwright's browser installer)."
-                    name
-
-        let proc exe args workingDir =
-            CreateProcess.fromRawCommand exe args
-            |> CreateProcess.withWorkingDirectory workingDir
-
-        let runChecked exe args workingDir =
-            proc exe args workingDir |> CreateProcess.ensureExitCode |> Proc.run |> ignore
+            )
 
         let npm = onPath "npm"
 
@@ -956,16 +933,22 @@ let main args =
         // client tiers, the second is module resolution against the npm
         // tree.
         Trace.tracefn "▶ VerifyBrowserSmoke (1/6): dotnet tool restore (fixture)"
-        runChecked "dotnet" [ "tool"; "restore" ] fixtureDir
+        Proc.exec "dotnet" [ "tool"; "restore" ] fixtureDir |> Proc.ensure |> ignore
 
         Trace.tracefn "▶ VerifyBrowserSmoke (2/6): npm ci (fixture)"
-        runChecked npm [ "ci"; "--no-fund"; "--no-audit" ] fixtureDir
+
+        Proc.exec npm [ "ci"; "--no-fund"; "--no-audit" ] fixtureDir
+        |> Proc.ensure
+        |> ignore
 
         Trace.tracefn "▶ VerifyBrowserSmoke (3/6): dotnet fable -o output --noCache (fixture)"
-        runChecked "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] fixtureDir
+
+        Proc.exec "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] fixtureDir
+        |> Proc.ensure
+        |> ignore
 
         Trace.tracefn "▶ VerifyBrowserSmoke (4/6): npm run build (fixture bundle)"
-        runChecked npm [ "run"; "build" ] fixtureDir
+        Proc.exec npm [ "run"; "build" ] fixtureDir |> Proc.ensure |> ignore
 
         // ── 5: the harness, and the browser it drives ───────────────
         //
@@ -983,14 +966,14 @@ let main args =
         // landed, while passing locally in worktrees whose harness had
         // already been built by an earlier step. The checked build here
         // is what `VerifyAll` does before its own per-pack queries.
-        runChecked "dotnet" [ "build"; harnessProject; "--nologo" ] "."
+        Proc.exec "dotnet" [ "build"; harnessProject; "--nologo" ] "."
+        |> Proc.ensure
+        |> ignore
 
         let targetPath =
-            proc "dotnet" [ "build"; harnessProject; "--nologo"; "-getProperty:TargetPath" ] "."
-            |> CreateProcess.redirectOutput
-            |> CreateProcess.ensureExitCode
-            |> Proc.run
-            |> fun result -> result.Result.Output.Trim()
+            (Proc.redirected "dotnet" [ "build"; harnessProject; "--nologo"; "-getProperty:TargetPath" ] "."
+             |> Proc.ensure)
+                .StdOut.Trim()
 
         if String.isNullOrWhiteSpace targetPath || not (File.exists targetPath) then
             failwithf
@@ -1005,7 +988,9 @@ let main args =
 
         if File.exists installer then
             try
-                runChecked (onPath "pwsh") [ installer; "install"; "chromium" ] "."
+                Proc.exec (onPath "pwsh") [ installer; "install"; "chromium" ] "."
+                |> Proc.ensure
+                |> ignore
             with ex ->
                 Trace.traceImportantfn
                     "VerifyBrowserSmoke: Playwright's Chromium install step failed (%s). Continuing — the scenario floor below will report it if no browser is available."
@@ -1013,10 +998,9 @@ let main args =
 
         Trace.tracefn "▶ VerifyBrowserSmoke (6/6): run the scenarios"
 
-        let result =
-            proc "dotnet" [ targetPath ] "." |> CreateProcess.redirectOutput |> Proc.run
+        let result = Proc.redirected "dotnet" [ targetPath ] "."
 
-        let output = result.Result.Output + result.Result.Error
+        let output = result.StdOut + result.StdErr
         printfn "%s" output
 
         // Expecto's summary line, e.g.
@@ -1065,251 +1049,9 @@ let main args =
             failwith
                 "VerifyBrowserSmoke: the harness printed no Expecto summary — it did not run. The counts are checked rather than the exit status alone precisely because a harness that never started can still exit 0.")
 
-    // Template-content compile gate.
-    //
-    // The `templates/` scaffolds are shipped to consumers via `dotnet
-    // new`, and nothing compiled them. Two had been broken for an
-    // unknown span: platformsdk-application's client carried a
-    // `ToolUp.Remoting.Client` PackageReference the 0.4.4 fold deleted
-    // (NU1010 under CPM) plus a `ClientConfigOverrides` reference that
-    // needed module qualification, and platformsdk-datamanager's
-    // Server.fs implemented an `IDataSource` shape — Id / DisplayName /
-    // Probe / Pull — that the SDK no longer has. A consumer running
-    // `dotnet new` got a project that did not compile.
-    //
-    // Usage: `dotnet run --project Build.fsproj -- VerifyTemplates`
-    //
-    // WHY NOT JUST ADD THEM TO ToolUp.Forge.sln. Template projects
-    // reference ToolUp.Platform.* by PackageReference (they must — that
-    // is what a consumer's instantiated copy does), and forge itself
-    // consumes those only by ProjectReference. CI creates an EMPTY
-    // ../../local-nuget-feed, so a template project inside the solution
-    // would fail restore in CI and take the whole `verify-all` gate with
-    // it. This target supplies the packages instead of assuming them.
-    //
-    // WHY A THROWAWAY VERSION. Packing at $(ToolUpSdkVersion) into the
-    // shared feed would be a same-version repack: NuGet resolves from
-    // the already-extracted global-packages entry, so the gate would
-    // compile the templates against WHATEVER WAS PACKED LAST rather than
-    // against current source — green while the real drift sat
-    // undetected. `0.0.0-templategate` is packed to a scratch feed and
-    // its cache entries are wiped first, so each run reads bits this run
-    // produced. The cache wipe is the load-bearing half; without it the
-    // second run onwards is stale.
-    //
-    // NOT COVERED, deliberately: templates/safer/ and
-    // templates/platformsdk-solution/ are standalone solutions carrying
-    // their own nuget.config (`../local-nuget-feed`, resolved relative to
-    // the consumer's instantiated location) and, in safer's case, a
-    // literal `TOOLUP_SDK_VERSION` placeholder substituted at
-    // instantiation. Neither is buildable in-repo without rewriting what
-    // makes it a template. Gating those needs an instantiate-then-build
-    // harness — a bigger job than this, and the drift found here was all
-    // in the root-inheriting set.
-    let templateGateVersion = "0.0.0-templategate"
-
-    // The SDK packages the gated templates reference, plus the closure
-    // of ToolUp.* packages those declare. Kept explicit rather than
-    // globbed: packing all ~43 is minutes of work for packages no
-    // template names. Adding an SDK->SDK dependency without adding it
-    // here does not silently degrade — the NU1603 escalation below turns
-    // the resulting version fallback into a build error naming the
-    // missing package.
-    //
-    // Phase 754 — each entry declares its PackageId AND the project that
-    // produces it. They were one string, with the project derived as
-    // `src/<id>/<id>.fsproj`; that assumption died when the AG Grid /
-    // AG Charts bindings took `ToolUp.Feliz.*` ids while their projects
-    // stayed at `src/Feliz.*/`. The pack loop below reconciles the two
-    // against what was actually emitted (`TemplateGate.unproducedIds`),
-    // so an id this repo does not produce fails the gate by name rather
-    // than falling through to a stranger's package on nuget.org.
-    let templateGatePackages = [
-        TemplateGate.package "ToolUp.Platform.Core" "src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj"
-        TemplateGate.package "ToolUp.Platform.Client" "src/ToolUp.Platform.Client/ToolUp.Platform.Client.fsproj"
-        TemplateGate.package "ToolUp.Platform.Server" "src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj"
-        // Phase 307 — declared by Platform.Client (the UI toolkit,
-        // promoted out of the client tier into its own package). This is
-        // exactly the SDK->SDK dependency the note above describes: without
-        // it, Platform.Client packed at the gate version would declare a
-        // ToolUp.Platform.UI the scratch feed cannot serve, and the NU1603
-        // escalation would fail the gate by name.
-        TemplateGate.package "ToolUp.Platform.UI" "src/ToolUp.Platform.UI/ToolUp.Platform.UI.fsproj"
-        // Also declared by Platform.Client, since Phase 344 promoted the
-        // AG Grid / AG Charts bindings out of the client tier. They were
-        // not added here at the time, and the consequence is not benign:
-        // BOTH bare `Feliz.*` ids exist on nuget.org (Feliz.AgGrid 0.0.1,
-        // Feliz.AgCharts 0.23.0 — unrelated packages by another author),
-        // so restore silently fell through to a stranger's package and
-        // NU1603 turned that into a hard error. The `templates` CI job
-        // was red on main from 344 until Phase 307 found it while adding
-        // ToolUp.Platform.UI above — the very case the note at the head
-        // of this list describes.
-        //
-        // Phase 754 settled the ids for good: the packages are
-        // `ToolUp.Feliz.*` now (that prefix is also the glob the repo's
-        // nuget.org Trusted Publishing policy is registered against), and
-        // the id/project split above is what lets the projects keep their
-        // `src/Feliz.*/` directories while the emitted ids move. The
-        // reconciliation after the pack loop is the structural successor
-        // to "someone remembers to add the package": it fails on any id
-        // this repo does not itself emit, which is precisely what a
-        // stranger's package is.
-        TemplateGate.package "ToolUp.Feliz.AgGrid" "src/Feliz.AgGrid/Feliz.AgGrid.fsproj"
-        TemplateGate.package "ToolUp.Feliz.AgCharts" "src/Feliz.AgCharts/Feliz.AgCharts.fsproj"
-        // Declared by Platform.Core.
-        TemplateGate.package "ToolUp.AI.Wire" "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj"
-        // Declared by AI.Wire and Platform.Core (Phase 128).
-        TemplateGate.package
-            "ToolUp.Platform.Transport"
-            "src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj"
-        // Declared by Platform.Server, and its own ProjectReference.
-        TemplateGate.package "ToolUp.Graph.InMemory" "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj"
-        TemplateGate.package "ToolUp.Graph.Core" "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj"
-    ]
-
-    let gatedTemplateProjects = [
-        "templates/platformsdk-application/src/MyApp-Client/MyApp-Client.fsproj"
-        "templates/platformsdk-application/src/MyApp-Server/MyApp-Server.fsproj"
-        "templates/platformsdk-datamanager/MyDataManager/MyDataManager.fsproj"
-        "templates/platformsdk-module/MyModule/MyModule.fsproj"
-    ]
-
-    Target.create "VerifyTemplates" (fun _ ->
-        let feedDir = Path.getFullName "obj/template-gate-feed"
-
-        let runChecked exe args =
-            CreateProcess.fromRawCommand exe args
-            |> CreateProcess.withWorkingDirectory "."
-            |> CreateProcess.ensureExitCode
-            |> Proc.run
-            |> ignore
-
-        // Same invocation, minus `ensureExitCode`: the caller wants the
-        // exit code back rather than an exception, so an aggregating
-        // loop can record it and carry on.
-        let runExit exe args =
-            let result =
-                CreateProcess.fromRawCommand exe args
-                |> CreateProcess.withWorkingDirectory "."
-                |> Proc.run
-
-            result.ExitCode
-
-        Shell.deleteDir feedDir
-        Directory.ensure feedDir
-
-        // Phase 903 — a PRIVATE, per-run packages folder, rather than
-        // guessing at the machine's shared global-packages folder (which
-        // may not even be the one NuGet is using — see
-        // TemplateGatePackages.fs) and evicting THIS version's entries
-        // from it. Wiped wholesale below: nothing but this gate's own
-        // restores writes here, so there is no previous run's extracted
-        // copy this folder could serve except one of this gate's own.
-        let privatePackages =
-            TemplateGatePackages.privatePackagesFolder (Path.getFullName ".")
-
-        let eviction = TemplateGatePackages.evict privatePackages
-
-        Trace.tracefn
-            "▶ VerifyTemplates: private packages folder %s (evicted %d prior entr%s: %s)"
-            eviction.Folder
-            eviction.Removed.Length
-            (if eviction.Removed.Length = 1 then "y" else "ies")
-            (String.concat ", " eviction.Removed)
-
-        System.Environment.SetEnvironmentVariable("NUGET_PACKAGES", privatePackages)
-
-        for pkg in templateGatePackages do
-            if not (File.Exists(Path.getFullName pkg.Project)) then
-                failwithf
-                    "VerifyTemplates: gate package %s declares project %s, which does not exist. Fix the `Project` in `templateGatePackages`."
-                    pkg.Id
-                    pkg.Project
-
-            Trace.tracefn "▶ VerifyTemplates: packing %s (%s) @ %s" pkg.Id pkg.Project templateGateVersion
-
-            runChecked "dotnet" [
-                "pack"
-                pkg.Project
-                sprintf "-p:Version=%s" templateGateVersion
-                "-o"
-                feedDir
-                "--nologo"
-            ]
-
-        // Phase 754 — the stranger's-package guard. Reconcile every
-        // DECLARED id against what the pack above actually emitted. A
-        // declared id with no `<id>.<version>.nupkg` in the scratch feed
-        // is an id this repo does not produce, and the restore below
-        // would resolve it from nuget.org — which, for the bare `Feliz.*`
-        // ids, meant an unrelated package by another author (Phase 307).
-        // Checked here rather than trusted: the previous shape could not
-        // even express a wrong id, so nothing ever tested that it was
-        // right. Go-red proven in ToolUp.Platform.Build.Tests.
-        match
-            TemplateGate.unproducedIds
-                templateGateVersion
-                templateGatePackages
-                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
-        with
-        | [] -> ()
-        | unproduced -> failwith (TemplateGate.report "VerifyTemplates" templateGateVersion unproduced)
-
-        // `RestoreAdditionalProjectSources` ADDS the scratch feed to the
-        // repo nuget.config's sources. `--source` would replace them, and
-        // the templates still need nuget.org for Feliz / Fable.Core.
-        //
-        // NU1603 is escalated to an error deliberately. It fires when a
-        // gate-versioned package declares a ToolUp.* dependency that was
-        // NOT packed at the gate version, in which case NuGet quietly
-        // resolves some other version off the shared feed. That fallback
-        // compiles the templates against a mix of current and months-old
-        // SDK, and on a machine whose feed lacks the older version it
-        // does not resolve at all — so the failure would surface later,
-        // somewhere unrelated. Escalated, it names the missing package
-        // and points straight at `templateGatePackages`.
-        // The template projects are INDEPENDENT of one another — each is
-        // what a separate `dotnet new` produces — so a broken scaffold
-        // should cost its own signal and not the others'. `runExit`
-        // rather than `runChecked` for exactly that reason: the exit code
-        // is captured and aggregated instead of thrown, and the target
-        // still fails at the end naming every scaffold that did not
-        // compile. Before this, a reader of a red run learned that the
-        // FIRST project in the list was broken and nothing whatsoever
-        // about the rest.
-        //
-        // The pack loop above stays fail-fast deliberately, and the
-        // asymmetry is the point: every build below reads those packages,
-        // so a failed pack makes the remaining results meaningless rather
-        // than merely unknown. Aggregating there would manufacture four
-        // confident-looking failures out of one real one.
-        gatedTemplateProjects
-        |> List.map (fun proj ->
-            Aggregate.leg proj (fun () ->
-                Trace.tracefn "▶ VerifyTemplates: building %s" proj
-
-                // Clear obj/ and bin/ first. Both are gitignored local
-                // artefacts, and a consumer's freshly-instantiated copy has
-                // neither — so building over them tests something the
-                // consumer never experiences. Concretely: NuGet no-ops a
-                // restore whose inputs are unchanged and REPLAYS the
-                // warnings recorded in the existing project.assets.json, so
-                // a leftover obj/ makes the gate report the previous run's
-                // resolution rather than this one's.
-                let projDir = Path.GetDirectoryName(Path.getFullName proj)
-                Shell.deleteDir (Path.Combine(projDir, "obj"))
-                Shell.deleteDir (Path.Combine(projDir, "bin"))
-
-                runExit "dotnet" [
-                    "build"
-                    proj
-                    sprintf "-p:ToolUpSdkVersion=%s" templateGateVersion
-                    sprintf "-p:RestoreAdditionalProjectSources=%s" feedDir
-                    "-warnaserror:NU1603"
-                    "--nologo"
-                ]))
-        |> Aggregate.runAll "VerifyTemplates" "template project")
+    // The template-content compile gate. Its rationale and its spec are
+    // `TemplateGatePackages.verifyTemplates`; the mechanism is `TemplateGate.run`.
+    Target.create "VerifyTemplates" (fun _ -> TemplateGate.run TemplateGatePackages.verifyTemplates)
 
     // Phase 620 — compile-checked documentation snippets.
     //
@@ -2181,18 +1923,13 @@ let main args =
         |> String.concat ", "
 
     Target.create "VerifyDocSnippets" (fun _ ->
-        // Read from the process argv rather than `p.Context.Arguments`:
-        // FAKE's own CLI parser consumes trailing options before the
-        // target sees them, so the flag never arrives there.
-        let updateBaseline = args |> Array.contains "--update-baseline"
+        let updateBaseline = Flags.has "--update-baseline" flags
         let repoRoot = __SOURCE_DIRECTORY__
         let projDir = Path.Combine(repoRoot, "docs-snippets")
         let outDir = Path.Combine(projDir, "generated")
         let baselinePath = Path.Combine(projDir, "known-drift.txt")
         let floorPath = Path.Combine(projDir, "corpus-floor.txt")
         let ambientDir = Path.Combine(projDir, "ambient")
-
-        let toSlash (s: string) = s.Replace('\\', '/')
 
         // Phase 669 — the name-scoped walk over `src/**`. Recursive by
         // hand rather than `SearchOption.AllDirectories` so `bin` / `obj`
@@ -2238,7 +1975,7 @@ let main args =
                     |> List.map (fun f -> Path.Combine(repoRoot, f))
                     |> List.filter File.Exists
             ]
-            |> List.map (fun f -> f, toSlash (Path.GetRelativePath(repoRoot, f)))
+            |> List.map (fun f -> f, Paths.toSlash (Path.GetRelativePath(repoRoot, f)))
             |> List.filter (fun (_, rel) ->
                 docSnippetExcludedTrees |> List.forall (fun t -> not (rel.StartsWith(t + "/"))))
             // A file reachable from two roots (a `README.md` inside the
@@ -2370,9 +2107,6 @@ let main args =
 
         let isSkipped (info: string) = info.Contains "skip="
 
-        let inScope =
-            fsharpBlocks |> List.filter (fun (_, _, _, _, info, _) -> not (isSkipped info))
-
         let skippedByReason =
             fsharpBlocks
             |> List.choose (fun (_, _, _, _, info, _) ->
@@ -2386,7 +2120,6 @@ let main args =
         let realTypes = surface.RealTypes
         let realFullNames = surface.RealFullNames
         let realByName = surface.RealByName
-        let bclSimpleNames = surface.BclSimpleNames
         let ownedSimpleNames = surface.OwnedSimpleNames
         let unambiguousTypeNames = surface.UnambiguousTypeNames
 
@@ -2788,7 +2521,7 @@ let main args =
                         | None ->
                             fragOutside <- fragOutside + 1
                             []
-                        | Some(root, memberName) when declared.Contains root ->
+                        | Some(root, _) when declared.Contains root ->
                             fragLocal <- fragLocal + 1
                             []
                         | Some(root, memberName) ->
@@ -3149,18 +2882,18 @@ let main args =
         Trace.tracefn "▶ VerifyDocSnippets (2/2): compiling against the real SDK"
 
         let result =
-            CreateProcess.fromRawCommand "dotnet" [
-                "build"
-                "docs-snippets/ToolUp.DocSnippets.fsproj"
-                "--nologo"
-                "-v"
-                "quiet"
-            ]
-            |> CreateProcess.withWorkingDirectory repoRoot
-            |> CreateProcess.redirectOutput
-            |> Proc.run
+            Proc.redirected
+                "dotnet"
+                [
+                    "build"
+                    "docs-snippets/ToolUp.DocSnippets.fsproj"
+                    "--nologo"
+                    "-v"
+                    "quiet"
+                ]
+                repoRoot
 
-        let output = result.Result.Output + result.Result.Error
+        let output = result.StdOut + result.StdErr
 
         // Attribute each reported error to the block whose line range
         // covers it. `+ 1` because an unterminated construct is reported
@@ -3182,7 +2915,7 @@ let main args =
                 match System.Int32.TryParse(rest.Substring(0, max 0 (rest.IndexOf ','))) with
                 | false, _ -> None
                 | true, lineNo ->
-                    let rel = toSlash (line.Substring(0, i + 3))
+                    let rel = Paths.toSlash (line.Substring(0, i + 3))
 
                     blockTable
                     |> Seq.tryFind (fun (r, _, s, e, _, _) -> rel.EndsWith r && lineNo >= s && lineNo <= e + 1)
@@ -3577,7 +3310,6 @@ let main args =
 
     Target.create "VerifySourceCitations" (fun _ ->
         let repoRoot = __SOURCE_DIRECTORY__
-        let toSlash (s: string) = s.Replace('\\', '/')
 
         let rec walkSources (dir: string) = seq {
             for d in Directory.EnumerateDirectories dir do
@@ -3591,7 +3323,7 @@ let main args =
 
         let sources =
             walkSources (Path.Combine(repoRoot, "src"))
-            |> Seq.map (fun f -> toSlash (Path.GetRelativePath(repoRoot, f)), File.ReadAllLines f)
+            |> Seq.map (fun f -> Paths.toSlash (Path.GetRelativePath(repoRoot, f)), File.ReadAllLines f)
             |> List.ofSeq
 
         let byRelPath = sources |> Map.ofList
@@ -3922,7 +3654,7 @@ let main args =
 
                             let target =
                                 if token.Contains "/" || token.Contains "\\" then
-                                    let relPath = toSlash token + ".fs"
+                                    let relPath = Paths.toSlash token + ".fs"
 
                                     match byRelPath.TryFind relPath with
                                     | Some ls -> Ok(relPath, ls)
@@ -4209,9 +3941,9 @@ let main args =
     //        discard without touching the tree).
     Target.create "VerifyUploadResults" (fun _ ->
         let root =
-            match args |> Array.tryFindIndex ((=) "--root") with
-            | Some i when i + 1 < args.Length -> Path.GetFullPath args[i + 1]
-            | _ -> __SOURCE_DIRECTORY__
+            match Flags.value "--root" flags with
+            | Some r -> Path.GetFullPath r
+            | None -> __SOURCE_DIRECTORY__
 
         let srcDir = Path.Combine(root, "src")
 
@@ -4221,8 +3953,6 @@ let main args =
 
         if not (Directory.Exists srcDir) then
             failwithf "VerifyUploadResults: no `src` directory under %s — nothing to scan is not a pass." root
-
-        let toSlash (s: string) = s.Replace('\\', '/')
 
         let rec walk (dir: string) = seq {
             for d in Directory.EnumerateDirectories dir do
@@ -4378,7 +4108,7 @@ let main args =
         let sites =
             files
             |> List.collect (fun file ->
-                let rel = toSlash (Path.GetRelativePath(root, file))
+                let rel = Paths.toSlash (Path.GetRelativePath(root, file))
                 let lines = File.ReadAllLines file
 
                 [
@@ -4578,8 +4308,6 @@ let main args =
 
             1
         else
-            let toSlash (s: string) = s.Replace('\\', '/')
-
             let rec walk (dir: string) = seq {
                 for d in Directory.EnumerateDirectories dir do
                     let name = Path.GetFileName d
@@ -4615,7 +4343,7 @@ let main args =
 
             let sites = [
                 for file in walk srcDir do
-                    let rel = toSlash (Path.GetRelativePath(root, file))
+                    let rel = Paths.toSlash (Path.GetRelativePath(root, file))
 
                     if not (rel.EndsWith "ToolUp.Platform.Core/Shared/Types/ScopeKey.fs") then
                         for i, line in File.ReadAllLines file |> Array.indexed do
@@ -4684,9 +4412,9 @@ let main args =
 
     Target.create "VerifyScopeLiterals" (fun _ ->
         let root =
-            match args |> Array.tryFindIndex ((=) "--root") with
-            | Some i when i + 1 < args.Length -> Path.GetFullPath args[i + 1]
-            | _ -> __SOURCE_DIRECTORY__
+            match Flags.value "--root" flags with
+            | Some r -> Path.GetFullPath r
+            | None -> __SOURCE_DIRECTORY__
 
         match runVerifyScopeLiterals root with
         | 0 -> ()
@@ -4793,9 +4521,9 @@ let main args =
 
     Target.create "VerifyServiceConfigFold" (fun _ ->
         let root =
-            match args |> Array.tryFindIndex ((=) "--root") with
-            | Some i when i + 1 < args.Length -> Path.GetFullPath args[i + 1]
-            | _ -> __SOURCE_DIRECTORY__
+            match Flags.value "--root" flags with
+            | Some r -> Path.GetFullPath r
+            | None -> __SOURCE_DIRECTORY__
 
         match runVerifyServiceConfigFold root with
         | 0 -> ()
@@ -4831,11 +4559,6 @@ let main args =
     //        drift without touching the tree). A leg of `VerifyAll` in the fast
     //        and full lanes.
     let fuaranFloorsFile = Path.Combine(__SOURCE_DIRECTORY__, "fuaran-ui-floors.json")
-
-    let argValue (name: string) =
-        match args |> Array.tryFindIndex ((=) name) with
-        | Some i when i + 1 < args.Length -> Some args[i + 1]
-        | _ -> None
 
     let readFuaranSnapshot (path: string) =
         match FuaranCoResolution.snapshotOfJson (File.ReadAllText path) with
@@ -4890,7 +4613,9 @@ let main args =
 
     Target.create "VerifyFuaranCoResolution" (fun _ ->
         let file name fallback =
-            argValue name |> Option.map Path.GetFullPath |> Option.defaultValue fallback
+            Flags.value name flags
+            |> Option.map Path.GetFullPath
+            |> Option.defaultValue fallback
 
         match
             runVerifyFuaranCoResolution
@@ -4928,10 +4653,10 @@ let main args =
             new System.Net.Http.HttpClient(Timeout = System.TimeSpan.FromSeconds 60.0)
 
         let get (url: string) =
-            use response = http.GetAsync(url).GetAwaiter().GetResult()
+            use response = block (http.GetAsync(url))
 
             if response.IsSuccessStatusCode then
-                Some(response.Content.ReadAsStringAsync().GetAwaiter().GetResult())
+                Some(block (response.Content.ReadAsStringAsync()))
             elif response.StatusCode = System.Net.HttpStatusCode.NotFound then
                 None
             else
@@ -4948,7 +4673,7 @@ let main args =
             | None -> failwithf "RefreshFuaranUiFloors: nuget.org does not list %s." id
 
         let release =
-            match FuaranCoResolution.chooseRelease (argValue "--release") (index "Fuaran.UI") with
+            match FuaranCoResolution.chooseRelease (Flags.value "--release" flags) (index "Fuaran.UI") with
             | Ok r -> r
             | Error e -> failwith ("RefreshFuaranUiFloors: " + e)
 
@@ -5046,14 +4771,17 @@ let main args =
 
         let run (workDir: string) (exe: string) (argv: string list) =
             let result =
-                CreateProcess.fromRawCommand exe argv
-                |> CreateProcess.withWorkingDirectory workDir
-                |> CreateProcess.setEnvironmentVariable "NUGET_PACKAGES" packages
-                |> CreateProcess.setEnvironmentVariable "DOTNET_CLI_HOME" cliHome
-                |> CreateProcess.redirectOutput
-                |> Proc.run
+                Proc.execWith
+                    {
+                        Proc.options with
+                            Environment = [ "NUGET_PACKAGES", packages; "DOTNET_CLI_HOME", cliHome ]
+                            Redirect = true
+                    }
+                    exe
+                    argv
+                    workDir
 
-            let output = result.Result.Output + result.Result.Error
+            let output = result.StdOut + result.StdErr
             printfn "%s" output
 
             if result.ExitCode <> 0 && FuaranCoResolution.CoBuild.isSubstrateMismatch output then
@@ -5102,17 +4830,18 @@ let main args =
                         (Path.GetRelativePath(root, proj))
                         fuaranCoBuildVersion
 
-                    CreateProcess.fromRawCommand "dotnet" [
-                        "pack"
-                        proj
-                        sprintf "-p:Version=%s" fuaranCoBuildVersion
-                        "-o"
-                        feedDir
-                        "--nologo"
-                    ]
-                    |> CreateProcess.withWorkingDirectory root
-                    |> CreateProcess.ensureExitCode
-                    |> Proc.run
+                    Proc.exec
+                        "dotnet"
+                        [
+                            "pack"
+                            proj
+                            sprintf "-p:Version=%s" fuaranCoBuildVersion
+                            "-o"
+                            feedDir
+                            "--nologo"
+                        ]
+                        root
+                    |> Proc.ensure
                     |> ignore
 
                 fuaranCoBuildVersion
@@ -5190,7 +4919,7 @@ let main args =
             Shell.deleteDir scratch
 
     Target.create "VerifyFuaranCoBuild" (fun _ ->
-        runVerifyFuaranCoBuild (argValue "--ui-version") (argValue "--toolup-version"))
+        runVerifyFuaranCoBuild (Flags.value "--ui-version" flags) (Flags.value "--toolup-version" flags))
 
     match verifyLane with
     | TestLane.Lane.Full ->
@@ -5232,7 +4961,7 @@ let main args =
         let root = Path.getFullName "."
         // `System.` qualified deliberately: this file opens Fake.Core but
         // not System, so a bare `Environment` binds to Fake's module.
-        let checkOnly = System.Environment.GetCommandLineArgs() |> Array.contains "--check"
+        let checkOnly = Flags.has "--check" flags
         let reconciliation = SdkManifest.reconcile root
 
         // A discovery that finds nothing would report a clean manifest
@@ -5283,11 +5012,6 @@ let main args =
     // `toolup-safer`). Add new template-packs by extending the
     // `templatePackProjects` glob.
     Target.create "PackTemplates" (fun _ ->
-        let dotnet args dir =
-            CreateProcess.fromRawCommand "dotnet" args
-            |> CreateProcess.withWorkingDirectory dir
-            |> CreateProcess.ensureExitCode
-
         let outputDir = Path.getFullName "../../local-nuget-feed"
         Directory.ensure outputDir
 
@@ -5296,8 +5020,8 @@ let main args =
         for proj in templatePackProjects do
             Trace.tracefn "Packing template-pack %s..." proj
 
-            dotnet [ "pack"; proj; "-c"; "Release"; "-o"; outputDir; "--nologo" ] "."
-            |> Proc.run
+            Proc.exec "dotnet" [ "pack"; proj; "-c"; "Release"; "-o"; outputDir; "--nologo" ] "."
+            |> Proc.ensure
             |> ignore)
 
     // Phase 167 — pack the `toolup` CLI as a tool-manifest-installable
@@ -5309,15 +5033,11 @@ let main args =
     //
     // Usage: `dotnet run -- PackCli`
     Target.create "PackCli" (fun _ ->
-        let dotnet args dir =
-            CreateProcess.fromRawCommand "dotnet" args
-            |> CreateProcess.withWorkingDirectory dir
-            |> CreateProcess.ensureExitCode
-
         let outputDir = Path.getFullName "../../local-nuget-feed"
         Directory.ensure outputDir
 
-        dotnet
+        Proc.exec
+            "dotnet"
             [
                 "pack"
                 "src/ToolUp.Cli/ToolUp.Cli.fsproj"
@@ -5328,7 +5048,7 @@ let main args =
                 "--nologo"
             ]
             "."
-        |> Proc.run
+        |> Proc.ensure
         |> ignore)
 
     // Phase 626 — unreferenced-definition report.
@@ -5351,23 +5071,16 @@ let main args =
     //
     // Usage: `dotnet run --project Build.fsproj -- DeadCodeReport`
     Target.create "DeadCodeReport" (fun _ ->
-        // Read from the process argv rather than the target context, for
-        // the same reason VerifyDocSnippets does: FAKE's own CLI parser
-        // consumes trailing options before the target sees them.
         let passthrough =
             [ "--fail-on-dead"; "--verbose"; "--json" ]
-            |> List.filter (fun flag -> args |> Array.contains flag)
+            |> List.filter (fun flag -> Flags.has flag flags)
 
         let toolArgs =
             [ "run"; "--project"; "tools/ToolUp.DeadCode"; "--" ]
             @ [ "--repo-root"; __SOURCE_DIRECTORY__ ]
             @ passthrough
 
-        CreateProcess.fromRawCommand "dotnet" toolArgs
-        |> CreateProcess.withWorkingDirectory __SOURCE_DIRECTORY__
-        |> CreateProcess.ensureExitCode
-        |> Proc.run
-        |> ignore)
+        Proc.exec "dotnet" toolArgs __SOURCE_DIRECTORY__ |> Proc.ensure |> ignore)
 
     // Phase 213 — Lighthouse / Core-Web-Vitals budget gate. The deciding
     // half only: it reads a committed budget file plus the Lighthouse
@@ -5398,593 +5111,14 @@ let main args =
     // target body resolves and reports its own missing inputs.
     PerfBudgetGate.registerTarget ()
 
-    // Phase 587 — instantiate-then-build smoke gate for the
-    // `platformsdk-module-packaged` template.
-    //
-    // Usage: `dotnet run --project Build.fsproj -- VerifyPackagedModuleTemplate`
-    //
-    // WHY THIS IS A SEPARATE TARGET FROM VerifyTemplates. That gate
-    // builds template PROJECTS in place, against the repo's own
-    // Directory.Build.props / Directory.Packages.props / nuget.config.
-    // It works because those templates are root-inheriting fragments.
-    // This template is not: it is a whole repository — its own CPM
-    // props, its own nuget.config, its own global.json, and a literal
-    // TOOLUP_SDK_VERSION placeholder — which is exactly the class the
-    // VerifyTemplates note calls "not buildable in-repo without
-    // rewriting what makes it a template", alongside templates/safer
-    // and templates/platformsdk-solution. So this IS the
-    // instantiate-then-build harness that note said such a template
-    // would need: `dotnet new` it into a scratch directory OUTSIDE the
-    // repo (so no ancestor MSBuild file leaks in) and run the
-    // scaffold's own pipeline end to end.
-    //
-    // WHAT IT PROVES, in the phase's words: scaffold -> build -> pack ->
-    // both conformance layers green. The scaffold's own target chain
-    // makes that one command: `Pack` depends on `Test` (the module-seam
-    // contract pack) and on `VerifyPackagedModule` (the packaging
-    // layout laws), so a green Pack cannot have skipped either.
-    //
-    // The gate-version + cache-wipe machinery is shared with
-    // VerifyTemplates and load-bearing for the same reason: packing at
-    // $(ToolUpSdkVersion) would be a same-version repack, and NuGet
-    // would serve the previously-extracted copy, so the gate would
-    // measure whatever was packed last rather than current source.
-    let packagedModuleTemplateDir = "templates/platformsdk-module-packaged"
-
-    // The VerifyTemplates closure plus the Build package: the generated
-    // repo's Build.fsproj references ToolUp.Platform.Build for the
-    // packaged-module conformance target. Everything else it restores
-    // (Feliz, Fable.*, Expecto, FAKE) comes from nuget.org, which is
-    // what a real consumer does.
-    let packagedModuleTemplateGatePackages =
-        templateGatePackages
-        @ [
-            TemplateGate.package "ToolUp.Platform.Build" "src/ToolUp.Platform.Build/ToolUp.Platform.Build.fsproj"
-        ]
-
+    // The two instantiating template gates. Their rationale and their specs
+    // are `TemplateGatePackages.verifyPackagedModuleTemplate` and
+    // `.verifyDataPlatformTemplate`; the mechanism is `TemplateGate.run`.
     Target.create "VerifyPackagedModuleTemplate" (fun _ ->
-        let runIn exe args dir =
-            CreateProcess.fromRawCommand exe args
-            |> CreateProcess.withWorkingDirectory dir
-            |> Proc.run
-            |> fun r -> r.ExitCode
-
-        let runCheckedIn exe args dir =
-            let code = runIn exe args dir
-
-            if code <> 0 then
-                failwithf
-                    "VerifyPackagedModuleTemplate: `%s %s` exited %d (in %s)"
-                    exe
-                    (String.concat " " args)
-                    code
-                    dir
-
-        // ── 0. The vendored conformance pack has not drifted ─────────
-        //
-        // The template's test project VENDORS the SDK's ModuleContract
-        // laws, because the SDK's test project is not packable and
-        // copying is the documented adoption route. A vendored copy
-        // drifts silently by construction, and this one is shipped to
-        // consumers as "born conformant" — so the copy is checked
-        // against its source here rather than trusted.
-        //
-        // Only the LAWS half is vendored: everything from the reference
-        // module onwards is the pack's own self-test, which binds
-        // deliberately non-conforming witnesses and belongs to the SDK.
-        let packSource = "src/ToolUp.Platform.Tests/Contracts/ModuleContract.fs"
-
-        let vendoredPack =
-            packagedModuleTemplateDir + "/tests/MyModule.Tests/Contracts/ModuleContract.fs"
-
-        let selfTestMarker = "// ── a conforming reference module"
-
-        let normaliseText (s: string) =
-            s.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
-
-        let sourceText = File.ReadAllText packSource
-
-        let markerIndex =
-            sourceText.IndexOf(selfTestMarker, System.StringComparison.Ordinal)
-
-        if markerIndex < 0 then
-            failwithf
-                "VerifyPackagedModuleTemplate: could not find the laws/self-test boundary marker %s in %s. The vendored-copy drift check cannot run; re-establish the marker or update this target."
-                selfTestMarker
-                packSource
-
-        let expectedVendored = normaliseText (sourceText.Substring(0, markerIndex))
-        let actualVendored = normaliseText (File.ReadAllText vendoredPack)
-
-        if expectedVendored <> actualVendored then
-            failwithf
-                "VerifyPackagedModuleTemplate: the vendored conformance pack has drifted from the SDK's.%sRe-copy the laws region:%s  the first %d characters of %s (everything before `%s`) into %s."
-                System.Environment.NewLine
-                System.Environment.NewLine
-                markerIndex
-                packSource
-                selfTestMarker
-                vendoredPack
-
-        Trace.tracefn "▶ VerifyPackagedModuleTemplate: vendored conformance pack matches %s" packSource
-
-        // ── 1. A scratch feed carrying the SDK at the gate version ───
-        let feedDir = Path.getFullName "obj/packaged-module-template-feed"
-        Shell.deleteDir feedDir
-        Directory.ensure feedDir
-
-        // Phase 903 — same private-folder fix as VerifyTemplates above,
-        // and the SAME path: each gate runs as its OWN `dotnet run`
-        // process (CI invokes them as two separate steps) and always
-        // evicts on entry, so there is no cross-target state to protect —
-        // sharing the path is for one worktree to have one private
-        // packages folder to reason about, not to skip a restore.
-        let privatePackages =
-            TemplateGatePackages.privatePackagesFolder (Path.getFullName ".")
-
-        let eviction = TemplateGatePackages.evict privatePackages
-
-        Trace.tracefn
-            "▶ VerifyPackagedModuleTemplate: private packages folder %s (evicted %d prior entr%s: %s)"
-            eviction.Folder
-            eviction.Removed.Length
-            (if eviction.Removed.Length = 1 then "y" else "ies")
-            (String.concat ", " eviction.Removed)
-
-        System.Environment.SetEnvironmentVariable("NUGET_PACKAGES", privatePackages)
-
-        for pkg in packagedModuleTemplateGatePackages do
-            if not (File.Exists(Path.getFullName pkg.Project)) then
-                failwithf
-                    "VerifyPackagedModuleTemplate: gate package %s declares project %s, which does not exist. Fix the `Project` in `templateGatePackages`."
-                    pkg.Id
-                    pkg.Project
-
-            Trace.tracefn "▶ VerifyPackagedModuleTemplate: packing %s (%s) @ %s" pkg.Id pkg.Project templateGateVersion
-
-            runCheckedIn
-                "dotnet"
-                [
-                    "pack"
-                    pkg.Project
-                    sprintf "-p:Version=%s" templateGateVersion
-                    "-o"
-                    feedDir
-                    "--nologo"
-                ]
-                "."
-
-        // Phase 754 — the same stranger's-package reconciliation
-        // VerifyTemplates runs, for the same reason: this gate's closure
-        // is that one plus ToolUp.Platform.Build, and the scaffold below
-        // restores with nuget.org still in its sources.
-        match
-            TemplateGate.unproducedIds
-                templateGateVersion
-                packagedModuleTemplateGatePackages
-                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
-        with
-        | [] -> ()
-        | unproduced -> failwith (TemplateGate.report "VerifyPackagedModuleTemplate" templateGateVersion unproduced)
-
-        // ── 2. Instantiate OUTSIDE the repo ──────────────────────────
-        //
-        // Under the repo, the scaffold's own Directory.Build.props stops
-        // the MSBuild walk but nuget.config files MERGE up the tree, so
-        // forge's sources would silently paper over a broken feed
-        // declaration in the template. A short temp path also keeps
-        // Windows MAX_PATH away from fsc, which fails by emitting no dll
-        // and no error.
-        let scratchRoot = Path.Combine(Path.GetTempPath(), "tu-pmt")
-        let moduleName = "Gate.Module"
-        let scaffoldDir = Path.Combine(scratchRoot, moduleName)
-        Shell.deleteDir scratchRoot
-        Directory.ensure scaffoldDir
-
-        let templatePath = Path.getFullName packagedModuleTemplateDir
-
-        // Uninstall first, ignoring the exit code: a dev machine may
-        // carry an earlier install of the same identity, and `install`
-        // refuses rather than replacing.
-        runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
-
-        runCheckedIn "dotnet" [ "new"; "install"; templatePath ] "."
-
-        try
-            // Forward slashes for the feed: it lands in an F# verbatim
-            // string in the generated Build.fs and in nuget.config, and
-            // a trailing-backslash Windows path would break the former.
-            let feedForTemplate = feedDir.Replace('\\', '/')
-
-            runCheckedIn
-                "dotnet"
-                [
-                    "new"
-                    "platformsdk-module-packaged"
-                    "-n"
-                    moduleName
-                    "-o"
-                    scaffoldDir
-                    "--namespace-root"
-                    "Gate.Module"
-                    "--sdk-version"
-                    templateGateVersion
-                    "--feed"
-                    feedForTemplate
-                ]
-                "."
-
-            // ── 3. The scaffold's own pipeline, end to end ───────────
-            //
-            // One command, because the generated target chain wires
-            // both conformance layers ahead of Pack. If either the
-            // module-seam laws or the packaging layout laws fail, this
-            // fails.
-            runCheckedIn "dotnet" [ "run"; "--project"; "Build.fsproj"; "--"; "Pack" ] scaffoldDir
-
-            // ── 4. Every ToolUp.* resolved at the gate version ───────
-            //
-            // The equivalent of VerifyTemplates' NU1603 escalation, done
-            // by reading the restore result rather than by a warning
-            // flag we cannot inject through the scaffold's own driver. A
-            // ToolUp.* package resolved at any other version means the
-            // gate closure above is incomplete and the scaffold compiled
-            // against a mix of current and released SDK.
-            let assetsFile =
-                Path.Combine(scaffoldDir, "src", moduleName, "obj", "project.assets.json")
-
-            if not (File.Exists assetsFile) then
-                failwithf
-                    "VerifyPackagedModuleTemplate: no restore graph at %s — the scaffold did not restore."
-                    assetsFile
-
-            let strayPins =
-                System.Text.RegularExpressions.Regex.Matches(
-                    File.ReadAllText assetsFile,
-                    "\"(ToolUp\\.[A-Za-z.]+)/([^\"]+)\""
-                )
-                |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value)
-                |> Seq.filter (fun (_, version) -> version <> templateGateVersion)
-                |> Seq.distinct
-                |> List.ofSeq
-
-            if not (List.isEmpty strayPins) then
-                failwithf
-                    "VerifyPackagedModuleTemplate: %d ToolUp.* package(s) resolved at a version other than %s — the gate closure is incomplete, so the scaffold built against a MIX of current source and a released SDK: %s. Add the named package(s) to `packagedModuleTemplateGatePackages`."
-                    (List.length strayPins)
-                    templateGateVersion
-                    (strayPins |> List.map (fun (p, v) -> sprintf "%s@%s" p v) |> String.concat ", ")
-
-            // ── 5. The packed layout is what the contract declared ───
-            //
-            // VerifyPackagedModule ran pre-Pack against the project's
-            // DECLARATIONS. This reads the artefact NuGet actually
-            // produced, which is the half a declaration cannot prove.
-            let nupkg =
-                Directory.GetFiles(feedDir, moduleName + ".*.nupkg")
-                |> Array.filter (fun p -> not (p.EndsWith(".snupkg", System.StringComparison.OrdinalIgnoreCase)))
-                |> Array.sort
-                |> Array.tryLast
-
-            match nupkg with
-            | None ->
-                failwithf
-                    "VerifyPackagedModuleTemplate: the scaffold's Pack produced no %s nupkg in %s."
-                    moduleName
-                    feedDir
-            | Some path ->
-                use archive = System.IO.Compression.ZipFile.OpenRead path
-
-                let entries =
-                    archive.Entries |> Seq.map (fun e -> e.FullName.Replace('\\', '/')) |> Set.ofSeq
-
-                let required = [
-                    "fable/" + moduleName + ".fsproj"
-                    "fable/SharedTypes.fs"
-                    "fable/ClientModel.fs"
-                    "fable/Icons.fs"
-                    "fable/ClientRegister.fs"
-                    "fable/icons/module-icon.svg"
-                ]
-
-                let missing = required |> List.filter (fun r -> not (entries.Contains r))
-
-                if not (List.isEmpty missing) then
-                    failwithf
-                        "VerifyPackagedModuleTemplate: the packed nupkg is missing %s. A consumer's Fable build resolves the client tier from these paths."
-                        (String.concat ", " missing)
-
-                // The server tier must NOT be in the Fable set: a
-                // server-only file reaching Fable breaks the consumer's
-                // build, naming this package's namespace.
-                if entries.Contains "fable/Server.fs" then
-                    failwith
-                        "VerifyPackagedModuleTemplate: Server.fs is packed under fable/ — declared server-only, so it must never reach a consumer's Fable compile."
-
-                Trace.tracefn
-                    "▶ VerifyPackagedModuleTemplate: %s carries a conformant fable/ layout"
-                    (Path.GetFileName path)
-        finally
-            runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
-
-        Trace.tracefn "▶ VerifyPackagedModuleTemplate: scaffold -> build -> conformance -> pack, green")
-
-    // Phase 1036 — instantiate-then-build gate for the
-    // `platformsdk-dataplatform` template.
-    //
-    // Usage: `dotnet run --project Build.fsproj -- VerifyDataPlatformTemplate`
-    //
-    // The template is a whole repository (its own CPM props, nuget.config,
-    // global.json and a literal TOOLUP_SDK_VERSION placeholder), so it is
-    // in the class VerifyPackagedModuleTemplate's note describes and this
-    // is the same harness: pack the SDK closure the scaffold references at
-    // the throwaway gate version, `dotnet new` it OUTSIDE the repo under a
-    // private packages folder (Phase 903), build the scaffold's solution
-    // and run its own end-to-end test — which uploads the synthetic
-    // delivery, writes both fact tables, generates the grounded report and
-    // probes the gated page anonymously and as a reader.
-    //
-    // It also holds the publication boundary: the template's own files and
-    // the scaffolded tree are scanned for the private vocabulary forge's
-    // OSS guard bans, so a regeneration of the template from an upstream
-    // composition cannot leak a name into a public scaffold.
-    let dataPlatformTemplateDir = "templates/platformsdk-dataplatform"
-
-    // The VerifyTemplates closure plus every ToolUp.* package the scaffold's
-    // server, module and test projects reference, and their own ToolUp.*
-    // dependencies. Incomplete here fails the stray-pin check below by name.
-    let dataPlatformTemplateGatePackages =
-        templateGatePackages
-        @ [
-            TemplateGate.package "ToolUp.AI.Core" "src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj"
-            TemplateGate.package "ToolUp.AI.Server" "src/ToolUp.AI.Server/ToolUp.AI.Server.fsproj"
-            TemplateGate.package "ToolUp.RAG.Core" "src/ToolUp.RAG.Core/ToolUp.RAG.Core.fsproj"
-            TemplateGate.package "ToolUp.RAG.Server" "src/ToolUp.RAG.Server/ToolUp.RAG.Server.fsproj"
-            TemplateGate.package "ToolUp.Facts.Core" "src/ToolUp.Facts.Core/ToolUp.Facts.Core.fsproj"
-            TemplateGate.package "ToolUp.Facts.Shared" "src/ToolUp.Facts.Shared/ToolUp.Facts.Shared.fsproj"
-            TemplateGate.package "ToolUp.Facts.Server" "src/ToolUp.Facts.Server/ToolUp.Facts.Server.fsproj"
-            TemplateGate.package "ToolUp.ArtefactSigning" "src/ToolUp.ArtefactSigning/ArtefactSigning.fsproj"
-            TemplateGate.package "ToolUp.PublicRendering" "src/ToolUp.PublicRendering/ToolUp.PublicRendering.fsproj"
-            TemplateGate.package
-                "ToolUp.KnowledgeBase.Core"
-                "src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj"
-            TemplateGate.package
-                "ToolUp.KnowledgeBase.Server"
-                "src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj"
-            TemplateGate.package "ToolUp.OpenXml" "src/ToolUp.OpenXml/ToolUp.OpenXml.fsproj"
-            TemplateGate.package "ToolUp.Tabular" "src/ToolUp.Tabular/ToolUp.Tabular.fsproj"
-            TemplateGate.package "ToolUp.AIProviders.Claude" "src/AIProviders/Claude/ClaudeAIProvider.fsproj"
-            TemplateGate.package
-                "ToolUp.EmbeddingProviders.Local"
-                "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj"
-            TemplateGate.package "ToolUp.VectorStores.Hnsw" "src/VectorStores/Hnsw/HnswVectorStore.fsproj"
-            TemplateGate.package "ToolUp.AuthProviders.Oidc" "src/AuthProviders/Oidc/OidcAuthProvider.fsproj"
-        ]
-
-    // The publication-boundary scan. The banned vocabulary is private and is
-    // never written into this public file: it is read at run time from the
-    // same sources the OSS guard tests read (`neutrality-tokens.local.txt`
-    // at the repo root, else `TOOLUP_NEUTRALITY_TOKENS`, semicolon-separated),
-    // with the one public-safe canary token always enforced. The matching
-    // rule is the guard's (src/ToolUp.Platform.Tests/InProcess/NeutralityTokens.fs):
-    // case-insensitive, word-bounded at an alphanumeric end, whitespace in a
-    // multi-word token matching any run, `re:` for a raw regex. That module
-    // is an Expecto test module and cannot be compiled into the build
-    // script, so the rule is restated here.
-    let boundaryRules () : (string * System.Text.RegularExpressions.Regex) list * bool =
-        let parse (lines: string seq) =
-            lines
-            |> Seq.map _.Trim()
-            |> Seq.filter (fun l -> l <> "" && not (l.StartsWith "#"))
-            |> List.ofSeq
-
-        let external =
-            if File.Exists "neutrality-tokens.local.txt" then
-                parse (File.ReadAllLines "neutrality-tokens.local.txt")
-            else
-                match System.Environment.GetEnvironmentVariable "TOOLUP_NEUTRALITY_TOKENS" with
-                | null -> []
-                | value -> parse (value.Split ';')
-
-        let toRegex (token: string) =
-            let options =
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                ||| System.Text.RegularExpressions.RegexOptions.CultureInvariant
-
-            if token.StartsWith("re:", System.StringComparison.OrdinalIgnoreCase) then
-                System.Text.RegularExpressions.Regex(token.Substring 3, options)
-            else
-                let isWord (c: char) =
-                    System.Char.IsLetterOrDigit c || c = '_'
-
-                let body =
-                    token.Split([| ' '; '\t' |], System.StringSplitOptions.RemoveEmptyEntries)
-                    |> Array.map System.Text.RegularExpressions.Regex.Escape
-                    |> String.concat @"\s+"
-
-                let edge (c: char) = if isWord c then @"\b" else ""
-                System.Text.RegularExpressions.Regex(edge token[0] + body + edge token[token.Length - 1], options)
-
-        ("PRIVATE-VOCAB-CANARY" :: external) |> List.map (fun t -> t, toRegex t), not (List.isEmpty external)
-
-    /// Every banned-token hit under `root` (text files; build output and
-    /// installed packages skipped), as `path:line token`. `masked` are
-    /// literal values the gate itself substituted into the scaffold (the
-    /// scratch feed's machine path), removed from each line before it is
-    /// matched: they are this machine's, not the template's.
-    let boundaryHits
-        (rules: (string * System.Text.RegularExpressions.Regex) list)
-        (masked: string list)
-        (root: string)
-        : string list =
-        let skipped = [ "bin"; "obj"; "node_modules"; "output" ]
-
-        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-        |> Seq.filter (fun path ->
-            let segments = Path.GetRelativePath(root, path).Split([| '\\'; '/' |])
-            not (segments |> Array.exists (fun s -> List.contains s skipped)))
-        |> Seq.collect (fun path ->
-            File.ReadAllLines path
-            |> Seq.mapi (fun i line -> i + 1, masked |> List.fold (fun (l: string) m -> l.Replace(m, "")) line)
-            |> Seq.collect (fun (n, line) ->
-                rules
-                |> Seq.filter (fun (_, rx) -> rx.IsMatch line)
-                |> Seq.map (fun (token, _) -> sprintf "%s:%d  '%s'" (Path.GetRelativePath(root, path)) n token)))
-        |> List.ofSeq
+        TemplateGate.run TemplateGatePackages.verifyPackagedModuleTemplate)
 
     Target.create "VerifyDataPlatformTemplate" (fun _ ->
-        let runIn exe args dir =
-            CreateProcess.fromRawCommand exe args
-            |> CreateProcess.withWorkingDirectory dir
-            |> Proc.run
-            |> fun r -> r.ExitCode
-
-        let runCheckedIn exe args dir =
-            let code = runIn exe args dir
-
-            if code <> 0 then
-                failwithf "VerifyDataPlatformTemplate: `%s %s` exited %d (in %s)" exe (String.concat " " args) code dir
-
-        let rules, fullList = boundaryRules ()
-
-        let assertNeutral (label: string) (masked: string list) (root: string) =
-            match boundaryHits rules masked root with
-            | [] ->
-                Trace.tracefn
-                    "▶ VerifyDataPlatformTemplate: %s carries no banned vocabulary (%s)"
-                    label
-                    (if fullList then
-                         sprintf "%d tokens" rules.Length
-                     else
-                         "NEUTRALITY TOKEN SOURCE ABSENT: only the public canary was enforced")
-            | hits ->
-                failwithf
-                    "VerifyDataPlatformTemplate: the publication boundary is broken in %s, %d reference(s) to private vocabulary:%s%s%sThis template is Apache-2.0 public; neutralise the wording."
-                    label
-                    hits.Length
-                    System.Environment.NewLine
-                    (hits |> List.truncate 40 |> String.concat System.Environment.NewLine)
-                    System.Environment.NewLine
-
-        // ── 0. The template's own files are neutral ──────────────────
-        assertNeutral "the template's files" [] (Path.getFullName dataPlatformTemplateDir)
-
-        // ── 1. A scratch feed carrying the closure at the gate version ─
-        let feedDir = Path.getFullName "obj/dataplatform-template-feed"
-        Shell.deleteDir feedDir
-        Directory.ensure feedDir
-
-        let privatePackages =
-            TemplateGatePackages.privatePackagesFolder (Path.getFullName ".")
-
-        let eviction = TemplateGatePackages.evict privatePackages
-
-        Trace.tracefn
-            "▶ VerifyDataPlatformTemplate: private packages folder %s (evicted %d prior entr%s)"
-            eviction.Folder
-            eviction.Removed.Length
-            (if eviction.Removed.Length = 1 then "y" else "ies")
-
-        System.Environment.SetEnvironmentVariable("NUGET_PACKAGES", privatePackages)
-
-        for pkg in dataPlatformTemplateGatePackages do
-            if not (File.Exists(Path.getFullName pkg.Project)) then
-                failwithf
-                    "VerifyDataPlatformTemplate: gate package %s declares project %s, which does not exist."
-                    pkg.Id
-                    pkg.Project
-
-            Trace.tracefn "▶ VerifyDataPlatformTemplate: packing %s @ %s" pkg.Id templateGateVersion
-
-            runCheckedIn
-                "dotnet"
-                [
-                    "pack"
-                    pkg.Project
-                    sprintf "-p:Version=%s" templateGateVersion
-                    "-o"
-                    feedDir
-                    "--nologo"
-                ]
-                "."
-
-        match
-            TemplateGate.unproducedIds
-                templateGateVersion
-                dataPlatformTemplateGatePackages
-                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
-        with
-        | [] -> ()
-        | unproduced -> failwith (TemplateGate.report "VerifyDataPlatformTemplate" templateGateVersion unproduced)
-
-        // ── 2. Instantiate OUTSIDE the repo (short path: MAX_PATH) ───
-        let scratchRoot = Path.Combine(Path.GetTempPath(), "tu-dpt")
-        let appName = "GateData"
-        let scaffoldDir = Path.Combine(scratchRoot, appName)
-        Shell.deleteDir scratchRoot
-        Directory.ensure scaffoldDir
-
-        let templatePath = Path.getFullName dataPlatformTemplateDir
-        runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
-        runCheckedIn "dotnet" [ "new"; "install"; templatePath ] "."
-
-        try
-            runCheckedIn
-                "dotnet"
-                [
-                    "new"
-                    "platformsdk-dataplatform"
-                    "-n"
-                    appName
-                    "-o"
-                    scaffoldDir
-                    "--sdk-version"
-                    templateGateVersion
-                    "--feed"
-                    feedDir.Replace('\\', '/')
-                ]
-                "."
-
-            // ── 3. The scaffolded tree is neutral too ────────────────
-            assertNeutral "the scaffolded repository" [ feedDir.Replace('\\', '/') ] scaffoldDir
-
-            // ── 4. Build the solution, then run the scaffold's own test ─
-            runCheckedIn "dotnet" [ "build"; appName + ".slnx"; "--nologo" ] scaffoldDir
-
-            // Every ToolUp.* resolved at the gate version, read off each
-            // project's restore graph (the NU1603-escalation equivalent).
-            let strayPins =
-                Directory.EnumerateFiles(scaffoldDir, "project.assets.json", SearchOption.AllDirectories)
-                |> Seq.collect (fun assets ->
-                    System.Text.RegularExpressions.Regex.Matches(
-                        File.ReadAllText assets,
-                        "\"(ToolUp\\.[A-Za-z.]+)/([^\"]+)\""
-                    )
-                    |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value))
-                |> Seq.filter (fun (_, version) -> version <> templateGateVersion)
-                |> Seq.distinct
-                |> List.ofSeq
-
-            if not (List.isEmpty strayPins) then
-                failwithf
-                    "VerifyDataPlatformTemplate: %d ToolUp.* package(s) resolved at a version other than %s, so the scaffold built against a MIX of current source and a released SDK: %s. Add them to `dataPlatformTemplateGatePackages`."
-                    (List.length strayPins)
-                    templateGateVersion
-                    (strayPins |> List.map (fun (p, v) -> sprintf "%s@%s" p v) |> String.concat ", ")
-
-            runCheckedIn
-                "dotnet"
-                [
-                    "run"
-                    "--project"
-                    Path.Combine("tests", appName + ".Tests", appName + ".Tests.fsproj")
-                    "--no-build"
-                ]
-                scaffoldDir
-        finally
-            runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
-
-        Trace.tracefn "▶ VerifyDataPlatformTemplate: neutral -> scaffold -> build -> end-to-end test, green")
+        TemplateGate.run TemplateGatePackages.verifyDataPlatformTemplate)
 
     // ─── Phase 184 — the fresh-machine published-package smoke gate ──
     //
@@ -6024,21 +5158,15 @@ let main args =
     Target.create "VerifyPublishedPackages" (fun _ ->
         let repoRoot = Path.getFullName "."
 
-        let runIn exe args dir =
-            CreateProcess.fromRawCommand exe args
-            |> CreateProcess.withWorkingDirectory dir
-            |> CreateProcess.redirectOutput
-            |> Proc.run
-
         // `diagnose` reads a failed step's captured output and returns an
         // account to print beside it ("" for none) — the restore steps use
         // it to say which ToolUp id missed and why (Phase 1004).
         let runCheckedInWith (diagnose: string -> string) label exe args dir =
             Trace.tracefn "▶ VerifyPublishedPackages: %s — %s %s" label exe (String.concat " " args)
-            let r = runIn exe args dir
+            let r = Proc.redirected exe args dir
 
             if r.ExitCode <> 0 then
-                let output = r.Result.Output + r.Result.Error
+                let output = r.StdOut + r.StdErr
                 printfn "%s" output
 
                 match diagnose output with
@@ -6120,7 +5248,7 @@ let main args =
 
         let fetchIndex (packageId: string) =
             try
-                http.GetStringAsync(PublishedSmoke.flatContainerIndexUrl packageId).GetAwaiter().GetResult()
+                block (http.GetStringAsync(PublishedSmoke.flatContainerIndexUrl packageId))
             with e ->
                 // A transient 404 IS the expected pre-index answer
                 // and the storage layer returns it as a throwing
@@ -6201,7 +5329,7 @@ let main args =
         // set no consumer can restore. A short temp path also keeps
         // Windows MAX_PATH away from fsc, which fails by emitting no dll
         // and no error.
-        let probeRoot = Path.Combine(Path.GetTempPath(), "tu-pubsmoke")
+        let probeRoot = Scratch.root "tu-pubsmoke"
 
         if not (PublishedSmoke.isOutsideRepo repoRoot probeRoot) then
             failwith (PublishedSmoke.insideRepoReport repoRoot probeRoot)
@@ -6326,40 +5454,24 @@ let main args =
     // Only the baselines that MOVED need reading: a blob identical on
     // both sides contributes an unchanged classification by definition,
     // and this keeps the cost proportional to the churn rather than to
-    // the ~165-package baseline set. `disableTraceCommand` because the
+    // the ~165-package baseline set. `Git.read` does not echo, because the
     // read is one `git show` per moved baseline, and echoing each would
     // bury the classification the caller exists to print.
     let surfaceChangesSince (root: string) (tag: string) : SemVerBump.PackageChange list =
-        let git (args: string list) =
-            let result =
-                CreateProcess.fromRawCommand "git" args
-                |> CreateProcess.withWorkingDirectory root
-                |> CreateProcess.redirectOutput
-                |> CreateProcess.disableTraceCommand
-                |> CreateProcess.ensureExitCode
-                |> Proc.run
-
-            result.Result.Output
-
-        let lines (text: string) =
-            text.Replace("\r\n", "\n").Split('\n')
-            |> Array.map _.Trim()
-            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
-            |> List.ofArray
-
         let changedPaths =
-            git [ "diff"; "--name-only"; tag; "--"; "api-baselines" ] |> lines
+            Git.read root [ "diff"; "--name-only"; tag; "--"; "api-baselines" ]
+            |> Lines.ofOutput
 
         let pathsAtTag =
-            git [ "ls-tree"; "-r"; "--name-only"; tag; "--"; "api-baselines" ]
-            |> lines
+            Git.read root [ "ls-tree"; "-r"; "--name-only"; tag; "--"; "api-baselines" ]
+            |> Lines.ofOutput
             |> Set.ofList
 
         changedPaths
         |> List.map (fun path ->
             let taggedText =
                 if pathsAtTag.Contains path then
-                    Some(git [ "show"; sprintf "%s:%s" tag path ])
+                    Some(Git.read root [ "show"; sprintf "%s:%s" tag path ])
                 else
                     None
 
@@ -6370,29 +5482,8 @@ let main args =
 
     Target.create "VerifySemVerBump" (fun _ ->
         let root = Path.getFullName "."
-        // `System.` qualified deliberately: this file opens Fake.Core but
-        // not System, so a bare `Environment` binds to Fake's module.
-        let proposeOnly =
-            System.Environment.GetCommandLineArgs() |> Array.contains "--propose"
+        let proposeOnly = Flags.has "--propose" flags
 
-        // `disableTraceCommand` because the read below is one `git show`
-        // per moved baseline — 53 of them on the release this was written
-        // against — and echoing each would bury the classification the
-        // target exists to print under its own plumbing.
-        let gitProc (args: string list) =
-            CreateProcess.fromRawCommand "git" args
-            |> CreateProcess.withWorkingDirectory root
-            |> CreateProcess.redirectOutput
-            |> CreateProcess.disableTraceCommand
-
-        let git (args: string list) =
-            (gitProc args |> CreateProcess.ensureExitCode |> Proc.run).Result.Output
-
-        let lines (text: string) =
-            text.Replace("\r\n", "\n").Split('\n')
-            |> Array.map _.Trim()
-            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
-            |> List.ofArray
 
         let propsPath = Path.Combine(root, "Directory.Build.props")
 
@@ -6429,9 +5520,7 @@ let main args =
         // it. Answering it here costs one process and turns a raw
         // non-zero from the first `git diff` into a sentence.
         if
-            (gitProc [ "rev-parse"; "--verify"; "--quiet"; releaseTag + "^{commit}" ]
-             |> Proc.run)
-                .ExitCode
+            (Git.run root [ "rev-parse"; "--verify"; "--quiet"; releaseTag + "^{commit}" ]).ExitCode
             <> 0
         then
             failwithf
@@ -6489,16 +5578,6 @@ let main args =
         "toolup-draftnote", "draftnote", "ToolUp append-only draft-note merge"
     ]
 
-    let gitOutput (cwd: string) (gitArgs: string list) =
-        let result =
-            CreateProcess.fromRawCommand "git" gitArgs
-            |> CreateProcess.withWorkingDirectory cwd
-            |> CreateProcess.redirectOutput
-            |> CreateProcess.disableTraceCommand
-            |> Proc.run
-
-        result.ExitCode, result.Result.Output.Trim()
-
     /// The two absolute paths a registered command names: the quoted shell
     /// it opens with, and the script after `-File`. The shape is the one
     /// `Setup` writes; anything else names no path this target can check.
@@ -6519,7 +5598,9 @@ let main args =
     let mergeDriverProblems (root: string) =
         mergeDrivers
         |> List.map (fun (name, _, _) ->
-            match gitOutput root [ "config"; "--get"; sprintf "merge.%s.driver" name ] with
+            let registered = Git.run root [ "config"; "--get"; sprintf "merge.%s.driver" name ]
+
+            match registered.ExitCode, registered.StdOut.Trim() with
             | 0, command when command <> "" ->
                 let problem =
                     match driverPathsOf command with
@@ -6542,7 +5623,7 @@ let main args =
     Target.create "Setup" (fun _ ->
         let root = Path.getFullName "."
 
-        if args |> Array.contains "--check" then
+        if Flags.has "--check" flags then
             let problems = mergeDriverProblems root
 
             for name, problem in problems do
@@ -6559,7 +5640,9 @@ let main args =
                     dead.Length
         else
             let commonDir =
-                match gitOutput root [ "rev-parse"; "--path-format=absolute"; "--git-common-dir" ] with
+                let r = Git.run root [ "rev-parse"; "--path-format=absolute"; "--git-common-dir" ]
+
+                match r.ExitCode, r.StdOut.Trim() with
                 | 0, dir when dir <> "" -> dir
                 | code, _ -> failwithf "Setup: `git rev-parse --git-common-dir` exited %d in %s." code root
 
@@ -6591,30 +5674,27 @@ let main args =
             // git runs a merge driver through a shell whose PATH is not
             // necessarily the one this target was launched with.
             let shell =
-                match ProcessUtils.tryFindFileOnPath "pwsh" with
-                | Some path -> path
-                | None ->
-                    failwith
-                        "Setup: `pwsh` is not on PATH. The merge drivers are PowerShell 7 scripts — they run inside `git merge`, in a tree that may not build, so they deliberately depend on nothing else. Install PowerShell 7 and re-run."
+                Proc.onPath
+                    (fun _ ->
+                        "Setup: `pwsh` is not on PATH. The merge drivers are PowerShell 7 scripts — they run inside `git merge`, in a tree that may not build, so they deliberately depend on nothing else. Install PowerShell 7 and re-run.")
+                    "pwsh"
 
-            let git (gitArgs: string list) =
-                CreateProcess.fromRawCommand "git" gitArgs
-                |> CreateProcess.withWorkingDirectory root
-                |> CreateProcess.ensureExitCode
-                |> Proc.run
-                |> ignore
-
-            // Forward slashes on both paths: the command string is
-            // interpreted by git's own shell, where a backslash is an escape
-            // character.
-            let slash (path: string) = path.Replace('\\', '/')
+            let gitConfig (key: string) (value: string) =
+                Proc.exec "git" [ "config"; key; value ] root |> Proc.ensure |> ignore
 
             for name, mode, title in mergeDrivers do
+                // Forward slashes on both paths: the command string is
+                // interpreted by git's own shell, where a backslash is an
+                // escape character.
                 let command =
-                    sprintf "\"%s\" -NoProfile -File \"%s\" -Mode %s %%O %%A %%B %%P" (slash shell) (slash driver) mode
+                    sprintf
+                        "\"%s\" -NoProfile -File \"%s\" -Mode %s %%O %%A %%B %%P"
+                        (Paths.toSlash shell)
+                        (Paths.toSlash driver)
+                        mode
 
-                git [ "config"; sprintf "merge.%s.driver" name; command ]
-                git [ "config"; sprintf "merge.%s.name" name; title ]
+                gitConfig (sprintf "merge.%s.driver" name) command
+                gitConfig (sprintf "merge.%s.name" name) title
                 Trace.tracefn "  merge.%s.driver = %s" name command
 
             Trace.tracefn
@@ -6659,13 +5739,8 @@ let main args =
     Target.create "MergeBaselines" (fun _ ->
         let root = Path.getFullName "."
 
-        // Read from the process argv rather than `p.Context.Arguments`, for
-        // the reason VerifyDocSnippets records: FAKE's own CLI parser consumes
-        // trailing options before the target sees them.
         let assemblies =
-            args
-            |> Array.tryFindIndex (fun a -> a = "--assemblies")
-            |> Option.bind (fun i -> Array.tryItem (i + 1) args)
+            Flags.value "--assemblies" flags
             |> Option.map (fun csv ->
                 csv.Split([| ','; ';' |], System.StringSplitOptions.RemoveEmptyEntries)
                 |> Array.map _.Trim()
@@ -6676,32 +5751,28 @@ let main args =
             failwith
                 "MergeBaselines: name the assemblies to regenerate — `dotnet run --project Build.fsproj -- MergeBaselines --assemblies ToolUp.AI.Core,ToolUp.AI.Server`. It deliberately has no all-of-them mode: an unscoped regen folds in every unrelated drift the merged tree happens to be carrying, which is the failure the scoping exists to prevent."
 
-        let dotnet (dotnetArgs: string list) =
-            CreateProcess.fromRawCommand "dotnet" dotnetArgs
-            |> CreateProcess.withWorkingDirectory root
-            |> CreateProcess.ensureExitCode
-            |> Proc.run
-            |> ignore
-
         // The renderer reads BUILT DLLs, so the merged tree has to compile
         // before it can be measured. An unbuilt tree would otherwise report as
         // the Phase 731 precondition failure, which reads like a surface break
         // and is not one.
         Trace.tracefn "MergeBaselines: building the merged tree…"
-        dotnet [ "build"; "ToolUp.Forge.sln"; "--nologo" ]
+
+        Proc.exec "dotnet" [ "build"; "ToolUp.Forge.sln"; "--nologo" ] root
+        |> Proc.ensure
+        |> ignore
 
         let scope = String.concat "," assemblies
         Trace.tracefn "MergeBaselines: regenerating %s" scope
 
-        CreateProcess.fromRawCommand "dotnet" [
-            "run"
-            "--project"
-            "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
-        ]
-        |> CreateProcess.withWorkingDirectory root
-        |> CreateProcess.setEnvironmentVariable "TOOLUP_APPROVE_API" scope
-        |> CreateProcess.ensureExitCode
-        |> Proc.run
+        Proc.execWith
+            {
+                Proc.options with
+                    Environment = [ "TOOLUP_APPROVE_API", scope ]
+            }
+            "dotnet"
+            [ "run"; "--project"; "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj" ]
+            root
+        |> Proc.ensure
         |> ignore
 
         // Then hand the regenerated bytes back to the driver, base = ours =
@@ -6710,11 +5781,10 @@ let main args =
         // drifted — and a merge commit produced by a drifted driver is exactly
         // what this target exists to keep out of the history.
         let shell =
-            match ProcessUtils.tryFindFileOnPath "pwsh" with
-            | Some path -> path
-            | None ->
-                failwith
-                    "MergeBaselines: `pwsh` is not on PATH, so the regenerated baselines cannot be re-checked against the driver."
+            Proc.onPath
+                (fun _ ->
+                    "MergeBaselines: `pwsh` is not on PATH, so the regenerated baselines cannot be re-checked against the driver.")
+                "pwsh"
 
         let driver = Path.Combine(root, "dev-scripts", "merge-baselines.ps1")
 
@@ -6729,19 +5799,7 @@ let main args =
                 File.Copy(path, copy, true)
 
                 let result =
-                    CreateProcess.fromRawCommand shell [
-                        "-NoProfile"
-                        "-File"
-                        driver
-                        "-Mode"
-                        mode
-                        path
-                        copy
-                        path
-                        path
-                    ]
-                    |> CreateProcess.withWorkingDirectory root
-                    |> Proc.run
+                    Proc.exec shell [ "-NoProfile"; "-File"; driver; "-Mode"; mode; path; copy; path; path ] root
 
                 if result.ExitCode <> 0 then
                     failwithf
@@ -6829,26 +5887,10 @@ let main args =
             else
                 V1Readiness.defaults, sprintf "the built-in defaults (`%s` is absent)" V1Readiness.thresholdsFileName
 
-        // ── git, read the way VerifySemVerBump reads it ──
-        let gitProc (args: string list) =
-            CreateProcess.fromRawCommand "git" args
-            |> CreateProcess.withWorkingDirectory root
-            |> CreateProcess.redirectOutput
-            |> CreateProcess.disableTraceCommand
-
-        let git (args: string list) =
-            (gitProc args |> CreateProcess.ensureExitCode |> Proc.run).Result.Output
-
-        let lines (text: string) =
-            text.Replace("\r\n", "\n").Split('\n')
-            |> Array.map _.Trim()
-            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
-            |> List.ofArray
-
         let treeSha =
             try
-                git [ "rev-parse"; "--short"; "HEAD" ]
-                |> lines
+                Git.read root [ "rev-parse"; "--short"; "HEAD" ]
+                |> Lines.ofOutput
                 |> List.tryHead
                 |> Option.defaultValue "unknown"
             with _ ->
@@ -6869,7 +5911,7 @@ let main args =
 
                 let identical (tag: string) =
                     let result =
-                        gitProc [
+                        Git.run root [
                             "diff"
                             "--quiet"
                             tag
@@ -6877,7 +5919,6 @@ let main args =
                             "api-baselines"
                             ":(exclude)api-baselines/doc-coverage.approved.txt"
                         ]
-                        |> Proc.run
 
                     result.ExitCode = 0
 
@@ -6965,8 +6006,7 @@ let main args =
     Target.create "V1Readiness" (fun _ ->
         let root = Path.getFullName "."
 
-        let requireReady =
-            System.Environment.GetCommandLineArgs() |> Array.contains "--require-ready"
+        let requireReady = Flags.has "--require-ready" flags
 
         let rows, thresholdsSource, treeSha, matrix, consumers = scoreV1Readiness root
 
@@ -7062,24 +6102,8 @@ let main args =
     Target.create "Changelog" (fun _ ->
         let root = Path.getFullName "."
 
-        let commandLine = System.Environment.GetCommandLineArgs()
-        let checkOnly = commandLine |> Array.contains "--check"
-        let draftOnly = commandLine |> Array.contains "--draft"
-
-        let gitProc (args: string list) =
-            CreateProcess.fromRawCommand "git" args
-            |> CreateProcess.withWorkingDirectory root
-            |> CreateProcess.redirectOutput
-            |> CreateProcess.disableTraceCommand
-
-        let git (args: string list) =
-            (gitProc args |> CreateProcess.ensureExitCode |> Proc.run).Result.Output
-
-        let lines (text: string) =
-            text.Replace("\r\n", "\n").Split('\n')
-            |> Array.map _.Trim()
-            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
-            |> List.ofArray
+        let checkOnly = Flags.has "--check" flags
+        let draftOnly = Flags.has "--draft" flags
 
         let isBaseline (path: string) =
             path.StartsWith "api-baselines/"
@@ -7099,17 +6123,19 @@ let main args =
             |> List.sortWith (fun (_, a) (_, b) -> SemVerBump.Version.compare a b)
 
         let dateOf (tag: string) =
-            git [ "log"; "-1"; "--format=%cs"; tag ] |> lines |> List.head
+            Git.read root [ "log"; "-1"; "--format=%cs"; tag ]
+            |> Lines.ofOutput
+            |> List.head
 
         let baselinesAt (rev: string) =
-            git [ "ls-tree"; "-r"; "--name-only"; rev; "--"; "api-baselines" ]
-            |> lines
+            Git.read root [ "ls-tree"; "-r"; "--name-only"; rev; "--"; "api-baselines" ]
+            |> Lines.ofOutput
             |> List.filter isBaseline
             |> Set.ofList
 
         let docsAt (rev: string) =
-            git [ "ls-tree"; "-r"; "--name-only"; rev; "--"; "docs/migrations" ]
-            |> lines
+            Git.read root [ "ls-tree"; "-r"; "--name-only"; rev; "--"; "docs/migrations" ]
+            |> Lines.ofOutput
             |> List.filter (fun p -> p.EndsWith ".md")
             |> Set.ofList
 
@@ -7127,7 +6153,7 @@ let main args =
 
         let showAt (rev: string) (pathsAtRev: Set<string>) (path: string) =
             if pathsAtRev.Contains path then
-                Some(git [ "show"; sprintf "%s:%s" rev path ])
+                Some(Git.read root [ "show"; sprintf "%s:%s" rev path ])
             else
                 None
 
@@ -7158,7 +6184,9 @@ let main args =
                     else
                         match since with
                         | Some s ->
-                            let changed = git [ "diff"; "--name-only"; s; tag; "--"; "api-baselines" ] |> lines
+                            let changed =
+                                Git.read root [ "diff"; "--name-only"; s; tag; "--"; "api-baselines" ]
+                                |> Lines.ofOutput
 
                             Changelog.Baselines(
                                 entriesBetween changed (showAt s (baselinesAt s)) (showAt tag pathsHere)
@@ -7209,8 +6237,8 @@ let main args =
                     | Error e -> failwithf "Changelog: cannot read the declared SDK version — %s (%s)." e propsPath
 
                 let changed =
-                    git [ "diff"; "--name-only"; newest; "--"; "api-baselines" ]
-                    |> lines
+                    Git.read root [ "diff"; "--name-only"; newest; "--"; "api-baselines" ]
+                    |> Lines.ofOutput
                     |> List.filter isBaseline
 
                 let docsIntroduced = Set.difference workingDocs (docsAt newest)
@@ -7324,13 +6352,6 @@ let main args =
     // Neither is in `verify.ps1`, for the reason VerifySemVerBump gives:
     // they answer release questions, and their rules run on every commit
     // in the Build test pack.
-    let releaseGitRun (root: string) (args: string list) =
-        CreateProcess.fromRawCommand "git" args
-        |> CreateProcess.withWorkingDirectory root
-        |> CreateProcess.redirectOutput
-        |> CreateProcess.disableTraceCommand
-        |> Proc.run
-
     // What nuget.org says about a candidate, read from the registration
     // leaf of every package the published-package smoke probes — the ids
     // that job already restores, so no second list of "representative"
@@ -7346,16 +6367,14 @@ let main args =
         |> List.map (fun id ->
             try
                 use response =
-                    client.GetAsync(ReleaseChannel.registrationLeafUrl id version).GetAwaiter().GetResult()
+                    block (client.GetAsync(ReleaseChannel.registrationLeafUrl id version))
 
                 if response.StatusCode = System.Net.HttpStatusCode.NotFound then
                     ReleaseChannel.NotPublished
                 elif not response.IsSuccessStatusCode then
                     ReleaseChannel.Unreadable(sprintf "%s: HTTP %d" id (int response.StatusCode))
                 else
-                    match
-                        ReleaseChannel.publicationOf (response.Content.ReadAsStringAsync().GetAwaiter().GetResult())
-                    with
+                    match ReleaseChannel.publicationOf (block (response.Content.ReadAsStringAsync())) with
                     | ReleaseChannel.Unreadable why -> ReleaseChannel.Unreadable(sprintf "%s: %s" id why)
                     | p -> p
             with e ->
@@ -7381,7 +6400,7 @@ let main args =
                 ReleaseChannel.PromotionEvidence.Version = version
                 ReleaseChannel.PromotionEvidence.Candidate = Some tag
                 ReleaseChannel.PromotionEvidence.CandidateIsAncestor =
-                    (releaseGitRun root [ "merge-base"; "--is-ancestor"; tag; "HEAD" ]).ExitCode = 0
+                    (Git.run root [ "merge-base"; "--is-ancestor"; tag; "HEAD" ]).ExitCode = 0
                 // `v1.0.0-rc.2` → `1.0.0-rc.2`: the tag shape is already
                 // validated, so the version is the tag minus its `v`.
                 ReleaseChannel.PromotionEvidence.Publication = candidatePublication (tag.Substring 1)

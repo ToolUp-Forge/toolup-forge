@@ -62,3 +62,54 @@ module PackScope =
         let normalised = projectPath.Replace('\\', '/')
 
         excludedDirs |> List.exists (fun seg -> normalised.Contains(sprintf "/%s/" seg))
+
+/// What one child process did: the command line as run, its
+/// exit code, what it printed (empty unless the run was redirected) and how
+/// long it took. Every runner in a build driver returns this one record, so a
+/// gate leg's verdict, output and budget are read off it rather than scraped.
+type ProcResult = {
+    /// The command line as the process was started, for reports.
+    Command: string
+    ExitCode: int
+    /// Captured standard output; empty when the run inherited the console.
+    StdOut: string
+    /// Captured standard error; empty when the run inherited the console.
+    StdErr: string
+    Elapsed: System.TimeSpan
+}
+
+/// How a child process is run. `Proc.options` is the default:
+/// inherit the console, echo the command line, no extra environment.
+type ProcOptions = {
+    /// Variables set on the child's environment, in order.
+    Environment: (string * string) list
+    /// Capture standard output and error into the result instead of
+    /// inheriting the console.
+    Redirect: bool
+    /// Echo the command line before it runs. Off for high-volume readers
+    /// (one `git show` per baseline), whose echo would bury the report.
+    TraceCommand: bool
+    /// Kill the child and raise when it outlives this.
+    Timeout: System.TimeSpan option
+}
+
+/// The options a driver accepts. A switch takes no value; a
+/// valued option takes the next argument. Anything else spelled `--name` is
+/// refused by name, so a mistyped flag cannot be silently ignored.
+type FlagSpec = {
+    Switches: string list
+    Valued: string list
+}
+
+/// A driver's command line, parsed once.
+type Flags = {
+    /// The first argument when it is not an option, else `Run` — the rule
+    /// `execute` has always applied.
+    Target: string
+    /// The non-option arguments after the target, in order.
+    Positionals: string list
+    /// The switches given.
+    Switches: Set<string>
+    /// The valued options given; the last occurrence wins.
+    Values: Map<string, string>
+}

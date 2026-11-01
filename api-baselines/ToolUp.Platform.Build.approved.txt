@@ -16,6 +16,14 @@ ToolUp.Platform.Build+BuildConfig.ServerProject : System.String { get }
 ToolUp.Platform.Build+BuildConfig.TestPacks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TestPack] { get }
 ToolUp.Platform.Build+BuildConfigModule (class)
 ToolUp.Platform.Build+BuildConfigModule.defaults : ToolUp.Platform.Build+BuildConfig { get }
+ToolUp.Platform.Build+Flags (class)
+ToolUp.Platform.Build+Flags.has(System.String, ToolUp.Platform.Flags) : System.Boolean
+ToolUp.Platform.Build+Flags.lenient(ToolUp.Platform.FlagSpec, System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.Flags
+ToolUp.Platform.Build+Flags.parse(ToolUp.Platform.FlagSpec, System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Flags, System.String]
+ToolUp.Platform.Build+Flags.sdk : ToolUp.Platform.FlagSpec { get }
+ToolUp.Platform.Build+Flags.targetOf(System.Collections.Generic.IEnumerable`1[System.String]) : System.String
+ToolUp.Platform.Build+Flags.union(ToolUp.Platform.FlagSpec, ToolUp.Platform.FlagSpec) : ToolUp.Platform.FlagSpec
+ToolUp.Platform.Build+Flags.value(System.String, ToolUp.Platform.Flags) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Build+Gate (class)
 ToolUp.Platform.Build+Gate.exclude(System.String, System.String) : ToolUp.Platform.Build+Gate+Exclusion
 ToolUp.Platform.Build+Gate.findings(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TestPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+Gate+Exclusion]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
@@ -26,7 +34,30 @@ ToolUp.Platform.Build+Gate+Exclusion (class)
 ToolUp.Platform.Build+Gate+Exclusion..ctor(System.String, System.String)
 ToolUp.Platform.Build+Gate+Exclusion.Project : System.String { get }
 ToolUp.Platform.Build+Gate+Exclusion.Reason : System.String { get }
+ToolUp.Platform.Build+Git (class)
+ToolUp.Platform.Build+Git.read(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.Platform.Build+Git.run(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.ProcResult
+ToolUp.Platform.Build+Git.within(System.TimeSpan, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.ProcResult
+ToolUp.Platform.Build+Lines (class)
+ToolUp.Platform.Build+Lines.ofOutput(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Neutrality (class)
+ToolUp.Platform.Build+Neutrality.Canary : System.String (literal)
+ToolUp.Platform.Build+Neutrality.externalTokens(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.Build+Neutrality.parseTokens(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+Neutrality.rules(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Text.RegularExpressions.Regex]]
+ToolUp.Platform.Build+Neutrality.toRegex(System.String) : System.Text.RegularExpressions.Regex
+ToolUp.Platform.Build+Neutrality.tokenFileName : System.String { get }
+ToolUp.Platform.Build+Neutrality.tokensVariable : System.String { get }
+ToolUp.Platform.Build+Paths (class)
+ToolUp.Platform.Build+Paths.toSlash(System.String) : System.String
 ToolUp.Platform.Build+Proc (class)
+ToolUp.Platform.Build+Proc.create(ToolUp.Platform.ProcOptions, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : Fake.Core.CreateProcess`1[Fake.Core.ProcessResult`1[Microsoft.FSharp.Core.Unit]]
+ToolUp.Platform.Build+Proc.ensure(ToolUp.Platform.ProcResult) : ToolUp.Platform.ProcResult
+ToolUp.Platform.Build+Proc.exec(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : ToolUp.Platform.ProcResult
+ToolUp.Platform.Build+Proc.execWith(ToolUp.Platform.ProcOptions, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : ToolUp.Platform.ProcResult
+ToolUp.Platform.Build+Proc.onPath(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String) : System.String
+ToolUp.Platform.Build+Proc.options : ToolUp.Platform.ProcOptions { get }
+ToolUp.Platform.Build+Proc.redirected(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : ToolUp.Platform.ProcResult
 ToolUp.Platform.Build+Proc+Parallel (class)
 ToolUp.Platform.Build+Proc+Parallel.colors : System.ConsoleColor[] { get }
 ToolUp.Platform.Build+Proc+Parallel.locker : System.Object { get }
@@ -36,14 +67,99 @@ ToolUp.Platform.Build+Proc+Parallel.print(System.ConsoleColor, System.String, Sy
 ToolUp.Platform.Build+Proc+Parallel.printStarting`2(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.Int32, System.Tuple`2[a, Fake.Core.CreateProcess`1[b]]]]) : System.Void
 ToolUp.Platform.Build+Proc+Parallel.redirect`2(System.Int32, System.Tuple`2[a, Fake.Core.CreateProcess`1[b]]) : Fake.Core.CreateProcess`1[b]
 ToolUp.Platform.Build+Proc+Parallel.run`2(System.Collections.Generic.IEnumerable`1[System.Tuple`2[a, Fake.Core.CreateProcess`1[b]]]) : b[]
+ToolUp.Platform.Build+Scratch (class)
+ToolUp.Platform.Build+Scratch.root(System.String) : System.String
 ToolUp.Platform.Build+TemplateGate (class)
+ToolUp.Platform.Build+TemplateGate.evict(System.String) : ToolUp.Platform.Build+TemplateGate+EvictionReport
+ToolUp.Platform.Build+TemplateGate.inPlaceBuildArgs(System.String, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+TemplateGate.instantiateArgs(ToolUp.Platform.Build+TemplateGate+Instantiation, System.String, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+TemplateGate.layoutFindings(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+TemplateGate.neutralHits(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Text.RegularExpressions.Regex]], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.String[]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Build+TemplateGate.package(System.String, System.String) : ToolUp.Platform.Build+TemplateGate+GatePackage
+ToolUp.Platform.Build+TemplateGate.privatePackagesFolder(System.String) : System.String
 ToolUp.Platform.Build+TemplateGate.report(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.Platform.Build+TemplateGate.run(ToolUp.Platform.Build+TemplateGate+TemplateGateSpec) : System.Void
+ToolUp.Platform.Build+TemplateGate.strayPins(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Platform.Build+TemplateGate.unproducedIds(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+GatePackage], System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+TemplateGate.vendoredFinding(System.String, System.String, System.String, System.String, System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.Build+TemplateGate.version : System.String { get }
+ToolUp.Platform.Build+TemplateGate+Check (class)
+ToolUp.Platform.Build+TemplateGate+Check.IsNeutral : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Check.IsNupkgLayout : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Check.IsStrayPins : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Check.IsVendoredPack : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Check.Tag : System.Int32 { get }
+ToolUp.Platform.Build+TemplateGate+Check+Neutral (class)
+ToolUp.Platform.Build+TemplateGate+Check+Neutral.Item : ToolUp.Platform.Build+TemplateGate+NeutralScope { get }
+ToolUp.Platform.Build+TemplateGate+Check+NupkgLayout (class)
+ToolUp.Platform.Build+TemplateGate+Check+NupkgLayout.forbidden : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Build+TemplateGate+Check+NupkgLayout.required : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Build+TemplateGate+Check+StrayPins (class)
+ToolUp.Platform.Build+TemplateGate+Check+StrayPins.assets : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Build+TemplateGate+Check+Tags (class)
+ToolUp.Platform.Build+TemplateGate+Check+Tags.Neutral : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Check+Tags.NupkgLayout : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Check+Tags.StrayPins : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Check+Tags.VendoredPack : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Check+VendoredPack (class)
+ToolUp.Platform.Build+TemplateGate+Check+VendoredPack.marker : System.String { get }
+ToolUp.Platform.Build+TemplateGate+Check+VendoredPack.source : System.String { get }
+ToolUp.Platform.Build+TemplateGate+Check+VendoredPack.vendored : System.String { get }
+ToolUp.Platform.Build+TemplateGate+EvictionReport (class)
+ToolUp.Platform.Build+TemplateGate+EvictionReport..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.Build+TemplateGate+EvictionReport.Folder : System.String { get }
+ToolUp.Platform.Build+TemplateGate+EvictionReport.Removed : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Build+TemplateGate+GatePackage (class)
 ToolUp.Platform.Build+TemplateGate+GatePackage..ctor(System.String, System.String)
 ToolUp.Platform.Build+TemplateGate+GatePackage.Id : System.String { get }
 ToolUp.Platform.Build+TemplateGate+GatePackage.Project : System.String { get }
+ToolUp.Platform.Build+TemplateGate+Instantiation (class)
+ToolUp.Platform.Build+TemplateGate+Instantiation..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+Step])
+ToolUp.Platform.Build+TemplateGate+Instantiation.Args : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Build+TemplateGate+Instantiation.Name : System.String { get }
+ToolUp.Platform.Build+TemplateGate+Instantiation.Scratch : System.String { get }
+ToolUp.Platform.Build+TemplateGate+Instantiation.ShortName : System.String { get }
+ToolUp.Platform.Build+TemplateGate+Instantiation.Steps : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+Step] { get }
+ToolUp.Platform.Build+TemplateGate+Instantiation.Template : System.String { get }
+ToolUp.Platform.Build+TemplateGate+NeutralScope (class)
+ToolUp.Platform.Build+TemplateGate+NeutralScope.IsScaffoldedTree : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+NeutralScope.IsTemplateFiles : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+NeutralScope.ScaffoldedTree : ToolUp.Platform.Build+TemplateGate+NeutralScope { get }
+ToolUp.Platform.Build+TemplateGate+NeutralScope.Tag : System.Int32 { get }
+ToolUp.Platform.Build+TemplateGate+NeutralScope.TemplateFiles : ToolUp.Platform.Build+TemplateGate+NeutralScope { get }
+ToolUp.Platform.Build+TemplateGate+NeutralScope+Tags (class)
+ToolUp.Platform.Build+TemplateGate+NeutralScope+Tags.ScaffoldedTree : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+NeutralScope+Tags.TemplateFiles : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Scaffold (class)
+ToolUp.Platform.Build+TemplateGate+Scaffold.IsInPlace : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Scaffold.IsInstantiate : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Scaffold.Tag : System.Int32 { get }
+ToolUp.Platform.Build+TemplateGate+Scaffold+InPlace (class)
+ToolUp.Platform.Build+TemplateGate+Scaffold+InPlace.projects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Build+TemplateGate+Scaffold+Instantiate (class)
+ToolUp.Platform.Build+TemplateGate+Scaffold+Instantiate.Item : ToolUp.Platform.Build+TemplateGate+Instantiation { get }
+ToolUp.Platform.Build+TemplateGate+Scaffold+Tags (class)
+ToolUp.Platform.Build+TemplateGate+Scaffold+Tags.InPlace : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Scaffold+Tags.Instantiate : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Step (class)
+ToolUp.Platform.Build+TemplateGate+Step.IsDotnet : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Step.IsVerify : System.Boolean { get }
+ToolUp.Platform.Build+TemplateGate+Step.Tag : System.Int32 { get }
+ToolUp.Platform.Build+TemplateGate+Step+Dotnet (class)
+ToolUp.Platform.Build+TemplateGate+Step+Dotnet.args : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Build+TemplateGate+Step+Tags (class)
+ToolUp.Platform.Build+TemplateGate+Step+Tags.Dotnet : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Step+Tags.Verify : System.Int32 (literal)
+ToolUp.Platform.Build+TemplateGate+Step+Verify (class)
+ToolUp.Platform.Build+TemplateGate+Step+Verify.Item : ToolUp.Platform.Build+TemplateGate+Check { get }
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec (class)
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+GatePackage], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+Check], ToolUp.Platform.Build+TemplateGate+Scaffold, System.String)
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec.Checks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+Check] { get }
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec.Closure : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+GatePackage] { get }
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec.Done : System.String { get }
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec.Feed : System.String { get }
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec.Name : System.String { get }
+ToolUp.Platform.Build+TemplateGate+TemplateGateSpec.Scaffold : ToolUp.Platform.Build+TemplateGate+Scaffold { get }
 ToolUp.Platform.Build+VerifyLeg (class)
 ToolUp.Platform.Build+VerifyLeg.register(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : System.Void
 ToolUp.Platform.Build+VerifyLeg.registeredLegs() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]]]
@@ -279,6 +395,16 @@ ToolUp.Platform.CoreWebVitalsServerSignals.MinConditionalGet304Rate : Microsoft.
 ToolUp.Platform.CoreWebVitalsServerSignals.Required : System.Boolean { get }
 ToolUp.Platform.CoreWebVitalsServerSignalsModule (class)
 ToolUp.Platform.CoreWebVitalsServerSignalsModule.none : ToolUp.Platform.CoreWebVitalsServerSignals { get }
+ToolUp.Platform.FlagSpec (class)
+ToolUp.Platform.FlagSpec..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.FlagSpec.Switches : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.FlagSpec.Valued : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Flags (class)
+ToolUp.Platform.Flags..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.Flags.Positionals : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Flags.Switches : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.Flags.Target : System.String { get }
+ToolUp.Platform.Flags.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.HostPackaging (class)
 ToolUp.Platform.HostPackaging.MinBundleBytes : System.Int64 (literal)
 ToolUp.Platform.HostPackaging.packAwsLambda(System.String, System.String) : System.Void
@@ -553,6 +679,19 @@ ToolUp.Platform.Prerender+PrerenderTargetOptions.CssLinkUrl : Microsoft.FSharp.C
 ToolUp.Platform.Prerender+PrerenderTargetOptions.OutputDirectory : System.String { get }
 ToolUp.Platform.Prerender+PrerenderTargetOptionsModule (class)
 ToolUp.Platform.Prerender+PrerenderTargetOptionsModule.defaults : ToolUp.Platform.Prerender+PrerenderTargetOptions { get }
+ToolUp.Platform.ProcOptions (class)
+ToolUp.Platform.ProcOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.ProcOptions.Environment : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.ProcOptions.Redirect : System.Boolean { get }
+ToolUp.Platform.ProcOptions.Timeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.Platform.ProcOptions.TraceCommand : System.Boolean { get }
+ToolUp.Platform.ProcResult (class)
+ToolUp.Platform.ProcResult..ctor(System.String, System.Int32, System.String, System.String, System.TimeSpan)
+ToolUp.Platform.ProcResult.Command : System.String { get }
+ToolUp.Platform.ProcResult.Elapsed : System.TimeSpan { get }
+ToolUp.Platform.ProcResult.ExitCode : System.Int32 { get }
+ToolUp.Platform.ProcResult.StdErr : System.String { get }
+ToolUp.Platform.ProcResult.StdOut : System.String { get }
 ToolUp.Platform.RenderMetricsSnapshot (class)
 ToolUp.Platform.RenderMetricsSnapshot..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.RenderMetricsSnapshot.ConditionalGet200 : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }

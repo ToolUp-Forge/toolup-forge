@@ -1,86 +1,259 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 903 — the template gates evict the package folder the machine
-/// actually uses.
-///
-/// **The bug.** `VerifyTemplates` and `VerifyPackagedModuleTemplate` both
-/// restore their scratch-fed templates against a THROWAWAY package version
-/// (`0.0.0-templategate`), and both used to wipe that version's cache
-/// entries out of a GUESSED global-packages folder first — `NUGET_PACKAGES`
-/// if set, else `~/.nuget/packages` — so a stale entry from a previous run
-/// could never mask this run's source. The guess is narrower than NuGet's
-/// own resolution: a `<config><add key="globalPackagesFolder" .../>` in
-/// ANY nuget.config on NuGet's search path overrides both the env var and
-/// the default, so a machine that sets it points the gate's eviction at a
-/// folder NuGet itself is not reading from. The eviction step then no-ops
-/// silently, restore resolves the PREVIOUS run's package from wherever
-/// NuGet is really caching, and the gate reports green having verified
-/// nothing about the tree it was told to check.
-///
-/// **Two candidate fixes, and why the second was chosen.** The narrower
-/// fix is to ask NuGet directly (`dotnet nuget locals global-packages
-/// --list`) rather than guess — honouring `NUGET_PACKAGES` first, exactly
-/// as NuGet does, then falling back to the CLI's own answer. That closes
-/// the wrong-folder class, but the folder it closes onto is still ONE
-/// folder SHARED by every worktree on the machine: two worktrees running a
-/// template gate at once pack and evict the SAME throwaway version in the
-/// SAME shared cache, and can each evict the other mid-restore — exactly
-/// the contention a several-worker campaign on one machine produces
-/// (campaign-forge-27, 2026-09-28, six workers sharing this machine).
-///
-/// So the fix here removes the guess rather than sharpening it: each gate
-/// run gets its OWN packages folder, scoped under the calling repository's
-/// own `obj/` — already the home of `template-gate-feed` /
-/// `packaged-module-template-feed`, and per-worktree by construction (a
-/// worktree has its own `obj/`) — and the gate points `NUGET_PACKAGES` at
-/// it for every child process it spawns. A private folder needs no
-/// resolution logic at all, because there is nothing ambient to get
-/// wrong, and two worktrees can never see — let alone evict — each
-/// other's entries. "Ask NuGet" is still the right answer for a gate that
-/// must read the machine's REAL shared cache; this one does not need to.
+/// The package closures the three template gates pack at the gate version:
+/// `VerifyTemplates` (`templates`), `VerifyPackagedModuleTemplate`
+/// (`packagedModule`) and `VerifyDataPlatformTemplate` (`dataPlatform`). Each
+/// is the `Closure` of its gate's `TemplateGateSpec` in `Build.fs`; the
+/// mechanism that packs, evicts and reconciles them is `TemplateGate.run`.
+/// Kept apart from the driver so the Build test pack can hold the closures
+/// to the tree.
 module ToolUp.Forge.TemplateGatePackages
 
-open System.IO
+open ToolUp.Platform.Build
 
-/// The private, per-run global-packages folder a template gate points
-/// `NUGET_PACKAGES` at, scoped under the calling repository's own `obj/`.
-/// Pure — a function of the repo root only, so it needs no read of
-/// `NUGET_PACKAGES` or any nuget.config to compute, and it never resolves
-/// to a folder any OTHER repository checkout (or worktree of this one)
-/// could also compute.
-let privatePackagesFolder (repoRoot: string) : string =
-    Path.Combine(repoRoot, "obj", "template-gate-packages")
+// The SDK packages the gated templates reference, plus the closure
+// of ToolUp.* packages those declare. Kept explicit rather than
+// globbed: packing all ~43 is minutes of work for packages no
+// template names. Adding an SDK->SDK dependency without adding it
+// here does not silently degrade — the gate's NU1603 escalation turns
+// the resulting version fallback into a build error naming the
+// missing package.
+//
+// Each entry declares its PackageId AND the project that
+// produces it. They were one string, with the project derived as
+// `src/<id>/<id>.fsproj`; that assumption died when the AG Grid /
+// AG Charts bindings took `ToolUp.Feliz.*` ids while their projects
+// stayed at `src/Feliz.*/`. The gate reconciles the two
+// against what was actually emitted (`TemplateGate.unproducedIds`),
+// so an id this repo does not produce fails the gate by name rather
+// than falling through to a stranger's package on nuget.org.
+let templates = [
+    TemplateGate.package "ToolUp.Platform.Core" "src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj"
+    TemplateGate.package "ToolUp.Platform.Client" "src/ToolUp.Platform.Client/ToolUp.Platform.Client.fsproj"
+    TemplateGate.package "ToolUp.Platform.Server" "src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj"
+    // Phase 307 — declared by Platform.Client (the UI toolkit,
+    // promoted out of the client tier into its own package). This is
+    // exactly the SDK->SDK dependency the note above describes: without
+    // it, Platform.Client packed at the gate version would declare a
+    // ToolUp.Platform.UI the scratch feed cannot serve, and the NU1603
+    // escalation would fail the gate by name.
+    TemplateGate.package "ToolUp.Platform.UI" "src/ToolUp.Platform.UI/ToolUp.Platform.UI.fsproj"
+    // Also declared by Platform.Client, since Phase 344 promoted the
+    // AG Grid / AG Charts bindings out of the client tier. They were
+    // not added here at the time, and the consequence is not benign:
+    // BOTH bare `Feliz.*` ids exist on nuget.org (Feliz.AgGrid 0.0.1,
+    // Feliz.AgCharts 0.23.0 — unrelated packages by another author),
+    // so restore silently fell through to a stranger's package and
+    // NU1603 turned that into a hard error. The `templates` CI job
+    // was red on main from 344 until Phase 307 found it while adding
+    // ToolUp.Platform.UI above — the very case the note at the head
+    // of this list describes.
+    //
+    // Phase 754 settled the ids for good: the packages are
+    // `ToolUp.Feliz.*` now (that prefix is also the glob the repo's
+    // nuget.org Trusted Publishing policy is registered against), and
+    // the id/project split above is what lets the projects keep their
+    // `src/Feliz.*/` directories while the emitted ids move. The
+    // reconciliation after the pack loop is the structural successor
+    // to "someone remembers to add the package": it fails on any id
+    // this repo does not itself emit, which is precisely what a
+    // stranger's package is.
+    TemplateGate.package "ToolUp.Feliz.AgGrid" "src/Feliz.AgGrid/Feliz.AgGrid.fsproj"
+    TemplateGate.package "ToolUp.Feliz.AgCharts" "src/Feliz.AgCharts/Feliz.AgCharts.fsproj"
+    // Declared by Platform.Core.
+    TemplateGate.package "ToolUp.AI.Wire" "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj"
+    // Declared by AI.Wire and Platform.Core (Phase 128).
+    TemplateGate.package "ToolUp.Platform.Transport" "src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj"
+    // Declared by Platform.Server, and its own ProjectReference.
+    TemplateGate.package "ToolUp.Graph.InMemory" "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj"
+    TemplateGate.package "ToolUp.Graph.Core" "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj"
+]
 
-/// What `evict` removed, and where — the gate prints both, so a reader can
-/// tell a cold run (nothing removed) from a run that actually needed it.
-type EvictionReport = {
-    /// The private packages folder evicted.
-    Folder: string
-    /// The package ids (top-level subfolder names) that were present
-    /// before the evict and are now gone, sorted for a stable report.
-    /// NuGet lays a global-packages folder out as `<folder>/<id>/<version>/`,
-    /// so a top-level subfolder name IS a package id.
-    Removed: string list
+// The VerifyTemplates closure plus the Build package: the generated
+// repo's Build.fsproj references ToolUp.Platform.Build for the
+// packaged-module conformance target. Everything else it restores
+// (Feliz, Fable.*, Expecto, FAKE) comes from nuget.org, which is
+// what a real consumer does.
+let packagedModule =
+    templates
+    @ [
+        TemplateGate.package "ToolUp.Platform.Build" "src/ToolUp.Platform.Build/ToolUp.Platform.Build.fsproj"
+    ]
+
+// The VerifyTemplates closure plus every ToolUp.* package the scaffold's
+// server, module and test projects reference, and their own ToolUp.*
+// dependencies. Incomplete here fails the gate's `StrayPins` check by name.
+let dataPlatform =
+    templates
+    @ [
+        TemplateGate.package "ToolUp.AI.Core" "src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj"
+        TemplateGate.package "ToolUp.AI.Server" "src/ToolUp.AI.Server/ToolUp.AI.Server.fsproj"
+        TemplateGate.package "ToolUp.RAG.Core" "src/ToolUp.RAG.Core/ToolUp.RAG.Core.fsproj"
+        TemplateGate.package "ToolUp.RAG.Server" "src/ToolUp.RAG.Server/ToolUp.RAG.Server.fsproj"
+        TemplateGate.package "ToolUp.Facts.Core" "src/ToolUp.Facts.Core/ToolUp.Facts.Core.fsproj"
+        TemplateGate.package "ToolUp.Facts.Shared" "src/ToolUp.Facts.Shared/ToolUp.Facts.Shared.fsproj"
+        TemplateGate.package "ToolUp.Facts.Server" "src/ToolUp.Facts.Server/ToolUp.Facts.Server.fsproj"
+        TemplateGate.package "ToolUp.ArtefactSigning" "src/ToolUp.ArtefactSigning/ArtefactSigning.fsproj"
+        TemplateGate.package "ToolUp.PublicRendering" "src/ToolUp.PublicRendering/ToolUp.PublicRendering.fsproj"
+        TemplateGate.package
+            "ToolUp.KnowledgeBase.Core"
+            "src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj"
+        TemplateGate.package
+            "ToolUp.KnowledgeBase.Server"
+            "src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj"
+        TemplateGate.package "ToolUp.OpenXml" "src/ToolUp.OpenXml/ToolUp.OpenXml.fsproj"
+        TemplateGate.package "ToolUp.Tabular" "src/ToolUp.Tabular/ToolUp.Tabular.fsproj"
+        TemplateGate.package "ToolUp.AIProviders.Claude" "src/AIProviders/Claude/ClaudeAIProvider.fsproj"
+        TemplateGate.package
+            "ToolUp.EmbeddingProviders.Local"
+            "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj"
+        TemplateGate.package "ToolUp.VectorStores.Hnsw" "src/VectorStores/Hnsw/HnswVectorStore.fsproj"
+        TemplateGate.package "ToolUp.AuthProviders.Oidc" "src/AuthProviders/Oidc/OidcAuthProvider.fsproj"
+    ]
+// ─── The three gates, as specs ───────────────────────────────────────
+//
+// Each is run by `TemplateGate.run` from its target in `Build.fs`
+// (`dotnet run --project Build.fsproj -- <Name>`). They differ only in the
+// data below; the pack, the eviction, the reconciliation and the checks are
+// written once. Each keeps its own scratch feed and scratch root.
+
+/// `VerifyTemplates` — the root-inheriting `dotnet new` scaffolds compile.
+///
+/// The `templates/` scaffolds are shipped to consumers via `dotnet new`, and
+/// nothing compiled them: two had been broken for an unknown span (a
+/// `ToolUp.Remoting.Client` reference the 0.4.4 fold deleted, and an
+/// `IDataSource` shape the SDK no longer had), so a consumer running
+/// `dotnet new` got a project that did not compile.
+///
+/// Not in `ToolUp.Forge.sln`: template projects reference `ToolUp.Platform.*`
+/// by PackageReference, as a consumer's copy does, and CI creates an EMPTY
+/// `../../local-nuget-feed`, so a template project in the solution would fail
+/// restore and take `verify-all` with it. The gate supplies the packages
+/// instead of assuming them.
+///
+/// Not covered, deliberately: `templates/safer/` and
+/// `templates/platformsdk-solution/` are standalone solutions with their own
+/// nuget.config and (safer) a literal `TOOLUP_SDK_VERSION` placeholder, so
+/// neither is buildable in-repo without rewriting what makes it a template —
+/// the class the two instantiating gates below exist for.
+let verifyTemplates: TemplateGate.TemplateGateSpec = {
+    Name = "VerifyTemplates"
+    Closure = templates
+    Feed = "obj/template-gate-feed"
+    Checks = []
+    Scaffold =
+        TemplateGate.InPlace [
+            "templates/platformsdk-application/src/MyApp-Client/MyApp-Client.fsproj"
+            "templates/platformsdk-application/src/MyApp-Server/MyApp-Server.fsproj"
+            "templates/platformsdk-datamanager/MyDataManager/MyDataManager.fsproj"
+            "templates/platformsdk-module/MyModule/MyModule.fsproj"
+        ]
+    Done = ""
 }
 
-/// Wipe the private packages folder and leave it present but empty. Safe
-/// to delete wholesale — unlike a shared global-packages folder, nothing
-/// but this gate's own restores ever writes here — so eviction needs no
-/// per-version targeting the way the retired shared-folder logic did.
-let evict (folder: string) : EvictionReport =
-    let removed =
-        if Directory.Exists folder then
-            Directory.EnumerateDirectories folder
-            |> Seq.map Path.GetFileName
-            |> Seq.sort
-            |> Seq.toList
-        else
-            []
+/// The packaged-module template's directory.
+let packagedModuleTemplateDir = "templates/platformsdk-module-packaged"
 
-    if Directory.Exists folder then
-        Directory.Delete(folder, true)
+/// `VerifyPackagedModuleTemplate` — scaffold -> build -> both conformance
+/// layers -> pack, for `platformsdk-module-packaged`.
+///
+/// That template is a whole repository (its own CPM props, nuget.config,
+/// global.json and a literal `TOOLUP_SDK_VERSION` placeholder), so it is
+/// `dotnet new`ed into a scratch directory OUTSIDE the repo — nuget.config
+/// files merge up the tree, so forge's sources would paper over a broken
+/// feed declaration in the template — and its own pipeline runs. One
+/// command covers both conformance layers: the scaffold's `Pack` depends on
+/// `Test` (the module-seam contract pack) and `VerifyPackagedModule` (the
+/// packaging layout laws). The template's test project VENDORS the laws
+/// half of the SDK's ModuleContract pack (the SDK's test project is not
+/// packable), so the copy is compared with its source first.
+let verifyPackagedModuleTemplate: TemplateGate.TemplateGateSpec =
+    let name = "Gate.Module"
 
-    Directory.CreateDirectory folder |> ignore
+    {
+        Name = "VerifyPackagedModuleTemplate"
+        Closure = packagedModule
+        Feed = "obj/packaged-module-template-feed"
+        Checks = [
+            TemplateGate.VendoredPack(
+                "src/ToolUp.Platform.Tests/Contracts/ModuleContract.fs",
+                packagedModuleTemplateDir + "/tests/MyModule.Tests/Contracts/ModuleContract.fs",
+                "// ── a conforming reference module"
+            )
+        ]
+        Scaffold =
+            TemplateGate.Instantiate {
+                Template = packagedModuleTemplateDir
+                ShortName = "platformsdk-module-packaged"
+                Name = name
+                Args = [ "--namespace-root"; name ]
+                Scratch = "tu-pmt"
+                Steps = [
+                    TemplateGate.Dotnet [ "run"; "--project"; "Build.fsproj"; "--"; "Pack" ]
+                    TemplateGate.Verify(
+                        TemplateGate.StrayPins(Some(System.IO.Path.Combine("src", name, "obj", "project.assets.json")))
+                    )
+                    // The half a pre-Pack declaration check cannot prove: what
+                    // NuGet actually produced.
+                    TemplateGate.Verify(
+                        TemplateGate.NupkgLayout(
+                            [
+                                "fable/" + name + ".fsproj"
+                                "fable/SharedTypes.fs"
+                                "fable/ClientModel.fs"
+                                "fable/Icons.fs"
+                                "fable/ClientRegister.fs"
+                                "fable/icons/module-icon.svg"
+                            ],
+                            [ "fable/Server.fs" ]
+                        )
+                    )
+                ]
+            }
+        Done = "scaffold -> build -> conformance -> pack, green"
+    }
 
-    { Folder = folder; Removed = removed }
+/// The data-platform template's directory.
+let dataPlatformTemplateDir = "templates/platformsdk-dataplatform"
+
+/// `VerifyDataPlatformTemplate` — the `platformsdk-dataplatform` template
+/// scaffolds outside the repo, builds, and passes its own end-to-end test
+/// (which uploads the synthetic delivery, writes both fact tables,
+/// generates the grounded report and probes the gated page anonymously and
+/// as a reader). It also holds the publication boundary: the template's
+/// files and the scaffolded tree are scanned for the private vocabulary the
+/// OSS guard bans, so a regeneration from an upstream composition cannot
+/// leak a name into a public scaffold.
+let verifyDataPlatformTemplate: TemplateGate.TemplateGateSpec =
+    let name = "GateData"
+
+    {
+        Name = "VerifyDataPlatformTemplate"
+        Closure = dataPlatform
+        Feed = "obj/dataplatform-template-feed"
+        Checks = [ TemplateGate.Neutral TemplateGate.TemplateFiles ]
+        Scaffold =
+            TemplateGate.Instantiate {
+                Template = dataPlatformTemplateDir
+                ShortName = "platformsdk-dataplatform"
+                Name = name
+                Args = []
+                Scratch = "tu-dpt"
+                Steps = [
+                    TemplateGate.Verify(TemplateGate.Neutral TemplateGate.ScaffoldedTree)
+                    TemplateGate.Dotnet [ "build"; name + ".slnx"; "--nologo" ]
+                    TemplateGate.Verify(TemplateGate.StrayPins None)
+                    TemplateGate.Dotnet [
+                        "run"
+                        "--project"
+                        System.IO.Path.Combine("tests", name + ".Tests", name + ".Tests.fsproj")
+                        "--no-build"
+                    ]
+                ]
+            }
+        Done = "neutral -> scaffold -> build -> end-to-end test, green"
+    }
+
+/// The three gates, for the checks that hold them to each other.
+let all = [ verifyTemplates; verifyPackagedModuleTemplate; verifyDataPlatformTemplate ]

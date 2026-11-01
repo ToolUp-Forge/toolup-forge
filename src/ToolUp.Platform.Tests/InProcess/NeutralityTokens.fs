@@ -83,7 +83,7 @@ open Expecto
 /// Public-safe canary — always enforced, even when no external token
 /// source is present. Proves the guard mechanism runs in public CI.
 [<Literal>]
-let Canary = "PRIVATE-VOCAB-CANARY"
+let Canary = ToolUp.Platform.Build.Neutrality.Canary
 
 /// Marker that takes a single line out of scope. Placed on the hit's
 /// own line or the line immediately above it.
@@ -108,62 +108,25 @@ let private repoRoot () =
 let repoRootPath = repoRoot ()
 
 /// Repo-root location of the untracked local token file.
-let tokenFilePath = Path.Combine(repoRootPath, "neutrality-tokens.local.txt")
-
-let private parseLines (lines: string seq) =
-    lines
-    |> Seq.map _.Trim()
-    |> Seq.filter (fun l -> l <> "" && not (l.StartsWith "#"))
-    |> Seq.toList
+let tokenFilePath =
+    Path.Combine(repoRootPath, ToolUp.Platform.Build.Neutrality.tokenFileName)
 
 /// The private token list, when a non-public source supplies one.
 /// `None` means neither the local file nor the environment variable is
 /// present (or both are empty) — guard tests must then skip loudly.
 let externalTokens: string list option =
-    if File.Exists tokenFilePath then
-        match parseLines (File.ReadAllLines tokenFilePath) with
-        | [] -> None
-        | tokens -> Some tokens
-    else
-        match Environment.GetEnvironmentVariable "TOOLUP_NEUTRALITY_TOKENS" with
-        | null
-        | "" -> None
-        | value ->
-            (match parseLines (value.Split ';') with
-             | [] -> None
-             | tokens -> Some tokens)
+    ToolUp.Platform.Build.Neutrality.externalTokens repoRootPath
 
 /// Every token the guard scans for: the hardcoded canary plus whatever
 /// the external source supplies.
 let activeTokens: string list = Canary :: (externalTokens |> Option.defaultValue [])
 
 /// Compile one denylist entry into the regex the matching rule above
-/// describes. Exposed so the guard tests can prove the rule rather
-/// than restate it.
+/// describes — the one rule, in `ToolUp.Platform.Build`, that the template
+/// gates' publication-boundary check applies too. Exposed so the guard
+/// tests can prove the rule rather than restate it.
 let toRegex (token: string) : Regex =
-    if token.StartsWith("re:", StringComparison.OrdinalIgnoreCase) then
-        Regex(token.Substring 3, RegexOptions.IgnoreCase ||| RegexOptions.CultureInvariant)
-    else
-        let isWordChar (c: char) = Char.IsLetterOrDigit c || c = '_'
-
-        let body =
-            token.Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries)
-            |> Array.map Regex.Escape
-            |> String.concat @"\s+"
-
-        let prefix =
-            if token.Length > 0 && isWordChar token[0] then
-                @"\b"
-            else
-                ""
-
-        let suffix =
-            if token.Length > 0 && isWordChar token[token.Length - 1] then
-                @"\b"
-            else
-                ""
-
-        Regex(prefix + body + suffix, RegexOptions.IgnoreCase ||| RegexOptions.CultureInvariant)
+    ToolUp.Platform.Build.Neutrality.toRegex token
 
 /// The active denylist, compiled once: the token as written beside the
 /// pattern it became.

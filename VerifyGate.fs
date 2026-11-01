@@ -77,12 +77,15 @@
 /// `SemVerBump.fs` and `TestLane.fs` — compiled into `Build.fsproj`,
 /// source-linked into `ToolUp.Platform.Build.Tests` so the driver and its
 /// go-red proofs run one implementation, and taking nothing beyond
-/// `System` so that pack can compile it without FAKE.
+/// `System` and the SDK's own `Git` and `Flags` (`ToolUp.Platform.Build`,
+/// which that pack already references).
 module ToolUp.Forge.VerifyGate
 
 open System
 open System.Diagnostics
 open System.IO
+open ToolUp.Platform
+open ToolUp.Platform.Build
 open System.Security.Cryptography
 open System.Text
 open System.Threading
@@ -105,15 +108,42 @@ let DefaultSlice = TimeSpan.FromSeconds 30.
 /// `VerifyAll` alone.
 let gatedTargets = set [ "VerifyAll" ]
 
-/// The target `argv` requests, read the way `ToolUp.Platform.Build.execute`
-/// reads it: the first argument that is not an option, else `Run`. One
-/// parser would be better than two, but that one is inside the frozen SDK
-/// and a gate that consulted a different rule from the runner it wraps
-/// would gate the wrong target.
-let requestedTarget (argv: string[]) =
-    match List.ofArray argv with
-    | t :: _ when not (t.StartsWith("--", StringComparison.Ordinal)) -> t
-    | _ -> "Run"
+/// The target `argv` requests, read by the same rule `execute` applies
+/// (`Flags.targetOf`), so the gate can never gate a different target from
+/// the runner it wraps.
+let requestedTarget (argv: string[]) = Flags.targetOf argv
+
+/// Every option a target in the forge driver reads. `Build.fs` parses its
+/// command line once against this, and an option no target declares is
+/// refused by name. Here rather than in `Build.fs` so the Build test pack
+/// can pin each one (`FlagsTests`).
+let driverFlags: FlagSpec =
+    Flags.union Flags.sdk {
+        Switches = [
+            "--propose"
+            "--update-baseline"
+            "--require-ready"
+            "--draft"
+            "--fail-on-dead"
+            "--verbose"
+            "--json"
+        ]
+        Valued = [
+            "--root"
+            "--assemblies"
+            "--base"
+            "--head"
+            "--paths"
+            "--declared"
+            "--out"
+            "--release"
+            "--ui-version"
+            "--toolup-version"
+            "--props"
+            "--snapshot"
+            "--boundary"
+        ]
+    }
 
 /// Is the opt-out set? Absent, empty and `0` all mean "gate as normal" —
 /// the shape the estate's other opt-outs take, so an unset variable can
@@ -143,28 +173,18 @@ let waitBoundFromEnvironment () =
 /// repository, a hung child — and the caller degrades rather than fails.
 let commonGitDir (workingDir: string) : Result<string, string> =
     try
-        let psi = ProcessStartInfo("git", "rev-parse --git-common-dir")
-        psi.WorkingDirectory <- workingDir
-        psi.RedirectStandardOutput <- true
-        psi.RedirectStandardError <- true
-        psi.UseShellExecute <- false
-        psi.CreateNoWindow <- true
+        let r =
+            Git.within (TimeSpan.FromSeconds 15.) workingDir [ "rev-parse"; "--git-common-dir" ]
 
-        use proc = Process.Start psi
-        let output = proc.StandardOutput.ReadToEnd()
-
-        if not (proc.WaitForExit 15000) then
-            proc.Kill true
-            Error "git rev-parse --git-common-dir did not return within 15 s"
-        elif proc.ExitCode <> 0 then
-            Error(sprintf "git rev-parse --git-common-dir exited %d (not a git repository?)" proc.ExitCode)
+        if r.ExitCode <> 0 then
+            Error(sprintf "git rev-parse --git-common-dir exited %d (not a git repository?)" r.ExitCode)
         else
-            match output.Trim() with
+            match r.StdOut.Trim() with
             | "" -> Error "git rev-parse --git-common-dir printed nothing"
             | raw when Path.IsPathRooted raw -> Ok(Path.GetFullPath raw)
             | raw -> Ok(Path.GetFullPath(Path.Combine(workingDir, raw)))
     with e ->
-        Error(sprintf "git could not be started: %s" e.Message)
+        Error(sprintf "git could not be started, or did not return within 15 s: %s" e.Message)
 
 /// A short, filesystem- and kernel-safe token for a path: the first 16
 /// hex digits of its SHA-256, over the path normalised the way the host
