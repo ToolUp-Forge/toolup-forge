@@ -630,7 +630,7 @@ let tests =
                     |> ServerApp.addModule m
 
                 Expect.equal
-                    (app.Config.NotificationCategories |> List.map _.Id)
+                    ((ServerApp.effectiveConfig app).NotificationCategories |> List.map _.Id)
                     [ "security.reset"; "reports.summary" ]
                     "app-level first, then the module's"
             }

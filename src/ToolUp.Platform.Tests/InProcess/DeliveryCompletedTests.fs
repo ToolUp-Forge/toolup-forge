@@ -278,7 +278,7 @@ let private hosted (app: ServerApp) (handler: Rig -> HttpHandler) (send: Net.Htt
                     .Configure(fun (builder: IApplicationBuilder) ->
                         let mutable b = builder
 
-                        for thunk in app.Extensions.PreMiddleware do
+                        for thunk in (ServerApp.composedExtensions app).PreMiddleware do
                             b <- thunk b
 
                         let sp = b.ApplicationServices
@@ -698,8 +698,8 @@ let private compositionTests =
                 "the module's hook is registered with the app"
 
             Expect.hasLength
-                app.Extensions.PreMiddleware
-                (ServerApp.empty.Extensions.PreMiddleware.Length + 1)
+                (ServerApp.composedExtensions app).PreMiddleware
+                ((ServerApp.composedExtensions ServerApp.empty).PreMiddleware.Length + 1)
                 "with the request seam"
 
             // A builder that counts what is mounted on it.
@@ -724,7 +724,7 @@ let private compositionTests =
                 }
 
             let apply () =
-                app.Extensions.PreMiddleware
+                (ServerApp.composedExtensions app).PreMiddleware
                 |> List.fold (fun b thunk -> thunk b) counting
                 |> ignore
 

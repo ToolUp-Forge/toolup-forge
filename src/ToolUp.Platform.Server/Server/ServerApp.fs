@@ -817,6 +817,28 @@ type ModuleLoadOutcome =
     /// (from the Phase 165 `BindingOutcome`).
     | ModuleBindingRejected of reason: string
 
+// ─── What a builder writes into the configuration ─────────────────────
+//
+// A builder that appends to, or sets one field of, `ServerConfig` records
+// the write as an override instead of editing `ServerApp.Config` in place.
+// `run` folds the overrides onto the consumer's `Config` ONCE, in the
+// order they were added, so `withConfig` (which sets `Config` and nothing
+// else) can sit on either side of `addModules` / `withAlertRule` / … and
+// the composed application is the same (finding B10: a trailing
+// `withConfig` used to discard every one of them).
+
+/// One write a builder makes to the deployment's
+/// `ServerConfig`: the field it writes (for diagnostics and the order
+/// tests) and the edit. `ServerApp.effectiveConfig` applies the edits in
+/// the order they were added, after the consumer's `withConfig` value.
+[<NoEquality; NoComparison>]
+type ConfigOverride = {
+    /// What wrote it: the `ServerConfig` field a builder sets or appends
+    /// to (`nameof`), or `module:<name>` for a module's declarations.
+    Field: string
+    Apply: ServerConfig -> ServerConfig
+}
+
 // ─── ServerApp — record form of the `compose` arguments ──────────────
 //
 // `ServerApp` is a drop-in replacement for calling `compose` positionally.
@@ -1306,6 +1328,10 @@ type ServerApp = {
     /// `ServerApp.addContribution` or `ServerApp.addServiceConfig`; read
     /// what `run` will apply with `ServerApp.serviceConfig`.
     Contributions: Contribution list
+    /// The writes builders made to `ServerConfig`, in the
+    /// order made. Folded onto `Config` once, by `effectiveConfig`, so a
+    /// `withConfig` on either side of them keeps them.
+    Overrides: ConfigOverride list
 }
 
 module ServerApp =
@@ -1373,6 +1399,7 @@ module ServerApp =
         ModelExecutionCompose = None
         TeamOutputVisibility = None
         Contributions = []
+        Overrides = []
     }
 
     /// Phase 1052 — **adds** a contribution. Contributions are applied by
@@ -1384,6 +1411,43 @@ module ServerApp =
         app with
             Contributions = app.Contributions @ [ contribution ]
     }
+
+    /// **adds** a write to `ServerConfig`: `apply` runs on the
+    /// consumer's `Config` when `run` composes, after every override added
+    /// before it. `field` names what it writes (see `ConfigOverride`). The
+    /// platform's set-one-field and append builders are written with it, so
+    /// a later `withConfig` keeps what they wrote.
+    let addOverride (field: string) (apply: ServerConfig -> ServerConfig) (app: ServerApp) : ServerApp = {
+        app with
+            Overrides = app.Overrides @ [ { Field = field; Apply = apply } ]
+    }
+
+    /// The `ServerConfig` `run` composes: the consumer's
+    /// `Config` with every override folded on in the order added, then the
+    /// module names and config schemas `addModule` accumulated. Read a
+    /// builder's write back through this, never off `app.Config` — which
+    /// holds only what `withConfig` set.
+    let effectiveConfig (app: ServerApp) : ServerConfig =
+        let config = app.Overrides |> List.fold (fun config o -> o.Apply config) app.Config
+
+        {
+            config with
+                ModuleNames =
+                    if config.ModuleNames.IsEmpty then
+                        app.ModuleNames
+                    else
+                        config.ModuleNames
+                ModuleConfigs = config.ModuleConfigs @ app.ModuleConfigs
+        }
+
+    /// The contributions in the order `run` applies them:
+    /// every provider of a seam before every contribution that requires it,
+    /// the order added otherwise (`ContributionPlan.order`). An unmet
+    /// requirement or a cycle refuses the composition, naming both ends.
+    let contributionPlan (app: ServerApp) : Contribution list =
+        match ContributionPlan.order app.Contributions with
+        | Ok plan -> plan
+        | Error refusal -> failwith (ContributionRefusal.describe refusal)
 
     /// The reserved owner of a registration added through `addServiceConfig`:
     /// the deployment's own composition (the reserved `_deployment` scope).
@@ -1411,13 +1475,60 @@ module ServerApp =
     /// app applies (reading `Extensions.ServiceConfig` alone misses every
     /// contribution).
     let serviceConfig (app: ServerApp) : (IServiceCollection -> IServiceCollection) option =
-        app.Contributions
+        let config = effectiveConfig app
+
+        contributionPlan app
         |> List.fold
             (fun acc contribution ->
                 match contribution.Kind with
                 | Service register -> ServiceConfig.append register acc
-                | Hosted unit -> ServiceConfig.append (fun services -> Hosting.register services app.Config unit) acc)
+                | Hosted unit -> ServiceConfig.append (fun services -> Hosting.register services config unit) acc
+                | Routes _
+                | Validator _
+                | Middleware _ -> acc)
             app.Extensions.ServiceConfig
+
+    /// The `ComposeExtensions` `run` hands `compose`: the
+    /// consumer's record with the plan's DI registrations (`serviceConfig`),
+    /// routes and middleware appended after the consumer's own, in plan
+    /// order. A later `withExtensions` therefore never discards what a
+    /// builder or companion contributed.
+    let composedExtensions (app: ServerApp) : ComposeExtensions =
+        let plan = contributionPlan app
+
+        let pick (choose: ContributionKind -> 'T list) =
+            plan |> List.collect (fun contribution -> choose contribution.Kind)
+
+        {
+            app.Extensions with
+                ServiceConfig = serviceConfig app
+                Handlers =
+                    app.Extensions.Handlers
+                    @ pick (function
+                        | Routes handlers -> handlers
+                        | _ -> [])
+                PreMiddleware =
+                    app.Extensions.PreMiddleware
+                    @ pick (function
+                        | Middleware(MiddlewarePosition.Pre, thunk) -> [ thunk ]
+                        | _ -> [])
+                PostMiddleware =
+                    app.Extensions.PostMiddleware
+                    @ pick (function
+                        | Middleware(MiddlewarePosition.Post, thunk) -> [ thunk ]
+                        | _ -> [])
+        }
+
+    /// The preflight validators `run` hands `compose`: the
+    /// deployment's own (`withConfigValidator`), then every `Validator`
+    /// contribution in plan order.
+    let composedValidators (app: ServerApp) : ConfigValidation.IConfigValidator list =
+        app.ConfigValidators
+        @ (contributionPlan app
+           |> List.choose (fun contribution ->
+               match contribution.Kind with
+               | Validator check -> Some check
+               | _ -> None))
 
     /// Phase 728 — compose the model-execution leg: register
     /// `IModelRegistry` (and optionally the `IModelScorer`, the Phase 640
@@ -1496,13 +1607,12 @@ module ServerApp =
             ComposedCompanions = app.ComposedCompanions @ [ companionName ]
     }
 
-    /// **Sets** the whole `ServerConfig`. The builders that append into
-    /// it — `withAlertRule` / `withAlertRules`, `withNotificationCategory` /
-    /// `withNotificationCategories`, `withPeerRoutePrefix` — and the ones
-    /// that set one field of it
-    /// (`withSeedData`, `withSecurityHardening`, …) write into the config
-    /// the app holds at that point, so a `withConfig` AFTER them discards
-    /// their work. Call it first.
+    /// **Sets** the consumer's `ServerConfig`, replacing any earlier
+    /// `withConfig` value. The builders that append to it
+    /// (`withAlertRule`, `withNotificationCategory`, `withPeerRoutePrefix`,
+    /// `addModule`, …) or set one field of it (`withSeedData`,
+    /// `withSecurityHardening`, …) record overrides that `run` folds onto
+    /// this value (`effectiveConfig`), so they survive it on either side.
     let withConfig (c: ServerConfig) (app: ServerApp) : ServerApp = { app with Config = c }
     /// **Sets** the value; a later call replaces it.
     let withAuth (a: IAuthProvider) (app: ServerApp) : ServerApp = { app with Auth = Some a }
@@ -1514,14 +1624,13 @@ module ServerApp =
     /// automatically). Default `NoConsentStateStore` registers nothing
     /// (GP 13). Sugar over a `Config` update so the consent store reads
     /// the same as every other fluent opt-in.
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withConsentStateStore (mode: ConsentStateStoreMode) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    ConsentStateStore = mode
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withConsentStateStore (mode: ConsentStateStoreMode) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.ConsentStateStore) (fun config -> {
+            config with
+                ConsentStateStore = mode
+        })
 
     /// Phase 447 — register a deterministic seed / fixture pack. Modules
     /// contribute their own demo/fixture data (GP 9); `run` folds each
@@ -1540,11 +1649,10 @@ module ServerApp =
     /// `{ Config with SeedData = mode }`. `EnabledSeedData` refuses
     /// startup on a Team / multi-team shape; `ForcedSeedData` overrides
     /// that refusal deliberately.
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withSeedData (mode: SeedDataMode) (app: ServerApp) : ServerApp = {
-        app with
-            Config = { app.Config with SeedData = mode }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withSeedData (mode: SeedDataMode) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.SeedData) (fun config -> { config with SeedData = mode })
 
     /// Phase 165 — opt into the module-binding gate. Once a verifier is
     /// configured, `addModule` drops any module whose `BindingStamp` does
@@ -1582,13 +1690,12 @@ module ServerApp =
     /// substrate at `/api/peer/federated/` at the same time.
     ///
     /// **Adds** to `ServerConfig.PeerRoutePrefixes`.
-    let withPeerRoutePrefix (prefix: string) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    PeerRoutePrefixes = app.Config.PeerRoutePrefixes @ [ prefix ]
-            }
-    }
+    let withPeerRoutePrefix (prefix: string) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.PeerRoutePrefixes) (fun config -> {
+            config with
+                PeerRoutePrefixes = config.PeerRoutePrefixes @ [ prefix ]
+        })
 
     /// **Sets** the value; a later call replaces it.
     let withNotifications (n: INotificationChannel) (app: ServerApp) : ServerApp = { app with Notifications = Some n }
@@ -1647,23 +1754,21 @@ module ServerApp =
     /// Rule `Name`s must be unique within a deployment (the engine keys its
     /// per-rule breach window on the name). **Adds** to
     /// `ServerConfig.AlertRules`.
-    let withAlertRule (rule: AlertRule) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    AlertRules = app.Config.AlertRules @ [ rule ]
-            }
-    }
+    let withAlertRule (rule: AlertRule) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.AlertRules) (fun config -> {
+            config with
+                AlertRules = config.AlertRules @ [ rule ]
+        })
 
     /// Phase 178 — register several alert rules at once. **Adds** to any
     /// already registered; see `withAlertRule` for the hosting contract.
-    let withAlertRules (rules: AlertRule list) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    AlertRules = app.Config.AlertRules @ rules
-            }
-    }
+    let withAlertRules (rules: AlertRule list) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.AlertRules) (fun config -> {
+            config with
+                AlertRules = config.AlertRules @ rules
+        })
 
     /// Phase 441 — declare a notification category at the composition
     /// root (an app-level category no single module owns, e.g. a
@@ -1677,13 +1782,11 @@ module ServerApp =
                 "category"
                 $"Notification category id '{category.Id}' is invalid: lower-case letters, digits, '.', '-' and '_' only, no leading or trailing dot."
 
-        {
-            app with
-                Config = {
-                    app.Config with
-                        NotificationCategories = app.Config.NotificationCategories @ [ category ]
-                }
-        }
+        app
+        |> addOverride (nameof ServerConfig.defaults.NotificationCategories) (fun config -> {
+            config with
+                NotificationCategories = config.NotificationCategories @ [ category ]
+        })
 
     /// Phase 441 — declare several app-level notification categories at
     /// once; **adds**, like `withNotificationCategory`.
@@ -1980,13 +2083,12 @@ module ServerApp =
     /// CSP reflects whatever `ICspContributor`s are registered, so a
     /// deployment that adds an AI / OIDC companion gets the right
     /// `connect-src` automatically.
-    let withSecurityHardening (mode: SecurityHardeningMode) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    SecurityHardening = mode
-            }
-    }
+    let withSecurityHardening (mode: SecurityHardeningMode) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.SecurityHardening) (fun config -> {
+            config with
+                SecurityHardening = mode
+        })
 
     /// Phase 9j — register a CSP contributor so its required origins
     /// are folded into the aggregated `Content-Security-Policy` at
@@ -2207,21 +2309,21 @@ module ServerApp =
     /// this seam is the `ServerConfig` opt-in that gates that wiring. When
     /// not called, no projection runs and the entity store is byte-identical
     /// (GP 13).
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withEntityGraphProjection (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    EntityGraphProjection = EnabledEntityGraphProjection
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withEntityGraphProjection (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.EntityGraphProjection) (fun config -> {
+            config with
+                EntityGraphProjection = EnabledEntityGraphProjection
+        })
 
-    /// **Sets** the whole `ComposeExtensions` record. The builders that
-    /// accumulate into it — `withPreMiddleware`, `withPostMiddleware`,
-    /// `withRemotingBatching`, `withCspContributor`,
-    /// `withDeliveryCompleted` — write into the record the app holds at
-    /// that point, so a `withExtensions` AFTER them discards their work.
-    /// Call it first, or build `e` from `app.Extensions` with a copy-and-update.
+    /// **Sets** the consumer's `ComposeExtensions` record, replacing any
+    /// earlier `withExtensions` value. The builders that add routes,
+    /// middleware or registrations (`withPreMiddleware`,
+    /// `withPostMiddleware`, `withRemotingBatching`, `withCspContributor`,
+    /// `withDeliveryCompleted`, …) add contributions instead, which `run`
+    /// appends after this record's own (`composedExtensions`), so they
+    /// survive it on either side.
     let withExtensions (e: ComposeExtensions) (app: ServerApp) : ServerApp = { app with Extensions = e }
 
     /// Phase 1f composition seam. **Adds** an `IApplicationBuilder`
@@ -2232,10 +2334,8 @@ module ServerApp =
     /// any concern that should short-circuit before the SDK resolves
     /// the caller's scope. Thunks are applied in registration order;
     /// each must return the (potentially modified) builder.
-    let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: ServerApp) : ServerApp = {
-        app with
-            Extensions.PreMiddleware = app.Extensions.PreMiddleware @ [ f ]
-    }
+    let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: ServerApp) : ServerApp =
+        addContribution (Contribution.middleware deploymentOwner MiddlewarePosition.Pre f) app
 
     /// Phase 855 — serve the remoting batch route (`POST /api/_batch`), so
     /// a client that calls `RemoteBatching.enable RemoteBatching.DefaultRoute`
@@ -2273,10 +2373,8 @@ module ServerApp =
     /// handlers (custom 404 / catch-all rewrites / debug-only routes)
     /// that only fire when no Giraffe handler matched. Thunks are
     /// applied in registration order.
-    let withPostMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: ServerApp) : ServerApp = {
-        app with
-            Extensions.PostMiddleware = app.Extensions.PostMiddleware @ [ f ]
-    }
+    let withPostMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: ServerApp) : ServerApp =
+        addContribution (Contribution.middleware deploymentOwner MiddlewarePosition.Post f) app
 
     /// Phase 5h — register a custom `IPendingInviteStore` implementation.
     /// When omitted, `compose` auto-selects: `InMemoryPendingInviteStore`
@@ -2422,10 +2520,8 @@ module ServerApp =
                 builder.Properties[deliveryMiddlewareMounted] <- box true
                 builder.Use(Func<HttpContext, Func<Threading.Tasks.Task>, Threading.Tasks.Task>(deliveryRequest))
 
-        {
-            app with
-                Extensions.PreMiddleware = app.Extensions.PreMiddleware @ [ mount ]
-        }
+        app
+        |> addContribution (Contribution.middleware EgressPolicy.platformComponent MiddlewarePosition.Pre mount)
         |> addPlatformServices register
 
     /// Phase 9b.A — opt into back-fill of `OnEvent`-triggered jobs on
@@ -2442,14 +2538,13 @@ module ServerApp =
     /// Non-idempotent work should stay opt-out and either rely on
     /// upstream event redelivery or accept the missed dispatches as a
     /// trade-off for at-most-once semantics.
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withBackfillMissedTicks (enabled: bool) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    BackfillMissedTicks = enabled
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withBackfillMissedTicks (enabled: bool) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.BackfillMissedTicks) (fun config -> {
+            config with
+                BackfillMissedTicks = enabled
+        })
 
     /// Phase 598 — opt into the event-trigger catch-up watermark.
     /// Default: off (`OnEvent` triggering stays at-most-once). When
@@ -2464,13 +2559,12 @@ module ServerApp =
     /// `withBackfillMissedTicks` sets, but replaying real events
     /// (each with its true `eventType` + `eventId`) rather than
     /// blind-re-firing every `OnEvent` job.
-    let withEventTriggerCatchUp (enabled: bool) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    EventTriggerCatchUp = enabled
-            }
-    }
+    let withEventTriggerCatchUp (enabled: bool) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.EventTriggerCatchUp) (fun config -> {
+            config with
+                EventTriggerCatchUp = enabled
+        })
 
     /// Phase 9t — select what an audit-write failure does beyond the
     /// Phase 114 counter. Default `LogAndContinue` (prior behaviour —
@@ -2483,25 +2577,23 @@ module ServerApp =
     /// the working directory — and the replay service re-ingests it
     /// once the store recovers). Only consulted when
     /// `AuditLog = EnabledAuditLog`.
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    AuditFailurePolicy = policy
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.AuditFailurePolicy) (fun config -> {
+            config with
+                AuditFailurePolicy = policy
+        })
 
     /// Phase 9t — override the `DegradeToFile` spill root (default:
     /// `audit-fallback/` under the process working directory).
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withAuditFallbackDirectory (directory: string) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    AuditFallbackDirectory = Some directory
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withAuditFallbackDirectory (directory: string) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.AuditFallbackDirectory) (fun config -> {
+            config with
+                AuditFallbackDirectory = Some directory
+        })
 
     /// Phase 599 — opt into the entity-write outbox. Default: off.
     /// When enabled (requires
@@ -2513,14 +2605,13 @@ module ServerApp =
     /// as committed (at-least-once; never-committed saves are
     /// discarded unpublished). Resolve `OutboxEntityStore` from DI
     /// for mutations whose events must not be lost.
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withEntityOutbox (enabled: bool) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    EntityOutbox = if enabled then EnabledEntityOutbox else NoEntityOutbox
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withEntityOutbox (enabled: bool) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.EntityOutbox) (fun config -> {
+            config with
+                EntityOutbox = if enabled then EnabledEntityOutbox else NoEntityOutbox
+        })
 
     /// Phase 1027 — opt into durable lineage. Default: off, where a
     /// lineage link the store fails to record is logged with everything
@@ -2533,14 +2624,13 @@ module ServerApp =
     /// `ResultStore.LineageOutbox`. Independent of `withEntityOutbox`; the
     /// two relays share the `EntityOutboxRelaySubsystem` gate, so a
     /// process profile that skips that subsystem skips both.
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withDurableLineage (enabled: bool) (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    LineageDurability = if enabled then EnabledDurableLineage else NoDurableLineage
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withDurableLineage (enabled: bool) (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.LineageDurability) (fun config -> {
+            config with
+                LineageDurability = if enabled then EnabledDurableLineage else NoDurableLineage
+        })
 
     /// Phase 177 — opt into the deployment-readiness scorecard. Flips
     /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
@@ -2550,14 +2640,13 @@ module ServerApp =
     /// Pure projection over signals that already exist — no new gate, no
     /// new control-plane behaviour. A deployment that never calls this
     /// stays `NoReadinessReport` and is byte-for-byte unchanged (GP 13).
-    /// **Sets** one `ServerConfig` field; a later call (or a later `withConfig`) replaces it.
-    let withDeploymentReadiness (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    DeploymentReadiness = EnabledReadinessReport
-            }
-    }
+    /// **Sets** one `ServerConfig` field; a later call replaces it.
+    let withDeploymentReadiness (app: ServerApp) : ServerApp =
+        app
+        |> addOverride (nameof ServerConfig.defaults.DeploymentReadiness) (fun config -> {
+            config with
+                DeploymentReadiness = EnabledReadinessReport
+        })
 
     /// Phase 771 — register the holder the boot observation of the
     /// hardening baseline is kept in, so `run` probes the composed pipeline
@@ -2604,13 +2693,12 @@ module ServerApp =
     /// no `withHostingBaselinePolicy` it refuses nothing.
     /// **Sets** `ServerConfig.DeploymentVerification` and **adds** the baseline-record registration (a platform contribution).
     let withDeploymentVerification (app: ServerApp) : ServerApp =
-        registerHostingBaselineRecord {
-            app with
-                Config = {
-                    app.Config with
-                        DeploymentVerification = EnabledDeploymentVerification
-                }
-        }
+        app
+        |> addOverride (nameof ServerConfig.defaults.DeploymentVerification) (fun config -> {
+            config with
+                DeploymentVerification = EnabledDeploymentVerification
+        })
+        |> registerHostingBaselineRecord
 
     /// Phase 686 — register the evidence the deployment verification
     /// report composes.
@@ -3051,10 +3139,6 @@ module ServerApp =
                         Definition = Metrics.ComponentCorrelation.permitComponentIdDimension d
                     })
 
-                let mergedSlowRequestOverrides =
-                    m.SlowRequestThresholdOverrides
-                    |> Map.fold (fun acc k v -> Map.add k v acc) app.Config.SlowRequestThresholdOverrides
-
                 // Phase 66 Stream B.3 — fan a module's surface-requirement
                 // declarations into the app-level accumulators. A module
                 // with no `RoutePrefixes` contributes nothing to the
@@ -3084,9 +3168,11 @@ module ServerApp =
                 // list) when the component declares no envelope, so a
                 // deployment with `ResourceEnvelopes = Map.empty` — the
                 // default — composes byte-for-byte its pre-437 self
-                // (GP 11 / GP 13). Envelopes are read from `app.Config`, so
-                // declare them on the `ServerConfig` before adding modules
-                // (the canonical `withConfig` |> `addModules` order).
+                // (GP 11 / GP 13). The job gate reads the envelopes from
+                // `app.Config` here, so declare them on the `ServerConfig`
+                // before adding modules (the canonical `withConfig` |>
+                // `addModules` order); the route limits are computed in the
+                // module's override, against the configuration `run` folds.
                 let gatedJobHandlers =
                     ResourceEnvelopeEnforcement.gateDeclarations
                         None
@@ -3094,13 +3180,6 @@ module ServerApp =
                         app.Config.ResourceEnvelopes
                         resolvedComponentId
                         m.JobHandlers
-
-                let envelopeRouteLimits =
-                    ResourceEnvelopeEnforcement.routeLimitsFor
-                        app.Config.RateLimits
-                        app.Config.ResourceEnvelopes
-                        resolvedComponentId
-                        m.RoutePrefixes
 
                 // Phase 770 — the module's route handlers and AI tools run
                 // under the seam-aware service provider, keyed by the id
@@ -3119,6 +3198,38 @@ module ServerApp =
 
                 let confinedTools =
                     SeamAwareServiceProvider.confineTools resolvedComponentId m.AITools
+
+                // The module's writes to `ServerConfig`, as one
+                // override folded onto the consumer's `Config` by `run`, so a
+                // `withConfig` after `addModule` keeps them.
+                let moduleConfigOverride: ConfigOverride = {
+                    Field = "module:" + m.Name
+                    Apply =
+                        fun config -> {
+                            config with
+                                SlowRequestThresholdOverrides =
+                                    m.SlowRequestThresholdOverrides
+                                    |> Map.fold (fun acc k v -> Map.add k v acc) config.SlowRequestThresholdOverrides
+                                // Phase 10b — fan the module's declared
+                                // config-schema migration steps onto the
+                                // app-level set the compose-time registry
+                                // is built from. A module declaring none
+                                // contributes the empty list, so a
+                                // pre-10b module composes byte-identically
+                                // (GP 11).
+                                ConfigMigrations = config.ConfigMigrations @ m.ConfigMigrations
+                                NotificationCategories = config.NotificationCategories @ m.NotificationCategories
+                                // Phase 437 — append-only; the empty list
+                                // when no envelope declares a request rate.
+                                RateLimits =
+                                    config.RateLimits
+                                    @ ResourceEnvelopeEnforcement.routeLimitsFor
+                                        config.RateLimits
+                                        config.ResourceEnvelopes
+                                        resolvedComponentId
+                                        m.RoutePrefixes
+                        }
+                }
 
                 {
                     app with
@@ -3179,22 +3290,7 @@ module ServerApp =
                             match m.AIExposure with
                             | Some exposure -> app.ModuleAIExposures @ [ m.Name, exposure ]
                             | None -> app.ModuleAIExposures
-                        Config = {
-                            app.Config with
-                                SlowRequestThresholdOverrides = mergedSlowRequestOverrides
-                                // Phase 10b — fan the module's declared
-                                // config-schema migration steps onto the
-                                // app-level set the compose-time registry
-                                // is built from. A module declaring none
-                                // contributes the empty list, so a
-                                // pre-10b module composes byte-identically
-                                // (GP 11).
-                                ConfigMigrations = app.Config.ConfigMigrations @ m.ConfigMigrations
-                                NotificationCategories = app.Config.NotificationCategories @ m.NotificationCategories
-                                // Phase 437 — append-only; the empty list
-                                // when no envelope declares a request rate.
-                                RateLimits = app.Config.RateLimits @ envelopeRouteLimits
-                        }
+                        Overrides = app.Overrides @ [ moduleConfigOverride ]
                 }
                 |> withRouteEffectObserver m
                 |> withDeclaredRouteEffects resolvedComponentId m
@@ -3262,7 +3358,7 @@ module ServerApp =
                     (NotificationKind.SinkKind.toWireString sink.Kind)
             for check in app.HealthChecks do
                 CompositionManifest.companionImplEntry "IHealthCheck" check.Name
-            for validator in app.ConfigValidators do
+            for validator in composedValidators app do
                 CompositionManifest.companionImplEntry "IConfigValidator" validator.Name
             for smoke in app.SmokeTests do
                 CompositionManifest.companionImplEntry "ISmokeTest" smoke.Name
@@ -3559,15 +3655,10 @@ module ServerApp =
                     sprintf "fact-tables: %d table(s) declared [%s]" tableIds.Length (String.concat ", " tableIds)
                 ))
 
-        let config = {
-            app.Config with
-                ModuleNames =
-                    if app.Config.ModuleNames.IsEmpty then
-                        app.ModuleNames
-                    else
-                        app.Config.ModuleNames
-                ModuleConfigs = app.Config.ModuleConfigs @ app.ModuleConfigs
-        }
+        // The builders' and modules' overrides fold onto the
+        // consumer's `Config` here, once, whichever side of `withConfig`
+        // they were written.
+        let config = effectiveConfig app
 
         // Phase 43.A — when a canonical BYOK provider-profile store is
         // registered (via `withProviderProfile`, or mirrored from
@@ -3575,14 +3666,12 @@ module ServerApp =
         // `IProviderProfile` DI singleton into the extension's
         // `ServiceConfig` so in-process consumers resolve it. `None`
         // leaves `Extensions` untouched — zero footprint (GP 13).
-        // Phase 1052 — the starting point is the consumer's `Extensions` with
-        // every contribution folded after its `ServiceConfig`, in the order
-        // added (`serviceConfig`); the platform's run-time families below
-        // append after them, so the descriptor order is the pre-1052 one.
-        let contributed = {
-            app.Extensions with
-                ServiceConfig = serviceConfig app
-        }
+        // The starting point is the consumer's
+        // `Extensions` with the contribution plan appended after its own
+        // registrations, routes and middleware (`composedExtensions`); the
+        // platform's run-time families below append after them, so the
+        // descriptor order is the pre-1052 one.
+        let contributed = composedExtensions app
 
         let withProviderProfileService =
             match app.ProviderProfile with
@@ -3928,7 +4017,7 @@ module ServerApp =
                 app.DataTypeRegistrations
                 app.TransactionalSinks
                 app.HealthChecks
-                app.ConfigValidators
+                (composedValidators app)
                 app.EncryptionKeyResolver
                 app.EntityRegistrations
                 app.QuotaPolicy

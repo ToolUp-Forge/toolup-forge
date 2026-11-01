@@ -589,13 +589,6 @@ let composeAI (app: AIServerApp) : ServerApp =
                 )
 
         let s =
-            Hosting.register
-                s
-                config
-                (BackgroundUnit.create "ai-chat-worker" ProcessLocal (fun sp ->
-                    sp.GetRequiredService<AIChatWorker.AIChatWorker>() :> Microsoft.Extensions.Hosting.IHostedService))
-
-        let s =
             s
                 // Warn at startup when AI runs multi-instance with the
                 // in-process cancel / client-tool-dispatch registries
@@ -697,6 +690,15 @@ let composeAI (app: AIServerApp) : ServerApp =
             Config = configWithBudgetSchema
     }
     |> contribute aiServiceConfig
+    // The chat worker's hosted service, as a `Hosted` contribution: the
+    // root admits it once, against the deployment's final configuration,
+    // whichever side of `withConfig` the AI tier was composed.
+    |> ServerApp.addContribution (
+        Contribution.hosted
+            owner
+            (BackgroundUnit.create "ai-chat-worker" ProcessLocal (fun sp ->
+                sp.GetRequiredService<AIChatWorker.AIChatWorker>() :> Microsoft.Extensions.Hosting.IHostedService))
+    )
 
 module AIServerApp =
     /// Construct an `AIServerApp` from scratch with the two required AI
@@ -1251,17 +1253,19 @@ let withAI
 /// share `ConversationRetention.deleteSiblings`.
 /// **Adds** its registrations as a contribution under the AI companion's id; a later `withExtensions` keeps them.
 let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: string list) (app: ServerApp) : ServerApp =
-    let register (s: IServiceCollection) =
-        let withPolicy = s.AddSingleton<ConversationRetentionPolicy>(policy)
+    let withPolicy =
+        app |> contribute (fun s -> s.AddSingleton<ConversationRetentionPolicy>(policy))
 
-        if ConversationRetentionPolicy.isInert policy || List.isEmpty scopes then
-            withPolicy
-        else
-            // Once at start: the sweep runs as a scheduler job, placed by
-            // the scheduler's own unit.
-            Hosting.register
-                withPolicy
-                app.Config
+    if ConversationRetentionPolicy.isInert policy || List.isEmpty scopes then
+        withPolicy
+    else
+        // Once at start: the sweep runs as a scheduler job, placed by the
+        // scheduler's own unit; the root admits the unit against the final
+        // configuration.
+        withPolicy
+        |> ServerApp.addContribution (
+            Contribution.hosted
+                owner
                 (Hosting.deferredJobs "ai-conversation-retention-sweep" [
                     DeferredScheduledJobDeclaration.create (fun provider ->
                         ScheduledJobDeclaration.create
@@ -1270,8 +1274,7 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
                             (Trigger.CronTrigger policy.SweepSchedule)
                         |> ScheduledJobDeclaration.withScopes scopes)
                 ])
-
-    app |> contribute register
+        )
 
 // ─── Conversation titling ──────────────────────────
 

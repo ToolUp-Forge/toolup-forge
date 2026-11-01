@@ -422,10 +422,18 @@ let private switchOff =
         test "the default is off, and withDurableLineage is the switch" {
             Expect.equal ServerConfig.defaults.LineageDurability NoDurableLineage "default off"
 
-            let config = (ServerApp.empty |> ServerApp.withDurableLineage true).Config
+            let config =
+                ServerApp.empty
+                |> ServerApp.withDurableLineage true
+                |> ServerApp.effectiveConfig
+
             Expect.equal config.LineageDurability EnabledDurableLineage "the builder enables it"
 
-            let config = (ServerApp.empty |> ServerApp.withDurableLineage false).Config
+            let config =
+                ServerApp.empty
+                |> ServerApp.withDurableLineage false
+                |> ServerApp.effectiveConfig
+
             Expect.equal config.LineageDurability NoDurableLineage "and disables it"
         }
 

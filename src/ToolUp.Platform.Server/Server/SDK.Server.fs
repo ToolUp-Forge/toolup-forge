@@ -184,8 +184,7 @@ let compose
     // over a store every replica reaches) is what lets the scheduler run on
     // more than one replica.
     let distributedLock =
-        distributedLockOverride
-        |> Option.defaultValue (InProcessDistributedLock.shared :> IDistributedLock)
+        distributedLockOverride |> Option.defaultValue InProcessDistributedLock.shared
 
     // Phase 9l — resolve the deployment's distributed-tracing sink.
     // Wrap of `OtelActivitySink` (or any custom companion) is opt-in
