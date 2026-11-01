@@ -33,7 +33,7 @@
   <!-- Client-tier closure: pack source for Fable consumers under fable/.
        See the companion note in Feliz.AgGrid.fsproj. -->
   <ItemGroup>
-    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    <Content Include="**\*.fsproj;**\*.fs;AgChartRuntime.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
