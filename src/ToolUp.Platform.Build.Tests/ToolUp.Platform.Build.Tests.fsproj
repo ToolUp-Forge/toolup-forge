@@ -118,6 +118,12 @@
         <Compile Include="GateReconcileTests.fs" />
         <!-- Phase 1096 - the pure lane's membership audit, as a test. -->
         <Compile Include="PureLaneTests.fs" />
+        <!-- The affected lane: the selection Build.fs's `Select` computes and
+             the keep the Platform pack applies, source-linked so these
+             go-red proofs run the lane's own implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLane.fs" Link="Support\TestLane.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLaneFilter.fs" Link="Support\TestLaneFilter.fs" />
+        <Compile Include="AffectedLaneTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

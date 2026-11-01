@@ -252,13 +252,46 @@ let private gateExclusions = [
 let private pureLanePacks =
     set [ "Voice"; "AlgorithmProviders"; "AssetStore"; "Reporting" ]
 
+/// The `affected` lane's lists file and the selection manifest it names,
+/// read once — `None` in every other lane. An `Error` (no lists file, a
+/// file naming nothing) fails `VerifyAll` before it builds anything.
+let private affectedPlan: Result<TestLane.AffectedPlan, string> option =
+    match TestLane.current with
+    | TestLane.Lane.Affected -> Some(TestLane.readAffectedPlan ())
+    | TestLane.Lane.Pure
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full -> None
+
+/// The selection manifest the lists file names, when it names a readable one.
+let private affectedManifest =
+    match affectedPlan with
+    | Some(Ok { Manifest = Some(Ok m) }) -> Some m
+    | _ -> None
+
+/// The lane every pack and leg decision below runs on. It is the variable's
+/// lane, except that an `affected` selection a forcing path turned into the
+/// full lane (its lists file keeps `*`) runs every leg as `full` does — the
+/// Platform pack keeps every list from the same file, so the run is whole.
+let private verifyLane =
+    match TestLane.current, affectedPlan with
+    | TestLane.Lane.Affected, Some(Ok plan) when plan.Lists.Everything -> TestLane.Lane.Full
+    | lane, _ -> lane
+
+/// Did client-tier code move, as far as the `affected` lane knows? With no
+/// manifest to say (a lists file written by hand) the answer is yes: a leg
+/// skipped on a guess is the direction that ships a broken client tier.
+let private affectedClientTierMoved =
+    match affectedManifest with
+    | Some m -> m.ClientTierMoved
+    | None -> true
+
 /// `config` for the lane this process runs. Kept as a projection OF
 /// `config` rather than folded into it so the authoritative pack list
 /// above stays one unbroken literal — it is the list `CLAUDE.md` calls
 /// authoritative, and a filter threaded through it would put a lane
 /// decision inside the thing the lane selects FROM.
 let private lanedConfig =
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> {
         config with
             TestPacks =
@@ -266,8 +299,10 @@ let private lanedConfig =
                 |> List.filter (fun pack -> Set.contains pack.Name pureLanePacks)
       }
     // `fast` runs every pack; the slow set it drops is inside the
-    // Platform pack and is that pack's own declaration.
+    // Platform pack and is that pack's own declaration. `affected` runs
+    // every pack too: its selection is of the Platform pack's lists.
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full -> config
 
 /// Phase 1096 — what a type declaration in a documentation `fsharp` block
@@ -293,6 +328,22 @@ let main args =
         sprintf "VerifyAll will run %d of %d pack(s)" (List.length lanedConfig.TestPacks) (List.length config.TestPacks)
     )
 
+    // The `affected` lane says what it did not run, in the gate output,
+    // before anything runs — so a log cannot be mistaken for a full run.
+    match affectedPlan with
+    | _ when not (Array.contains "VerifyAll" args) -> ()
+    | None -> ()
+    | Some(Error why) ->
+        eprintfn "VerifyAll: %s" why
+        exit 2
+    | Some(Ok plan) ->
+        printfn "%s=%s" TestLane.ListsVariableName plan.ListsPath
+
+        match plan.Manifest with
+        | Some(Ok m) -> TestLane.Selection.summaryLines m |> List.iter (printfn "%s")
+        | Some(Error why) -> printfn "  no readable selection manifest (%s); every leg runs" why
+        | None -> printfn "  no selection manifest (the lists file was written by hand); every leg runs"
+
     registerTargets lanedConfig
 
     // Phase 1096 — every test project runs or is excluded by name. Pure
@@ -310,6 +361,112 @@ let main args =
                 Trace.traceError (sprintf "GateReconcile: %s" f)
 
             1)
+
+    // The `affected` lane's selection, written as a manifest and the lists
+    // file the Platform pack reads.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- Select
+    //   (--base <sha> --head <sha> | --paths <file>) [--declared <file>] --out <manifest>`
+    //
+    // `--base`/`--head` select over `git diff --name-only --no-renames`
+    // between the two (a rename is its old path deleted and its new one
+    // added, so both sides are seen). `--paths` takes one path per line and
+    // is the prediction over a change's declared files before it exists; a
+    // path given relative to a directory above this repository is re-rooted
+    // at its first segment that names an entry of the repository root.
+    // `--declared` names lists the change is known to reach, one per line
+    // (`<pack>/<list>`, or a bare Platform list by label or binding). The
+    // lists file is written beside `--out`, with the extension `.lists`.
+    Target.create "Select" (fun _ ->
+        let root = Path.getFullName "."
+
+        let value (name: string) =
+            match args |> Array.tryFindIndex ((=) name) with
+            | Some i when i + 1 < args.Length -> Some args[i + 1]
+            | _ -> None
+
+        let lines (path: string) =
+            File.ReadAllLines path
+            |> Array.map _.Trim()
+            |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#"))
+            |> List.ofArray
+
+        let rootEntries =
+            Directory.EnumerateFileSystemEntries root |> Seq.map Path.GetFileName |> set
+
+        let reroot (raw: string) =
+            let segments = (TestLane.Selection.normalise raw).Split('/') |> List.ofArray
+
+            let rec drop (s: string list) =
+                match s with
+                | first :: rest when not (rootEntries.Contains first) && not rest.IsEmpty -> drop rest
+                | _ -> s
+
+            match drop segments with
+            | s when rootEntries.Contains(List.head s) -> String.concat "/" s
+            | _ -> TestLane.Selection.normalise raw
+
+        let baseSha, headSha, paths =
+            match value "--base", value "--head", value "--paths" with
+            | Some b, Some h, None ->
+                let result =
+                    CreateProcess.fromRawCommand "git" [ "diff"; "--name-only"; "--no-renames"; b; h ]
+                    |> CreateProcess.withWorkingDirectory root
+                    |> CreateProcess.redirectOutput
+                    |> CreateProcess.ensureExitCode
+                    |> Proc.run
+
+                let changed =
+                    result.Result.Output.Replace("\r\n", "\n").Split('\n')
+                    |> Array.map _.Trim()
+                    |> Array.filter ((<>) "")
+                    |> List.ofArray
+
+                Some b, Some h, changed
+            | None, None, Some file -> None, None, lines file |> List.map reroot
+            | _ -> failwith "Select: give exactly one of `--base <sha> --head <sha>` or `--paths <file>`."
+
+        let out =
+            match value "--out" with
+            | Some o -> Path.GetFullPath o
+            | None -> failwith "Select: `--out <manifest>` is required."
+
+        let listsFile = Path.ChangeExtension(out, ".lists")
+
+        let manifest =
+            TestLane.Selection.select {
+                Base = baseSha
+                Head = headSha
+                Paths = paths
+                Declared = value "--declared" |> Option.map lines |> Option.defaultValue []
+                Packs = config.TestPacks |> List.map _.Name
+                Read =
+                    fun relative ->
+                        let full = Path.Combine(root, relative)
+
+                        if File.Exists full then
+                            Some(File.ReadAllText full)
+                        else
+                            None
+                ListsFile = listsFile
+                Command =
+                    "dotnet run --project Build.fsproj -- "
+                    + String.concat " " (args |> Array.skipWhile ((<>) "Select"))
+            }
+
+        Directory.CreateDirectory(Path.GetDirectoryName out) |> ignore
+        File.WriteAllText(out, TestLane.Selection.toJson manifest)
+
+        File.WriteAllText(listsFile, TestLane.Lists.render (Some out) manifest.Forced manifest.Lists)
+
+        TestLane.Selection.summaryLines manifest |> List.iter (Trace.tracefn "%s")
+
+        Trace.tracefn
+            "▶ Select: wrote %s and %s. Run the lane with TOOLUP_TEST_LANE=affected and %s=%s."
+            out
+            listsFile
+            TestLane.ListsVariableName
+            listsFile)
 
     // Phase 614 — the Fable-tier test gate as ONE invocation.
     //
@@ -448,9 +605,11 @@ let main args =
     // opposite of that claim; `fast` keeps it, because `fast` runs every
     // pack and drops only the measured slow set INSIDE one of them. Cost
     // in `full`: the ~1.5-minute `fable-tier` recipe, once, at the end.
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Affected when not affectedClientTierMoved -> ()
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full ->
         VerifyLeg.register "Fable" (fun () ->
             Trace.tracefn "▶ VerifyAll: Fable (src/ToolUp.AI.Client.Tests, via the VerifyFable recipe)"
@@ -498,9 +657,11 @@ let main args =
         // six Fable samples are ~10 minutes: the FULL lane only. The fast
         // lane still BUILDS every sample on .NET and asserts the count.
         let transpile =
-            match TestLane.current with
+            match verifyLane with
             | TestLane.Lane.Full -> true
-            | _ -> false
+            | TestLane.Lane.Affected -> affectedClientTierMoved
+            | TestLane.Lane.Pure
+            | TestLane.Lane.Fast -> false
 
         // Fable resolves its own tool from the nearest `.config/
         // dotnet-tools.json` above the directory it runs in, and it must
@@ -624,9 +785,10 @@ let main args =
     Target.create "VerifySamples" (fun _ -> runVerifySamples ())
 
     // Phase 904 — the samples gate IN the canonical gate.
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> ()
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full ->
         VerifyLeg.register "Samples" (fun () ->
             Trace.tracefn "▶ VerifyAll: Samples (samples/, via the VerifySamples recipe)"
@@ -677,9 +839,10 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyAnalyzers: the analyser run exited %d; its findings are printed above." code)
 
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> ()
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full ->
         VerifyLeg.register "Analyzers" (fun () ->
             Trace.tracefn "▶ VerifyAll: Analyzers (TUA rules over src/, via the RemotingAnalyzers pack)"
@@ -4529,9 +4692,10 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyScopeLiterals: exited %d; the sites are printed above." code)
 
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> ()
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full ->
         VerifyLeg.register "ScopeLiterals" (fun () ->
             Trace.tracefn "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals)"
@@ -4637,9 +4801,10 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyServiceConfigFold: exited %d; the sites are printed above." code)
 
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> ()
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full ->
         VerifyLeg.register "ServiceConfigFold" (fun () ->
             Trace.tracefn "▶ VerifyAll: ServiceConfigFold (the closure-fold's one home, via VerifyServiceConfigFold)"
@@ -4736,9 +4901,10 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyFuaranCoResolution: exited %d; the verdicts are printed above." code)
 
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> ()
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full ->
         VerifyLeg.register "FuaranCoResolution" (fun () ->
             Trace.tracefn "▶ VerifyAll: FuaranCoResolution (Fuaran floors beside the published Fuaran.UI)"
@@ -5026,7 +5192,7 @@ let main args =
     Target.create "VerifyFuaranCoBuild" (fun _ ->
         runVerifyFuaranCoBuild (argValue "--ui-version") (argValue "--toolup-version"))
 
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Full ->
         VerifyLeg.register "FuaranCoBuild" (fun () ->
             Trace.tracefn
@@ -5035,7 +5201,8 @@ let main args =
             runVerifyFuaranCoBuild None None
             0)
     | TestLane.Lane.Pure
-    | TestLane.Lane.Fast -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Affected -> ()
 
     // Phase 326 — the ToolUp.Sdk meta-manifest, emitted from the tree.
     //
@@ -6456,9 +6623,10 @@ let main args =
     // Warn-only: an unregistered driver is a clone's choice (git falls back
     // to its text merge), but one registered to a missing path turns every
     // merge of its files into a conflict, in every worktree of the clone.
-    match TestLane.current with
+    match verifyLane with
     | TestLane.Lane.Pure -> ()
     | TestLane.Lane.Fast
+    | TestLane.Lane.Affected
     | TestLane.Lane.Full ->
         VerifyLeg.register "MergeDrivers" (fun () ->
             let dead =

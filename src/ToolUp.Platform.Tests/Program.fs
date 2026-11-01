@@ -1144,41 +1144,90 @@ let private laneDeclaration: TestLaneFilter.LaneDeclaration = {
     Pure = []
 }
 
-/// Phase 722 — the registered list plus the guard that makes an
-/// unregistered `[<Tests>]` binding fail loudly instead of vanishing.
-/// The floor is a LOWER BOUND (140 against ~170 attributed bindings), so
-/// adding a pack never needs an edit here; it only moves when bindings
-/// are deliberately removed.
+/// The `affected` lane's lists, resolved against the registered list —
+/// `None` in every other lane. Resolved once, so the tree that runs and
+/// the account printed of it are the same resolution.
+let private affectedKeep: Result<TestLaneFilter.Keep, string> option =
+    match TestLane.current with
+    | TestLane.Lane.Affected ->
+        TestLane.Lists.read ()
+        |> Result.bind (fun (_, lists) ->
+            TestLaneFilter.resolveKeep
+                (TestLaneFilter.bindingResolver (Assembly.GetExecutingAssembly()))
+                lists
+                registeredTests)
+        |> Some
+    | TestLane.Lane.Pure
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full -> None
+
+let private keep =
+    match affectedKeep with
+    | Some(Ok k) -> Some k
+    | Some(Error _)
+    | None -> None
+
+/// The registered list plus the guard that makes an unregistered
+/// `[<Tests>]` binding fail loudly instead of vanishing. The floor is a
+/// LOWER BOUND (140 against ~170 attributed bindings), so adding a pack
+/// never needs an edit here; it only moves when bindings are deliberately
+/// removed.
 ///
-/// Phase 762 — the lane filter is applied AFTER the guard, deliberately:
-/// the guard is about what this pack REGISTERS (all of it, in every
-/// lane), the lane only about what RUNS. Under `full` — the default, and
-/// the only lane a ship may cite — `forLane` returns the guarded tree
-/// physically unchanged.
+/// The lane filter is applied AFTER the guard, deliberately: the guard is
+/// about what this pack REGISTERS (all of it, in every lane), the lane
+/// only about what RUNS. Under `full` — the default, and the only lane a
+/// ship may cite — the guarded tree is returned physically unchanged.
 let allTests =
     TestRegistrationGuard.withGuardExempting
         (Assembly.GetExecutingAssembly())
         140
         deliberatelyUnregistered
         registeredTests
-    |> TestLaneFilter.forLane laneDeclaration registeredTests
+    |> TestLaneFilter.forLaneIn TestLane.current laneDeclaration keep registeredTests
+
+let private describe (tree: Test) =
+    sprintf
+        "%s — %d case(s)"
+        (TestLaneFilter.labelOf tree |> Option.defaultValue "<unlabelled list>")
+        (TestLaneFilter.caseCount tree)
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are enough).
 // `--parallel` still overrides. See docs/platform/testing-conventions.md
-// § "Every Expecto pack runs sequenced by default". (Phase 617.)
+// § "Every Expecto pack runs sequenced by default".
 [<EntryPoint>]
 let main argv =
-    // Phase 762 — say which lane produced the result, so a log a reader
-    // finds later cannot be mistaken for a full run. Silent under `full`
-    // (the default), so the shipping gate's output is unchanged.
-    let dropped = TestLaneFilter.dropped laneDeclaration registeredTests
+    // Say which lane produced the result, so a log a reader finds later
+    // cannot be mistaken for a full run. Silent under `full` (the
+    // default), so the shipping gate's output is unchanged.
+    match affectedKeep with
+    | Some(Error why) ->
+        eprintfn "%s" why
+        2
+    | _ ->
+        let dropped =
+            TestLaneFilter.droppedIn TestLane.current laneDeclaration keep registeredTests
 
-    TestLane.announce (
-        sprintf
-            "%d case(s) in %d registered list(s) are not in this run"
-            (dropped |> List.sumBy TestLaneFilter.caseCount)
-            (List.length dropped)
-    )
+        TestLane.announce (
+            sprintf
+                "%d case(s) in %d registered list(s) are not in this run"
+                (dropped |> List.sumBy TestLaneFilter.caseCount)
+                (List.length dropped)
+        )
 
-    runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests
+        match keep with
+        | Some k ->
+            printfn
+                "  kept %d list(s), %d case(s); skipped %d list(s); map: none"
+                k.Kept.Length
+                (k.Kept |> List.sumBy (snd >> TestLaneFilter.caseCount))
+                k.Skipped.Length
+
+            for line, tree in k.Kept do
+                printfn "  kept     %s  [%s]" (describe tree) line
+
+            for tree in k.Skipped do
+                printfn "  skipped  %s" (describe tree)
+        | None -> ()
+
+        runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests

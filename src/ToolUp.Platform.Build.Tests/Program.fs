@@ -90,6 +90,7 @@ let private registeredTests =
         GateReconcileTests.tests
         // Phase 1096 - the pure lane's grep audit re-run over every member.
         PureLaneTests.tests
+        AffectedLaneTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
