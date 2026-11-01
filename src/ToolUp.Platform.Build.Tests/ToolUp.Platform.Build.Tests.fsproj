@@ -76,6 +76,7 @@
              rather than only inside the pack whose cost it bounds. -->
         <Compile Include="..\..\VerifyGate.fs" Link="VerifyGate.fs" />
         <Compile Include="VerifyGateTests.fs" />
+        <Compile Include="FlagsTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Support\CorpusAnchor.fs" Link="Support\CorpusAnchor.fs" />
         <Compile Include="CorpusAnchorTests.fs" />
         <!-- Phase 183 — the consumer codemod for the 0.x breaking renames:

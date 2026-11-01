@@ -53,6 +53,7 @@ let private registeredTests =
         // the corpus-anchor memoisation's constant-spawn property. Named
         // OS mutexes and a handful of `git` subprocesses; no network.
         VerifyGateTests.tests
+        FlagsTests.tests
         CorpusAnchorTests.tests
         // Phase 183 — the consumer codemod for the 0.x breaking renames:
         // golden-file tests over the fixture consumer tree (every deterministic

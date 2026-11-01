@@ -655,4 +655,122 @@ jobs:
                     | findings -> failtest (PublishedSmoke.smokeJobReport findings)
             }
         ]
+        // ── Phase 1200 — the on-demand import resolves for a feed consumer ──
+        //
+        // Fable spells `importValueDynamic` from the output extension and writes
+        // a package source under fable_modules as `.fs.js`, so the first feed
+        // consumer of 0.38.0 could not bundle. Two rules, each proven both ways:
+        // the packaging rule over the source tree, and the resolution rule over
+        // a compiled output, which the feed-consumer leg runs after a real
+        // Fable compile from a feed.
+        testList "on-demand imports" [
+            let runtime = "AgGridRuntime.fs", "module Feliz.AgGridRuntime\n\nlet Grid = 1\n"
+
+            let importer =
+                "AgGrid.fs", "module Feliz.AgGrid\n\nlet lazyGrid () = importValueDynamic Feliz.AgGridRuntime.Grid\n"
+
+            let shim = "AgGridRuntime.js", PublishedSmoke.shimReExport "AgGridRuntime" + "\n"
+
+            let fsproj (include: string) =
+                "Feliz.AgGrid.fsproj",
+                sprintf
+                    "<Project><ItemGroup><Content Include=\"%s\" Exclude=\"**\\*.fs.js\" PackagePath=\"fable\\\" /></ItemGroup></Project>"
+                    include
+
+            let packed = fsproj "**\\*.fsproj;**\\*.fs;AgGridRuntime.js"
+            let unpacked = fsproj "**\\*.fsproj;**\\*.fs"
+
+            test "dynamicallyImportedModules reads the module, not the member" {
+                Expect.equal
+                    (PublishedSmoke.dynamicallyImportedModules (snd importer))
+                    [ "Feliz.AgGridRuntime" ]
+                    "one module, named once"
+
+                Expect.equal (PublishedSmoke.dynamicallyImportedModules (snd runtime)) [] "a file that imports nothing"
+            }
+
+            test "a packed shim that re-exports its sibling is clean" {
+                Expect.equal
+                    (PublishedSmoke.dynamicImportShimFindings [ runtime; importer; shim; packed ])
+                    []
+                    "no finding"
+            }
+
+            test "a missing shim is a finding naming the import Fable will spell" {
+                match PublishedSmoke.dynamicImportShimFindings [ runtime; importer; packed ] with
+                | [ finding ] ->
+                    Expect.stringContains finding "./AgGridRuntime.js" "the spelled import"
+                    Expect.stringContains finding "AgGridRuntime.fs.js" "what fable_modules holds"
+                | findings -> failtestf "expected one finding, got %A" findings
+            }
+
+            test "a shim that does not re-export its sibling is a finding" {
+                let wrong = "AgGridRuntime.js", "export const Grid = 1;\n"
+
+                match PublishedSmoke.dynamicImportShimFindings [ runtime; importer; wrong; packed ] with
+                | [ finding ] ->
+                    Expect.stringContains finding (PublishedSmoke.shimReExport "AgGridRuntime") "the line it must carry"
+                | findings -> failtestf "expected one finding, got %A" findings
+            }
+
+            test "a shim the fsproj does not pack is a finding" {
+                match PublishedSmoke.dynamicImportShimFindings [ runtime; importer; shim; unpacked ] with
+                | [ finding ] -> Expect.stringContains finding "fable/" "the payload it is missing from"
+                | findings -> failtestf "expected one finding, got %A" findings
+            }
+
+            test "a module imported on demand that no packed source declares is not this package's to shim" {
+                Expect.equal (PublishedSmoke.dynamicImportShimFindings [ importer; packed ]) [] "declared elsewhere"
+            }
+
+            test "unresolvedDynamicImports resolves each specifier against its importer's directory" {
+                let importerPath =
+                    Path.Combine("out", "fable_modules", "ToolUp.Feliz.AgGrid.0.38.0", "AgGrid.fs.js")
+
+                let compiled =
+                    importerPath,
+                    "export function lazyGrid() { return import(\"./AgGridRuntime.js\").then((m) => m.Grid); }\n"
+
+                let present (path: string) =
+                    path.EndsWith(
+                        Path.Combine("ToolUp.Feliz.AgGrid.0.38.0", "AgGridRuntime.js"),
+                        StringComparison.Ordinal
+                    )
+
+                Expect.equal (PublishedSmoke.unresolvedDynamicImports present [ compiled ]) [] "the shim is there"
+
+                Expect.equal
+                    (PublishedSmoke.unresolvedDynamicImports (fun _ -> false) [ compiled ])
+                    [ importerPath, "./AgGridRuntime.js" ]
+                    "the 0.38.0 shape: spelled, not written"
+
+                Expect.equal
+                    (PublishedSmoke.unresolvedDynamicImports (fun _ -> false) [ importerPath, "import(\"react\")" ])
+                    []
+                    "a bare specifier is a package import, not a file"
+            }
+
+            // ── And the SHIPPED tree, not only fixtures ──────────────
+            test "every packed client library that imports on demand ships its shims" {
+                match repoRoot with
+                | None -> failtest "could not locate the repo root — this test would otherwise be vacuously green"
+                | Some root ->
+                    let packages = [ "src/Feliz.AgGrid"; "src/Feliz.AgCharts" ]
+
+                    for package in packages do
+                        let dir = Path.Combine(root, package)
+                        let sources = Directory.GetFiles(dir, "*.fs") |> Array.map File.ReadAllText
+
+                        Expect.isNonEmpty
+                            (sources
+                             |> Array.collect (PublishedSmoke.dynamicallyImportedModules >> Array.ofList))
+                            (sprintf
+                                "%s imports on demand (Phase 1168) — if it no longer does, retire it from this list"
+                                package)
+
+                        match PublishedSmoke.dynamicImportShimFindingsIn dir with
+                        | [] -> ()
+                        | findings -> failtest (PublishedSmoke.dynamicImportShimReport dir findings)
+            }
+        ]
     ]

@@ -154,7 +154,7 @@ let tests =
         // reproduces the retired guess as a LOCAL function (production
         // code no longer has one to call) purely to pin the class of bug
         // it had; every other test below exercises the actual fix.
-        testList "TemplateGatePackages" [
+        testList "TemplateGate.privatePackagesFolder" [
 
             let withScratchRoot (body: string -> unit) =
                 let temp =
@@ -210,8 +210,8 @@ let tests =
             test "privatePackagesFolder is a pure function of the repo root — it consults no ambient config" {
                 let repoRoot = @"C:\repos\some-sdk-checkout"
 
-                let a = TemplateGatePackages.privatePackagesFolder repoRoot
-                let b = TemplateGatePackages.privatePackagesFolder repoRoot
+                let a = TemplateGate.privatePackagesFolder repoRoot
+                let b = TemplateGate.privatePackagesFolder repoRoot
 
                 Expect.equal a b "computing it twice for the same root must agree"
 
@@ -222,11 +222,9 @@ let tests =
             }
 
             test "two different repo roots (two worktrees) never resolve the same private folder" {
-                let checkoutA =
-                    TemplateGatePackages.privatePackagesFolder @"C:\repos\some-sdk-checkout-a"
+                let checkoutA = TemplateGate.privatePackagesFolder @"C:\repos\some-sdk-checkout-a"
 
-                let checkoutB =
-                    TemplateGatePackages.privatePackagesFolder @"C:\repos\some-sdk-checkout-b"
+                let checkoutB = TemplateGate.privatePackagesFolder @"C:\repos\some-sdk-checkout-b"
 
                 Expect.notEqual
                     checkoutA
@@ -246,7 +244,7 @@ let tests =
 
                     File.WriteAllText(Path.Combine(folder, "toolup.platform.core", "marker.txt"), "x")
 
-                    let report = TemplateGatePackages.evict folder
+                    let report = TemplateGate.evict folder
 
                     Expect.equal
                         report.Removed
@@ -264,7 +262,7 @@ let tests =
                 withScratchRoot (fun scratch ->
                     let folder = Path.Combine(scratch, "never-seen-before")
 
-                    let report = TemplateGatePackages.evict folder
+                    let report = TemplateGate.evict folder
 
                     Expect.equal report.Removed [] "a cold run removed nothing, because there was nothing"
                     Expect.isTrue (Directory.Exists folder) "evict leaves the folder present either way")
@@ -280,11 +278,177 @@ let tests =
 
                     let ownFolder = Path.Combine(scratch, "own", "template-gate-packages")
 
-                    TemplateGatePackages.evict ownFolder |> ignore
+                    TemplateGate.evict ownFolder |> ignore
 
                     Expect.isTrue
                         (Directory.Exists untouched)
                         "evicting the private folder must never reach a sibling directory")
+            }
+        ]
+
+        // ── The gate as data: each check refuses, in both directions ──
+        testList "TemplateGate checks" [
+
+            let source =
+                "module Laws\nlet law = 1\n// ── a conforming reference module\nlet selfTest = 2\n"
+
+            let marker = "// ── a conforming reference module"
+            let files = "src/Laws.fs", "template/Laws.fs", marker
+
+            test "VendoredPack is silent over a copy of the laws region, CRLF and trailing space aside" {
+                Expect.isNone
+                    (TemplateGate.vendoredFinding "Gate" files source "module Laws\r\nlet law = 1\r\n\r\n")
+                    "a faithful copy is no finding"
+            }
+
+            test "VendoredPack names a drifted copy" {
+                match TemplateGate.vendoredFinding "Gate" files source "module Laws\nlet law = 2\n" with
+                | Some finding ->
+                    Expect.stringContains finding "has drifted" "the class"
+                    Expect.stringContains finding "template/Laws.fs" "the copy to re-make"
+                | None -> failtest "a drifted copy must be a finding"
+            }
+
+            test "VendoredPack refuses when the boundary marker is gone, rather than comparing everything" {
+                match TemplateGate.vendoredFinding "Gate" files "module Laws\nlet law = 1\n" "module Laws\n" with
+                | Some finding -> Expect.stringContains finding "boundary marker" "names the missing marker"
+                | None -> failtest "a missing marker must be a finding"
+            }
+
+            let assets (pins: (string * string) list) =
+                pins
+                |> List.map (fun (id, v) -> sprintf "\"%s/%s\": {}" id v)
+                |> String.concat ",\n"
+
+            test "StrayPins is silent when every ToolUp.* resolved at the gate version" {
+                Expect.isEmpty
+                    (TemplateGate.strayPins [
+                        assets [ "ToolUp.Platform.Core", TemplateGate.version; "Feliz", "2.9.0" ]
+                    ])
+                    "only ToolUp.* packages are held to the gate version"
+            }
+
+            test "StrayPins names every ToolUp.* at another version, once each, across graphs" {
+                Expect.equal
+                    (TemplateGate.strayPins [
+                        assets [
+                            "ToolUp.Platform.Core", "0.38.0"
+                            "ToolUp.Platform.Server", TemplateGate.version
+                        ]
+                        assets [ "ToolUp.Platform.Core", "0.38.0" ]
+                    ])
+                    [ "ToolUp.Platform.Core", "0.38.0" ]
+                    "the stray pin, deduplicated"
+            }
+
+            let entries = set [ "fable/A.fsproj"; "fable/Client.fs" ]
+
+            test "NupkgLayout is silent over a conformant package" {
+                Expect.isEmpty
+                    (TemplateGate.layoutFindings [ "fable/A.fsproj"; "fable/Client.fs" ] [ "fable/Server.fs" ] entries)
+                    "every required entry present, no forbidden one"
+            }
+
+            test "NupkgLayout names a missing entry and a forbidden one" {
+                let findings =
+                    TemplateGate.layoutFindings [ "fable/A.fsproj"; "fable/Icons.fs" ] [ "fable/Client.fs" ] entries
+
+                Expect.equal findings.Length 2 "one finding each"
+                Expect.stringContains findings[0] "fable/Icons.fs" "the missing entry"
+                Expect.stringContains findings[1] "fable/Client.fs" "the forbidden entry"
+            }
+
+            let rules = Neutrality.rules (Some [ "Secret Product" ])
+
+            test "Neutral is silent over neutral text and over a masked machine path" {
+                Expect.isEmpty
+                    (TemplateGate.neutralHits rules [ "C:/feeds/PRIVATE-VOCAB-CANARY" ] [
+                        "README.md", [| "A public template."; "feed: C:/feeds/PRIVATE-VOCAB-CANARY" |]
+                    ])
+                    "the gate's own substitution is masked before matching"
+            }
+
+            test "Neutral names each hit by file, line and token" {
+                Expect.equal
+                    (TemplateGate.neutralHits rules [] [
+                        "README.md", [| "fine"; "built for the secret   product team" |]
+                        "Server.fs", [| "// PRIVATE-VOCAB-CANARY" |]
+                    ])
+                    [ "README.md:2  'Secret Product'"; "Server.fs:1  'PRIVATE-VOCAB-CANARY'" ]
+                    "case-insensitive, any whitespace run, the canary always enforced"
+            }
+        ]
+
+        // ── The three specs, held to the tree and to each other ──────
+        testList "TemplateGatePackages specs" [
+
+            let repoRoot =
+                let rec up (dir: DirectoryInfo) =
+                    if isNull dir then
+                        failwith "no repository root above the test assembly"
+                    elif File.Exists(Path.Combine(dir.FullName, "Build.fsproj")) then
+                        dir.FullName
+                    else
+                        up dir.Parent
+
+                up (DirectoryInfo AppContext.BaseDirectory)
+
+            test "every gate keeps its own scratch feed and scratch root" {
+                let feeds = TemplateGatePackages.all |> List.map _.Feed
+
+                Expect.equal (List.distinct feeds) feeds "no two gates share a feed"
+
+                let scratch =
+                    TemplateGatePackages.all
+                    |> List.choose (fun s ->
+                        match s.Scaffold with
+                        | TemplateGate.Instantiate i -> Some i.Scratch
+                        | TemplateGate.InPlace _ -> None)
+
+                Expect.equal (List.distinct scratch) scratch "no two gates share a scratch root"
+                Expect.equal scratch.Length 2 "both instantiating gates have one"
+            }
+
+            test "every closure entry names a project on disk, and no closure repeats an id" {
+                for spec in TemplateGatePackages.all do
+                    let ids = spec.Closure |> List.map _.Id
+                    Expect.equal (List.distinct ids) ids (sprintf "%s repeats an id" spec.Name)
+
+                    for p in spec.Closure do
+                        Expect.isTrue
+                            (File.Exists(Path.Combine(repoRoot, p.Project)))
+                            (sprintf "%s declares %s at %s, which does not exist" spec.Name p.Id p.Project)
+            }
+
+            // The template SDK-version defaults track the newest published
+            // version; the gate must still override them with its throwaway
+            // version, or a scaffold would restore a published SDK instead of
+            // this tree's.
+            test "every scaffold is told the gate version, overriding the template's default" {
+                for spec in TemplateGatePackages.all do
+                    let args =
+                        match spec.Scaffold with
+                        | TemplateGate.InPlace projects ->
+                            projects |> List.collect (TemplateGate.inPlaceBuildArgs "feed")
+                        | TemplateGate.Instantiate i -> TemplateGate.instantiateArgs i "scaffold" "feed"
+
+                    let overrides =
+                        List.contains (sprintf "-p:ToolUpSdkVersion=%s" TemplateGate.version) args
+                        || (args |> List.pairwise |> List.contains ("--sdk-version", TemplateGate.version))
+
+                    Expect.isTrue overrides (sprintf "%s must pass %s to its scaffold" spec.Name TemplateGate.version)
+            }
+
+            test "the in-place gate's projects and the instantiated templates exist" {
+                for spec in TemplateGatePackages.all do
+                    match spec.Scaffold with
+                    | TemplateGate.InPlace projects ->
+                        for p in projects do
+                            Expect.isTrue (File.Exists(Path.Combine(repoRoot, p))) (sprintf "%s: %s" spec.Name p)
+                    | TemplateGate.Instantiate i ->
+                        Expect.isTrue
+                            (Directory.Exists(Path.Combine(repoRoot, i.Template)))
+                            (sprintf "%s: %s" spec.Name i.Template)
             }
         ]
     ]

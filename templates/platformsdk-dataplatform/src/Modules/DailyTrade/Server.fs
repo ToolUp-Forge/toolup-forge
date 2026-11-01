@@ -324,21 +324,21 @@ let private service<'T> (ctx: HttpContext) : 'T option =
 /// days outside the delivery keep the facts earlier deliveries wrote.
 let private writeTable
     (writer: IFactTableWriter)
-    (scopeId: string)
+    (scope: ResolvedScope)
     (options: FactTableRunOptions)
     (tableId: string)
     (rows: FactTableRow list)
     : Async<Result<TableWritten, string>> =
     async {
-        match! writer.OpenRun(scopeId, tableId, options = options) with
+        match! writer.OpenRun(scope, tableId, options = options) with
         | Error e -> return Error(FactTableWriteError.describe e)
         | Ok run ->
-            match! writer.WriteRows(scopeId, run.RunId, rows) with
+            match! writer.WriteRows(scope, run.RunId, rows) with
             | Error e ->
-                let! _ = writer.Abandon(scopeId, run.RunId, FactTableWriteError.describe e)
+                let! _ = writer.Abandon(scope, run.RunId, FactTableWriteError.describe e)
                 return Error(FactTableWriteError.describe e)
             | Ok _ ->
-                match! writer.Commit(scopeId, run.RunId) with
+                match! writer.Commit(scope, run.RunId) with
                 | Ok commit ->
                     return
                         Ok {
@@ -419,7 +419,7 @@ let upload
                             |> FactTableRunOptions.withInputs [ hash ]
                             |> FactTableRunOptions.forSlice slice
 
-                        let write = writeTable writer scope.ScopeId options
+                        let write = writeTable writer scope options
                         let! site = write SiteTable (siteRows fiscalWeek lines)
                         let! channel = write ChannelTable (channelRows fiscalWeek lines)
 
