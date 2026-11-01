@@ -144,7 +144,7 @@ ServerApp.empty
 
 The Redis cache survives process restarts and serves across multiple app instances. Useful at scale.
 
-It also **lifts** the `team-mode-shared-embedding-cache` preflight warning. That validator fires when the process-local `InMemoryEmbeddingCache` is active in `Team` / `MultiTeam` mode with `ReplicaCount > 1`, because each replica then keeps its own entries for the same text. A cross-replica cache removes that divergence, so the warning stops applying rather than being suppressed — `ServerConfig.AcceptSharedEmbeddingCacheInTeamMode` stays `false`. Composing `InMemoryEmbeddingCache` through the hook by hand is accepted and behaves exactly as the default, warning included: what lifts the warning is the cache spanning replicas, not the hook being called.
+It also **lifts** the `team-mode-shared-embedding-cache` preflight warning. That validator fires when the process-local `InMemoryEmbeddingCache` is active in `Team` / `MultiTeam` mode with `ReplicaCount > 1`, because each replica then keeps its own entries for the same text. A cross-replica cache removes that divergence, so the warning stops applying rather than being suppressed — `ServerConfig.RiskAcknowledgements.AcceptSharedEmbeddingCacheInTeamMode` stays `false`. Composing `InMemoryEmbeddingCache` through the hook by hand is accepted and behaves exactly as the default, warning included: what lifts the warning is the cache spanning replicas, not the hook being called.
 
 ## Version stamping + re-embedding
 

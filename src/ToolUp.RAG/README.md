@@ -168,10 +168,10 @@ table above, a bounds refusal.
 Two `Accept*` escape hatches relax RAG preflight; both are documented in
 [`docs/operations/env-vars.md`](../../docs/operations/env-vars.md):
 
-- `ServerConfig.AcceptEphemeralRagIndex` (`TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1`) —
+- `ServerConfig.RiskAcknowledgements.AcceptEphemeralRagIndex` (`TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1`) —
   degrades the no-durable-backing refusal to a `Warning` for a deployment that
   deliberately re-ingests its corpus on every boot.
-- `ServerConfig.AcceptLocalEmbedderAtScale` (`TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1`)
+- `ServerConfig.RiskAcknowledgements.AcceptLocalEmbedderAtScale` (`TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1`)
   — accepts the dev-only, process-stateful `LocalEmbeddingProvider` in a
   production-shaped deployment, silencing both local-embedder validators and the
   `embedding_provider:local` probe's `Degraded` verdict together.
@@ -461,7 +461,7 @@ A RAG deployment uses the `ServerApp` observability surface directly — the bui
 
 - `ServerApp.withHealthCheck` (Phase 9k) — companion `IHealthCheck` (e.g. `HnswVectorStoreHealth`).
 - `ServerApp.withConfigValidator` (Phase 9m) — companion `IConfigValidator` for startup preflight.
-- `ServerApp.withMetricsSink` (Phase 9e) — companion `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. Wire `MetricsEndpoint = EnabledMetricsEndpoint` on `ServerConfig` to mount `/metrics`. RAG-specific metrics (`toolup.rag.embedding_latency_ms`, `toolup.rag.retrieval.empty_count`, etc.) are not yet emitted at SDK level — the `IRagTelemetry` interface (Phase 14j) carries them today; promoting RAG telemetry into the `IMetricsSink` substrate is a follow-up.
+- `ServerApp.withMetricsSink` (Phase 9e) — companion `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. Wire `MetricsEndpoint = FeatureMode.Enabled` on `ServerConfig` to mount `/metrics`. RAG-specific metrics (`toolup.rag.embedding_latency_ms`, `toolup.rag.retrieval.empty_count`, etc.) are not yet emitted at SDK level — the `IRagTelemetry` interface (Phase 14j) carries them today; promoting RAG telemetry into the `IMetricsSink` substrate is a follow-up.
 
 See [`src/ToolUp.Platform/README.md`](../ToolUp.Platform/README.md) and `TECHNICAL_GUIDE.md` for the full contract.
 

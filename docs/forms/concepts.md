@@ -341,13 +341,13 @@ The `/api/public/forms/*` prefix is registered as an anonymous route via `Server
 
 | Condition | `Anonymous` / `AuthenticatedEphemeral` | `Individual` / `Team` / `MultiTeam` |
 |---|---|---|
-| `Publishable` schema + `ShareTokenStore = NoShareTokenStore` | `Warning` | **`Error`** (boot fails) |
+| `Publishable` schema + `ShareTokenStore = FeatureMode.Disabled` | `Warning` | **`Error`** (boot fails) |
 | `Publishable` schema + `PublicBaseUrl = None` or whitespace | `Warning` | **`Error`** (boot fails) |
 | No Publishable schemas | `Ok` | `Ok` |
 
-The escape hatch `ServerConfig.AcceptUnsignedPublishable = true` (env `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE=1`) downgrades the persistent-mode `Error` back to `Warning` for the staging-shape-in-production-mode edge case — explicit operator opt-in for the dry-run scenario where Publishable schemas are registered but the share-link surface is not yet wired.
+The escape hatch `ServerConfig.RiskAcknowledgements.AcceptUnsignedPublishable = true` (env `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE=1`) downgrades the persistent-mode `Error` back to `Warning` for the staging-shape-in-production-mode edge case — explicit operator opt-in for the dry-run scenario where Publishable schemas are registered but the share-link surface is not yet wired.
 
-The `Error` exists because a misconfigured production deployment that boots cleanly with only a `Warning` ships a public surface with no signed-token gate, no use-limit enforcement, and no revocation. Persistent-data deployments must wire `EnabledShareTokenStore` + a valid `PublicBaseUrl` or explicitly opt out via the escape hatch.
+The `Error` exists because a misconfigured production deployment that boots cleanly with only a `Warning` ships a public surface with no signed-token gate, no use-limit enforcement, and no revocation. Persistent-data deployments must wire `FeatureMode.Enabled` + a valid `PublicBaseUrl` or explicitly opt out via the escape hatch.
 
 The `INotificationSink` checks emit `Warning` regardless of mode (deployments dispatching via the creator's own MTA legitimately skip the sink).
 

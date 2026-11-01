@@ -21,7 +21,7 @@ open ToolUp.TelemetrySinks.Ga4
 let sink = Ga4TelemetrySink.create httpClient "G-XXXXXXX" apiSecret
 
 // Compose:
-//   ServerConfig.TelemetrySink = CustomTelemetrySink
+//   ServerConfig.Observability.TelemetrySink = FeatureMode.Enabled
 //   services.AddSingleton<ITelemetrySink>(sink)
 ```
 

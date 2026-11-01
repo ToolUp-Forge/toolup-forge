@@ -325,7 +325,7 @@ The public-utility widgets read from three deployment-wide endpoints, all Platfo
 
 | Route | Method(s) | Substrate | Mount condition |
 |---|---|---|---|
-| `/api/_platform/admin/ad-units[/{slotId}]` | GET / POST / PUT / DELETE | `IEntityStore<AdSlotEntity>` | `ServerConfig.EntityStore = EnabledEntityStore` |
+| `/api/_platform/admin/ad-units[/{slotId}]` | GET / POST / PUT / DELETE | `IEntityStore<AdSlotEntity>` | `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` |
 | `/api/_platform/admin/rate-limits` | GET (with `?count=N`) | `IRateLimitStore.GetRecentDecisions` | Always mounted (default `InMemoryRateLimitStore` returns empty list) |
 | `/api/_platform/admin/premium-users` | GET | `IUserClaims.ListPremiumUsers` | Always mounted (default `NoOpUserClaims` returns `Ok []`) |
 
@@ -351,14 +351,17 @@ let clientConfig = {
 let serverConfig = {
     ServerConfig.defaults with
         Surfaces = Surfaces.anonymous
-        EntityStore = EnabledEntityStore   // unlocks ad-unit CRUD
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled   // unlocks ad-unit CRUD
+        }
         RateLimits = [ /* policies */ ]    // populates the rate-limit event log
-        AdAnalytics = EnabledAdAnalytics   // pairs with AdPanel for impression/click capture
-        // IUserClaims swapped in for a Clerk-backed provider in production
+        AdAnalytics = FeatureMode.Enabled   // pairs with AdPanel for impression/click capture
 }
+
 ```
 
-An operator with the platform-admin role lands on the `PlatformAdmin` view and sees two standard tabs (Admins + Settings) plus a "Public utility" section with the four widgets. Each widget gracefully degrades when its substrate is absent: `RateLimits = []` shows "no recent decisions", `IUserClaims = NoOpUserClaims` shows "no premium users", `EntityStore = NoEntityStore` 404s the ad-unit CRUD endpoint and the widget surfaces a substrate-stub explaining the missing endpoint.
+An operator with the platform-admin role lands on the `PlatformAdmin` view and sees two standard tabs (Admins + Settings) plus a "Public utility" section with the four widgets. Each widget gracefully degrades when its substrate is absent: `RateLimits = []` shows "no recent decisions", `IUserClaims = NoOpUserClaims` shows "no premium users", `EntityStore = FeatureMode.Disabled` 404s the ad-unit CRUD endpoint and the widget surfaces a substrate-stub explaining the missing endpoint.
 
 ### Six-rule portability — `IRateLimitStore.GetRecentDecisions`
 

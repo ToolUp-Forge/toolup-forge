@@ -17,7 +17,7 @@ production traffic.
 The contract is designed so the swap is contract-free: emission sites
 call `IRateLimiter.Wait` and observe `RateLimitDecision` regardless of
 which implementation the deployment wires. Apps opt in via
-`ServerConfig.RateLimiter = EnabledRateLimiter` and the companion
+`ServerConfig.RateLimiter = FeatureMode.Enabled` and the companion
 exposes a `RedisRateLimiter.create` factory that the composition root
 hands to a future `ServerApp.withRateLimiter` builder (TBD in the
 companion's PR — the SDK default is registered automatically today).

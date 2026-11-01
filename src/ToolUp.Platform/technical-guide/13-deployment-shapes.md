@@ -7,7 +7,7 @@
 
 Chapter [12](12-hosting-models.md) is the reference for *where* the SDK runs — Kestrel vs the three host-adapter companions. This chapter is the reference for *how the silos partition* once you have picked Kestrel: which background subsystems live in which process, what persistence the silos must share, and how the cross-silo coordination contract is written.
 
-The lever is `ServerConfig.ProcessProfile` ([`SDK.Shared.fs`](../../ToolUp.Platform.Core/Shared/SDK.Shared.fs)) — four cases, one decision per silo:
+The lever is `ServerConfig.MultiInstance.ProcessProfile` ([`SDK.Shared.fs`](../../ToolUp.Platform.Core/Shared/SDK.Shared.fs)) — four cases, one decision per silo:
 
 | `ProcessProfile` | HTTP pipeline | Background work it runs |
 |---|---|---|
@@ -32,7 +32,7 @@ Every unit of background work — the platform's and every companion's — decla
 
 ## Three pure-Kestrel deployment shapes
 
-The three shapes below cover the spectrum from "single binary, every concern" through "outbound-delivery isolation". They all run from the **same publish output** — the only difference is the value of `ServerConfig.ProcessProfile` (or the `TOOLUP_PROCESS_PROFILE` env var, when [`ServerConfigOverrides.fromEnv`](../../ToolUp.Platform.Server/Server/ServerConfigOverrides.fs) is wired) per silo.
+The three shapes below cover the spectrum from "single binary, every concern" through "outbound-delivery isolation". They all run from the **same publish output** — the only difference is the value of `ServerConfig.MultiInstance.ProcessProfile` (or the `TOOLUP_PROCESS_PROFILE` env var, when [`ServerConfigOverrides.fromEnv`](../../ToolUp.Platform.Server/Server/ServerConfigOverrides.fs) is wired) per silo.
 
 ### Shape 1 — single-process (`AllInOne`)
 
@@ -61,8 +61,11 @@ ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
         Surfaces = Surfaces.team
-        // ProcessProfile defaults to AllInOne; shown here for clarity:
-        ProcessProfile = AllInOne
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                // ProcessProfile defaults to AllInOne; shown here for clarity:
+                ProcessProfile = AllInOne
+        }
 }
 |> ServerApp.addModule (MyApp.Module.register ())
 |> ServerApp.run
@@ -101,9 +104,12 @@ ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
         Surfaces = Surfaces.team
-        ProcessProfile = WebOnly
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ProcessProfile = WebOnly
+        }
         JobScheduler = InProcessJobScheduler   // substrate registers; tick is gated off
-        Webhooks = EnabledWebhooks             // substrate registers; dispatcher is gated off
+        Webhooks = FeatureMode.Enabled             // substrate registers; dispatcher is gated off
 }
 // Cloud persistence and the distributed notification channel are wired as
 // SUBSTRATE, not as ServerConfig fields.
@@ -122,9 +128,12 @@ ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
         Surfaces = Surfaces.team
-        ProcessProfile = WorkerOnly
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ProcessProfile = WorkerOnly
+        }
         JobScheduler = InProcessJobScheduler
-        Webhooks = EnabledWebhooks
+        Webhooks = FeatureMode.Enabled
 }
 // Cloud persistence and the distributed notification channel are wired as
 // SUBSTRATE, not as ServerConfig fields.
@@ -170,8 +179,11 @@ ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
         Surfaces = Surfaces.team
-        ProcessProfile = DispatcherOnly
-        Webhooks = EnabledWebhooks
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ProcessProfile = DispatcherOnly
+        }
+        Webhooks = FeatureMode.Enabled
 }
 // Cloud persistence and the distributed notification channel are wired as
 // SUBSTRATE, not as ServerConfig fields.
@@ -199,7 +211,7 @@ The two- and three-silo shapes only work because every silo reaches the same per
 | `ConfigStore` | Web + Worker (+ Dispatcher) | Blob-backed — operator-set rate limits, kill switches; the `ConfigStoreInvalidator` `BackgroundService` only ticks on the worker, so the web silo re-reads on cache miss |
 | `SecretStore` | Web + Worker (+ Dispatcher) | Provider-native (`AzureKeyVault` / `AwsSecretsManager` / `GcpSecretManager`); same secret scope; each silo's managed identity granted read |
 | `JobScheduler` | Web + Worker | `InProcessJobScheduler` on both — the substrate registers in both silos (so module code can `Schedule`), only the tick is gated. Web silo schedules; worker silo drains |
-| `Webhooks` | Web + Worker + Dispatcher | `EnabledWebhooks` on every silo that needs to publish via `IWebhookEvents.publish`; dispatcher silo (or worker, in shape 2) drains |
+| `Webhooks` | Web + Worker + Dispatcher | `FeatureMode.Enabled` on every silo that needs to publish via `IWebhookEvents.publish`; dispatcher silo (or worker, in shape 2) drains |
 | `AuditLog` / `UsageMetering` / `HealthStateTracking` | Web + Worker | Write substrate registers on all silos; only the worker's replicator / flusher / tracker `BackgroundService` ticks. Events from every silo land in the shared event store |
 | `OAuth` data-source connectors | Worker (refresh) + Web (initial auth) | Token refresher + state-cleanup `BackgroundService`s run only on the worker; the web silo handles the user-facing authorise / callback flow |
 

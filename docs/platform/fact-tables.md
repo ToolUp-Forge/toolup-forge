@@ -61,7 +61,13 @@ table:
 
 ```fsharp skip=fragment
 ServerApp.empty
-|> ServerApp.withConfig { ServerConfig.defaults with FactStore = EnabledFactStore }
+|> ServerApp.withConfig {
+    ServerConfig.defaults with
+        Stores = {
+            ServerConfig.defaults.Stores with
+                FactStore = FeatureMode.Enabled
+        }
+}
 |> ServerApp.addModules [ salesModule ]
 |> FactsCompose.withFactStore
 |> FactsCompose.withFactTableWriter   // binds every table to the default writer
@@ -262,7 +268,13 @@ one record per column that points at it.
 
 ```fsharp skip=fragment
 ServerApp.empty
-|> ServerApp.withConfig { ServerConfig.defaults with FactStore = EnabledFactStore }
+|> ServerApp.withConfig {
+    ServerConfig.defaults with
+        Stores = {
+            ServerConfig.defaults.Stores with
+                FactStore = FeatureMode.Enabled
+        }
+}
 |> ServerApp.addModules [ salesModule ]
 |> FactsCompose.withFactStore
 |> FactsCompose.withFactTableWriter          // every other table, as facts

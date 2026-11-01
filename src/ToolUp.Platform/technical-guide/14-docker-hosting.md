@@ -5,7 +5,7 @@
 
 ---
 
-Chapter [12](12-hosting-models.md) covered the serverless-front-door deployment shapes and [chapter 13](13-deployment-shapes.md) the pure-Kestrel deployment shapes partitioned via `ServerConfig.ProcessProfile`. This chapter is the reference for **packaging a Kestrel deployment as a container** — the OCI image layout, the conventions the SDK assumes about the runtime environment, and the entry points each major container platform consumes.
+Chapter [12](12-hosting-models.md) covered the serverless-front-door deployment shapes and [chapter 13](13-deployment-shapes.md) the pure-Kestrel deployment shapes partitioned via `ServerConfig.MultiInstance.ProcessProfile`. This chapter is the reference for **packaging a Kestrel deployment as a container** — the OCI image layout, the conventions the SDK assumes about the runtime environment, and the entry points each major container platform consumes.
 
 The companion package is [`ToolUp.Hosts.Docker`](../../Hosts/Docker/README.md). It ships no `.fs` bridge code — the SDK already speaks HTTP via Kestrel; the container just runs the published binary. The deliverable is four template files (`Dockerfile.template`, `.dockerignore.template`, `healthcheck.sh`, `compose.yml.template`) that the consumer scaffolds via `dotnet new platformsdk-docker` or copies by hand.
 
@@ -87,7 +87,7 @@ Liveness vs Readiness: Phase 9k registers both probes at `/health` (Liveness) an
 
 ## `ProcessProfile` interaction — one image, env-var-driven role
 
-The image runs every `ServerConfig.ProcessProfile` ([chapter 13](13-deployment-shapes.md), Phase 16a) — set the value at container start:
+The image runs every `ServerConfig.MultiInstance.ProcessProfile` ([chapter 13](13-deployment-shapes.md), Phase 16a) — set the value at container start:
 
 ```bash
 docker run -e TOOLUP_PROCESS_PROFILE=AllInOne       myapp:dev
@@ -117,7 +117,7 @@ The healthcheck still fires under `WorkerOnly` even though no HTTP pipeline is m
 
 ## Forwarded-headers trust
 
-Phase 16d (forwarded-headers default-on, shipped 0.4.4) made `ServerConfig.TrustForwardedHeaders = true` the SDK default. The Dockerfile does **not** set `TOOLUP_TRUST_FORWARDED_HEADERS=1` — that would be redundant. Reverse-proxy deployments behind nginx / Traefik / Azure App Service ingress / Cloud Run front door / ALB work without any Dockerfile knob.
+Phase 16d (forwarded-headers default-on, shipped 0.4.4) made `ServerConfig.SecurityPosture.TrustForwardedHeaders = true` the SDK default. The Dockerfile does **not** set `TOOLUP_TRUST_FORWARDED_HEADERS=1` — that would be redundant. Reverse-proxy deployments behind nginx / Traefik / Azure App Service ingress / Cloud Run front door / ALB work without any Dockerfile knob.
 
 Set the env var explicitly only to opt **out** (`=0`) for a deployment that intentionally exposes Kestrel directly without a proxy.
 

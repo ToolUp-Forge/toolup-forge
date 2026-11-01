@@ -118,7 +118,7 @@ These are the known boundaries. Each is a single-bullet "follow-up" rather than 
 - **iCalendar X-property preservation** — silently dropped on parse, never emitted. A round-trip-stable encoding for `Booking.Metadata` via `X-TOOLUP-META-*` is a follow-up.
 - **Multi-resource booking** — one booking → many resources is not v1. Caller composes via N parallel single-resource bookings; if many fail, caller handles rollback.
 - **Full RFC 5545** — VTODO / VJOURNAL / VFREEBUSY / VTIMEZONE definitions / positional `BYDAY` / `BYMONTHDAY` / `BYSETPOS` / sub-day frequencies are out of scope. CalDAV companion can extend later.
-- **`ServerConfig.EntityStore = EnabledEntityStore` enforcement** — `withScheduling` doesn't validate that the user enabled the entity store. Forgetting yields a null-reference at first dispatch. Explicit fail-loud-at-compose-time is a follow-up.
+- **`ServerConfig.Stores.EntityStore = FeatureMode.Enabled` enforcement** — `withScheduling` doesn't validate that the user enabled the entity store. Forgetting yields a null-reference at first dispatch. Explicit fail-loud-at-compose-time is a follow-up.
 
 ## Test surface
 

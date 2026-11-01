@@ -774,9 +774,9 @@ The browser-facing `/r/{token}` route for `PublicEmbed` is owned by the consumer
 
 ## Configuration knobs
 
-- `ServerConfig.EntityStore = EnabledEntityStore` — required substrate.
-- `ServerConfig.AuditLogMode = EnabledAuditLog` — required for audit emission.
-- `ServerConfig.ShareTokenStore = EnabledShareTokenStore { Secret = ... }` — required for `Publishable` schemas.
+- `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` — required substrate.
+- `ServerConfig.FeatureMode = FeatureMode.Enabled` — required for audit emission.
+- `ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled { Secret = ... }` — required for `Publishable` schemas.
 - `ServerConfig.PublicBaseUrl = Some "https://my-app.example.com"` — required for `IssueTokens` URL composition.
 - `ServerConfig.AnonymousRoutePrefixes` — `/api/public/forms/` is appended automatically by `FormsCompose.withForms`.
 

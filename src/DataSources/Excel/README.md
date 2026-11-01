@@ -127,7 +127,7 @@ open ToolUp.DataSources.Excel
 // `storage` is whatever IBlobStorage this deployment built.
 let config = {
     ServerConfig.defaults with
-        DataIngestion = EnabledDataIngestion
+        DataIngestion = FeatureMode.Enabled
         JobScheduler = InProcessJobScheduler
 }
 

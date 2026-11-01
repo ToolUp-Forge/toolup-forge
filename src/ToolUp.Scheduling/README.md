@@ -50,7 +50,10 @@ let config = {
     ServerConfig.defaults with
         Port = 5000
         Surfaces = Surfaces.team
-        EntityStore = EnabledEntityStore   // REQUIRED — scheduling rides on Phase 19
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled   // REQUIRED — scheduling rides on Phase 19
+        }
 }
 
 [<EntryPoint>]
@@ -73,7 +76,7 @@ let main _ =
 3. Mounts the `ISchedulingApi` ToolUp.Remoting handler.
 4. Delegates the rest to `ServerApp.run`.
 
-Apps without `ServerConfig.EntityStore = EnabledEntityStore` get a runtime null reference at first dispatch — explicit enforcement is a follow-up.
+Apps without `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` get a runtime null reference at first dispatch — explicit enforcement is a follow-up.
 
 ## How to register a resource type
 

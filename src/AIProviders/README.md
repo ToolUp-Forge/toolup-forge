@@ -17,7 +17,7 @@ AI vendors enforce tier-scoped RPM and TPM ceilings — Anthropic per-organisati
 
 - The same primitive backs every connector + AI provider — observability (`toolup.ratelimit.waited_total`, `wait_ms` histogram, `refused_total`) is uniform across the deployment.
 - The pattern is portable: a Redis-backed `IRateLimiter` (Phase 9c half-2) replaces the in-process default at compose time without any provider-code change, which is what unlocks correct quota accounting in load-balanced multi-instance deployments.
-- The default `NoRateLimiter` short-circuits to `Proceed`, so a deployment that hasn't opted in pays nothing.
+- The default `FeatureMode.Disabled` short-circuits to `Proceed`, so a deployment that hasn't opted in pays nothing.
 
 ### Descriptor — declared at compose time
 
@@ -91,7 +91,7 @@ let builder: AIProviderBuilder = {
 }
 ```
 
-`rateLimiter` is resolved from DI at factory-construction time (`services.GetRequiredService<IRateLimiter>()`); when `ServerConfig.RateLimiter = NoRateLimiter`, that resolves to `NoOpRateLimiter` which short-circuits to `Proceed` — no per-call branch needed in the provider.
+`rateLimiter` is resolved from DI at factory-construction time (`services.GetRequiredService<IRateLimiter>()`); when `ServerConfig.RateLimiter = FeatureMode.Disabled`, that resolves to `NoOpRateLimiter` which short-circuits to `Proceed` — no per-call branch needed in the provider.
 
 ### Rules
 

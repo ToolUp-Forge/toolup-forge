@@ -11,7 +11,7 @@ message carries.
 
 - **`PresentationCompose.withRenderTools`** composes both tools onto the AI options, taking and returning the pair
   `ServerApp * AIOptions`: a tool rides `AIOptions.AIAnsweringTools`, while its gate reads the
-  deployment's config and its endpoint belongs to the deployment. It is idempotent, and it does nothing under `NoFactStore`.
+  deployment's config and its endpoint belongs to the deployment. It is idempotent, and it does nothing under `FeatureMode.Disabled`.
 - **`RenderTools.answerWith`** is the executor over explicit dependencies: the fact browse's
   dependencies, the caller's resolved scope and principal. **`RenderTools.answer`** is the
   `HttpContext` adapter the composition registers.

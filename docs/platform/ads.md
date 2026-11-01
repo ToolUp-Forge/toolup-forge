@@ -20,7 +20,7 @@ Three files in `ToolUp.Platform.Client/Client/AdPanel/`:
 
 - **`AdScriptLoader.fs`** — singleton bootstrap. Loads `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=...` once per page load and tracks idempotency via a `window.__toolupAdScriptLoaded` marker. Triggered automatically by the first `AdSlot` mount; consumers wanting eager-load call `AdScriptLoader.ensureLoaded` explicitly.
 - **`IAdAnalyticsSink.fs`** — optional first-party impression / click logging seam. Default `NoOpAdAnalyticsSink` swallows every event silently so wiring it is a zero-cost choice. The six-rule portability audit lives at the top of the interface file ([`IAdAnalyticsSink.fs`](../../src/ToolUp.Platform.Client/Client/AdPanel/IAdAnalyticsSink.fs)); the matching contract pack is [`IAdAnalyticsSinkContract`](../../src/ToolUp.Platform.Tests/Contracts/IAdAnalyticsSinkContract.fs).
-- **`ServerSinkAdAnalytics.fs`** — reference impl. POSTs `AdImpression` / `AdClick` to `/api/_platform/ads/impression` and `/api/_platform/ads/click`. Server-side handler at [`AdAnalyticsApiHandler.fs`](../../src/ToolUp.Platform.Server/Server/AdAnalyticsApiHandler.fs) records via `IAuditLog` under the `_platform` scope. The endpoint mounts only when `ServerConfig.AdAnalytics = EnabledAdAnalytics`.
+- **`ServerSinkAdAnalytics.fs`** — reference impl. POSTs `AdImpression` / `AdClick` to `/api/_platform/ads/impression` and `/api/_platform/ads/click`. Server-side handler at [`AdAnalyticsApiHandler.fs`](../../src/ToolUp.Platform.Server/Server/AdAnalyticsApiHandler.fs) records via `IAuditLog` under the `_platform` scope. The endpoint mounts only when `ServerConfig.AdAnalytics = FeatureMode.Enabled`.
 
 The Feliz component itself lives in `ToolUp.Platform.Client/Components/AdSlot.fs` alongside `ConsentGate`.
 
@@ -138,7 +138,7 @@ The contract pack [`IAdAnalyticsSinkContract`](../../src/ToolUp.Platform.Tests/C
 
 ## Server-side audit endpoint (opt-in)
 
-`ServerConfig.AdAnalytics = EnabledAdAnalytics` mounts two endpoints:
+`ServerConfig.AdAnalytics = FeatureMode.Enabled` mounts two endpoints:
 
 | Route | Method | Records |
 |---|---|---|
@@ -147,7 +147,7 @@ The contract pack [`IAdAnalyticsSinkContract`](../../src/ToolUp.Platform.Tests/C
 
 Both accept the `AdImpression` / `AdClick` JSON shapes the `ServerSinkAdAnalytics` client emits. The handler swallows storage failures into `204 No Content` to preserve the best-effort contract on the client; malformed bodies return `400`. Auth gating is whatever the deployment's existing pipeline applies — no special carve-out for these routes.
 
-Default `ServerConfig.AdAnalytics = NoAdAnalytics` strips both endpoints. The corresponding `IAuditLog` cases (`AdImpressionRecorded` / `AdClickRecorded`) remain in the audit event DU regardless — they cost nothing when unused.
+Default `ServerConfig.AdAnalytics = FeatureMode.Disabled` strips both endpoints. The corresponding `IAuditLog` cases (`AdImpressionRecorded` / `AdClickRecorded`) remain in the audit event DU regardless — they cost nothing when unused.
 
 ## AdSense approval gotchas
 

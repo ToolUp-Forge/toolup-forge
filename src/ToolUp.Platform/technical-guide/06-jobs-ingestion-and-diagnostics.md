@@ -242,7 +242,7 @@ The SDK ships the substrate for pulling data from external sources (BigQuery, Re
 
 ### Activation
 
-`ServerConfig.DataIngestion` is an opt-in DU. `NoDataIngestion` (default) skips registration entirely — no `IDataIngestor`, no `IDataSourceConfigStore`, no `_platform/data-sources/` blob layout, no `IDataIngestionApi` route. `EnabledDataIngestion` activates the substrate. Triggered refreshes through `IDataIngestionApi.TriggerRefresh` additionally require `JobScheduler = InProcessJobScheduler` (or any future distributed-scheduler companion) — without a scheduler, the ingestor still runs synchronously through `IDataIngestor.RunIngestion`, but the API path returns a clear error.
+`ServerConfig.DataIngestion` is an opt-in DU. `FeatureMode.Disabled` (default) skips registration entirely — no `IDataIngestor`, no `IDataSourceConfigStore`, no `_platform/data-sources/` blob layout, no `IDataIngestionApi` route. `FeatureMode.Enabled` activates the substrate. Triggered refreshes through `IDataIngestionApi.TriggerRefresh` additionally require `JobScheduler = InProcessJobScheduler` (or any future distributed-scheduler companion) — without a scheduler, the ingestor still runs synchronously through `IDataIngestor.RunIngestion`, but the API path returns a clear error.
 
 ### Substrate
 
@@ -338,7 +338,7 @@ OAuth Authorization Code with offline-access is the canonical credential-minting
 
 ### Activation
 
-OAuth substrate registration follows the data-ingestion gate: `ServerConfig.DataIngestion = EnabledDataIngestion` registers `IOAuthStateStore` + the cleanup `BackgroundService` and mounts `OAuthFlowHandler.routes`. Companion packages register their `IOAuthCredentialFlow` via DI (`services.AddSingleton<IOAuthCredentialFlow>(GoogleOAuthFlow.create ...)` from the composition root). Deployments without OAuth-flow companions get a working route table that returns `404 "OAuth flow 'X' is not registered"` to any /authorize attempt — the substrate stays cheap until a real flow is added.
+OAuth substrate registration follows the data-ingestion gate: `ServerConfig.DataIngestion = FeatureMode.Enabled` registers `IOAuthStateStore` + the cleanup `BackgroundService` and mounts `OAuthFlowHandler.routes`. Companion packages register their `IOAuthCredentialFlow` via DI (`services.AddSingleton<IOAuthCredentialFlow>(GoogleOAuthFlow.create ...)` from the composition root). Deployments without OAuth-flow companions get a working route table that returns `404 "OAuth flow 'X' is not registered"` to any /authorize attempt — the substrate stays cheap until a real flow is added.
 
 ### Two endpoints, one flow
 

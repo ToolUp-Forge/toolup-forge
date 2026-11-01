@@ -96,7 +96,7 @@ nearly-expired one is refreshed through `RefreshNow` first (the connection's des
 registered on first use), and a `401` from Graph forces one refresh and one re-send. The
 identity platform rotates the refresh token on every refresh; the refresher persists the rotated
 token before it caches the access token, so the next call — on any instance — uses it. Compose
-the SDK refresher with `ServerConfig.OAuthRefresher = EnabledOAuthRefresher` (paired with the
+the SDK refresher with `ServerConfig.OAuthRefresher = FeatureMode.Enabled` (paired with the
 in-process job scheduler).
 
 ## Configuration

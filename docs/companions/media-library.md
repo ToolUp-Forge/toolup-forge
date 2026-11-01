@@ -23,7 +23,7 @@ companion onto your `ServerApp` with `MediaCompose.withMediaLibrary`:
 open ToolUp.MediaLibrary
 open ToolUp.MediaLibrary.MediaCompose
 
-let config = { ServerConfig.defaults with MediaLibrary = EnabledMediaLibrary }
+let config = { ServerConfig.defaults with MediaLibrary = FeatureMode.Enabled }
 
 ServerApp.empty
 |> ServerApp.withConfig config
@@ -37,7 +37,7 @@ ServerApp.empty
 |> ServerApp.run
 ```
 
-When `MediaLibrary = NoMediaLibrary` (the default), the companion contributes
+When `MediaLibrary = FeatureMode.Disabled` (the default), the companion contributes
 nothing — no handlers, no DI, no signing key, no probe. A deployment that doesn't host media pays nothing.
 
 ## Endpoints
@@ -648,10 +648,16 @@ either one alone is enough to start receiving that half.
 To receive both, compose them as usual:
 
 ```fsharp
-{ ServerConfig.defaults with
-    MediaLibrary = EnabledMediaLibrary
-    UsageMetering = EnabledUsageMetering
-    MetricsEndpoint = EnabledMetricsEndpoint }
+{
+    ServerConfig.defaults with
+        MediaLibrary = FeatureMode.Enabled
+        UsageMetering = FeatureMode.Enabled
+        Observability = {
+            ServerConfig.defaults.Observability with
+                MetricsEndpoint = FeatureMode.Enabled
+        }
+}
+
 ```
 
 The two metric series are declared into `ServerApp.MetricRegistrations` by

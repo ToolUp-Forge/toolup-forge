@@ -51,7 +51,13 @@ open ToolUp.Graph.Projection
 
 let app =
     ServerApp.empty
-    |> ServerApp.withConfig { ServerConfig.defaults with EntityStore = EnabledEntityStore }
+    |> ServerApp.withConfig {
+        ServerConfig.defaults with
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    EntityStore = FeatureMode.Enabled
+            }
+    }
     |> ServerApp.withEntity bookRegistration
     |> ServerApp.withEntity authorRegistration
     |> ServerApp.withEntityGraphProjection   // opt in (requires an IGraphStore)

@@ -68,7 +68,7 @@ The other `/peer/v1/*` routes are `GET` and carry no body.
 
 The SDK ships **two unrelated ways** for one deployment to authenticate another, and they are legitimately different tools rather than two attempts at one:
 
-- **The static-bearer substrate** — `ServerConfig.PeerRoutePrefixes` + `PeerBearerAuthMiddleware` (Phase 37 / Phase 137), in `ToolUp.Platform.Server`. A caller names itself in `X-Peer-Name` and presents a shared secret read from `ISecretStore` at `peers/{peerName}/bearer`; a constant-time match stamps `HttpContext.Items["PeerName"]` and the request continues.
+- **The static-bearer substrate** — `ServerConfig.MultiInstance.PeerRoutePrefixes` + `PeerBearerAuthMiddleware` (Phase 37 / Phase 137), in `ToolUp.Platform.Server`. A caller names itself in `X-Peer-Name` and presents a shared secret read from `ISecretStore` at `peers/{peerName}/bearer`; a constant-time match stamps `HttpContext.Items["PeerName"]` and the request continues.
 - **The signed-JWT substrate** — this companion. Per-call HS256 (or Phase 343 ES256 / RS256) tokens, validated fail-closed by `IPeerAuthProvider` inside the `/peer/v1/*` handlers.
 
 They are **not** the same guarantee, and the gap is the whole reason this section exists:
@@ -99,7 +99,7 @@ They are **not** the same guarantee, and the gap is the whole reason this sectio
 | `NoPeerAuthSurface` | neither substrate composed |
 | `SignedPeerAuthOnly` | this companion alone — the strongest posture |
 | `StaticBearerOnly` | the bearer flavour on prefixes of its own; legitimate |
-| `StaticBearerOnReservedNamespace` | bearer prefix covers `/peer/v1/`, but `PeerSubstrate = NoPeerSubstrate`, so nothing is shadowed **yet** |
+| `StaticBearerOnReservedNamespace` | bearer prefix covers `/peer/v1/`, but `PeerSubstrate = FeatureMode.Disabled`, so nothing is shadowed **yet** |
 | `BothSubstratesDisjoint` | both composed, disjoint prefixes — the documented coexistence |
 | `StaticBearerShadowsSignedPeer` | the defect: the host is serving and a bearer prefix covers its namespace |
 

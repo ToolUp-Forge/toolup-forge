@@ -41,8 +41,8 @@ ServerApp.empty
 ```
 
 `withHttpCompute` folds in the dispatcher singleton, a readiness probe (when a health URL is
-configured), the startup preflight, and `ServerConfig.ExternalCompute = CustomExternalCompute`. A
-deployment that never calls it keeps the `NoExternalCompute` default and pays nothing.
+configured), the startup preflight, and `ServerConfig.ExternalCompute = FeatureMode.Enabled`. A
+deployment that never calls it keeps the `FeatureMode.Disabled` default and pays nothing.
 
 Environment-bound alternative: `HttpComputeConfig.fromEnv ()` returns `None` unless
 `TOOLUP_EXTERNAL_COMPUTE=http`, and otherwise `Ok config` or `Error problems` read from

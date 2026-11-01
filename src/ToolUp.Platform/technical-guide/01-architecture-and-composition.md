@@ -378,8 +378,8 @@ The middleware pipeline runs in this order (each step is conditional only where 
 
 ```fsharp skip=fragment
 // Optional — production behind a TLS-terminating load balancer
-if config.TrustForwardedHeaders then app.UseForwardedHeaders(opts) |> ignore
-if config.RequireHttps then app.UseHttpsRedirection() |> ignore
+if config.SecurityPosture.TrustForwardedHeaders then app.UseForwardedHeaders(opts) |> ignore
+if config.SecurityPosture.RequireHttps then app.UseHttpsRedirection() |> ignore
 
 app.UseResponseCompression() |> ignore
 // Static files — behaviour controlled by config.StaticPathBehaviour
@@ -424,16 +424,28 @@ Infrastructure services (auth, blob storage, event store, scope resolver) are re
 
 Apps extend the ASP.NET Core middleware chain through three opt-in surfaces, each landing at a documented pipeline position. None of the seams require touching `compose`:
 
-**`ServerConfig.SecurityHeaders : Map<string, string>`** — every entry is stamped onto every response by `SecurityHeadersMiddleware`, registered ahead of every other middleware so headers go out on `200`, `401`, `429`, `404`, and any pre-middleware short-circuit. Per-route overrides keep working: a handler that sets a same-name header before `OnStarting` runs wins (the middleware uses `ContainsKey` to avoid clobbering). Common keys: `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`. Default is `Map.empty`.
+**`ServerConfig.SecurityPosture.SecurityHeaders : Map<string, string>`** — every entry is stamped onto every response by `SecurityHeadersMiddleware`, registered ahead of every other middleware so headers go out on `200`, `401`, `429`, `404`, and any pre-middleware short-circuit. Per-route overrides keep working: a handler that sets a same-name header before `OnStarting` runs wins (the middleware uses `ContainsKey` to avoid clobbering). Common keys: `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`. Default is `Map.empty`.
 
-**`ServerConfig.Cors : CorsConfig option`** — typed allowlist mapping to `Microsoft.AspNetCore.Cors.Infrastructure.CorsPolicyBuilder`. `compose` calls `services.AddCors(...)` and `app.UseCors()` only when this is `Some`. Helpers:
+**`ServerConfig.SecurityPosture.Cors : CorsConfig option`** — typed allowlist mapping to `Microsoft.AspNetCore.Cors.Infrastructure.CorsPolicyBuilder`. `compose` calls `services.AddCors(...)` and `app.UseCors()` only when this is `Some`. Helpers:
 
 ```fsharp
 // Wide-open dev / public API
-{ ServerConfig.defaults with Cors = Some CorsConfig.permissive }
+{
+    ServerConfig.defaults with
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                Cors = Some CorsConfig.permissive
+        }
+}
 
 // Allowlist + credentials (the typical SaaS shape)
-{ ServerConfig.defaults with Cors = Some (CorsConfig.forOrigins [ "https://app.example.com" ]) }
+{
+    ServerConfig.defaults with
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                Cors = Some (CorsConfig.forOrigins [ "https://app.example.com" ])
+        }
+}
 ```
 
 `AllowCredentials = true` cannot combine with wildcard origins (browser policy); `compose` logs a warning and falls back to non-credentialed mode. For per-route or dynamic-origin policies, use `withPreMiddleware` and register the policy by hand.
@@ -493,8 +505,11 @@ let private securityHeaders =
 let private config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.team
-        SecurityHeaders = securityHeaders
-        Cors = Some (CorsConfig.forOrigins [ "https://app.example.com" ])
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                SecurityHeaders = securityHeaders
+                Cors = Some (CorsConfig.forOrigins [ "https://app.example.com" ])
+        }
 }
 
 ServerApp.empty
@@ -505,9 +520,9 @@ ServerApp.empty
 
 #### Phase 9j — security hardening (`ICspContributor` + CSRF)
 
-`ServerConfig.SecurityHeaders` (above) is the *static* path — a hand-maintained header map. Phase 9j adds a *companion-aware* path that generates the CSP correct-by-construction and adds a CSRF guard. Both compose: an already-present `Content-Security-Policy` header (from the `SecurityHeaders` map or a per-route handler) always wins — `CspMiddleware` only sets the header when absent.
+`ServerConfig.SecurityPosture.SecurityHeaders` (above) is the *static* path — a hand-maintained header map. Phase 9j adds a *companion-aware* path that generates the CSP correct-by-construction and adds a CSRF guard. Both compose: an already-present `Content-Security-Policy` header (from the `SecurityHeaders` map or a per-route handler) always wins — `CspMiddleware` only sets the header when absent.
 
-**Opt-in (GP 13).** `ServerConfig.SecurityHardening` defaults to `NoSecurityHardening`: `CspMiddleware` / `CsrfMiddleware` no-op and `/api/csrf-token` is not mounted, so a stock deployment is byte-for-byte unchanged. Opt in with `ServerApp.withSecurityHardening DefaultSecurityHardening` (or `StrictSecurityHardening`).
+**Opt-in (GP 13).** `ServerConfig.SecurityPosture.SecurityHardening` defaults to `NoSecurityHardening`: `CspMiddleware` / `CsrfMiddleware` no-op and `/api/csrf-token` is not mounted, so a stock deployment is byte-for-byte unchanged. Opt in with `ServerApp.withSecurityHardening DefaultSecurityHardening` (or `StrictSecurityHardening`).
 
 **`ICspContributor`.** Every subsystem/companion that needs a non-`'self'` origin declares it; `SecurityHardening.aggregate` walks the `IServiceCollection` at compose time (same instance-descriptor contract as `IHealthCheck` / `IConfigValidator`) and folds them into one header. First-party defaults auto-registered when hardening is on: the OIDC issuer (from `TOOLUP_OIDC_ISSUER`, inert if unset) and the AI provider hosts (`api.anthropic.com`, `api.openai.com`) → `connect-src`. A CDN-delivered grid host is opt-in via `ServerApp.withCspContributor (AgGridCdnCspContributor())`. Companions register their own with `services.AddSingleton<ICspContributor>(...)` through the `ComposeExtensions.ServiceConfig` hook.
 
@@ -582,7 +597,7 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
 | `IBlobStorage` | Always | constructor arg | `SDK.Server.fs:1148` |
 | `IDataObjectStore` | Always | — | `SDK.Server.fs:1149` |
 | `IDataCatalog` | Always | — | `SDK.Server.fs:1150` |
-| `IEventStore` (inner) | OptIn | `config.EventStore` | `SDK.Server.fs:973–979` |
+| `IEventStore` (inner) | OptIn | `config.Stores.EventStore` | `SDK.Server.fs:973–979` |
 | `IAuthProvider` | Always | constructor arg | `SDK.Server.fs:1153` |
 | `ISecretStore` | Always | constructor arg | `SDK.Server.fs:1154` |
 | `IStorageScopeResolver` | OptIn (surface-driven) | `config.Surfaces` | `SDK.Server.fs:1373` |
@@ -592,14 +607,14 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
 | `IWebhookRegistry` + `IWebhookDeliveryLog` + `IWebhookDispatcher` | OptIn | `config.Webhooks` | `SDK.Server.fs:996–1009, 1158–1163` |
 | `WebhookDispatcher` `BackgroundService` | OptIn | `config.Webhooks` | `SDK.Server.fs:1161–1163` |
 | `HookedEventStore` decorator wrapping `IEventStore` | OptIn | `config.Webhooks` | `SDK.Server.fs:1015–1016` |
-| `IResultStore` | OptIn | `config.ResultStore` | `SDK.Server.fs:1124–1143, 1170` |
+| `IResultStore` | OptIn | `config.Stores.ResultStore` | `SDK.Server.fs:1124–1143, 1170` |
 | `ILineageStore` | OptIn | `config.Lineage` | `SDK.Server.fs:1110–1113, 1176` |
 | `IJobStore` + `IJobScheduler` + `InProcessJobScheduler` `BackgroundService` | OptIn | `config.JobScheduler` | `SDK.Server.fs:1186–1210` |
 | `IDataSourceConfigStore` + `IDataIngestor` | OptIn | `config.DataIngestion` | `SDK.Server.fs:1218–1251` |
 | `RateLimiter` middleware | OptIn | `config.RateLimit` | `SDK.Server.fs:1273–1277` |
 | `ScopeResolutionMiddleware` | Always | — | pipeline |
 | `SurfaceEnforcementMiddleware` | Always (surface-aware) | `config.Surfaces` | pipeline |
-| `RequestTimingMiddleware` | OptIn | `config.SlowRequestThreshold` | pipeline |
+| `RequestTimingMiddleware` | OptIn | `config.Observability.SlowRequestThreshold` | pipeline |
 | `platformInfoApiHandler` / `teamApiHandler` / `permissionApiHandler` / `accessibilityApiHandler` / `dataCatalogApiHandler` | Always (surface trims for anonymous subjects) | `config.Surfaces` | router |
 | `configHandler` / `featureFlagHandler` / `moduleQueryBusHandler` | Always | — | router |
 | `webhookHandler` | OptIn | `config.Webhooks` | router |
@@ -617,8 +632,8 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
    - the deployment declares a `HeaderSwitcher` Team surface — `DeploymentConfig.hasMultiTeamSwitcher config`, e.g. `Surfaces.multiTeam` (membership-change events feed the client team-switch reset path)
    - the AI or RAG tier is composed onto the deployment (`AICompose.withAI` / `RAGCompose.withRAG`; each adds itself to `extensions.NotificationConsumers`)
    - Otherwise `NoNotifications` — the SSE endpoint and `InMemoryNotificationChannel` are not registered.
-2. `AuditLog = NoAuditLog` (the default) replaces `EventStoreAuditLog` with `NoOpAuditLog`. Emission callsites (`ScopeResolutionMiddleware`, the platform-API handlers — `TeamApi` / `PermissionApi` — and `fileManagementApi`) keep their unconditional `IAuditLog.Record` calls — the no-op swallows them, so callsites stay clean and future emission additions don't need a mode check. This deviates from the original "interface unregistered" framing in favour of single-touchpoint gating.
-3. `Webhooks = NoWebhooks` (the default) skips every webhook registration: `WebhookDispatcher` `BackgroundService`, `HookedEventStore` decorator (the inner `IEventStore` is registered directly), `IWebhookRegistry` / `IWebhookDeliveryLog` / `IWebhookDispatcher` DI services, and `webhookHandler` from the router.
+2. `AuditLog = FeatureMode.Disabled` (the default) replaces `EventStoreAuditLog` with `NoOpAuditLog`. Emission callsites (`ScopeResolutionMiddleware`, the platform-API handlers — `TeamApi` / `PermissionApi` — and `fileManagementApi`) keep their unconditional `IAuditLog.Record` calls — the no-op swallows them, so callsites stay clean and future emission additions don't need a mode check. This deviates from the original "interface unregistered" framing in favour of single-touchpoint gating.
+3. `Webhooks = FeatureMode.Disabled` (the default) skips every webhook registration: `WebhookDispatcher` `BackgroundService`, `HookedEventStore` decorator (the inner `IEventStore` is registered directly), `IWebhookRegistry` / `IWebhookDeliveryLog` / `IWebhookDispatcher` DI services, and `webhookHandler` from the router.
 
 The minimum-viable shape — `ServerApp.empty |> ServerApp.run` with all defaults — registers zero `BackgroundService`s beyond ASP.NET Core's own infrastructure, mounts no SSE endpoint, and has a `NoOpAuditLog` swallowing all audit emissions. Verified in CI by `src/ToolUp.Platform.Tests/InProcess/MinimumViableShapeTests.fs`.
 
