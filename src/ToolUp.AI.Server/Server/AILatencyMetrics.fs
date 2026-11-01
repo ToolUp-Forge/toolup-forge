@@ -28,7 +28,7 @@ open ToolUp.Platform.Metrics
 // extension of the allowlist on the corresponding `MetricDefinition`.
 
 /// Per-turn duration histogram. Records `TurnDurationMs` from every
-/// `AILatencyRecord` emitted by `AIAgentEngine.runAgentLoop`.
+/// `AILatencyRecord` emitted by the agent loop (`AIAgentEngine.Loop.run`).
 [<Literal>]
 let TurnDurationMs = "toolup.ai.turn.duration.ms"
 
@@ -80,7 +80,7 @@ let cachedPromptRatioBuckets: float list = [ 0.0; 0.1; 0.25; 0.5; 0.75; 0.9; 1.0
 /// SDK-owned AI latency registrations. Wired by `AIServerApp.create`
 /// into `ServerApp.MetricRegistrations` so the in-process
 /// `PrometheusMetricsSink` allocates the series at compose time and
-/// emissions from `AIAgentEngine.runAgentLoop.emitLatency` flow.
+/// the agent loop's per-turn latency emissions (`AIAgentEngine.Loop.run`) flow.
 let registrations: MetricRegistration list = [
     {
         Module = None

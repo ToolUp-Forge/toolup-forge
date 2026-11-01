@@ -101,7 +101,7 @@ let renderEntry (doc: NarrativeDocument) : string =
 /// `feedSelfUrl` is the feed's own URL (`<link rel="self">`), and
 /// `feedAlternateUrl` is the human-readable site URL
 /// (`<link rel="alternate">`). The feed's `<updated>` element is set
-/// to the most-recent document's `Provenance.GeneratedAt` (or the
+/// to the most-recent document's `NarrativeProvenance.GeneratedAt` (or the
 /// current time if every document lacks provenance).
 let renderFeed
     (feedTitle: string)

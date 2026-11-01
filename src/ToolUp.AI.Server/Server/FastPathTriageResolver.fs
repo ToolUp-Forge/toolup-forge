@@ -1219,7 +1219,8 @@ let private tryResolve<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
     | :? 'T as s -> Some s
     | _ -> None
 
-/// Mirrors `AIAgentEngine.resolveLatencyScope` so triage rows land in
+/// Mirrors the agent loop's latency-scope fallback (`AIAgentEngine`'s
+/// private `scopeOf`) so triage rows land in
 /// the same scope the beacon rows and the latency rows use — a rollup
 /// that read a different scope would silently report nothing.
 let private resolveScope (ctx: HttpContext) : StorageScope =
