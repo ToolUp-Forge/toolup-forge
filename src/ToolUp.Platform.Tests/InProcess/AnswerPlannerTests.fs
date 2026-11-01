@@ -1295,7 +1295,7 @@ type private StubStructuredProvider(content: string) =
 /// The composed fact tier the way a deployment builds it — the
 /// `FactsCompose.withFactStore` knob over a substrate-seeded collection.
 let private composedUnder
-    (knob: FactStoreMode)
+    (knob: FeatureMode)
     (registry: IMetricRegistry option)
     (provider: IAIProvider option)
     : ServerApp * ServiceProvider =
@@ -1304,7 +1304,10 @@ let private composedUnder
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -1331,22 +1334,22 @@ let private composedUnder
 let composeTests =
     testList "Phase 560 compose registration" [
 
-        test "EnabledFactStore registers IAnswerPlanner on the same knob as the store" {
-            let _, sp = composedUnder EnabledFactStore None None
+        test "FeatureMode.Enabled registers IAnswerPlanner on the same knob as the store" {
+            let _, sp = composedUnder FeatureMode.Enabled None None
 
             Expect.isFalse (isNull (box (sp.GetService<IAnswerPlanner>()))) "the planner rides the one knob"
         }
 
-        test "EnabledFactStore registers IProvenanceGraph, so 'show the working' is one resolve" {
-            let _, sp = composedUnder EnabledFactStore None None
+        test "FeatureMode.Enabled registers IProvenanceGraph, so 'show the working' is one resolve" {
+            let _, sp = composedUnder FeatureMode.Enabled None None
 
             Expect.isFalse
                 (isNull (box (sp.GetService<IProvenanceGraph>())))
                 "the graph rides the same knob — no consumer has to rebuild lineage + evidence by hand"
         }
 
-        test "NoFactStore registers no IProvenanceGraph (GP 13)" {
-            let _, sp = composedUnder NoFactStore None None
+        test "FeatureMode.Disabled registers no IProvenanceGraph (GP 13)" {
+            let _, sp = composedUnder FeatureMode.Disabled None None
 
             Expect.isTrue
                 (isNull (sp.GetService(typeof<IProvenanceGraph>)))
@@ -1365,7 +1368,7 @@ let composeTests =
             // are what actually distinguishes a correctly-wired
             // registration. (Confirmed by probe: the root-node form
             // passed with the source cut out; these two do not.)
-            let _, sp = composedUnder EnabledFactStore None None
+            let _, sp = composedUnder FeatureMode.Enabled None None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             let graph = sp.GetRequiredService<IProvenanceGraph>()
@@ -1391,12 +1394,15 @@ let composeTests =
                 "the walk reaches the fact's input hash — the evidence source is wired to the composed store"
         }
 
-        test "NoFactStore composes byte-identically: no planner registered, the app untouched (GP 11 / GP 13)" {
+        test "FeatureMode.Disabled composes byte-identically: no planner registered, the app untouched (GP 11 / GP 13)" {
             let before = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
@@ -1418,7 +1424,7 @@ let composeTests =
             "with no IAIProvider composed the DI planner refuses questions with the typed missing-compiler reason"
         <| async {
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) None
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) None
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
             let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "acme revenue?")
@@ -1438,7 +1444,7 @@ let composeTests =
                 )
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
@@ -1464,7 +1470,7 @@ let composeTests =
             let stub = StubStructuredProvider "the revenue was probably fine"
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
             let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "acme revenue?")
@@ -1489,7 +1495,7 @@ let populationComposeTests =
 
             let _, sp =
                 composedUnder
-                    EnabledFactStore
+                    FeatureMode.Enabled
                     (Some(registryDirected HigherIsBetter UntilSuperseded None))
                     (Some(stub :> IAIProvider))
 
@@ -1530,7 +1536,7 @@ let populationComposeTests =
                 )
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
@@ -1548,7 +1554,7 @@ let populationComposeTests =
                 StubStructuredProvider """{"triples":[],"populations":"the top ten brands"}"""
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
             let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "top brands?")
@@ -1564,7 +1570,7 @@ let populationComposeTests =
             let stub = StubStructuredProvider """{"triples":[],"populations":[]}"""
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
             let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "what is the meaning of life?")

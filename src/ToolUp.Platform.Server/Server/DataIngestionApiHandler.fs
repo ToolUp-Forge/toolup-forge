@@ -71,9 +71,9 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
         | _ -> None
 
     // Phase 10h — token-status read path. Both are optional: deployments
-    // without `OAuthRefresher = EnabledOAuthRefresher` will not register
+    // without `OAuthRefresher = FeatureMode.Enabled` will not register
     // an `IOAuthTokenRefresher`, and deployments running `AuditLog =
-    // NoAuditLog` will register `NoOpAuditLog` (no event store reads to
+    // FeatureMode.Disabled` will register `NoOpAuditLog` (no event store reads to
     // do). Either missing collapses `GetTokenStatus` to `None`.
     let tokenRefresher =
         match ctx.RequestServices.GetService(typeof<IOAuthTokenRefresher>) with
@@ -413,7 +413,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                         // `IAuditLog.GetAuditTrail` surface returns
                         // only the decoded `AuditEvent`s and drops the
                         // envelope). Returns an empty list when no
-                        // `IEventStore` is wired (`NoAuditLog` mode).
+                        // `IEventStore` is wired (`FeatureMode.Disabled` mode).
                         let! envelopes =
                             match eventStore with
                             | Some es -> es.ReadBySource(scope.ScopeId, AuditSourceModule.value)

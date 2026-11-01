@@ -194,7 +194,7 @@ type ComputeBackendRegistry(registrations: ComputeBackendRegistration list) =
     do
         if List.isEmpty registrations then
             failwith
-                "ToolUp.Platform: ComputeBackendRegistry was constructed with no backends. A routing dispatcher over an empty fleet can only ever refuse, which is strictly worse than the NoExternalComputeDispatcher default it would replace — that at least says so in one clear message. Register at least one backend, or leave ServerConfig.ExternalCompute = NoExternalCompute."
+                "ToolUp.Platform: ComputeBackendRegistry was constructed with no backends. A routing dispatcher over an empty fleet can only ever refuse, which is strictly worse than the NoExternalComputeDispatcher default it would replace — that at least says so in one clear message. Register at least one backend, or leave ServerConfig.ExternalCompute = FeatureMode.Disabled."
 
         let duplicates =
             registrations

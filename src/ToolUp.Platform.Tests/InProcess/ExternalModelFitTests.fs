@@ -1293,7 +1293,7 @@ let private compositionTests =
 
             ComposeStores.registerExternalCompute services {
                 ServerConfig.defaults with
-                    ExternalCompute = NoExternalCompute
+                    ExternalCompute = FeatureMode.Disabled
             }
 
             use provider = services.BuildServiceProvider()

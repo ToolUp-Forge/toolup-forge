@@ -45,10 +45,13 @@ type private RecordingLogger() =
 /// A config differing from the defaults in exactly the two fields the
 /// classification reads, so every case below is a one- or two-field
 /// delta and nothing incidental can explain a verdict.
-let private configFor (substrate: PeerSubstrateMode) (prefixes: string list) = {
+let private configFor (substrate: FeatureMode) (prefixes: string list) = {
     ServerConfig.defaults with
-        PeerSubstrate = substrate
-        PeerRoutePrefixes = prefixes
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = substrate
+                PeerRoutePrefixes = prefixes
+        }
 }
 
 // ─── 1. The ladder ───────────────────────────────────────────────────
@@ -58,35 +61,35 @@ let ladderTests =
 
         test "neither substrate composed — no peer surface at all" {
             Expect.equal
-                (auditPeerAuthPosture (configFor NoPeerSubstrate []))
+                (auditPeerAuthPosture (configFor FeatureMode.Disabled []))
                 NoPeerAuthSurface
                 "a deployment exposing no cross-deployment surface has no posture to compare"
         }
 
         test "signed-JWT substrate alone is the strongest rung" {
             Expect.equal
-                (auditPeerAuthPosture (configFor EnabledPeerSubstrate []))
+                (auditPeerAuthPosture (configFor FeatureMode.Enabled []))
                 SignedPeerAuthOnly
                 "per-call minting + exp/aud + host-verified delegation, and no weaker gate in front of it"
         }
 
         test "static bearer on its own prefix is a legitimate rung, not a defect" {
             Expect.equal
-                (auditPeerAuthPosture (configFor NoPeerSubstrate [ "/api/peer/echo" ]))
+                (auditPeerAuthPosture (configFor FeatureMode.Disabled [ "/api/peer/echo" ]))
                 (StaticBearerOnly [ "/api/peer/echo" ])
                 "the bearer flavour is the right tool for operator-controlled internal callers; it is not being deprecated"
         }
 
         test "both substrates on disjoint prefixes is the documented coexistence" {
             Expect.equal
-                (auditPeerAuthPosture (configFor EnabledPeerSubstrate [ "/api/peer/echo" ]))
+                (auditPeerAuthPosture (configFor FeatureMode.Enabled [ "/api/peer/echo" ]))
                 (BothSubstratesDisjoint [ "/api/peer/echo" ])
                 "the bearer flavour guards its own routes and /peer/v1/* is served untouched — exactly what the SDK documents"
         }
 
         test "THE DEFECT — a bearer prefix covering /peer/ while the host serves" {
             Expect.equal
-                (auditPeerAuthPosture (configFor EnabledPeerSubstrate [ "/peer/" ]))
+                (auditPeerAuthPosture (configFor FeatureMode.Enabled [ "/peer/" ]))
                 (StaticBearerShadowsSignedPeer [ "/peer/" ])
                 "the static-bearer gate runs ahead of the router, so it decides who reaches the signed-JWT host"
         }
@@ -96,7 +99,7 @@ let ladderTests =
             // the shadow verdict would pass against a classifier that
             // never read `PeerSubstrate` at all.
             Expect.equal
-                (auditPeerAuthPosture (configFor NoPeerSubstrate [ "/peer/" ]))
+                (auditPeerAuthPosture (configFor FeatureMode.Disabled [ "/peer/" ]))
                 (StaticBearerOnReservedNamespace [ "/peer/" ])
                 "nothing is shadowed while the peer substrate is off — the hazard is what enabling it later would do silently"
         }
@@ -107,7 +110,7 @@ let ladderTests =
             // operator reading the advisory would be sent to audit a
             // prefix that is doing nothing wrong.
             let posture =
-                auditPeerAuthPosture (configFor EnabledPeerSubstrate [ "/api/peer/echo"; "/peer/v1/" ])
+                auditPeerAuthPosture (configFor FeatureMode.Enabled [ "/api/peer/echo"; "/peer/v1/" ])
 
             Expect.equal
                 posture
@@ -211,7 +214,7 @@ let advisoryTests =
 
         test "advisePeerAuthPosture emits exactly one Warn on the shadowing composition" {
             let logger = RecordingLogger()
-            advisePeerAuthPosture logger (configFor EnabledPeerSubstrate [ "/peer/" ])
+            advisePeerAuthPosture logger (configFor FeatureMode.Enabled [ "/peer/" ])
 
             Expect.equal logger.Warnings.Length 1 "one line per start, not per request"
 
@@ -226,14 +229,14 @@ let advisoryTests =
             // emitted" would pass against an advisory that fired on
             // every peer-enabled deployment.
             let logger = RecordingLogger()
-            advisePeerAuthPosture logger (configFor EnabledPeerSubstrate [ "/api/peer/echo" ])
+            advisePeerAuthPosture logger (configFor FeatureMode.Enabled [ "/api/peer/echo" ])
 
             Expect.isEmpty logger.Warnings "the documented coexistence must stay quiet"
         }
 
         test "CONTROL — the same prefix with the peer substrate off logs nothing" {
             let logger = RecordingLogger()
-            advisePeerAuthPosture logger (configFor NoPeerSubstrate [ "/peer/" ])
+            advisePeerAuthPosture logger (configFor FeatureMode.Disabled [ "/peer/" ])
 
             Expect.isEmpty
                 logger.Warnings
@@ -245,20 +248,20 @@ let advisoryTests =
             // shadowing composition still starts, and the middleware's
             // own behaviour is untouched: the static-bearer gate still
             // matches exactly the prefixes it did before.
-            let config = configFor EnabledPeerSubstrate [ "/peer/" ]
+            let config = configFor FeatureMode.Enabled [ "/peer/" ]
             let logger = RecordingLogger()
 
             advisePeerAuthPosture logger config
 
             Expect.isTrue
                 (PeerRouteRegistry.isPeerRoute
-                    config.PeerRoutePrefixes
+                    config.MultiInstance.PeerRoutePrefixes
                     (Microsoft.AspNetCore.Http.PathString "/peer/v1/ledger"))
                 "the runtime gate is unchanged — the advisory describes it, it does not alter it"
 
             Expect.isFalse
                 (PeerRouteRegistry.isPeerRoute
-                    config.PeerRoutePrefixes
+                    config.MultiInstance.PeerRoutePrefixes
                     (Microsoft.AspNetCore.Http.PathString "/api/things"))
                 "and a non-peer path is still untouched"
         }

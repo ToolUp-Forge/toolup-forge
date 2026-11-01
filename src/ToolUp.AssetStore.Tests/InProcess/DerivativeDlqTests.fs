@@ -458,14 +458,24 @@ let tests =
                 |> withAssetStore (AssetStoreCompanionOptions.create ())
                 |> ServerApp.withConfig {
                     ServerConfig.defaults with
-                        AssetStore = ToolUp.Platform.AssetStoreMode.EnabledAssetStore
-                        ReplicaCount = 2
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                AssetStore = ToolUp.Platform.FeatureMode.Enabled
+                        }
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
                 }
                 |> ServerApp.withLogger logger
 
             let resolved = ServerApp.resolve app
 
-            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.equal
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
+
             Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
 
             Expect.equal

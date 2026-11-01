@@ -304,7 +304,7 @@ let private resolveSigningKey (secretStore: ISecretStore) (logger: ILogger) : As
 /// `_platform/share-tokens/{scopeId}/...` and HMAC-signs token strings
 /// against a key resolved from `ISecretStore`. Audit emission is
 /// optional — pass `None` for the `audit` constructor parameter when
-/// the deployment runs `AuditLog = NoAuditLog`.
+/// the deployment runs `AuditLog = FeatureMode.Disabled`.
 type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit: IAuditLog option, logger: ILogger) =
 
     let lockObj = obj ()

@@ -31,7 +31,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 // these go red. Each end-to-end case asserts on a value produced by a
 // chain whose every link is compose-wired — the `IDataObjectStore`
 // decorator, the DI-deferred handler registration, and the DI-resolved
-// resolver — so removing any one of them breaks it. `NoFactStore`
+// resolver — so removing any one of them breaks it. `FeatureMode.Disabled`
 // twins pin the other direction: none of it exists when facts are not
 // composed (623.E).
 
@@ -250,7 +250,7 @@ let private serving (composed: Composed) (scopeId: string) =
     composed.Request.Context <- ctx
 
 let private compose
-    (knob: FactStoreMode)
+    (knob: FeatureMode)
     (registry: IMetricRegistry option)
     (recomputer: IFactRecomputer option)
     (scheduler: IJobScheduler option)
@@ -260,7 +260,10 @@ let private compose
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -353,7 +356,8 @@ let declarationTests =
         test "a facts-composed deployment registers + schedules the recompute handler at boot" {
             let scheduler = DispatchingScheduler()
 
-            let composed = compose EnabledFactStore None None (Some(scheduler :> IJobScheduler))
+            let composed =
+                compose FeatureMode.Enabled None None (Some(scheduler :> IJobScheduler))
 
             Expect.contains
                 scheduler.RegisteredHandlers
@@ -376,7 +380,7 @@ let declarationTests =
         test "a deployment's own IFactRecomputer wins over the composed default (TryAdd)" {
             let mine = recomputerReturning (fun _ -> Ok None)
 
-            let composed = compose EnabledFactStore None (Some mine) None
+            let composed = compose FeatureMode.Enabled None (Some mine) None
 
             Expect.isTrue
                 (Object.ReferenceEquals(composed.Provider.GetRequiredService<IFactRecomputer>(), mine))
@@ -463,7 +467,7 @@ let readPathTests =
             // recomputes, so this isolates the freshness derivation.
             let registry = registryWith [ metricDef "revenue" UntilUpstreamChange None ]
 
-            let composed = compose EnabledFactStore (Some registry) None None
+            let composed = compose FeatureMode.Enabled (Some registry) None None
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let resolver = composed.Provider.GetRequiredService<IFactResolver>()
             let scope = newScope ()
@@ -504,7 +508,7 @@ let readPathTests =
         <| async {
             let registry = registryWith [ metricDef "revenue" UntilSuperseded None ]
 
-            let composed = compose EnabledFactStore (Some registry) None None
+            let composed = compose FeatureMode.Enabled (Some registry) None None
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let resolver = composed.Provider.GetRequiredService<IFactResolver>()
             let scope = newScope ()
@@ -531,7 +535,7 @@ let readPathTests =
 
             let composed =
                 compose
-                    EnabledFactStore
+                    FeatureMode.Enabled
                     (Some registry)
                     (Some(recomputerCitingLatest (fun () -> objects.Value) InputObject 120m))
                     None
@@ -569,7 +573,7 @@ let readPathTests =
                 registryWith [ metricDef "revenue" UntilUpstreamChange (Some OnQuery) ]
 
             // Only the NoFactRecomputer floor the compose root registers.
-            let composed = compose EnabledFactStore (Some registry) None None
+            let composed = compose FeatureMode.Enabled (Some registry) None None
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let resolver = composed.Provider.GetRequiredService<IFactResolver>()
             let scope = newScope ()
@@ -608,7 +612,7 @@ let endToEndTests =
 
             let composed =
                 compose
-                    EnabledFactStore
+                    FeatureMode.Enabled
                     (Some registry)
                     (Some(recomputerCitingLatest (fun () -> objects.Value) InputObject 120m))
                     (Some(scheduler :> IJobScheduler))
@@ -666,7 +670,7 @@ let endToEndTests =
 
             let composed =
                 compose
-                    EnabledFactStore
+                    FeatureMode.Enabled
                     (Some registry)
                     (Some(recomputerCitingLatest (fun () -> objects.Value) InputObject 120m))
                     (Some(scheduler :> IJobScheduler))
@@ -701,7 +705,7 @@ let endToEndTests =
             let scheduler = DispatchingScheduler()
 
             let composed =
-                compose EnabledFactStore (Some registry) (Some recomputer) (Some(scheduler :> IJobScheduler))
+                compose FeatureMode.Enabled (Some registry) (Some recomputer) (Some(scheduler :> IJobScheduler))
 
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let scope = newScope ()
@@ -741,7 +745,7 @@ let endToEndTests =
             let scheduler = DispatchingScheduler()
 
             let composed =
-                compose EnabledFactStore (Some registry) (Some recomputer) (Some(scheduler :> IJobScheduler))
+                compose FeatureMode.Enabled (Some registry) (Some recomputer) (Some(scheduler :> IJobScheduler))
 
             let store = composed.Provider.GetRequiredService<IFactStore>()
             let scope = newScope ()
@@ -800,16 +804,19 @@ let endToEndTests =
 let zeroCostTests =
     testList "Phase 623.E — a facts-free deployment is unchanged" [
 
-        test "NoFactStore leaves the ServerApp structurally identical" {
+        test "FeatureMode.Disabled leaves the ServerApp structurally identical" {
             let app = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
-            // Reference equality, not structural: the `NoFactStore` arm
+            // Reference equality, not structural: the `FeatureMode.Disabled` arm
             // must return the very object it was handed, so no field is
             // rebuilt and nothing is allocated (GP 13).
             Expect.isTrue
@@ -819,10 +826,11 @@ let zeroCostTests =
             Expect.isNone (ServerApp.serviceConfig (FactsCompose.withFactStore app)) "no service config was contributed"
         }
 
-        test "NoFactStore registers no hosted service, no recomputer, and does not wrap the data-object store" {
+        test "FeatureMode.Disabled registers no hosted service, no recomputer, and does not wrap the data-object store" {
             let scheduler = DispatchingScheduler()
 
-            let composed = compose NoFactStore None None (Some(scheduler :> IJobScheduler))
+            let composed =
+                compose FeatureMode.Disabled None None (Some(scheduler :> IJobScheduler))
 
             Expect.isEmpty
                 (composed.Provider.GetServices<IHostedService>() |> List.ofSeq)
@@ -844,8 +852,8 @@ let zeroCostTests =
                 "the composed IDataObjectStore is the SAME object — no decorator was allocated"
         }
 
-        test "EnabledFactStore is the twin that proves the previous assertion means something" {
-            let composed = compose EnabledFactStore None None None
+        test "FeatureMode.Enabled is the twin that proves the previous assertion means something" {
+            let composed = compose FeatureMode.Enabled None None None
 
             Expect.isFalse
                 (Object.ReferenceEquals(composed.DataObjects, composed.PlainDataObjects))
@@ -859,7 +867,7 @@ let zeroCostTests =
 
         testCaseAsync "the decorator is transparent — every delegated member behaves as the plain store"
         <| async {
-            let composed = compose EnabledFactStore None None None
+            let composed = compose FeatureMode.Enabled None None None
             let scope = newScope ()
 
             let! saved = saveVersion composed.DataObjects scope "v1"
@@ -1002,7 +1010,10 @@ let refusalTests =
                     ServerApp.empty with
                         Config = {
                             ServerConfig.defaults with
-                                FactStore = EnabledFactStore
+                                Stores = {
+                                    ServerConfig.defaults.Stores with
+                                        FactStore = FeatureMode.Enabled
+                                }
                         }
                 }
                 |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible ]

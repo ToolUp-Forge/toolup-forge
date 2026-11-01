@@ -143,13 +143,20 @@ let tests =
                     )
                     |> ServerApp.withConfig {
                         ServerConfig.defaults with
-                            ReplicaCount = 2
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    ReplicaCount = 2
+                            }
                     }
                     |> ServerApp.withLogger logger
 
                 let resolved = ServerApp.resolve app
 
-                Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+                Expect.equal
+                    (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                    2
+                    "the later withConfig reaches the app"
+
                 Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
 
                 Expect.equal

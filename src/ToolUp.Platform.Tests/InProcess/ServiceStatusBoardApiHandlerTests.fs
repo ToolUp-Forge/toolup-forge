@@ -56,9 +56,9 @@ let private nonAdminContext (configure: IServiceCollection -> unit) =
 let private allDisabledConfig = {
     ServerConfig.defaults with
         JobScheduler = NoJobScheduler
-        RateLimiter = NoRateLimiter
-        ConfigDriftDetection = NoConfigDriftDetection
-        SmokeTest = NoSmokeTest
+        RateLimiter = FeatureMode.Disabled
+        ConfigDriftDetection = FeatureMode.Disabled
+        SmokeTest = FeatureMode.Disabled
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────
@@ -198,11 +198,11 @@ let tests =
             | Error e -> failtestf "expected Ok, got Error %s" e
         }
 
-        testCaseAsync "RateLimit section reports enabled when RateLimiter = EnabledRateLimiter"
+        testCaseAsync "RateLimit section reports enabled when RateLimiter = FeatureMode.Enabled"
         <| async {
             let config = {
                 allDisabledConfig with
-                    RateLimiter = EnabledRateLimiter
+                    RateLimiter = FeatureMode.Enabled
             }
 
             let ctx = platformAdminContext ignore
@@ -240,7 +240,7 @@ let tests =
 
             let config = {
                 allDisabledConfig with
-                    SmokeTest = EnabledSmokeTest
+                    SmokeTest = FeatureMode.Enabled
             }
 
             let ctx =
@@ -252,7 +252,7 @@ let tests =
 
             match result with
             | Ok summary ->
-                Expect.isFalse summary.Disabled "Smoke not disabled when EnabledSmokeTest"
+                Expect.isFalse summary.Disabled "Smoke not disabled when FeatureMode.Enabled"
                 Expect.equal summary.Severity StatusSeverity.Ok "no-runs-yet is Ok"
                 Expect.stringContains summary.Headline "no runs" "headline mentions no runs"
             | Error e -> failtestf "expected Ok, got Error %s" e

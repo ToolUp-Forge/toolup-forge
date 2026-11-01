@@ -77,7 +77,7 @@ type IMetricsSink =
     abstract SetGauge: name: string * value: float * tags: Map<string, string> -> unit
 
 /// SDK-default no-op implementation of `IMetricsSink`. Registered when
-/// `ServerConfig.MetricsEndpoint = Disabled` so emission sites in
+/// `ServerConfig.Observability.MetricsEndpoint = Disabled` so emission sites in
 /// `compose`-controlled code (request middleware, job scheduler, SSE
 /// connection manager) can resolve the service unconditionally —
 /// `IMetricsSink` is never `null` in DI when the SDK is composed.

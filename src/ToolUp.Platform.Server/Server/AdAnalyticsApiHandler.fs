@@ -15,7 +15,7 @@ open ToolUp.Platform.Metrics
 
 // ─── Phase 60 — server-side ad-analytics endpoint ─────────────────
 //
-// Mounted only when `ServerConfig.AdAnalytics = EnabledAdAnalytics`.
+// Mounted only when `ServerConfig.AdAnalytics = FeatureMode.Enabled`.
 // Receives `AdImpression` / `AdClick` posts from the client-side
 // `ServerSinkAdAnalytics` and records via `IAuditLog` under
 // `_platform` scope.
@@ -446,7 +446,7 @@ let private clickHandler: HttpHandler =
     }
 
 /// Routes table. Mounted by `compose` only when
-/// `ServerConfig.AdAnalytics = EnabledAdAnalytics`.
+/// `ServerConfig.AdAnalytics = FeatureMode.Enabled`.
 let routes: HttpHandler list = [
     POST >=> route "/api/_platform/ads/impression" >=> impressionHandler
     POST >=> route "/api/_platform/ads/click" >=> clickHandler

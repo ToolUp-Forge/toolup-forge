@@ -15,7 +15,7 @@ open ToolUp.Platform
 // Default `NoOpAdAnalyticsSink` is no-op so wiring it is a runtime
 // no-cost choice. The `ServerSinkAdAnalytics` reference (below)
 // POSTs to `/api/_platform/ads/impression` — only mount when
-// `ServerConfig.AdAnalytics = EnabledAdAnalytics`.
+// `ServerConfig.AdAnalytics = FeatureMode.Enabled`.
 //
 // **Six-rule portability audit** (see
 // [`docs/platform/portability-rules.md`](../../../../docs/platform/portability-rules.md)):

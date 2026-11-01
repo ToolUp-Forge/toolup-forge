@@ -151,23 +151,35 @@ let private probeRule: AlertRule = {
 
 let private logsOn = {
     ServerConfig.defaults with
-        LogStore = LogStoreMode.SqliteLogStore(LogStoreConfig.create "never-opened.db")
+        Observability = {
+            ServerConfig.defaults.Observability with
+                LogStore = LogStoreMode.SqliteLogStore(LogStoreConfig.create "never-opened.db")
+        }
 }
 
 let private metricsOn = {
     ServerConfig.defaults with
-        MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+        Observability = {
+            ServerConfig.defaults.Observability with
+                MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+        }
 }
 
 let private alertsOn = {
     ServerConfig.defaults with
-        AlertRules = [ queueRule; probeRule ]
+        Observability = {
+            ServerConfig.defaults.Observability with
+                AlertRules = [ queueRule; probeRule ]
+        }
 }
 
 let private allOn = {
     logsOn with
-        MetricsHistory = metricsOn.MetricsHistory
-        AlertRules = alertsOn.AlertRules
+        Observability = {
+            logsOn.Observability with
+                MetricsHistory = metricsOn.Observability.MetricsHistory
+                AlertRules = alertsOn.Observability.AlertRules
+        }
 }
 
 let private observabilityPaths = [
@@ -669,7 +681,10 @@ let private datadogRoutes =
 
 let private datadogOn = {
     ServerConfig.defaults with
-        DatadogReadback = EnabledDatadogReadback DatadogReadbackConfig.defaults
+        Observability = {
+            ServerConfig.defaults.Observability with
+                DatadogReadback = EnabledDatadogReadback DatadogReadbackConfig.defaults
+        }
 }
 
 [<Tests>]

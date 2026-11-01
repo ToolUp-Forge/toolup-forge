@@ -36,11 +36,14 @@ type Dependencies = {
 let configure (config: ServerConfig) (contentRoot: string) : ServerConfig = {
     config with
         Surfaces = Surfaces.team
-        FactStore = EnabledFactStore
+        Stores = {
+            config.Stores with
+                FactStore = FeatureMode.Enabled
+                EntityStore = FeatureMode.Enabled
+        }
         PublicRendering = EnabledPublicRendering(ContentRoot contentRoot)
-        DataIngestion = EnabledDataIngestion
+        DataIngestion = FeatureMode.Enabled
         JobScheduler = InProcessJobScheduler
-        EntityStore = EnabledEntityStore
 }
 
 /// The application: a RAG app (AI + retrieval + the knowledge base) with the

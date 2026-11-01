@@ -35,7 +35,7 @@ open ToolUp.Platform.TeamManagement
 // via `ISecretStore` (two keys — token + token secret), emits an
 // `OAuth1aConnected` audit event, and 302-redirects back to the admin UI.
 //
-// Routes are mounted only when `ServerConfig.OAuth1a = EnabledOAuth1a`
+// Routes are mounted only when `ServerConfig.OAuth1a = FeatureMode.Enabled`
 // (see `BuildRouteHandlers`). Stateless across calls; the state store is
 // the only stateful element (single-instance default + distributed
 // companion candidate).
@@ -271,7 +271,7 @@ let private callback (flowName: string) : HttpHandler =
 // ─── Route table ────────────────────────────────────────────────────────
 
 /// The OAuth 1.0a flow routes. Mounted by `BuildRouteHandlers` only when
-/// `ServerConfig.OAuth1a = EnabledOAuth1a`.
+/// `ServerConfig.OAuth1a = FeatureMode.Enabled`.
 let routes: HttpHandler list = [
     GET >=> routef "/api/oauth1a/%s/start" start
     GET >=> routef "/api/oauth1a/%s/callback" callback

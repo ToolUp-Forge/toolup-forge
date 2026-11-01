@@ -36,7 +36,7 @@ open ToolUp.Platform.Server
 // resolved `IBlobStorage`.
 //
 // **Strip-imports guarantee**: when the resolved
-// `ServerConfig.PeerSubstrate = NoPeerSubstrate`, the companion contributes
+// `ServerConfig.MultiInstance.PeerSubstrate = FeatureMode.Disabled`, the companion contributes
 // nothing — no DI registrations, no `/peer/v1` handlers, no peer audit
 // (GP 13 — zero cost when unused).
 
@@ -49,7 +49,7 @@ let private owner = peerCompanion
 /// What the peer companion composes: the local deployment identity (used by the outbound
 /// client / handshake) plus the contracts this deployment hosts. Like
 /// the other companions, the strip-imports gate is read from the resolved
-/// `ServerConfig.PeerSubstrate`, not a field on this record, so a single `ServerConfig` override controls it.
+/// `ServerConfig.MultiInstance.PeerSubstrate`, not a field on this record, so a single `ServerConfig` override controls it.
 type PeerOptions = {
     /// The local deployment's own peer identity, vouched for by the
     /// outbound `IPeerClient` / `IPeerHandshake`. `None` for a host-only
@@ -304,7 +304,7 @@ type PeerOptions = {
 /// scraping a log line — the same shape `ModuleLoadOutcome` takes for
 /// module-load observability.
 type PeerAudienceBinding =
-    /// `ServerConfig.PeerSubstrate = NoPeerSubstrate` — no peer token is
+    /// `ServerConfig.MultiInstance.PeerSubstrate = FeatureMode.Disabled` — no peer token is
     /// validated here at all, so there is nothing to bind.
     | AudienceBindingOff
     /// A usable `LocalPeer` is composed: every inbound token must carry
@@ -399,7 +399,7 @@ module PeerOptions =
     /// deployment and read back the rows this deployment logged for the
     /// *caller's own* calls (scoped to the validated caller id — a peer
     /// can never see another peer's rows). The contract reads the
-    /// resolved `IAuditLog`; a deployment with `AuditLog = NoAuditLog`
+    /// resolved `IAuditLog`; a deployment with `AuditLog = FeatureMode.Disabled`
     /// still registers it but answers with an empty trail. Off by default
     /// (GP 13).
     let withPeerAuditTransparency (options: PeerOptions) : PeerOptions = {
@@ -1122,9 +1122,9 @@ let withCommutativeCipher (cipher: ICommutativeCipher) (app: ServerApp) : Server
 /// expected audience, so `withLocalPeer { PeerId = ""; … }` binds
 /// nothing while looking composed.
 let auditAudienceBinding (app: ServerApp, options: PeerOptions) : PeerAudienceBinding =
-    match (ServerApp.effectiveConfig app).PeerSubstrate with
-    | NoPeerSubstrate -> AudienceBindingOff
-    | EnabledPeerSubstrate ->
+    match (ServerApp.effectiveConfig app).MultiInstance.PeerSubstrate with
+    | FeatureMode.Disabled -> AudienceBindingOff
+    | FeatureMode.Enabled ->
         match options.LocalPeer with
         | Some identity when not (System.String.IsNullOrWhiteSpace identity.PeerId) ->
             AudienceBindingEnforced identity.PeerId
@@ -1187,9 +1187,9 @@ let insecureTransportAdvisory =
 /// `PeerTransportSecurity`. Exposed so a deployment can run the same
 /// check from its own preflight.
 let enforceTransportSecurity (app: ServerApp, options: PeerOptions) : unit =
-    match (ServerApp.effectiveConfig app).PeerSubstrate with
-    | NoPeerSubstrate -> ()
-    | EnabledPeerSubstrate ->
+    match (ServerApp.effectiveConfig app).MultiInstance.PeerSubstrate with
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         if options.TransportPolicy.AllowInsecureTransport then
             app.Logger |> Option.iter (fun logger -> logger.Warn insecureTransportAdvisory)
 
@@ -1241,15 +1241,15 @@ let private hostedContractIds (options: PeerOptions) : Set<string> =
 ///
 /// Materialising the contract builders is not free, so it happens
 /// only when at least one template is composed: a deployment that
-/// gates nothing runs no probe (GP 13). A `NoPeerSubstrate`
+/// gates nothing runs no probe (GP 13). A `FeatureMode.Disabled`
 /// composition reports nothing — it registers no contracts at all,
 /// and the strip-imports path must stay byte-for-byte a bare
 /// `ServerApp.run`.
 let auditCleanRoomTemplates (app: ServerApp, options: PeerOptions) : string list =
-    match (ServerApp.effectiveConfig app).PeerSubstrate, options.CleanRoomTemplates with
-    | NoPeerSubstrate, _
+    match (ServerApp.effectiveConfig app).MultiInstance.PeerSubstrate, options.CleanRoomTemplates with
+    | FeatureMode.Disabled, _
     | _, [] -> []
-    | EnabledPeerSubstrate, templates ->
+    | FeatureMode.Enabled, templates ->
         let hosted = hostedContractIds options
 
         templates
@@ -1302,10 +1302,10 @@ let noisedReleaseMap (options: PeerOptions) : Map<string, NoisedReleasePolicy> =
 ///     would throw on the first call, and a privacy parameter that
 ///     is wrong is wrong at compose time.
 let auditNoisedRelease (app: ServerApp, options: PeerOptions) : string list =
-    match (ServerApp.effectiveConfig app).PeerSubstrate, options.NoisedReleases with
-    | NoPeerSubstrate, _
+    match (ServerApp.effectiveConfig app).MultiInstance.PeerSubstrate, options.NoisedReleases with
+    | FeatureMode.Disabled, _
     | _, [] -> []
-    | EnabledPeerSubstrate, _ ->
+    | FeatureMode.Enabled, _ ->
         let gated = options.CleanRoomTemplates |> List.map fst |> Set.ofList
 
         noisedReleaseMap options
@@ -1348,10 +1348,10 @@ let enforceNoisedRelease (app: ServerApp, options: PeerOptions) : unit =
 /// the same argument `auditAudienceBinding` makes: an empty peer id
 /// is not an identity, it just looks composed.
 let auditTemplateApprovals (app: ServerApp, options: PeerOptions) : TemplateApprovalPosture =
-    match (ServerApp.effectiveConfig app).PeerSubstrate, options.TemplateApprovals with
-    | NoPeerSubstrate, _
+    match (ServerApp.effectiveConfig app).MultiInstance.PeerSubstrate, options.TemplateApprovals with
+    | FeatureMode.Disabled, _
     | _, None -> TemplateApprovalOff
-    | EnabledPeerSubstrate, Some _ ->
+    | FeatureMode.Enabled, Some _ ->
         let gated = options.CleanRoomTemplates |> List.map fst |> List.distinct |> List.sort
 
         if List.isEmpty gated then
@@ -1463,7 +1463,7 @@ let roundOrchestrationServices (options: PeerOptions) (services: IServiceCollect
             System.Func<System.IServiceProvider, IRoundObserver>(fun sp ->
                 // Both halves optional and independently so, exactly
                 // as `PlatformRoundObserver` is written for: a
-                // deployment with `AuditLog = NoAuditLog` still gets
+                // deployment with `AuditLog = FeatureMode.Disabled` still gets
                 // progress, and a partial host with neither observes
                 // nothing rather than failing to compose.
                 let auditLog =
@@ -1490,21 +1490,21 @@ let roundOrchestrationServices (options: PeerOptions) (services: IServiceCollect
         services
 
 /// The peer companion's `apply`. When the resolved
-/// `ServerConfig.PeerSubstrate` is `NoPeerSubstrate`, contributes nothing.
-/// When `EnabledPeerSubstrate`, registers the peer DI singletons and
+/// `ServerConfig.MultiInstance.PeerSubstrate` is `FeatureMode.Disabled`, contributes nothing.
+/// When `FeatureMode.Enabled`, registers the peer DI singletons and
 /// contributes `JsonRpcPeerHost.routes`.
 let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
-    match (ServerApp.effectiveConfig app).PeerSubstrate with
-    | NoPeerSubstrate ->
+    match (ServerApp.effectiveConfig app).MultiInstance.PeerSubstrate with
+    | FeatureMode.Disabled ->
         // Strip-imports path: zero contribution. Same shape as if the
         // peer substrate were never imported.
         app
-    | EnabledPeerSubstrate ->
+    | FeatureMode.Enabled ->
         // Phase 309 — surface the audience-binding posture before
         // anything registers. A host-only deployment that never
         // composed `LocalPeer` gets a startup `Warn`; under
         // `withStrictAudienceBinding` it does not start at all. Kept
-        // inside this branch so the `NoPeerSubstrate` short-circuit
+        // inside this branch so the `FeatureMode.Disabled` short-circuit
         // above stays byte-for-byte a bare `ServerApp.run` (GP 13).
         enforceAudienceBinding (app, options)
 
@@ -1529,7 +1529,7 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
         // Phase 339 — one line per start when the composition has
         // opted out of peer-transport TLS enforcement. Silent in
         // every other state, and inside this branch so the
-        // `NoPeerSubstrate` short-circuit stays byte-for-byte a bare
+        // `FeatureMode.Disabled` short-circuit stays byte-for-byte a bare
         // `ServerApp.run` (GP 13).
         enforceTransportSecurity (app, options)
 
@@ -1662,7 +1662,7 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
                 // host falls back to `PeerWireLimits.defaults` when
                 // nothing is registered, so this only ever makes an
                 // explicit `withWireLimits` reachable, and the
-                // `NoPeerSubstrate` short-circuit above still
+                // `FeatureMode.Disabled` short-circuit above still
                 // registers nothing at all (GP 13).
                 .AddSingleton<PeerWireLimits>(wireLimits)
                 // Phase 331 — the composed cascade ceilings plus this
@@ -1983,11 +1983,11 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
 /// `options` describes are composed once, when the deployment resolves,
 /// onto the deployment as every builder left it — so a `ServerApp` builder
 /// applied after this call still reaches it. Contributes nothing unless the
-/// resolved `ServerConfig.PeerSubstrate` is `EnabledPeerSubstrate`. A
+/// resolved `ServerConfig.MultiInstance.PeerSubstrate` is `FeatureMode.Enabled`. A
 /// second call replaces the first.
 ///
 ///     ServerApp.empty
-///     |> ServerApp.withConfig { config with PeerSubstrate = EnabledPeerSubstrate }
+///     |> ServerApp.withConfig { config with MultiInstance = { config.MultiInstance with PeerSubstrate = FeatureMode.Enabled } }
 ///     |> PeerCompose.withPeer (PeerOptions.create () |> PeerOptions.withLocalPeer identity)
 ///     |> ServerApp.run
 let withPeer (options: PeerOptions) (app: ServerApp) : ServerApp =

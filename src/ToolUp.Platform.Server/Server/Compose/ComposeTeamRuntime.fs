@@ -132,7 +132,7 @@ let registerTeamPermissionStores
         pendingInviteStoreOverride
         |> Option.defaultWith (fun () ->
             let blobDefault =
-                if config.ReplicaCount > 1 then
+                if config.MultiInstance.ReplicaCount > 1 then
                     ToolUp.Platform.Teams.BlobPendingInviteStore.TryCreate(
                         resolvedBlobStorage,
                         resolvedLogger,
@@ -146,8 +146,8 @@ let registerTeamPermissionStores
             | Some store ->
                 resolvedLogger.Info(
                     sprintf
-                        "[ComposeTeamRuntime] event=pending_invite_store_selected store=BlobPendingInviteStore ServerConfig.ReplicaCount = %d and the composed IBlobStorage implements IConditionalBlobStorage — pending-by-email invitations use ETag-guarded writes across replicas."
-                        config.ReplicaCount
+                        "[ComposeTeamRuntime] event=pending_invite_store_selected store=BlobPendingInviteStore ServerConfig.MultiInstance.ReplicaCount = %d and the composed IBlobStorage implements IConditionalBlobStorage — pending-by-email invitations use ETag-guarded writes across replicas."
+                        config.MultiInstance.ReplicaCount
                 )
 
                 store

@@ -28,15 +28,15 @@ type ServerConfigOverrides = {
     /// declaring mixed-mode override per their deployment.
     Surfaces: SurfaceProfile list option
     /// Override `ServerConfig.Webhooks`. Reference posture:
-    /// `EnabledWebhooks`.
-    Webhooks: WebhookMode option
+    /// `FeatureMode.Enabled`.
+    Webhooks: FeatureMode option
     /// Override `ServerConfig.AuditLog`. Reference posture:
-    /// `EnabledAuditLog`.
-    AuditLog: AuditLogMode option
-    /// Override `ServerConfig.SecurityHardening`. Reference
+    /// `FeatureMode.Enabled`.
+    AuditLog: FeatureMode option
+    /// Override `ServerConfig.SecurityPosture.SecurityHardening`. Reference
     /// posture: `DefaultSecurityHardening`.
     SecurityHardening: SecurityHardeningMode option
-    /// Override `ServerConfig.SlowRequestThresholdOverrides` with
+    /// Override `ServerConfig.Observability.SlowRequestThresholdOverrides` with
     /// app-supplied per-route ceilings (KB upload, AI inference,
     /// large file paths). Reference posture supplies its own map.
     SlowRequestThresholdOverrides: Map<string, TimeSpan> option
@@ -52,17 +52,17 @@ type ServerConfigOverrides = {
     /// whose modules render no monetary values set `Some false`
     /// to drop the irrelevant `Platform Defaults` admin tab.
     IncludePlatformDefaults: bool option
-    /// Override `ServerConfig.ShareTokenStore`. `None` (default) leaves
-    /// the resolved value at `ServerConfig.defaults.ShareTokenStore`
-    /// (`NoShareTokenStore`); deployments that issue signed share-links
+    /// Override `ServerConfig.Stores.ShareTokenStore`. `None` (default) leaves
+    /// the resolved value at `ServerConfig.defaults.Stores.ShareTokenStore`
+    /// (`FeatureMode.Disabled`); deployments that issue signed share-links
     /// — publishable forms, magic-login links, public dashboards, or the
     /// auto-mounted `ITeamInviteApi` (whose impl hard-depends on
-    /// `IShareTokenStore`) — set `Some EnabledShareTokenStore` here
+    /// `IShareTokenStore`) — set `Some FeatureMode.Enabled` here
     /// rather than patching the resolved `ServerConfig` record after
     /// `fromEnv`. The compose-time `ClaimBearer`-surface auto-promotion
     /// (`ComposeNotifications`) still applies on top of whatever this
     /// resolves to.
-    ShareTokenStore: ShareTokenStoreMode option
+    ShareTokenStore: FeatureMode option
 }
 
 module ServerConfigOverrides =
@@ -86,7 +86,7 @@ module ServerConfigOverrides =
     let referenceApp: ServerConfigOverrides = {
         empty with
             Surfaces = Some Surfaces.individual
-            Webhooks = Some EnabledWebhooks
-            AuditLog = Some EnabledAuditLog
+            Webhooks = Some FeatureMode.Enabled
+            AuditLog = Some FeatureMode.Enabled
             SecurityHardening = Some DefaultSecurityHardening
     }

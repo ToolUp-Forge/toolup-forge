@@ -126,7 +126,7 @@ type BlobBackedNotificationAddressBook
     }
 
     /// Read an external contact, if an external address book is
-    /// composed at all. A deployment with `NoExternalContactStore`
+    /// composed at all. A deployment with `FeatureMode.Disabled`
     /// resolves every external recipient to `None` - the same answer a
     /// contact with no consent gets, and the correct one: with no store
     /// there is no consent record, and with no consent record there is

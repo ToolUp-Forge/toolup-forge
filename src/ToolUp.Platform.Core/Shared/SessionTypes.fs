@@ -162,7 +162,7 @@ module SessionError =
 /// Client-facing session-security API.
 ///
 /// Mounted only when the deployment opts in via
-/// `ServerConfig.SessionRegistry`; the default `NoSessionRegistry`
+/// `ServerConfig.Stores.SessionRegistry`; the default `NoSessionRegistry`
 /// mounts nothing and the routes 404 (GP 13).
 ///
 /// **No method takes a user id from the wire except

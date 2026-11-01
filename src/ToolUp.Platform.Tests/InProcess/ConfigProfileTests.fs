@@ -461,9 +461,14 @@ let tests =
                         (fun () ->
                             let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
 
-                            Expect.equal cfg.ReplicaCount 2 "the profile's replica count reached ServerConfig"
+                            Expect.equal
+                                cfg.MultiInstance.ReplicaCount
+                                2
+                                "the profile's replica count reached ServerConfig"
 
-                            Expect.isTrue cfg.RequireHttps "the profile's HTTPS posture reached ServerConfig")
+                            Expect.isTrue
+                                cfg.SecurityPosture.RequireHttps
+                                "the profile's HTTPS posture reached ServerConfig")
 
                     withProfile
                         "dev-single-instance"
@@ -473,7 +478,10 @@ let tests =
                         (fun () ->
                             let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
 
-                            Expect.equal cfg.ReplicaCount 1 "the dev posture's single instance reached ServerConfig"
+                            Expect.equal
+                                cfg.MultiInstance.ReplicaCount
+                                1
+                                "the dev posture's single instance reached ServerConfig"
 
                             Expect.isTrue
                                 cfg.EnableDevEndpoints
@@ -491,12 +499,12 @@ let tests =
                             let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
 
                             Expect.equal
-                                cfg.ReplicaCount
+                                cfg.MultiInstance.ReplicaCount
                                 11
                                 "the deployment's own replica count wins over the posture's placeholder"
 
                             Expect.isTrue
-                                cfg.RequireHttps
+                                cfg.SecurityPosture.RequireHttps
                                 "…while every key it did NOT override still comes from the bundle"))
 
             // ─── C — consumer-declared profiles ───────────────────────

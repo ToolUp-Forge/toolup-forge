@@ -31,7 +31,7 @@ open ToolUp.Platform.IEmbeddingProvider
 /// `/dev/inspect` validators panel pointing at the actionable
 /// remediation.
 ///
-/// **Phase 9m.B** — honours `ServerConfig.AcceptLocalEmbedderAtScale`
+/// **Phase 9m.B** — honours `ServerConfig.RiskAcknowledgements.AcceptLocalEmbedderAtScale`
 /// (`TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1`), the escape hatch shared
 /// with `LocalEmbeddingProviderInProductionModeValidator`. The two
 /// validators cover disjoint deployment shapes but name the SAME
@@ -72,7 +72,7 @@ type TeamModeLocalEmbedderValidator
                 isTeamMode
                 && embedder.ProviderId = "local"
                 && not scopeKeyedEmbedder
-                && not serverConfig.AcceptLocalEmbedderAtScale
+                && not serverConfig.RiskAcknowledgements.AcceptLocalEmbedderAtScale
             then
                 return
                     Warning(
@@ -86,7 +86,7 @@ type TeamModeLocalEmbedderValidator
                         + "dictionary and lifts this warning; retrieval then embeds the query once per authorised "
                         + "scope, so cross-scope results still rank together. Otherwise wire in a stateless "
                         + "embedder (OpenAI / Cohere / Anthropic embeddings) via RagOptions.create, or set "
-                        + "ServerConfig.AcceptLocalEmbedderAtScale = true "
+                        + "ServerConfig.RiskAcknowledgements.AcceptLocalEmbedderAtScale = true "
                         + "(TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off explicitly. "
                         + "Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
                     )
@@ -109,7 +109,7 @@ type TeamModeLocalEmbedderValidator
 /// refusal had no opt-out, so a deployment that *deliberately* runs an
 /// ephemeral index on a persistent surface — a build-time-seeded
 /// corpus re-ingested on boot, a sandbox, an integration-test harness —
-/// could not start at all. `ServerConfig.AcceptEphemeralRagIndex`
+/// could not start at all. `ServerConfig.RiskAcknowledgements.AcceptEphemeralRagIndex`
 /// (`TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1`) degrades the refusal to a
 /// `Warning`, which is the GP 13 shape used across the `Accept*`
 /// family: default refuses, the operator opts past it by name, and the
@@ -134,7 +134,7 @@ type RagPersistenceValidator
                     "RAG is composed with neither an IBlobStorage nor an IVectorStore override. The in-memory vector store writes through a null blob store that DISCARDS bytes — every ingested chunk is lost on the next process restart with no further signal. Pass `Some storage` to composeWithRAG (or a durable IVectorStore companion, e.g. src/VectorStores/Hnsw) for a deployment whose corpus survives a restart."
 
                 if DeploymentConfig.hasPersistentAuthenticatedStorage serverConfig then
-                    if serverConfig.AcceptEphemeralRagIndex then
+                    if serverConfig.RiskAcknowledgements.AcceptEphemeralRagIndex then
                         // Phase 9m.B — the operator has opted past the
                         // refusal by name. Keep it visible (never silent)
                         // so `/dev/inspect` still shows the deployment is
@@ -142,13 +142,13 @@ type RagPersistenceValidator
                         return
                             Warning(
                                 msg
-                                + " ServerConfig.AcceptEphemeralRagIndex = true (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1) — RAG durability is EPHEMERAL by explicit operator opt-in: the corpus must be re-ingested after every restart."
+                                + " ServerConfig.RiskAcknowledgements.AcceptEphemeralRagIndex = true (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1) — RAG durability is EPHEMERAL by explicit operator opt-in: the corpus must be re-ingested after every restart."
                             )
                     else
                         return
                             Error(
                                 msg
-                                + " If the corpus is deliberately re-ingested on every boot (build-time-seeded index, sandbox, or test harness), set ServerConfig.AcceptEphemeralRagIndex = true (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1) to start with a Warning instead."
+                                + " If the corpus is deliberately re-ingested on every boot (build-time-seeded index, sandbox, or test harness), set ServerConfig.RiskAcknowledgements.AcceptEphemeralRagIndex = true (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1) to start with a Warning instead."
                             )
                 else
                     // Ephemeral / public-only by design — non-durable
@@ -181,7 +181,7 @@ type RagPersistenceValidator
 /// on no longer holds. It is not silenced: an operator who composed nothing,
 /// or composed the process-local `InMemoryEmbeddingCache` explicitly, still
 /// sees it, and the remaining escape hatch is still
-/// `ServerConfig.AcceptSharedEmbeddingCacheInTeamMode = true`.
+/// `ServerConfig.RiskAcknowledgements.AcceptSharedEmbeddingCacheInTeamMode = true`.
 type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, crossReplicaCache: bool, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -191,8 +191,10 @@ type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, crossRepl
 
         member _.Validate() = async {
             let isTeamMode = DeploymentConfig.hasTeamScope serverConfig
-            let multiInstance = serverConfig.ReplicaCount > 1
-            let accepted = serverConfig.AcceptSharedEmbeddingCacheInTeamMode
+            let multiInstance = serverConfig.MultiInstance.ReplicaCount > 1
+
+            let accepted =
+                serverConfig.RiskAcknowledgements.AcceptSharedEmbeddingCacheInTeamMode
 
             if isTeamMode && multiInstance && not accepted && not crossReplicaCache then
                 return
@@ -203,7 +205,7 @@ type TeamModeSharedEmbeddingCacheValidator(serverConfig: ServerConfig, crossRepl
                         + "and per-call latency become non-deterministic across replicas. Compose a cross-replica "
                         + "cache (RagOptions.withEmbeddingCache — e.g. the ToolUp.EmbeddingCaches.Redis companion), "
                         + "which removes the divergence and lifts this warning; or accept best-effort per-replica "
-                        + "hit-rate via ServerConfig.AcceptSharedEmbeddingCacheInTeamMode = true "
+                        + "hit-rate via ServerConfig.RiskAcknowledgements.AcceptSharedEmbeddingCacheInTeamMode = true "
                         + "(TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE=1). Verify in the HealthMonitorUI admin "
                         + "tab or /dev/inspect Validators panel."
                     )
@@ -340,15 +342,17 @@ type RagIngestionInstanceValidator(serverConfig: ServerConfig, durableQueue: boo
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let multiInstance = serverConfig.ReplicaCount > 1
-            let escapeHatch = serverConfig.AcceptInProcessIngestionInMultiInstance
+            let multiInstance = serverConfig.MultiInstance.ReplicaCount > 1
+
+            let escapeHatch =
+                serverConfig.RiskAcknowledgements.AcceptInProcessIngestionInMultiInstance
 
             if multiInstance && not durableQueue && not escapeHatch then
                 return
                     Error(
                         sprintf
-                            "RAG is composed with the in-process ingestion queue and ReplicaCount = %d. The queue is a process-local channel with no leasing or redelivery: only the replica that handled an upload can drain its ingestion job, and a crash/redeploy between dequeue and completion loses that document silently (the corpus becomes quietly incomplete). Compose a durable ingestion queue (RagOptions.withDurableIngestionQueue — e.g. the ToolUp.IngestionQueues.Redis companion), keep RAG single-instance, or set ServerConfig.AcceptInProcessIngestionInMultiInstance = true (TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE=1) if you accept best-effort per-instance ingestion. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
-                            serverConfig.ReplicaCount
+                            "RAG is composed with the in-process ingestion queue and ReplicaCount = %d. The queue is a process-local channel with no leasing or redelivery: only the replica that handled an upload can drain its ingestion job, and a crash/redeploy between dequeue and completion loses that document silently (the corpus becomes quietly incomplete). Compose a durable ingestion queue (RagOptions.withDurableIngestionQueue — e.g. the ToolUp.IngestionQueues.Redis companion), keep RAG single-instance, or set ServerConfig.RiskAcknowledgements.AcceptInProcessIngestionInMultiInstance = true (TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE=1) if you accept best-effort per-instance ingestion. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
+                            serverConfig.MultiInstance.ReplicaCount
                     )
             else
                 return Ok
@@ -408,7 +412,7 @@ type VacuumScheduleValidator(serverConfig: ServerConfig, vacuumScheduleEnabled: 
 /// `Warning` (not `Error`): single-tenant deployments behind their own
 /// rate-limiting proxy legitimately run `RateLimit = None`. Honours the same
 /// escape hatch as `RateLimitModeValidator`
-/// (`ServerConfig.AcceptNoRateLimitWhenAuthRequired` /
+/// (`ServerConfig.RiskAcknowledgements.AcceptNoRateLimitWhenAuthRequired` /
 /// `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1`) so an operator who has made
 /// the informed decision silences both at once. Anonymous-only deployments
 /// are `Ok` — there's no per-user budget to protect and public tools accept
@@ -423,13 +427,15 @@ type RAGRateLimitConfiguredValidator(serverConfig: ServerConfig, ?timeout: TimeS
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth serverConfig
             let rateLimitOff = not (RateLimitConfig.isEnabled serverConfig.RateLimit)
-            let escapeHatch = serverConfig.AcceptNoRateLimitWhenAuthRequired
+
+            let escapeHatch =
+                serverConfig.RiskAcknowledgements.AcceptNoRateLimitWhenAuthRequired
 
             if requiresAuth && rateLimitOff && not escapeHatch then
                 return
                     Warning(
                         sprintf
-                            "RAG is composed in an authenticated deployment (Surfaces = %s) with ServerConfig.RateLimit = RateLimitConfig.none. Retrieval embeds every query through the configured embedding provider, so an unbounded request loop against the AI-assistant / knowledge-search path burns embedding-token spend and CPU with no ceiling — a cost-DoS surface even behind a TLS-terminating proxy, because retrieval cost is per-query, not per-connection. Enable the SDK's per-subject-kind fixed-window limiter by setting ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 } (or RateLimitConfig.withOverrides for per-shape limits), or set ServerConfig.AcceptNoRateLimitWhenAuthRequired = true (TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1) if a rate-limiting proxy enforces per-client limits upstream. Verify in the HealthMonitorUI Preflight tab or /dev/inspect Validators panel."
+                            "RAG is composed in an authenticated deployment (Surfaces = %s) with ServerConfig.RateLimit = RateLimitConfig.none. Retrieval embeds every query through the configured embedding provider, so an unbounded request loop against the AI-assistant / knowledge-search path burns embedding-token spend and CPU with no ceiling — a cost-DoS surface even behind a TLS-terminating proxy, because retrieval cost is per-query, not per-connection. Enable the SDK's per-subject-kind fixed-window limiter by setting ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 } (or RateLimitConfig.withOverrides for per-shape limits), or set ServerConfig.RiskAcknowledgements.AcceptNoRateLimitWhenAuthRequired = true (TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1) if a rate-limiting proxy enforces per-client limits upstream. Verify in the HealthMonitorUI Preflight tab or /dev/inspect Validators panel."
                             (DeploymentConfig.surfacesLabel serverConfig)
                     )
             else
@@ -491,12 +497,12 @@ type LocalEmbeddingProviderInProductionModeValidator
             if
                 nonTeamProductionShape
                 && embedder.ProviderId = "local"
-                && not serverConfig.AcceptLocalEmbedderAtScale
+                && not serverConfig.RiskAcknowledgements.AcceptLocalEmbedderAtScale
             then
                 return
                     Warning(
                         sprintf
-                            "LocalEmbeddingProvider is active in a %s deployment. The local TF-IDF embedder is dev-only and process-stateful: its IDF dictionary evolves with the corpus in THIS process, so the same document re-ingested later embeds differently, and a second replica embeds it differently again — retrieval quality drifts over time and diverges across instances (LocalEmbeddingProvider is the documented exception to portability rule 4, stateless-between-calls). Wire a stateless embedder (OpenAI / Cohere / Anthropic embeddings) as the third argument to RagOptions.create, or set ServerConfig.AcceptLocalEmbedderAtScale = true (TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off on a single-replica deployment. The embedding_provider:local health probe reports Degraded for the same reason — see /dev/inspect."
+                            "LocalEmbeddingProvider is active in a %s deployment. The local TF-IDF embedder is dev-only and process-stateful: its IDF dictionary evolves with the corpus in THIS process, so the same document re-ingested later embeds differently, and a second replica embeds it differently again — retrieval quality drifts over time and diverges across instances (LocalEmbeddingProvider is the documented exception to portability rule 4, stateless-between-calls). Wire a stateless embedder (OpenAI / Cohere / Anthropic embeddings) as the third argument to RagOptions.create, or set ServerConfig.RiskAcknowledgements.AcceptLocalEmbedderAtScale = true (TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1) to accept the trade-off on a single-replica deployment. The embedding_provider:local health probe reports Degraded for the same reason — see /dev/inspect."
                             (DeploymentConfig.surfacesLabel serverConfig)
                     )
             else
@@ -700,7 +706,7 @@ type RagDurabilityContributor(blobStorageSupplied: bool, vectorStoreSupplied: bo
                     if durable then
                         "Ingested chunks are written through to durable storage and reload after a restart."
                     elif acceptedEphemeral then
-                        "RAG durability: ephemeral — accepted explicitly via ServerConfig.AcceptEphemeralRagIndex (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1). The corpus must be re-ingested after every process restart."
+                        "RAG durability: ephemeral — accepted explicitly via ServerConfig.RiskAcknowledgements.AcceptEphemeralRagIndex (TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1). The corpus must be re-ingested after every process restart."
                     else
                         "RAG durability: ephemeral — the in-memory vector store writes through a null blob store that discards bytes. The corpus starts empty after every process restart."
             |}
@@ -786,12 +792,12 @@ type InProcessIndexReplicaValidator
                 | None -> ()
             ]
 
-            if serverConfig.ReplicaCount > 1 && not findings.IsEmpty then
+            if serverConfig.MultiInstance.ReplicaCount > 1 && not findings.IsEmpty then
                 return
                     Warning(
                         sprintf
                             "RAG runs with ReplicaCount = %d over process-local retrieval indexes: %s. Each replica keeps its own copy in its own memory, so a chunk ingested on one replica is missing from another's retrieval until a flush-and-reload, and hybrid retrieval returns different results depending on which replica served the turn. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
-                            serverConfig.ReplicaCount
+                            serverConfig.MultiInstance.ReplicaCount
                             (String.Join("; ", findings))
                     )
             else

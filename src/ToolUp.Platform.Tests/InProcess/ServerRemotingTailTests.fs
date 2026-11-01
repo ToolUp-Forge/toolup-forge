@@ -460,7 +460,7 @@ let tests =
             test "compose registers the queue only where a drain can honour it" {
                 let enabled = {
                     ServerConfig.defaults with
-                        AuditLog = EnabledAuditLog
+                        AuditLog = FeatureMode.Enabled
                 }
 
                 Expect.isTrue (registered enabled) "an enabled audit log under the default policy gets the queue"
@@ -482,11 +482,19 @@ let tests =
                 Expect.isFalse
                     (registered {
                         enabled with
-                            ProcessProfile = WorkerOnly
+                            MultiInstance = {
+                                enabled.MultiInstance with
+                                    ProcessProfile = WorkerOnly
+                            }
                     })
                     "a silo serving no HTTP has no audited calls to queue"
 
-                Expect.isFalse (registered { enabled with AuditLog = NoAuditLog }) "no audit log, no queue (GP 13)"
+                Expect.isFalse
+                    (registered {
+                        enabled with
+                            AuditLog = FeatureMode.Disabled
+                    })
+                    "no audit log, no queue (GP 13)"
             }
         ]
 

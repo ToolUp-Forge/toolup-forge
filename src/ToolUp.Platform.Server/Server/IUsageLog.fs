@@ -43,7 +43,7 @@ type IUsageLog =
     abstract Aggregate: scopeId: string * grouping: UsageGrouping -> Async<Map<string, decimal>>
 
 /// SDK-default no-op implementation of `IUsageLog`. Registered when
-/// `ServerConfig.UsageMetering = NoUsageMetering` so emission sites
+/// `ServerConfig.UsageMetering = FeatureMode.Disabled` so emission sites
 /// can resolve the service unconditionally — `IUsageLog` is never
 /// `null` in DI when the SDK is composed. Mirrors the
 /// `EventStoreAuditLog` no-op pattern used by `IAuditLog`.

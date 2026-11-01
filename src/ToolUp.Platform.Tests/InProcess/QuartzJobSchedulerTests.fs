@@ -623,7 +623,10 @@ let probeTests =
 
             let multiReplica = {
                 ServerConfig.defaults with
-                    ReplicaCount = 3
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 3
+                    }
             }
 
             let validator =

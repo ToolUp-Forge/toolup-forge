@@ -12,8 +12,8 @@ open ToolUp.Platform
 // publish the events of every settled intent whose entity save is
 // version-witnessed as committed, and discard intents whose save
 // never landed (the semantics live on `OutboxEntityStore.RelayOnce`).
-// Registered by compose only when `ServerConfig.EntityOutbox =
-// EnabledEntityOutbox` (alongside `EntityStore = EnabledEntityStore`),
+// Registered by compose only when `ServerConfig.Stores.EntityOutbox =
+// FeatureMode.Enabled` (alongside `EntityStore = FeatureMode.Enabled`),
 // gated as `EntityOutboxRelaySubsystem` on the process-profile
 // matrix — deployments that don't opt in pay nothing (GP 13).
 

@@ -132,7 +132,7 @@ module BackendCapabilities =
 /// outcome. Implemented by a companion under `src/ExternalCompute/` (GP 1 —
 /// the backend SDK / transport never reaches `ToolUp.Platform.*`) and
 /// composed as an `IExternalComputeDispatcher` DI singleton. Selected by
-/// `ServerConfig.ExternalCompute`; the default `NoExternalCompute` registers
+/// `ServerConfig.ExternalCompute`; the default `FeatureMode.Disabled` registers
 /// `NoExternalComputeDispatcher` (GP 13).
 type IExternalComputeDispatcher =
     /// Stable backend identifier stamped onto every `ExternalHandle.Backend`
@@ -173,7 +173,7 @@ type IExternalComputeDispatcher =
 
 /// The default dispatcher for a deployment that composes no external-compute
 /// backend. Registered when `ServerConfig.ExternalCompute =
-/// NoExternalCompute` (the default), so `IExternalComputeDispatcher` always
+/// FeatureMode.Disabled` (the default), so `IExternalComputeDispatcher` always
 /// resolves and a handler's submit path is a typed refusal rather than a DI
 /// resolution failure.
 ///

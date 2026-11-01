@@ -776,7 +776,7 @@ let private harness (embedder: IEmbeddingProvider) (rows: (VectorScope * string 
         new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
             store :> IVectorStore,
             embedder,
-            platformKnowledgeBase = EnabledPlatformKnowledgeBase
+            platformKnowledgeBase = FeatureMode.Enabled
         )
         :> IRetrievalPipeline
 

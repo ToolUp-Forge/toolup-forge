@@ -129,8 +129,11 @@ let private vaultStore (vault: FakeVault) : ISecretStore =
 let private authConfig () = {
     ServerConfig.defaults with
         Surfaces = Surfaces.individual
-        DataIngestion = EnabledDataIngestion
-        AcceptPlaintextSecretsWhenAuthRequired = false
+        DataIngestion = FeatureMode.Enabled
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptPlaintextSecretsWhenAuthRequired = false
+        }
 }
 
 let private threeChecks = [

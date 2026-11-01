@@ -44,7 +44,7 @@ type CsrfHardeningValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let hardened = config.SecurityHardening <> NoSecurityHardening
+            let hardened = config.SecurityPosture.SecurityHardening <> NoSecurityHardening
 
             match hardened, config.PublicBaseUrl with
             | true, Some baseUrl ->

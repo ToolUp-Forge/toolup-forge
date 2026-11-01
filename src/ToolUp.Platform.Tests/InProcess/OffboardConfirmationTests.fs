@@ -112,7 +112,7 @@ let private handlerFor
     services.AddSingleton<ServerConfig>(
         {
             ServerConfig.defaults with
-                TenantLifecycle = EnabledTenantLifecycle
+                TenantLifecycle = FeatureMode.Enabled
                 TenantOffboardConfirmation = mode
         }
     )

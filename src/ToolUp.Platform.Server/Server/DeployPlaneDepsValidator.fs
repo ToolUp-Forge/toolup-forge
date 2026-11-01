@@ -48,10 +48,10 @@ type DeployPlaneDepsValidator(config: ServerConfig, services: IServiceCollection
                     if not (isRegistered typeof<IJobScheduler>) then
                         "IJobScheduler (set ServerConfig.JobScheduler = InProcessJobScheduler, or register a distributed scheduler companion) — required by IBuildOrchestrator"
                     if
-                        config.EntityStore <> EnabledEntityStore
+                        config.Stores.EntityStore <> FeatureMode.Enabled
                         || not (isRegistered typeof<IEntityStore.IEntityStore>)
                     then
-                        "IEntityStore (set ServerConfig.EntityStore = EnabledEntityStore) — required by ITenantFleet"
+                        "IEntityStore (set ServerConfig.Stores.EntityStore = FeatureMode.Enabled) — required by ITenantFleet"
                     if not (isRegistered typeof<IContainerScheduler>) then
                         "IContainerScheduler (register a backend companion, e.g. DockerLocalContainerScheduler from src/ContainerSchedulers/DockerLocal/, via services.AddSingleton<IContainerScheduler>(...)) — required by IDeployPipeline and ITenantFleet"
                 ]

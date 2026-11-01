@@ -7,8 +7,14 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (scheduler: JobSchedulerMode) (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
         JobScheduler = scheduler
-        ReplicaCount = replicaCount
-        AcceptInProcessSchedulerInMultiInstance = escapeHatch
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptInProcessSchedulerInMultiInstance = escapeHatch
+        }
 }
 
 let private validate (config: ServerConfig) : ValidationResult =

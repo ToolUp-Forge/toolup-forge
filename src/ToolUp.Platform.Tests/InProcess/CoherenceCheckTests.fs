@@ -687,12 +687,15 @@ let tests =
 
         // ─── 563.D — deployments that don't opt in are byte-identical ──
 
-        test "withCoherenceChecks over a NoFactStore app is a no-op (byte-identical)" {
+        test "withCoherenceChecks over a FeatureMode.Disabled app is a no-op (byte-identical)" {
             let app = {
                 ServerApp.empty with
                     Config = {
                         ServerApp.empty.Config with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerApp.empty.Config.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
@@ -701,6 +704,6 @@ let tests =
 
             Expect.isTrue
                 (Object.ReferenceEquals(after, app))
-                "a NoFactStore app is returned unchanged — nothing registered, byte-identical (GP 11 / GP 13)"
+                "a FeatureMode.Disabled app is returned unchanged — nothing registered, byte-identical (GP 11 / GP 13)"
         }
     ]

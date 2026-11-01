@@ -61,7 +61,7 @@ open ToolUp.Platform.Usage
 // prefix is what makes coexistence with OIDC / JWT bearer auth on the
 // same header possible without either scheme having to know about the
 // other. The middleware itself is registered only when
-// `ServerConfig.ServiceAccounts = EnabledServiceAccounts`, so a
+// `ServerConfig.Stores.ServiceAccounts = EnabledServiceAccounts`, so a
 // deployment that has not opted in has no middleware at all (GP 13).
 //
 // **The SCIM seam (Phase 530).** `src/AuthProviders/Scim/README.md`

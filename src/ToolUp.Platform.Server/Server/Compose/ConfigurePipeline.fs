@@ -53,7 +53,7 @@ let buildForwardedHeadersOptions (config: ServerConfig) : Microsoft.AspNetCore.B
     opts.KnownIPNetworks.Clear()
     opts.KnownProxies.Clear()
 
-    match ForwardedHeadersTrustValidator.Cidr.parseAll config.TrustedProxyCidrs with
+    match ForwardedHeadersTrustValidator.Cidr.parseAll config.SecurityPosture.TrustedProxyCidrs with
     | Ok [] -> () // trust-any-peer posture (validator-gated in auth-requiring modes)
     | Ok networks ->
         for network in networks do
@@ -77,20 +77,20 @@ let configurePipeline
     // and any handler that calls `Url.IsAbsoluteUri` need
     // `Request.Scheme` to reflect the originating proxy hop, not the
     // proxy-to-origin scheme.
-    if config.TrustForwardedHeaders then
+    if config.SecurityPosture.TrustForwardedHeaders then
         app.UseForwardedHeaders(buildForwardedHeadersOptions config) |> ignore
 
         // Phase 16d follow-up / Phase 325 — surface the trust posture
         // explicitly at startup (not per request, so the noise budget
         // is bounded). Trust-any-peer (empty allowlist) warns; a
         // scoped allowlist logs the declared networks at Info.
-        if List.isEmpty config.TrustedProxyCidrs then
+        if List.isEmpty config.SecurityPosture.TrustedProxyCidrs then
             resolvedLogger.Warn
-                "ServerConfig.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured from any peer (KnownIPNetworks + KnownProxies cleared; TrustedProxyCidrs is empty). Behind a single TLS-terminating ingress that strips client-supplied X-Forwarded-* headers this is correct. To scope the trust to your proxy's network(s), set `TOOLUP_TRUSTED_PROXY_CIDRS` (comma-separated CIDRs). To opt out entirely, set `TOOLUP_TRUST_FORWARDED_HEADERS=0`."
+                "ServerConfig.SecurityPosture.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured from any peer (KnownIPNetworks + KnownProxies cleared; TrustedProxyCidrs is empty). Behind a single TLS-terminating ingress that strips client-supplied X-Forwarded-* headers this is correct. To scope the trust to your proxy's network(s), set `TOOLUP_TRUSTED_PROXY_CIDRS` (comma-separated CIDRs). To opt out entirely, set `TOOLUP_TRUST_FORWARDED_HEADERS=0`."
         else
             resolvedLogger.Info(
-                "ServerConfig.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured only from TrustedProxyCidrs: "
-                + String.concat ", " config.TrustedProxyCidrs
+                "ServerConfig.SecurityPosture.TrustForwardedHeaders = true — `X-Forwarded-Proto` / `X-Forwarded-For` honoured only from TrustedProxyCidrs: "
+                + String.concat ", " config.SecurityPosture.TrustedProxyCidrs
                 + "."
             )
 
@@ -115,7 +115,7 @@ let configurePipeline
             ctx.Response.WriteAsync("""{"error":"internal_server_error"}""")))
     |> ignore
 
-    if config.RequireHttps then
+    if config.SecurityPosture.RequireHttps then
         app.UseHttpsRedirection() |> ignore
 
     // Request-id middleware. Generates a Guid-N per request (or accepts
@@ -146,8 +146,8 @@ let configurePipeline
 
     // CORS middleware uses the default policy registered in
     // `services.AddCors` above. Skipped entirely when
-    // `config.Cors = None`.
-    if config.Cors.IsSome then
+    // `config.SecurityPosture.Cors = None`.
+    if config.SecurityPosture.Cors.IsSome then
         app.UseCors() |> ignore
 
     app.UseResponseCompression() |> ignore // `use_gzip`
@@ -250,7 +250,7 @@ let configurePipeline
     // arrives on `?token=` / `X-Share-Token`, a service-account token on
     // `Authorization: Bearer tusa_…`, and each middleware passes through
     // untouched when its own credential is absent.
-    match config.ServiceAccounts with
+    match config.Stores.ServiceAccounts with
     | NoServiceAccounts -> ()
     | EnabledServiceAccounts
     | CustomServiceAccountStore ->
@@ -274,7 +274,7 @@ let configurePipeline
     // requests get bearer-checked and stamped with
     // `HttpContext.Items["PeerName"]` before user-auth enforcement runs
     // (and exempts peer routes — the bearer IS the authentication).
-    if not (List.isEmpty config.PeerRoutePrefixes) then
+    if not (List.isEmpty config.MultiInstance.PeerRoutePrefixes) then
         app.UseMiddleware<PeerBearerAuthMiddleware>(config) |> ignore
 
         // Phase 317 — one line per start when a registered static-bearer
@@ -315,7 +315,7 @@ let configurePipeline
         |> ignore
 
     // Phase 528 — revoked-session refusal. Registered ONLY when
-    // `ServerConfig.SessionRegistry` selects a backend, so the default
+    // `ServerConfig.Stores.SessionRegistry` selects a backend, so the default
     // deployment pays not even a delegate hop (GP 13) and stays
     // byte-for-byte as before (GP 11).
     //
@@ -326,7 +326,7 @@ let configurePipeline
     // authenticated, not that a session they do not have was revoked. It
     // must be after `ScopeResolutionMiddleware` besides, since the
     // `Subject` and `StorageScope` it reads are that middleware's stamps.
-    match config.SessionRegistry with
+    match config.Stores.SessionRegistry with
     | NoSessionRegistry -> ()
     | BlobSessionRegistry _
     | CustomSessionRegistry _ ->
@@ -346,13 +346,13 @@ let configurePipeline
     // MetricsMiddleware — sits before RequestTimingMiddleware so it
     // observes the same downstream span. The two middlewares serve
     // different audiences (operator dashboards vs. log lines) and stay
-    // independently togglable: NoMetricsEndpoint resolves IMetricsSink
+    // independently togglable: FeatureMode.Disabled resolves IMetricsSink
     // to NoOpMetricsSink so this middleware is a no-op try/finally;
-    // EnabledMetricsEndpoint records the standard request-level counter
+    // FeatureMode.Enabled records the standard request-level counter
     // / latency / error metrics. Skipped entirely when MetricsEndpoint =
-    // NoMetricsEndpoint to avoid even the no-op call overhead on every
+    // FeatureMode.Disabled to avoid even the no-op call overhead on every
     // request.
-    if config.MetricsEndpoint = EnabledMetricsEndpoint then
+    if config.Observability.MetricsEndpoint = FeatureMode.Enabled then
         app.UseMiddleware<Metrics.MetricsMiddleware>(resolvedMetricsSink) |> ignore
     // Request timing. Sits between auth enforcement (so we don't time
     // unauthenticated rejections) and the remoting body normaliser (so
@@ -367,7 +367,7 @@ let configurePipeline
     // are declared.
     if
         not (List.isEmpty config.RateLimits)
-        && config.RateLimitStore <> NoRateLimitStore
+        && config.Stores.RateLimitStore <> NoRateLimitStore
     then
         app.UseMiddleware<RateLimitMiddleware.InboundRateLimitMiddleware>(config)
         |> ignore

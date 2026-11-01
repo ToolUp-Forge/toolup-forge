@@ -2317,7 +2317,7 @@ type EventStoreAuditLog
         }
 
 /// `NoOp` `IAuditLog`. Registered by `compose` when
-/// `ServerConfig.AuditLog = NoAuditLog` (Phase 1g lightweight default).
+/// `ServerConfig.AuditLog = FeatureMode.Disabled` (Phase 1g lightweight default).
 /// `Record` returns immediately without serialising or touching the
 /// event store; `GetAuditTrail` returns an empty list. Emission sites
 /// (`ScopeResolutionMiddleware`, `PlatformApi` handlers,

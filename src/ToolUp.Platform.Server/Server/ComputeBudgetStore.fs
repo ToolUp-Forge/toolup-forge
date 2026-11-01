@@ -179,7 +179,7 @@ module ComputeBudgetJson =
         |> Option.map ComputeBudgetUsage.ofBudgetUsage
 
 /// Phase 451 — the blob-backed `IComputeBudgetStore` registered when
-/// `ServerConfig.ComputeBudget = EnabledComputeBudget`.
+/// `ServerConfig.ComputeBudget = FeatureMode.Enabled`.
 ///
 /// `blobs` is the composed `IBlobStorage`; when it also implements
 /// `IConditionalBlobStorage` the admission write becomes a cross-replica

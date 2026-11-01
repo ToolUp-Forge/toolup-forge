@@ -49,58 +49,9 @@ type ResultStoreMode =
     /// Blob-backed via `IDataObjectStore`. Results are stored
     /// `StrictlyVersioned` (no delete, full history). Each successful
     /// `SaveResult` emits an `AnalysisCompleted` event to
-    /// `IEventStore` and (when `Lineage = EnabledLineageStore`) one
+    /// `IEventStore` and (when `Lineage = FeatureMode.Enabled`) one
     /// `LineageLink` per declared input.
     | PersistentResultStore
-
-/// Selects whether `ILineageStore` is registered. Lineage
-/// is a query layer over `IEventStore` filtered to `LineageLink`
-/// events — there is no separate persistence to enable, so the toggle
-/// is binary. Default: `NoLineageStore`. Enabling this mode also
-/// activates auto-emit in `PersistentResultStore`: every
-/// `SaveResult` with a non-empty `inputs` list writes a
-/// `LineageLink` per input.
-type LineageStoreMode =
-    /// `ILineageStore` is not registered; `PersistentResultStore`
-    /// silently ignores the `inputs` parameter on `SaveResult`.
-    /// Default.
-    | NoLineageStore
-    /// `ILineageStore` is registered as a query layer over
-    /// `IEventStore`. Auto-emit on `SaveResult` activates.
-    | EnabledLineageStore
-
-/// Phase 1027 — durable lineage: whether a result save's lineage links
-/// survive a lineage-store outage. Default off — a link the store fails to
-/// record is logged at Warning, with every field needed to re-record it by
-/// hand, and dropped (Phase 1025). When enabled (requires
-/// `Lineage = EnabledLineageStore` and a result store), the links ride a
-/// write-ahead intent in the Phase 599 outbox shape and the relay retries
-/// them, deduplicated by link id, until they are recorded or become a
-/// durable, readable dead letter. Independent of `EntityOutbox`; its relay
-/// shares the `EntityOutboxRelaySubsystem` gate. Env:
-/// `TOOLUP_LINEAGE_DURABILITY`.
-type LineageDurabilityMode =
-    /// Log and drop a link the store fails to record. Default.
-    | NoDurableLineage
-    /// `LineageOutbox` registered in DI + its relay drain running.
-    | EnabledDurableLineage
-
-/// Selects whether `compose` registers the share-token substrate.
-/// Default: `NoShareTokenStore` — no `IShareTokenStore`
-/// in DI, no `_platform/share-tokens/` blob layout, no signing-key
-/// secret resolved. Apps that issue signed share-links (publishable
-/// forms, magic-login links, public dashboards) opt in to
-/// `EnabledShareTokenStore`.
-type ShareTokenStoreMode =
-    /// No share-token substrate registered. Default — keeps the SDK
-    /// lean for deployments that don't issue tokens.
-    | NoShareTokenStore
-    /// Register `BlobShareTokenStore` against the resolved
-    /// `IBlobStorage` and `ISecretStore`. Audit emission flows
-    /// through the configured `IAuditLog` — when `AuditLog =
-    /// NoAuditLog` the impl simply skips audit emission with no
-    /// runtime cost.
-    | EnabledShareTokenStore
 
 /// Phase 527 — selects whether `compose` registers the service-account
 /// substrate: named machine principals owned by a scope, each minting
@@ -119,7 +70,7 @@ type ServiceAccountStoreMode =
     /// Register `BlobServiceAccountStore` against the resolved
     /// `IBlobStorage`, mount the admin API, and insert the bearer-token
     /// middleware ahead of scope resolution. Audit emission flows
-    /// through the configured `IAuditLog` — under `NoAuditLog` the impl
+    /// through the configured `IAuditLog` — under `FeatureMode.Disabled` the impl
     /// skips it at no runtime cost.
     | EnabledServiceAccounts
     /// The consumer composed its own `IServiceAccountStore` singleton
@@ -196,68 +147,10 @@ type JobSchedulerMode =
     /// so a case inserted mid-union would shift every later case's tag.
     | QuartzJobScheduler of QuartzConfig
 
-/// Phase 321 — selects whether the job scheduler fans progress
-/// checkpoints out to `INotificationChannel` + `IEventStore`.
-///
-/// Default: `NoJobProgress` — no `IJobProgressSink` in DI, and
-/// `ctx.Progress` hands handlers the no-op reporter, so a handler that
-/// reports progress in an opted-out deployment costs one interface
-/// dispatch and publishes nothing (GP 11 + GP 13). Progress is
-/// observability, and observability that a deployment did not ask for is
-/// notification traffic and blob writes it did not budget for.
-type JobProgressMode =
-    /// No progress fan-out. Default. `ctx.Progress` is the no-op reporter
-    /// and the external reconciliation poll logs fractional progress
-    /// exactly as Phase 319 did.
-    | NoJobProgress
-    /// Fan progress checkpoints out: every checkpoint to
-    /// `INotificationChannel` under the reserved
-    /// `_platform.jobs.progress` key (scope-gated, coalesced), and each
-    /// `Durable = true` or terminal checkpoint additionally to
-    /// `IEventStore` under `_platform.jobs`.
-    | EnabledJobProgress
-
-/// Selects whether `compose` registers the data-ingestion substrate.
-/// Default: `NoDataIngestion` — no `IDataIngestor`, no
-/// `IDataSourceConfigStore`, no `_platform/data-sources/` blob
-/// layout, no `IDataIngestionApi` route. Apps that opt in pick the
-/// `EnabledDataIngestion` mode; the connectors themselves are
-/// supplied via DI (companion packages register their `IDataSource`
-/// implementations against this surface).
-type DataIngestionMode =
-    /// No data-ingestion infrastructure registered. Default — keeps
-    /// the SDK lean for deployments that don't pull from external
-    /// data sources.
-    | NoDataIngestion
-    /// `IDataIngestor` + `IDataSourceConfigStore` registered.
-    /// Connectors register via DI as `IDataSource` (one per `Kind`).
-    /// The data-ingestion API (`IDataIngestionApi`) is auto-injected
-    /// as a ToolUp.Remoting endpoint when the scheduler is also
-    /// enabled — `TriggerRefresh` schedules a `Manual` job through
-    /// `IJobScheduler`, so apps that want triggered ingestion need
-    /// `JobScheduler = InProcessJobScheduler` too.
-    | EnabledDataIngestion
-
-/// Selects whether `compose` registers the column-mapping substrate
-/// that backs the mapping-aware Data Manager (`DataManager =
-/// MappingDataManager` on the client). Default: `NoColumnMapping` — no
-/// `IColumnMappingStore`, no `IColumnMappingApi` route. Pairs with the
-/// client data-manager shell slot, mirroring the `DataIngestion` (server) /
-/// `DataManager` (client) split: the client mode renders the wizard,
-/// this server flag persists the reusable maps and mounts the API.
-type ColumnMappingMode =
-    /// No column-mapping infrastructure. Default — the built-in Data
-    /// Manager (the data slot's `SlotFill.Default`) needs no per-CSV mapping store.
-    | NoColumnMapping
-    /// `IColumnMappingStore` (default `IDataObjectStore`-backed) in DI
-    /// and `IColumnMappingApi` auto-mounted. Enable alongside
-    /// `ClientConfig.DataManager = MappingDataManager`.
-    | EnabledColumnMapping
-
 /// Phase 218 — policy for the mapping-aware Data Manager's dry-run
 /// validation step (the per-row/per-cell error preview shown before a
 /// mapped CSV is committed). Read only when `ColumnMapping =
-/// EnabledColumnMapping`; the report is always shown, the policy only
+/// FeatureMode.Enabled`; the report is always shown, the policy only
 /// decides whether failing rows BLOCK the commit or merely WARN.
 type MappingDryRunPolicy =
     /// Default — the dry-run report is advisory: failing rows are
@@ -267,83 +160,6 @@ type MappingDryRunPolicy =
     /// The dry-run report blocks commit when any row would fail
     /// validation — the user must fix the mapping or the source first.
     | BlockOnValidationFailure
-
-/// Phase 10h — generic OAuth 2.0 refresh-token lifecycle substrate.
-/// Selects whether `compose` registers `IOAuthTokenRefresher` +
-/// `OAuthRefreshJobHandler` (`_platform.oauth.refresh`). Default:
-/// `NoOAuthRefresher` — connectors fall back to per-call
-/// `IOAuthCredentialFlow.RefreshAccessToken` (the Phase 10e path),
-/// no background refresh, no admin-UI token-status column. Apps that
-/// want background refresh enable with `EnabledOAuthRefresher`;
-/// connectors register their `OAuthRefreshDescriptor` at `Connect`
-/// (and unregister on `Disconnect`).
-///
-/// Pair with `JobScheduler = InProcessJobScheduler` (or any future
-/// distributed scheduler companion). The
-/// `ServiceStatusBoardDepsValidator`-shaped `IConfigValidator`
-/// emits a Warning at startup when `OAuthRefresher = EnabledOAuthRefresher`
-/// but `JobScheduler = NoJobScheduler` — the refresher has no way to
-/// schedule dispatches.
-type OAuthRefresherMode =
-    /// No `IOAuthTokenRefresher` registered. Default — connectors
-    /// using OAuth Authorization Code (Phase 10e) refresh
-    /// synchronously per API call via
-    /// `IOAuthCredentialFlow.RefreshAccessToken`.
-    | NoOAuthRefresher
-    /// `InProcessOAuthTokenRefresher` registered;
-    /// `OAuthRefreshJobHandler` registered under
-    /// `_platform.oauth.refresh`; admin-UI token-status column on
-    /// the data-ingestion admin renders refresh outcomes + next
-    /// scheduled refresh. Requires `JobScheduler =
-    /// InProcessJobScheduler` (or distributed companion) to schedule
-    /// dispatches.
-    | EnabledOAuthRefresher
-
-/// Phase 10g — selects whether `compose` mounts the OAuth 1.0a
-/// three-legged flow routes (`/api/oauth1a/{flow}/*`). Default:
-/// `NoOAuth1a` — no routes mounted, no 1.0a code path active; a
-/// deployment with no 1.0a connectors pays nothing (GP 13). Enable with
-/// `EnabledOAuth1a` and register per-provider flows via
-/// `ServerApp.withOAuth1aFlow`. Independent of the OAuth 2.0
-/// (`DataIngestion`) substrate — a deployment can run either, both, or
-/// neither.
-type OAuth1aMode =
-    /// No OAuth 1.0a routes mounted. Default.
-    | NoOAuth1a
-    /// Mount the `/api/oauth1a/{flow}/*` three-legged flow routes.
-    | EnabledOAuth1a
-
-/// Selects whether `compose` registers the entity-store substrate.
-/// Default: `NoEntityStore` — no `IEntityStore` in DI, no
-/// `EntityRegistry`, no per-entity-type index space allocated. Apps
-/// that want typed entity persistence with declared indexes opt in to
-/// `EnabledEntityStore`; entity types and their indexes are registered
-/// via `ServerApp.withEntity<'T>` per type.
-type EntityStoreMode =
-    /// No entity-store infrastructure registered. Default — keeps the
-    /// SDK lean for deployments whose only persistence needs are
-    /// blob/event/result-shaped.
-    | NoEntityStore
-    /// `IEntityStore` + `EntityRegistry` registered. Default impl
-    /// (`BlobEntityStore`) wraps `IDataObjectStore` for versioning
-    /// and `BlobIndex` for declared indexes. Entity types register
-    /// via `ServerApp.withEntity<'T> registration`.
-    | EnabledEntityStore
-
-/// Phase 599 — the entity-write outbox: durable coupling between an
-/// entity save and the `IEventStore` events it implies. Default off —
-/// an entity save and its event emission stay two independent writes
-/// (a crash between them loses the events). When enabled (requires
-/// `EntityStore = EnabledEntityStore`), `OutboxEntityStore.SaveWithEvents`
-/// stages a write-ahead intent (single-blob atomic) before the save,
-/// and the relay service publishes the staged events once the save is
-/// version-witnessed as committed — at-least-once, with never-committed
-/// saves discarded unpublished. Env: `TOOLUP_ENTITY_OUTBOX`.
-type EntityOutboxMode =
-    /// No outbox surface, no relay service. Default.
-    | NoEntityOutbox
-    /// `OutboxEntityStore` registered in DI + the relay drain running.
-    | EnabledEntityOutbox
 
 /// Phase 447 — selects whether `compose` applies registered `ISeedPack`
 /// fixtures at end-of-compose (dev / demo seed data). Default:
@@ -382,29 +198,6 @@ type GraphStoreMode =
     /// `compose` registers no default and leaves the consumer's singleton
     /// in place.
     | CustomGraphStore
-
-/// Phase 68d — selects whether entity-store mutations are projected into
-/// the `IGraphStore` as a derived read-model. Default:
-/// `NoEntityGraphProjection` — no projection runs, no bridge is wired, and
-/// the entity store behaves exactly as today (GP 13 — zero cost when
-/// unused). `EnabledEntityGraphProjection` opts in: the
-/// `ToolUp.Graph.Projection` bridge (composed via
-/// `EntityGraphProjectionCompose.wire`) subscribes to the entity-lifecycle
-/// signal (`EntityCreated` / `EntityUpdated` / `EntityDeleted`) and keeps a
-/// graph projection of the registered entities + their Phase-19c declared
-/// relationships in sync. Requires `EntityStore = EnabledEntityStore` and
-/// an `IGraphStore` (the in-memory default suffices for dev). Like a graph
-/// *engine* companion, the concrete bridge lives in its own package and is
-/// wired by the deployment — this flag is the opt-in the wiring reads.
-type EntityGraphProjectionMode =
-    /// No entity→graph projection. Default — the entity store and graph
-    /// store stay independent; a consumer wanting only relational, or only
-    /// a hand-built graph, is untouched.
-    | NoEntityGraphProjection
-    /// Project registered entities (and their declared relationships) into
-    /// the `IGraphStore` as a derived read-model, kept in sync by the
-    /// entity-lifecycle signal + a one-shot `RebuildProjection`.
-    | EnabledEntityGraphProjection
 
 /// Phase 161 — selects the time-series storage backend (`ITimeSeriesStore`)
 /// for high-frequency numeric/analytical series. Default:
@@ -628,219 +421,6 @@ module BackupMode =
         | NoBackup -> false
         | BackupEnabled _ -> true
 
-/// Phase 449 — selects the model-fit substrate (the `IModelFitProvider`
-/// envelope + `_platform.modelfit.run` job handler). Default:
-/// `NoModelFitting` — no registry, no job handler, zero cost (GP 13).
-/// Modelling math never lives in forge; a fit executes through a
-/// consumer-composed `IModelFitProvider` companion (plan D9).
-type ModelFittingMode =
-    /// No model-fit substrate registered (default). A deployment that never
-    /// fits a model pays nothing (GP 13).
-    | NoModelFitting
-    /// Register the model-fit envelope: index every DI-registered
-    /// `IModelFitProvider` into a `ModelFitProviderRegistry` (duplicate
-    /// `Kind` rejected at startup) and bind the `ModelFitJobHandler` to
-    /// `_platform.modelfit.run`. Requires `JobScheduler` to be composed and
-    /// at least one `IModelFitProvider` companion registered.
-    | EnabledModelFitting
-
-/// Phase 600 — selects the out-of-process model-execution submitter API
-/// (`ModelExecutionApi` remoting surface: submit fits single + batch,
-/// bulk outcome retrieval, dataset-version resolution, scoring, registry
-/// query — every denial a typed, enumerable refusal on the wire).
-/// Default: `NoModelExecutionApi` — the route is not mounted, zero cost
-/// (GP 13).
-type ModelExecutionApiMode =
-    /// No submitter API mounted (default). Clients calling the proxy on
-    /// such a deployment receive a 404 (the JobApi absence precedent).
-    | NoModelExecutionApi
-    /// Mount the `ModelExecutionApi` remoting surface. Useful only
-    /// alongside `ModelFitting = EnabledModelFitting` + a composed
-    /// `JobScheduler` (submission), `IModelRegistry` (outcomes),
-    /// `IDatasetStore` (resolution), and `IModelScorer` (scoring) — each
-    /// method reports a typed `SubstrateDisabled` refusal for whichever
-    /// substrate is absent.
-    ///
-    /// **The registry is not wired by default.** Phase 728 added the
-    /// opt-in compose leg that registers one —
-    /// `ServerApp.withModelExecution ModelExecutionComposeOptions.defaults`
-    /// — and a deployment that mounts this surface without it (and without
-    /// hand-registering) is named at startup by the `model-execution-deps`
-    /// preflight validator rather than discovering it on the first
-    /// request. `IModelScorer` stays consumer-supplied by design: forge
-    /// cannot build a default scorer without score providers.
-    | EnabledModelExecutionApi
-
-/// Phase 163 — selects the end-user product-telemetry sink (`ITelemetrySink`).
-/// Default: `NoTelemetrySink` — the `NoOpTelemetrySink` (a true no-op) is
-/// registered, so `Track` emission sites are free at runtime (GP 13).
-type TelemetrySinkMode =
-    /// Register the `NoOpTelemetrySink` (default) — a true no-op; analytics
-    /// events go nowhere and cost nothing.
-    | NoTelemetrySink
-    /// A companion-provided `ITelemetrySink` (e.g.
-    /// `ToolUp.TelemetrySinks.Ga4`) is registered in DI by the deployment;
-    /// `compose` registers no default and leaves the consumer's sink in place.
-    | CustomTelemetrySink
-
-/// Selects whether `compose` registers the usage-metering substrate.
-/// Default: `NoUsageMetering` — `IUsageLog` resolves to
-/// `NoOpUsageLog` so emission sites (`SessionFileStore`, the AI
-/// metering middleware in `ToolUp.AI`, future ingestion / API-request
-/// emitters) stay free at runtime. `ITeamQuotaPolicy` similarly
-/// resolves to the no-op default. Apps that need per-team billing /
-/// fair-use quotas opt in to `EnabledUsageMetering`.
-///
-/// Mirrors `AuditLogMode` (binary, not three-way) — the in-memory
-/// middle case is redundant when blob-backed default + an in-memory
-/// `IBlobStorage` already gives tests the surface they need without
-/// the durability cost.
-type UsageMeteringMode =
-    /// `IUsageLog` resolves to `NoOpUsageLog`; `ITeamQuotaPolicy`
-    /// resolves to `NoOpTeamQuotaPolicy`. The `UsageBatchFlusher`
-    /// `BackgroundService` is not registered, the `IUsageQueryApi`
-    /// route is not mounted, and emission sites are free. Default.
-    | NoUsageMetering
-    /// `BlobUsageLog` + `UsageBatchFlusher` registered;
-    /// `BlobBackedTeamQuotaPolicy` registered; the `IUsageQueryApi`
-    /// route is auto-injected. Storage layout
-    /// `_platform/usage/{scopeId}/{yyyy-MM-dd}.json`. Quota fields
-    /// read from the reserved `_platform.usage` config schema —
-    /// missing config = unrestricted.
-    | EnabledUsageMetering
-
-/// Selects whether `compose` registers the metrics substrate.
-/// Default: `Disabled` — `IMetricsSink` resolves to
-/// `NoOpMetricsSink` so emission sites in `compose`-controlled code
-/// (request middleware, job scheduler, SSE connection manager) stay
-/// free at runtime. The `/metrics` endpoint is not mounted, and no
-/// `MetricsMiddleware` is added to the pipeline. Apps that want
-/// Prometheus-format scraping opt in to `Enabled`.
-///
-/// Information-disclosure caution: a `/metrics` endpoint exposes
-/// route templates, tag values, and traffic patterns. The `Disabled`
-/// default avoids surprising deployments that don't want this surface
-/// open. When `Enabled`, the endpoint is mounted at the literal
-/// Prometheus convention `/metrics` and is exempt from
-/// `AuthEnforcementMiddleware` (so vanilla scrapers without bearer
-/// tokens can read it); deployments needing authn gate at the
-/// network layer (LB allowlist, monitoring-network CIDR).
-///
-/// Mirrors `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in).
-type MetricsEndpointMode =
-    /// `IMetricsSink` resolves to `NoOpMetricsSink`. No
-    /// `MetricsMiddleware` is added; the `/metrics` route is not
-    /// mounted; SDK standard metrics (`toolup.requests.total`, etc.)
-    /// are not registered. Default.
-    | NoMetricsEndpoint
-    /// `PrometheusMetricsSink` registered; `MetricsMiddleware` injected
-    /// into the pipeline before `RequestTimingMiddleware`; the
-    /// `/metrics` endpoint is mounted in OpenMetrics text format; SDK
-    /// standard metrics are pre-registered. Companions (e.g. the
-    /// OpenTelemetry exporter at `src/Metrics/OpenTelemetry/`)
-    /// register additional sinks via DI; multiple sinks compose via
-    /// fan-out so a single emission hits every registered sink.
-    | EnabledMetricsEndpoint
-
-/// Selects whether `compose` registers the inter-platform peer
-/// substrate (Phase 18) — opt-in, cross-deployment typed-RPC where one
-/// ToolUp deployment can call a typed contract exposed by another
-/// ToolUp deployment (peer), with identity propagation, versioning,
-/// and audit. Default: `NoPeerSubstrate` — no `/peer/v1/{contractId}`
-/// route is mounted, no `IPlatformPeer` / `IPeerClient` /
-/// `IPeerAuthProvider` resolved in DI, no peer audit emission wired.
-/// Zero cost when not enabled (GP 13). Enable with
-/// `EnabledPeerSubstrate` to activate the substrate; contracts are
-/// hosted via `PeerCompose.withPeer` and the JSON-RPC 2.0 host.
-///
-/// Distinct from `PeerRoutePrefixes` (the simpler shared-bearer
-/// peer-call middleware) — the two coexist on different route
-/// prefixes; this richer substrate adds JWT / delegated assertions,
-/// a version handshake, and job-substrate fusion for long-running
-/// peer calls.
-///
-/// Mirrors `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in).
-type PeerSubstrateMode =
-    /// No peer-substrate infrastructure registered. The
-    /// `/peer/v1/{contractId}` route is not mounted; `IPlatformPeer`,
-    /// `IPeerClient`, `IPeerAuthProvider`, `IPeerHandshake`, and
-    /// `IPeerRegistry` are absent from DI; no peer audit events are
-    /// emitted. Default — keeps the SDK lean and the public attack
-    /// surface closed for deployments that don't federate.
-    | NoPeerSubstrate
-    /// JSON-RPC 2.0 peer host mounted at `/peer/v1/{contractId}`;
-    /// `JwtPeerAuthProvider` (fail-closed HS256), `BlobPeerRegistry`,
-    /// and `InMemoryPeerHandshake` registered as defaults; peer-call
-    /// and handshake lifecycle events emitted via `IEventStore` under
-    /// `SourceModule = "_platform.peer"`. Contracts are authored as
-    /// `IPlatformPeer`-shaped records and hosted through
-    /// `PeerCompose.withPeer`.
-    | EnabledPeerSubstrate
-
-/// Phase 520 — selects whether a bitemporal fact store (the `ToolUp.Facts`
-/// companion) participates in the composition. Default `NoFactStore` — no
-/// `IFactStore` is expected in DI; a deployment that stores no facts is
-/// byte-for-byte unchanged (GP 11 + GP 13). `BlobFactStore` selects the
-/// blob-backed default. The knob is the introspectable *slot* the
-/// composition manifest / composable-surface descriptor report as the
-/// resolved fact-store kind; the `ToolUp.Facts` companion also exposes
-/// `BlobFactStore.create` for direct composition. Mirrors
-/// `PeerSubstrateMode` / `EntityStoreMode` (binary, opt-in).
-type FactStoreMode =
-    /// No fact store composed — the default. Nothing in the grounding
-    /// fact tier is active.
-    | NoFactStore
-    /// A fact store (the blob-backed `BlobFactStore` default — append-only,
-    /// bitemporal, content-addressed) participates in the composition.
-    | EnabledFactStore
-
-/// Phase 54 — selects whether `compose` registers the tenant-lifecycle
-/// substrate: the four first-party `ITenantLifecycle` hooks
-/// (encryption-key destroy, membership-cache invalidate, scheduled-job
-/// cancel, subject-data erasure) + the `/api/_platform/tenants/*` admin
-/// API that drives the aggregator. Default `NoTenantLifecycle` — no
-/// hooks resolved, no route mounted, no `ITenantLifecycle` in DI; an
-/// existing deployment that upgrades stays byte-for-byte identical until
-/// it opts in (GP 11 + GP 13). Mirrors `PeerSubstrateMode` /
-/// `EntityStoreMode` (binary, opt-in).
-type TenantLifecycleMode =
-    /// No tenant-lifecycle infrastructure registered. The
-    /// `/api/_platform/tenants/*` route is not mounted; the four
-    /// first-party hooks are absent from DI; no tenant-lifecycle audit
-    /// events are emitted. Default — keeps the SDK lean and the
-    /// destructive offboard surface closed for deployments that manage
-    /// tenant teardown out-of-band.
-    | NoTenantLifecycle
-    /// `IPlatformTenantApi` mounted at `/api/_platform/tenants/*`
-    /// (Owner / Platform-Admin gated); the four first-party
-    /// `ITenantLifecycle` hooks registered (each self-`Skipped` when its
-    /// substrate is inactive); companion hooks register additively via
-    /// `services.AddSingleton<ITenantLifecycle>`. One `DeprovisionTenant`
-    /// call runs every hook with audit + per-hook isolation under
-    /// `SourceModule = "_platform.tenant"`.
-    | EnabledTenantLifecycle
-
-/// Phase 7b — schema-first user-authoring substrate selection. Default
-/// `NoUserSchemaAuthoring` — no `IUserSchemaStore` in DI, the
-/// `IUserSchemaApi` route is not mounted, no `SchemaMigrationJobHandler`
-/// registered, no schema-authoring audit events emitted. An existing
-/// deployment that upgrades stays byte-for-byte identical until it opts
-/// in (GP 11 + GP 13). `EnabledUserSchemaAuthoring` registers the
-/// blob-backed `BlobUserSchemaStore` (over `IDataObjectStore`), mounts the
-/// Owner/Admin-gated `IUserSchemaApi`, and registers the migration job
-/// handler with `IJobScheduler` so long-running schema migrations survive
-/// restarts. Mirrors `PeerSubstrateMode` / `EntityStoreMode` (binary,
-/// opt-in).
-type UserSchemaAuthoringMode =
-    /// No user-schema authoring infrastructure registered. The default.
-    | NoUserSchemaAuthoring
-    /// `BlobUserSchemaStore` registered as `IUserSchemaStore`;
-    /// `IUserSchemaApi` mounted (Owner/Admin gated writes);
-    /// `SchemaMigrationJobHandler` registered with the scheduler; schema
-    /// lifecycle audit events (`SchemaProposed` / `SchemaApproved` /
-    /// `SchemaChanged`) emitted under `SourceModule = "_platform.user_schema"`.
-    | EnabledUserSchemaAuthoring
-
 /// Phase 54i — confirmation gate in front of the destructive
 /// tenant-offboard surface. Default `NoConfirmation` preserves Phase 54's
 /// one-call behaviour byte-for-byte (GP 11); the two stronger modes
@@ -970,7 +550,7 @@ type MetricsHistoryMode =
     | NoMetricsHistory
     /// Sample the live registry into the composed `ITimeSeriesStore`
     /// every `FlushSeconds` and run the daily retention sweep. Requires
-    /// `MetricsEndpoint = EnabledMetricsEndpoint` (the concrete
+    /// `MetricsEndpoint = FeatureMode.Enabled` (the concrete
     /// `PrometheusMetricsSink` is the read tap) and a composed
     /// `ITimeSeriesStore`; the flusher names either one's absence once
     /// rather than sampling into nothing silently.
@@ -1001,31 +581,3 @@ type DatadogReadbackMode =
     /// endpoint reports a typed, audited soft failure for whichever is
     /// absent rather than blanking the admin surface.
     | EnabledDatadogReadback of DatadogReadbackConfig
-
-/// Phase 6f.A — selects whether the external address book is composed:
-/// the `ExternalContact` entity registration, `IExternalContactStore` in
-/// DI, the consent filter wrapping the outbound notification channel, and
-/// `IExternalContactApi` on the router. Default
-/// `NoExternalContactStore` — a deployment that never addresses a
-/// non-platform recipient registers no entity, mounts no route, adds no
-/// channel decorator and pays nothing (GP 13); the shipped user-keyed
-/// `_platform/contacts/` address-book layout is byte-for-byte unchanged
-/// (GP 11).
-///
-/// Requires `EntityStore = EnabledEntityStore`: the contact store is
-/// `IEntityStore`-backed, for the versioning, the dedupe indexes and the
-/// per-scope container the substrate already provides. Enabling this
-/// without the entity store is named at compose time rather than left to
-/// dangle.
-type ExternalContactStoreMode =
-    /// No external address book (default). Transactional envelopes may
-    /// still carry `RecipientId.External _`, and every such recipient is
-    /// refused for want of a store to resolve it — the same refusal a
-    /// contact with no opt-in gets, for the same reason.
-    | NoExternalContactStore
-    /// Register the `ExternalContact` entity and the `IEntityStore`-backed
-    /// `IExternalContactStore`, wrap the outbound channel in
-    /// `ExternalContactConsentFilter`, and mount `IExternalContactApi`.
-    /// Pair with `ClientConfig.ExternalContactManager` to get the admin
-    /// module.
-    | EnabledExternalContactStore

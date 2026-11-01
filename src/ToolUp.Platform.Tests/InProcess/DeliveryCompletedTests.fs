@@ -211,7 +211,7 @@ let private configure (app: ServerApp) (scheduler: RecordingScheduler) (logger: 
             services
             {
                 ServerConfig.defaults with
-                    DataIngestion = EnabledDataIngestion
+                    DataIngestion = FeatureMode.Enabled
             }
             blobs
             noSecrets

@@ -16,7 +16,7 @@ open ToolUp.Platform.ConfigValidation
 // deployment is scaled out, with no signal.
 //
 // Mirrors `JobSchedulerInstanceValidator`: operator-declared
-// multi-instance via `ServerConfig.ReplicaCount`. Warning (not Error)
+// multi-instance via `ServerConfig.MultiInstance.ReplicaCount`. Warning (not Error)
 // — the same soft-touch posture the other topology validators use;
 // some Team deployments legitimately accept the short staleness window
 // or invalidate out-of-band. Only the shipped distributed backend
@@ -34,7 +34,7 @@ type NotificationChannelInstanceValidator(config: ServerConfig, ?timeout: TimeSp
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let multiInstance = config.ReplicaCount > 1
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
             let teamScoped = DeploymentConfig.hasTeamScope config
 
             let isDistributed =
@@ -51,7 +51,7 @@ type NotificationChannelInstanceValidator(config: ServerConfig, ?timeout: TimeSp
                         sprintf
                             "ServerConfig.Surfaces = %s + ReplicaCount = %d + Notifications = %A. TeamScopeResolver evicts its 5-minute active-team / membership cache on MembershipChanged notifications, but the in-memory notification channel does not cross instance boundaries — a RemoveMember or SetActiveTeam handled on one replica never invalidates the others, so a removed user keeps team-scoped data access for up to 5 minutes on every other instance. Set ServerConfig.Notifications = RedisNotifications \"<connection-string>\" (the src/NotificationChannels/Redis companion) so eviction propagates across replicas, or run a single instance."
                             (DeploymentConfig.surfacesLabel config)
-                            config.ReplicaCount
+                            config.MultiInstance.ReplicaCount
                             config.Notifications
                     )
             else

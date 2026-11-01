@@ -190,7 +190,7 @@ type DevDiagnosticsReport = {
     /// configured `SecurityHeaders` keys (values redacted) so the
     /// dev panel shows what the consumer wired through
     /// `withPreMiddleware` / `withPostMiddleware` /
-    /// `ServerConfig.SecurityHeaders` / `ServerConfig.Cors`.
+    /// `ServerConfig.SecurityPosture.SecurityHeaders` / `ServerConfig.SecurityPosture.Cors`.
     CompositionSeam: CompositionSeamSummary
     /// Phase 9k — per-probe health-check status. Empty when no
     /// probes are registered; otherwise one entry per `IHealthCheck`
@@ -622,7 +622,7 @@ let private buildProcessProfile (config: ServerConfig) (ctx: HttpContext) : Proc
         | ServerlessHost -> "ServerlessHost"
 
     let profileName =
-        match config.ProcessProfile with
+        match config.MultiInstance.ProcessProfile with
         | AllInOne -> "AllInOne"
         | WebOnly -> "WebOnly"
         | WorkerOnly -> "WorkerOnly"

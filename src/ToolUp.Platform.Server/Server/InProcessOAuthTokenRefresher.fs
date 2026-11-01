@@ -21,7 +21,7 @@ open ToolUp.Platform.ProviderExceptions
 // ─── Phase 10h — in-process IOAuthTokenRefresher ──────────────────
 //
 // SDK-default `IOAuthTokenRefresher` registered when
-// `ServerConfig.OAuthRefresher = EnabledOAuthRefresher`. Performs
+// `ServerConfig.OAuthRefresher = FeatureMode.Enabled`. Performs
 // vanilla OAuth 2.0 refresh-token grants (RFC 6749 §6) against the
 // upstream `TokenEndpoint`, persists rotated tokens through
 // `ISecretStore`, emits the `_platform.oauth.refresh` audit family +

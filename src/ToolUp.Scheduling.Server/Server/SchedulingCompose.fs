@@ -27,7 +27,7 @@ open ToolUp.Scheduling.SchedulingApiHandler
 // left it. Every `ServerApp` builder stays reachable on either side of it.
 //
 // **Required substrate**: `IEntityStore` + `IEventStore`. The compose
-// step does NOT enforce `ServerConfig.EntityStore = EnabledEntityStore`
+// step does NOT enforce `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`
 // — if the consumer forgets, the DI lookup for `IEntityStore` at
 // first-call time throws `null reference`, which the SDK's error
 // handler propagates as `500`. Documented requirement; explicit

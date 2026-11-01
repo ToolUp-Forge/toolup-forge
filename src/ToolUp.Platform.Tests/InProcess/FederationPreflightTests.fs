@@ -56,7 +56,10 @@ let private directoryImpl: DirectoryContract = {
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
 }
 
 /// When each pin was taken, and when the preflight runs. Fixed values, so

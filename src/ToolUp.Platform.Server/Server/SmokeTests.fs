@@ -9,7 +9,7 @@ open ToolUp.Platform.SmokeTests
 // ─── First-party smoke tests (Phase 9o) ──────────────────────────────
 //
 // The six probes the SDK ships when
-// `ServerConfig.SmokeTest = EnabledSmokeTest`. Each exercises one
+// `ServerConfig.SmokeTest = FeatureMode.Enabled`. Each exercises one
 // wired companion path end-to-end against the reserved sentinel
 // scope `SmokeTest.SentinelScope` ("_smoke") and cleans up after
 // itself inside `try`/`finally` (a failing impl still cleans up —

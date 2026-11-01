@@ -160,7 +160,7 @@ type private TokenStorageState = {
     /// `HttpOnly; Secure; SameSite=Strict` cookie) and keeps it only
     /// in transient in-memory state — never in `localStorage`, never
     /// in a JS-readable cookie. Requires
-    /// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`.
+    /// `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled`.
     Strategy: AuthTokenStorage
     /// In-memory bearer token for the `ServerSetHttpOnlyCookie` path.
     /// Lost on reload (the durable credential is the HttpOnly cookie;
@@ -488,7 +488,7 @@ let getUserId () =
 /// Phase 6k Workstream A: on the default `ClientCookieAndLocalStorage`
 /// path also writes the token to `localStorage` + `document.cookie` so
 /// EventSource handshakes can authenticate when
-/// `ServerConfig.SseAuthMode = CookieRequired`. The cookie path is
+/// `ServerConfig.SecurityPosture.SseAuthMode = CookieRequired`. The cookie path is
 /// silent overhead in `QueryParamFallback` deployments — the server
 /// just doesn't read it. Phase 1047: when that cookie write does not land
 /// (a server-written `HttpOnly` cookie holds the name), the token is sent

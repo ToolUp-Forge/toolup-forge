@@ -39,7 +39,7 @@ type SeedContext = {
     /// Always present — an `IBlobStorage` is registered in every
     /// composition.
     BlobStorage: IBlobStorage
-    /// `Some` only when `ServerConfig.EntityStore = EnabledEntityStore`.
+    /// `Some` only when `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`.
     /// `None` means the deployment did not compose the entity substrate.
     EntityStore: IEntityStore.IEntityStore option
     /// `Some` when a `IDataObjectStore` is composed (the default data

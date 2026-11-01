@@ -594,7 +594,7 @@ let private callbackHandler: HttpHandler =
 
 /// Routes table. Mounted by `buildRouteHandlers` **only** when the
 /// deployment composed an external-compute backend
-/// (`ServerConfig.ExternalCompute = CustomExternalCompute`), so a
+/// (`ServerConfig.ExternalCompute = FeatureMode.Enabled`), so a
 /// deployment that composed none has no such path and the Giraffe
 /// terminal middleware answers a clean 404 (GP 13). No hosted service, no
 /// middleware, no allocation for anyone else.

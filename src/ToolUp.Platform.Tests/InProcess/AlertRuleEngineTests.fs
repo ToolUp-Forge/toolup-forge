@@ -316,7 +316,10 @@ let tests =
                     services
                     {
                         ServerConfig.defaults with
-                            AlertRules = rules
+                            Observability = {
+                                ServerConfig.defaults.Observability with
+                                    AlertRules = rules
+                            }
                     }
                     stubChannel
                     stubLogger

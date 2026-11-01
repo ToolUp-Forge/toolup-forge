@@ -26,8 +26,8 @@ open ToolUp.Platform
 //     substrate (see the decision record in `Shared/PresenceTypes.fs`).
 //
 // **Opt-in, and it pays nothing when off (GP 13 / GP 11).** The shell
-// mounts this only under `ClientConfig.Presence = EnabledPresence`, whose
-// default is `NoPresence`. That is a SEPARATE flag from the server's
+// mounts this only under `ClientConfig.Presence = FeatureMode.Enabled`, whose
+// default is `FeatureMode.Disabled`. That is a SEPARATE flag from the server's
 // `ServerConfig.Presence` on purpose: an existing deployment that already
 // enabled the server substrate and hand-mounts its own client wiring must
 // not silently acquire a second heartbeat in every browser tab because it
@@ -178,8 +178,8 @@ let private PresenceRoot (moduleId: string) (children: ReactElement) =
     PresenceContext.provider value children
 
 /// Wrap `children` in a live presence + soft-lock context. Called by the
-/// shell under `ClientConfig.Presence = EnabledPresence`; a deployment on
-/// the default `NoPresence` never reaches this and renders byte-for-byte
+/// shell under `ClientConfig.Presence = FeatureMode.Enabled`; a deployment on
+/// the default `FeatureMode.Disabled` never reaches this and renders byte-for-byte
 /// as before.
 ///
 /// A deployment that mounts `PresenceContext.provider` itself — the

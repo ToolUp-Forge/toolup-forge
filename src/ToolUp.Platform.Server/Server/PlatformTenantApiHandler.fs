@@ -111,7 +111,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         | _ -> TenantLifecycleSnapshot()
 
     // Phase 54e — durable backing for the last summary. Registered under
-    // `EnabledTenantLifecycle`; `None` only in minimal/test wiring, where
+    // `FeatureMode.Enabled`; `None` only in minimal/test wiring, where
     // the process-local snapshot remains the sole backing (prior Phase 54
     // behaviour). The snapshot is a read-through cache in front of it.
     let summaryStore =

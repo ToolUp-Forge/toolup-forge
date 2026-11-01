@@ -12,7 +12,7 @@ open ToolUp.Platform
 
 // ─── Phase 59 — server-side consent-audit endpoint ────────────────
 //
-// Mounted only when `ServerConfig.ConsentAudit = EnabledConsentAudit`.
+// Mounted only when `ServerConfig.ConsentAudit = FeatureMode.Enabled`.
 // Receives client-side `ConsentEvent` posts from the configured
 // `IConsentProvider` and records them via `IAuditLog` under
 // `_platform` scope. The audit emission is fire-and-forget — failures
@@ -63,5 +63,5 @@ let private consentHandler: HttpHandler =
     }
 
 /// Routes table. Mounted by `compose` only when
-/// `ServerConfig.ConsentAudit = EnabledConsentAudit`.
+/// `ServerConfig.ConsentAudit = FeatureMode.Enabled`.
 let routes: HttpHandler list = [ POST >=> route "/api/_platform/consent" >=> consentHandler ]

@@ -78,7 +78,7 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
     let webhookUrlPolicy: WebhookUrlValidator.WebhookUrlPolicy =
         match ctx.RequestServices.GetService(typeof<ServerConfig>) with
         | :? ServerConfig as cfg -> {
-            AllowedHosts = cfg.WebhookUrlAllowedHosts
+            AllowedHosts = cfg.SecurityPosture.WebhookUrlAllowedHosts
           }
         | _ -> WebhookUrlValidator.WebhookUrlPolicy.empty
 

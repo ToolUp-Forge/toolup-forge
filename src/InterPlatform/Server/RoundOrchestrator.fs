@@ -336,7 +336,7 @@ type IRoundObserver =
 
 /// The default observer: audit rows through `IAuditLog`, progress
 /// notifications through `INotificationChannel`. Either half is optional,
-/// so a deployment with `AuditLog = NoAuditLog` still gets progress, and
+/// so a deployment with `AuditLog = FeatureMode.Disabled` still gets progress, and
 /// one that wants an audit trail without client chatter gets that.
 type PlatformRoundObserver(auditLog: IAuditLog option, channel: INotificationChannel option) =
 

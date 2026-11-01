@@ -664,13 +664,16 @@ let reuseTests =
 
 // ── Compose (708.A / GP 13) ───────────────────────────────────────
 
-let private composedUnder (knob: FactStoreMode) : ServiceProvider =
+let private composedUnder (knob: FeatureMode) : ServiceProvider =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -692,8 +695,8 @@ let private composedUnder (knob: FactStoreMode) : ServiceProvider =
 let composeTests =
     testList "Phase 708 compose registration" [
 
-        test "EnabledFactStore registers the clause planner on the same knob as the store" {
-            let sp = composedUnder EnabledFactStore
+        test "FeatureMode.Enabled registers the clause planner on the same knob as the store" {
+            let sp = composedUnder FeatureMode.Enabled
 
             Expect.isFalse
                 (isNull (box (sp.GetService<IFactClausePlanner>())))
@@ -705,7 +708,7 @@ let composeTests =
         }
 
         test "the planner and the recorder are ONE instance — a split pair would empty the retention" {
-            let sp = composedUnder EnabledFactStore
+            let sp = composedUnder FeatureMode.Enabled
 
             let asPlanner = sp.GetRequiredService<IFactClausePlanner>()
             let asRecorder = sp.GetRequiredService<IPlannedAnswerRecorder>()
@@ -715,8 +718,8 @@ let composeTests =
                 "both faces resolve to the same object, so plans retained by one are visible to the other"
         }
 
-        test "NoFactStore registers no feeder — a fact-less composition is byte-identical (GP 11 / GP 13)" {
-            let sp = composedUnder NoFactStore
+        test "FeatureMode.Disabled registers no feeder — a fact-less composition is byte-identical (GP 11 / GP 13)" {
+            let sp = composedUnder FeatureMode.Disabled
 
             Expect.isTrue (isNull (sp.GetService(typeof<IFactClausePlanner>))) "no feeder in a no-store composition"
 

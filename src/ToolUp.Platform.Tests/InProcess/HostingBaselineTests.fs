@@ -168,8 +168,11 @@ let private observeHost (app: WebApplication) (host: IServerHost) (peer: IPAddre
 
 let private hardenedConfig = {
     ServerConfig.defaults with
-        RequireHttps = true
-        SecurityHeaders = SecurityHeaders.productionDefaults
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                RequireHttps = true
+                SecurityHeaders = SecurityHeaders.productionDefaults
+        }
 }
 
 /// A middleware that strips a header another middleware stamps —
@@ -187,7 +190,7 @@ let private stripping (name: string) (app: WebApplication) =
 
 /// A consumer pre-middleware that reflects ANY origin with credentials —
 /// the shape the compose-time CORS refusal cannot see, because it is not
-/// `ServerConfig.Cors`.
+/// `ServerConfig.SecurityPosture.Cors`.
 let private reflectingCors (app: WebApplication) =
     app.Use(
         Func<HttpContext, RequestDelegate, Task>(fun ctx next ->
@@ -312,7 +315,10 @@ let private allCells: (ProcessProfile * ServerlessHostMode) list = [
 
 let private cellConfig (profile, host) = {
     ServerConfig.defaults with
-        ProcessProfile = profile
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ProcessProfile = profile
+        }
         ServerlessHost = host
 }
 
@@ -586,13 +592,16 @@ let tests =
                 // floor naming the CORS control.
                 let config = {
                     ServerConfig.defaults with
-                        Cors =
-                            Some {
-                                Origins = [ "*" ]
-                                Methods = [ "*" ]
-                                Headers = [ "*" ]
-                                AllowCredentials = true
-                            }
+                        SecurityPosture = {
+                            ServerConfig.defaults.SecurityPosture with
+                                Cors =
+                                    Some {
+                                        Origins = [ "*" ]
+                                        Methods = [ "*" ]
+                                        Headers = [ "*" ]
+                                        AllowCredentials = true
+                                    }
+                        }
                 }
 
                 let mutable baselineReached = false
@@ -787,7 +796,8 @@ let tests =
                     dispose app
             }
 
-            test "a credentialed grant to an arbitrary origin is observed even when ServerConfig.Cors is unset" {
+            test
+                "a credentialed grant to an arbitrary origin is observed even when ServerConfig.SecurityPosture.Cors is unset" {
                 let app, host = composedHost (Some "0.0.0.0") ignore reflectingCors
 
                 try
@@ -802,8 +812,11 @@ let tests =
             test "forwarded-headers trust makes a proxied HTTPS request HTTPS; without it the Secure flag is lost" {
                 let trusted = {
                     ServerConfig.defaults with
-                        TrustForwardedHeaders = true
-                        TrustedProxyCidrs = [ "10.0.0.0/8" ]
+                        SecurityPosture = {
+                            ServerConfig.defaults.SecurityPosture with
+                                TrustForwardedHeaders = true
+                                TrustedProxyCidrs = [ "10.0.0.0/8" ]
+                        }
                 }
 
                 let peer = HostingBaseline.proxyPeerFor trusted

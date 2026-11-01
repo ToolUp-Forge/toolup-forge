@@ -423,9 +423,14 @@ let compose (plan: CompositionPlan) =
                 | Some s -> s.Trim().ToLowerInvariant() = "json"
 
             if wantsJson then
-                JsonConsoleLogger.JsonConsoleLogger(config.LogLevel, config.TraceCategories) :> ILogger
+                JsonConsoleLogger.JsonConsoleLogger(
+                    config.Observability.LogLevel,
+                    config.Observability.TraceCategories
+                )
+                :> ILogger
             else
-                ConsoleLogger.ConsoleLogger(config.LogLevel, config.TraceCategories) :> ILogger)
+                ConsoleLogger.ConsoleLogger(config.Observability.LogLevel, config.Observability.TraceCategories)
+                :> ILogger)
 
     // ─── Phase 828 — the self-hosted log store ─────────────────────────
     //
@@ -480,7 +485,7 @@ let compose (plan: CompositionPlan) =
     // (built and DI-registered further down in this function). The
     // post-save hook dispatch site reads it from the runtime.
 
-    // Resolve event store per config.EventStore.
+    // Resolve event store per config.Stores.EventStore.
     // - InMemoryOnly: thread-safe list, lost on restart.
     // - PersistentBlobBacked: blob-backed append-only store using
     //   the registered IBlobStorage (LocalFileStorage on disk by
@@ -488,7 +493,7 @@ let compose (plan: CompositionPlan) =
     // The persistent store is kept as a value: the MaintenanceApi handler
     // and the /dev/inspect index inspector hold the same instance.
     let persistentEventStore =
-        match config.EventStore with
+        match config.Stores.EventStore with
         | InMemoryOnly -> None
         | PersistentBlobBacked retention ->
             Some(PersistentEventStore.PersistentEventStore(resolvedBlobStorage, retention))
@@ -509,7 +514,7 @@ let compose (plan: CompositionPlan) =
     // create/update/delete) writes through the wrapped store below —
     // admins *can* alert on those.
     //
-    // Phase 1g — `NoWebhooks` (the default) skips every registration:
+    // Phase 1g — `FeatureMode.Disabled` (the default) skips every registration:
     // no dispatcher `BackgroundService`, no `HookedEventStore`
     // decorator wrapping `IEventStore`, no `IWebhookRegistry` /
     // `IWebhookDeliveryLog` / `IWebhookDispatcher` DI services, and
@@ -642,7 +647,7 @@ let compose (plan: CompositionPlan) =
     // `IShareTokenStore`. Fold-left applies decorators outside-in so
     // the LAST `withShareTokenStoreDecorator` call wraps the others
     // (matching the docstring contract on the builder). No-op when
-    // `ServerConfig.ShareTokenStore = NoShareTokenStore` — the
+    // `ServerConfig.Stores.ShareTokenStore = FeatureMode.Disabled` — the
     // underlying instance is `None` so the decorator list is
     // structurally unreachable. `SurfaceCoherenceValidator` (Stream
     // B.2) warns at startup when decorators are registered but no
@@ -808,21 +813,21 @@ let compose (plan: CompositionPlan) =
 
     // Phase 7b — user-authored schema store + migration job handler
     // (extracted to `ComposeStores.registerUserSchemaStore`). No-op unless
-    // `UserSchemaAuthoring = EnabledUserSchemaAuthoring`.
+    // `UserSchemaAuthoring = FeatureMode.Enabled`.
     registerUserSchemaStore services config
 
     // Phase 599 — entity-write outbox surface + relay drain (extracted
     // to `ComposeStores.registerEntityOutbox`). No-op unless
-    // `EntityOutbox = EnabledEntityOutbox` with the entity store on.
+    // `EntityOutbox = FeatureMode.Enabled` with the entity store on.
     registerEntityOutbox services config resolvedLogger
 
     // Phase 1027 — durable lineage: the lineage outbox + its relay drain
     // (`ComposeStores.registerLineageOutbox`). No-op unless
-    // `LineageDurability = EnabledDurableLineage` built an outbox.
+    // `LineageDurability = FeatureMode.Enabled` built an outbox.
     registerLineageOutbox services config lineageOutbox resolvedLogger
 
     // Phase 161 — time-series substrate. Conditional on
-    // `ServerConfig.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips
+    // `ServerConfig.Stores.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips
     // registration entirely; `CustomTimeSeriesStore` leaves the consumer's
     // companion singleton in place.
     registerTimeSeriesStore services config
@@ -842,7 +847,7 @@ let compose (plan: CompositionPlan) =
     // `/api/observability/alerts`. A no-op when no rule is declared.
     ComposeObservability.registerObservabilityReadback services config
 
-    // Phase 448 — dataset substrate. Conditional on `ServerConfig.Datasets`;
+    // Phase 448 — dataset substrate. Conditional on `ServerConfig.Stores.Datasets`;
     // `NoDatasets` (default) skips registration entirely; `BlobDatasets`
     // registers the blob-backed default lazily; `CustomDatasetStore` leaves
     // the consumer's own `IDatasetStore` singleton in place.
@@ -865,14 +870,14 @@ let compose (plan: CompositionPlan) =
     registerBackupCoordinator services config innerBlobStorage encryptionKeyResolver
 
     // Phase 528 — session registry. Conditional on
-    // `ServerConfig.SessionRegistry`; `NoSessionRegistry` (default) skips
+    // `ServerConfig.Stores.SessionRegistry`; `NoSessionRegistry` (default) skips
     // registration entirely, so neither the revocation middleware nor the
     // ISessionApi route has a store to resolve; `BlobSessionRegistry`
     // registers the blob-backed default lazily; `CustomSessionRegistry`
     // leaves the consumer's own `ISessionRegistry` singleton in place.
     registerSessionRegistry services config
     // Phase 527 — service-account substrate. Conditional on
-    // `ServerConfig.ServiceAccounts`; `NoServiceAccounts` (default) skips
+    // `ServerConfig.Stores.ServiceAccounts`; `NoServiceAccounts` (default) skips
     // registration entirely; `EnabledServiceAccounts` registers the
     // blob-backed default lazily; `CustomServiceAccountStore` leaves the
     // consumer's own `IServiceAccountStore` singleton in place.
@@ -883,29 +888,29 @@ let compose (plan: CompositionPlan) =
     // CustomGraphStore leaves an engine companion's singleton in place.
     registerGraphStore services config
 
-    // Phase 163 — end-user telemetry sink. NoTelemetrySink (default)
-    // registers the NoOpTelemetrySink; CustomTelemetrySink leaves the
+    // Phase 163 — end-user telemetry sink. FeatureMode.Disabled (default)
+    // registers the NoOpTelemetrySink; FeatureMode.Enabled leaves the
     // consumer's companion sink in place.
     registerTelemetrySink services config
 
-    // Phase 318 — external-compute broker. NoExternalCompute (default)
+    // Phase 318 — external-compute broker. FeatureMode.Disabled (default)
     // registers the NoExternalComputeDispatcher lazily, so Submit is a
-    // typed not-configured refusal; CustomExternalCompute leaves the
+    // typed not-configured refusal; FeatureMode.Enabled leaves the
     // consumer's companion dispatcher in place.
     registerExternalCompute services config
 
     // Column-mapping substrate (mapping-aware Data Manager). Conditional
-    // on `ServerConfig.ColumnMapping`; `NoColumnMapping` (default) skips
+    // on `ServerConfig.ColumnMapping`; `FeatureMode.Disabled` (default) skips
     // registration entirely.
     registerColumnMappingStore services config
 
     // Phase 159 — durable per-subject consent-state store. Conditional
-    // on `ServerConfig.ConsentStateStore`; `NoConsentStateStore`
+    // on `ServerConfig.Stores.ConsentStateStore`; `NoConsentStateStore`
     // (default) registers nothing.
     registerConsentStateStore services config
 
     // Phase 6f.A — the external address book. Conditional on
-    // `ServerConfig.ExternalContactStore`; `NoExternalContactStore`
+    // `ServerConfig.Stores.ExternalContactStore`; `FeatureMode.Disabled`
     // (default) registers nothing.
     registerExternalContactStore services config
 
@@ -930,8 +935,8 @@ let compose (plan: CompositionPlan) =
     let usageLogInstance =
         registerUsageMetering services config resolvedBlobStorage eventStore resolvedLogger quotaPolicyOverride
 
-    // Phase 451 — compute-budget governance. `NoComputeBudget` (default)
-    // registers nothing and wraps nothing. `EnabledComputeBudget` registers
+    // Phase 451 — compute-budget governance. `FeatureMode.Disabled` (default)
+    // registers nothing and wraps nothing. `FeatureMode.Enabled` registers
     // the blob-backed store + the shared guard and replaces the already-
     // registered IExternalComputeDispatcher instance with the budget
     // decorator. Deliberately AFTER registerUsageMetering (the guard meters
@@ -973,7 +978,7 @@ let compose (plan: CompositionPlan) =
     registerShareTokenStore services shareTokenStoreInstance
 
     // Phase 442 — register the presence + soft-lock substrate when
-    // `ServerConfig.Presence = EnabledPresence` (extracted to
+    // `ServerConfig.Presence = FeatureMode.Enabled` (extracted to
     // `ComposeNotifications.registerPresenceSubstrate`).
     registerPresenceSubstrate services notificationStack.PresenceSubstrate
 
@@ -1048,12 +1053,12 @@ let compose (plan: CompositionPlan) =
 
     // Phase 9p — opt-in HealthStateTracker BackgroundService (extracted
     // to `ComposeRuntimeServices.registerHealthStateTracker`). Gated
-    // on `config.HealthStateTracking` AND ProcessProfile matrix.
+    // on `config.Observability.HealthStateTracking` AND ProcessProfile matrix.
     registerHealthStateTracker services config auditLog resolvedLogger
 
     // Phase 178 — opt-in alert-rule / threshold engine BackgroundService
     // (extracted to `ComposeRuntimeServices.registerAlertRuleEngine`).
-    // Gated on a non-empty `config.AlertRules` AND the ProcessProfile
+    // Gated on a non-empty `config.Observability.AlertRules` AND the ProcessProfile
     // matrix. Passes the decorated `resolvedNotificationChannel` so
     // `ViaSink` deliveries route through the transactional dispatcher.
     registerAlertRuleEngine services config resolvedNotificationChannel resolvedLogger
@@ -1130,10 +1135,10 @@ let compose (plan: CompositionPlan) =
         resolvedLogger
 
     // Phase 449 — opt-in model-fit envelope (extracted to
-    // `ComposeJobs.registerModelFitting`). `EnabledModelFitting` indexes the
+    // `ComposeJobs.registerModelFitting`). `FeatureMode.Enabled` indexes the
     // registered `IModelFitProvider` companions + binds the fit-run job
     // handler; requires `JobScheduler = InProcessJobScheduler` (misconfigured
-    // pair logs a Warn and skips). `NoModelFitting` (default) registers
+    // pair logs a Warn and skips). `FeatureMode.Disabled` (default) registers
     // nothing — zero cost (GP 13).
     registerModelFitting services config jobSchedulerInstance auditLog resolvedLogger
 
@@ -1293,8 +1298,8 @@ let compose (plan: CompositionPlan) =
 
     // Phase 54 — opt-in tenant-lifecycle hooks + snapshot (extracted to
     // `ComposeTenantLifecycle.registerTenantLifecycle`). Gated on
-    // `config.TenantLifecycle = EnabledTenantLifecycle`; the default
-    // `NoTenantLifecycle` is a no-op. Hooks resolve their substrate
+    // `config.TenantLifecycle = FeatureMode.Enabled`; the default
+    // `FeatureMode.Disabled` is a no-op. Hooks resolve their substrate
     // lazily from the built provider at request time, so this runs
     // before companion registrations without ordering coupling.
     ComposeTenantLifecycle.registerTenantLifecycle services config

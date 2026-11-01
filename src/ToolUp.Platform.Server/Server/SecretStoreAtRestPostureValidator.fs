@@ -49,7 +49,7 @@ open ToolUp.Platform.Secrets
 //
 // `TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1` and the older
 // `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE=1` both set
-// `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired` through
+// `ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired` through
 // `ServerConfig.fromEnv`, so all three plaintext-secret validators honour
 // either. This validator ALSO resolves the shorter key itself, because a
 // consumer that builds its `ServerConfig` by hand never goes through
@@ -122,7 +122,7 @@ let encryptsAtRest (store: ISecretStore) : bool =
 /// spelling) and the shorter key read straight through the config seam
 /// for a hand-built `ServerConfig`.
 let internal acknowledged (config: ServerConfig) : bool =
-    config.AcceptPlaintextSecretsWhenAuthRequired
+    config.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired
     || (match ConfigResolution.tryValue ConfigKeys.Names.acceptPlaintextSecrets with
         | None -> false
         | Some v ->
@@ -137,7 +137,7 @@ let internal acknowledged (config: ServerConfig) : bool =
 /// severity decides what happens at startup, never what the operator is
 /// told to do about it (the `OAuthSecretEncryptionModeValidator` rule).
 let private resolutions =
-    "Resolutions: (1) compose EncryptedSecretStore over the local store and set TOOLUP_SECRETS_MASTER_KEY to a base64-encoded 32-byte key (EncryptedSecretStore.generateMasterKey () once during deployment setup) — note the SDK's default store is a raw FileSecretStore with no encryption, so the key alone does nothing until the decorator is composed; (2) switch to a KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / gcp-secret-manager / vault) and wire that companion's resolver; (3) if the storage medium itself provides at-rest encryption (disk FDE, an encrypting volume, a KMS-managed bucket) and you have made an informed decision to rely on it, acknowledge that with TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1 (or ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true) — the deployment then boots and the acknowledgement is reported as a warning. A custom ISecretStore that does encrypt can declare it by implementing ISecretStoreAtRestPosture. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+    "Resolutions: (1) compose EncryptedSecretStore over the local store and set TOOLUP_SECRETS_MASTER_KEY to a base64-encoded 32-byte key (EncryptedSecretStore.generateMasterKey () once during deployment setup) — note the SDK's default store is a raw FileSecretStore with no encryption, so the key alone does nothing until the decorator is composed; (2) switch to a KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / gcp-secret-manager / vault) and wire that companion's resolver; (3) if the storage medium itself provides at-rest encryption (disk FDE, an encrypting volume, a KMS-managed bucket) and you have made an informed decision to rely on it, acknowledge that with TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1 (or ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired = true) — the deployment then boots and the acknowledgement is reported as a warning. A custom ISecretStore that does encrypt can declare it by implementing ISecretStoreAtRestPosture. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
 
 /// Phase 457 — refuse an auth-requiring deployment whose composed secret
 /// store does not encrypt at rest, whichever store that is.
@@ -177,7 +177,7 @@ type SecretStoreAtRestPostureValidator(config: ServerConfig, secretStore: ISecre
                         return
                             Warning(
                                 sprintf
-                                    "ServerConfig.Surfaces = %s and the composed ISecretStore does not encrypt at rest (%s), so every BYOK provider key, OAuth token and webhook secret this deployment stores is readable by anything that can read the medium. This is NOT being refused only because the plaintext-secrets acknowledgement is set (TOOLUP_ACCEPT_PLAINTEXT_SECRETS / ServerConfig.AcceptPlaintextSecretsWhenAuthRequired). Confirm the medium really does provide at-rest encryption; if it does not, clear the acknowledgement. %s"
+                                    "ServerConfig.Surfaces = %s and the composed ISecretStore does not encrypt at rest (%s), so every BYOK provider key, OAuth token and webhook secret this deployment stores is readable by anything that can read the medium. This is NOT being refused only because the plaintext-secrets acknowledgement is set (TOOLUP_ACCEPT_PLAINTEXT_SECRETS / ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired). Confirm the medium really does provide at-rest encryption; if it does not, clear the acknowledgement. %s"
                                     label
                                     reason
                                     resolutions

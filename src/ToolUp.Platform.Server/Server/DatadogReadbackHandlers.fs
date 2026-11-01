@@ -20,7 +20,7 @@ open ToolUp.Platform.Metrics
 // Read-only surface over a DI-registered `IDatadogReadbackApi` — the
 // `ToolUp.Observability.Datadog` companion is the shipped
 // implementation. Mounted only when
-// `ServerConfig.DatadogReadback = EnabledDatadogReadback`, so a
+// `ServerConfig.Observability.DatadogReadback = EnabledDatadogReadback`, so a
 // deployment that does not read from Datadog carries no route and pays
 // nothing (GP 13).
 //

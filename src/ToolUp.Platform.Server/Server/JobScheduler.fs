@@ -183,9 +183,9 @@ type private LoopState = {
 // `IBlobStorage`-backed `IJobStore` both notice the same due job; the cron
 // tick is an election over `SchedulerOptions.DistributedLock`, so they run
 // it once only when that lock is SHARED. `JobSchedulerInstanceValidator`
-// refuses `ServerConfig.ReplicaCount > 1` with this scheduler unless the
+// refuses `ServerConfig.MultiInstance.ReplicaCount > 1` with this scheduler unless the
 // deployment composed a shared lock (`ServerApp.withDistributedLock`) or
-// set `ServerConfig.AcceptInProcessSchedulerInMultiInstance`.
+// set `ServerConfig.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance`.
 //
 // **Dispatch concurrency.** Each in-flight job takes a
 // per-`JobId` lease on the injected `IDistributedLock` before any
@@ -257,7 +257,7 @@ type SchedulerOptions = {
     /// Where handlers' progress checkpoints go. `None` gives handlers
     /// `JobProgressReporter.noOp` and writes nothing (GP 13);
     /// `JobScheduler.progressSinkFor` builds the fan-out sink a deployment
-    /// with `JobProgress = EnabledJobProgress` wants.
+    /// with `JobProgress = FeatureMode.Enabled` wants.
     ProgressSink: IJobProgressSink option
     /// The carrier a typed `Schedule` stamps a job's scope with and a
     /// dispatch redeems it through, bound at construction. `None` is a
@@ -1901,7 +1901,7 @@ let create (deps: SchedulerDeps) (options: SchedulerOptions) : InProcessJobSched
     new InProcessJobScheduler(deps, options)
 
 /// The fan-out progress sink a deployment with
-/// `JobProgress = EnabledJobProgress` wants (`None` under `NoJobProgress`),
+/// `JobProgress = FeatureMode.Enabled` wants (`None` under `FeatureMode.Disabled`),
 /// for `SchedulerOptions.ProgressSink`. Built once by the caller so DI and
 /// the scheduler share one instance, and so one per-job rate-limit window:
 /// two instances would each keep their own and a chatty handler would
@@ -1913,6 +1913,6 @@ let create (deps: SchedulerDeps) (options: SchedulerOptions) : InProcessJobSched
 /// `JobId` against the job it already has.
 let progressSinkFor (deps: SchedulerDeps) : IJobProgressSink option =
     match deps.Config.JobProgress with
-    | NoJobProgress -> None
-    | EnabledJobProgress ->
+    | FeatureMode.Disabled -> None
+    | FeatureMode.Enabled ->
         Some(FanOutJobProgressSink(deps.NotificationChannel, deps.EventStore, deps.Logger) :> IJobProgressSink)

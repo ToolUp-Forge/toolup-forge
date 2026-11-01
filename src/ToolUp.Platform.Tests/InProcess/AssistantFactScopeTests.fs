@@ -139,7 +139,10 @@ let private servicesWith (model: IAIProvider) : ServiceProvider =
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> FactsCompose.withFactStore

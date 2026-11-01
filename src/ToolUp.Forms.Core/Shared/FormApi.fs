@@ -169,7 +169,7 @@ type SurveyOverviewRow = {
     /// Committed (non-`Draft`) submissions for this schema in scope.
     SubmissionCount: int
     /// Total tokens issued (active + revoked + expired). Always 0
-    /// when `ServerConfig.ShareTokenStore = NoShareTokenStore`.
+    /// when `ServerConfig.Stores.ShareTokenStore = FeatureMode.Disabled`.
     InvitedCount: int
     /// `SubmissionCount / InvitedCount` (None when InvitedCount = 0
     /// to avoid division-by-zero); renderer formats as percentage.
@@ -286,8 +286,8 @@ type IFormApi = {
     /// Returns one `(handle, tokenId, url, expiresAt)` row per
     /// recipient. The platform sends nothing — the caller handles
     /// distribution (own MTA, third-party survey provider, paper /
-    /// QR codes, etc.). Requires `ServerConfig.ShareTokenStore =
-    /// EnabledShareTokenStore` and `PublicBaseUrl = Some _`.
+    /// QR codes, etc.). Requires `ServerConfig.Stores.ShareTokenStore =
+    /// FeatureMode.Enabled` and `PublicBaseUrl = Some _`.
     [<AllowAnonymous>]
     [<Audit "Custom:ShareTokensIssued">]
     IssueTokens: IssueTokensRequest -> Async<Result<IssuedToken list, FormError>>

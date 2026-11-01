@@ -324,7 +324,10 @@ let private storeTests =
                 services
                 {
                     ServerConfig.defaults with
-                        EntityStore = EnabledEntityStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                EntityStore = FeatureMode.Enabled
+                        }
                 }
                 [
                     fun registry ->

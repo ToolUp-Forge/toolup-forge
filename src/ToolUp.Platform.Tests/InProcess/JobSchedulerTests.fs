@@ -2274,7 +2274,10 @@ let private lifecycleTests =
 let private replicaConfig: ServerConfig = {
     ServerConfig.defaults with
         JobScheduler = InProcessJobScheduler
-        ReplicaCount = 3
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = 3
+        }
 }
 
 let private validate (services: IServiceCollection option) =
@@ -2329,8 +2332,8 @@ let sharedLockTests =
             Expect.isNone o.ScopeCarrier "the scheduler's own carrier"
         }
 
-        test "progressSinkFor builds a sink only under EnabledJobProgress" {
-            let deps (progress: JobProgressMode) : JobScheduler.SchedulerDeps = {
+        test "progressSinkFor builds a sink only under FeatureMode.Enabled" {
+            let deps (progress: FeatureMode) : JobScheduler.SchedulerDeps = {
                 Store = Unchecked.defaultof<IJobStore>
                 EventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
                 NotificationChannel = silentChannel
@@ -2342,8 +2345,11 @@ let sharedLockTests =
                 ActivitySink = NoOpActivitySink() :> IActivitySink
             }
 
-            Expect.isNone (JobScheduler.progressSinkFor (deps NoJobProgress)) "nothing under NoJobProgress (GP 13)"
-            Expect.isSome (JobScheduler.progressSinkFor (deps EnabledJobProgress)) "the fan-out sink when asked"
+            Expect.isNone
+                (JobScheduler.progressSinkFor (deps FeatureMode.Disabled))
+                "nothing under FeatureMode.Disabled (GP 13)"
+
+            Expect.isSome (JobScheduler.progressSinkFor (deps FeatureMode.Enabled)) "the fan-out sink when asked"
         }
     ]
 

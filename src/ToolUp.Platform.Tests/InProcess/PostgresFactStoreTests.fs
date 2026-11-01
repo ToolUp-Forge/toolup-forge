@@ -90,8 +90,14 @@ let private composed (replicaCount: int) (knobs: ServerApp -> ServerApp) : Servi
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
-                        ReplicaCount = replicaCount
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = replicaCount
+                        }
                 }
         }
         |> knobs
@@ -606,13 +612,16 @@ let offlineTests =
             | other -> failtestf "expected one guard, got %d" other.Length
         }
 
-        testCase "withFactStoreImplementation under NoFactStore changes nothing"
+        testCase "withFactStoreImplementation under FeatureMode.Disabled changes nothing"
         <| fun _ ->
             let app = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 

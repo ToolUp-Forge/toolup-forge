@@ -42,7 +42,7 @@ type ILogger =
 ///
 /// Use a dotted-namespace category convention: `ai.sse`, `ai.agent`,
 /// `platform.sse`, `auth`, etc. The default `ConsoleLogger` does straight-
-/// string membership against `ServerConfig.TraceCategories` — no prefix
+/// string membership against `ServerConfig.Observability.TraceCategories` — no prefix
 /// matching, no globbing — so spell categories consistently.
 type ITraceLogger =
     abstract Trace: category: string * message: string -> unit

@@ -597,7 +597,10 @@ let private preflightGateTests =
 
     let multiReplica = {
         ServerConfig.defaults with
-            ReplicaCount = 3
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = 3
+            }
     }
 
     let wiredRegistry (channel: INotificationChannel) = async {

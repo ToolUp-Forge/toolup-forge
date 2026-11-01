@@ -46,7 +46,7 @@ open ToolUp.InterPlatform.PeerCompose
 //
 // **Generic substrate (GP 1); zero cost when unused (GP 11 / GP 13).**
 // Pure + on demand — nothing is built until a caller asks; a deployment
-// on `NoPeerSubstrate` yields the empty surface without running a single
+// on `FeatureMode.Disabled` yields the empty surface without running a single
 // contract builder, and a deployment that never calls `describe` is
 // byte-for-byte unchanged.
 
@@ -125,7 +125,7 @@ type PeerBudgetShape = {
 /// wire face.
 type PeerSurface = {
     /// Whether the peer substrate is enabled
-    /// (`ServerConfig.PeerSubstrate = EnabledPeerSubstrate`).
+    /// (`ServerConfig.MultiInstance.PeerSubstrate = FeatureMode.Enabled`).
     Enabled: bool
     /// The deployment's own declared peer id (`withLocalPeer`), or
     /// `None` for a host-only deployment that never calls peers.
@@ -290,7 +290,7 @@ module PeerSurface =
         }
 
     /// The empty surface — what a non-federating deployment
-    /// (`NoPeerSubstrate`) presents: nothing served, nothing consumed,
+    /// (`FeatureMode.Disabled`) presents: nothing served, nothing consumed,
     /// no trust posture, no budget shape.
     let empty: PeerSurface = {
         Enabled = false
@@ -358,7 +358,7 @@ module PeerSurface =
         }
 
     /// Assemble the deployment's cross-instance face from its composed
-    /// deployment and `PeerOptions`. Pure + on demand (GP 13): a `NoPeerSubstrate`
+    /// deployment and `PeerOptions`. Pure + on demand (GP 13): a `FeatureMode.Disabled`
     /// composition short-circuits to `empty` without running a single
     /// contract builder; an enabled composition materialises exactly the
     /// registrations `PeerCompose.withPeer` would compose, so a new
@@ -366,9 +366,9 @@ module PeerSurface =
     let describe (app: ServerApp, options: PeerOptions) : PeerSurface =
         let config = ServerApp.effectiveConfig app
 
-        match config.PeerSubstrate with
-        | NoPeerSubstrate -> empty
-        | EnabledPeerSubstrate ->
+        match config.MultiInstance.PeerSubstrate with
+        | FeatureMode.Disabled -> empty
+        | FeatureMode.Enabled ->
             // Mirror the peer companion's scheduler gate: routines are
             // advertised only when they are actually dispatchable.
             let fusion =

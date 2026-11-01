@@ -542,7 +542,16 @@ module CompositionRuleVersions =
     /// here in the same commit as the evaluator change — and the golden
     /// rule-manifest baseline turns that into a reviewed diff rather
     /// than a silent behaviour change.
-    let overrides: (string * RuleVersion) list = []
+    let overrides: (string * RuleVersion) list = [
+        // Phase 877 — the refusal names `ServerConfig.MultiInstance.PeerSubstrate = FeatureMode.Enabled`
+        // where it named the retired `EnabledPeerSubstrate`: a message change.
+        ScaleReadinessPreflight.IntentUnsatisfiableRule,
+        {
+            RuleMajor = 1
+            RuleMinor = 0
+            RulePatch = 1
+        }
+    ]
 
     /// Version a family's exported descriptors. Generic over any
     /// exported rule id: a rule with no override seeds at 1.0.0, so a

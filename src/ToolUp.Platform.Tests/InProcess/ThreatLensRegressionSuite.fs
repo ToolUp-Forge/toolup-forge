@@ -282,7 +282,10 @@ let private lens2ModeGating =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    AcceptHeaderAuthWhenAuthRequired = false
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptHeaderAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isTrue
@@ -294,7 +297,10 @@ let private lens2ModeGating =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.anonymous
-                    AcceptHeaderAuthWhenAuthRequired = false
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptHeaderAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isFalse
@@ -423,8 +429,14 @@ let private lens5EdgeAuth =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = CookieRequired
-                    AcceptQueryParamSseAuthWhenAuthRequired = false
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = CookieRequired
+                    }
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptQueryParamSseAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isFalse (isValidationError (sseValidator config)) "cookie auth is the production SSE path"
@@ -434,8 +446,14 @@ let private lens5EdgeAuth =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = QueryParamFallback
-                    AcceptQueryParamSseAuthWhenAuthRequired = false
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = QueryParamFallback
+                    }
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptQueryParamSseAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isTrue

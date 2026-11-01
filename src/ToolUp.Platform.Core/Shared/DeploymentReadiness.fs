@@ -327,7 +327,7 @@ module DeploymentReadiness =
 /// per-tenant (GP 4) — the read carries no tenant-scoped data.
 ///
 /// Mounted only when `ServerConfig.DeploymentReadiness =
-/// EnabledReadinessReport` (default `NoReadinessReport`, GP 11/13) — an
+/// FeatureMode.Enabled` (default `FeatureMode.Disabled`, GP 11/13) — an
 /// unopted deployment 404s the route and pays nothing.
 type IDeploymentReadinessApi = {
     [<RequiresRole "PlatformAdmin">]

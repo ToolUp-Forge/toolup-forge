@@ -17,8 +17,8 @@ open ToolUp.Forms.FormSchema
 //      not set"; surfacing the same fact at startup means operators see
 //      it before respondents try to load the link.
 //
-//   2. `Publishable` schemas are registered but `ServerConfig.ShareTokenStore
-//      = NoShareTokenStore` — `IssueTokens` will fail at runtime; same
+//   2. `Publishable` schemas are registered but `ServerConfig.Stores.ShareTokenStore
+//      = FeatureMode.Disabled` — `IssueTokens` will fail at runtime; same
 //      reasoning, surface earlier.
 //
 // **Severity (Phase 21e).** Persistent-data modes (`Individual` /
@@ -29,7 +29,7 @@ open ToolUp.Forms.FormSchema
 // (`Anonymous` / `AuthenticatedEphemeral`) preserve the original
 // `Warning` shape so dry runs and demos still boot.
 //
-// The escape hatch `ServerConfig.AcceptUnsignedPublishable = true`
+// The escape hatch `ServerConfig.RiskAcknowledgements.AcceptUnsignedPublishable = true`
 // (env `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE=1`) downgrades the
 // persistent-mode `Error` to `Warning` for the
 // staging-shape-in-production-mode edge case — explicit operator
@@ -59,10 +59,10 @@ type PublishableFormConfigValidator
             let issues = ResizeArray<string>()
 
             if not (List.isEmpty registeredPublishable) then
-                if config.ShareTokenStore = NoShareTokenStore then
+                if config.Stores.ShareTokenStore = FeatureMode.Disabled then
                     issues.Add(
                         sprintf
-                            "Publishable schemas registered (%s) but ServerConfig.ShareTokenStore = NoShareTokenStore — IssueTokens will fail at runtime."
+                            "Publishable schemas registered (%s) but ServerConfig.Stores.ShareTokenStore = FeatureMode.Disabled — IssueTokens will fail at runtime."
                             (String.concat ", " registeredPublishable)
                     )
 
@@ -93,11 +93,11 @@ type PublishableFormConfigValidator
                 // `Anonymous` / `AuthenticatedEphemeral`.
                 let isPersistentMode = DeploymentConfig.hasPersistentAuthenticatedStorage config
 
-                if isPersistentMode && not config.AcceptUnsignedPublishable then
+                if isPersistentMode && not config.RiskAcknowledgements.AcceptUnsignedPublishable then
                     return
                         Error(
                             sprintf
-                                "%s Set ServerConfig.AcceptUnsignedPublishable = true (or TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE=1) to override if intentional."
+                                "%s Set ServerConfig.RiskAcknowledgements.AcceptUnsignedPublishable = true (or TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE=1) to override if intentional."
                                 combined
                         )
                 else

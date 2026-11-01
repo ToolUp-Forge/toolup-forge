@@ -89,13 +89,16 @@ let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : 
 /// The composed fact tier the way a deployment builds it —
 /// `FactsCompose.withFactStore` under the knob, its service config run
 /// over a substrate-seeded collection. Returns (composed app, provider).
-let private composedUnder (knob: FactStoreMode) (registry: IMetricRegistry option) : ServerApp * ServiceProvider =
+let private composedUnder (knob: FeatureMode) (registry: IMetricRegistry option) : ServerApp * ServiceProvider =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -181,8 +184,8 @@ let registrationTests =
                 "the description teaches that the subject/metric vocabulary comes from the registry"
         }
 
-        test "EnabledFactStore declares the tool on ServerApp.AITools alongside the store — one knob" {
-            let app, sp = composedUnder EnabledFactStore None
+        test "FeatureMode.Enabled declares the tool on ServerApp.AITools alongside the store — one knob" {
+            let app, sp = composedUnder FeatureMode.Enabled None
 
             // Phase 703 added `query_metric_population` to the SAME knob:
             // one compose declares the point read and the population read
@@ -206,12 +209,15 @@ let registrationTests =
             Expect.isTrue (isNull (sp.GetService(typeof<AIToolRegistry>))) "no AI tool registry in a no-AI composition"
         }
 
-        test "NoFactStore composes byte-identically: no tool declared, the app untouched (GP 11 / GP 13)" {
+        test "FeatureMode.Disabled composes byte-identically: no tool declared, the app untouched (GP 11 / GP 13)" {
             let before = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
@@ -224,7 +230,7 @@ let registrationTests =
         test "the composeAI-shaped pickup registers the tool into the AI tool registry" {
             // Mirror of `composeAI`'s module-tool pickup: every
             // `ServerApp.AITools` pair becomes a `RegisteredTool`.
-            let app, _ = composedUnder EnabledFactStore None
+            let app, _ = composedUnder FeatureMode.Enabled None
 
             let registry = AIToolRegistry()
             registry.RegisterAll(app.AITools |> List.map (fun (def, exec) -> createTool def exec))
@@ -259,7 +265,9 @@ let egressTests =
 
         testCase "a Surfaceable fact answers with rendering, freshness, and method identity — never store internals"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith UntilSuperseded "N0"))
+            let _, sp =
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded "N0"))
+
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             let fact = assertFact store scope (draft "revenue" q2 [ "h1" ] 21800m)
@@ -287,7 +295,7 @@ let egressTests =
         testCase
             "a fact names the inputs it was computed from by content hash, and nothing else of its evidence (Phase 994)"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             let input = "sha256:" + String('a', 64)
@@ -313,7 +321,7 @@ let egressTests =
 
         testCase "an Internal fact projects to the typed marker — policy ref + canonical refusal, never the value"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -353,7 +361,7 @@ let egressTests =
 
         testCase "a query hitting only restricted facts returns markers, never an empty result"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -410,7 +418,7 @@ let auditAndScopeTests =
 
         testCaseAsync "a denied fact writes a FactDisclosureDenied audit row at the ToolResult surface"
         <| async {
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -435,7 +443,7 @@ let auditAndScopeTests =
 
         testCaseAsync "another scope's facts are structurally unreachable through the tool (GP 4)"
         <| async {
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scopeA = newScope ()
             let scopeB = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
@@ -566,7 +574,7 @@ let temporalTests =
 
         testCaseAsync "the period window restricts to overlapping facts only"
         <| async {
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -600,7 +608,7 @@ let validationTests =
         let expectError (args: string) (fragment: string) (label: string) =
             testCase label
             <| fun () ->
-                let _, sp = composedUnder EnabledFactStore None
+                let _, sp = composedUnder FeatureMode.Enabled None
                 let el = executeVia sp (newScope ()) args
 
                 Expect.stringContains (str el "error") fragment "the error names the offending argument"

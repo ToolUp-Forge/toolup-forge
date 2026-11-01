@@ -564,12 +564,15 @@ module LayoutCensus =
         }
 
     /// An AI composition with or without the fact store and the page store.
-    let aiApp (factStore: FactStoreMode) (pageStore: bool) : ServerApp * AIOptions =
+    let aiApp (factStore: FeatureMode) (pageStore: bool) : ServerApp * AIOptions =
         let app = {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = factStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = factStore
+                        }
                 }
         }
 
@@ -660,23 +663,25 @@ let private layoutCensusTests =
         test
             "a deployment composing no layout tools, or composing them without a page store, lists the same tools byte for byte" {
             let without =
-                LayoutCensus.providerDefinitions (LayoutCensus.aiApp EnabledFactStore false)
+                LayoutCensus.providerDefinitions (LayoutCensus.aiApp FeatureMode.Enabled false)
 
             let withoutPageStore =
                 LayoutCensus.providerDefinitions (
-                    LayoutCensus.aiApp EnabledFactStore false |> PresentationCompose.withLayoutTools
+                    LayoutCensus.aiApp FeatureMode.Enabled false
+                    |> PresentationCompose.withLayoutTools
                 )
 
             Expect.equal withoutPageStore without "no page store: the same list"
 
             let pageStoreOnly =
-                LayoutCensus.providerDefinitions (LayoutCensus.aiApp EnabledFactStore true)
+                LayoutCensus.providerDefinitions (LayoutCensus.aiApp FeatureMode.Enabled true)
 
             Expect.equal pageStoreOnly without "a page store alone adds no tool"
 
             let composed =
                 LayoutCensus.providerDefinitions (
-                    LayoutCensus.aiApp EnabledFactStore true |> PresentationCompose.withLayoutTools
+                    LayoutCensus.aiApp FeatureMode.Enabled true
+                    |> PresentationCompose.withLayoutTools
                 )
 
             Expect.equal (List.length composed) (List.length without + 9) "composed: nine more"

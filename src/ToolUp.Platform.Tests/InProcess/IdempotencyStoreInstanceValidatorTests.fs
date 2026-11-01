@@ -9,7 +9,10 @@ open ToolUp.Remoting.Server
 
 let private cfg (replicaCount: int) : ServerConfig = {
     ServerConfig.defaults with
-        ReplicaCount = replicaCount
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
 }
 
 /// A `ServiceCollection` with the in-memory default `IIdempotencyStore`

@@ -859,7 +859,10 @@ let private compositionTests =
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
             }
 
@@ -953,7 +956,10 @@ let private composeDemo () : DemoApp =
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> FactsCompose.withFactStore

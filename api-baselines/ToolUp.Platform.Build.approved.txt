@@ -171,17 +171,24 @@ ToolUp.Platform.BuildOutputModule (class)
 ToolUp.Platform.BuildOutputModule.defaults : ToolUp.Platform.BuildOutput { get }
 ToolUp.Platform.Codemod (class)
 ToolUp.Platform.Codemod.analyseFile(System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
+ToolUp.Platform.Codemod.analyseFileFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
 ToolUp.Platform.Codemod.apply(ToolUp.Platform.CodemodPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Codemod.classify(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CodemodFileClass]
+ToolUp.Platform.Codemod.concernFields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
+ToolUp.Platform.Codemod.featureModes : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]] { get }
+ToolUp.Platform.Codemod.migrationOfPhase(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CodemodMigration]
 ToolUp.Platform.Codemod.plan(System.String) : ToolUp.Platform.CodemodPlan
+ToolUp.Platform.Codemod.planFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], System.String) : ToolUp.Platform.CodemodPlan
 ToolUp.Platform.Codemod.prunedDirectories : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.Codemod.renderDiff(ToolUp.Platform.CodemodPlan) : System.String
 ToolUp.Platform.Codemod.renderFindings(ToolUp.Platform.CodemodPlan) : System.String
 ToolUp.Platform.Codemod.renderSummary(ToolUp.Platform.CodemodPlan) : System.String
 ToolUp.Platform.Codemod.reviewRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodReviewRule] { get }
 ToolUp.Platform.Codemod.reviewText(ToolUp.Platform.CodemodFileClass, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFinding]
+ToolUp.Platform.Codemod.reviewTextFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], ToolUp.Platform.CodemodFileClass, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFinding]
 ToolUp.Platform.Codemod.rewriteRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewriteRule] { get }
 ToolUp.Platform.Codemod.rewriteText(ToolUp.Platform.CodemodFileClass, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite]]
+ToolUp.Platform.Codemod.rewriteTextFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], ToolUp.Platform.CodemodFileClass, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite]]
 ToolUp.Platform.Codemod.walk(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CodemodFileClass, System.String]]
 ToolUp.Platform.CodemodFileClass (class)
 ToolUp.Platform.CodemodFileClass.IsProject : System.Boolean { get }
@@ -225,6 +232,7 @@ ToolUp.Platform.CodemodMigration.IsCompanionOptions : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsDeprecations : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsJobOutcomes : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsModelCapabilities : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsNestedConfig : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsOneScopeForm : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemoting : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemotingLeftovers : System.Boolean { get }
@@ -232,6 +240,7 @@ ToolUp.Platform.CodemodMigration.IsShellSlots : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.JobOutcomes : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ModelCapabilities : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.NestedConfig : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.OneScopeForm : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Remoting : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.RemotingLeftovers : ToolUp.Platform.CodemodMigration { get }
@@ -247,6 +256,7 @@ ToolUp.Platform.CodemodMigration+Tags.CompanionOptions : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Deprecations : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.JobOutcomes : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ModelCapabilities : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.NestedConfig : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.OneScopeForm : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Remoting : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RemotingLeftovers : System.Int32 (literal)

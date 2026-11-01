@@ -39,7 +39,7 @@ type ITeamQuotaPolicy =
 
 /// SDK-default no-op `ITeamQuotaPolicy`. Both checks return `Ok ()`
 /// unconditionally. Registered when `ServerConfig.UsageMetering =
-/// NoUsageMetering` so decorators can resolve the service
+/// FeatureMode.Disabled` so decorators can resolve the service
 /// unconditionally — `ITeamQuotaPolicy` is never `null` in DI when the
 /// SDK is composed. Mirrors the `NoOpUsageLog` and `NoOpAuditLog`
 /// patterns.

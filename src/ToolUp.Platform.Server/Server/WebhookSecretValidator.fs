@@ -21,7 +21,7 @@ open ToolUp.Platform.ConfigValidation
 // exposure, so it runs even under `ServerConfig.SkipPreflight` — a
 // noisy-companion bypass lever must never silently re-expose every
 // tenant's webhook signing secret. Registered only when
-// `Webhooks = EnabledWebhooks`, so a deployment without webhooks never
+// `Webhooks = FeatureMode.Enabled`, so a deployment without webhooks never
 // scans.
 //
 // Remediation is the compose-time opt-in

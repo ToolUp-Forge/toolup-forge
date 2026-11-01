@@ -48,6 +48,10 @@ type CodemodMigration =
     /// A companion root is an options record composed onto a `ServerApp`
     /// with one `withX options` entry point, not a record wrapping it.
     | CompanionOptions
+    /// `ServerConfig` is nested by concern (`SecurityPosture`,
+    /// `RiskAcknowledgements`, `MultiInstance`, `Observability`, `Stores`)
+    /// and every payload-free two-case `*Mode` is the one `FeatureMode`.
+    | NestedConfig
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -70,6 +74,7 @@ module CodemodMigration =
         | CodemodMigration.BackgroundPlacement ->
             "docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md"
         | CodemodMigration.CompanionOptions -> "docs/migrations/876-composition-contributions.md"
+        | CodemodMigration.NestedConfig -> "docs/migrations/877-nested-server-config.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -87,6 +92,7 @@ module CodemodMigration =
         | CodemodMigration.OneScopeForm -> "Phase 1157"
         | CodemodMigration.BackgroundPlacement -> "Phase 1067"
         | CodemodMigration.CompanionOptions -> "Phase 876"
+        | CodemodMigration.NestedConfig -> "Phase 877"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -305,6 +311,169 @@ module Codemod =
     /// one per labelled slot, plus the platform-users module's.
     let private labelRecords =
         "HomeModule|TeamManager|TeamConfig|WebhookAdmin|ServiceAccountAdmin|ExternalContactManager|NotificationPreferences|ModuleVisibilityAdmin|SessionSecurity|PermissionsAdmin|UsageDashboard|AuditViewer|DataIngestionAdmin|PlatformAdmin|HealthMonitor|ServiceStatusBoard|DataSubjectRequestAdmin|MigrationAdmin|CompositionInspector|PlatformUsers"
+
+    // ── The Phase 877 tables ──────────────────────────────────────────
+
+    /// The thirty-seven payload-free two-case `*Mode` unions that became
+    /// `FeatureMode`, as (type, off case, on case). The table is the
+    /// migration doc's mode map; a type that kept its own shape (a
+    /// payload, a third case, a choice between substrates) is not here.
+    let featureModes: (string * string * string) list = [
+        "PlatformKnowledgeBaseMode", "NoPlatformKnowledgeBase", "EnabledPlatformKnowledgeBase"
+        "LineageStoreMode", "NoLineageStore", "EnabledLineageStore"
+        "LineageDurabilityMode", "NoDurableLineage", "EnabledDurableLineage"
+        "JobProgressMode", "NoJobProgress", "EnabledJobProgress"
+        "ShareTokenStoreMode", "NoShareTokenStore", "EnabledShareTokenStore"
+        "DataIngestionMode", "NoDataIngestion", "EnabledDataIngestion"
+        "ColumnMappingMode", "NoColumnMapping", "EnabledColumnMapping"
+        "OAuthRefresherMode", "NoOAuthRefresher", "EnabledOAuthRefresher"
+        "OAuth1aMode", "NoOAuth1a", "EnabledOAuth1a"
+        "EntityStoreMode", "NoEntityStore", "EnabledEntityStore"
+        "EntityOutboxMode", "NoEntityOutbox", "EnabledEntityOutbox"
+        "EntityGraphProjectionMode", "NoEntityGraphProjection", "EnabledEntityGraphProjection"
+        "ModelFittingMode", "NoModelFitting", "EnabledModelFitting"
+        "ModelExecutionApiMode", "NoModelExecutionApi", "EnabledModelExecutionApi"
+        "ExternalComputeMode", "NoExternalCompute", "CustomExternalCompute"
+        "ComputeBudgetMode", "NoComputeBudget", "EnabledComputeBudget"
+        "TelemetrySinkMode", "NoTelemetrySink", "CustomTelemetrySink"
+        "UsageMeteringMode", "NoUsageMetering", "EnabledUsageMetering"
+        "MetricsEndpointMode", "NoMetricsEndpoint", "EnabledMetricsEndpoint"
+        "WebhookMode", "NoWebhooks", "EnabledWebhooks"
+        "AuditLogMode", "NoAuditLog", "EnabledAuditLog"
+        "AuthCookieIssuanceMode", "NoAuthCookieIssuance", "EnabledAuthCookieIssuance"
+        "ConfigDriftDetectionMode", "NoConfigDriftDetection", "EnabledConfigDriftDetection"
+        "RateLimiterMode", "NoRateLimiter", "EnabledRateLimiter"
+        "SmokeTestMode", "NoSmokeTest", "EnabledSmokeTest"
+        "AssetStoreMode", "NoAssetStore", "EnabledAssetStore"
+        "MediaLibraryMode", "NoMediaLibrary", "EnabledMediaLibrary"
+        "DeploymentReadinessMode", "NoReadinessReport", "EnabledReadinessReport"
+        "DeploymentVerificationMode", "NoDeploymentVerification", "EnabledDeploymentVerification"
+        "ConsentAuditMode", "NoConsentAudit", "EnabledConsentAudit"
+        "AdAnalyticsMode", "NoAdAnalytics", "EnabledAdAnalytics"
+        "PeerSubstrateMode", "NoPeerSubstrate", "EnabledPeerSubstrate"
+        "FactStoreMode", "NoFactStore", "EnabledFactStore"
+        "TenantLifecycleMode", "NoTenantLifecycle", "EnabledTenantLifecycle"
+        "UserSchemaAuthoringMode", "NoUserSchemaAuthoring", "EnabledUserSchemaAuthoring"
+        "ExternalContactStoreMode", "NoExternalContactStore", "EnabledExternalContactStore"
+        "PresenceMode", "NoPresence", "EnabledPresence"
+    ]
+
+    /// The `ServerConfig` fields that moved into a concern record, as
+    /// (concern, fields). The table is the migration doc's field map.
+    let concernFields: (string * string list) list = [
+        "SecurityPosture",
+        [
+            "RequireHttps"
+            "TrustForwardedHeaders"
+            "TrustedProxyCidrs"
+            "SecurityHeaders"
+            "SecurityHardening"
+            "Cors"
+            "SseAuthMode"
+            "AuthCookieIssuance"
+            "MaxRequestBodyBytes"
+            "WebhookUrlAllowedHosts"
+        ]
+        "RiskAcknowledgements",
+        [
+            "AcceptForwardedHeadersFromAnyProxy"
+            "AcceptHeaderAuthWhenAuthRequired"
+            "AcceptPlaintextSecretsWhenAuthRequired"
+            "AcceptInProcessSchedulerInMultiInstance"
+            "AcceptInProcessIngestionInMultiInstance"
+            "AcceptSharedEmbeddingCacheInTeamMode"
+            "AcceptEphemeralRagIndex"
+            "AcceptLocalEmbedderAtScale"
+            "AcceptStickyRoutedAiInMultiInstance"
+            "AcceptNoRateLimitWhenAuthRequired"
+            "AcceptUnsignedPublishable"
+            "AcceptQueryParamSseAuthWhenAuthRequired"
+            "AcceptSameSiteOnlyCsrfWhenAuthRequired"
+            "AcceptUnboundAudienceWhenAuthRequired"
+            "AcceptInMemoryOAuthStateInMultiInstance"
+            "AcceptInMemoryShareTokenRateLimiterInMultiInstance"
+            "AcceptPendingInviteStoreInMultiInstance"
+            "AcceptInviteByEmailWithoutDirectory"
+            "AcceptEphemeralShareTokenKey"
+            "AcceptAnonymousModeWithAI"
+        ]
+        "MultiInstance", [ "ReplicaCount"; "ProcessProfile"; "PeerRoutePrefixes"; "PeerSubstrate" ]
+        "Observability",
+        [
+            "LogLevel"
+            "TraceCategories"
+            "HealthStateTracking"
+            "MetricsEndpoint"
+            "MetricsSink"
+            "MetricsHistory"
+            "TelemetrySink"
+            "SlowRequestThreshold"
+            "SlowRequestThresholdOverrides"
+            "AlertRules"
+            "LogStore"
+            "DatadogReadback"
+        ]
+        "Stores",
+        [
+            "EventStore"
+            "ResultStore"
+            "ShareTokenStore"
+            "ServiceAccounts"
+            "EntityStore"
+            "EntityOutbox"
+            "GraphStore"
+            "TimeSeriesStore"
+            "Datasets"
+            "SessionRegistry"
+            "ConversationStore"
+            "AssetStore"
+            "RateLimitStore"
+            "ConsentStateStore"
+            "ExternalContactStore"
+            "FactStore"
+        ]
+    ]
+
+    /// Field → concern, over `concernFields`.
+    let private concernOf: Map<string, string> =
+        concernFields
+        |> List.collect (fun (concern, fields) -> fields |> List.map (fun f -> f, concern))
+        |> Map.ofList
+
+    let private concernNames = concernFields |> List.map fst
+
+    /// The moved fields whose NAME is also a label on other records a
+    /// consumer is likely to hold (a deps record's `EventStore`, an
+    /// overrides record's `SecurityHardening`): a `.Field` read on an
+    /// arbitrary receiver cannot be proved to be a `ServerConfig` read,
+    /// so it is rewritten only behind a receiver that names the config
+    /// and reported otherwise. `DatadogReadback` is also a `ClientConfig`
+    /// field, and a client shell reads it as `ctx.Config.DatadogReadback`,
+    /// so it is never rewritten, only reported.
+    let private sharedLabels =
+        set [
+            "EventStore"
+            "EntityStore"
+            "ResultStore"
+            "Datasets"
+            "MetricsSink"
+            "SlowRequestThresholdOverrides"
+            "DatadogReadback"
+            "SecurityHardening"
+            "ProcessProfile"
+            "ShareTokenStore"
+            "RateLimitStore"
+            "LogLevel"
+            "Cors"
+        ]
+
+    let private movedFields = concernOf |> Map.keys |> List.ofSeq
+    let private alternation (names: string seq) = String.Join("|", names)
+
+    /// A receiver that is a `ServerConfig` by name: the conventional
+    /// bindings, `app.Config`, and the defaults value itself.
+    let private configReceiver =
+        @"(?:\b(?:config|cfg|serverConfig|conf|effective|effectiveConfig|finalConfig|baseConfig|merged|defaults)|\.Config|\.defaults)"
 
     // ── The deterministic rewrites ────────────────────────────────────
 
@@ -658,6 +827,74 @@ module Codemod =
             @"\bProcessProfileGate\.atStart\b"
             "Hosting.atStart"
             "`ProcessProfileGate.atStart` → `Hosting.atStart`"
+        // Phase 877 — the thirty-seven two-case modes are one. The
+        // qualified spelling (`AuditLogMode.NoAuditLog`) is consumed with
+        // its case, so the type rule below never sees it.
+        rewrite
+            "877-feature-mode-off"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf
+                @"\b(?:(?:%s)\.)?(?:%s)\b"
+                (alternation (featureModes |> List.map (fun (t, _, _) -> t)))
+                (alternation (featureModes |> List.map (fun (_, off, _) -> off))))
+            "FeatureMode.Disabled"
+            "`NoAuditLog` / `NoEntityStore` / … (the off case of every payload-free two-case mode) → `FeatureMode.Disabled`"
+        rewrite
+            "877-feature-mode-on"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf
+                @"\b(?:(?:%s)\.)?(?:%s)\b"
+                (alternation (featureModes |> List.map (fun (t, _, _) -> t)))
+                (alternation (featureModes |> List.map (fun (_, _, on) -> on))))
+            "FeatureMode.Enabled"
+            "`EnabledAuditLog` / `EnabledEntityStore` / `CustomTelemetrySink` / … (the on case) → `FeatureMode.Enabled`"
+        rewrite
+            "877-feature-mode-type"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf @"\b(?:%s)\b" (alternation (featureModes |> List.map (fun (t, _, _) -> t))))
+            "FeatureMode"
+            "`FeatureMode` / `FeatureMode` / … (a type annotation on a retired mode) → `FeatureMode`"
+        // A moved field read off a receiver that names the config.
+        {
+            rewrite
+                "877-config-member"
+                CodemodMigration.NestedConfig
+                CodemodFileClass.Source
+                (sprintf
+                    @"(%s)\.(%s)\b"
+                    configReceiver
+                    (alternation (Set.toList (sharedLabels.Remove "DatadogReadback"))))
+                ""
+                "`config.EventStore` / `app.Config.LogLevel` / … (a moved field read off a receiver named as the config) → `config.<Concern>.<Field>`" with
+                Rewrite =
+                    fun m ->
+                        let field = m.Groups[2].Value
+                        sprintf "%s.%s.%s" m.Groups[1].Value concernOf[field] field
+        }
+        // A moved field whose name no other record a consumer holds is
+        // likely to carry: the read is a `ServerConfig` read on any VALUE
+        // receiver (a lowercase-initial binding, or `.Config`). A
+        // capitalised segment is a module or namespace path — `ToolUp.AssetStore`,
+        // `Consent.ConsentStateStore`, `module X.EntityOutbox` — and is
+        // never a field read, whatever its last segment is called.
+        {
+            rewrite
+                "877-moved-member"
+                CodemodMigration.NestedConfig
+                CodemodFileClass.Source
+                (sprintf
+                    @"(?<=\b[a-z_][\w']*|\.Config)\.(%s)\b"
+                    (alternation (movedFields |> List.filter (fun f -> not (sharedLabels.Contains f)))))
+                ""
+                "`.ReplicaCount` / `.RequireHttps` / `.AcceptEphemeralRagIndex` / … (a moved field only `ServerConfig` carries) → `.<Concern>.<Field>`" with
+                Rewrite =
+                    fun m ->
+                        let field = m.Groups[1].Value
+                        sprintf ".%s.%s" concernOf[field] field
+        }
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1045,6 +1282,17 @@ module Codemod =
             CodemodFileClass.Source
             @"\bScimServerApp\b|\bScimMode\b|\bEnabledScim\b|\bNoScim\b"
             "`ScimServerApp` and `ScimMode` are gone: the SCIM endpoint is a companion composed onto the `ServerApp`. `ScimServerApp.ofServerApp app |> ScimServerApp.withScim config |> ScimServerApp.run` is `app |> ScimRoutes.withScim config |> ServerApp.run`; a deployment that does not call `withScim` mounts nothing"
+        // Phase 877 — a moved field whose name other records carry too,
+        // read off a receiver the rewrite could not name as the config.
+        review
+            "877-shared-label-receiver"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf
+                @"(?<!\b(?:%s|config|cfg|serverConfig|conf|effective|effectiveConfig|finalConfig|baseConfig|merged|defaults|Config))\.(?:%s)\b"
+                (alternation concernNames)
+                (alternation (Set.toList sharedLabels)))
+            "if this receiver is a `ServerConfig`, the field moved: `EventStore` / `EntityStore` / `ResultStore` / `Datasets` / `ShareTokenStore` / `RateLimitStore` read `.Stores.<Field>`, `MetricsSink` / `SlowRequestThresholdOverrides` / `DatadogReadback` / `LogLevel` read `.Observability.<Field>`, `SecurityHardening` / `Cors` read `.SecurityPosture.<Field>` and `ProcessProfile` reads `.MultiInstance.ProcessProfile`; a deps or options record of your own with the same label is unchanged"
     ]
 
 
@@ -1222,6 +1470,517 @@ module Codemod =
 
         out, List.ofSeq rewrites
 
+    // ── Phase 877 — nesting `ServerConfig` record-update expressions ──
+    //
+    // A record update that sets `Port` and `EntityStore` has to set `Port`
+    // and `Stores = { base.Stores with EntityStore = … }` instead, which no
+    // line regex can do: the labels of one expression regroup, and the inner
+    // base is the outer one. So the pass reads whole expressions. It is
+    // deterministic exactly when the base is a plain identifier path
+    // (`defaults`, `ServerConfig.defaults`, `app.Config`) and every top-level
+    // item is `Label = …`; a base that is an application or a parenthesised
+    // expression cannot be re-read as `base.Concern` without a binding, and
+    // is reported instead. A label other records carry too (`EventStore` on a
+    // deps record) proves nothing on its own: such an expression is nested
+    // only behind a base named as the config, or beside a label only
+    // `ServerConfig` has, and is reported otherwise.
+
+    /// `{ base with …` on one line (`rest` is what follows `with`).
+    let private updateOpener =
+        Regex(@"\{\s*(?<base>[^{}]+?)\s+with\b(?<rest>.*)$", RegexOptions.CultureInvariant)
+
+    /// The second line of the two-line opener `{` / `base with`.
+    let private withLine =
+        Regex(@"^\s*(?<base>[^{}]+?)\s+with\s*$", RegexOptions.CultureInvariant)
+
+    let private simplePath =
+        Regex(@"^[A-Za-z_][\w']*(?:\.[A-Za-z_][\w']*)*$", RegexOptions.CultureInvariant)
+
+    let private labelLine =
+        Regex(@"^(?<label>[A-Z][\w']*)\s*=(?!=)", RegexOptions.CultureInvariant)
+
+    /// Brace depth change over `text`, skipping string literals and a
+    /// trailing `//` comment.
+    let private braceDelta (text: string) =
+        let mutable depth = 0
+        let mutable inString = false
+        let mutable i = 0
+
+        while i < text.Length do
+            let c = text[i]
+
+            if inString then
+                if c = '\\' then
+                    i <- i + 1
+                elif c = '"' then
+                    inString <- false
+            elif c = '"' then
+                inString <- true
+            elif c = '/' && i + 1 < text.Length && text[i + 1] = '/' then
+                i <- text.Length
+            elif c = '{' then
+                depth <- depth + 1
+            elif c = '}' then
+                depth <- depth - 1
+
+            i <- i + 1
+
+        depth
+
+    /// The index of the `}` that closes the `{` opened before `text`
+    /// (depth starts at 1), or -1 when it is not on this line.
+    let private closingBrace (text: string) =
+        let mutable depth = 1
+        let mutable inString = false
+        let mutable i = 0
+        let mutable found = -1
+
+        while found < 0 && i < text.Length do
+            let c = text[i]
+
+            if inString then
+                if c = '\\' then
+                    i <- i + 1
+                elif c = '"' then
+                    inString <- false
+            elif c = '"' then
+                inString <- true
+            elif c = '/' && i + 1 < text.Length && text[i + 1] = '/' then
+                i <- text.Length
+            elif c = '{' || c = '[' || c = '(' then
+                depth <- depth + 1
+            elif c = '}' || c = ']' || c = ')' then
+                depth <- depth - 1
+
+                if depth = 0 then
+                    found <- i
+
+            i <- i + 1
+
+        found
+
+    /// Splits single-line items on `;` at depth 0.
+    let private splitItems (text: string) =
+        let items = ResizeArray<string>()
+        let sb = StringBuilder()
+        let mutable depth = 0
+        let mutable inString = false
+        let mutable i = 0
+
+        while i < text.Length do
+            let c = text[i]
+
+            if inString then
+                if c = '\\' && i + 1 < text.Length then
+                    sb.Append(c).Append(text[i + 1]) |> ignore
+                    i <- i + 1
+                else
+                    if c = '"' then
+                        inString <- false
+
+                    sb.Append c |> ignore
+            elif c = '"' then
+                inString <- true
+                sb.Append c |> ignore
+            elif c = '{' || c = '[' || c = '(' then
+                depth <- depth + 1
+                sb.Append c |> ignore
+            elif c = '}' || c = ']' || c = ')' then
+                depth <- depth - 1
+                sb.Append c |> ignore
+            elif c = ';' && depth = 0 then
+                items.Add(sb.ToString())
+                sb.Clear() |> ignore
+            else
+                sb.Append c |> ignore
+
+            i <- i + 1
+
+        items.Add(sb.ToString())
+        items |> Seq.map _.Trim() |> Seq.filter (fun s -> s <> "") |> List.ofSeq
+
+    /// One top-level item of a record-update expression: the comment
+    /// lines above it, its label, and its lines (the first holds the
+    /// label; continuations keep their own indentation).
+    type private UpdateItem = {
+        Comments: string list
+        Label: string
+        Lines: string list
+    }
+
+    /// One record-update expression the pass read: where it sits, its
+    /// base, its items, and the text after its closing brace.
+    type private UpdateBlock = {
+        First: int
+        Last: int
+        OpenerPrefix: string
+        Base: string
+        Items: UpdateItem list
+        Suffix: string
+    }
+
+    let private indentOf' (line: string) = line.Length - line.TrimStart().Length
+
+    /// Reads the record-update expression opening at `at`, or `None` when
+    /// the line opens none. `Error` names why an expression that holds a
+    /// moved label cannot be nested mechanically.
+    let private readUpdate (lines: string[]) (at: int) : Result<UpdateBlock, string> option =
+        let line = lines[at]
+        // A record update quoted in a comment is prose, not code.
+        let isComment = line.TrimStart().StartsWith "//"
+        let oneLine = if isComment then Match.Empty else updateOpener.Match line
+
+        let twoLine =
+            if
+                not isComment
+                && not oneLine.Success
+                && line.TrimEnd().EndsWith "{"
+                && at + 1 < lines.Length
+            then
+                let m = withLine.Match lines[at + 1]
+                if m.Success then Some m else None
+            else
+                None
+
+        match oneLine.Success, twoLine with
+        | false, None -> None
+        | _ ->
+            let baseText, rest, itemsFrom, openerPrefix =
+                if oneLine.Success then
+                    let restText = oneLine.Groups["rest"].Value
+                    let prefix = line.Substring(0, oneLine.Index)
+                    oneLine.Groups["base"].Value.Trim(), restText, at + 1, prefix
+                else
+                    twoLine.Value.Groups["base"].Value.Trim(), "", at + 2, line.Substring(0, line.LastIndexOf '{')
+
+            let closeOnOpener = if oneLine.Success then closingBrace rest else -1
+
+            let last, suffix, inner =
+                if closeOnOpener >= 0 then
+                    at, rest.Substring(closeOnOpener + 1), Some(rest.Substring(0, closeOnOpener))
+                else
+                    let mutable depth = 1 + (if oneLine.Success then braceDelta rest else 0)
+
+                    let mutable i = itemsFrom
+                    let mutable closing = -1
+
+                    while closing < 0 && i < lines.Length do
+                        let d = braceDelta lines[i]
+
+                        if depth + d <= 0 then closing <- i else depth <- depth + d
+                        i <- i + 1
+
+                    if closing < 0 then
+                        -1, "", None
+                    else
+                        // Where on the closing line the expression ends.
+                        let text = lines[closing]
+                        let mutable depth' = depth
+                        let mutable pos = -1
+                        let mutable k = 0
+
+                        while pos < 0 && k < text.Length do
+                            if text[k] = '{' then
+                                depth' <- depth' + 1
+                            elif text[k] = '}' then
+                                depth' <- depth' - 1
+
+                                if depth' = 0 then
+                                    pos <- k
+
+                            k <- k + 1
+
+                        closing, text.Substring(pos + 1), None
+
+            if last < 0 then
+                None
+            else
+                let items: Result<UpdateItem list, string> =
+                    match inner with
+                    | Some inline' ->
+                        splitItems inline'
+                        |> List.map (fun item ->
+                            let m = labelLine.Match item
+
+                            if m.Success then
+                                Ok {
+                                    Comments = []
+                                    Label = m.Groups["label"].Value
+                                    Lines = [ item ]
+                                }
+                            else
+                                Error(sprintf "an item that is not `Label = …`: `%s`" item))
+                        |> List.fold
+                            (fun acc r ->
+                                match acc, r with
+                                | Ok xs, Ok x -> Ok(xs @ [ x ])
+                                | Error e, _
+                                | _, Error e -> Error e)
+                            (Ok [])
+                    | None ->
+                        let body = [
+                            if rest.Trim() <> "" then
+                                yield rest.Trim(), true
+                            for i in itemsFrom .. last - 1 do
+                                yield lines[i], false
+                            if last >= itemsFrom then
+                                let text = lines[last]
+                                let cut = text.Length - suffix.Length - 1
+                                let head = text.Substring(0, max 0 cut)
+
+                                if head.Trim() <> "" then
+                                    yield head, false
+                        ]
+
+                        let fieldIndent =
+                            body
+                            |> List.tryPick (fun (l, inlineFirst) ->
+                                if inlineFirst || l.Trim() = "" then
+                                    None
+                                else
+                                    Some(indentOf' l))
+                            |> Option.defaultValue 0
+
+                        let mutable comments = []
+                        let mutable current: UpdateItem option = None
+                        let items = ResizeArray<UpdateItem>()
+                        let mutable fault = None
+
+                        for text, inlineFirst in body do
+                            let trimmed = text.Trim()
+
+                            if trimmed = "" then
+                                ()
+                            elif inlineFirst || indentOf' text = fieldIndent then
+                                if trimmed.StartsWith "//" then
+                                    comments <- comments @ [ trimmed ]
+                                elif trimmed.StartsWith "}" then
+                                    match current with
+                                    | Some c -> current <- Some { c with Lines = c.Lines @ [ text ] }
+                                    | None -> fault <- Some "a `}` before any item"
+                                else
+                                    let m = labelLine.Match trimmed
+
+                                    if m.Success then
+                                        current |> Option.iter items.Add
+
+                                        current <-
+                                            Some {
+                                                Comments = comments
+                                                Label = m.Groups["label"].Value
+                                                Lines = [ text ]
+                                            }
+
+                                        comments <- []
+                                    else
+                                        fault <- Some(sprintf "an item that is not `Label = …`: `%s`" trimmed)
+                            else
+                                match current with
+                                | Some c -> current <- Some { c with Lines = c.Lines @ [ text ] }
+                                | None -> fault <- Some(sprintf "text before the first item: `%s`" trimmed)
+
+                        current |> Option.iter items.Add
+
+                        match fault with
+                        | Some f -> Error f
+                        | None -> Ok(List.ofSeq items)
+
+                let movedLabelLine =
+                    Regex(sprintf @"^\s*(?:%s)\s*=(?!=)" (alternation movedFields), RegexOptions.CultureInvariant)
+
+                // Whether a TOP-LEVEL item of this expression sets a moved
+                // field: the items of a one-line form, else the lines at
+                // the field indentation (a nested concern block's own items
+                // are deeper, and are that block's business).
+                let holdsMovedLabel =
+                    match inner with
+                    | Some text -> splitItems text |> List.exists movedLabelLine.IsMatch
+                    | None ->
+                        let candidates = [
+                            if rest.Trim() <> "" then
+                                yield! splitItems rest
+                            for i in itemsFrom..last do
+                                yield lines[i]
+                        ]
+
+                        let fieldIndent =
+                            candidates
+                            |> List.tryFind (fun l -> l.Trim() <> "" && not (l.Trim().StartsWith "//"))
+                            |> Option.map indentOf'
+                            |> Option.defaultValue 0
+
+                        candidates
+                        |> List.exists (fun l -> indentOf' l <= fieldIndent && movedLabelLine.IsMatch l)
+
+                let baseIsConfig =
+                    simplePath.IsMatch baseText
+                    && (match baseText.Split '.' |> Array.last with
+                        | "defaults"
+                        | "Config"
+                        | "config"
+                        | "cfg"
+                        | "serverConfig"
+                        | "conf"
+                        | "effective"
+                        | "effectiveConfig"
+                        | "finalConfig"
+                        | "baseConfig"
+                        | "merged" -> true
+                        | _ -> false)
+
+                match items with
+                | _ when not holdsMovedLabel || baseText.StartsWith "new " -> None
+                | Error e -> Some(Error e)
+                | Ok items when not (items |> List.exists (fun i -> concernOf.ContainsKey i.Label)) -> None
+                | Ok items when
+                    (match baseText.Split '.' |> Array.last with
+                     | seg -> List.contains seg concernNames)
+                    ->
+                    None
+                | Ok items when
+                    not baseIsConfig
+                    && items
+                       |> List.forall (fun i -> not (concernOf.ContainsKey i.Label) || sharedLabels.Contains i.Label)
+                    ->
+                    Some(
+                        Error(
+                            sprintf
+                                "`%s` is not named as the config and every moved label it sets (%s) is one other records carry too; if it is a `ServerConfig`, nest by hand, otherwise nothing changes"
+                                baseText
+                                (items
+                                 |> List.filter (fun i -> sharedLabels.Contains i.Label)
+                                 |> List.map _.Label
+                                 |> alternation)
+                        )
+                    )
+                | Ok items when not (simplePath.IsMatch baseText) ->
+                    Some(
+                        Error(
+                            sprintf
+                                "the base `%s` is not a plain path, so `%s.<Concern>` cannot be written for the nested record"
+                                baseText
+                                baseText
+                        )
+                    )
+                | Ok items ->
+                    Some(
+                        Ok {
+                            First = at
+                            Last = last
+                            OpenerPrefix = openerPrefix
+                            Base = baseText
+                            Items = items
+                            Suffix = suffix
+                        }
+                    )
+
+    /// The nested rendering of a block, as lines.
+    let private renderNested (block: UpdateBlock) : string list =
+        // A bare `{` keeps its own column; `Config = {` nests under the
+        // line that carries it.
+        let openerIndent = indentOf' (block.OpenerPrefix + "x")
+        let pad n = String(' ', n)
+        let fi = openerIndent + 8
+
+        let shifted (item: UpdateItem) (toIndent: int) =
+            let from = item.Lines |> List.head |> indentOf'
+
+            item.Lines
+            |> List.mapi (fun i l ->
+                if i = 0 then
+                    pad toIndent + l.Trim()
+                else
+                    let current = indentOf' l
+                    pad (max 0 (current - from + toIndent)) + l.Trim())
+
+        [
+            yield
+                (if block.OpenerPrefix.Trim() = "" then
+                     pad openerIndent + "{"
+                 else
+                     block.OpenerPrefix.TrimEnd() + " {")
+            yield pad (openerIndent + 4) + block.Base + " with"
+            let mutable emitted = Set.empty
+
+            for item in block.Items do
+                match concernOf.TryFind item.Label with
+                | None ->
+                    for c in item.Comments do
+                        yield pad fi + c
+
+                    yield! shifted item fi
+                | Some concern when emitted.Contains concern -> ()
+                | Some concern ->
+                    emitted <- emitted.Add concern
+                    yield pad fi + concern + " = {"
+                    yield pad (fi + 4) + block.Base + "." + concern + " with"
+
+                    for inner in block.Items |> List.filter (fun i -> concernOf.TryFind i.Label = Some concern) do
+                        for c in inner.Comments do
+                            yield pad (fi + 8) + c
+
+                        yield! shifted inner (fi + 8)
+
+                    yield pad fi + "}"
+
+            yield pad openerIndent + "}" + block.Suffix
+        ]
+
+    /// Reads every record-update expression in `lines`, nesting the
+    /// provable ones. Answers the rewritten segments, one rewrite per
+    /// nested expression and one finding per expression it could not
+    /// prove.
+    let private nestServerConfigUpdates (segments: string[]) : string[] * CodemodRewrite list * CodemodFinding list =
+        let lines = [| for i in 0..2 .. segments.Length - 1 -> segments[i] |]
+        let out = Array.copy segments
+        let rewrites = ResizeArray<CodemodRewrite>()
+        let findings = ResizeArray<CodemodFinding>()
+        let mutable at = 0
+
+        while at < lines.Length do
+            match readUpdate lines at with
+            | None -> at <- at + 1
+            | Some(Error why) ->
+                findings.Add {
+                    RuleId = "877-record-update-unprovable"
+                    Migration = CodemodMigration.NestedConfig
+                    Line = at + 1
+                    Text = lines[at].Trim()
+                    Guidance =
+                        sprintf
+                            "this record update sets a field that moved into a concern record, and the codemod could not nest it: %s. Bind the base to a name and write `<Concern> = { <base>.<Concern> with <Field> = … }` by hand"
+                            why
+                }
+
+                at <- at + 1
+            | Some(Ok block) ->
+                let terminator =
+                    if 2 * block.First + 1 < segments.Length then
+                        segments[2 * block.First + 1]
+                    else
+                        "\n"
+
+                let rendered = renderNested block
+                let after = String.Join(terminator, rendered)
+                out[2 * block.First] <- after
+
+                for i in block.First + 1 .. block.Last do
+                    out[2 * i] <- ""
+
+                    if 2 * i + 1 < out.Length then
+                        out[2 * i + 1] <- ""
+
+                rewrites.Add {
+                    RuleId = "877-record-update"
+                    Line = block.First + 1
+                    Before = lines[block.First]
+                    After = after
+                }
+
+                at <- block.Last + 1
+
+        out, List.ofSeq rewrites, List.ofSeq findings
+
     // ── Per-file decision ─────────────────────────────────────────────
 
     /// The file class a path belongs to, or `None` when the walk skips it.
@@ -1241,8 +2000,17 @@ module Codemod =
     /// Applies every rewrite rule of `cls` to `text`, line by line.
     /// Returns the rewritten text and one record per (line, rule) that
     /// changed it.
-    let rewriteText (cls: CodemodFileClass) (text: string) : string * CodemodRewrite list =
-        let rules = rewriteRules |> List.filter (fun r -> r.Applies = cls)
+    let rewriteTextFor
+        (only: CodemodMigration list)
+        (cls: CodemodFileClass)
+        (text: string)
+        : string * CodemodRewrite list =
+        let selected (migration: CodemodMigration) =
+            only.IsEmpty || List.contains migration only
+
+        let rules =
+            rewriteRules |> List.filter (fun r -> r.Applies = cls && selected r.Migration)
+
         let segments = lineSplitter.Split text
         let rewrites = ResizeArray<CodemodRewrite>()
 
@@ -1281,15 +2049,48 @@ module Codemod =
 
         match cls with
         | CodemodFileClass.Source ->
-            let withMembers, added = addCapabilitiesMembers (lineSplitter.Split rewritten)
+            let nested, nestedRewrites =
+                if selected CodemodMigration.NestedConfig then
+                    let segments, nestedRewrites, _ =
+                        nestServerConfigUpdates (lineSplitter.Split rewritten)
 
-            String.concat "" withMembers, List.ofSeq rewrites @ added |> List.sortBy _.Line
+                    segments, nestedRewrites
+                else
+                    lineSplitter.Split rewritten, []
+
+            let withMembers, added =
+                if selected CodemodMigration.ModelCapabilities then
+                    addCapabilitiesMembers nested
+                else
+                    nested, []
+
+            String.concat "" withMembers, List.ofSeq rewrites @ nestedRewrites @ added |> List.sortBy _.Line
         | CodemodFileClass.Project -> rewritten, List.ofSeq rewrites
+
+    /// Applies every rewrite rule of `cls` to `text`, line by line.
+    let rewriteText (cls: CodemodFileClass) (text: string) : string * CodemodRewrite list = rewriteTextFor [] cls text
+
+    /// The findings the nesting pass raises over `text` — the REWRITTEN
+    /// text, like every review finding, so a second run over migrated
+    /// source reports the same lines as the first.
+    let private nestFindings
+        (only: CodemodMigration list)
+        (cls: CodemodFileClass)
+        (text: string)
+        : CodemodFinding list =
+        match cls with
+        | CodemodFileClass.Source when only.IsEmpty || List.contains CodemodMigration.NestedConfig only ->
+            let _, _, findings = nestServerConfigUpdates (lineSplitter.Split text)
+            findings
+        | _ -> []
 
     /// Every review-rule match over `text` (the REWRITTEN text), in line
     /// order then rule order.
-    let reviewText (cls: CodemodFileClass) (text: string) : CodemodFinding list =
-        let rules = reviewRules |> List.filter (fun r -> r.Applies = cls)
+    let reviewTextFor (only: CodemodMigration list) (cls: CodemodFileClass) (text: string) : CodemodFinding list =
+        let rules =
+            reviewRules
+            |> List.filter (fun r -> r.Applies = cls && (only.IsEmpty || List.contains r.Migration only))
+
         let segments = lineSplitter.Split text
 
         [
@@ -1319,14 +2120,19 @@ module Codemod =
         Path.GetRelativePath(root, path).Replace('\\', '/')
 
     /// Decides one file: read, rewrite, review. Pure apart from the read.
-    let analyseFile (root: string) (cls: CodemodFileClass) (path: string) : CodemodFileResult =
+    let analyseFileFor
+        (only: CodemodMigration list)
+        (root: string)
+        (cls: CodemodFileClass)
+        (path: string)
+        : CodemodFileResult =
         let bytes = File.ReadAllBytes path
         let bom = hasBom bytes
 
         let original =
             Encoding.UTF8.GetString(bytes, (if bom then 3 else 0), bytes.Length - (if bom then 3 else 0))
 
-        let rewritten, rewrites = rewriteText cls original
+        let rewritten, rewrites = rewriteTextFor only cls original
 
         {
             Path = Path.GetFullPath path
@@ -1336,8 +2142,17 @@ module Codemod =
             Rewritten = rewritten
             HasBom = bom
             Rewrites = rewrites
-            Findings = reviewText cls rewritten
+            Findings =
+                reviewTextFor only cls rewritten @ nestFindings only cls rewritten
+                |> List.sortBy _.Line
         }
+
+    /// Every review-rule match over `text` (the REWRITTEN text).
+    let reviewText (cls: CodemodFileClass) (text: string) : CodemodFinding list = reviewTextFor [] cls text
+
+    /// Decides one file under every migration.
+    let analyseFile (root: string) (cls: CodemodFileClass) (path: string) : CodemodFileResult =
+        analyseFileFor [] root cls path
 
     // ── The walk ──────────────────────────────────────────────────────
 
@@ -1370,7 +2185,7 @@ module Codemod =
 
     /// Decides the whole tree under `root`. Pure apart from reads: no
     /// file is written until `apply`.
-    let plan (root: string) : CodemodPlan =
+    let planFor (only: CodemodMigration list) (root: string) : CodemodPlan =
         if not (Directory.Exists root) then
             failwithf "Codemod: %s is not a directory" root
 
@@ -1378,8 +2193,32 @@ module Codemod =
 
         {
             Root = full
-            Files = walk full |> List.map (fun (cls, path) -> analyseFile full cls path)
+            Files = walk full |> List.map (fun (cls, path) -> analyseFileFor only full cls path)
         }
+
+    /// Decides the whole tree under `root` under every migration.
+    let plan (root: string) : CodemodPlan = planFor [] root
+
+    /// The migration a `--phase` argument names, by its label's number
+    /// (`877` for `Phase 877`), or `None` when no migration carries it.
+    let migrationOfPhase (phase: string) : CodemodMigration option =
+        [
+            CodemodMigration.Remoting
+            CodemodMigration.Surfaces
+            CodemodMigration.ApiStability
+            CodemodMigration.Deprecations
+            CodemodMigration.ShellSlots
+            CodemodMigration.AgentLoop
+            CodemodMigration.Capabilities
+            CodemodMigration.ModelCapabilities
+            CodemodMigration.RemotingLeftovers
+            CodemodMigration.JobOutcomes
+            CodemodMigration.OneScopeForm
+            CodemodMigration.BackgroundPlacement
+            CodemodMigration.CompanionOptions
+            CodemodMigration.NestedConfig
+        ]
+        |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 
     /// Writes every changed file in `plan`, preserving its BOM and line
     /// terminators, and returns the absolute paths written (in plan

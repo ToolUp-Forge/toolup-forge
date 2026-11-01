@@ -356,7 +356,7 @@ let tests =
             services.AddSingleton<ServerConfig>(
                 {
                     ServerConfig.defaults with
-                        TenantLifecycle = EnabledTenantLifecycle
+                        TenantLifecycle = FeatureMode.Enabled
                 }
             )
             |> ignore

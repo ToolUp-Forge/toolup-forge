@@ -40,7 +40,7 @@ open ToolUp.Platform.TeamManagement
 // `ServerConfig.AuditLog`: reading the store directly would otherwise
 // show residue on a deployment that has since turned the audit log off.
 // `auditViewApi` therefore takes the mode captured at compose time and
-// short-circuits `NoAuditLog` to an empty result — the same answer
+// short-circuits `FeatureMode.Disabled` to an empty result — the same answer
 // `NoOpAuditLog` would have given.
 //
 // ─── Scope (GP 4) ─────────────────────────────────────────────────────
@@ -265,14 +265,14 @@ let internal renderCsv (views: AuditEventView list) : byte[] =
 /// Build the `IAuditViewApi` ToolUp.Remoting handler.
 ///
 /// `auditLogMode` is captured at compose time from
-/// `ServerConfig.AuditLog`. On the default `NoAuditLog` the deployment
+/// `ServerConfig.AuditLog`. On the default `FeatureMode.Disabled` the deployment
 /// records nothing, so every method answers empty — the same answer
 /// `NoOpAuditLog` gives the rest of the SDK, restored here because this
 /// handler reads the event store rather than the audit log (see the
 /// header). The route stays mounted either way, mirroring
 /// `usageQueryApiHandler`: a client whose proxy 404s cannot tell "off"
 /// from "broken", and the module's empty state says "off" plainly.
-let auditViewApi (auditLogMode: AuditLogMode) (ctx: HttpContext) : IAuditViewApi =
+let auditViewApi (auditLogMode: FeatureMode) (ctx: HttpContext) : IAuditViewApi =
 
     let accessContext = resolveAccessContext ctx
     let scopeId = callerScopeId accessContext
@@ -309,13 +309,13 @@ let auditViewApi (auditLogMode: AuditLogMode) (ctx: HttpContext) : IAuditViewApi
     }
 
     /// Every row in the caller's scope, newest first, in the total order
-    /// the cursor is expressed in. Empty under `NoAuditLog` and when no
+    /// the cursor is expressed in. Empty under `FeatureMode.Disabled` and when no
     /// event store is registered (a test path that wired neither).
     let readTrail () : Async<AuditEventView list> = async {
         match auditLogMode, eventStoreOpt with
-        | NoAuditLog, _
+        | FeatureMode.Disabled, _
         | _, None -> return []
-        | EnabledAuditLog, Some store ->
+        | FeatureMode.Enabled, Some store ->
             let! events = store.ReadBySource(scopeId, AuditSourceModule.value)
 
             return

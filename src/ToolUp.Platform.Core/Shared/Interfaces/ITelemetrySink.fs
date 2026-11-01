@@ -62,7 +62,7 @@ type ITelemetrySink =
 
 /// The default no-op telemetry sink — a true no-op (no allocation beyond the
 /// returned `Async`, no network). Composed when
-/// `ServerConfig.TelemetrySink = NoTelemetrySink` (the default), so emission
+/// `ServerConfig.Observability.TelemetrySink = FeatureMode.Disabled` (the default), so emission
 /// sites are free at runtime (GP 13).
 type NoOpTelemetrySink() =
     interface ITelemetrySink with

@@ -111,7 +111,7 @@ let private handlerFor (userId: string) (scheduler: IJobScheduler option) : IPla
     services.AddSingleton<ServerConfig>(
         {
             ServerConfig.defaults with
-                TenantLifecycle = EnabledTenantLifecycle
+                TenantLifecycle = FeatureMode.Enabled
         }
     )
     |> ignore
@@ -239,7 +239,7 @@ let tests =
                 services.AddSingleton<ServerConfig>(
                     {
                         ServerConfig.defaults with
-                            TenantLifecycle = EnabledTenantLifecycle
+                            TenantLifecycle = FeatureMode.Enabled
                     }
                 )
                 |> ignore

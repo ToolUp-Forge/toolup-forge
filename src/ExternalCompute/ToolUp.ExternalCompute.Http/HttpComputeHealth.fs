@@ -176,19 +176,19 @@ module HttpComputeCompose =
     /// One call folds in everything the companion contributes: the
     /// `IExternalComputeDispatcher` DI singleton, the readiness probe
     /// (when a health URL is configured), the startup preflight, and
-    /// `ServerConfig.ExternalCompute = CustomExternalCompute`.
+    /// `ServerConfig.ExternalCompute = FeatureMode.Enabled`.
     ///
     /// **The mode flip is not cosmetic.** Under the default
-    /// `NoExternalCompute`, compose registers `NoExternalComputeDispatcher`
+    /// `FeatureMode.Disabled`, compose registers `NoExternalComputeDispatcher`
     /// — and a later registration of the same service type is what
     /// `GetService` resolves, so leaving the mode alone would make
     /// whether real work is submitted depend on registration ORDER
-    /// between this companion and the SDK's own compose. `CustomExternalCompute`
+    /// between this companion and the SDK's own compose. `FeatureMode.Enabled`
     /// is precisely the mode meaning "a companion under
     /// `src/ExternalCompute/` owns this seam"; setting it here is what
     /// makes the composition unambiguous.
     ///
-    /// A deployment that never calls this keeps the `NoExternalCompute`
+    /// A deployment that never calls this keeps the `FeatureMode.Disabled`
     /// default and pays nothing (GP 11 + GP 13) — no probe, no validator,
     /// no HTTP client, no allocation.
     /// **Sets** `ServerConfig.ExternalCompute`, and **adds** the dispatcher's registrations through `ServerApp.addServiceConfig`.
@@ -218,7 +218,7 @@ module HttpComputeCompose =
                 app with
                     Config = {
                         app.Config with
-                            ExternalCompute = CustomExternalCompute
+                            ExternalCompute = FeatureMode.Enabled
                     }
             }
             |> withProbe

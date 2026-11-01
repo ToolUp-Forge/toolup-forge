@@ -23,7 +23,7 @@ open ToolUp.Platform.ConfigValidation
 // (no browser surface) and don't need a CSP; (2) SDK consumers might emit
 // a CSP via a custom middleware ahead of this one. The warning surfaces in
 // HealthMonitorUI / `/dev/inspect` so the operator can set
-// `ServerConfig.SecurityHeaders = SecurityHeaders.productionDefaults`,
+// `ServerConfig.SecurityPosture.SecurityHeaders = SecurityHeaders.productionDefaults`,
 // call `withSecurityHardening`, or knowingly ignore.
 //
 // Heuristic for "internet-facing": `Mode != Anonymous` AND
@@ -47,14 +47,14 @@ type SecurityHeadersValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Validate() = async {
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
             let internetFacing = DeploymentConfig.isInternetFacing config
-            let headersEmpty = config.SecurityHeaders.IsEmpty
-            let noHardening = config.SecurityHardening = NoSecurityHardening
+            let headersEmpty = config.SecurityPosture.SecurityHeaders.IsEmpty
+            let noHardening = config.SecurityPosture.SecurityHardening = NoSecurityHardening
 
             if requiresAuth && internetFacing && headersEmpty && noHardening then
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + SecurityHeaders = Map.empty + SecurityHardening = NoSecurityHardening. Phase 129d auto-stamps a baseline (X-Frame-Options DENY / nosniff / Referrer-Policy strict-origin-when-cross-origin, plus HSTS when RequireHttps), but this deployment still ships no Content-Security-Policy (XSS surface widened) and no preload/includeSubDomains HSTS posture. Set ServerConfig.SecurityHeaders = SecurityHeaders.productionDefaults for the SDK's recommended baseline (preload HSTS / nosniff / X-Frame-Options DENY / Referrer-Policy / baseline CSP), merge productionDefaults with your own per-deployment overrides, or call withSecurityHardening for an auto-generated companion-aware CSP. API-only deployments that legitimately don't need browser-targeted headers can ignore this warning."
+                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + SecurityHeaders = Map.empty + SecurityHardening = NoSecurityHardening. Phase 129d auto-stamps a baseline (X-Frame-Options DENY / nosniff / Referrer-Policy strict-origin-when-cross-origin, plus HSTS when RequireHttps), but this deployment still ships no Content-Security-Policy (XSS surface widened) and no preload/includeSubDomains HSTS posture. Set ServerConfig.SecurityPosture.SecurityHeaders = SecurityHeaders.productionDefaults for the SDK's recommended baseline (preload HSTS / nosniff / X-Frame-Options DENY / Referrer-Policy / baseline CSP), merge productionDefaults with your own per-deployment overrides, or call withSecurityHardening for an auto-generated companion-aware CSP. API-only deployments that legitimately don't need browser-targeted headers can ignore this warning."
                             (DeploymentConfig.surfacesLabel config)
                     )
             else

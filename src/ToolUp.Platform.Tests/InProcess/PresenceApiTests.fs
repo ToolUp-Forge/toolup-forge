@@ -368,7 +368,7 @@ let tests =
 
         // ─── 622.D — the hand-mounted consumer path still composes ───
 
-        test "EnabledPresence still resolves the substrate for a hand-mounted API" {
+        test "FeatureMode.Enabled still resolves the substrate for a hand-mounted API" {
             // The documented pre-622 contract is "the SDK registers the
             // substrate, the deployment owns the wire and the client
             // mounting", and a live consumer builds on exactly that. The
@@ -402,7 +402,7 @@ let tests =
             Expect.isEmpty roster "an unheard-of scope starts empty rather than throwing"
         }
 
-        test "NoPresence registers nothing" {
+        test "FeatureMode.Disabled registers nothing" {
             // GP 13 in its most literal form: the default composes no
             // service at all, so nothing downstream can accidentally
             // depend on presence being there.

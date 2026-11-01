@@ -194,13 +194,20 @@ let private compositionTests =
                 |> MathNetAlgorithms.withMathNetAlgorithms
                 |> ServerApp.withConfig {
                     ServerConfig.defaults with
-                        ReplicaCount = 2
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
                 }
 
             let resolved = ServerApp.resolve app
 
             Expect.contains resolved.ComposedCompanions "ToolUp.Algorithms" "the algorithms companion is composed"
-            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+
+            Expect.equal
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
 
             Expect.contains
                 (ServerApp.effectiveConfig app).ModuleNames

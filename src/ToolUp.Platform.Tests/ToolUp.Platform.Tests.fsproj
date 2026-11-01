@@ -373,6 +373,7 @@
         <Compile Include="InProcess\ConfigStartupModeTests.fs" />
         <Compile Include="InProcess\ConfigResolverTests.fs" />
         <Compile Include="InProcess\ConfigProfileTests.fs" />
+        <Compile Include="InProcess\ConfigKeyReadBoolTests.fs" />
         <Compile Include="InProcess\UnknownConfigKeyValidatorTests.fs" />
         <Compile Include="InProcess\TraceCategoriesValidatorTests.fs" />
         <Compile Include="InProcess\AIProviderEnvValidatorTests.fs" />

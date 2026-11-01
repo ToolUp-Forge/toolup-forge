@@ -1371,18 +1371,18 @@ module FactBrowseHandler =
     /// `/api/_facts/browse/*` and decorate the composed table writer so a
     /// committed run publishes one notification.
     ///
-    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`,
+    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`,
     /// composed with `FactsCompose.withFactStore`). Call it AFTER
     /// `FactsCompose.withFactTableWriter`, so the writer it decorates is
     /// registered; without a writer the surface still mounts and every
-    /// table reads as never refreshed. Under `NoFactStore` the app is
+    /// table reads as never refreshed. Under `FeatureMode.Disabled` the app is
     /// returned unchanged — a composition without this call is
     /// byte-for-byte unchanged (GP 11 / GP 13).
     /// **Adds** one handler, and the writer decoration through `ServerApp.addServiceConfig` (a later `withExtensions` keeps it).
     let withFactBrowse (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             {
                 app with
                     Extensions.Handlers = app.Extensions.Handlers @ [ handler ]

@@ -101,9 +101,15 @@ let private withHost (enableDev: bool) (configure: ServerApp -> ServerApp) (body
             Port = port
             PublicPath = publicDir
             EnableDevEndpoints = enableDev
-            TrustForwardedHeaders = false
-            AcceptPlaintextSecretsWhenAuthRequired = true
-            AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            SecurityPosture = {
+                ServerConfig.defaults.SecurityPosture with
+                    TrustForwardedHeaders = false
+            }
+            RiskAcknowledgements = {
+                ServerConfig.defaults.RiskAcknowledgements with
+                    AcceptPlaintextSecretsWhenAuthRequired = true
+                    AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            }
     }
 
     let app =

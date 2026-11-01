@@ -517,6 +517,13 @@ module CompositionManifest =
     /// by `caseName`.
     let caseKnob (name: string) (value: 'T) : ConfigKnob = knob name (caseName value)
 
+    /// Phase 877 — a knob over a `FeatureMode` field, rendered as the token
+    /// the field spelled before the modes were one type
+    /// (`FeatureModeKnob.render`), so a binding sealed before 877 still
+    /// re-canonicalises to its own bytes.
+    let featureKnob (name: string) (value: FeatureMode) : ConfigKnob =
+        knob name (FeatureModeKnob.render name value)
+
     /// Phase 1051 — the knobs `caseKnob` renders. A binding sealed before
     /// 1051 holds the `%A` rendering for a payload case of one of these,
     /// and `BootVerificationPreflight.compare` reads that legacy value as

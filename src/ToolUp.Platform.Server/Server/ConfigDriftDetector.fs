@@ -22,7 +22,7 @@ open ToolUp.Platform.BlobStorage
 // incident.
 //
 // **Opt-in via `ServerConfig.ConfigDriftDetection`.** Default
-// `NoConfigDriftDetection` (GP 13): no read, no write, no compare.
+// `FeatureMode.Disabled` (GP 13): no read, no write, no compare.
 //
 // **What counts as drift.** Any field-level difference in the
 // resolved `ServerConfig` (every `ServerConfig` property, recursed

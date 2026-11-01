@@ -13,8 +13,11 @@ open ToolUp.Platform.Server
 let config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.individual
-        AcceptHeaderAuthWhenAuthRequired = true
-        AcceptPlaintextSecretsWhenAuthRequired = true
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptHeaderAuthWhenAuthRequired = true
+                AcceptPlaintextSecretsWhenAuthRequired = true
+        }
         RateLimit = Some RateLimitPolicy.defaults
 }
 

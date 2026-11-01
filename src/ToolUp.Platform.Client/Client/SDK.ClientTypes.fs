@@ -728,7 +728,7 @@ type DataManagerChoice =
     /// per-field override. The confirmed map is persisted per scope,
     /// keyed by the CSV's column structure, and reused on later uploads.
     /// `None` keeps its own label. Requires
-    /// `ServerConfig.ColumnMapping = EnabledColumnMapping` to back the
+    /// `ServerConfig.ColumnMapping = FeatureMode.Enabled` to back the
     /// mapping store.
     | ColumnMapping of DataManagerConfig option
 
@@ -1149,7 +1149,7 @@ type AuthUIMode =
 /// transient in-memory JS state (lost on reload, re-acquired via the
 /// bridge), and the durable session credential is the HttpOnly cookie
 /// the browser sends automatically for SSE + same-origin XHR. Requires
-/// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` (or the
+/// `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` (or the
 /// server-rendered sign-in, which mounts the same endpoint; Phase 1047) and an
 /// `IAuthProvider` configured `TokenLocation = BearerOrCookie
 /// "toolup-auth-token"`. Pairs with the `IAuthBridge` refresh model
@@ -1169,8 +1169,8 @@ type AuthTokenStorage =
 /// The client cannot see which of the three sources the server composed,
 /// so the module asks: it reads `/api/observability/sources` on open and
 /// renders only the tabs that answered. Pair it with at least one of
-/// `ServerConfig.LogStore`, `ServerConfig.MetricsHistory` or
-/// `ServerConfig.AlertRules` — with none of them on, the endpoints are
+/// `ServerConfig.Observability.LogStore`, `ServerConfig.Observability.MetricsHistory` or
+/// `ServerConfig.Observability.AlertRules` — with none of them on, the endpoints are
 /// not mounted and the module says so rather than rendering empty tabs.
 type ObservabilityModuleMode =
     /// No observability module in the sidebar (default — opt-in).
@@ -1187,7 +1187,7 @@ type ObservabilityModuleMode =
 /// existing app is byte-for-byte unchanged (GP 11/13). Platform-Admin
 /// gated client-side by the "Platform Management" sidebar group; the
 /// underlying `IPlatformTenantApi` is admin-gated server-side regardless.
-/// Zero-cost on `NoTenantLifecycle` deployments (GP 13): the offboard
+/// Zero-cost on `FeatureMode.Disabled` deployments (GP 13): the offboard
 /// surface 404s and the panel's per-row actions degrade to the empty
 /// state.
 type PlatformUsersMode =
@@ -1771,17 +1771,17 @@ type ShellSlotFills = {
     /// list when the deployment declares no schemas.
     TeamConfig: SlotFill<ModuleLabel>
     /// The webhook admin. Gated on any authenticated surface. **Default
-    /// `Empty`** — pair with `ServerConfig.Webhooks = EnabledWebhooks`.
+    /// `Empty`** — pair with `ServerConfig.Webhooks = FeatureMode.Enabled`.
     WebhookAdmin: SlotFill<ModuleLabel>
     /// Phase 527 — the service-account admin (machine principals and
     /// their scoped API tokens). Gated on any authenticated surface.
-    /// **Default `Empty`** — pair with `ServerConfig.ServiceAccounts`;
+    /// **Default `Empty`** — pair with `ServerConfig.Stores.ServiceAccounts`;
     /// setting one half gives a module with no API behind it.
     ServiceAccountAdmin: SlotFill<ModuleLabel>
     /// Phase 6f.A — the external-contact admin (people with no account
     /// here, and the per-channel consent that makes them reachable).
     /// Gated on any authenticated surface. **Default `Empty`** — pair
-    /// with `ServerConfig.ExternalContactStore`.
+    /// with `ServerConfig.Stores.ExternalContactStore`.
     ExternalContactManager: SlotFill<ModuleLabel>
     /// Phase 441 — the notification preference centre (category x channel
     /// matrix, digest frequency, quiet hours). Gated on any authenticated
@@ -1796,7 +1796,7 @@ type ShellSlotFills = {
     /// Phase 528 — the session-security page (the caller's active
     /// sessions, revoke-one, sign-out-everywhere over `ISessionApi`).
     /// Gated on any authenticated surface. **Default `Empty`** — pair
-    /// with a `ServerConfig.SessionRegistry` other than
+    /// with a `ServerConfig.Stores.SessionRegistry` other than
     /// `NoSessionRegistry`: a page that cannot list your sessions reads,
     /// to the person holding them, like a page saying you have none.
     SessionSecurity: SlotFill<ModuleLabel>
@@ -1813,7 +1813,7 @@ type ShellSlotFills = {
     UsageDashboard: SlotFill<ModuleLabel>
     /// Phase 529 — the audit-trail viewer over `IAuditViewApi`. Gated on
     /// any authenticated surface. **Default `Default`** — pair with
-    /// `ServerConfig.AuditLog = EnabledAuditLog`; the viewer shows its
+    /// `ServerConfig.AuditLog = FeatureMode.Enabled`; the viewer shows its
     /// "no audit events" state otherwise.
     AuditViewer: SlotFill<ModuleLabel>
     /// Phase 10b — the data-ingestion admin (configured `IDataSource`
@@ -1927,7 +1927,7 @@ type ClientConfig = {
     /// The SAME `DatadogReadbackMode` the server side takes: pass the
     /// one config value to both, and the window and page-size defaults
     /// the panel shows cannot drift from the ones the endpoints apply.
-    /// Pair it with `ServerConfig.DatadogReadback` — with the endpoints
+    /// Pair it with `ServerConfig.Observability.DatadogReadback` — with the endpoints
     /// unmounted the module renders its degraded state on every tab,
     /// which is honest but not useful.
     DatadogReadback: DatadogReadbackMode
@@ -1941,9 +1941,9 @@ type ClientConfig = {
     /// module lists every principal (Phase 543 `ListPrincipals`), flags
     /// team-less ones, and drives the Phase 54-family offboard flow per
     /// row. Platform-Admin gated by the "Platform Management" sidebar
-    /// group; pair with `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`
+    /// group; pair with `ServerConfig.TenantLifecycle = FeatureMode.Enabled`
     /// server-side for the offboard actions (the list still renders under
-    /// `NoTenantLifecycle`, the per-row offboard degrades gracefully).
+    /// `FeatureMode.Disabled`, the per-row offboard degrades gracefully).
     PlatformUsers: PlatformUsersMode
     /// Phase 567 — how the admin built-ins are presented in the sidebar.
     /// **Default `InlineGroups`** (byte-identical to pre-567: admin modules
@@ -2031,7 +2031,7 @@ type ClientConfig = {
     /// `ServerSetHttpOnlyCookie` moves the JWT out of JS-readable storage
     /// into a server-set `HttpOnly; Secure; SameSite=Strict` cookie via
     /// `POST /api/auth/session`. Pairs with
-    /// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`.
+    /// `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled`.
     AuthTokenStorage: AuthTokenStorage
     /// Declared subject shapes this deployment supports. Mirrors
     /// `ServerConfig.Surfaces` (the server-side non-empty list of
@@ -2243,17 +2243,17 @@ type ClientConfig = {
     ExpectedModules: string list option
 
     /// Phase 622 — shell auto-mount of the presence + soft-lock context.
-    /// `EnabledPresence` makes the shell wrap the view tree in a live
+    /// `FeatureMode.Enabled` makes the shell wrap the view tree in a live
     /// `PresenceContext` provider: a heartbeat announcing the active
     /// module as this peer's location, a roster refreshed off the
     /// reserved `_platform.presence` fan-out, and a lease map folded from
     /// `_platform.lock` — so module views get `Presence.usePeers` /
     /// `Presence.useLock` / `useEntityLock` with no deployment wiring.
     ///
-    /// Pair it with `ServerConfig.Presence = EnabledPresence`, which
+    /// Pair it with `ServerConfig.Presence = FeatureMode.Enabled`, which
     /// registers the substrate and mounts the `IPresenceApi` this reads.
     ///
-    /// `NoPresence` (the default) mounts nothing and starts no timer, so
+    /// `FeatureMode.Disabled` (the default) mounts nothing and starts no timer, so
     /// an existing deployment renders byte-for-byte as before (GP 11 +
     /// GP 13). The flag is deliberately separate from the server's: a
     /// deployment already on the Phase 442 hand-mounted path must not
@@ -2261,7 +2261,7 @@ type ClientConfig = {
     /// upgrading the SDK. That path stays supported — a self-mounted
     /// `PresenceContext.provider` nested inside the shell's takes
     /// precedence for the views below it.
-    Presence: PresenceMode
+    Presence: FeatureMode
 
     /// Phase 444 — how the shell resolves the active locale for its own
     /// chrome and the SDK's built-in modules.
@@ -2406,7 +2406,7 @@ module ClientConfig =
         ExpectedModules = None
         // Phase 622 — no shell presence mount, no heartbeat, no SSE
         // subscription until the deployment opts in (GP 11 + GP 13).
-        Presence = NoPresence
+        Presence = FeatureMode.Disabled
         // Phase 444 — one fixed locale, the built-in English catalog, no
         // browser or team-config read. Byte-for-byte the pre-444 shell
         // (GP 11 + GP 13).

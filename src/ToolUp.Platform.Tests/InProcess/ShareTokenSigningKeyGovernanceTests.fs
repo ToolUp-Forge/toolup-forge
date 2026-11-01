@@ -77,10 +77,19 @@ type private SeedableSecretStore(seed: (string * string) list) =
 let private cfg (replicaCount: int) (publicBaseUrl: string option) (acceptEphemeral: bool) = {
     ServerConfig.defaults with
         Surfaces = Surfaces.individual
-        ShareTokenStore = EnabledShareTokenStore
-        ReplicaCount = replicaCount
+        Stores = {
+            ServerConfig.defaults.Stores with
+                ShareTokenStore = FeatureMode.Enabled
+        }
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
         PublicBaseUrl = publicBaseUrl
-        AcceptEphemeralShareTokenKey = acceptEphemeral
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptEphemeralShareTokenKey = acceptEphemeral
+        }
 }
 
 let private validate (config: ServerConfig) (seed: (string * string) list) : ValidationResult =
@@ -215,9 +224,14 @@ let tests =
             }
 
             test "surface off → Ok even in a public multi-replica shape" {
+                let shaped = cfg 5 (Some "https://app.example.com") false
+
                 let config = {
-                    cfg 5 (Some "https://app.example.com") false with
-                        ShareTokenStore = NoShareTokenStore
+                    shaped with
+                        Stores = {
+                            shaped.Stores with
+                                ShareTokenStore = FeatureMode.Disabled
+                        }
                 }
 
                 Expect.equal (validate config []) Ok "no share-token surface → the key is irrelevant"

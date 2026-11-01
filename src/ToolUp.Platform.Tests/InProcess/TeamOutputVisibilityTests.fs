@@ -954,13 +954,16 @@ let private composeTests =
                 (FactsCompose.withTeamOutputVisibility TeamAdmins [ TeamAdmins ] noFacts)
                     .Extensions.PreMiddleware.Length
                 noFacts.Extensions.PreMiddleware.Length
-                "NoFactStore: nothing composed"
+                "FeatureMode.Disabled: nothing composed"
 
             let withFacts = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
             }
 
@@ -992,7 +995,10 @@ let private composeTests =
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
                     Extensions = {
                         ServerApp.empty.Extensions with
@@ -1070,7 +1076,10 @@ let private composeWith
         ServerApp.empty with
             Config = {
                 ServerConfig.defaults with
-                    FactStore = EnabledFactStore
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            FactStore = FeatureMode.Enabled
+                    }
             }
             Extensions = {
                 ServerApp.empty.Extensions with
@@ -1339,7 +1348,10 @@ let private platformTierTests =
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
             }
 

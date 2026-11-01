@@ -692,8 +692,14 @@ let private composedCache (app: ToolUp.RAG.RAGCompose.RagOptions) : IEmbeddingCa
 let private teamCfg (replicaCount: int) (accepted: bool) : ToolUp.Platform.ServerConfig = {
     ToolUp.Platform.ServerConfig.defaults with
         Surfaces = [ ToolUp.Platform.SurfaceProfile.team ]
-        ReplicaCount = replicaCount
-        AcceptSharedEmbeddingCacheInTeamMode = accepted
+        MultiInstance = {
+            ToolUp.Platform.ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
+        RiskAcknowledgements = {
+            ToolUp.Platform.ServerConfig.defaults.RiskAcknowledgements with
+                AcceptSharedEmbeddingCacheInTeamMode = accepted
+        }
 }
 
 let private validate

@@ -343,7 +343,7 @@ let mergeNotificationPrefsSchema (appEntries: ModuleConfigEntry list) : ModuleCo
 /// SDK-shipped default `_platform.usage` schema (Phase 9d). Declares
 /// the per-team compute-quota fields read by
 /// `BlobBackedTeamQuotaPolicy`. All defaults are `0` (= unrestricted)
-/// so a deployment that enables `UsageMetering = EnabledUsageMetering`
+/// so a deployment that enables `UsageMetering = FeatureMode.Enabled`
 /// but doesn't customise quotas pays nothing — the policy short-
 /// circuits on `0` for every check.
 ///

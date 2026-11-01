@@ -13,7 +13,7 @@ open ToolUp.Platform
 // (oldest first, batch-bounded, halt-on-store-failure — the
 // semantics live on `AuditFallbackStore.ReplayOnce`). Registered by
 // compose only when `ServerConfig.AuditFailurePolicy = DegradeToFile`
-// and `AuditLog = EnabledAuditLog`, gated by
+// and `AuditLog = FeatureMode.Enabled`, gated by
 // `ProcessProfileGate` (`AuditFallbackReplaySubsystem`) like every
 // other background subsystem — a deployment on any other policy
 // pays nothing (GP 13).

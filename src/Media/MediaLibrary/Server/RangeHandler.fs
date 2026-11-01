@@ -15,7 +15,7 @@ open ToolUp.Platform
 // ─── Phase 88 — HTTP range-serving endpoints ──────────────────────────
 //
 // Three routes the SDK mounts when `ServerConfig.MediaLibrary =
-// EnabledMediaLibrary`:
+// FeatureMode.Enabled`:
 //
 //   GET /api/media/stream/{mediaId}        scoped (authenticated) stream
 //   GET /media/signed/{mediaId}?token=...  scope-signed public stream

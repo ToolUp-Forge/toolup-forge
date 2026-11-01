@@ -616,10 +616,10 @@ let tests =
         // ─── 321.D — the reconciliation poll ─────────────────────────
 
         testList "reconciliation-loop integration" [
-            test "ServerConfig defaults to NoJobProgress (GP 11)" {
+            test "ServerConfig defaults to FeatureMode.Disabled (GP 11)" {
                 Expect.equal
                     ServerConfig.defaults.JobProgress
-                    NoJobProgress
+                    FeatureMode.Disabled
                     "an existing deployment gains no progress traffic on upgrade"
             }
 

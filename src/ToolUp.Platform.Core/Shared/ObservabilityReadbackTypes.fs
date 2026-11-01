@@ -27,13 +27,13 @@ open System
 /// admin module reads this first and renders one tab per `true` field, so
 /// a deployment that enabled only the log store shows only a Logs tab.
 type ObservabilitySources = {
-    /// `ServerConfig.LogStore` is not `NoLogStore` — the Logs tab and
+    /// `ServerConfig.Observability.LogStore` is not `NoLogStore` — the Logs tab and
     /// `GET /api/observability/logs` are available.
     Logs: bool
-    /// `ServerConfig.MetricsHistory` is not `NoMetricsHistory` — the
+    /// `ServerConfig.Observability.MetricsHistory` is not `NoMetricsHistory` — the
     /// Metrics tab and `GET /api/observability/metrics` are available.
     Metrics: bool
-    /// `ServerConfig.AlertRules` is non-empty — the Alerts tab and
+    /// `ServerConfig.Observability.AlertRules` is non-empty — the Alerts tab and
     /// `GET /api/observability/alerts` are available.
     Alerts: bool
 }

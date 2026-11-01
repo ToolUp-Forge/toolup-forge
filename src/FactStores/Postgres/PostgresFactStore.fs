@@ -1789,9 +1789,9 @@ module PostgresFactStoreCompose =
     /// misconfigured database fails the first resolution loudly rather than
     /// a later request.
     ///
-    /// Requires the fact tier (`ServerConfig.FactStore = EnabledFactStore`)
+    /// Requires the fact tier (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`)
     /// and goes straight after `FactsCompose.withFactStore`; under
-    /// `NoFactStore` the app is returned unchanged.
+    /// `FeatureMode.Disabled` the app is returned unchanged.
     ///
     /// ```fsharp
     /// ServerApp.empty

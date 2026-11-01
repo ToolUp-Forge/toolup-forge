@@ -293,7 +293,10 @@ let private validateIndexInstance (replicaCount: int) (storage: IBlobStorage) =
 
     let config = {
         ServerConfig.defaults with
-            ReplicaCount = replicaCount
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = replicaCount
+            }
     }
 
     let validator =

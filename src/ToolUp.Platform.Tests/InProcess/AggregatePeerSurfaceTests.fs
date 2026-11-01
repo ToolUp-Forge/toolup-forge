@@ -84,7 +84,10 @@ let private sharedPack: DataVocabularyPack = {
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
         PinnedVocabularyPacks = [ sharedPack ]
 }
 
@@ -282,7 +285,10 @@ let private gatewayFixture (members: AggregateMember list) (exposure: AggregateE
         |> PeerComposition.app (
             ServerApp.withConfig {
                 ServerConfig.defaults with
-                    PeerSubstrate = EnabledPeerSubstrate
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            PeerSubstrate = FeatureMode.Enabled
+                    }
             }
         )
         |> PeerGateway.withAggregate client members exposure
@@ -780,7 +786,10 @@ let tests =
                 |> PeerComposition.app (
                     ServerApp.withConfig {
                         ServerConfig.defaults with
-                            PeerSubstrate = EnabledPeerSubstrate
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
                     }
                 )
                 |> PeerGateway.withAggregate client (referenceMembers ()) {

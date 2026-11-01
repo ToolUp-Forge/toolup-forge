@@ -35,7 +35,7 @@ open ToolUp.Platform
 // like `_sdk.PlatformAdmin` / `_sdk.HealthMonitor`. `IPlatformTenantApi`
 // is itself Platform-Admin gated server-side, so a non-admin who reaches
 // the module by direct navigation gets a uniform error banner rather than
-// a silent read. Opt-in / zero-cost (GP 13): `NoTenantLifecycle`
+// a silent read. Opt-in / zero-cost (GP 13): `FeatureMode.Disabled`
 // deployments 404 the proxy surface, so the panel simply renders its
 // empty state — nothing to show, no failure.
 

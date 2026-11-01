@@ -156,7 +156,7 @@ module Hosting =
         | ServerlessHost, _ -> false
         | KestrelHost, ProcessLocal -> true
         | KestrelHost, SharedWork ->
-            match config.ProcessProfile with
+            match config.MultiInstance.ProcessProfile with
             | AllInOne
             | WorkerOnly -> true
             | DispatcherOnly -> outbound
@@ -257,7 +257,7 @@ module ProcessProfileGate =
     /// registered `IHostedService` set). Every other profile mounts
     /// the HTTP pipeline.
     let shouldRegisterHttpPipeline (config: ServerConfig) : bool =
-        match config.ProcessProfile with
+        match config.MultiInstance.ProcessProfile with
         | WorkerOnly -> false
         | AllInOne
         | WebOnly

@@ -185,10 +185,11 @@ module Flags =
         | _ -> "Run"
 
     /// The options the SDK's own targets read: `AddHeaders` / `Codemod`
-    /// take `--check`, `execute` takes `--module <name>`.
+    /// take `--check`, `Codemod` takes `--phase <n>`, `execute` takes
+    /// `--module <name>`.
     let sdk: FlagSpec = {
         Switches = [ "--check" ]
-        Valued = [ "--module" ]
+        Valued = [ "--module"; "--phase" ]
     }
 
     /// Two specs accepted together.
@@ -2325,10 +2326,22 @@ let registerTargets (config: BuildConfig) =
         // The directory is the first non-option argument after the target.
         let root = List.tryHead flags.Positionals
 
+        // `--phase 877` applies one migration's rules only — what a consumer
+        // adopting one release wants, and what the SDK's own tree needs
+        // when the rename it carries lands (every other rule would then
+        // rewrite the names the SDK itself still defines).
+        let only =
+            match Flags.value "--phase" flags with
+            | None -> []
+            | Some phase ->
+                match Codemod.migrationOfPhase phase with
+                | Some m -> [ m ]
+                | None -> failwithf "Codemod: no migration is labelled Phase %s" phase
+
         match root with
-        | None -> failwith "Codemod: usage — dotnet run -- Codemod <consumer-source-dir> [--check]"
+        | None -> failwith "Codemod: usage — dotnet run -- Codemod <consumer-source-dir> [--check] [--phase <n>]"
         | Some dir ->
-            let plan = Codemod.plan (System.IO.Path.GetFullPath dir)
+            let plan = Codemod.planFor only (System.IO.Path.GetFullPath dir)
             Trace.tracefn "%s" (Codemod.renderSummary plan)
             Trace.tracefn "%s" (Codemod.renderFindings plan)
 

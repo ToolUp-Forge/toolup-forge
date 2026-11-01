@@ -223,7 +223,7 @@ module internal AgeExec =
 
 /// Postgres-colocated `IGraphStore` over an AGE-enabled PostgreSQL. Construct via
 /// the `AgeGraphStore` module (`connect` / `connectWith` / `ofDataSource`),
-/// register the result as a DI singleton, and select `ServerConfig.GraphStore =
+/// register the result as a DI singleton, and select `ServerConfig.Stores.GraphStore =
 /// CustomGraphStore`. Implements `IDisposable` so the host disposes the data
 /// source (closing the pool) on shutdown when the store owns it.
 type AgeGraphStore(dataSource: NpgsqlDataSource, config: AgeGraphStoreConfig, ownsDataSource: bool) =

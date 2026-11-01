@@ -299,7 +299,7 @@ type InMemoryConsentStateStore internal (auditLog: IAuditLog option, logger: ILo
 /// operation reads/writes through `IEntityStore` with no in-memory
 /// cache. Requires the `ConsentRecord.registration` entity type to be
 /// registered with the entity store (the compose path prepends it when
-/// `ServerConfig.ConsentStateStore = EntityBackedConsentStateStore`).
+/// `ServerConfig.Stores.ConsentStateStore = EntityBackedConsentStateStore`).
 /// Phase 1026 — the consent audit rows are started through
 /// `Background.startAudit`: a failing `IAuditLog` loses that one row and
 /// logs a Warning naming it, never failing the write or the host. The

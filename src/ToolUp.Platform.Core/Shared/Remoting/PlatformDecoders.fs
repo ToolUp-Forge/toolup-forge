@@ -2850,11 +2850,11 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Grants" 3 (Decode.asMap Decode.asString (Decode.asMap Decode.asString moduleGrantRecord)))
         |> Decode.apply (Decode.field "Pages" 4 (Decode.asMap Decode.asString (Decode.list pageGrant)))
 
-    /// Generated decoder for `PlatformKnowledgeBaseMode` — one combinator per field or case, read off the type's own shape.
-    let platformKnowledgeBaseMode: Decoder<PlatformKnowledgeBaseMode> =
-        Decode.union "PlatformKnowledgeBaseMode" (function
-            | 0 -> Some(Decode.case0 PlatformKnowledgeBaseMode.NoPlatformKnowledgeBase)
-            | 1 -> Some(Decode.case0 PlatformKnowledgeBaseMode.EnabledPlatformKnowledgeBase)
+    /// Generated decoder for `FeatureMode` — one combinator per field or case, read off the type's own shape.
+    let featureMode: Decoder<FeatureMode> =
+        Decode.union "FeatureMode" (function
+            | 0 -> Some(Decode.case0 FeatureMode.Disabled)
+            | 1 -> Some(Decode.case0 FeatureMode.Enabled)
             | _ -> None)
 
     /// Generated decoder for `PlatformInfo` — one combinator per field or case, read off the type's own shape.
@@ -3179,7 +3179,7 @@ module PlatformDecoders =
         typeof<ModuleGrantRecord>.FullName
         typeof<PageGrant>.FullName
         typeof<TeamPermissions>.FullName
-        typeof<PlatformKnowledgeBaseMode>.FullName
+        typeof<FeatureMode>.FullName
         typeof<PlatformInfo>.FullName
         typeof<TeamMembership>.FullName
         typeof<TeamCreationPolicy>.FullName
@@ -3513,7 +3513,7 @@ module PlatformDecoders =
         RemotingDecoders.register<ModuleGrantRecord> moduleGrantRecord
         RemotingDecoders.register<PageGrant> pageGrant
         RemotingDecoders.register<TeamPermissions> teamPermissions
-        RemotingDecoders.register<PlatformKnowledgeBaseMode> platformKnowledgeBaseMode
+        RemotingDecoders.register<FeatureMode> featureMode
         RemotingDecoders.register<PlatformInfo> platformInfo
         RemotingDecoders.register<TeamMembership> teamMembership
         RemotingDecoders.register<TeamCreationPolicy> teamCreationPolicy
@@ -3848,7 +3848,7 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<ModuleGrantRecord> gate draws seed moduleGrantRecord
         RemotingDecoders.verifyThrough<PageGrant> gate draws seed pageGrant
         RemotingDecoders.verifyThrough<TeamPermissions> gate draws seed teamPermissions
-        RemotingDecoders.verifyThrough<PlatformKnowledgeBaseMode> gate draws seed platformKnowledgeBaseMode
+        RemotingDecoders.verifyThrough<FeatureMode> gate draws seed featureMode
         RemotingDecoders.verifyThrough<PlatformInfo> gate draws seed platformInfo
         RemotingDecoders.verifyThrough<TeamMembership> gate draws seed teamMembership
         RemotingDecoders.verifyThrough<TeamCreationPolicy> gate draws seed teamCreationPolicy
@@ -4034,7 +4034,7 @@ module PlatformDecoders =
         "MaintenanceApi", [ typeof<Result<int, string>>.FullName ], true
         "ModelExecutionApi", [ typeof<Result<ModelExecutionReceipt, ModelExecutionRefusal>>.FullName; typeof<Result<ModelExecutionOutcome, ModelExecutionRefusal>>.FullName; typeof<Result<ModelExecutionOutcomePage, ModelExecutionRefusal>>.FullName; typeof<Result<ModelExecutionDatasetVersion, ModelExecutionRefusal>>.FullName ], true
         "PermissionApi", [ typeof<Result<TeamPermissions, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
-        "PlatformAdminApi", [ typeof<bool>.FullName; typeof<string list>.FullName; typeof<Result<unit, string>>.FullName; typeof<PlatformKnowledgeBaseMode>.FullName ], true
+        "PlatformAdminApi", [ typeof<bool>.FullName; typeof<string list>.FullName; typeof<Result<unit, string>>.FullName; typeof<FeatureMode>.FullName ], true
         "PlatformInfoApi", [ typeof<PlatformInfo>.FullName ], true
         "TeamApi", [ typeof<Result<TeamInfo, string>>.FullName; typeof<TeamInfo list>.FullName; typeof<Result<unit, string>>.FullName; typeof<TeamMembership list>.FullName; typeof<string option>.FullName; typeof<TeamCreationPolicy>.FullName; typeof<Result<TeamSummary list, string>>.FullName ], true
         "TeamOutputVisibilityApi", [ typeof<TeamOutputVisibilityView>.FullName; typeof<Result<TeamOutputVisibilityView, string>>.FullName ], true

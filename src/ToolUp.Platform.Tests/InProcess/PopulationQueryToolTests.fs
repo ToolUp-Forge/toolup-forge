@@ -98,13 +98,16 @@ let private registryWith (direction: DirectionOfBetter) : IMetricRegistry =
     ] []
 
 /// The composed fact tier the way a deployment builds it.
-let private composedUnder (knob: FactStoreMode) (registry: IMetricRegistry option) : ServerApp * ServiceProvider =
+let private composedUnder (knob: FeatureMode) (registry: IMetricRegistry option) : ServerApp * ServiceProvider =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -204,8 +207,8 @@ let registrationTests =
                 "and that ordering comes from the registry's declared direction-of-better"
         }
 
-        test "EnabledFactStore declares BOTH fact tools on ServerApp.AITools — one knob, never two" {
-            let app, sp = composedUnder EnabledFactStore None
+        test "FeatureMode.Enabled declares BOTH fact tools on ServerApp.AITools — one knob, never two" {
+            let app, sp = composedUnder FeatureMode.Enabled None
 
             Expect.equal
                 (app.AITools |> List.map (fun (def, _) -> def.Name))
@@ -223,12 +226,15 @@ let registrationTests =
             Expect.isTrue (isNull (sp.GetService(typeof<AIToolRegistry>))) "no AI tool registry in a no-AI composition"
         }
 
-        test "NoFactStore composes byte-identically: neither tool declared (GP 11 / GP 13)" {
+        test "FeatureMode.Disabled composes byte-identically: neither tool declared (GP 11 / GP 13)" {
             let before = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
@@ -239,7 +245,7 @@ let registrationTests =
         }
 
         test "the composeAI-shaped pickup registers the population tool into the AI tool registry" {
-            let app, _ = composedUnder EnabledFactStore None
+            let app, _ = composedUnder FeatureMode.Enabled None
 
             let registry = AIToolRegistry()
             registry.RegisterAll(app.AITools |> List.map (fun (def, exec) -> createTool def exec))
@@ -277,7 +283,7 @@ let rankingTests =
 
         testCase "a ranked population answers with renderings, true ranks, and the population summary"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 5 |> ignore
@@ -336,7 +342,7 @@ let rankingTests =
             // ordering refused with "metric 'revenue' is not registered"
             // in a deployment that had registered it. The refusal was not
             // merely unhelpful — it was untrue.
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith LowerIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith LowerIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 4 |> ignore
@@ -354,7 +360,7 @@ let rankingTests =
 
         testCase "an explicit ordering needs no registry at all"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 3 |> ignore
@@ -377,7 +383,7 @@ let rankingTests =
 
         testCase "the value band filters the population BEFORE the ranking and the statistics"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 10 |> ignore
@@ -426,7 +432,7 @@ let rankingTests =
                     }
                 ] []
 
-            let _, sp = composedUnder EnabledFactStore (Some registry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some registry)
             let scope = newScope ()
             seedPopulation (sp.GetRequiredService<IFactStore>()) scope 3 |> ignore
 
@@ -437,7 +443,9 @@ let rankingTests =
                 narrative
                 "an answer that quotes a rendering verbatim still needs the reader to know what the quantity IS"
 
-            let _, spPlain = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, spPlain =
+                composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
+
             let scopePlain = newScope ()
 
             seedPopulation (spPlain.GetRequiredService<IFactStore>()) scopePlain 2 |> ignore
@@ -449,7 +457,7 @@ let rankingTests =
 
         testCase "the population's method mix is reported, and rides regardless of the magnitude suppression"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -489,7 +497,7 @@ let ceilingTests =
 
         testCase "a request above MaxTopK is capped server-side and TOLD so, not silently shortened"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 12 |> ignore
@@ -510,7 +518,7 @@ let ceilingTests =
 
         testCase "a non-positive top_k clamps up to one rather than answering nothing"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 4 |> ignore
@@ -524,7 +532,7 @@ let ceilingTests =
 
         testCase "an empty population is an ANSWER, not an error"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let el = executeVia sp (newScope ()) baseArgs
 
             Expect.isFalse (el.TryGetProperty("error") |> fst) "nothing matched is a fact about the population"
@@ -578,7 +586,7 @@ let disclosureTests =
 
         testCase "restricted members fold into a policy-grouped COUNT — never an id, a subject, or a value"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -647,7 +655,7 @@ let disclosureTests =
 
         testCaseAsync "a denied member writes a FactDisclosureDenied audit row at the ToolResult surface (525.E)"
         <| async {
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -668,7 +676,7 @@ let disclosureTests =
 
         testCaseAsync "another scope's population is structurally unreachable (GP 4)"
         <| async {
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scopeA = newScope ()
             let scopeB = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
@@ -729,7 +737,7 @@ let refusalTests =
 
         testCase "an unregistered metric refuses best_first with the registration remedy named"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 2 |> ignore
@@ -744,7 +752,7 @@ let refusalTests =
 
         testCase "a Neutral metric refuses best_first SEPARATELY — a different fact, a different remedy"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith Neutral))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith Neutral))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 2 |> ignore
@@ -759,7 +767,7 @@ let refusalTests =
 
         testCase "an explicit ordering answers a Neutral metric fine"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith Neutral))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith Neutral))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             seedPopulation store scope 2 |> ignore
@@ -779,7 +787,7 @@ let validationTests =
         let expectError (args: string) (fragment: string) (label: string) =
             testCase label
             <| fun () ->
-                let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+                let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
                 let el = executeVia sp (newScope ()) args
 
                 Expect.stringContains (str el "error") fragment "the error names the offending argument"
@@ -897,7 +905,7 @@ let subjectSetTests =
 
         testCase "level and path_prefix describe a population without enumerating it"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -934,7 +942,7 @@ let subjectSetTests =
 
         testCase "path_any_of and path_exclude narrow the population the store ranks, and the result echoes them"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let _, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -1107,7 +1115,7 @@ let demoTests =
             let populationSize = 250
             let topK = 3
 
-            let app, sp = composedUnder EnabledFactStore (Some(registryWith HigherIsBetter))
+            let app, sp = composedUnder FeatureMode.Enabled (Some(registryWith HigherIsBetter))
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             let seeded = seedPopulation store scope populationSize
@@ -1382,7 +1390,7 @@ let private companionDraft (sku: string) (metric: string) (value: decimal) (peri
 /// composed services, the scope, the store and the shoppers facts of sku-a,
 /// sku-b and sku-c's year.
 let private companionWorld () =
-    let _, sp = composedUnder EnabledFactStore (Some companionRegistry)
+    let _, sp = composedUnder FeatureMode.Enabled (Some companionRegistry)
     let scope = newScope ()
     let store = sp.GetRequiredService<IFactStore>()
 

@@ -315,7 +315,10 @@ let tests =
                 deployedSignals
                     {
                         ServerConfig.defaults with
-                            ReplicaCount = 3
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    ReplicaCount = 3
+                            }
                     }
                     noEnv
 

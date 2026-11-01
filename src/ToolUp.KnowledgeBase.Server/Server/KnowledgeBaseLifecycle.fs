@@ -14,7 +14,7 @@ open KnowledgeBase.ServerInventory
 // tenant's uploaded documents don't outlive the tenant. Lives in the
 // companion package (GP 1: the KB store is the companion's, outside the
 // core's reach), registered by the KB compose root only when
-// `TenantLifecycle = EnabledTenantLifecycle`.
+// `TenantLifecycle = FeatureMode.Enabled`.
 //
 // Resolves `IBlobStorage` from DI per call (stateless between
 // invocations, GP 12 rule 4) and deletes every blob under the scope

@@ -183,7 +183,7 @@ module EntityLock =
 // **`IPresenceApi` below binds Phase 442, and only 442.** Three reasons,
 // in the order that decided it:
 //
-//   1. **442 is the only one that is composed.** `EnabledPresence`
+//   1. **442 is the only one that is composed.** `FeatureMode.Enabled`
 //      registers `IPresenceTracker` + `IEntityLockStore` into DI
 //      (`ComposeNotifications.registerPresenceSubstrate`).
 //      `IPresenceChannel` has NO compose site and NO DI registration
@@ -213,10 +213,10 @@ module EntityLock =
 //
 // The half a consumer actually consumes: a Remoting contract over the
 // DI-registered 442 substrate, mounted by `compose` when
-// `ServerConfig.Presence = EnabledPresence`. Before this existed the SDK
+// `ServerConfig.Presence = FeatureMode.Enabled`. Before this existed the SDK
 // registered the substrate and left every deployment to hand-roll the
 // wire — which the documented contract still permits (see
-// `PresenceMode.EnabledPresence`), so this surface is purely additive.
+// `FeatureMode.Enabled`), so this surface is purely additive.
 //
 // **Scope isolation is structural (GP 4), not a filter.** Note what is
 // absent from every signature below: there is no `scopeId` parameter and
@@ -309,41 +309,3 @@ module PresenceApi =
     /// inside `lockTtl` for the same reason.
     [<Literal>]
     let lockRenewIntervalMs = 30_000
-
-/// Selects whether `compose` registers the presence + soft-lock
-/// collaboration substrate (Phase 442) and mounts the platform presence
-/// API (Phase 622). Default `NoPresence` — no `IPresenceTracker` /
-/// `IEntityLockStore` in DI, no route, no heartbeat cost, no
-/// `_platform.presence` / `_platform.lock` fan-out; an existing
-/// deployment that upgrades stays byte-for-byte identical until it opts
-/// in (GP 11 + GP 13). Mirrors `PeerSubstrateMode` / `EntityStoreMode`
-/// (binary, opt-in).
-type PresenceMode =
-    /// No presence / soft-lock infrastructure registered. The default —
-    /// awareness features cost nothing for deployments that don't
-    /// compose them in.
-    | NoPresence
-    /// Register the in-memory `IPresenceTracker` + `IEntityLockStore`
-    /// defaults into DI (single-instance; a multi-instance deployment
-    /// supplies distributed implementations over the distributed
-    /// `INotificationChannel` companion — see the Phase 9c
-    /// distributed-companion family). Presence / lock events fan out on
-    /// the reserved `_platform.*` keys, scope-isolated per team.
-    ///
-    /// Phase 622 additionally mounts `IPresenceApi` over that substrate
-    /// at `/api/IPresenceApi/*`. **The hand-mounted path is unchanged and
-    /// still supported:** a deployment that already exposes its own
-    /// module-owned API over the resolved `IPresenceTracker` /
-    /// `IEntityLockStore` and mounts `PresenceContext.provider` itself
-    /// keeps working exactly as before — the platform API is an
-    /// additional route it need never call, and a self-mounted context
-    /// provider nested inside the shell's wins for the views below it.
-    /// The client hooks stay transport-parameterised by design precisely
-    /// so both paths compose.
-    ///
-    /// The client half is gated separately by `ClientConfig.Presence`,
-    /// which defaults to `NoPresence` — so enabling the server substrate
-    /// never starts a heartbeat in an existing deployment's browser
-    /// (GP 11). Set both to `EnabledPresence` for the batteries-included
-    /// path.
-    | EnabledPresence

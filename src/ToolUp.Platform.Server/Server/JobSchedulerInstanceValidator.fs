@@ -25,7 +25,7 @@ open Microsoft.Extensions.DependencyInjection
 // duplication.
 //
 // This validator catches operator-declared multi-instance via
-// `ServerConfig.ReplicaCount`. Auto-detection via heartbeats in
+// `ServerConfig.MultiInstance.ReplicaCount`. Auto-detection via heartbeats in
 // `IBlobStorage` is a Phase 6l.F.2 follow-up — needs more design
 // (heartbeat TTL, lock-holder election semantics, race between two
 // instances starting in the same window).
@@ -78,15 +78,17 @@ type JobSchedulerInstanceValidator(config: ServerConfig, ?timeout: TimeSpan, ?se
                 // from the real state rather than from the mode.
                 | QuartzJobScheduler _ -> false
 
-            let multiInstance = config.ReplicaCount > 1
-            let escapeHatch = config.AcceptInProcessSchedulerInMultiInstance
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
+
+            let escapeHatch =
+                config.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance
 
             if isInProcess && multiInstance && not escapeHatch && not (sharedLockComposed ()) then
                 return
                     Error(
                         sprintf
-                            "ServerConfig.JobScheduler = InProcessJobScheduler with ReplicaCount = %d. The in-process scheduler fires every cron job, every event-triggered job, and every webhook fan-out from every instance independently — N replicas means N times every job, every audit emission, every webhook delivery. Compose a shared IDistributedLock (ServerApp.withDistributedLock) so the cron tick is an election across replicas, configure a distributed scheduler companion (Phase 9c.A Akka actor port), or set ServerConfig.AcceptInProcessSchedulerInMultiInstance = true if your jobs are idempotent and you accept the duplicate execution. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
-                            config.ReplicaCount
+                            "ServerConfig.JobScheduler = InProcessJobScheduler with ReplicaCount = %d. The in-process scheduler fires every cron job, every event-triggered job, and every webhook fan-out from every instance independently — N replicas means N times every job, every audit emission, every webhook delivery. Compose a shared IDistributedLock (ServerApp.withDistributedLock) so the cron tick is an election across replicas, configure a distributed scheduler companion (Phase 9c.A Akka actor port), or set ServerConfig.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance = true if your jobs are idempotent and you accept the duplicate execution. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            config.MultiInstance.ReplicaCount
                     )
             else
                 return Ok

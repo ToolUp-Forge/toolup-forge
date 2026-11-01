@@ -19,7 +19,7 @@
 ///
 /// Fills the data-manager shell slot when it is
 /// `SlotFill.Configured (DataManagerChoice.ColumnMapping _)`; pair with
-/// `ServerConfig.ColumnMapping = EnabledColumnMapping` to back the store.
+/// `ServerConfig.ColumnMapping = FeatureMode.Enabled` to back the store.
 module MappingDataManagerUI
 
 open ToolUp.Elmish

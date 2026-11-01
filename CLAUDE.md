@@ -300,14 +300,20 @@ When adding a new store substrate (an `IXxxStore` + its types), the canonical sp
 - **Crypto-addressed / server-only-compute types stay in Server** — e.g. SHA-256-addressed envelope
   types use `System.Security.Cryptography`, which is not Fable-compilable, and belong in
   `Platform.Server/Server/` even though "types" usually go to Core.
-- **Opt-in wiring (GP 13):** an `XxxStoreMode` DU + a `ServerConfig.Xxx` field defaulting to `NoXxx`
-  (the DU under `Shared/Config/`, the field in `SDK.Shared.fs`, its default in
-  `Shared/Config/ServerConfigDefaults.fs`, any env binding in the server tier's
-  `Server/Config/ServerConfigFromEnv.fs` — a key is first a `ConfigKey` in `ConfigKeys.keys`, and the binder
-  takes its parser, default and bounds from there); a `registerXxxStore` helper in `Server/Compose/ComposeStores.fs`
-  (`TryAddSingleton` with a lazy factory); called from `Server/SDK.Server.fs` next to
-  `registerTimeSeriesStore`. Note a new `ServerConfig` field retypes the record ctor and forces a
-  Core api-baseline regen (see [Public-API approval baselines](#public-api-approval-baselines-phase-175)).
+- **Opt-in wiring (GP 13) — one `FeatureMode` field, one `ConfigKey`, one `Contribution` (Phase 877).**
+  A store is on or off, and that fact has one type: `Xxx: FeatureMode` (default `FeatureMode.Disabled`)
+  on the concern record it belongs to — `Stores` for a persistence substrate, the top level for a
+  subsystem composed over the stores — with its default in that concern's `defaults` in
+  `Shared/Config/ServerConfigDefaults.fs`. Its environment key is a `ConfigKey` in `ConfigKeys.keys`
+  (the binder in `Server/Config/ServerConfigFromEnv.fs` reads it with `enabledDisabled` and takes
+  parser, default and direction from the entry; nothing else is written for the key). Its wiring is
+  a `Contribution` under the store's `ComponentId` (`Contribution.service owner register`, admitted
+  when the field is `Enabled`), not a `registerXxxStore` helper called from `SDK.Server.fs`. Never
+  mint an `XxxStoreMode` union for an on/off store: the forty that existed were one boolean shape
+  with forty parsers, and Phase 877 deleted them. A mode that carries a payload, has a third case, or
+  chooses between substrates keeps its own type. A field added to a concern record retypes only that
+  record's ctor: the Core baseline regenerates, and no downstream baseline moves unless its own
+  public record embeds the concern (see [Public-API approval baselines](#public-api-approval-baselines-phase-175)).
 
 **Vendor dependencies never enter `ToolUp.Platform.*` (GP 1).** `ToolUp.Tabular` carries
 `DocumentFormat.OpenXml` for its XLSX leg, and its `.fsproj` says so: the vendor dep stays there. Do
@@ -621,11 +627,17 @@ touches public surface:
   author the sibling's baseline.
 - **A failing baseline names an assembly, not a cause** — confirm attribution with `git log -- <source
   files>` before writing it into a commit message.
-- **Design corollary:** a new opt-in feature that would widen a shared record's ctor can instead
-  ship as a NEW options record + NEW builder entry points — existing builders delegate with a
-  behaviour-preserving default (GP 11). Since Phase 618 the new surface still needs its assemblies'
-  baselines regenerated (additions are a named, surgical regen rather than a silent pass), but the
-  existing types' baselines stay untouched and no consumer breaks.
+- **Design corollary (ruled 2026-10-23, landed by Phase 877):** a new opt-in is a `FeatureMode` key on
+  the concern record it belongs to (`ServerConfig.Stores`, `Observability`, `SecurityPosture`,
+  `MultiInstance`, `RiskAcknowledgements`, or the top level for a subsystem) plus its `ConfigKey` in
+  the registry and, where it registers anything, a `Contribution`. It widens that one concern
+  record's ctor, so the Core baseline regenerates by name and nothing downstream does unless its own
+  public record embeds the concern. The older escape — a NEW options record + NEW builder entry
+  points so an existing shared record's ctor never widens — is still right for a feature that needs
+  more than a toggle (a payload, several knobs), with existing builders delegating under a
+  behaviour-preserving default (GP 11); it is not a reason to keep a toggle out of its concern record.
+  Since Phase 618 any new surface needs its assemblies' baselines regenerated (additions are a named,
+  surgical regen rather than a silent pass), and the existing types' baselines stay untouched.
 - **Marking a member `[<Obsolete>]` moves the baseline, and the notice is gated (Phase 258).** The
   renderer emits a SEPARATE `…  (obsolete)` marker line beside the member's unchanged token, so a
   deprecation scores as an addition (regenerate, commit in the same PR) and never as a removal — the

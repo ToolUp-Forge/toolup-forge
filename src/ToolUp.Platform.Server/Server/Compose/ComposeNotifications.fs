@@ -65,7 +65,7 @@ type NotificationStack = {
     /// Non-transactional kinds pass through unchanged.
     ResolvedNotificationChannel: INotificationChannel
     /// Phase 442 — opt-in presence + soft-lock substrate. `None` when
-    /// `ServerConfig.Presence = NoPresence` (the default): no DI
+    /// `ServerConfig.Presence = FeatureMode.Disabled` (the default): no DI
     /// registration, no allocation, byte-for-byte unchanged (GP 13).
     PresenceSubstrate: (IPresenceTracker * IEntityLockStore) option
     /// Phase 441 — the preference substrate, `None` when not enabled.
@@ -174,7 +174,7 @@ let buildNotificationStack
     // the DI-registered `IEventStore` (which is itself the
     // webhook-hooked store when webhooks are enabled), so audit writes
     // flow through the same retention policy and webhook fan-out as
-    // every other platform event. The `NoAuditLog` mode (Phase 1g
+    // every other platform event. The `FeatureMode.Disabled` mode (Phase 1g
     // default) registers `NoOpAuditLog` instead — emission sites
     // (TeamStore, SessionFileStore, PermissionStore,
     // ScopeResolutionMiddleware, TransactionalDispatcher) still call
@@ -189,7 +189,7 @@ let buildNotificationStack
     // over the same root — the store is stateless over the directory.
     let auditFallbackStore =
         match config.AuditLog, config.AuditFailurePolicy with
-        | EnabledAuditLog, DegradeToFile ->
+        | FeatureMode.Enabled, DegradeToFile ->
             let root =
                 config.AuditFallbackDirectory
                 |> Option.defaultValue (AuditFallbackStore.defaultDirectory ())
@@ -199,8 +199,8 @@ let buildNotificationStack
 
     let auditLog: IAuditLog =
         match config.AuditLog with
-        | NoAuditLog -> AuditLog.NoOpAuditLog() :> _
-        | EnabledAuditLog ->
+        | FeatureMode.Disabled -> AuditLog.NoOpAuditLog() :> _
+        | FeatureMode.Enabled ->
             AuditLog.EventStoreAuditLog(
                 eventStore,
                 resolvedLogger,
@@ -210,7 +210,7 @@ let buildNotificationStack
             )
             :> _
 
-    // Phase 21b — opt-in share-token substrate. `NoShareTokenStore`
+    // Phase 21b — opt-in share-token substrate. `FeatureMode.Disabled`
     // (default) leaves `shareTokenStoreInstance = None`, no DI
     // registration, no `_platform/share-tokens/` blob layout, no signing
     // key resolved from the secret store. Apps that resolve
@@ -218,14 +218,14 @@ let buildNotificationStack
     // absence explicitly. Audit emission flows through the configured
     // `IAuditLog`; the `NoOpAuditLog` default makes share-token audit
     // emission free at runtime when the deployment runs
-    // `AuditLog = NoAuditLog`. Built here (before `services` is in
+    // `AuditLog = FeatureMode.Disabled`. Built here (before `services` is in
     // scope) so the let-binding is visible to the bulk DI registration
     // block further down — mirrors the JobScheduler / EntityStore
     // patterns.
     // Phase 66 Stream A.7 — auto-promote `ShareTokenStore` to
-    // `EnabledShareTokenStore` when `config.Surfaces` declares a
+    // `FeatureMode.Enabled` when `config.Surfaces` declares a
     // `ClaimBearer` profile but the operator left the explicit
-    // selection at the `NoShareTokenStore` default. The
+    // selection at the `FeatureMode.Disabled` default. The
     // `ClaimBearer` surface is unreachable without a share-token
     // store to validate the claims it carries, so the auto-promotion
     // closes the door on a startup-shape that has no working
@@ -234,27 +234,27 @@ let buildNotificationStack
     // `Surfaces` — so the two together cover both halves of the
     // coherence rule.
     let effectiveShareTokenStore =
-        match config.ShareTokenStore with
-        | EnabledShareTokenStore -> EnabledShareTokenStore
-        | NoShareTokenStore when DeploymentConfig.hasClaimBearer config ->
+        match config.Stores.ShareTokenStore with
+        | FeatureMode.Enabled -> FeatureMode.Enabled
+        | FeatureMode.Disabled when DeploymentConfig.hasClaimBearer config ->
             // Phase 66 Stream B.2 — log the auto-promotion at Info level
             // so operators see it in startup output (per design §3.8
             // "Logged at info level so operators can see the
             // auto-promotion in startup output"). The matching
             // `SurfaceCoherenceValidator` Rule 5 surfaces a Warning so
             // operators relying on auto-promotion are nudged toward an
-            // explicit `EnabledShareTokenStore` setting.
+            // explicit `FeatureMode.Enabled` setting.
             resolvedLogger.Info(
-                "[ShareTokenStore] auto-promoted NoShareTokenStore → EnabledShareTokenStore: ServerConfig.Surfaces declares SurfaceProfile.ClaimBearer. Set ServerConfig.ShareTokenStore = EnabledShareTokenStore explicitly to silence this notice."
+                "[ShareTokenStore] auto-promoted FeatureMode.Disabled → FeatureMode.Enabled: ServerConfig.Surfaces declares SurfaceProfile.ClaimBearer. Set ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled explicitly to silence this notice."
             )
 
-            EnabledShareTokenStore
-        | NoShareTokenStore -> NoShareTokenStore
+            FeatureMode.Enabled
+        | FeatureMode.Disabled -> FeatureMode.Disabled
 
     let shareTokenStoreInstance: IShareTokenStore option =
         match effectiveShareTokenStore with
-        | NoShareTokenStore -> None
-        | EnabledShareTokenStore ->
+        | FeatureMode.Disabled -> None
+        | FeatureMode.Enabled ->
             // Phase 131 (remainder) — wrap the blob store in the
             // id-sanitising decorator so every caller-supplied `scopeId`
             // / `tokenId` that becomes a
@@ -331,7 +331,7 @@ let buildNotificationStack
             :> INotificationChannel
 
     // Phase 442 — opt-in presence + soft-lock collaboration substrate.
-    // `EnabledPresence` constructs the in-memory `IPresenceTracker` /
+    // `FeatureMode.Enabled` constructs the in-memory `IPresenceTracker` /
     // `IEntityLockStore` defaults over the resolved (dispatcher-wrapped)
     // notification channel so join / move / leave and lock events fan out
     // on the same per-scope SSE pipeline every other server event rides.
@@ -344,8 +344,8 @@ let buildNotificationStack
     // implementations, per the impl file headers).
     let presenceSubstrate: (IPresenceTracker * IEntityLockStore) option =
         match config.Presence with
-        | NoPresence -> None
-        | EnabledPresence ->
+        | FeatureMode.Disabled -> None
+        | FeatureMode.Enabled ->
             Some(
                 InMemoryPresenceTracker(resolvedNotificationChannel) :> IPresenceTracker,
                 InMemoryEntityLockStore(resolvedNotificationChannel) :> IEntityLockStore
@@ -438,9 +438,9 @@ let registerShareTokenStore (services: IServiceCollection) (shareTokenStoreInsta
     | Some store -> services.AddSingleton<IShareTokenStore>(store) |> ignore
 
 /// Phase 442 — register the presence + soft-lock substrate when
-/// `ServerConfig.Presence = EnabledPresence`. The pair was constructed in
+/// `ServerConfig.Presence = FeatureMode.Enabled`. The pair was constructed in
 /// `buildNotificationStack` (over the resolved notification channel);
-/// only the DI registration happens here. `NoPresence` registers nothing
+/// only the DI registration happens here. `FeatureMode.Disabled` registers nothing
 /// — a module that resolves either interface then receives `null` and
 /// must handle absence explicitly (same contract as `IShareTokenStore`).
 let registerPresenceSubstrate
@@ -567,7 +567,7 @@ let registerAuditFallbackReplay
     (resolvedLogger: ILogger)
     : unit =
     match config.AuditLog, config.AuditFailurePolicy with
-    | EnabledAuditLog, DegradeToFile ->
+    | FeatureMode.Enabled, DegradeToFile ->
         Hosting.register
             services
             (BackgroundUnit.create "audit-fallback-replay" SharedWork (fun _ ->

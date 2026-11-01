@@ -110,7 +110,10 @@ let private hardeningTests =
 
             let config = {
                 ServerConfig.defaults with
-                    PeerRoutePrefixes = [ "/peer/" ]
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            PeerRoutePrefixes = [ "/peer/" ]
+                    }
             }
 
             let mw = PeerBearerAuthMiddleware(next, config)

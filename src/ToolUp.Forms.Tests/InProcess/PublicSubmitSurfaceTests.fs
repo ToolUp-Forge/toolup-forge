@@ -154,7 +154,10 @@ let tests =
                 |> withForms (FormsOptions.create ())
                 |> ServerApp.withConfig {
                     anonymousConfig with
-                        ReplicaCount = 2
+                        MultiInstance = {
+                            anonymousConfig.MultiInstance with
+                                ReplicaCount = 2
+                        }
                         PublicBaseUrl = Some "https://forms.example.com"
                 }
                 |> ServerApp.withLogger logger
@@ -162,7 +165,12 @@ let tests =
             let resolved = ServerApp.resolve app
 
             Expect.contains resolved.ComposedCompanions "ToolUp.Forms" "the Forms tier is composed"
-            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+
+            Expect.equal
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
+
             Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
 
             Expect.equal

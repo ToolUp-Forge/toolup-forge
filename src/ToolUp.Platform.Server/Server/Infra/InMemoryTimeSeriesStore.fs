@@ -23,7 +23,7 @@ open System.Collections.Concurrent
 
 /// Dev/test in-memory `ITimeSeriesStore`. **Not for production** — unbounded
 /// in-memory retention, no durability. Composed by
-/// `ServerConfig.TimeSeriesStore = InMemoryTimeSeriesStore`.
+/// `ServerConfig.Stores.TimeSeriesStore = InMemoryTimeSeriesStore`.
 type InMemoryTimeSeriesStore() =
     // scopeId -> series -> points (append order; sorted on query).
     let data =

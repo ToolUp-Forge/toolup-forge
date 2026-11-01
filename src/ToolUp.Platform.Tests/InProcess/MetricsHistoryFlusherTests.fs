@@ -342,7 +342,10 @@ let tests =
             test "the enabled mode registers the flusher" {
                 let config = {
                     ServerConfig.defaults with
-                        MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        Observability = {
+                            ServerConfig.defaults.Observability with
+                                MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        }
                 }
 
                 Expect.equal (hostedServicesFor config) 1 "one hosted service"
@@ -351,7 +354,10 @@ let tests =
             test "a serverless host registers nothing even when enabled" {
                 let config = {
                     ServerConfig.defaults with
-                        MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        Observability = {
+                            ServerConfig.defaults.Observability with
+                                MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        }
                         ServerlessHost = ServerlessHost
                 }
 

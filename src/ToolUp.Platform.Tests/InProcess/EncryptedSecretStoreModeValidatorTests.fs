@@ -43,7 +43,10 @@ let private validKey () =
 let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptPlaintextSecretsWhenAuthRequired = escapeHatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptPlaintextSecretsWhenAuthRequired = escapeHatch
+        }
 }
 
 let private dummyStore () : Secrets.ISecretStore =

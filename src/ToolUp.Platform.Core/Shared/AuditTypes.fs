@@ -59,7 +59,7 @@ type AuditEvent =
     | NotificationDeliveryFailed of NotificationDeliveryFailedPayload
     /// Debounced probe state transition (3 consecutive
     /// observations of a new status). Emitted by `HealthStateTracker`
-    /// when `ServerConfig.HealthStateTracking = true`.
+    /// when `ServerConfig.Observability.HealthStateTracking = true`.
     | HealthStateChanged of HealthStateChangedPayload
     /// Encryption key auto-created on first resolution by
     /// an SDK-managed resolver (`SingleKeyResolver` /
@@ -358,12 +358,12 @@ type AuditEvent =
     | WorkflowActionExecuted of WorkflowActionExecutedPayload
     /// Phase 59 — client recorded a consent decision via
     /// `IConsentProvider`; only emitted when
-    /// `ServerConfig.ConsentAudit = EnabledConsentAudit`. Reserved
+    /// `ServerConfig.ConsentAudit = FeatureMode.Enabled`. Reserved
     /// `SourceModule = "_platform.consent"`.
     | ConsentRecorded of ConsentEvent
     /// Phase 60 — an `<AdSlot>` rendered + the AdSense bundle
     /// reported an impression; only emitted when
-    /// `ServerConfig.AdAnalytics = EnabledAdAnalytics`. Reserved
+    /// `ServerConfig.AdAnalytics = FeatureMode.Enabled`. Reserved
     /// `SourceModule = "_platform.ads"`.
     | AdImpressionRecorded of AdImpression
     /// Phase 60 — an ad-click event was recorded via the

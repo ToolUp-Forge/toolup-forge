@@ -86,10 +86,16 @@ let private signInOnlyApp (port: int) (publicDir: string) (extensions: ComposeEx
         ServerConfig.defaults with
             Port = port
             PublicPath = publicDir
-            TrustForwardedHeaders = false
-            SseAuthMode = CookieRequired
-            AcceptPlaintextSecretsWhenAuthRequired = true
-            AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            SecurityPosture = {
+                ServerConfig.defaults.SecurityPosture with
+                    TrustForwardedHeaders = false
+                    SseAuthMode = CookieRequired
+            }
+            RiskAcknowledgements = {
+                ServerConfig.defaults.RiskAcknowledgements with
+                    AcceptPlaintextSecretsWhenAuthRequired = true
+                    AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            }
     }
 
     let auth =

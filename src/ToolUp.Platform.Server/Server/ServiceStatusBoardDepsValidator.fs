@@ -30,14 +30,14 @@ type ServiceStatusBoardDepsValidator(config: ServerConfig, ?timeout: TimeSpan) =
 
         member _.Validate() = async {
             let jobsOff = config.JobScheduler = NoJobScheduler
-            let rateOff = config.RateLimiter = NoRateLimiter
-            let driftOff = config.ConfigDriftDetection = NoConfigDriftDetection
-            let smokeOff = config.SmokeTest = NoSmokeTest
+            let rateOff = config.RateLimiter = FeatureMode.Disabled
+            let driftOff = config.ConfigDriftDetection = FeatureMode.Disabled
+            let smokeOff = config.SmokeTest = FeatureMode.Disabled
 
             if jobsOff && rateOff && driftOff && smokeOff then
                 return
                     Warning(
-                        "ServiceStatusBoard composes JobQueue, RateLimit, Drift and SmokeTest sections, but ServerConfig disables all four (JobScheduler = NoJobScheduler, RateLimiter = NoRateLimiter, ConfigDriftDetection = NoConfigDriftDetection, SmokeTest = NoSmokeTest). The board will render disabled banners for those four sections; Health and Preflight remain best-effort. Set ClientConfig.Slots.ServiceStatusBoard = SlotFill.Empty to hide the sidebar entry, or enable at least one underlying substrate."
+                        "ServiceStatusBoard composes JobQueue, RateLimit, Drift and SmokeTest sections, but ServerConfig disables all four (JobScheduler = NoJobScheduler, RateLimiter = FeatureMode.Disabled, ConfigDriftDetection = FeatureMode.Disabled, SmokeTest = FeatureMode.Disabled). The board will render disabled banners for those four sections; Health and Preflight remain best-effort. Set ClientConfig.Slots.ServiceStatusBoard = SlotFill.Empty to hide the sidebar entry, or enable at least one underlying substrate."
                     )
             else
                 return Ok

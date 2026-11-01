@@ -49,7 +49,7 @@ let buildDataObjectStoreAndCatalog
 /// start fire-and-forget fails. `compose` calls this one; the public
 /// signature below is kept for its existing callers.
 ///
-/// Phase 1027 — with `LineageDurability = EnabledDurableLineage`, a lineage
+/// Phase 1027 — with `LineageDurability = FeatureMode.Enabled`, a lineage
 /// store, a result store and `blobStorage`, also the `LineageOutbox` the
 /// result store stages its links in (`registerLineageOutbox` puts it in DI
 /// and starts its relay). Enabled without the lineage store or a result
@@ -64,22 +64,22 @@ let internal buildOptionalStoreValuesLogged
 
     let lineageStore: ILineageStore option =
         match config.Lineage with
-        | NoLineageStore -> None
-        | EnabledLineageStore -> Some(LineageStore.EventStoreLineageStore(eventStore) :> _)
+        | FeatureMode.Disabled -> None
+        | FeatureMode.Enabled -> Some(LineageStore.EventStoreLineageStore(eventStore) :> _)
 
     let lineageOutbox =
-        match config.LineageDurability, lineageStore, config.ResultStore, blobStorage with
-        | NoDurableLineage, _, _, _ -> None
-        | EnabledDurableLineage, Some lineage, (InMemoryResultStore | PersistentResultStore), Some blobs ->
+        match config.LineageDurability, lineageStore, config.Stores.ResultStore, blobStorage with
+        | FeatureMode.Disabled, _, _, _ -> None
+        | FeatureMode.Enabled, Some lineage, (InMemoryResultStore | PersistentResultStore), Some blobs ->
             Some(ResultStore.LineageOutbox(blobs, lineage, dataObjectStore, logger))
-        | EnabledDurableLineage, _, _, _ ->
+        | FeatureMode.Enabled, _, _, _ ->
             logger.Warn
-                "[LineageOutbox] LineageDurability = EnabledDurableLineage needs Lineage = EnabledLineageStore and a ResultStore - durable lineage NOT enabled; lineage links stay log-and-drop."
+                "[LineageOutbox] LineageDurability = FeatureMode.Enabled needs Lineage = FeatureMode.Enabled and a ResultStore - durable lineage NOT enabled; lineage links stay log-and-drop."
 
             None
 
     let resultStore: IResultStore option =
-        match config.ResultStore with
+        match config.Stores.ResultStore with
         | NoResultStore -> None
         | InMemoryResultStore ->
             Some(ResultStore.InMemoryResultStore(Some eventStore, lineageStore, logger, lineageOutbox) :> _)
@@ -90,7 +90,7 @@ let internal buildOptionalStoreValuesLogged
             )
 
     let conversationStore: IConversationStore option =
-        match config.ConversationStore with
+        match config.Stores.ConversationStore with
         | NoConversationStore -> None
         | EnabledConversationStore _ ->
             Some(ConversationStore.PersistentConversationStore(dataObjectStore, Some eventStore, logger) :> _)
@@ -115,10 +115,10 @@ let buildOptionalStoreValues
     lineageStore, resultStore, conversationStore
 
 /// Phase 19 — register the entity-store substrate when
-/// `ServerConfig.EntityStore = EnabledEntityStore`. Constructs the
+/// `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`. Constructs the
 /// `EntityRegistry`, runs every accumulated registration closure
 /// against it, then constructs the `BlobEntityStore` over the
-/// resolved `IBlobStorage` and `IDataObjectStore`. `NoEntityStore`
+/// resolved `IBlobStorage` and `IDataObjectStore`. `FeatureMode.Disabled`
 /// (the default) skips both registrations entirely — entity store
 /// costs zero runtime when unused.
 let registerEntityStore
@@ -126,8 +126,8 @@ let registerEntityStore
     (config: ServerConfig)
     (entityRegistrations: (EntityStore.EntityRegistry -> unit) list)
     : unit =
-    match config.EntityStore with
-    | EnabledEntityStore ->
+    match config.Stores.EntityStore with
+    | FeatureMode.Enabled ->
         let entityRegistry = EntityStore.EntityRegistry()
 
         // Phase 26 — when SingleNodeDeployPlane is set, prepend the
@@ -152,7 +152,7 @@ let registerEntityStore
         // convenience as the Tenant prepend above; gated on the mode so
         // a deployment not using durable consent pays nothing.
         let effectiveRegistrations =
-            match config.ConsentStateStore with
+            match config.Stores.ConsentStateStore with
             | EntityBackedConsentStateStore ->
                 let consentRegister (registry: EntityStore.EntityRegistry) =
                     registry.Register Consent.ConsentStateStore.ConsentRecord.registration
@@ -170,13 +170,13 @@ let registerEntityStore
         // can still register `ExternalContactStore.registration` itself
         // through `ServerApp.withEntity`; `Register` is idempotent.
         let effectiveRegistrations =
-            match config.ExternalContactStore with
-            | EnabledExternalContactStore ->
+            match config.Stores.ExternalContactStore with
+            | FeatureMode.Enabled ->
                 let contactRegister (registry: EntityStore.EntityRegistry) =
                     registry.Register ExternalContactStore.registration
 
                 contactRegister :: effectiveRegistrations
-            | NoExternalContactStore -> effectiveRegistrations
+            | FeatureMode.Disabled -> effectiveRegistrations
 
         for registerFn in effectiveRegistrations do
             registerFn entityRegistry
@@ -187,7 +187,7 @@ let registerEntityStore
             let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
             let bs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
             // IAuditLog is always registered (Phase 9 ensures even
-            // NoAuditLog mode resolves to NoOpAuditLog). Wrap in
+            // FeatureMode.Disabled mode resolves to NoOpAuditLog). Wrap in
             // Some/None for the BlobEntityStore constructor's
             // option parameter.
             let auditLogObj = sp.GetService(typeof<IAuditLog>)
@@ -230,11 +230,11 @@ let registerEntityStore
                 })
         )
         |> ignore
-    | NoEntityStore -> ()
+    | FeatureMode.Disabled -> ()
 
 /// Phase 7b — register the user-authored schema store (`IUserSchemaStore`)
 /// + its migration `IJobHandler` when
-/// `ServerConfig.UserSchemaAuthoring = EnabledUserSchemaAuthoring`. Rides
+/// `ServerConfig.UserSchemaAuthoring = FeatureMode.Enabled`. Rides
 /// the Phase 7 versioned object store (`IDataObjectStore`); the audit log
 /// is resolved optionally (always present in practice — the SDK registers
 /// at least `NoOpAuditLog`). The migration handler is registered with the
@@ -243,7 +243,7 @@ let registerEntityStore
 /// cost when off (GP 11 + GP 13).
 let registerUserSchemaStore (services: IServiceCollection) (config: ServerConfig) : unit =
     match config.UserSchemaAuthoring with
-    | EnabledUserSchemaAuthoring ->
+    | FeatureMode.Enabled ->
         services.AddSingleton<IUserSchemaStore>(fun (sp: System.IServiceProvider) ->
             let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
             let auditLogObj = sp.GetService(typeof<IAuditLog>)
@@ -271,21 +271,21 @@ let registerUserSchemaStore (services: IServiceCollection) (config: ServerConfig
 
             store)
         |> ignore
-    | NoUserSchemaAuthoring -> ()
+    | FeatureMode.Disabled -> ()
 
 /// Phase 599 — register the entity-write outbox surface + its relay
-/// drain when `ServerConfig.EntityOutbox = EnabledEntityOutbox`.
+/// drain when `ServerConfig.Stores.EntityOutbox = FeatureMode.Enabled`.
 /// Requires the entity store; enabling the outbox without it is a
 /// compose-time no-op with a loud log rather than a dangling DI
 /// registration. The relay is gated as `EntityOutboxRelaySubsystem`
 /// on the process-profile matrix.
 let registerEntityOutbox (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
-    match config.EntityOutbox, config.EntityStore with
-    | NoEntityOutbox, _ -> ()
-    | EnabledEntityOutbox, NoEntityStore ->
+    match config.Stores.EntityOutbox, config.Stores.EntityStore with
+    | FeatureMode.Disabled, _ -> ()
+    | FeatureMode.Enabled, FeatureMode.Disabled ->
         resolvedLogger.Warn
-            "[EntityOutbox] EntityOutbox = EnabledEntityOutbox but EntityStore = NoEntityStore — outbox NOT registered. Pair with EntityStore = EnabledEntityStore."
-    | EnabledEntityOutbox, EnabledEntityStore ->
+            "[EntityOutbox] EntityOutbox = FeatureMode.Enabled but EntityStore = FeatureMode.Disabled — outbox NOT registered. Pair with EntityStore = FeatureMode.Enabled."
+    | FeatureMode.Enabled, FeatureMode.Enabled ->
         services.AddSingleton<EntityOutbox.OutboxEntityStore>(fun sp ->
             EntityOutbox.OutboxEntityStore(
                 sp.GetRequiredService<IEntityStore.IEntityStore>(),
@@ -352,13 +352,13 @@ let internal registerLineageOutbox
         |> ignore
 
 /// Phase 161 — register the time-series store when
-/// `ServerConfig.TimeSeriesStore` selects a backend. `InMemoryTimeSeries`
+/// `ServerConfig.Stores.TimeSeriesStore` selects a backend. `InMemoryTimeSeries`
 /// registers the dev/test in-memory default; `CustomTimeSeriesStore`
 /// registers nothing, leaving the consumer's own `ITimeSeriesStore`
 /// singleton in DI; `NoTimeSeriesStore` (the default) registers nothing —
 /// the substrate costs zero runtime when unused (GP 13).
 let registerTimeSeriesStore (services: IServiceCollection) (config: ServerConfig) : unit =
-    match config.TimeSeriesStore with
+    match config.Stores.TimeSeriesStore with
     | NoTimeSeriesStore -> ()
     | CustomTimeSeriesStore -> () // consumer composed its own ITimeSeriesStore singleton
     | InMemoryTimeSeries ->
@@ -478,7 +478,7 @@ let registerGrantConsentStore (services: IServiceCollection) (config: ServerConf
 
         services.TryAddSingleton<GrantConsentStore.IGrantConsentVerifier>(GrantConsentStore.verifierOver [])
 
-/// Phase 448 — register the dataset store when `ServerConfig.Datasets`
+/// Phase 448 — register the dataset store when `ServerConfig.Stores.Datasets`
 /// selects a backend. `BlobDatasets` registers the blob-backed
 /// `BlobDatasetStore` over the composed `IDataObjectStore` (BCL-only
 /// JSON-frame codec, no vendor dependency) via a lazy factory, so a
@@ -489,7 +489,7 @@ let registerGrantConsentStore (services: IServiceCollection) (config: ServerConf
 /// unused (GP 13). Uses `TryAddSingleton` so a consumer that pre-registered
 /// its own `IDatasetStore` under `BlobDatasets` is never overridden.
 let registerDatasetStore (services: IServiceCollection) (config: ServerConfig) : unit =
-    match config.Datasets with
+    match config.Stores.Datasets with
     | NoDatasets -> ()
     | CustomDatasetStore -> () // consumer / companion composed its own IDatasetStore singleton
     | BlobDatasets ->
@@ -498,7 +498,7 @@ let registerDatasetStore (services: IServiceCollection) (config: ServerConfig) :
             BlobDatasetStore.create dataObjects)
 
 /// Phase 528 — register the session registry when
-/// `ServerConfig.SessionRegistry` selects a backend.
+/// `ServerConfig.Stores.SessionRegistry` selects a backend.
 /// `BlobSessionRegistry` registers the blob-backed default over the
 /// composed `IBlobStorage` (BCL-only JSON, no vendor dependency — GP 1)
 /// via a lazy factory, so a deployment that never resolves
@@ -509,7 +509,7 @@ let registerDatasetStore (services: IServiceCollection) (config: ServerConfig) :
 /// consumer that pre-registered its own registry under
 /// `BlobSessionRegistry` is never overridden.
 let registerSessionRegistry (services: IServiceCollection) (config: ServerConfig) : unit =
-    match config.SessionRegistry with
+    match config.Stores.SessionRegistry with
     | NoSessionRegistry -> ()
     | CustomSessionRegistry _ -> () // consumer / companion composed its own ISessionRegistry singleton
     | BlobSessionRegistry opts ->
@@ -524,7 +524,7 @@ let registerSessionRegistry (services: IServiceCollection) (config: ServerConfig
             SessionRegistry.BlobBackedSessionRegistry.create blobs logger opts.RetentionDays)
 
 /// Phase 527 — register the service-account store when
-/// `ServerConfig.ServiceAccounts` opts in. `EnabledServiceAccounts`
+/// `ServerConfig.Stores.ServiceAccounts` opts in. `EnabledServiceAccounts`
 /// registers the blob-backed `BlobServiceAccountStore` via a lazy
 /// factory, so a deployment that opts in but never receives a
 /// service-account request pays only the registration (GP 13);
@@ -533,7 +533,7 @@ let registerSessionRegistry (services: IServiceCollection) (config: ServerConfig
 /// default) registers nothing at all.
 ///
 /// `IAuditLog` is resolved OPTIONALLY inside the factory rather than
-/// required: a deployment running `AuditLog = NoAuditLog` composes no
+/// required: a deployment running `AuditLog = FeatureMode.Disabled` composes no
 /// `IAuditLog`, and the store's audit emission is a no-op under `None`.
 /// Requiring it here would make the audit mode a hard dependency of the
 /// substrate, which is the coupling GP 13 exists to prevent.
@@ -541,7 +541,7 @@ let registerSessionRegistry (services: IServiceCollection) (config: ServerConfig
 /// `TryAddSingleton` so a consumer that pre-registered its own store
 /// under `EnabledServiceAccounts` is never overridden.
 let registerServiceAccountStore (services: IServiceCollection) (config: ServerConfig) : unit =
-    match config.ServiceAccounts with
+    match config.Stores.ServiceAccounts with
     | NoServiceAccounts -> ()
     | CustomServiceAccountStore -> () // consumer composed its own IServiceAccountStore singleton
     | EnabledServiceAccounts ->
@@ -564,7 +564,7 @@ let registerServiceAccountStore (services: IServiceCollection) (config: ServerCo
 /// registers nothing, leaving an engine companion's own `IGraphStore`
 /// singleton in DI.
 let registerGraphStore (services: IServiceCollection) (config: ServerConfig) : unit =
-    match config.GraphStore with
+    match config.Stores.GraphStore with
     | CustomGraphStore -> () // consumer / engine companion composed its own IGraphStore
     | InMemoryGraphStore ->
         // Lazy factory: the InMemoryGraphStore is not constructed until the
@@ -574,22 +574,22 @@ let registerGraphStore (services: IServiceCollection) (config: ServerConfig) : u
             ToolUp.Graph.InMemory.InMemoryGraphStore() :> ToolUp.Graph.IGraphStore)
         |> ignore
 
-/// Phase 163 — register the end-user telemetry sink. `NoTelemetrySink`
+/// Phase 163 — register the end-user telemetry sink. `FeatureMode.Disabled`
 /// (the default) registers the `NoOpTelemetrySink` (a true no-op), so
 /// `ITelemetrySink` always resolves and emission sites are free at runtime
-/// (GP 13); `CustomTelemetrySink` registers nothing, leaving the consumer's
+/// (GP 13); `FeatureMode.Enabled` registers nothing, leaving the consumer's
 /// companion sink (e.g. `ToolUp.TelemetrySinks.Ga4`) in DI.
 let registerTelemetrySink (services: IServiceCollection) (config: ServerConfig) : unit =
-    match config.TelemetrySink with
-    | CustomTelemetrySink -> () // consumer composed its own ITelemetrySink singleton
-    | NoTelemetrySink -> services.AddSingleton<ITelemetrySink>(NoOpTelemetrySink()) |> ignore
+    match config.Observability.TelemetrySink with
+    | FeatureMode.Enabled -> () // consumer composed its own ITelemetrySink singleton
+    | FeatureMode.Disabled -> services.AddSingleton<ITelemetrySink>(NoOpTelemetrySink()) |> ignore
 
 /// Phase 318 — register the external-compute dispatcher.
-/// `NoExternalCompute` (the default) registers the
+/// `FeatureMode.Disabled` (the default) registers the
 /// `NoExternalComputeDispatcher`, so `IExternalComputeDispatcher` always
 /// resolves and a submit path is a typed not-configured refusal rather than
 /// a DI resolution failure; nothing is started and no dependency is pulled
-/// (GP 13). `CustomExternalCompute` registers nothing, leaving the
+/// (GP 13). `FeatureMode.Enabled` registers nothing, leaving the
 /// deployment's own companion dispatcher (an HTTP worker pool, a batch
 /// backend) in DI.
 ///
@@ -598,14 +598,14 @@ let registerTelemetrySink (services: IServiceCollection) (config: ServerConfig) 
 /// deployment that never submits external work allocates nothing.
 let registerExternalCompute (services: IServiceCollection) (config: ServerConfig) : unit =
     match config.ExternalCompute with
-    | CustomExternalCompute -> () // consumer composed its own IExternalComputeDispatcher singleton
-    | NoExternalCompute ->
+    | FeatureMode.Enabled -> () // consumer composed its own IExternalComputeDispatcher singleton
+    | FeatureMode.Disabled ->
         services.AddSingleton<IExternalComputeDispatcher>(fun _ ->
             NoExternalComputeDispatcher() :> IExternalComputeDispatcher)
         |> ignore
 
 /// Phase 451 — register the compute-budget substrate when
-/// `ServerConfig.ComputeBudget = EnabledComputeBudget`.
+/// `ServerConfig.ComputeBudget = FeatureMode.Enabled`.
 ///
 /// Registers the blob-backed `IComputeBudgetStore` and the
 /// `ComputeBudgetGuard` both enforcement points share, then **replaces**
@@ -623,7 +623,7 @@ let registerExternalCompute (services: IServiceCollection) (config: ServerConfig
 /// scheduler's reconciliation polls go through the decorator too — which is
 /// what settles a reservation when a run reaches a terminal outcome.
 ///
-/// `NoComputeBudget` (the default) registers nothing and replaces nothing,
+/// `FeatureMode.Disabled` (the default) registers nothing and replaces nothing,
 /// so the composed graph is byte-for-byte what it was (GP 11 + GP 13).
 ///
 /// The cost model is `ComputeCostModel.perRun` — the only model that is
@@ -637,8 +637,8 @@ let registerComputeBudget
     (usageLog: IUsageLog)
     : unit =
     match config.ComputeBudget with
-    | NoComputeBudget -> ()
-    | EnabledComputeBudget ->
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         let store =
             BlobComputeBudgetStore(resolvedBlobStorage, resolvedLogger) :> IComputeBudgetStore
 
@@ -679,28 +679,28 @@ let registerComputeBudget
             )
             |> ignore
         | None ->
-            // `NoExternalCompute` registers its no-op dispatcher by
+            // `FeatureMode.Disabled` registers its no-op dispatcher by
             // factory, and budgeting a dispatcher whose every Submit is
             // already a typed refusal buys nothing — so that combination
             // is silent. A deployment that DID compose a backend and
             // registered it by factory is the case worth naming.
             match config.ExternalCompute with
-            | NoExternalCompute -> ()
-            | CustomExternalCompute ->
+            | FeatureMode.Disabled -> ()
+            | FeatureMode.Enabled ->
                 resolvedLogger.Warn
-                    "ServerConfig.ComputeBudget = EnabledComputeBudget, but no IExternalComputeDispatcher INSTANCE registration was found to wrap — external-compute submissions will NOT be budgeted (fit-job enqueue still is). Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(dispatcher)), not as a factory — the same requirement Phase 319's hand-off reconciliation already has."
+                    "ServerConfig.ComputeBudget = FeatureMode.Enabled, but no IExternalComputeDispatcher INSTANCE registration was found to wrap — external-compute submissions will NOT be budgeted (fit-job enqueue still is). Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(dispatcher)), not as a factory — the same requirement Phase 319's hand-off reconciliation already has."
 
 /// Register the `IColumnMappingStore` substrate when
-/// `ServerConfig.ColumnMapping = EnabledColumnMapping`. The default
+/// `ServerConfig.ColumnMapping = FeatureMode.Enabled`. The default
 /// store (`ColumnMappingStore.create`) wraps the resolved
 /// `IDataObjectStore`, persisting reusable CSV→schema maps keyed by the
-/// source CSV's column-structure fingerprint. `NoColumnMapping` (the
+/// source CSV's column-structure fingerprint. `FeatureMode.Disabled` (the
 /// default) skips registration — the mapping-aware Data Manager and its
 /// `IColumnMappingApi` route are not mounted, so the store is never
 /// resolved and costs zero at runtime.
 let registerColumnMappingStore (services: IServiceCollection) (config: ServerConfig) : unit =
     match config.ColumnMapping with
-    | EnabledColumnMapping ->
+    | FeatureMode.Enabled ->
         services.AddSingleton<IConversionStore>(fun (sp: System.IServiceProvider) ->
             let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
 
@@ -718,10 +718,10 @@ let registerColumnMappingStore (services: IServiceCollection) (config: ServerCon
         // backed) ahead of this default and have it win.
         services.TryAddSingleton<IMappingDryRunValidator>(MappingDryRunValidator.create ())
         |> ignore
-    | NoColumnMapping -> ()
+    | FeatureMode.Disabled -> ()
 
 /// Phase 159 — register the durable per-subject `IConsentStateStore`
-/// when `ServerConfig.ConsentStateStore` opts in. `NoConsentStateStore`
+/// when `ServerConfig.Stores.ConsentStateStore` opts in. `NoConsentStateStore`
 /// (default) registers nothing — consent state lives only in the
 /// browser via `IConsentProvider`, zero runtime cost (GP 13).
 /// `InMemoryConsentStateStore` registers the dev-only single-instance
@@ -729,7 +729,7 @@ let registerColumnMappingStore (services: IServiceCollection) (config: ServerCon
 /// over the already-registered `IEntityStore` (+ `IAuditLog` for the
 /// `Custom:ConsentGranted` / `Custom:ConsentWithdrawn` emission); the
 /// `ConsentRecord` entity type is registered by `registerEntityStore`
-/// under the same flag. Requires `EntityStore = EnabledEntityStore` —
+/// under the same flag. Requires `EntityStore = FeatureMode.Enabled` —
 /// the factory resolves `null` for `IEntityStore` otherwise and fails
 /// loudly at first resolve.
 let registerConsentStateStore (services: IServiceCollection) (config: ServerConfig) : unit =
@@ -738,7 +738,7 @@ let registerConsentStateStore (services: IServiceCollection) (config: ServerConf
         | :? IAuditLog as log -> Some log
         | _ -> None
 
-    match config.ConsentStateStore with
+    match config.Stores.ConsentStateStore with
     | NoConsentStateStore -> ()
     | InMemoryConsentStateStore ->
         services.AddSingleton<Consent.ConsentStateStore.IConsentStateStore>(fun (sp: System.IServiceProvider) ->
@@ -753,26 +753,26 @@ let registerConsentStateStore (services: IServiceCollection) (config: ServerConf
         |> ignore
 
 /// Phase 6f.A — register the `IExternalContactStore` when
-/// `ServerConfig.ExternalContactStore = EnabledExternalContactStore`.
-/// `NoExternalContactStore` (default) registers nothing: every
+/// `ServerConfig.Stores.ExternalContactStore = FeatureMode.Enabled`.
+/// `FeatureMode.Disabled` (default) registers nothing: every
 /// `RecipientId.External` recipient is then refused by the consent
 /// filter for want of a consent record to consult, which is the correct
 /// answer rather than a degraded one (GP 13).
 ///
 /// The store is entity-backed, so it needs `EntityStore =
-/// EnabledEntityStore`. That dependency is NAMED here at compose time
+/// FeatureMode.Enabled`. That dependency is NAMED here at compose time
 /// rather than left to fail at first resolve: a deployment that turns on
 /// the address book and forgets the entity store would otherwise
 /// discover it only when someone tried to file a contact.
 let registerExternalContactStore (services: IServiceCollection) (config: ServerConfig) : unit =
-    match config.ExternalContactStore with
-    | NoExternalContactStore -> ()
-    | EnabledExternalContactStore ->
-        match config.EntityStore with
-        | NoEntityStore ->
+    match config.Stores.ExternalContactStore with
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
+        match config.Stores.EntityStore with
+        | FeatureMode.Disabled ->
             failwith
-                "ExternalContactStore = EnabledExternalContactStore requires EntityStore = EnabledEntityStore — the                  external address book is entity-backed (versioned records plus the email / phone duplicate indexes).                  Set TOOLUP_ENTITY_STORE=enabled, or turn the address book off."
-        | EnabledEntityStore ->
+                "ExternalContactStore = FeatureMode.Enabled requires EntityStore = FeatureMode.Enabled — the                  external address book is entity-backed (versioned records plus the email / phone duplicate indexes).                  Set TOOLUP_ENTITY_STORE=enabled, or turn the address book off."
+        | FeatureMode.Enabled ->
             services.AddSingleton<IExternalContactStore>(fun (sp: System.IServiceProvider) ->
                 let entityStore =
                     sp.GetService(typeof<IEntityStore.IEntityStore>) :?> IEntityStore.IEntityStore
@@ -786,10 +786,10 @@ let registerExternalContactStore (services: IServiceCollection) (config: ServerC
             |> ignore
 
 /// Phase 8 / 8a / 53 — conditional store registrations. `IResultStore`
-/// is registered only when `ServerConfig.ResultStore` opts in;
-/// `ILineageStore` only when `ServerConfig.Lineage = EnabledLineageStore`;
+/// is registered only when `ServerConfig.Stores.ResultStore` opts in;
+/// `ILineageStore` only when `ServerConfig.Lineage = FeatureMode.Enabled`;
 /// `IConversationStore` (+ role interfaces + DSR erasure handler) only
-/// when `ServerConfig.ConversationStore = EnabledConversationStore _`.
+/// when `ServerConfig.Stores.ConversationStore = EnabledConversationStore _`.
 /// The unset defaults leave DI unaware so resolution returns `null`
 /// and downstream consumers must handle absence explicitly.
 let registerOptionalStores
@@ -811,7 +811,7 @@ let registerOptionalStores
     | None -> ()
 
     // Phase 53 conditional registration. `IConversationStore` is
-    // registered only when `ServerConfig.ConversationStore =
+    // registered only when `ServerConfig.Stores.ConversationStore =
     // EnabledConversationStore _`. The substrate also registers each
     // role interface separately so consumers can depend on the
     // narrowest interface they need without taking a transitive dep on
@@ -961,7 +961,7 @@ let registerDeployPlane
 
             if isNull (box entityStore) then
                 failwith
-                    "SingleNodeDeployPlane requires EntityStore = EnabledEntityStore — the Tenant catalog lives behind IEntityStore. Set ServerConfig.EntityStore = EnabledEntityStore."
+                    "SingleNodeDeployPlane requires EntityStore = FeatureMode.Enabled — the Tenant catalog lives behind IEntityStore. Set ServerConfig.Stores.EntityStore = FeatureMode.Enabled."
 
             let containerSched =
                 sp.GetService(typeof<IContainerScheduler>) :?> IContainerScheduler

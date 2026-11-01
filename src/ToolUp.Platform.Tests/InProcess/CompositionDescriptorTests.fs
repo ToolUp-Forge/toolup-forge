@@ -147,7 +147,7 @@ let tests =
         <| fun _ ->
             let config = {
                 ServerConfig.defaults with
-                    RateLimiter = EnabledRateLimiter
+                    RateLimiter = FeatureMode.Enabled
             }
 
             let d = CompositionDescriptor.create [] config
@@ -155,7 +155,7 @@ let tests =
 
             Expect.equal
                 built.Config.RateLimiter
-                EnabledRateLimiter
+                FeatureMode.Enabled
                 "the descriptor's config is carried onto the built app"
 
         // ── unknown component id fails readably (total) ───────────────

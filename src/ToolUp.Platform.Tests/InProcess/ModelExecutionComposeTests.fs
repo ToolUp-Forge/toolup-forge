@@ -176,7 +176,7 @@ let tests =
 
             let config = {
                 ServerConfig.defaults with
-                    ModelExecution = EnabledModelExecutionApi
+                    ModelExecution = FeatureMode.Enabled
             }
 
             match validate config services with
@@ -196,7 +196,7 @@ let tests =
 
             let config = {
                 ServerConfig.defaults with
-                    ModelExecution = EnabledModelExecutionApi
+                    ModelExecution = FeatureMode.Enabled
             }
 
             Expect.equal (validate config services) ConfigValidation.Ok "a composed registry validates clean"
@@ -215,7 +215,7 @@ let tests =
 
             let config = {
                 ServerConfig.defaults with
-                    ModelExecution = EnabledModelExecutionApi
+                    ModelExecution = FeatureMode.Enabled
             }
 
             Expect.equal
@@ -230,7 +230,7 @@ let tests =
             Expect.equal
                 (validate ServerConfig.defaults services)
                 ConfigValidation.Ok
-                "NoModelExecutionApi (the default) is never a finding"
+                "FeatureMode.Disabled (the default) is never a finding"
 
         // ── Options: overrides, TryAdd semantics, observers ───────────────
 

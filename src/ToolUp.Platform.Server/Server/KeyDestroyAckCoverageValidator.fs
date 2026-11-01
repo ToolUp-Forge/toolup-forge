@@ -24,7 +24,7 @@ open ToolUp.Platform.ConfigValidation
 // worth stating because the two look alike at a glance:
 //
 //   * `PerScopeKeyResolverDistributedValidator` gates on the operator
-//     DECLARING multi-instance (`ServerConfig.ReplicaCount > 1` or
+//     DECLARING multi-instance (`ServerConfig.MultiInstance.ReplicaCount > 1` or
 //     `TOOLUP_REPLICA_COUNT > 1` — either counts since Phase 458; it read
 //     only the env var before, and so skipped every deployment that set
 //     the config field in code) and refuses startup with `Error`. It is
@@ -145,7 +145,7 @@ type KeyDestroyAckCoverageValidator(config: ServerConfig, services: IServiceColl
                 return
                     Warning(
                         sprintf
-                            "PerScopeKeyResolver is composed in a %s deployment, but the registered INotificationChannel is in-process. PerScopeKeyResolver.DestroyKey (the GDPR-erasure / contract-termination crypto-shred path) publishes a KeyDestroyed envelope so every OTHER replica evicts its cached key and records an EncryptionKeyDestroyAcknowledged audit event — with an in-process channel that publish reaches no other replica. On a single replica this is correct and costs nothing. On more than one, a destroyed key keeps decrypting that tenant's blobs on every sibling replica for up to the resolver's 5-minute sliding TTL, and the audit trail records no acknowledgements — indistinguishable from having no siblings at all, so the gap does not announce itself. If this deployment runs more than one replica, switch to %s. If it runs exactly one, this warning is expected and can be ignored; setting ServerConfig.ReplicaCount = 1 explicitly documents that."
+                            "PerScopeKeyResolver is composed in a %s deployment, but the registered INotificationChannel is in-process. PerScopeKeyResolver.DestroyKey (the GDPR-erasure / contract-termination crypto-shred path) publishes a KeyDestroyed envelope so every OTHER replica evicts its cached key and records an EncryptionKeyDestroyAcknowledged audit event — with an in-process channel that publish reaches no other replica. On a single replica this is correct and costs nothing. On more than one, a destroyed key keeps decrypting that tenant's blobs on every sibling replica for up to the resolver's 5-minute sliding TTL, and the audit trail records no acknowledgements — indistinguishable from having no siblings at all, so the gap does not announce itself. If this deployment runs more than one replica, switch to %s. If it runs exactly one, this warning is expected and can be ignored; setting ServerConfig.MultiInstance.ReplicaCount = 1 explicitly documents that."
                             (DeploymentConfig.surfacesLabel config)
                             RecommendedCompanion
                     )

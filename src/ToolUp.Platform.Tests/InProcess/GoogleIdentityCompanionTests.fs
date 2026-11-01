@@ -371,7 +371,10 @@ let private cspContributorTests =
 let private cspValidatorTests =
     let serverConfig hardening = {
         ServerConfig.defaults with
-            SecurityHardening = hardening
+            SecurityPosture = {
+                ServerConfig.defaults.SecurityPosture with
+                    SecurityHardening = hardening
+            }
     }
 
     let validate (config: ServerConfig) (services: IServiceCollection) =

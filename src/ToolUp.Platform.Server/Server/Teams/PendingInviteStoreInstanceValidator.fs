@@ -58,8 +58,10 @@ type PendingInviteStoreInstanceValidator
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let multiInstance = config.ReplicaCount > 1
-            let escapeHatch = config.AcceptPendingInviteStoreInMultiInstance
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
+
+            let escapeHatch =
+                config.RiskAcknowledgements.AcceptPendingInviteStoreInMultiInstance
 
             let inMemoryResolved =
                 match resolvedStore with
@@ -73,8 +75,8 @@ type PendingInviteStoreInstanceValidator
                 return
                     Warning(
                         sprintf
-                            "InMemoryPendingInviteStore (email-keyed pending invitations) is single-instance-only, and it is the resolved IPendingInviteStore under ServerConfig.ReplicaCount = %d. Writes serialise on a process-local lock + full-blob overwrite; two replicas issuing pending-by-email entries concurrently will silently lose updates, and a 30-second per-process read cache can serve stale entries that a peer already consumed (double auto-join). The link-based invitation flow is unaffected. The SDK auto-selects the ETag-based BlobPendingInviteStore for ReplicaCount > 1 when the composed IBlobStorage implements IConditionalBlobStorage — compose a blob backend with conditional-write support (the local, Azure, S3 and GCS backends all have it) or supply one via ServerApp.withPendingInviteStore; or avoid the IssuePendingInviteByEmail surface in multi-instance deployments; or set ServerConfig.AcceptPendingInviteStoreInMultiInstance = true (TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE=1) to acknowledge the risk."
-                            config.ReplicaCount
+                            "InMemoryPendingInviteStore (email-keyed pending invitations) is single-instance-only, and it is the resolved IPendingInviteStore under ServerConfig.MultiInstance.ReplicaCount = %d. Writes serialise on a process-local lock + full-blob overwrite; two replicas issuing pending-by-email entries concurrently will silently lose updates, and a 30-second per-process read cache can serve stale entries that a peer already consumed (double auto-join). The link-based invitation flow is unaffected. The SDK auto-selects the ETag-based BlobPendingInviteStore for ReplicaCount > 1 when the composed IBlobStorage implements IConditionalBlobStorage — compose a blob backend with conditional-write support (the local, Azure, S3 and GCS backends all have it) or supply one via ServerApp.withPendingInviteStore; or avoid the IssuePendingInviteByEmail surface in multi-instance deployments; or set ServerConfig.RiskAcknowledgements.AcceptPendingInviteStoreInMultiInstance = true (TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE=1) to acknowledge the risk."
+                            config.MultiInstance.ReplicaCount
                     )
             else
                 return Ok

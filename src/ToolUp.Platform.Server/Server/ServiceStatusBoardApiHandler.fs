@@ -189,11 +189,11 @@ let private buildPreflight (ctx: HttpContext) : Async<PreflightSummary> = async 
                 "Preflight snapshot service not registered (deployment composed before Phase 9m, or SkipPreflight = true)."
 }
 
-let private buildDrift (ctx: HttpContext) (mode: ConfigDriftDetectionMode) : Async<DriftSummary> = async {
+let private buildDrift (ctx: HttpContext) (mode: FeatureMode) : Async<DriftSummary> = async {
     match mode with
-    | NoConfigDriftDetection ->
+    | FeatureMode.Disabled ->
         return SectionSummary.disabled "Config drift detector disabled (ServerConfig.ConfigDriftDetection)."
-    | EnabledConfigDriftDetection ->
+    | FeatureMode.Enabled ->
         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
         | :? IAuditLog as auditLog ->
             let now = DateTime.UtcNow
@@ -221,10 +221,10 @@ let private buildDrift (ctx: HttpContext) (mode: ConfigDriftDetectionMode) : Asy
             return
                 SectionSummary.failure
                     "Drift detector enabled but audit log unavailable."
-                    "ServerConfig.ConfigDriftDetection = EnabledConfigDriftDetection but IAuditLog could not be resolved from DI."
+                    "ServerConfig.ConfigDriftDetection = FeatureMode.Enabled but IAuditLog could not be resolved from DI."
 }
 
-let private buildRateLimit (ctx: HttpContext) (mode: RateLimiterMode) : Async<RateLimitSummary> = async {
+let private buildRateLimit (ctx: HttpContext) (mode: FeatureMode) : Async<RateLimitSummary> = async {
     // Phase 69g.tail — per-method `[<RateLimit>]` denial activity, read
     // from the audit trail. A denied call emits a `RateLimitExceeded`
     // `RemotingMethodAudited` row (dispatcher rate-limit pre-flight);
@@ -269,7 +269,7 @@ let private buildRateLimit (ctx: HttpContext) (mode: RateLimiterMode) : Async<Ra
     }
 
     match mode with
-    | NoRateLimiter ->
+    | FeatureMode.Disabled ->
         // The outbound `IRateLimiter` is off, but per-method `[<RateLimit>]`
         // budgets are an independent dispatcher subsystem — still report
         // their denial activity if any.
@@ -285,7 +285,7 @@ let private buildRateLimit (ctx: HttpContext) (mode: RateLimiterMode) : Async<Ra
                 Headline = "Outbound rate limiter disabled; per-method [<RateLimit>] budgets active."
                 Details = rlDetails
             }
-    | EnabledRateLimiter ->
+    | FeatureMode.Enabled ->
         // The `IRateLimiter` substrate does not expose a cross-scope
         // refused-count read — `RateLimitRefused` audit rows live under
         // per-tenant scope, not `_platform`, and walking every scope on
@@ -374,10 +374,10 @@ let private buildJobQueue (ctx: HttpContext) (mode: JobSchedulerMode) : Async<Jo
                     "ServerConfig.JobScheduler = InProcessJobScheduler but IJobStore could not be resolved from DI."
 }
 
-let private buildSmokeTest (ctx: HttpContext) (mode: SmokeTestMode) : Async<SmokeTestSummary> = async {
+let private buildSmokeTest (ctx: HttpContext) (mode: FeatureMode) : Async<SmokeTestSummary> = async {
     match mode with
-    | NoSmokeTest -> return SectionSummary.disabled "Smoke-test endpoint disabled (ServerConfig.SmokeTest)."
-    | EnabledSmokeTest ->
+    | FeatureMode.Disabled -> return SectionSummary.disabled "Smoke-test endpoint disabled (ServerConfig.SmokeTest)."
+    | FeatureMode.Enabled ->
         match ctx.RequestServices.GetService(typeof<IEventStore>) with
         | :? IEventStore as store ->
             let! events = store.ReadBySource(ScopeKey.PlatformContainer, SmokeTest.AuditSourceModule)
@@ -431,7 +431,7 @@ let private buildSmokeTest (ctx: HttpContext) (mode: SmokeTestMode) : Async<Smok
             return
                 SectionSummary.failure
                     "Smoke endpoint enabled but event store unavailable."
-                    "ServerConfig.SmokeTest = EnabledSmokeTest but IEventStore could not be resolved from DI."
+                    "ServerConfig.SmokeTest = FeatureMode.Enabled but IEventStore could not be resolved from DI."
 }
 
 // ─── Composite snapshot builder ──────────────────────────────────────

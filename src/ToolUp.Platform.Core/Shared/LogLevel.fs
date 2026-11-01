@@ -12,8 +12,8 @@ namespace ToolUp.Platform
 /// had before this DU existed.
 ///
 /// Implementations interpret levels per-call and per-category. The default
-/// `ConsoleLogger` reads `ServerConfig.LogLevel` for the floor and
-/// `ServerConfig.TraceCategories` for the per-category whitelist that gates
+/// `ConsoleLogger` reads `ServerConfig.Observability.LogLevel` for the floor and
+/// `ServerConfig.Observability.TraceCategories` for the per-category whitelist that gates
 /// `Trace` calls. Empty `TraceCategories` + `LogLevel.Info` is the default —
 /// behaviour identical to the code path before `Trace` was added.
 /// `[<RequireQualifiedAccess>]` because `Error` collides with `Result.Error`

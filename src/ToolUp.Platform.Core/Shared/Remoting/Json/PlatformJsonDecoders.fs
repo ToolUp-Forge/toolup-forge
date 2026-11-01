@@ -934,11 +934,11 @@ module PlatformJsonDecoders =
             | "Unavailable" -> Some(JsonDecode.case0 ModuleExposure.Unavailable)
             | _ -> None)
 
-    /// Generated JSON decoder for `PlatformKnowledgeBaseMode` — members by name, cases by case name, read off the type's own shape.
-    let platformKnowledgeBaseMode: JsonDecoder<PlatformKnowledgeBaseMode> =
-        JsonDecode.union "PlatformKnowledgeBaseMode" (function
-            | "NoPlatformKnowledgeBase" -> Some(JsonDecode.case0 PlatformKnowledgeBaseMode.NoPlatformKnowledgeBase)
-            | "EnabledPlatformKnowledgeBase" -> Some(JsonDecode.case0 PlatformKnowledgeBaseMode.EnabledPlatformKnowledgeBase)
+    /// Generated JSON decoder for `FeatureMode` — members by name, cases by case name, read off the type's own shape.
+    let featureMode: JsonDecoder<FeatureMode> =
+        JsonDecode.union "FeatureMode" (function
+            | "Disabled" -> Some(JsonDecode.case0 FeatureMode.Disabled)
+            | "Enabled" -> Some(JsonDecode.case0 FeatureMode.Enabled)
             | _ -> None)
 
     /// Generated JSON decoder for `CreateTeamRequest` — members by name, cases by case name, read off the type's own shape.
@@ -1062,7 +1062,7 @@ module PlatformJsonDecoders =
         Some "PermissionApi", typeof<string * (Map<string, ModulePermission list>)>.FullName
         Some "PermissionApi", typeof<string * string * ModuleExposure>.FullName
         Some "PlatformAdminApi", typeof<string>.FullName
-        Some "PlatformAdminApi", typeof<PlatformKnowledgeBaseMode>.FullName
+        Some "PlatformAdminApi", typeof<FeatureMode>.FullName
         Some "TeamApi", typeof<string>.FullName
         Some "TeamApi", typeof<CreateTeamRequest>.FullName
         Some "TeamApi", typeof<string * string * TeamRole>.FullName
@@ -1206,7 +1206,7 @@ module PlatformJsonDecoders =
         JsonDecoders.registerFor<string * (Map<string, ModulePermission list>)> "PermissionApi" (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
         JsonDecoders.registerFor<string * string * ModuleExposure> "PermissionApi" (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString moduleExposure)
         JsonDecoders.registerFor<string> "PlatformAdminApi" JsonDecode.asString
-        JsonDecoders.registerFor<PlatformKnowledgeBaseMode> "PlatformAdminApi" platformKnowledgeBaseMode
+        JsonDecoders.registerFor<FeatureMode> "PlatformAdminApi" featureMode
         JsonDecoders.registerFor<string> "TeamApi" JsonDecode.asString
         JsonDecoders.registerFor<CreateTeamRequest> "TeamApi" createTeamRequest
         JsonDecoders.registerFor<string * string * TeamRole> "TeamApi" (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString teamRole)
@@ -1309,7 +1309,7 @@ module PlatformJsonDecoders =
             (Some "PermissionApi", typeof<string * (Map<string, ModulePermission list>)>.FullName), JsonDecoders.verifyThrough<string * (Map<string, ModulePermission list>)> gate draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
             (Some "PermissionApi", typeof<string * string * ModuleExposure>.FullName), JsonDecoders.verifyThrough<string * string * ModuleExposure> gate draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString moduleExposure)
             (Some "PlatformAdminApi", typeof<string>.FullName), JsonDecoders.verifyThrough<string> gate draws seed JsonDecode.asString
-            (Some "PlatformAdminApi", typeof<PlatformKnowledgeBaseMode>.FullName), JsonDecoders.verifyThrough<PlatformKnowledgeBaseMode> gate draws seed platformKnowledgeBaseMode
+            (Some "PlatformAdminApi", typeof<FeatureMode>.FullName), JsonDecoders.verifyThrough<FeatureMode> gate draws seed featureMode
             (Some "TeamApi", typeof<string>.FullName), JsonDecoders.verifyThrough<string> gate draws seed JsonDecode.asString
             (Some "TeamApi", typeof<CreateTeamRequest>.FullName), JsonDecoders.verifyThrough<CreateTeamRequest> gate draws seed createTeamRequest
             (Some "TeamApi", typeof<string * string * TeamRole>.FullName), JsonDecoders.verifyThrough<string * string * TeamRole> gate draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString teamRole)

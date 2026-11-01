@@ -100,9 +100,14 @@ let private persistenceTests =
         }
 
         test "escape hatch degrades the refusal to a Warning — it does NOT silence it" {
+            let baseConfig = configWith Surfaces.individual
+
             let cfg = {
-                configWith Surfaces.individual with
-                    AcceptEphemeralRagIndex = true
+                baseConfig with
+                    RiskAcknowledgements = {
+                        baseConfig.RiskAcknowledgements with
+                            AcceptEphemeralRagIndex = true
+                    }
             }
 
             // The whole point of the GP 13 escape-hatch shape: an
@@ -160,9 +165,14 @@ let private localEmbedderTests =
         }
 
         test "GREEN — the escape hatch silences it" {
+            let baseConfig = configWith Surfaces.individual
+
             let cfg = {
-                configWith Surfaces.individual with
-                    AcceptLocalEmbedderAtScale = true
+                baseConfig with
+                    RiskAcknowledgements = {
+                        baseConfig.RiskAcknowledgements with
+                            AcceptLocalEmbedderAtScale = true
+                    }
             }
 
             Expect.equal
@@ -201,9 +211,14 @@ let private localEmbedderTests =
             // Two flags for one remedy would be a trap: an operator
             // silences the warning they saw, scales to a team surface,
             // and the family starts talking again.
+            let baseConfig = configWith Surfaces.team
+
             let cfg = {
-                configWith Surfaces.team with
-                    AcceptLocalEmbedderAtScale = true
+                baseConfig with
+                    RiskAcknowledgements = {
+                        baseConfig.RiskAcknowledgements with
+                            AcceptLocalEmbedderAtScale = true
+                    }
             }
 
             Expect.equal (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, false))) Ok "same flag, team half"
@@ -228,7 +243,10 @@ let private localEmbedderTests =
             // by every team in the process — no longer holds, so this is a
             // lift, not a suppression: no escape hatch was set.
             let cfg = configWith Surfaces.team
-            Expect.isFalse cfg.AcceptLocalEmbedderAtScale "the lift must not lean on the escape hatch"
+
+            Expect.isFalse
+                cfg.RiskAcknowledgements.AcceptLocalEmbedderAtScale
+                "the lift must not lean on the escape hatch"
 
             Expect.equal
                 (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, true)))

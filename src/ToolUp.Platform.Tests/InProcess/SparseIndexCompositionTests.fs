@@ -174,7 +174,10 @@ let private composedAt (replicas: int) (rag: RagOptions) : ServerApp =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            ReplicaCount = replicas
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = replicas
+            }
     }
     |> ServerApp.withStorage (InMemoryBlobStorage() :> BlobStorage.IBlobStorage)
     |> withRAG rag

@@ -564,21 +564,6 @@ module AssetStoreOptions =
             UploadValidation = EnabledUploadValidator validator
     }
 
-/// Asset-store substrate opt-in (GP 13 — default off, strip-
-/// imports byte-for-byte).
-///
-///   * `NoAssetStore` (default) — no DI registration, no
-///     `/api/assets/*` handlers, no audit emission. Strip-
-///     imports byte-for-byte: a deployment that doesn't opt in
-///     pays zero runtime cost.
-///   * `EnabledAssetStore options` — `DefaultAssetStore` is
-///     registered as `IAssetStore`, the ToolUp.Remoting handler
-///     mounts at `/api/assets/`, and the multipart upload
-///     endpoint mounts at `/api/assets/upload`.
-type AssetStoreMode =
-    | NoAssetStore
-    | EnabledAssetStore of options: AssetStoreOptions
-
 /// Upload request — what the handler hands to
 /// `IAssetStore.Upload`. Smart constructor enforces the alt-
 /// text invariant + filename validity + MIME accept-list. The

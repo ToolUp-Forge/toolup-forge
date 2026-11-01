@@ -40,7 +40,7 @@ open ToolUp.Platform.ConfigValidation
 // self-heals; it persists until the sibling process restarts.
 //
 // **Scope, deliberately narrow.** It fires only when the operator has
-// DECLARED more than one replica (`ServerConfig.ReplicaCount` or
+// DECLARED more than one replica (`ServerConfig.MultiInstance.ReplicaCount` or
 // `TOOLUP_REPLICA_COUNT`, via the same `declaredReplicaCount` helper 458
 // uses — so the two gates can never disagree about the topology) AND the
 // webhook subsystem is composed. A single-replica deployment has no
@@ -88,7 +88,7 @@ type WebhookSecretRotationFanoutValidator(config: ServerConfig, services: IServi
                     return
                         Error(
                             sprintf
-                                "The webhook registry is composed with %d declared replicas (ServerConfig.ReplicaCount / TOOLUP_REPLICA_COUNT), but WireToChannel was never invoked on it — it holds no INotificationChannel, so RotateSecret publishes no invalidation broadcast at all. Every OTHER instance keeps signing deliveries with the SUPERSEDED secret until its process restarts (a caching ISecretStore has no TTL, so the stale read never expires on its own), and a receiver updated to the new secret rejects those deliveries as INAUTHENTIC rather than as stale. Since a rotation is usually the response to a compromised secret, the remediation appears to succeed while the exposure continues. Compose the webhook subsystem through ServerApp — compose calls WireToChannel for every BlobWebhookRegistry it builds — or call WireToChannel yourself before startup completes. Single-instance deployments (ReplicaCount = 1) do not need it and are not affected."
+                                "The webhook registry is composed with %d declared replicas (ServerConfig.MultiInstance.ReplicaCount / TOOLUP_REPLICA_COUNT), but WireToChannel was never invoked on it — it holds no INotificationChannel, so RotateSecret publishes no invalidation broadcast at all. Every OTHER instance keeps signing deliveries with the SUPERSEDED secret until its process restarts (a caching ISecretStore has no TTL, so the stale read never expires on its own), and a receiver updated to the new secret rejects those deliveries as INAUTHENTIC rather than as stale. Since a rotation is usually the response to a compromised secret, the remediation appears to succeed while the exposure continues. Compose the webhook subsystem through ServerApp — compose calls WireToChannel for every BlobWebhookRegistry it builds — or call WireToChannel yourself before startup completes. Single-instance deployments (ReplicaCount = 1) do not need it and are not affected."
                                 replicas
                         )
                 else
@@ -112,7 +112,7 @@ type WebhookSecretRotationFanoutValidator(config: ServerConfig, services: IServi
                         return
                             Error(
                                 sprintf
-                                    "The webhook registry is composed with %d declared replicas (ServerConfig.ReplicaCount / TOOLUP_REPLICA_COUNT) but the composed INotificationChannel is in-process (InMemoryNotificationChannel / NoOpNotificationChannel) — the cross-instance invalidation RotateSecret relies on reaches no sibling. Every OTHER instance keeps signing deliveries with the SUPERSEDED secret until its process restarts (a caching ISecretStore has no TTL), and a receiver updated to the new secret rejects those deliveries as INAUTHENTIC rather than as stale. Since a rotation is usually the response to a compromised secret, the remediation appears to succeed while the exposure continues. Switch to a distributed channel: ServerConfig.Notifications = RedisNotifications \"<connection-string>\" (or TOOLUP_NOTIFICATION_CHANNEL=redis + TOOLUP_REDIS_CONNECTION=<conn-string>) — the Redis companion at src/NotificationChannels/Redis/ ships today. This is the same channel the Phase 458 crypto-shred gate requires."
+                                    "The webhook registry is composed with %d declared replicas (ServerConfig.MultiInstance.ReplicaCount / TOOLUP_REPLICA_COUNT) but the composed INotificationChannel is in-process (InMemoryNotificationChannel / NoOpNotificationChannel) — the cross-instance invalidation RotateSecret relies on reaches no sibling. Every OTHER instance keeps signing deliveries with the SUPERSEDED secret until its process restarts (a caching ISecretStore has no TTL), and a receiver updated to the new secret rejects those deliveries as INAUTHENTIC rather than as stale. Since a rotation is usually the response to a compromised secret, the remediation appears to succeed while the exposure continues. Switch to a distributed channel: ServerConfig.Notifications = RedisNotifications \"<connection-string>\" (or TOOLUP_NOTIFICATION_CHANNEL=redis + TOOLUP_REDIS_CONNECTION=<conn-string>) — the Redis companion at src/NotificationChannels/Redis/ ships today. This is the same channel the Phase 458 crypto-shred gate requires."
                                     replicas
                             )
                     else

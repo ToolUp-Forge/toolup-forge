@@ -46,8 +46,8 @@ type private PlatformAdminPanel = {
 
 let private modeToString =
     function
-    | EnabledPlatformKnowledgeBase -> "Enabled"
-    | NoPlatformKnowledgeBase -> "Disabled"
+    | FeatureMode.Enabled -> "Enabled"
+    | FeatureMode.Disabled -> "Disabled"
 
 /// Default contributor. Registered as a DI singleton in `compose`
 /// alongside the existing SSE-trace contributor.

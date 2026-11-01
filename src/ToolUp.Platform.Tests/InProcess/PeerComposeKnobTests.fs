@@ -37,7 +37,10 @@ let private localPeer: PeerIdentity = {
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
         JobScheduler = InProcessJobScheduler
 }
 
@@ -334,12 +337,22 @@ let reachabilityTests =
             let app =
                 ServerApp.empty
                 |> PeerCompose.withPeer (baseApp ())
-                |> ServerApp.withConfig { enabledConfig with ReplicaCount = 2 }
+                |> ServerApp.withConfig {
+                    enabledConfig with
+                        MultiInstance = {
+                            enabledConfig.MultiInstance with
+                                ReplicaCount = 2
+                        }
+                }
                 |> ServerApp.withLogger logger
 
             let resolved = ServerApp.resolve app
 
-            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.equal
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
+
             Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
 
             Expect.equal
@@ -354,5 +367,5 @@ let reachabilityTests =
             Expect.equal
                 (ServerApp.composedExtensions app).Handlers.Length
                 ServerApp.empty.Extensions.Handlers.Length
-                "NoPeerSubstrate composes no route (GP 13)"
+                "FeatureMode.Disabled composes no route (GP 13)"
     ]

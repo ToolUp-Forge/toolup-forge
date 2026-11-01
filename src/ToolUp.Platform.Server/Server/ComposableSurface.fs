@@ -100,7 +100,7 @@ type GroundingSurface = {
     FactStoreSlot: ComponentId
     /// The fact-store companion interface name.
     FactStoreInterface: string
-    /// The `ServerConfig.FactStore` values (the config knob that selects
+    /// The `ServerConfig.Stores.FactStore` values (the config knob that selects
     /// the fact-store kind) — the first is the default.
     FactStoreModes: string list
     /// The `ComponentId` slot prefix a registered metric is namespaced
@@ -211,32 +211,62 @@ module ComposableSurface =
         |> List.distinctBy _.Interface
         |> List.sortBy _.Interface
 
+    /// The five concern records `ServerConfig` nests by (Phase 877). Their
+    /// fields are knobs under their own, flat names; no other record-typed
+    /// field is walked.
+    let private concernRecords: Type list = [
+        typeof<SecurityPosture>
+        typeof<RiskAcknowledgements>
+        typeof<MultiInstance>
+        typeof<Observability>
+        typeof<Stores>
+    ]
+
+    /// Whether `t` is one of the concern records a knob walk descends into.
+    let isConcernRecord (t: Type) : bool = List.contains t concernRecords
+
     /// The composition-shaping config-knob schemas, derived by reflecting
     /// `ServerConfig`'s enum-like union fields (every case nullary) — the
-    /// mode switches that change *what* gets composed. A newly-added
-    /// mode knob surfaces automatically.
+    /// mode switches that change *what* gets composed — through the
+    /// concern records, under the flat names the knobs carry. A
+    /// newly-added mode knob surfaces automatically. A `FeatureMode` knob
+    /// admits the tokens the field spelled before the modes were one type
+    /// (`FeatureModeKnob.values`), which is what the manifest seals.
     let configKnobs () : ConfigKnobSchema list =
-        FSharpType.GetRecordFields(typeof<ServerConfig>)
-        |> Array.choose (fun field ->
-            let t = field.PropertyType
+        let rec knobsOf (record: Type) =
+            FSharpType.GetRecordFields record
+            |> Array.toList
+            |> List.collect (fun field ->
+                let t = field.PropertyType
 
-            if FSharpType.IsUnion t then
-                let cases = FSharpType.GetUnionCases t
+                if isConcernRecord t then
+                    knobsOf t
+                elif t = typeof<FeatureMode> then
+                    [
+                        {
+                            Name = field.Name
+                            Values = FeatureModeKnob.values field.Name
+                        }
+                    ]
+                elif FSharpType.IsUnion t then
+                    let cases = FSharpType.GetUnionCases t
 
-                let enumLike =
-                    cases.Length > 0 && cases |> Array.forall (fun c -> c.GetFields().Length = 0)
+                    let enumLike =
+                        cases.Length > 0 && cases |> Array.forall (fun c -> c.GetFields().Length = 0)
 
-                if enumLike then
-                    Some {
-                        Name = field.Name
-                        Values = cases |> Array.map _.Name |> Array.toList
-                    }
+                    if enumLike then
+                        [
+                            {
+                                Name = field.Name
+                                Values = cases |> Array.map _.Name |> Array.toList
+                            }
+                        ]
+                    else
+                        []
                 else
-                    None
-            else
-                None)
-        |> Array.toList
-        |> List.sortBy _.Name
+                    [])
+
+        knobsOf typeof<ServerConfig> |> List.sortBy _.Name
 
     /// Phase 432 — the slot-level requirements projection: for every
     /// companion slot forge can compose, the secrets + config knobs
@@ -276,7 +306,7 @@ module ComposableSurface =
 
     /// The grounding-plane composable surface (Phase 526). The fact-store
     /// modes are read from the derived `FactStore` config-knob schema so
-    /// they stay synced with `ServerConfig.FactStore`; the rest is stable
+    /// they stay synced with `ServerConfig.Stores.FactStore`; the rest is stable
     /// descriptor data (the slot id, the registration-point prefixes, and
     /// the plan-D14 disclosure defaults).
     let grounding () : GroundingSurface =

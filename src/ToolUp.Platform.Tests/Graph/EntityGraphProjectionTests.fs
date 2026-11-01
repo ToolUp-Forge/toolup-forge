@@ -371,7 +371,7 @@ let tests =
                 services
                 {
                     ServerConfig.defaults with
-                        EntityGraphProjection = NoEntityGraphProjection
+                        EntityGraphProjection = FeatureMode.Disabled
                 }
                 enrollments
 
@@ -410,7 +410,7 @@ let tests =
                 services
                 {
                     ServerConfig.defaults with
-                        EntityGraphProjection = EnabledEntityGraphProjection
+                        EntityGraphProjection = FeatureMode.Enabled
                 }
                 enrollments
 

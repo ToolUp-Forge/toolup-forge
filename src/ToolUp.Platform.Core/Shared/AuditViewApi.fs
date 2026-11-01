@@ -166,7 +166,7 @@ type AuditEventPage = {
 /// shown.
 ///
 /// **Substrate.** Reads the rows `IAuditLog` writes. A deployment on
-/// the default `ServerConfig.AuditLog = NoAuditLog` records nothing, so
+/// the default `ServerConfig.AuditLog = FeatureMode.Disabled` records nothing, so
 /// every method here returns an empty result and the module renders its
 /// empty state (the same pairing `IUsageQueryApi` has with
 /// `ServerConfig.UsageMetering`).

@@ -147,7 +147,7 @@ type InMemoryVectorStore
         // `auditLog` records a `KnowledgeIndexLoadFailed` event; `notifications`
         // publishes a `SystemMessage` (Error) to platform admins on first
         // observed corruption per scope. Both optional — a deployment with
-        // `NoAuditLog` / no channel still gets the telemetry counter + Warn
+        // `FeatureMode.Disabled` / no channel still gets the telemetry counter + Warn
         // log line (GP 13: no collaborator, no cost).
         ?auditLog: IAuditLog,
         ?notifications: INotificationChannel
@@ -301,11 +301,8 @@ type InMemoryVectorStore
     // aborted with an actionable error instead of starting the scope empty;
     // for the eager Platform/Deployment loads this fails process startup.
     let refuseOnCorruption =
-        match Environment.GetEnvironmentVariable ConfigKeys.Names.ragRefuseOnIndexCorruption with
-        | "1"
-        | "true"
-        | "TRUE" -> true
-        | _ -> false
+        let key = ConfigKeys.key ConfigKeys.Names.ragRefuseOnIndexCorruption
+        ConfigKeys.ConfigKey.readPermissiveBool key (Environment.GetEnvironmentVariable key.EnvVar |> Option.ofObj)
 
     /// Handle a scope-load deserialisation failure. Refusal (when enabled)
     /// is raised on every attempt, independent of the dedup — a corrupt

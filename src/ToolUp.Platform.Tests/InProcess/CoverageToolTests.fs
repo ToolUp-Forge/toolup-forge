@@ -148,13 +148,16 @@ let private twoMetricRegistry: IMetricRegistry =
     ] [ subjectDef "brand" [ "brand"; "sku" ]; subjectDef "region" [ "country" ] ]
 
 /// The composed fact tier the way a deployment builds it.
-let private composedUnder (knob: FactStoreMode) (registry: IMetricRegistry option) : ServerApp * ServiceProvider =
+let private composedUnder (knob: FeatureMode) (registry: IMetricRegistry option) : ServerApp * ServiceProvider =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -263,8 +266,8 @@ let registrationTests =
             Expect.stringContains description "never a value" "and is explicit that it reports coverage, not values"
         }
 
-        test "EnabledFactStore declares ALL FIVE fact tools on one knob" {
-            let app, sp = composedUnder EnabledFactStore None
+        test "FeatureMode.Enabled declares ALL FIVE fact tools on one knob" {
+            let app, sp = composedUnder FeatureMode.Enabled None
 
             Expect.equal
                 (app.AITools |> List.map (fun (def, _) -> def.Name))
@@ -280,12 +283,15 @@ let registrationTests =
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "the store rides the same knob"
         }
 
-        test "NoFactStore declares no coverage tool (GP 11 / GP 13)" {
+        test "FeatureMode.Disabled declares no coverage tool (GP 11 / GP 13)" {
             let before = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
@@ -296,7 +302,7 @@ let registrationTests =
         }
 
         test "the composeAI-shaped pickup registers the coverage tool into the AI tool registry" {
-            let app, _ = composedUnder EnabledFactStore None
+            let app, _ = composedUnder FeatureMode.Enabled None
 
             let registry = AIToolRegistry()
             registry.RegisterAll(app.AITools |> List.map (fun (def, exec) -> createTool def exec))
@@ -333,7 +339,7 @@ let definitionTests =
 
         testCase "every registered metric is reported with its declaration, including its Context"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let el = executeVia sp (newScope ()) noArgs
 
             Expect.equal (num el "metricCount") 2 "both declarations are reported, facts or no facts"
@@ -360,7 +366,7 @@ let definitionTests =
             // listing the ids; it cannot make the second unreachable, so it
             // answers it in advance instead of leaving the model to provoke
             // it.
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let el = executeVia sp (newScope ()) noArgs
 
             Expect.isTrue (flag (metricRow el "revenue") "supportsBestFirst") "a declared direction resolves best_first"
@@ -373,7 +379,7 @@ let definitionTests =
 
         testCase "the registered subject hierarchies are reported with their level labels"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let el = executeVia sp (newScope ()) noArgs
 
             let brand =
@@ -392,7 +398,7 @@ let coverageTests =
 
         testCase "coverage over a seeded multi-metric store: per metric, per hierarchy, with the method mix"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -442,7 +448,7 @@ let coverageTests =
 
         testCase "several competing methods are counted separately — the mix, not a merge"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -468,7 +474,7 @@ let coverageTests =
 
         testCase "coverage reports counts and NEVER a value — no minimum, maximum, mean, or rendering"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -495,7 +501,7 @@ let coverageTests =
 
         testCase "another scope's facts are structurally invisible (GP 4)"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scopeA = newScope ()
             let scopeB = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
@@ -520,7 +526,7 @@ let disclosureTests =
 
         testCase "a wholly restricted population reports EXISTENCE AND POLICY ONLY — no distribution detail"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -555,7 +561,7 @@ let disclosureTests =
 
         testCase "a partly restricted population IS described, and says that it is partial"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -590,7 +596,7 @@ let disclosureTests =
             // check against the gate — which is neither "disclosable" nor
             // "restricted", and is reported as the third thing rather than
             // resolved to either.
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -613,7 +619,7 @@ let disclosureTests =
 
         testCaseAsync "the probe's denials are audited at the ToolResult surface (525.E)"
         <| async {
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -641,7 +647,7 @@ let filterTests =
 
         testCase "the optional metric filter narrows the report to one declaration"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
 
             let el = executeVia sp (newScope ()) """{"metric":"churn"}"""
 
@@ -650,7 +656,7 @@ let filterTests =
 
         testCase "an unregistered filter is refused with the DISCOVERY remedy named"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
 
             let el = executeVia sp (newScope ()) """{"metric":"sales"}"""
 
@@ -663,13 +669,13 @@ let filterTests =
 
         testCase "a non-string metric filter is refused rather than coerced"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let el = executeVia sp (newScope ()) """{"metric":7}"""
             Expect.stringContains (str el "error") "must be a string" ""
 
         testCase "an empty argument object is the ordinary call"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             Expect.equal (num (executeVia sp (newScope ()) noArgs) "metricCount") 2 ""
 
         testCase "a deployment that declared no grounding vocabulary answers plainly, in the same shape"
@@ -678,7 +684,7 @@ let filterTests =
             // (Phase 519). "Nothing is declared" is an answer, and it
             // arrives in the ordinary envelope so a consumer parses one
             // shape.
-            let _, sp = composedUnder EnabledFactStore None
+            let _, sp = composedUnder FeatureMode.Enabled None
             let el = executeVia sp (newScope ()) noArgs
 
             Expect.equal (num el "metricCount") 0 ""
@@ -692,7 +698,7 @@ let filterTests =
 
         testCase "a registry with declarations carries no note"
         <| fun () ->
-            let _, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let _, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             Expect.isTrue (isNullField (executeVia sp (newScope ()) noArgs) "note") "nothing to explain"
     ]
 
@@ -845,7 +851,7 @@ let demoTests =
 
         testCaseAsync "the assistant discovers what the deployment holds, then queries ids it READ rather than guessed"
         <| async {
-            let app, sp = composedUnder EnabledFactStore (Some twoMetricRegistry)
+            let app, sp = composedUnder FeatureMode.Enabled (Some twoMetricRegistry)
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
@@ -977,7 +983,7 @@ let descriptionTests =
         testCase "a declared description and its level descriptions are reported, levels in declaration order"
         <| fun () ->
             let _, sp =
-                composedUnder EnabledFactStore (Some(geographyRegistry [ geographyDescription ]))
+                composedUnder FeatureMode.Enabled (Some(geographyRegistry [ geographyDescription ]))
 
             let geography = hierarchy (executeVia sp (newScope ()) noArgs) "geography"
 
@@ -997,10 +1003,10 @@ let descriptionTests =
         testCase "an undescribed hierarchy serialises exactly as it did without descriptions"
         <| fun () ->
             let withDescriptions =
-                composedUnder EnabledFactStore (Some(geographyRegistry [ geographyDescription ]))
+                composedUnder FeatureMode.Enabled (Some(geographyRegistry [ geographyDescription ]))
                 |> snd
 
-            let without = composedUnder EnabledFactStore (Some(geographyRegistry [])) |> snd
+            let without = composedUnder FeatureMode.Enabled (Some(geographyRegistry [])) |> snd
 
             let brandWith = hierarchy (executeVia withDescriptions (newScope ()) noArgs) "brand"
             let brandWithout = hierarchy (executeVia without (newScope ()) noArgs) "brand"
@@ -1027,7 +1033,7 @@ let descriptionTests =
                     member _.MetricsByOperation o = inner.MetricsByOperation o
                 }
 
-            let _, sp = composedUnder EnabledFactStore (Some bare)
+            let _, sp = composedUnder FeatureMode.Enabled (Some bare)
             let el = executeVia sp (newScope ()) noArgs
 
             Expect.equal (num el "metricCount") 2 "the report is the ordinary one"

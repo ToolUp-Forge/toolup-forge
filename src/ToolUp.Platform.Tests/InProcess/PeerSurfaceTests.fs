@@ -70,7 +70,10 @@ let private localPeer: PeerIdentity = {
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
         JobScheduler = InProcessJobScheduler
 }
 
@@ -612,21 +615,24 @@ let tests =
                 |> PeerComposition.app (
                     ServerApp.withConfig {
                         enabledConfig with
-                            PeerSubstrate = NoPeerSubstrate
+                            MultiInstance = {
+                                enabledConfig.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Disabled
+                            }
                     }
                 )
                 // A booby-trapped builder proves describe never runs the
                 // registrations on the strip-imports path (GP 13).
                 |> PeerComposition.options (
                     PeerOptions.withContract (fun _ ->
-                        failwith "a NoPeerSubstrate describe must not materialise contract builders")
+                        failwith "a FeatureMode.Disabled describe must not materialise contract builders")
                 )
                 |> PeerComposition.options (PeerOptions.withConsumedContract consumedDirectory)
 
             Expect.equal
                 (PeerSurface.describe disabled)
                 PeerSurface.empty
-                "NoPeerSubstrate must yield the empty surface"
+                "FeatureMode.Disabled must yield the empty surface"
         }
 
         test "consumes<'TApi> refuses a non-record contract type" {
