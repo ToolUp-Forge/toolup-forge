@@ -60,6 +60,7 @@ let private mkContext () : PromptContext = {
     ShortCircuit = ref None
     PlannedAnswerId = ref None
     Scope = ResolvedScope.anonymous
+    Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
 }
 
 /// Phase 538 — a tool that DECLARES the live-interface capability. Named

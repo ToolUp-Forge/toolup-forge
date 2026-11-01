@@ -343,6 +343,7 @@ let tests =
                 ShortCircuit = ref None
                 PlannedAnswerId = ref None
                 Scope = ResolvedScope.anonymous
+                Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
             }
 
             let builder =
@@ -408,6 +409,7 @@ let tests =
                 ShortCircuit = ref None
                 PlannedAnswerId = ref None
                 Scope = ResolvedScope.anonymous
+                Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
             }
 
             // A high MinScore that would drop any real chunk.

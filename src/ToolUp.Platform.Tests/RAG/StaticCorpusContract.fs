@@ -605,10 +605,7 @@ let tests =
                 let composed = ServerApp.empty |> withRAG app
                 let sc = ServiceCollection() :> IServiceCollection
 
-                let sc =
-                    match ServerApp.serviceConfig composed with
-                    | Some f -> f sc
-                    | None -> sc
+                let sc = ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed sc
 
                 let sp = sc.BuildServiceProvider()
 

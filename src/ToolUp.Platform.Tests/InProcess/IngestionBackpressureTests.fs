@@ -1033,9 +1033,7 @@ let private lostTraces =
             |> ignore
 
             let services =
-                match ServerApp.serviceConfig composed with
-                | Some configure -> configure services
-                | None -> services
+                ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed services
 
             use sp =
                 Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider

@@ -195,9 +195,7 @@ let private build (storage: IBlobStorage) (composed: ServerApp) : IServiceCollec
     services.AddSingleton<IFactTableRegistry>(tables) |> ignore
 
     let services =
-        match ServerApp.serviceConfig composed with
-        | Some f -> f services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed services
 
     services, services.BuildServiceProvider()
 
@@ -235,6 +233,7 @@ let private contextFor (scope: ResolvedScope) (question: string) : PromptContext
     ShortCircuit = ref None
     PlannedAnswerId = ref None
     Scope = scope
+    Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
 }
 
 let private writeThroughTable (sp: IServiceProvider) (teamId: string) (value: decimal) =

@@ -116,9 +116,8 @@ let private ragHost (storage: IBlobStorage) (app: RagOptions) : IHost =
     let composed = composedOn storage app
     let builder = Host.CreateEmptyApplicationBuilder(HostApplicationBuilderSettings())
 
-    match ServerApp.serviceConfig composed with
-    | Some f -> f builder.Services |> ignore
-    | None -> ()
+    ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed builder.Services
+    |> ignore
 
     builder.Services.Configure<HostOptions>(fun (o: HostOptions) -> o.ShutdownTimeout <- TimeSpan.FromSeconds 10.0)
     |> ignore
@@ -135,9 +134,7 @@ let private hostedServiceTypeNames (app: RagOptions) =
     let services = ServiceCollection() :> IServiceCollection
 
     let services =
-        match ServerApp.serviceConfig composed with
-        | Some f -> f services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed services
 
     use sp = services.BuildServiceProvider()
     sp.GetServices<IHostedService>() |> Seq.map _.GetType().Name |> List.ofSeq

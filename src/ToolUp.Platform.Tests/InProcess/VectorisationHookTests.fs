@@ -65,11 +65,11 @@ let private enqueueFor (scope: StorageScope) (createdBy: string) : Async<Documen
             false
             None
             None
-            (ref None)
-            (ref None)
+            (InMemoryEventStore.InMemoryEventStore())
+            (IngestionStatusStore.createInMemory ())
             DropWrite
-            (ref None)
-            (ref None)
+            (AuditLog.NoOpAuditLog())
+            (NotificationChannel.NoOpNotificationChannel())
             (SilentLogger())
 
     let processed: ProcessedData = { TypeName = "Notes"; Payload = "{}" }
@@ -158,5 +158,150 @@ let tests =
                     ""
 
             Expect.equal job.Scope Deployment "the deployment container is deployment-wide shared content"
+        }
+    ]
+
+// ─── RAG's registrations are staged ──────────────────────────────────
+//
+// RAG reads the event store, audit log and notification channel compose
+// built from the `Substrate` handed to its staged contribution, and builds
+// what it needs from other services in the app's own container. Two
+// observables: the post-save hook writes through the SUBSTRATE's event store
+// (a decoy registered in DI under `IEventStore` stays empty), and applying
+// the registrations resolves nothing, so no container is built to probe for
+// a service RAG reads.
+
+let private stubAiFactory =
+    { new ToolUp.AI.IAIProviderFactory with
+        member _.Available = []
+        member _.PlatformDescriptors = []
+        member _.PlatformDescriptor = None
+        member _.Resolve _ = async { return Error ToolUp.AI.NoProviderConfigured }
+        member _.TryResolveByLabel(_, _) = async { return Error ToolUp.AI.NoProviderConfigured }
+        member _.BuildPlatform(_, _, _) = None
+    }
+
+let private stubProviderProfile =
+    { new ToolUp.Platform.Providers.IProviderProfile with
+        member _.Get _ = async { return None }
+        member _.Set(_, _) = async { return Ok() }
+        member _.Clear _ = async { return () }
+        member _.ResolveEntry(_, _, _) = async { return None }
+        member _.SetEntryHealth(_, _, _) = async { return Ok() }
+    }
+
+/// A deployment with RAG composed and one vectorisation handler, so the
+/// post-save hook is registered.
+let private ragApp () : ServerApp =
+    {
+        ServerApp.empty with
+            VectorisationHandlers = [ handler ]
+    }
+    |> ServerApp.withStorage (
+        ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage() :> BlobStorage.IBlobStorage
+    )
+    |> ToolUp.RAG.RAGCompose.withRAG (
+        ToolUp.RAG.RAGCompose.RagOptions.create stubAiFactory stubProviderProfile (ConstantEmbedder())
+    )
+
+let stagedTests =
+    testList "RAG registrations are staged" [
+        testAsync "the post-save hook writes through the substrate's event store, not a DI registration" {
+            let app = ragApp ()
+            let substrateEvents = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let decoy = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+            let services =
+                Microsoft.Extensions.DependencyInjection.ServiceCollection()
+                :> Microsoft.Extensions.DependencyInjection.IServiceCollection
+
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IEventStore>(
+                services,
+                decoy
+            )
+            |> ignore
+
+            let substrate = {
+                ToolUp.Platform.Tests.Support.TestSubstrate.ofServices (ServerApp.effectiveConfig app) services with
+                    EventStore = substrateEvents
+            }
+
+            Substrate.register substrate services |> ignore
+
+            let services =
+                ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig app services
+
+            use sp =
+                Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+                    services
+
+            let hook =
+                Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<
+                    FileManagement.PostSaveHook
+                 >(
+                    sp
+                )
+                |> Seq.exactlyOne
+
+            let processed: ProcessedData = { TypeName = "Slides"; Payload = "{}" }
+
+            // A data type no handler serves: the hook records the skip.
+            let entry =
+                ProcessedFileEntry.summarised "slides.pptx" "unhandled-type" DateTime.UtcNow processed
+
+            do! hook.Run(processed, entry, userScope "alice", "alice")
+
+            let! written = substrateEvents.ReadByType("alice", "DocumentVectorisationSkipped")
+            Expect.hasLength written 1 "the skip is written to the event store compose built"
+
+            let! leaked = decoy.ReadAll "alice"
+            Expect.isEmpty leaked "nothing is written to an IEventStore merely registered in DI"
+        }
+
+        test "applying RAG's registrations resolves nothing; the app's container builds what RAG reads" {
+            let app = ragApp ()
+            let built = ref 0
+
+            let services =
+                Microsoft.Extensions.DependencyInjection.ServiceCollection()
+                :> Microsoft.Extensions.DependencyInjection.IServiceCollection
+
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IDataObjectStore>(
+                services,
+                Func<IServiceProvider, IDataObjectStore>(fun _ ->
+                    built.Value <- built.Value + 1
+
+                    DataObjectStore.DataObjectStore(
+                        ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage(),
+                        SilentLogger()
+                    )
+                    :> IDataObjectStore)
+            )
+            |> ignore
+
+            let services =
+                ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig app services
+
+            Expect.equal built.Value 0 "registering RAG built no container to probe for the data-object store"
+
+            use sp =
+                Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+                    services
+
+            Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<
+                IRetrievalPipeline
+             >(
+                sp
+            )
+            |> ignore
+
+            Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<
+                IIngestionStatusStore
+             >(
+                sp
+            )
+            |> ignore
+
+            Expect.equal built.Value 1 "the app's own container built the data-object store, once, and RAG read it"
         }
     ]

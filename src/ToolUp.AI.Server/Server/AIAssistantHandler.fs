@@ -1656,6 +1656,7 @@ let aiAssistantApi
                 ShortCircuit = ref None
                 PlannedAnswerId = ref None
                 Scope = ScopeResolution.forRequest ctx
+                Services = ctx.RequestServices
             }
     }
 

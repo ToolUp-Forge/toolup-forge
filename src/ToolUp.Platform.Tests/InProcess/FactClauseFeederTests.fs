@@ -217,6 +217,7 @@ let private contextFor (question: string) : PromptContext = {
     ShortCircuit = ref None
     PlannedAnswerId = ref None
     Scope = ResolvedScope.anonymous
+    Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
 }
 
 // ── The projection: plan steps → clauses (708.A) ──────────────────

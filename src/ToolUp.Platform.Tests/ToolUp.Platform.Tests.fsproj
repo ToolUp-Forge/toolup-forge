@@ -165,6 +165,7 @@
         <Compile Include="Contracts\IEvidencePackGeneratorContract.fs" />
         <Compile Include="Contracts\ArchitectureFitness.fs" />
         <Compile Include="Support\CacheReset.fs" />
+        <Compile Include="Support\TestSubstrate.fs" />
         <Compile Include="Support\SubjectWildcardAnalyzer.fs" />
         <Compile Include="..\ToolUp.Remoting.Analyzers\Recognition.fs" Link="Support\RemotingAnalyzerRecognition.fs" />
         <Compile Include="Support\MixedDimFixture.fs" />

@@ -296,6 +296,7 @@ let private promptContextWith (perRequest: Map<string, string> option) : ToolUp.
     ShortCircuit = ref None
     PlannedAnswerId = ref None
     Scope = ResolvedScope.anonymous
+    Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
 }
 
 /// Run the tool-aware builder with the given deployment + per-request

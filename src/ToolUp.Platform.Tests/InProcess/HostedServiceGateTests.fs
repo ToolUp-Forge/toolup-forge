@@ -118,9 +118,7 @@ let composedWith (durableQueue: bool) (config: ServerConfig) : IServiceCollectio
         )
 
     let services =
-        match ServerApp.serviceConfig app with
-        | Some configure -> configure services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig app services
 
     // The platform's own compose-time sites. The scheduler instance is
     // captured by the start hooks and never invoked: nothing here starts.

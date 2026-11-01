@@ -876,9 +876,7 @@ let private deployShaped
     |> ignore
 
     let services =
-        match ServerApp.serviceConfig app with
-        | Some configure -> configure services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig app services
 
     let sp = services.BuildServiceProvider()
 

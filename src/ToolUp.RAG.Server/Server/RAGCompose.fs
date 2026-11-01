@@ -307,54 +307,43 @@ let internal makeVectorisationHook
     (enableSummaries: bool)
     (maxChunkBytes: int option)
     (maxDocumentBytes: int option)
-    (eventStoreRef: IEventStore option ref)
-    (ingestionStatusStoreRef: IIngestionStatusStore option ref)
+    (eventStore: IEventStore)
+    (ingestionStatusStore: IIngestionStatusStore)
     (overflowPolicy: IngestionOverflowPolicy)
-    (auditLogRef: IAuditLog option ref)
-    (notificationChannelRef: INotificationChannel option ref)
+    (auditLog: IAuditLog)
+    (notifications: INotificationChannel)
     (logger: ILogger)
     : ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit> =
 
     let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
 
-    // Phase 173 — write the per-file ingestion status alongside the
+    // Write the per-file ingestion status alongside the
     // `DocumentVectorisation{Skipped,Rejected,Dropped}` events these arms
     // already emit, so the Data Manager badge surfaces *why* a file
     // isn't searchable. Best-effort (mirrors `writeEvent`): a status-store
     // outage degrades to a missing badge, never an escaping exception on
-    // the fire-and-forget post-save path. No store composed ⇒ no-op.
+    // the fire-and-forget post-save path.
     let setStatus (scopeId: string) (documentId: string) (status: FileIngestionStatus) = async {
-        match ingestionStatusStoreRef.Value with
-        | None -> ()
-        | Some s ->
-            try
-                do! s.Set(scopeId, documentId, status)
-            with ex ->
-                logger.Warn(sprintf "[RAGCompose] ingestion-status write failed for %s: %s" documentId ex.Message)
+        try
+            do! ingestionStatusStore.Set(scopeId, documentId, status)
+        with ex ->
+            logger.Warn(sprintf "[RAGCompose] ingestion-status write failed for %s: %s" documentId ex.Message)
     }
 
     let setPending (scopeId: string) (documentId: string) (totalChunks: int) = async {
-        match ingestionStatusStoreRef.Value with
-        | None -> ()
-        | Some s ->
-            try
-                do! s.SetPending(scopeId, documentId, totalChunks)
-            with ex ->
-                logger.Warn(
-                    sprintf "[RAGCompose] ingestion-status pending write failed for %s: %s" documentId ex.Message
-                )
+        try
+            do! ingestionStatusStore.SetPending(scopeId, documentId, totalChunks)
+        with ex ->
+            logger.Warn(sprintf "[RAGCompose] ingestion-status pending write failed for %s: %s" documentId ex.Message)
     }
 
     let writeEvent (scopeId: string) (eventName: string) (payload: obj) = async {
-        match eventStoreRef.Value with
-        | None -> ()
-        | Some es ->
-            try
-                let json = System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions)
-                let evt = Events.create scopeId "ToolUp.RAG" eventName json
-                do! es.Write evt
-            with ex ->
-                logger.Warn(sprintf "[RAGCompose] event-write failed for %s: %s" eventName ex.Message)
+        try
+            let json = System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions)
+            let evt = Events.create scopeId "ToolUp.RAG" eventName json
+            do! eventStore.Write evt
+        with ex ->
+            logger.Warn(sprintf "[RAGCompose] event-write failed for %s: %s" eventName ex.Message)
     }
 
     let utf8ByteLen (s: string) =
@@ -617,8 +606,8 @@ let internal makeVectorisationHook
                             // surfaced on /health/rag).
                             do!
                                 emitIngestionDrop
-                                    auditLogRef.Value
-                                    notificationChannelRef.Value
+                                    (Some auditLog)
+                                    (Some notifications)
                                     queue
                                     logger
                                     scopeKey
@@ -1168,6 +1157,41 @@ type internal RetrievalStoreFlushService(owned: (string * System.IDisposable) li
     interface System.IDisposable with
         member _.Dispose() = flushOnce ()
 
+// ─── What RAG builds from the running app's services ─────────────
+//
+// The retrieval pipeline, the per-file ingestion-status store and the
+// ingestion's collaborators read services the running app composed: the
+// data-object store, a registered retrieval tracer, the fact tier, a query
+// rewriter, the runtime knowledge-base toggle, the usage log and the quota
+// policy. The container builds them ONCE, the first time anything resolves
+// a service projected from them, so each sees exactly the instances the app
+// runs with and no second container is built to find them.
+
+/// RAG's run-time objects, built once by the container.
+[<NoEquality; NoComparison>]
+type internal RagRuntime = {
+    /// The per-file ingestion status: written by the post-save hook and the
+    /// Data Manager observer, read by the file list.
+    IngestionStatusStore: IIngestionStatusStore
+    /// The tracer the pipeline writes through (the off-path queue when composed).
+    Tracer: IRetrievalTracer
+    /// The off-path trace queue, when traces are not written inline.
+    BackgroundTracer: ToolUp.RAG.RetrievalTracers.BackgroundRetrievalTracer option
+    Pipeline: IRetrievalPipeline
+    /// The fact-clause feeder, present exactly when the fact tier is composed.
+    ClausePlanner: IFactClausePlanner option
+    IngestionObservers: IIngestionStatusObserver list
+    UsageLog: IUsageLog
+    Quota: ITeamQuotaPolicy
+    RetryDeps: IngestionRetryDeps
+}
+
+[<RequireQualifiedAccess>]
+module internal RagRuntime =
+
+    /// The runtime the container built, building it on first use.
+    let resolve (sp: System.IServiceProvider) : RagRuntime = sp.GetRequiredService<RagRuntime>()
+
 // ─── composeRAG ───────────────────────────────────────────────────
 //
 // `composeRAG options` is the RAG companion's `apply`. It composes *over*
@@ -1196,8 +1220,8 @@ let private ragOwner: ComponentId = ComponentId.forCompanionSlot "ToolUp.RAG"
 [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
 let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
     // The fact tier goes onto the deployment FIRST, against the config it
-    // was finally given, so every probe below (the fact resolver, the
-    // disclosure gate, the clause planner) sees it.
+    // was finally given, so the services RAG reads from it (the fact
+    // resolver, the disclosure gate, the clause planner) are registered.
     let b =
         match options.FactTier with
         | None -> app
@@ -1275,78 +1299,31 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         b.Logger
         |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
 
-    // EventStore reference — filled in the RAG service config callback below.
-    // The post-save hook captures it lazily so handler-skip and oversize-doc
-    // rejections can write `RAG.*` events. Deferred-ref pattern (same as
-    // `pipelineRef` / `tracerRef`) because the hook is built before the
-    // service config runs.
-    let eventStoreRef: IEventStore option ref = ref None
-
-    // Phase 173 — the per-file ingestion-status store. Built in the
-    // service-config callback below (where the `IDataObjectStore` probe
-    // is available) and captured here by deferred ref, same pattern as
-    // `eventStoreRef`. The post-save hook writes `Pending` / `Failed`
-    // through it; the ingestion observer writes `Indexed`; `FileManagement`
-    // reads it to badge the file list. `None` until the callback runs ⇒
-    // the hook's status writes are no-ops if a file somehow ingests first.
-    let ingestionStatusStoreRef: IIngestionStatusStore option ref = ref None
-
-    // Phase 303 — audit log + notification channel references for the
-    // ingestion-drop observability triple. Both are resolved from the
-    // probe in the service-config callback below (same instances the
-    // vector store's corrupt-index path uses), so — like `eventStoreRef` —
-    // they're captured here by deferred ref because the post-save hook is
-    // built before that callback runs. `None` until then ⇒ a drop before
-    // the callback degrades to the queue counter + `Error` log only.
-    let auditLogRef: IAuditLog option ref = ref None
-    let notificationChannelRef: INotificationChannel option ref = ref None
-
-    // Register the post-save vectorisation hook so `SessionFileStore.AddFile`
-    // enqueues chunks after every successful file upload.
-    if not b.VectorisationHandlers.IsEmpty then
-        configurePostSaveHooks [
-            makeVectorisationHook
-                b.VectorisationHandlers
-                queue
-                telemetry
-                options.EnableDocumentSummaries
-                options.MaxChunkBytes
-                options.MaxDocumentBytes
-                eventStoreRef
-                ingestionStatusStoreRef
-                options.OverflowPolicy
-                auditLogRef
-                notificationChannelRef
-                ragLogger
-        ]
-
-    // Pipeline + tracer references — filled in the RAG service config callback
-    // below, before any request arrives. The prompt builder reads both lazily
-    // at request time so the miss-diagnostic path resolves the same tracer the
-    // pipeline writes its `KnowledgeRetrieved` events through.
-    let pipelineRef: IRetrievalPipeline option ref = ref None
-    let tracerRef: IRetrievalTracer option ref = ref None
-
-    // Phase 708 — the fact-clause feeder, resolved the same deferred way
-    // the pipeline and tracer are (the DI probe lives in the service-config
-    // callback below, which runs before any request arrives). `None` when
-    // the deployment did not compose the fact tier — the builder then takes
-    // the pre-708 path with no planning stage at all (GP 13).
-    let clausePlannerRef: IFactClausePlanner option ref = ref None
-
+    // The retrieval layer of the system prompt. The pipeline, its tracer and
+    // the fact-clause feeder are the ones the container built for the running
+    // app (`RagRuntime`), read from the request's services; a context that
+    // carries no RAG runtime contributes nothing.
     let ragBuilder: SystemPromptBuilder =
         fun ctx -> async {
-            match pipelineRef.Value with
-            | Some pipeline ->
+            let runtime =
+                if isNull ctx.Services then
+                    None
+                else
+                    match ctx.Services.GetService(typeof<RagRuntime>) with
+                    | :? RagRuntime as runtime -> Some runtime
+                    | _ -> None
+
+            match runtime with
+            | Some runtime ->
                 let! block =
                     (withRetrievalPlanned
                         options.RetrievalDefaults
                         (Some telemetry)
-                        tracerRef.Value
+                        (Some runtime.Tracer)
                         toolFraming
-                        clausePlannerRef.Value
+                        runtime.ClausePlanner
                         options.FactClausePlan
-                        pipeline)
+                        runtime.Pipeline)
                         ctx
 
                 // Server-side strict-grounding guard. Under `StrictlyGrounded`,
@@ -1468,7 +1445,17 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             yield! ToolUp.RAG.RAGCitationDevEndpoint.routes
     ]
 
-    let ragServiceConfig (s: IServiceCollection) =
+    // RAG's registrations. A staged contribution: the event store, audit log
+    // and notification channel are the values compose built (`Substrate`),
+    // so nothing here builds a container to find them. What RAG needs from
+    // services that are not substrate values is built by the container
+    // itself, once, in `RagRuntime`, and the services that depend on it are
+    // projected from it by factory.
+    let ragStaged (substrate: Substrate) (s: IServiceCollection) =
+        let eventStore = substrate.EventStore
+        let auditLog = substrate.AuditLog
+        let notifications = substrate.Notifications
+
         // Citation seam — RAG-specific (composeWithAI callers never register
         // these; the AI handler resolves `null` and skips the pass).
         let s = s.AddSingleton<ICitationCounters>(citationCounters)
@@ -1488,10 +1475,10 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
 
                 makeNullBlobStorage ()
 
-        // Phase 893 — the keyword index is a composition choice. The default
-        // constructs exactly the in-process index every earlier composition
-        // built; a supplied or analyzer-built index was resolved at
-        // composition (`composedSparseIndex`, above); `None` is dense-only.
+        // The keyword index is a composition choice. The default constructs
+        // the in-process index; a supplied or analyzer-built index was
+        // resolved at composition (`composedSparseIndex`, above); `None` is
+        // dense-only.
         let sparseIndex: ISparseIndex option =
             match options.SparseIndex with
             | SparseIndexComposition.InProcessSparseIndex ->
@@ -1509,12 +1496,8 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // Wrap the supplied embedder so repeated query / chunk text hits a
         // cache rather than the underlying provider. Cache key includes
         // provider + model + dimensions so a model swap automatically
-        // invalidates entries.
-        //
-        // Phase 633 — `withEmbeddingCache` substitutes the cache. Unset
-        // (the default) constructs exactly the `InMemoryEmbeddingCache`
-        // this site hard-constructed before, so an existing deployment is
-        // byte-for-byte unchanged (GP 11).
+        // invalidates entries. `withEmbeddingCache` substitutes the cache;
+        // unset constructs the `InMemoryEmbeddingCache` (GP 11).
         let embeddingCache: IEmbeddingCache =
             match options.EmbeddingCache with
             | Some composed -> composed
@@ -1533,71 +1516,12 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             QueryRewriteTimeoutMs = RetrievalPipelineOptions.defaults.QueryRewriteTimeoutMs
         }
 
-        // Build the probe provider ONCE and resolve every pre-pipeline
-        // registration from it. One probe = one consistent view (calling
-        // `BuildServiceProvider` per lookup leaked duplicate singletons and
-        // could resolve a different instance than the running app uses).
-        let probe = s.BuildServiceProvider()
-
-        // Resolve event store first so the retrieval tracer can write
-        // `KnowledgeRetrieved` audit events alongside ingestion / RBAC /
-        // file-op audit events.
-        let eventStore =
-            match probe.GetService(typeof<IEventStore>) with
-            | :? IEventStore as es -> es
-            | _ -> ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
-
-        // Hand the resolved event store to the post-save hook so handler-skip
-        // and oversize-doc rejections emit `RAG.*` audit events.
-        eventStoreRef.Value <- Some eventStore
-
-        // Phase 173 — per-file ingestion-status store + Data Manager
-        // observer. Durable over `IDataObjectStore` when present (status
-        // survives a restart), in-memory otherwise (ephemeral / test
-        // scopes). ONE instance is shared three ways: the post-save hook
-        // (writes `Pending` / `Failed`) and the observer (writes `Indexed`)
-        // capture it directly; `FileManagement` resolves the same singleton
-        // (registered below) to badge the file list. Only built here, when
-        // RAG is composed — a no-RAG deployment never registers it, so the
-        // file list shows no status column (GP 13).
-        let ingestionStatusStore: IIngestionStatusStore =
-            match probe.GetService(typeof<IDataObjectStore>) with
-            | :? IDataObjectStore as dos -> IngestionStatusStore.create dos (Some ragLogger)
-            | _ -> IngestionStatusStore.createInMemory ()
-
-        ingestionStatusStoreRef.Value <- Some ingestionStatusStore
-
-        // Live-badge notifications are published only when a channel is
-        // composed; `None` ⇒ the badge still refreshes on the next
-        // `ListFiles` (GP 13).
-        let ingestionNotificationChannel =
-            match probe.GetService(typeof<INotificationChannel>) with
-            | :? INotificationChannel as ch -> Some ch
-            | _ -> None
-
-        // Phase 303 — hand the resolved notification channel to the
-        // post-save hook so a queue-drop can warn the uploading user.
-        notificationChannelRef.Value <- ingestionNotificationChannel
-
-        let dataManagerIngestionObserver =
-            ToolUp.RAG.DataManagerIngestionObserver.create ingestionStatusStore ingestionNotificationChannel ragLogger
-
-        // Phase 14v — build the default vector store here (after the probe)
-        // so it can resolve the audit log + notification channel and make
-        // corrupt-index loads loud (audit event + telemetry counter +
-        // SystemMessage) instead of starting the scope silently empty. Both
-        // collaborators are optional — a `NoAuditLog` / channel-less
-        // deployment still gets the telemetry counter + Warn log line.
-        let ragAuditLog =
-            match probe.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as a -> Some a
-            | _ -> None
-
-        // Phase 303 — hand the resolved audit log to the post-save hook so
-        // a queue-drop writes a `KnowledgeIngestionDropped` row under
-        // `_platform.knowledge` (same instance the corrupt-index path uses).
-        auditLogRef.Value <- ragAuditLog
-
+        // The default vector store makes corrupt-index loads loud (audit
+        // event + telemetry counter + SystemMessage) instead of starting the
+        // scope silently empty, through the audit log and notification
+        // channel compose built. It is an INSTANCE registration, so the
+        // container never disposes it: `RetrievalStoreFlushService` ends its
+        // lifetime at stop.
         let vectorStore: IVectorStore =
             options.VectorStore
             |> Option.defaultWith (fun () ->
@@ -1605,207 +1529,144 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                     blobStorageForRag,
                     logger = ragLogger,
                     telemetry = telemetry,
-                    ?auditLog = ragAuditLog,
-                    ?notifications = ingestionNotificationChannel
+                    auditLog = auditLog,
+                    notifications = notifications
                 )
                 :> IVectorStore)
 
-        // Pick the registered tracer if any; default to the event-store tracer
-        // so retrieval traces are persisted out-of-the-box.
-        let composedTracer =
-            match probe.GetService(typeof<IRetrievalTracer>) with
-            | :? IRetrievalTracer as t -> t
-            | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
-
-        // Phase 894 — take the trace write off the request path: the
-        // pipeline enqueues, a background loop writes, a full queue drops
-        // and counts. `0` keeps the inline pre-894 write.
-        let backgroundTracer =
-            if options.RetrievalTraceQueueCapacity > 0 then
-                Some(
-                    ToolUp.RAG.RetrievalTracers.createBackground
-                        composedTracer
-                        options.RetrievalTraceQueueCapacity
-                        ragLogger
-                )
-            else
-                None
-
-        let retrievalTracer: IRetrievalTracer =
-            match backgroundTracer with
-            | Some background -> background :> IRetrievalTracer
-            | None -> composedTracer
-
-        let pipeline: IRetrievalPipeline =
-            // Phase 63.A — an override (e.g. the static-corpus pipeline) is
-            // registered verbatim; the default dense/hybrid `RetrievalPipeline`
-            // is not constructed. The override still receives the query through
-            // `IRetrievalPipeline.Retrieve` and embeds it via the registered
-            // `IEmbeddingProvider`; it just doesn't consume the vector store /
-            // sparse index / reranker this branch would build.
-            match options.RetrievalPipelineOverride with
-            | Some overridePipeline -> overridePipeline
-            | None ->
-                // Phase 4b commit 5 + runtime-toggle follow-up — wire a snapshot
-                // thunk that reads the live `IPlatformRuntimeConfigStore` value
-                // when registered, otherwise falls back to the static
-                // `ServerConfig.PlatformKnowledgeBase` value.
-                let runtimeStoreOpt =
-                    match probe.GetService(typeof<IPlatformRuntimeConfigStore>) with
-                    | :? IPlatformRuntimeConfigStore as rc -> Some rc
-                    | _ -> None
-
-                let snapshot () =
-                    match runtimeStoreOpt with
-                    | Some rc -> rc.Snapshot()
-                    | None -> config.PlatformKnowledgeBase
-
-                // Phase 558 — fact-first wiring. When the deployment composed
-                // the fact tier (`FactsCompose.withFactStore` registers the
-                // `IFactResolver` + `IFactDisclosureGate` alongside the store,
-                // before this compose runs), the pipeline picks both up here so
-                // the Phase 522 fact stage + the Phase 525 retrieval egress
-                // door fire with zero extra config. Absent registrations ⇒ the
-                // constructor args are omitted and the pipeline is
-                // byte-identical to a fact-less deployment (GP 11 / GP 13).
-                // The pair is structural: the fact compose never registers one
-                // without the other, so a resolver here always arrives gated.
-                let factResolverOpt =
-                    match probe.GetService(typeof<IFactResolver>) with
-                    | :? IFactResolver as r -> Some r
-                    | _ -> None
-
-                let disclosureGateOpt =
-                    match probe.GetService(typeof<IFactDisclosureGate>) with
-                    | :? IFactDisclosureGate as g -> Some g
-                    | _ -> None
-
-                // Phase 506 — conversation-aware query rewrite, resolved the
-                // same way the fact tier is: a deployment registers an
-                // `IQueryRewriter` in DI (the shipped provider-backed one is
-                // `ProviderQueryRewriter.create`) before `withRAG` runs, and
-                // the pipeline picks it up. No registration ⇒ the argument is
-                // omitted and retrieval is byte-identical (GP 11 / GP 13),
-                // which is why this is a probe rather than a `RagOptions`
-                // field: the opt-in already has a home, and the compose
-                // surface does not grow a knob for it.
-                let queryRewriterOpt =
-                    match probe.GetService(typeof<IQueryRewriter>) with
-                    | :? IQueryRewriter as r -> Some r
-                    | _ -> None
-
-                RetrievalPipeline(
-                    vectorStore,
-                    cachedEmbedder,
-                    ?sparseIndex = sparseIndex,
-                    options = pipelineOptions,
-                    tracer = retrievalTracer,
-                    platformKnowledgeBaseSnapshot = snapshot,
-                    // Phase 122 — same instance the `/health/rag` endpoint resolves,
-                    // so per-stage P50/P95 surface in the snapshot.
-                    telemetry = telemetry,
-                    // Phase 14y — query-size cap + audit sink for the hard refusal.
-                    ?maxQueryChars = options.MaxQueryChars,
-                    eventStore = eventStore,
-                    // Phase 558 — the fact stage + its retrieval egress door,
-                    // present exactly when the fact tier is composed.
-                    ?factResolver = factResolverOpt,
-                    ?disclosureGate = disclosureGateOpt,
-                    // Phase 506 — present exactly when a deployment registered
-                    // an IQueryRewriter; absent otherwise.
-                    ?queryRewriter = queryRewriterOpt,
-                    // Phase 894 — the per-turn budgets (query embed, facts).
-                    budgets = options.RetrievalBudgets
-                )
-                :> IRetrievalPipeline
-
-        // Fill the deferred pipeline + tracer references so the prompt builder
-        // works at request time. Both share the same tracer instance so traces
-        // and miss diagnostics land in the same event-store stream.
-        pipelineRef.Value <- Some pipeline
-        tracerRef.Value <- Some retrievalTracer
-
-        // Phase 708 — fill the feeder from the same probe. Present exactly
-        // when the fact tier is composed (`FactsCompose.withFactStore`
-        // registers it beside the resolver and the gate), so this needs no
-        // knob of its own to arm — `options.FactClausePlan` only decides
-        // whether an armed feeder is consulted.
-        clausePlannerRef.Value <-
-            match probe.GetService(typeof<IFactClausePlanner>) with
-            | :? IFactClausePlanner as p -> Some p
-            | _ -> None
-
-        // Resolve usage-metering + quota substrate from the single probe (G10)
-        // so embedding spend is attributed per scope and pre-flight-gated like
-        // AI provider calls. Defensive NoOp fallback keeps ingestion working if
-        // either is somehow absent.
-        let ingestionUsageLog =
-            match probe.GetService(typeof<IUsageLog>) with
-            | :? IUsageLog as u -> u
-            | _ -> NoOpUsageLog() :> IUsageLog
-
-        let ingestionQuota =
-            match probe.GetService(typeof<ITeamQuotaPolicy>) with
-            | :? ITeamQuotaPolicy as q -> q
-            | _ -> NoOpTeamQuotaPolicy() :> ITeamQuotaPolicy
-
-        // Append the Data Manager ingestion-status observer (Phase 173) to
-        // whatever observers the app registered (e.g. KB's). Append-only —
-        // KB's observer is untouched; each fires independently and scopes
-        // itself by the documents it tracks.
-        let ingestionObservers =
-            options.IngestionObservers @ [ dataManagerIngestionObserver ]
-
-        // Phase 14t — retry / dead-letter substrate. One shared
-        // `IngestionAlertState` spans the first-attempt path (the
+        // One shared alert state spans the first-attempt path (the
         // background service) and the scheduled retry handler, so
-        // provider-unavailable dedup + the dead-letter-rate threshold
-        // count both. `ingestionNotificationChannel` (resolved above)
-        // carries the Owner/Admin alerts; `None` ⇒ audit-only.
+        // provider-unavailable dedup and the dead-letter-rate threshold
+        // count both.
         let ingestionAlertState = IngestionAlertState()
 
-        let retryHandlerDeps: IngestionRetryDeps = {
-            Pipeline = pipeline
-            EventStore = eventStore
-            Observers = ingestionObservers
-            NotificationChannel = ingestionNotificationChannel
-            Telemetry = telemetry
-            Logger = ragLogger
-            Policy = options.IngestionRetryPolicy
-            AlertState = ingestionAlertState
-        }
+        // Built once by the container (`RagRuntime`), from the services the
+        // running app composed. A service registered later in the
+        // composition is seen here too: the container resolves the final
+        // registration, as it does for every other consumer.
+        let buildRuntime (sp: System.IServiceProvider) : RagRuntime =
+            // The per-file ingestion-status store: durable over
+            // `IDataObjectStore` when composed (status survives a restart),
+            // in-memory otherwise. ONE instance is shared three ways: the
+            // post-save hook (writes `Pending` / `Failed`), the observer
+            // (writes `Indexed`) and `FileManagement` (badges the file list).
+            let ingestionStatusStore: IIngestionStatusStore =
+                match ServiceComposition.tryService<IDataObjectStore> sp with
+                | Some dos -> IngestionStatusStore.create dos (Some ragLogger)
+                | None -> IngestionStatusStore.createInMemory ()
 
-        // The background service registers this handler on the resolved
-        // scheduler at startup (the handler is compiled after
-        // IngestionService, so the registration is injected here rather
-        // than referenced from inside the service).
-        let registerRetryHandler (scheduler: IJobScheduler) =
-            scheduler.RegisterHandler(RetryHandlerName, ToolUp.RAG.IngestionRetryJobHandler.create retryHandlerDeps)
+            let dataManagerIngestionObserver =
+                ToolUp.RAG.DataManagerIngestionObserver.create ingestionStatusStore (Some notifications) ragLogger
 
-        // Background re-embedding: when a deployment swaps the embedding model,
-        // chunks indexed under the old `EmbeddingVersion` are detected and
+            // The registered tracer if any; default to the event-store tracer
+            // so retrieval traces are persisted out-of-the-box.
+            let composedTracer =
+                match ServiceComposition.tryService<IRetrievalTracer> sp with
+                | Some t -> t
+                | None -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
+
+            // The trace write leaves the request path: the pipeline enqueues,
+            // a background loop writes, a full queue drops and counts. `0`
+            // keeps the inline write.
+            let backgroundTracer =
+                if options.RetrievalTraceQueueCapacity > 0 then
+                    Some(
+                        ToolUp.RAG.RetrievalTracers.createBackground
+                            composedTracer
+                            options.RetrievalTraceQueueCapacity
+                            ragLogger
+                    )
+                else
+                    None
+
+            let retrievalTracer: IRetrievalTracer =
+                match backgroundTracer with
+                | Some background -> background :> IRetrievalTracer
+                | None -> composedTracer
+
+            let pipeline: IRetrievalPipeline =
+                // An override (e.g. the static-corpus pipeline) is used
+                // verbatim; the default dense/hybrid `RetrievalPipeline` is
+                // not constructed.
+                match options.RetrievalPipelineOverride with
+                | Some overridePipeline -> overridePipeline
+                | None ->
+                    // The live `IPlatformRuntimeConfigStore` value when
+                    // registered, otherwise the static
+                    // `ServerConfig.PlatformKnowledgeBase` value.
+                    let runtimeStoreOpt = ServiceComposition.tryService<IPlatformRuntimeConfigStore> sp
+
+                    let snapshot () =
+                        match runtimeStoreOpt with
+                        | Some rc -> rc.Snapshot()
+                        | None -> config.PlatformKnowledgeBase
+
+                    RetrievalPipeline(
+                        vectorStore,
+                        cachedEmbedder,
+                        ?sparseIndex = sparseIndex,
+                        options = pipelineOptions,
+                        tracer = retrievalTracer,
+                        platformKnowledgeBaseSnapshot = snapshot,
+                        // The same instance the `/health/rag` endpoint
+                        // resolves, so per-stage P50/P95 surface there.
+                        telemetry = telemetry,
+                        ?maxQueryChars = options.MaxQueryChars,
+                        eventStore = eventStore,
+                        // The fact stage and its retrieval egress door,
+                        // present exactly when the fact tier is composed
+                        // (it registers the resolver and the gate as a
+                        // pair); absent ⇒ a fact-less pipeline (GP 11 / 13).
+                        ?factResolver = ServiceComposition.tryService<IFactResolver> sp,
+                        ?disclosureGate = ServiceComposition.tryService<IFactDisclosureGate> sp,
+                        // Conversation-aware query rewrite, present exactly
+                        // when the deployment registered an `IQueryRewriter`.
+                        ?queryRewriter = ServiceComposition.tryService<IQueryRewriter> sp,
+                        budgets = options.RetrievalBudgets
+                    )
+                    :> IRetrievalPipeline
+
+            // The Data Manager observer is appended to the app's own
+            // observers (e.g. KB's); each fires independently.
+            let ingestionObservers =
+                options.IngestionObservers @ [ dataManagerIngestionObserver ]
+
+            {
+                IngestionStatusStore = ingestionStatusStore
+                Tracer = retrievalTracer
+                BackgroundTracer = backgroundTracer
+                Pipeline = pipeline
+                ClausePlanner = ServiceComposition.tryService<IFactClausePlanner> sp
+                IngestionObservers = ingestionObservers
+                // Embedding spend is attributed per scope and pre-flight
+                // gated like AI provider calls; NoOp keeps ingestion working
+                // when either is absent.
+                UsageLog =
+                    ServiceComposition.tryService<IUsageLog> sp
+                    |> Option.defaultWith (fun () -> NoOpUsageLog() :> IUsageLog)
+                Quota =
+                    ServiceComposition.tryService<ITeamQuotaPolicy> sp
+                    |> Option.defaultWith (fun () -> NoOpTeamQuotaPolicy() :> ITeamQuotaPolicy)
+                RetryDeps = {
+                    Pipeline = pipeline
+                    EventStore = eventStore
+                    Observers = ingestionObservers
+                    NotificationChannel = Some notifications
+                    Telemetry = telemetry
+                    Logger = ragLogger
+                    Policy = options.IngestionRetryPolicy
+                    AlertState = ingestionAlertState
+                }
+            }
+
+        // Background re-embedding: when a deployment swaps the embedding
+        // model, chunks indexed under the old `EmbeddingVersion` are
         // re-indexed via `IRetrievalPipeline.Index`.
         let reembedQueue = ToolUp.RAG.ReembeddingService.ReembeddingQueue()
 
-        let reembedSvc =
-            ToolUp.RAG.ReembeddingService.create reembedQueue vectorStore pipeline cachedEmbedder eventStore ragLogger
-
-        // Document-understanding defaults: register no-ops so the KB extractor
-        // can resolve them from DI unconditionally. Companion packages override
-        // by registering their concrete provider *before* `composeRAG` runs.
-        let ocrProvider: IOcrProvider =
-            match probe.GetService(typeof<IOcrProvider>) with
-            | :? IOcrProvider as p -> p
-            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
-
-        let tableExtractor: ITableExtractor =
-            match probe.GetService(typeof<ITableExtractor>) with
-            | :? ITableExtractor as t -> t
-            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
-
-        // Phase 115 — the unified index-lifecycle seam over every index tier
-        // this composition fuses, so KB deletion paths fan out across the
-        // vector store AND the sparse index.
+        // The unified index-lifecycle seam over every index tier this
+        // composition fuses, so KB deletion paths fan out across the vector
+        // store AND the sparse index.
         let indexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle =
             ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(
                 vectorStore,
@@ -1814,21 +1675,23 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 ragLogger
             )
 
+        let s =
+            s.AddSingleton<RagRuntime>(System.Func<System.IServiceProvider, RagRuntime>(buildRuntime))
+
         let s = s.AddSingleton<IVectorStore>(vectorStore)
 
-        // Phase 893 — registered exactly when a keyword index is composed,
-        // in the position it always held. Dense-only registers none, so a
-        // consumer resolving `ISparseIndex` optionally (the entity store's
-        // full-text leg) sees it absent rather than an empty stand-in.
+        // Registered exactly when a keyword index is composed. Dense-only
+        // registers none, so a consumer resolving `ISparseIndex` optionally
+        // (the entity store's full-text leg) sees it absent.
         let s =
             match sparseIndex with
             | Some index -> s.AddSingleton<ISparseIndex>(index)
             | None -> s
 
-        // Phase 869 — the stores registered above are flushed at a graceful
-        // stop by `RetrievalStoreFlushService`, which owns exactly the ones
-        // this composition constructed. Nothing constructed, nothing
-        // registered (GP 13).
+        // The stores registered above are flushed at a graceful stop by
+        // `RetrievalStoreFlushService`, which owns exactly the ones this
+        // composition constructed. Nothing constructed, nothing registered
+        // (GP 13).
         let s =
             let owned = [
                 match options.VectorStore, box vectorStore with
@@ -1852,38 +1715,95 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                     (BackgroundUnit.create "rag-retrieval-store-flush" OnceAtStart (fun _ ->
                         new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService))
 
-        // Phase 945 — the off-path trace queue, registered so `/health/rag`
-        // can report its lost-trace count. Absent when traces are written
-        // inline (capacity 0), and then the endpoint omits the block.
+        // The off-path trace queue, registered so `/health/rag` can report
+        // its lost-trace count. Absent when traces are written inline
+        // (capacity 0), and then the endpoint omits the block.
         let s =
-            match backgroundTracer with
-            | Some background -> s.AddSingleton<ToolUp.RAG.RetrievalTracers.BackgroundRetrievalTracer>(background)
-            | None -> s
+            if options.RetrievalTraceQueueCapacity > 0 then
+                s.AddSingleton<ToolUp.RAG.RetrievalTracers.BackgroundRetrievalTracer>(
+                    System.Func<System.IServiceProvider, ToolUp.RAG.RetrievalTracers.BackgroundRetrievalTracer>
+                        (fun sp -> (RagRuntime.resolve sp).BackgroundTracer |> Option.get)
+                )
+            else
+                s
 
         let s =
             s
                 .AddSingleton<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>(indexLifecycle)
                 .AddSingleton<IEmbeddingProvider>(cachedEmbedder)
                 .AddSingleton<IEmbeddingCache>(embeddingCache)
-                .AddSingleton<IRetrievalPipeline>(pipeline)
+
+        // A supplied pipeline stays an instance registration (its owner
+        // keeps owning it); the default is the one the container built.
+        let s =
+            match options.RetrievalPipelineOverride with
+            | Some overridePipeline -> s.AddSingleton<IRetrievalPipeline>(overridePipeline)
+            | None ->
+                s.AddSingleton<IRetrievalPipeline>(
+                    System.Func<System.IServiceProvider, IRetrievalPipeline>(fun sp -> (RagRuntime.resolve sp).Pipeline)
+                )
+
+        let s =
+            s
                 .AddSingleton<IngestionQueue>(queue)
                 .AddSingleton<ToolUp.RAG.ReembeddingService.ReembeddingQueue>(reembedQueue)
-                .AddSingleton<IOcrProvider>(ocrProvider)
-                .AddSingleton<ITableExtractor>(tableExtractor)
-                .AddSingleton<IRagTelemetry>(telemetry)
-                // Phase 173 — register the SAME store instance the hook +
-                // observer write through, so `FileManagementApi.ListFiles`
-                // resolves it and joins status onto the file-list read.
-                .AddSingleton<IIngestionStatusStore>(ingestionStatusStore)
 
-        // Phase 63.A — the ingestion + reembedding hosted services are the
-        // load-bearing live-ingestion overhead. Register them only when NOT
-        // suppressed. `suppressIngestion` is set when a retrieval-pipeline
-        // override is composed AND no module contributes a
-        // `VectorisationHandler` — i.e. a static-corpus / read-only-retrieval
-        // deployment with no producers, so these consumers have nothing to do
-        // (GP 13). A deployment that keeps the default pipeline, or overrides
-        // the pipeline but still registers handlers, keeps both services.
+        // Document-understanding defaults: no-ops, so the KB extractor can
+        // resolve them unconditionally. A companion's own provider,
+        // registered before RAG, is kept; one registered after wins as the
+        // later registration.
+        Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<IOcrProvider>(
+            s,
+            ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
+        )
+
+        Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<ITableExtractor>(
+            s,
+            ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
+        )
+
+        let s =
+            s
+                .AddSingleton<IRagTelemetry>(telemetry)
+                // The SAME store instance the hook and observer write
+                // through, so `FileManagementApi.ListFiles` joins status onto
+                // the file-list read.
+                .AddSingleton<IIngestionStatusStore>(
+                    System.Func<System.IServiceProvider, IIngestionStatusStore>(fun sp ->
+                        (RagRuntime.resolve sp).IngestionStatusStore)
+                )
+
+        // The post-save vectorisation hook: `SessionFileStore.AddFile`
+        // enqueues chunks after every successful upload. Registered only
+        // when a module contributes a `VectorisationHandler`.
+        let s =
+            if b.VectorisationHandlers.IsEmpty then
+                s
+            else
+                s.AddSingleton<PostSaveHook>(
+                    System.Func<System.IServiceProvider, PostSaveHook>(fun sp ->
+                        PostSaveHook(
+                            makeVectorisationHook
+                                b.VectorisationHandlers
+                                queue
+                                telemetry
+                                options.EnableDocumentSummaries
+                                options.MaxChunkBytes
+                                options.MaxDocumentBytes
+                                eventStore
+                                (RagRuntime.resolve sp).IngestionStatusStore
+                                options.OverflowPolicy
+                                auditLog
+                                notifications
+                                ragLogger
+                        ))
+                )
+
+        // The ingestion + reembedding hosted services are the load-bearing
+        // live-ingestion overhead. `suppressIngestion` is set when a
+        // retrieval-pipeline override is composed AND no module contributes
+        // a `VectorisationHandler`: a static-corpus deployment with no
+        // producers, so these consumers have nothing to do (GP 13).
         let s =
             if suppressIngestion then
                 ragLogger.Info(
@@ -1895,38 +1815,49 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 // Ingestion is shared work when the queue is durable (a
                 // composed `IIngestionQueueStore`: every replica drains ONE
                 // queue, so a worker silo drains it for a web silo). Over the
-                // historical in-process channel only the process that
-                // accepted the upload can drain it, so it is process-local
-                // there: gating it off a WebOnly silo would strand every job
-                // that silo's HTTP tier enqueued.
+                // in-process channel only the process that accepted the
+                // upload can drain it, so it is process-local there: gating
+                // it off a WebOnly silo would strand every job that silo's
+                // HTTP tier enqueued.
                 let ingestionPlacement =
                     match options.IngestionQueueStore with
                     | Some _ -> SharedWork
                     | None -> ProcessLocal
 
-                // The ingestion service is a factory registration so it
-                // captures the REAL host provider and can lazily resolve the
+                // Built from the host provider, so it lazily resolves the
                 // (downstream-built) `IJobScheduler` for durable retries.
                 let ingestion =
                     BackgroundUnit.create "rag-ingestion" ingestionPlacement (fun (sp: System.IServiceProvider) ->
+                        let runtime = RagRuntime.resolve sp
+
                         let getJobScheduler () =
                             match sp.GetService(typeof<IJobScheduler>) with
                             | :? IJobScheduler as js -> Some js
                             | _ -> None
 
+                        // The service registers the retry handler on the
+                        // resolved scheduler at startup (the handler is
+                        // compiled after IngestionService, so the
+                        // registration is injected here).
+                        let registerRetryHandler (scheduler: IJobScheduler) =
+                            scheduler.RegisterHandler(
+                                RetryHandlerName,
+                                ToolUp.RAG.IngestionRetryJobHandler.create runtime.RetryDeps
+                            )
+
                         create
                             queue
-                            pipeline
+                            runtime.Pipeline
                             cachedEmbedder
                             eventStore
-                            ingestionObservers
+                            runtime.IngestionObservers
                             options.IngestionConcurrency
                             ragLogger
                             telemetry
-                            ingestionUsageLog
-                            ingestionQuota
+                            runtime.UsageLog
+                            runtime.Quota
                             options.IngestionRetryPolicy
-                            ingestionNotificationChannel
+                            (Some notifications)
                             ingestionAlertState
                             getJobScheduler
                             registerRetryHandler
@@ -1937,38 +1868,33 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 // outside the service enqueues to its queue, so one silo
                 // re-embeds for every silo (N replicas would pay the
                 // embedding API N times for the same corpus).
-                let reembedding = BackgroundUnit.ofInstance "rag-reembedding" SharedWork reembedSvc
+                let reembedding =
+                    BackgroundUnit.create "rag-reembedding" SharedWork (fun (sp: System.IServiceProvider) ->
+                        ToolUp.RAG.ReembeddingService.create
+                            reembedQueue
+                            vectorStore
+                            (RagRuntime.resolve sp).Pipeline
+                            cachedEmbedder
+                            eventStore
+                            ragLogger
+                        :> IHostedService)
 
                 Hosting.register (Hosting.register s ingestion) reembedding
 
-        // Phase 509.C — startup recovery sweep for the per-file ingestion
-        // status. A restart mid-ingestion leaves the DURABLE status entry
-        // at `Pending` while the in-memory job it referred to is gone, so
-        // the Data Manager badge reads "still ingesting" forever with
-        // nothing left to clear it. This flips those entries to `Failed`
-        // with a restart-interrupted reason, making the loss visible.
+        // Startup recovery sweep for the per-file ingestion status. A restart
+        // mid-ingestion leaves the DURABLE status entry at `Pending` while
+        // the in-memory job it referred to is gone; the sweep flips those
+        // entries to `Failed` with a restart-interrupted reason. The sweep
+        // body is `ToolUp.Platform.IngestionRecoverySweep`, shared with KB;
+        // this block owns WHETHER a sweep runs and which surfaces and scopes
+        // it gets.
         //
-        // Phase 723 — the sweep body no longer lives here. The traversal,
-        // the per-scope error isolation, the reason string and the
-        // logging shape are `ToolUp.Platform.IngestionRecoverySweep`,
-        // shared with KB's `recoverStuckDocumentsAtStartup`, which was a
-        // near-identical copy of exactly this loop in another companion.
-        // What this block still owns is the two composition decisions:
-        // WHETHER a sweep runs at all, and which surfaces + scopes it
-        // gets.
-        //
-        // Registered when the consumer named containers to sweep OR
-        // composed a scope enumerator — an unconfigured deployment still
-        // carries no hosted service and no surface registration, so it
-        // is byte-for-byte its pre-509 self (GP 11 / GP 13).
-        //
-        // Surfaces are resolved from the BUILT provider at StartAsync,
-        // not captured here, so a companion that registers its own
-        // surface (KB's document index, via
-        // `KnowledgeBaseServerApp.withIngestionRecovery`) is picked up
-        // with no ordering requirement between compose helpers — and the
-        // scope enumeration is a live read, so a team created since the
-        // last start is swept on this one.
+        // Registered when the consumer named containers to sweep OR composed
+        // a scope enumerator — an unconfigured deployment carries no hosted
+        // service and no surface registration (GP 11 / GP 13). Surfaces are
+        // resolved from the BUILT provider at StartAsync, so a companion that
+        // registers its own surface is picked up with no ordering
+        // requirement, and the scope enumeration is a live read.
         let s =
             if options.IngestionRecoveryScopes.IsEmpty && options.ScopeEnumerator.IsNone then
                 s
@@ -1976,13 +1902,16 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 let explicitScopes = options.IngestionRecoveryScopes
                 let enumerator = options.ScopeEnumerator
 
-                let ragSurface: IIngestionRecoverySurface =
-                    IngestionRecoverySweep.ofIngestionStatusStore ingestionStatusStore
+                let s =
+                    s.AddSingleton<IIngestionRecoverySurface>(
+                        System.Func<System.IServiceProvider, IIngestionRecoverySurface>(fun sp ->
+                            IngestionRecoverySweep.ofIngestionStatusStore (RagRuntime.resolve sp).IngestionStatusStore)
+                    )
 
                 // Once at start: a one-shot sweep settling the ingestion
                 // jobs a restart lost.
                 Hosting.register
-                    (s.AddSingleton<IIngestionRecoverySurface>(ragSurface))
+                    s
                     (BackgroundUnit.create "rag-ingestion-recovery-sweep" OnceAtStart (fun sp ->
                         IngestionRecoverySweep.hostedService
                             ragLogger
@@ -1994,17 +1923,12 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             | Some r -> s.AddSingleton<IReranker>(r)
             | None -> s
 
-        // Phase 14w — tombstone auto-vacuum. When a vacuum schedule is
-        // configured, register the vacuum handler + schedule a cron job on
-        // the resolved `IJobScheduler`. Deferred to an `IHostedService`
-        // `StartAsync` (mirrors the DSR handler-registration pattern in
-        // `ComposeJobs.registerDataSubjectRequestJobs`) because the
-        // scheduler singleton is built downstream in `ComposeJobs` — it is
-        // only resolvable from the built provider, not from this callback.
-        // The handler captures the local `vectorStore` / `eventStore`
-        // singletons directly (same instances registered above). Scheduling
-        // is idempotent (stable key + one-year TTL) so a restart re-attaches
-        // to the existing job definition rather than duplicating it.
+        // Tombstone auto-vacuum. When a vacuum schedule is configured,
+        // register the vacuum handler and schedule a cron job on the
+        // `IJobScheduler`, from a hosted service's `StartAsync`, because the
+        // scheduler is only resolvable from the built provider. Scheduling is
+        // idempotent (stable key + one-year TTL), so a restart re-attaches to
+        // the existing job definition rather than duplicating it.
         let s =
             match options.VacuumSchedule with
             | None -> s
@@ -2078,26 +2002,23 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                                 System.Threading.Tasks.Task.CompletedTask
                         }))
 
-        // Phase 54d — RAG vector-store offboard purge hook, gated on the
-        // same `TenantLifecycle = EnabledTenantLifecycle` switch the core
-        // `ComposeTenantLifecycle` gates on. Additive `AddSingleton` —
-        // the aggregator resolves the full `seq<ITenantLifecycle>`, so this
-        // stacks with the core first-party hooks. Self-`Skipped`s when no
-        // `IVectorStore` is composed (here it always is), so the gate is
-        // the only condition.
+        // RAG vector-store offboard purge hook, gated on the same
+        // `TenantLifecycle = EnabledTenantLifecycle` switch the core
+        // `ComposeTenantLifecycle` gates on. Additive — the aggregator
+        // resolves the full `seq<ITenantLifecycle>`, so this stacks with the
+        // core first-party hooks.
         let s =
             match config.TenantLifecycle with
             | EnabledTenantLifecycle ->
                 s.AddSingleton<ITenantLifecycle>(fun (sp: System.IServiceProvider) -> RagVectorStoreLifecycle.create sp)
             | NoTenantLifecycle -> s
 
-        // Phase 9m.B — two `/dev/inspect` panels. Both are
-        // unconditional: they answer questions ("does this deployment
-        // keep its index?", "which of my data types are actually
-        // indexed?") whose ANSWER may be fine, so gating them on the
-        // matching validator having fired would hide exactly the healthy
-        // case an operator wants to confirm. Neither does I/O — the
-        // payload is closed over at compose time (GP 13: two records).
+        // Two `/dev/inspect` panels. Both are unconditional: they answer
+        // questions ("does this deployment keep its index?", "which of my
+        // data types are actually indexed?") whose ANSWER may be fine, so
+        // gating them on the matching validator having fired would hide
+        // exactly the healthy case an operator wants to confirm. Neither
+        // does I/O — the payload is closed over at compose time.
         s
             .AddSingleton<IDevDiagnosticsContributor>(
                 ToolUp.RAG.RagConfigValidator.RagDurabilityContributor(
@@ -2114,10 +2035,9 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 )
                 :> IDevDiagnosticsContributor
             )
-            // Phase 541 — the live-interface posture: a `/dev/inspect`
-            // panel, plus the typed value the deployment-readiness
-            // gatherer reads (DI-only, so the composition manifest and
-            // its boot seal are unchanged).
+            // The live-interface posture: a `/dev/inspect` panel, plus the
+            // typed value the deployment-readiness gatherer reads (DI-only,
+            // so the composition manifest and its boot seal are unchanged).
             .AddSingleton<DeploymentReadiness.LiveInterfaceSummary>(liveInterface)
             .AddSingleton<IDevDiagnosticsContributor>(
                 LiveInterfaceContributor(liveInterface) :> IDevDiagnosticsContributor
@@ -2249,7 +2169,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             Extensions = mergedExt
     }
     // RAG's registrations are a contribution under its own id.
-    |> ServerApp.addContribution (Contribution.service ragOwner ragServiceConfig)
+    |> ServerApp.addContribution (Contribution.staged ragOwner ragStaged)
 
 module RagOptions =
     /// The RAG companion's options with the three required inputs: the AI

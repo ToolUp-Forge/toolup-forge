@@ -262,6 +262,7 @@ let private registeredTests =
         ContentScannerTests.tests
         KnowledgeUserScopeIsolationTests.tests
         VectorisationHookTests.tests
+        VectorisationHookTests.stagedTests
         RagTelemetryTests.tests
         ExtractorTests.tests
         TerminalStatusAnnouncementTests.tests

@@ -173,8 +173,8 @@ type ProviderQueryRewriter(provider: IAIProvider, ?historyTurns: int, ?timeoutMs
         }
 
 /// Construct the shipped provider-backed rewriter as the seam type. Wire it
-/// into DI (`services.AddSingleton<IQueryRewriter>(…)`) before `withRAG`
-/// composes the retrieval pipeline; compose picks it up from there.
+/// into DI (`services.AddSingleton<IQueryRewriter>(…)`), before or after
+/// `withRAG`: the retrieval pipeline resolves it from the running app.
 let create (provider: IAIProvider) : IQueryRewriter =
     ProviderQueryRewriter(provider) :> IQueryRewriter
 

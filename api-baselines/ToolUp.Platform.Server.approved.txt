@@ -4966,7 +4966,6 @@ ToolUp.Platform.FileBindingTransparencyLog..ctor(System.String)
 ToolUp.Platform.FileBindingTransparencyLog.Path : System.String { get }
 ToolUp.Platform.FileManagement (class)
 ToolUp.Platform.FileManagement.configureEvictionMinutes(System.Double) : System.Void
-ToolUp.Platform.FileManagement.configurePostSaveHooks(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[ProcessedDataTypes+ProcessedData, ProcessedDataTypes+ProcessedFileEntry, ToolUp.Platform.StorageScope, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]]) : System.Void
 ToolUp.Platform.FileManagement.detectFileType(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Platform.FileManagement.fileManagementApi(Microsoft.AspNetCore.Http.HttpContext) : ProcessedDataTypes+FileManagementApi
 ToolUp.Platform.FileManagement.getFileContents(Microsoft.AspNetCore.Http.HttpContext, System.String) : System.String
@@ -4990,6 +4989,9 @@ ToolUp.Platform.FileManagement+FileNotFoundInSessionException (class)
 ToolUp.Platform.FileManagement+FileNotFoundInSessionException..ctor()
 ToolUp.Platform.FileManagement+FileNotFoundInSessionException..ctor(System.String)
 ToolUp.Platform.FileManagement+FileNotFoundInSessionException.Data0 : System.String { get }
+ToolUp.Platform.FileManagement+PostSaveHook (class)
+ToolUp.Platform.FileManagement+PostSaveHook..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[ProcessedDataTypes+ProcessedData, ProcessedDataTypes+ProcessedFileEntry, ToolUp.Platform.StorageScope, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.FileManagement+PostSaveHook.Run : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[ProcessedDataTypes+ProcessedData, ProcessedDataTypes+ProcessedFileEntry, ToolUp.Platform.StorageScope, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.FileManagement+ProcessedEntryStore (class)
 ToolUp.Platform.FileManagement+ProcessedEntryStore.DataType : System.String (literal)
 ToolUp.Platform.FileManagement+ProcessedEntryStore.delete(ToolUp.Platform.IDataObjectStore, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

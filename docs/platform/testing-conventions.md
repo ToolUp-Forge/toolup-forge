@@ -4,10 +4,9 @@ Conventions for keeping the SDK's Expecto test suite reliable under default para
 
 ## The "module-level mutable cache" pattern
 
-A handful of SDK substrate files carry a `let mutable private <name>` (or `let mutable internal <name>`) at module scope — a process-local cache or registration list populated lazily on first use and read on every call. Two examples:
+A handful of SDK substrate files carry a `let mutable private <name>` (or `let mutable internal <name>`) at module scope — a process-local cache or registration list populated lazily on first use and read on every call. For example:
 
 - [`PendingInviteStore.cache`](../../src/ToolUp.Platform.Server/Server/Teams/PendingInviteStore.fs) — 30-second TTL cache of the pending-invite blob, populated on first read and invalidated on every write.
-- [`FileManagement.pendingPostSaveHooks`](../../src/ToolUp.Platform.Server/Server/Files/FileManagement.fs) — companion-registered list of post-save hooks; populated before `compose`, drained when `compose` runs.
 
 In production this is the right shape: process-lifetime singletons at hot paths, no DI overhead per call. In tests the same shape is a flake source — sibling tests in the same `testList` mutate the shared cache concurrently and observe each other's writes.
 
@@ -20,7 +19,7 @@ In production this is the right shape: process-lifetime singletons at hot paths,
 **When it's not OK.**
 
 - Anywhere DI resolution per call is cheap enough that the cache buys nothing.
-- New code on the SDK boundary. Prefer a record-shaped runtime threaded through `compose` (see how `FileManagementRuntime` retired three of `FileManagement.fs`'s prior module mutables — only `pendingPostSaveHooks` survives, and that survives precisely because it's populated by callers BEFORE `compose` runs).
+- New code on the SDK boundary. Prefer a record-shaped runtime threaded through `compose` (see how `FileManagementRuntime` retired `FileManagement.fs`'s registration mutables — the last, the post-save hook list, went when hooks became DI registrations the runtime folds in).
 
 **Client-tier consolidation rule (Phase 496).** A client-tier concern (`ToolUp.Platform.Client/`, `ToolUp.AI.Client/`) with **more than one** ambient module-level mutable consolidates them into a **single mutable state record** — one `type private <Concern>State = { … }` carrying the per-field justification as doc comments, plus one `let mutable private state = { … }` binding updated via copy-and-update (`state <- { state with … }`). One documented exception per concern instead of N, and the related fields cannot be updated inconsistently. Reference shapes: `NotificationClient.NotificationClientState`, `UserSession.SubjectAndBridgeState` / `TokenStorageState` (split by lifetime), `CsrfClient.CsrfClientState`. New **lone** flags (one-shot init guards, warn-once latches, single pluggable-reporter slots) stay as plain `let mutable private` bindings and keep the one-line justification comment — a record wrapper adds nothing to a lone boolean.
 
@@ -94,7 +93,6 @@ Each (a) site MUST carry a comment naming its classification: `// (a) — proces
 
 **Class (b) — exposes `__internal_resetForTests`.** Required when the mutable is:
 - A read-on-every-call cache populated lazily (`PendingInviteStore.cache`).
-- A compose-time registration list drained by `compose` (`FileManagement.pendingPostSaveHooks`) — even though the drain pattern resets it, tests that bypass `compose` need an explicit reset to start clean.
 
 Each (b) site MUST be registered in `CacheReset.invalidateAll`.
 

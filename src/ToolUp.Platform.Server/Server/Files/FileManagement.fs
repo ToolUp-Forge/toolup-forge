@@ -294,9 +294,9 @@ type StoredFile = {
 /// emission time.
 type FileManagementRuntime = {
     /// Hooks that fire fire-and-forget after every successful
-    /// `SessionFileStore.AddFile`. Empty by default; `RAGCompose`
-    /// registers a vectorisation hook when any `VectorisationHandler`
-    /// is wired. The fourth tuple element is the uploading user's id
+    /// `SessionFileStore.AddFile`. Empty by default; compose folds in
+    /// every `PostSaveHook` registered in DI (`RAGCompose` registers a
+    /// vectorisation hook). The fourth tuple element is the uploading user's id
     /// (`AddFile`'s `createdBy`) — distinct from `StorageScope.ScopeId`
     /// (which is the team in team scopes) so a hook can attribute the
     /// work it spawns to the actual user.
@@ -358,43 +358,17 @@ module FileManagementRuntime =
         AuditLog = None
     }
 
-/// Pending post-save hooks registered by companions (notably
-/// `RAGCompose`) BEFORE `compose` runs. `compose` drains this into the
-/// `FileManagementRuntime` it builds, then the list is no longer
-/// consulted. The single surviving module-level mutable in this file —
-/// the others were replaced by the runtime record. See the documented
-/// exceptions in `src/ToolUp.Platform/README.md`.
-//
-// (b) — registration list survives across tests that bypass `compose`;
-// reset for Expecto via `CacheReset.invalidateAll`. See
-// docs/platform/testing-conventions.md.
-let mutable internal pendingPostSaveHooks
-    : (ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) list = []
-
-/// Register post-save hooks that fire after every successful
-/// `SessionFileStore.AddFile`. Companions call this from their compose
-/// path BEFORE the SDK's `compose` runs. Replaces the existing list
-/// (matching the prior contract — a single companion owns hook
-/// registration today).
-let configurePostSaveHooks (hooks: (ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) list) =
-    pendingPostSaveHooks <- hooks
-
-/// Drain pending companion-registered hooks. Called by `compose`
-/// when it builds the `FileManagementRuntime`. After draining,
-/// `pendingPostSaveHooks` is reset to `[]` so a second compose run
-/// (e.g. integration tests that bring up the host repeatedly) starts
-/// from a clean slate.
-let internal drainPendingPostSaveHooks () =
-    let hooks = pendingPostSaveHooks
-    pendingPostSaveHooks <- []
-    hooks
-
-/// Test-only: drop pending hook registrations so a subsequent test
-/// starts from a clean slate. Registered via
-/// `ToolUp.Platform.Tests.Support.CacheReset.invalidateAll`. Never
-/// called from production code paths — the `compose` drain pattern
-/// resets `pendingPostSaveHooks` naturally there.
-let internal __internal_resetForTests () = pendingPostSaveHooks <- []
+/// A hook that fires fire-and-forget after every successful
+/// `SessionFileStore.AddFile`. A companion registers one in DI
+/// (`services.AddSingleton<PostSaveHook>(…)`, typically by factory, so the
+/// hook is built from the services the running app composed); compose
+/// folds every registered hook into the `FileManagementRuntime`, in
+/// registration order.
+[<Sealed>]
+type PostSaveHook(run: ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) =
+    /// The hook: the processed data, its file entry, the storage scope and
+    /// the uploading user's id.
+    member _.Run = run
 
 type SessionFileStore
     (
@@ -823,8 +797,8 @@ type SessionFileStore
 
                 // Fire post-save hooks asynchronously. Hooks come from the
                 // compose-built `FileManagementRuntime` — companions register
-                // them via `configurePostSaveHooks` before `compose` runs and
-                // `compose` drains them into the runtime.
+                // them as `PostSaveHook` DI registrations and compose folds
+                // every registered hook into the runtime.
                 //
                 // Each hook is wrapped in a try/with that routes thrown
                 // exceptions through `runtime.PostSaveHooksLogger`. The HTTP

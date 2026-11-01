@@ -691,8 +691,8 @@ let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerCo
         ()
 
 /// Build the immutable `FileManagementRuntime` consumed by every
-/// `SessionFileStore` instance. Drains companion-registered post-save
-/// hooks (RAG vectorisation in particular), folds in the
+/// `SessionFileStore` instance. Folds in every `PostSaveHook` registered
+/// in DI (RAG vectorisation in particular), the
 /// compose-resolved logger / quota / usage-log, and registers the
 /// record as a DI singleton. Replaces the prior pattern of four
 /// module-level mutables that `compose` set via `configure*` setters.
@@ -735,7 +735,7 @@ let registerFileManagementRuntime
             | false, _ -> FileManagement.FileManagementRuntime.empty.MaxFileBytes
 
     let fileManagementRuntime: FileManagement.FileManagementRuntime = {
-        PostSaveHooks = FileManagement.drainPendingPostSaveHooks ()
+        PostSaveHooks = []
         PostSaveHooksLogger = Some resolvedLogger
         QuotaResolver = quotaResolver
         UsageLog = Some usageLogInstance
@@ -752,7 +752,15 @@ let registerFileManagementRuntime
         AuditLog = Some auditLog
     }
 
-    services.AddSingleton<FileManagement.FileManagementRuntime>(fileManagementRuntime)
+    // The post-save hooks are the `PostSaveHook`s registered in DI, which a
+    // companion builds from the running app's services, so the runtime is
+    // completed by the container.
+    services.AddSingleton<FileManagement.FileManagementRuntime>(
+        System.Func<System.IServiceProvider, FileManagement.FileManagementRuntime>(fun sp -> {
+            fileManagementRuntime with
+                PostSaveHooks = sp.GetServices<FileManagement.PostSaveHook>() |> Seq.map _.Run |> List.ofSeq
+        })
+    )
     |> ignore
 
     FileManagement.configureEvictionMinutes config.EphemeralStoreEvictionMinutes

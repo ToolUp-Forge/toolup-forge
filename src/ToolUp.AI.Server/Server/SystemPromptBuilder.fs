@@ -104,7 +104,23 @@ type PromptContext = {
     /// construction) carries `ResolvedScope.anonymous`, never a derived
     /// scope.
     Scope: ResolvedScope
+    /// The request's services (`HttpContext.RequestServices`): a builder
+    /// reads the services the running app composed from here, the
+    /// instances every other consumer of the request sees. A context built
+    /// without a request carries `PromptContext.noServices`, which resolves
+    /// nothing.
+    Services: IServiceProvider
 }
+
+[<RequireQualifiedAccess>]
+module PromptContext =
+
+    /// A service provider that resolves nothing, for a context built
+    /// without a request (tests, startup-time prompt construction).
+    let noServices: IServiceProvider =
+        { new IServiceProvider with
+            member _.GetService(_) = null
+        }
 
 /// Builds the system prompt sent to the AI provider for a given request.
 /// Async so builders can pull from cloud secret stores, team config stores,

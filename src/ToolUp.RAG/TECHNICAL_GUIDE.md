@@ -107,7 +107,7 @@ Alongside the triple, the existing per-scope `DocumentVectorisationDropped` even
 ## Pipeline lifecycle — retrieval path
 
 1. **Trigger.** `AIAssistantHandler` receives a `SubmitMessage` request, builds a `PromptContext` with `CurrentMessage = Some request.Content`, and invokes the configured `SystemPromptBuilder`.
-2. **Builder composition.** `composeRAG` appends `withRetrieval pipelineRef.Value.Value` to the builder chain. If the caller supplied no `aiConfig`, the retrieval builder alone becomes the system prompt. If the caller supplied one, `SystemPromptBuilder.compose` layers their builder with `withRetrieval` so retrieval content appears after their static/module content.
+2. **Builder composition.** `composeRAG` appends the retrieval builder (over the pipeline the container built) to the builder chain. If the caller supplied no `aiConfig`, the retrieval builder alone becomes the system prompt. If the caller supplied one, `SystemPromptBuilder.compose` layers their builder with `withRetrieval` so retrieval content appears after their static/module content.
 3. **Skip condition.** `withRetrieval` returns `""` immediately when `ctx.CurrentMessage = None` — a graceful no-op for builder invocations outside a user message (startup health checks, etc.).
 4. **Scope selection.** Team users query `[Platform; Deployment; Team ctx.Access.TeamId]`; anonymous or teamless users query `[Platform; Deployment]`. Platform and Deployment are universally readable; Team is filtered below.
 5. **Pipeline call.** `IRetrievalPipeline.Retrieve` runs `authorisedScopes` to drop any `Team teamId` whose `teamId ≠ ctx.TeamId`. If the permitted list is empty, return `[]` (graceful — no auth error, just no context).
@@ -541,21 +541,16 @@ Phase 14r makes the framing **tool-aware** so this composition is handled by the
 
 `composeRAG : RagOptions -> ServerApp -> ServerApp` (hidden from IntelliSense) is what `withRAG options` registers as the RAG companion; it runs once, when the deployment resolves, over the deployment as every `ServerApp` builder left it, and composes the AI tier (`composeAI options.AI`) inside itself. Consumers call `withRAG`, never `composeRAG`. Internally it runs in three phases:
 
-1. **Pre-compose construction.** Build the `IngestionQueue`, install the post-save hook via `configurePostSaveHooks` if any handlers were supplied, allocate a deferred `pipelineRef : IRetrievalPipeline option ref`, and construct the RAG-aware system prompt builder (which reads `pipelineRef.Value` lazily).
-2. **`serviceConfig` callback.** Executed by `compose` when DI is being built:
-   - Register AI services (factory, config store, tool registry, SSE manager).
+1. **Compose-time construction.** Build the `IngestionQueue`, resolve a supplied or analyzer-built sparse index (refusing a mismatched analyzer now), and construct the RAG-aware system prompt builder. The builder reads the pipeline, its tracer and the fact-clause feeder from the request's services (`PromptContext.Services`), where the container built them; a context carrying none contributes nothing.
+2. **Staged contribution.** `composeRAG` adds its registrations as `Contribution.staged`, so `compose` hands it the `Substrate` — the event store, audit log and notification channel it built — and nothing builds a second container to find them:
    - Resolve `IBlobStorage` (with warning if absent).
-   - Construct `InMemoryVectorStore` with the shared `ILogger`. Construct `InMemoryBM25Index` (when sparse retrieval is wired).
+   - Construct `InMemoryVectorStore` (over the substrate's audit log and notification channel) and `InMemoryBM25Index` (when sparse retrieval is wired). Both stay instance registrations; `RetrievalStoreFlushService` ends their lifetime at stop.
    - Construct `InMemoryEmbeddingCache` and wrap the supplied `IEmbeddingProvider` with `CachingEmbeddingProvider`. The wrapped provider is what flows into `RetrievalPipeline` — every embed call (query path and ingestion path) is cached.
-   - Construct `RetrievalPipeline` with the wrapped embedder, vector store, and (optional) sparse index + reranker / MMR options.
-   - **Fill `pipelineRef.Value <- Some pipeline`** — this is what wires the deferred builder to a live pipeline.
-   - Resolve `IEventStore` (fallback to `InMemoryEventStore` if none registered).
-   - Construct `IngestionBackgroundService` with the shared logger.
-   - Construct `ReembeddingQueue` and `ReembeddingBackgroundService`. Both register as singletons; the service runs alongside `IngestionBackgroundService` as a second `IHostedService`.
-   - Register `IVectorStore`, `ISparseIndex` (when present), `IEmbeddingProvider` (wrapped), `IEmbeddingCache`, `IRetrievalPipeline`, `IngestionQueue`, `ReembeddingQueue`, and the two `IHostedService`s.
+   - Register a factory for RAG's run-time objects, which the container builds once from the services the running app composed: the per-file ingestion-status store (over `IDataObjectStore` when composed), the retrieval tracer (a registered `IRetrievalTracer`, else the event-store tracer), `RetrievalPipeline` (with the fact resolver and disclosure gate, a query rewriter and the runtime knowledge-base toggle when registered), the fact-clause feeder, and the usage log and quota policy ingestion meters against.
+   - Register `IVectorStore`, `ISparseIndex` (when present), `IEmbeddingProvider` (wrapped), `IEmbeddingCache`, `IRetrievalPipeline`, `IIngestionStatusStore`, `IngestionQueue`, `ReembeddingQueue`, the post-save vectorisation hook (a `PostSaveHook`, when any handler is wired), and the ingestion and re-embedding hosted units through `Hosting.register`.
 3. **Handlers + inner compose.** Pass the composed handler list (AI routes + `/api/ai/events`) and extensions to `compose`, which finishes the ASP.NET Core + Giraffe pipeline setup.
 
-The `pipelineRef` pattern is deliberate: the system-prompt builder is constructed *before* DI is built, but needs *a reference to* the pipeline that DI will construct. Using a mutable ref cell for this single fill-once-at-startup handoff is the simplest correct answer. The ref is written once during service-config and read lock-free from every request — there is no race.
+The run-time objects are factory-built rather than probed because the instances matter: a service a companion registers before or after RAG is resolved exactly as every other consumer resolves it, and no duplicate singleton is built at registration time.
 
 ### `RagOptions` record + `withRAG` — the composition surface
 

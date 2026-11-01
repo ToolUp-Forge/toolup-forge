@@ -23,6 +23,11 @@ Version: 0.39.0 (breaking, a 0.x minor).
    (`Contribution.routes`, `Contribution.validator`), alongside `Middleware`.
 5. **Hosted units contributed through `Contribution.hosted` are admitted against the final configuration.**
    The AI chat worker and the conversation-retention sweep now use that route.
+6. **A post-save hook is a DI registration.** `FileManagement.configurePostSaveHooks` and the list it filled are gone:
+   register a `FileManagement.PostSaveHook` (by factory, to build it from the running app's services), and compose
+   folds every registered hook into the `FileManagementRuntime`.
+7. **`PromptContext` carries the request's services** (`Services`, `HttpContext.RequestServices`), so a system-prompt
+   builder reads what the running app composed. A context built without a request uses `PromptContext.noServices`.
 
 ## Diff, per file
 
@@ -48,6 +53,20 @@ A record literal of `Contribution` (the constructors are unchanged, so most code
 ```
 
 A record literal of `ServerApp` adds `Overrides = []`. Build it from `ServerApp.empty` instead.
+
+A post-save hook:
+
+```diff
+-FileManagement.configurePostSaveHooks [ hook ]
++services.AddSingleton<FileManagement.PostSaveHook>(FileManagement.PostSaveHook hook)
+```
+
+A `PromptContext` record literal (tests) adds the provider:
+
+```diff
+     Scope = ResolvedScope.anonymous
++    Services = PromptContext.noServices
+```
 
 ## Verification
 

@@ -68,7 +68,7 @@ The wire-format string `"KnowledgeBase.IngestionStatus"` is exposed as `[<Litera
 
 ## Ingestion runtime interaction
 
-The two RAG ingestion paths converge on `IngestionBackgroundService`. KB uses **Path A — post-save hook**: `FileManagement.configurePostSaveHooks` installs a hook that runs `VectorisationHandler.Vectorise` after `SessionFileStore.AddFile`. KB registers a `VectorisationHandler` for its own document data type, returning the chunks that should be indexed; the hook then enqueues `IngestionJob`s into the queue.
+The two RAG ingestion paths converge on `IngestionBackgroundService`. KB uses **Path A — post-save hook**: RAG registers a `FileManagement.PostSaveHook` that runs `VectorisationHandler.Vectorise` after `SessionFileStore.AddFile`. KB registers a `VectorisationHandler` for its own document data type, returning the chunks that should be indexed; the hook then enqueues `IngestionJob`s into the queue.
 
 The flow:
 

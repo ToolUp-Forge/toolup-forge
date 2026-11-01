@@ -187,9 +187,7 @@ let private provider (app: RagOptions) : ServiceProvider =
     let services = ServiceCollection() :> IServiceCollection
 
     let services =
-        match ServerApp.serviceConfig composed with
-        | Some f -> f services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed services
 
     services.BuildServiceProvider()
 
@@ -296,6 +294,7 @@ let private promptFor (defaults: RetrievalDefaults) (pipeline: IRetrievalPipelin
         ShortCircuit = ref None
         PlannedAnswerId = ref None
         Scope = ResolvedScope.anonymous
+        Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
     }
 
     let! prompt = ToolUp.RAG.RAGPromptBuilder.withRetrieval defaults None None pipeline ctx
