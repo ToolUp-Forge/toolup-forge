@@ -32,7 +32,7 @@ open ToolUp.AI
 //
 // **What this MVP does NOT support.**
 // - Full agent-loop replay including tool-call dispatch. The agent
-//   loop (`AIAgentEngine.runAgentLoop`) wires SSE streaming,
+//   loop (`AIAgentEngine.runAgentLoopWithInput`) wires SSE streaming,
 //   per-task cancellation, `ClientToolDispatchRegistry`, system
 //   prompt builders with retrieval cells — replaying through it
 //   needs a synthetic `HttpContext` + a fresh `bgScope` per replay

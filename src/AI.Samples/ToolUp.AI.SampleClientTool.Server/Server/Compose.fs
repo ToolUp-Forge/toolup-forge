@@ -13,7 +13,7 @@ module ToolUp.AI.SampleClientTool.Server.Compose
 //
 // Reference-only — not a production companion. Two reasons:
 //   1. No authorizer is wired by default. The seam-absent default in
-//      `AIAgentEngine.runAgentLoop` is `Allow`, so this companion
+//      `AIAgentEngine.Loop.run` is `Allow`, so this companion
 //      composed without `registerWithPolicy` lets the AI fire the
 //      tool unrestricted. Fine for a docs / sample / contract-pack
 //      binding subject; not fine for any real deployment.

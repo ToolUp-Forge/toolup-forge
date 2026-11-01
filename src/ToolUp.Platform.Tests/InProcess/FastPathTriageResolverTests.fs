@@ -23,7 +23,7 @@ open ToolUp.AI.FastPathTriageResolver
 // the whole safety argument — a wrong hit changes the user's screen
 // and hides their request from the agent that could have handled it.
 //
-// The LOOP bar is `AIAgentEngine.runAgentLoop`: the assertion that the
+// The LOOP bar is `AIAgentEngine.run`: the assertion that the
 // intercept sits BEFORE any provider call, that it is inert unless
 // deliberately turned on, and that a hit emits the action, appends the
 // recap, and does not run the loop. Every provider in this file counts

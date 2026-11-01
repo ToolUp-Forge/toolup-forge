@@ -255,7 +255,7 @@ module StructuredDataHelpers =
     /// `og:url` when the document carries a `CanonicalUrl`,
     /// `og:locale` when `Lang` is set, and
     /// `article:published_time` / `article:modified_time` when
-    /// `Provenance.GeneratedAt` is present.
+    /// `NarrativeProvenance.GeneratedAt` is present.
     let openGraphFromNarrative (page: PublicPage) (doc: NarrativeDocument) : (string * string) list = [
         "og:title",
         (if System.String.IsNullOrWhiteSpace page.Title then

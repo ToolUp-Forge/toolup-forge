@@ -6,7 +6,7 @@ module ToolUp.Platform.Tests.InProcess.AIAgentEngineClientResidentAuthorizationT
 // ─── Phase 46 — agent-loop dispatch-enumeration regression test ──────
 //
 // Asserts the structural promise that *every* `ClientResident` tool
-// dispatch path in `AIAgentEngine.runAgentLoop` flows through the
+// dispatch path in `AIAgentEngine.Loop.run` flows through the
 // `IClientToolAuthorizer` consult before any `ClientToolInvoke` SSE
 // event is emitted. The contract pack
 // (`IClientToolAuthorizerContract`) verifies a *single authorizer's*
@@ -216,9 +216,9 @@ let tests =
             // (3) Denial audit row landed in the event store. The loop
             // writes one ModuleEvent per denial under
             // `_platform.ai.tool_allowlist_denial` (see
-            // `AIAgentEngine.writeDenialAudit`). Scope defaults to
+            // `ToolEffectEnvelope.DenialAuditSource`). Scope defaults to
             // "anonymous" because the test doesn't seed ctx.Items —
-            // matches `resolveLatencyScope`'s fallback.
+            // matches the engine's private `scopeOf` fallback.
             let! denialAudits = eventStore.ReadBySource("anonymous", "_platform.ai.tool_allowlist_denial")
 
             Expect.isNonEmpty

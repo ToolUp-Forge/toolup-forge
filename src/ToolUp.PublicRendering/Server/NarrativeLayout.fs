@@ -62,7 +62,7 @@ module NarrativeLayout =
     /// Convenience: project a `PublicPage` whose body is a
     /// `NarrativeDocument` into a `PrerenderMeta` suitable for the
     /// Phase 57 prerender route system. Title / Description come from
-    /// the page; the document's `Provenance.GeneratedAt` (if present)
+    /// the page; the document's `NarrativeProvenance.GeneratedAt` (if present)
     /// feeds `article:published_time` in the OpenGraph map. JSON-LD is
     /// the Article blob from `articleJsonLd`.
     ///
