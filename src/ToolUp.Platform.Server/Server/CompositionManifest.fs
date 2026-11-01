@@ -112,6 +112,23 @@ type RegisteredPurpose = {
     AllowedSurfaces: string list
 }
 
+/// One contribution in the deployment's ordered plan, as data: who
+/// contributed it, what kind of contribution it is, and the seams it
+/// requires and provides. A projection of a `Contribution` that carries no
+/// closure, so it is deterministic, comparable and serialisable.
+///
+/// `Kind` is a stable label: `service`, `staged`, `routes`,
+/// `validator:<name>`, `middleware:pre` / `middleware:post`, or
+/// `hosted:<unit id>:<placement>` (with `:outbound` appended for an
+/// outbound unit). `Requires` / `Provides` are the seam ids, sorted and
+/// distinct.
+type PlanEntry = {
+    Owner: ComponentId
+    Kind: string
+    Requires: string list
+    Provides: string list
+}
+
 /// A read-only, machine-readable description of what an application
 /// composed: every module, companion slot, datatype, and tool by stable
 /// `ComponentId`, plus the config knobs that shaped composition. Produced
@@ -173,6 +190,19 @@ type CompositionManifest = {
     /// name, so sealing it would move every existing seal's bytes for no
     /// new evidence.
     LiveInterfaceTools: string list
+    /// The deployment's contribution plan, one entry per contribution in
+    /// the order `run` applies them (after companions are resolved).
+    ///
+    /// Read it through `CompositionManifest.plan`, and only when
+    /// `recordsPlan` holds: empty at `PlanSchemaVersion`+ means *the
+    /// deployment contributes nothing*; below it, the manifest never
+    /// carried the field.
+    ///
+    /// **Sealed.** `BootVerificationPreflight.compositionCanonicalForm`
+    /// frames it, in plan order, for a manifest that records it, and
+    /// `compare` reports an entry added, removed, changed or moved when both
+    /// manifests record it.
+    Plan: PlanEntry list
 }
 
 /// Element constructors + assembly for `CompositionManifest`. Each
@@ -186,7 +216,7 @@ module CompositionManifest =
 
     /// The schema every manifest this binary projects is stamped with.
     [<Literal>]
-    let SchemaVersion = 3
+    let SchemaVersion = 4
 
     /// The schema of every manifest projected before Phase 694 — the
     /// shape that carried no version field at all, and therefore
@@ -207,6 +237,11 @@ module CompositionManifest =
     /// step must not move it.
     [<Literal>]
     let LiveInterfaceSchemaVersion = 3
+
+    /// The schema at which the contribution plan began to be recorded.
+    /// Like the two above, a later schema step must not move it.
+    [<Literal>]
+    let PlanSchemaVersion = 4
 
     /// The schema a manifest was projected under, reading an absent or
     /// non-positive field as the pre-694 shape.
@@ -295,6 +330,64 @@ module CompositionManifest =
         |> List.map _.Name
         |> List.distinct
         |> List.sort
+
+    // ─── Contribution plan ───────────────────────────────────────────
+
+    /// Whether this manifest is new enough for its `Plan` to be evidence.
+    /// `false` means the manifest is SILENT on the plan, which a comparison
+    /// must report as unrecorded rather than resolve as unchanged.
+    let recordsPlan (manifest: CompositionManifest) : bool =
+        effectiveSchemaVersion manifest >= PlanSchemaVersion
+
+    let private coerceStrings (xs: string list) : string list = if isNull (box xs) then [] else xs
+
+    /// The recorded plan, in plan order, with the null-list coercion a
+    /// manifest deserialised from a document predating the field needs
+    /// (on the plan and on each entry's seam lists).
+    let plan (manifest: CompositionManifest) : PlanEntry list =
+        (if isNull (box manifest.Plan) then [] else manifest.Plan)
+        |> List.map (fun entry -> {
+            entry with
+                Requires = coerceStrings entry.Requires
+                Provides = coerceStrings entry.Provides
+        })
+
+    let private placementLabel =
+        function
+        | SharedWork -> "shared-work"
+        | ProcessLocal -> "process-local"
+        | OnceAtStart -> "once-at-start"
+
+    /// The stable label of a contribution's kind (see `PlanEntry.Kind`).
+    let contributionKindLabel (kind: ContributionKind) : string =
+        match kind with
+        | Service _ -> "service"
+        | Staged _ -> "staged"
+        | Routes _ -> "routes"
+        | Validator check -> "validator:" + check.Name
+        | Middleware(MiddlewarePosition.Pre, _) -> "middleware:pre"
+        | Middleware(MiddlewarePosition.Post, _) -> "middleware:post"
+        | Hosted unit ->
+            let label = $"hosted:{unit.Id.Value}:{placementLabel unit.Placement}"
+            if unit.Outbound then label + ":outbound" else label
+
+    /// The plan entry a contribution projects to.
+    let planEntryOf (contribution: Contribution) : PlanEntry =
+        let seams (ids: SeamId list) =
+            (if isNull (box ids) then [] else ids)
+            |> List.map _.Value
+            |> List.distinct
+            |> List.sort
+
+        {
+            Owner = contribution.Owner
+            Kind = contributionKindLabel contribution.Kind
+            Requires = seams contribution.Requires
+            Provides = seams contribution.Provides
+        }
+
+    /// The plan entries of an ordered contribution plan, in the same order.
+    let planOf (contributions: Contribution list) : PlanEntry list = contributions |> List.map planEntryOf
 
     /// A registered module, identified by the resolved id `addModule`
     /// accumulated onto `ServerApp.ModuleComponentIds` (explicit when
@@ -431,6 +524,7 @@ module CompositionManifest =
             ConfigKnobs = configKnobs
             CanonicalMethods = []
             LiveInterfaceTools = []
+            Plan = []
         }
 
     /// Phase 526 — attach registered grounding metric / subject entries to
@@ -480,6 +574,16 @@ module CompositionManifest =
         m with
             SchemaVersion = SchemaVersion
             LiveInterfaceTools = (if isNull (box toolNames) then [] else toolNames) |> List.distinct |> List.sort
+    }
+
+    /// Record the contribution plan, the same way `withCanonicalMethods`
+    /// records selectors: it stamps `SchemaVersion` as well as the list, so
+    /// a manifest that went through it with an empty list claims "the
+    /// deployment contributes nothing".
+    let withPlan (entries: PlanEntry list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            SchemaVersion = SchemaVersion
+            Plan = (if isNull (box entries) then [] else entries)
     }
 
     /// The empty manifest — what a pipeline that composed nothing (or was

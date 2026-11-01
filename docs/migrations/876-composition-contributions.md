@@ -211,3 +211,34 @@ The options record is `MediaLibraryCompanionOptions`, for the same reason: `Medi
 ```
 
 `ScimMode` is gone: a deployment that does not call `withScim` mounts nothing.
+
+## The composition manifest records the plan (schema 4)
+
+`ServerApp.compositionManifest` now carries `Plan: PlanEntry list`: one entry per contribution, in
+the order `run` applies them (after companions are resolved). An entry is data with no closure in
+it: the owner's `ComponentId`, a kind label (`service`, `staged`, `routes`, `validator:<name>`,
+`middleware:pre` / `middleware:post`, or `hosted:<unit id>:<placement>`, with `:outbound` appended
+for an outbound unit), and the required and provided seam ids, sorted. The manifest's
+`SchemaVersion` moves from 3 to 4 (`CompositionManifest.PlanSchemaVersion`). Read the field
+through `CompositionManifest.plan` and only when `CompositionManifest.recordsPlan` holds: a
+manifest deserialised from an older document carries `null` there, and is silent about the plan
+rather than claiming an empty one.
+
+The plan is **sealed**. `BootVerificationPreflight.compositionCanonicalForm` frames it, in plan
+order, under its own framing version (`toolup.compositionmanifest.plan.v1`), and `compare` reports
+`ContributionAdded`, `ContributionRemoved`, `ContributionChanged` (same owner and kind, different
+seams) and `ContributionMoved` (same entry, different position). Two deployments that differ only in
+what a companion contributes, or in the order contributions run, now seal to different bytes.
+
+**What a sealed deployment sees on upgrade.** Nothing breaks. A binding sealed at schema 3 or below
+has no plan, so the plan block is not framed for it and it re-canonicalises to exactly the bytes it
+was sealed over: its seal still verifies. Its plan is never compared (an absent recording is not
+evidence that nothing moved), and the boot reports `VerifiedUnrecorded` with a
+`ContributionPlanUnrecorded` item listing the running contributions. That verdict is affirmative,
+so a `RefuseOnDrift` deployment keeps serving. Re-seal the composition binding to close the gap;
+from then on the plan is compared, and a contribution that moves is drift. A deployment whose plan
+is empty sees plain `Verified`, since there is nothing to be silent about.
+
+Code that matches `CompositionDrift` or `CompositionUnrecorded` exhaustively gains the new cases.
+A manifest built by full record literal adds `Plan = []` (or goes through `CompositionManifest.build`,
+which already does).

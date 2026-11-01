@@ -3500,6 +3500,10 @@ module ServerApp =
         |> CompositionManifest.withLiveInterfaceTools (
             CompositionManifest.liveInterfaceToolsOf (app.AITools |> List.map fst)
         )
+        // The ordered contribution plan `run` applies, projected to data so
+        // the boot seal covers what each contributor registers and in what
+        // order.
+        |> CompositionManifest.withPlan (CompositionManifest.planOf (contributionPlan app))
 
     /// Phase 657 — run the boot verification preflight over the composition
     /// THIS app derived, and decide whether it may serve.

@@ -19,9 +19,12 @@ open ToolUp.RAG
 //   * The manifest and the tool-aware RAG framing share ONE predicate: they
 //     agree on every member of a fixture set covering each arm.
 //   * The field is NOT sealed: the canonical form is byte-identical to what
-//     the binary before this phase produced, with the field empty or
+//     the binary before the field produced, with the field empty or
 //     populated, at schema 2 or 3; `compare` ignores it; a binding sealed at
-//     schema 2 still verifies with no drift.
+//     schema 2 still verifies with no drift. (Schema 4 adds the sealed
+//     contribution plan, so the goldens below are read through the schema-3
+//     projection; a schema-4 manifest's plan block is pinned in the
+//     boot-verification tests.)
 //   * Readiness without RAG reports the posture from the manifest, and a RAG
 //     composition's own summary wins whenever it is registered.
 
@@ -93,11 +96,19 @@ let private PreNoLiveCanonicalForm =
 let private PreWithLiveCanonicalForm =
     "1:69:companion22:companion:IBlobStorage12:IBlobStorage1:00:8:datatype14:datatype:sales5:sales1:00:6:module14:module:reports7:Reports1:00:4:tool23:tool:client.pick_colour18:client.pick_colour1:00:4:tool19:tool:host.read_view14:host.read_view1:00:4:tool22:tool:reports.summarise17:reports.summarise1:00:1:114:ProcessProfile8:AllInOne46:toolup.compositionmanifest.canonicalmethods.v11:21:0"
 
-/// A manifest as the binary before this phase projected it: stamped at
-/// schema 2, and with no `LiveInterfaceTools` field, so it deserialises
-/// as `null`.
-let private asSchema2 (manifest: CompositionManifest) : CompositionManifest = {
+/// A manifest as a schema-3 binary projected it: no `Plan` field, so it
+/// deserialises as `null`.
+let private asSchema3 (manifest: CompositionManifest) : CompositionManifest = {
     manifest with
+        SchemaVersion = CompositionManifest.LiveInterfaceSchemaVersion
+        Plan = Unchecked.defaultof<PlanEntry list>
+}
+
+/// A manifest as a schema-2 binary projected it: stamped at schema 2, and
+/// with neither `LiveInterfaceTools` nor `Plan`, so both deserialise as
+/// `null`.
+let private asSchema2 (manifest: CompositionManifest) : CompositionManifest = {
+    asSchema3 manifest with
         SchemaVersion = CompositionManifest.CanonicalMethodSchemaVersion
         LiveInterfaceTools = Unchecked.defaultof<string list>
 }
@@ -190,10 +201,10 @@ let tests =
                     "the field is a subset of the tool census, not a second census"
             }
 
-            test "a manifest this binary projects records the field at schema 3, empty when no tool is one" {
+            test "a manifest this binary projects records the field, empty when no tool is one" {
                 let manifest = ServerApp.compositionManifest (appWith [ serverTool; lookalikeTool ])
 
-                Expect.equal manifest.SchemaVersion CompositionManifest.LiveInterfaceSchemaVersion "stamped at schema 3"
+                Expect.equal manifest.SchemaVersion CompositionManifest.SchemaVersion "stamped at the current schema"
                 Expect.isTrue (CompositionManifest.recordsLiveInterfaceTools manifest) "it speaks about the posture"
                 Expect.isEmpty (CompositionManifest.liveInterfaceTools manifest) "and says no tool is one"
             }
@@ -239,9 +250,11 @@ let tests =
         testList "the seal" [
             test "a composition with no live-interface tools canonicalises to its pre-860 bytes" {
                 let current =
-                    sealFixture noLiveToolNames |> CompositionManifest.withLiveInterfaceTools []
+                    sealFixture noLiveToolNames
+                    |> CompositionManifest.withLiveInterfaceTools []
+                    |> asSchema3
 
-                Expect.equal current.SchemaVersion 3 "projected at the new schema"
+                Expect.equal current.SchemaVersion 3 "projected at the schema that added the field"
 
                 Expect.equal
                     (BootVerificationPreflight.compositionCanonicalForm current)
@@ -258,6 +271,7 @@ let tests =
                 let current =
                     sealFixture liveToolNames
                     |> CompositionManifest.withLiveInterfaceTools [ "host.read_view"; "client.pick_colour" ]
+                    |> asSchema3
 
                 Expect.isNonEmpty current.LiveInterfaceTools "the field is populated"
 

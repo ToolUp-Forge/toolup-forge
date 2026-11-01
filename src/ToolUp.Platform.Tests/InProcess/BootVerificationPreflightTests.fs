@@ -159,6 +159,44 @@ let private asLegacy (manifest: CompositionManifest) : CompositionManifest = {
         CanonicalMethods = Unchecked.defaultof<MetricCanonicalMethod list>
 }
 
+// ─── Contribution-plan fixtures ──────────────────────────────────────
+
+let private ordersOwner = ComponentId.ofModule "orders"
+let private ledgerOwner = ComponentId.ofModule "ledger"
+let private extraOwner = ComponentId.ofModule "extra"
+
+/// The base plan: a service providing a seam, and routes requiring it.
+let private basePlan: Contribution list = [
+    Contribution.service ordersOwner id
+    |> Contribution.provides [ SeamId "IOrderStore" ]
+    Contribution.routes ledgerOwner []
+    |> Contribution.requires [ SeamId "IOrderStore" ]
+]
+
+let private planApp (contributions: Contribution list) : ServerApp =
+    contributions
+    |> List.fold (fun app contribution -> ServerApp.addContribution contribution app) ServerApp.empty
+
+/// The manifest this binary projects for a deployment contributing
+/// `contributions`.
+let private planned (contributions: Contribution list) : CompositionManifest =
+    ServerApp.compositionManifest (planApp contributions)
+
+/// A manifest as a schema-3 binary projected it: no `Plan` field, so it
+/// deserialises as `null`.
+let private asSchema3 (manifest: CompositionManifest) : CompositionManifest = {
+    manifest with
+        SchemaVersion = CompositionManifest.LiveInterfaceSchemaVersion
+        Plan = Unchecked.defaultof<PlanEntry list>
+}
+
+/// The canonical form of `planned basePlan`, captured from the binary
+/// BEFORE the plan joined the manifest (schema 3, no `Plan` field). The
+/// `1:2` after the canonical-method framing version is the schema frame.
+[<Literal>]
+let private PreRecordedPlanCanonicalForm =
+    "1:02:1120:ConfigDriftDetection22:NoConfigDriftDetection19:DataSubjectRequests8:Disabled11:EntityStore13:NoEntityStore9:FactStore11:NoFactStore12:JobScheduler14:NoJobScheduler15:MetricsEndpoint17:NoMetricsEndpoint13:PeerSubstrate15:NoPeerSubstrate14:ProcessProfile8:AllInOne11:RateLimiter13:NoRateLimiter9:SmokeTest11:NoSmokeTest13:UsageMetering15:NoUsageMetering46:toolup.compositionmanifest.canonicalmethods.v11:21:0"
+
 let private sealer = StubSealer "boot-secret" :> IDeployRecordSealer
 
 let private optionsFor
@@ -613,6 +651,176 @@ let tests =
                         "computed:rollup:2"
                         "naming what it is running"
                 | Ok result -> failtestf "the flip was allowed to serve: %A" result.Verdict
+            }
+        ]
+
+        testList "contribution plan" [
+            test "a manifest this binary projects records the plan, in plan order" {
+                let manifest = planned basePlan
+
+                Expect.equal manifest.SchemaVersion CompositionManifest.PlanSchemaVersion "stamped at schema 4"
+                Expect.isTrue (CompositionManifest.recordsPlan manifest) "it speaks about the plan"
+
+                Expect.equal
+                    (CompositionManifest.plan manifest)
+                    [
+                        {
+                            Owner = ordersOwner
+                            Kind = "service"
+                            Requires = []
+                            Provides = [ "IOrderStore" ]
+                        }
+                        {
+                            Owner = ledgerOwner
+                            Kind = "routes"
+                            Requires = [ "IOrderStore" ]
+                            Provides = []
+                        }
+                    ]
+                    "one entry per contribution: owner, kind label, seams"
+
+                Expect.isFalse
+                    (CompositionManifest.recordsPlan (asSchema3 manifest))
+                    "a schema-3 manifest never carried the plan"
+
+                Expect.isEmpty (CompositionManifest.plan (asSchema3 manifest)) "and its null plan reads as empty"
+            }
+
+            test "a schema-3 manifest re-canonicalises to the bytes it was sealed over" {
+                let legacy = asSchema3 (planned basePlan)
+                let form = BootVerificationPreflight.compositionCanonicalForm legacy
+
+                Expect.equal
+                    form
+                    PreRecordedPlanCanonicalForm
+                    "the schema-3 bytes are where the binary before the plan put them"
+
+                Expect.isFalse
+                    (form.Contains BootVerificationPreflight.PlanFramingVersion)
+                    "no plan block is framed for a manifest too old to carry one"
+
+                Expect.isTrue
+                    ((BootVerificationPreflight.compositionCanonicalForm (planned basePlan)).Contains
+                        BootVerificationPreflight.PlanFramingVersion)
+                    "and the gate is real: the schema-4 projection of the same composition frames the plan"
+            }
+
+            test "two compositions differing only in their plan seal to different bytes" {
+                let before = planned basePlan
+                let after = planned (basePlan @ [ Contribution.service extraOwner id ])
+
+                Expect.equal
+                    { after with Plan = before.Plan }
+                    before
+                    "nothing but the plan differs between the two manifests"
+
+                Expect.notEqual
+                    (BootVerificationPreflight.bindingCanonicalBytes (
+                        BootVerificationPreflight.bindingFor baseRecord after
+                    ))
+                    (BootVerificationPreflight.bindingCanonicalBytes (
+                        BootVerificationPreflight.bindingFor baseRecord before
+                    ))
+                    "an added contribution moves the sealed bytes"
+
+                let swapped =
+                    planned (List.rev basePlan |> List.map (fun c -> { c with Requires = []; Provides = [] }))
+
+                let straight =
+                    planned (basePlan |> List.map (fun c -> { c with Requires = []; Provides = [] }))
+
+                Expect.notEqual
+                    (BootVerificationPreflight.compositionCanonicalForm swapped)
+                    (BootVerificationPreflight.compositionCanonicalForm straight)
+                    "and so does the order contributions are applied in"
+            }
+
+            test "compare names an added, a removed, a changed and a moved contribution" {
+                let recorded = planned basePlan
+                let added = planned (basePlan @ [ Contribution.service extraOwner id ])
+
+                Expect.equal
+                    (BootVerificationPreflight.compare recorded added)
+                    [ ContributionAdded(3, "module:extra", "service") ]
+                    "the added contribution, by position, owner and kind"
+
+                Expect.equal
+                    (BootVerificationPreflight.compare added recorded)
+                    [ ContributionRemoved(3, "module:extra", "service") ]
+                    "and its removal"
+
+                let reseamed =
+                    planned [ basePlan[0] |> Contribution.provides [ SeamId "IOrderAudit" ]; basePlan[1] ]
+
+                match BootVerificationPreflight.compare recorded reseamed with
+                | [ ContributionChanged(1, "module:orders", "service", was, now) as finding ] ->
+                    Expect.stringContains now "IOrderAudit" "the observed seams name the new one"
+                    Expect.isFalse (was.Contains "IOrderAudit") "the recorded seams do not"
+
+                    Expect.stringContains
+                        (CompositionDrift.describe finding)
+                        "module:orders"
+                        "the finding names the owner"
+                | other -> failtestf "expected one ContributionChanged, got %A" other
+
+                let bare = basePlan |> List.map (fun c -> { c with Requires = []; Provides = [] })
+
+                match BootVerificationPreflight.compare (planned bare) (planned (List.rev bare)) with
+                | [ ContributionMoved(_, _, recordedAt, observedAt) ] ->
+                    Expect.notEqual recordedAt observedAt "a reorder is reported as a move between positions"
+                | other -> failtestf "expected one ContributionMoved, got %A" other
+
+                Expect.isEmpty
+                    (BootVerificationPreflight.compare recorded (planned basePlan))
+                    "an unmoved plan is no drift"
+            }
+
+            test "a schema-3 recording is silent on the plan: no drift, and the plan is named as unrecorded" {
+                let recorded = asSchema3 (planned basePlan)
+                let observed = planned (basePlan @ [ Contribution.service extraOwner id ])
+
+                Expect.isEmpty
+                    (BootVerificationPreflight.compare recorded observed)
+                    "the binding never recorded the plan, so it is not evidence the plan moved"
+
+                match BootVerificationPreflight.unrecorded recorded observed with
+                | [ ContributionPlanUnrecorded entries as item ] ->
+                    Expect.equal
+                        entries
+                        [
+                            "service by module:orders"
+                            "routes by module:ledger"
+                            "service by module:extra"
+                        ]
+                        "every running contribution, in plan order"
+
+                    Expect.equal (CompositionUnrecorded.code item) "contribution-plan-unrecorded" "its own code"
+                | other -> failtestf "expected the plan to be unrecorded, got %A" other
+
+                Expect.isEmpty
+                    (BootVerificationPreflight.unrecorded (planned basePlan) observed)
+                    "a schema-4 binding is never silent on the plan"
+
+                Expect.isEmpty
+                    (BootVerificationPreflight.unrecorded (asSchema3 composition) composition)
+                    "and an empty running plan has nothing to be silent about"
+            }
+
+            test "a binding sealed at schema 3 still verifies, qualified by the unrecorded plan" {
+                let observed = planned basePlan
+                let sealedRecord, sealedBinding = sealPair baseRecord (asSchema3 observed)
+
+                let options =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.RefuseOnDrift
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None
+
+                match verdictOf options observed with
+                | BootVerificationVerdict.VerifiedUnrecorded [ ContributionPlanUnrecorded _ ] -> ()
+                | other -> failtestf "expected VerifiedUnrecorded naming the plan, got %A" other
             }
         ]
 
