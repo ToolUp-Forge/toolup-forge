@@ -155,6 +155,28 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!--
+    Compiler levers, measured on this tree and then declared. The tables are in docs/migrations/1195-compiler-levers.md;
+    src/ToolUp.Platform.Build.Tests/CompilerLeversTests.fs holds both verdicts.
+
+    ProduceReferenceAssembly is ON. The SDK already turns it on for an .fsproj
+    targeting net7.0+, so this line changes no build; it holds the setting
+    against a project, an import or a future SDK turning it off. It is what
+    lets an implementation-only edit stop at the edited project: an internal
+    edit to ToolUp.Platform.Server recompiles 2 projects, not 129. KNOWN GAP:
+    F#'s reference assembly does not move when a [<Literal>] is added or its
+    value changes, so dependants keep the old value on an INCREMENTAL build.
+    After touching a literal, build its dependants clean (see the doc).
+
+    ParallelCompilation is deliberately NOT declared. Measured on this
+    machine it made the two serial-bottleneck projects slower, and F# 10.0
+    flags the switch "for test purposes only" (FS0075) on every project, in
+    both directions. Re-measure on an idle machine before declaring it.
+  -->
+  <PropertyGroup>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Authors>Andrew J. Willshire</Authors>
     <Company>ToolUp Analytics Ltd (UK)</Company>
@@ -1043,6 +1065,7 @@
       - 1097 (0.39.0): additive — ToolUp.Platform.Build gains one process runner, one git reader and one flag parser: `ProcResult` / `ProcOptions` and `Proc.exec` / `redirected` / `execWith` / `create` / `ensure` / `onPath` / `options`, `Git.run` / `read` / `within`, `Lines.ofOutput`, `Paths.toSlash`, `Flags.parse` / `lenient` / `targetOf` / `has` / `value` / `union` / `sdk` over `FlagSpec` / `Flags`, `Scratch.root`, the publication-boundary rule `Neutrality.*`, and the template gate as data (`TemplateGate.TemplateGateSpec`, `Check`, `Step`, `Scaffold`, `Instantiation`, `NeutralScope`, `run`, `version`, `inPlaceBuildArgs`, `instantiateArgs`, `vendoredFinding`, `strayPins`, `layoutFindings`, `neutralHits`, `privatePackagesFolder`, `evict`, `EvictionReport`); `execute` and the SDK targets read the same parse, and no existing member changes.
       - 1200 (0.39.0): none — released first as the 0.38.1 patch off v0.38.0; ToolUp.Feliz.AgGrid and ToolUp.Feliz.AgCharts pack a `<Runtime>.js` beside each on-demand runtime source (`AgGridRuntime.js`, `AgChartRuntime.js`) re-exporting its compiled `.fs.js`, so a feed consumer's bundle resolves the `import("./<Runtime>.js")` Fable spells under fable_modules; no package surface moves.
       - 876 (0.39.0): breaking, continued — `Hosting.register` takes no configuration (compose decides admission once with `Hosting.admit` against the final config); `compose` takes a `CompositionPlan` record and its five ref cells become values or `LateBound` slots; `Substrate` and `Contribution.staged` hand companions the composed event store, audit log and notification channel (RAG and Facts no longer build a probe container); `ServerApp.withCompanion` / `resolve`; the companion wrappers (`AIServerApp`, `RAGServerApp`, `McpServerApp`, Forms, Scheduling, Peer, PublicRendering, AssetStore, MediaLibrary, Algorithms, Passkey, Scim) become options records composed by one `withX` each, delegators deleted (codemod rules 876-*); the composition manifest records the plan at schema 4 and the boot seal frames it (docs/migrations/876-composition-contributions.md).
+      - 1195 (0.39.0): none — `ProduceReferenceAssembly` is declared `true` (the SDK default for net7.0+ .fsproj, now held by CompilerLeversTests) and `ParallelCompilation` is measured and left off (docs/migrations/1195-compiler-levers.md); no package surface moves.
     -->
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

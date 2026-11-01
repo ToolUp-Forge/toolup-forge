@@ -504,7 +504,7 @@ New code cites no phase in a source comment: the phase's recorded outcome is the
 
 ### Fast iteration
 
-`dotnet build ToolUp.Forge.sln` evaluates ~50 fsprojs (~1.5–6 minutes); a one-shot Fable compile is similarly expensive. Use:
+`dotnet build ToolUp.Forge.sln` compiles 234 F# projects (a clean build is 4m18s on a quiet machine and 5½–6½ minutes on a busy one); a one-shot Fable compile is similarly expensive. Use:
 
 ```bash
 # Targeted fsproj build
@@ -515,6 +515,17 @@ dotnet watch build --project src/ToolUp.Platform.Server/
 ```
 
 Full-sln verification is for end-of-task / pre-commit, not per-edit.
+
+**Compiler levers: what an incremental build recompiles.** `Directory.Build.props` declares `ProduceReferenceAssembly`
+on. It is also the SDK default, and the declaration keeps it on. A dependant compiles against the reference assembly,
+so an edit that leaves a project's public surface unchanged recompiles only that project. An internal edit to
+`ToolUp.Platform.Server` rebuilds 2 projects instead of 129. A public change still rebuilds every dependant, and the
+approval gate still renders the implementation DLLs in `bin/`. **One gap: F#'s reference assembly does not change when
+a `[<Literal>]` is added or its value changes.** After touching a literal, build its dependants clean
+(`--no-incremental`), or an incremental build keeps the old value. `ParallelCompilation` is deliberately unset: measured
+here it slowed both bottleneck projects, and the compiler marks it test-only (FS0075). `ToolUp.Platform.Build.Tests`
+(`CompilerLeversTests.fs`) holds both decisions. The tables and the re-measure rule are in
+[`docs/migrations/1195-compiler-levers.md`](docs/migrations/1195-compiler-levers.md).
 
 ## Build verification
 
