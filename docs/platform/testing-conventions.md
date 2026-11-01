@@ -419,7 +419,7 @@ Full convention, the baseline's ratchet, and how context is supplied:
 
 ## Generated documentation pages, and the one command that moves them (Phases 214 / 697 / 765)
 
-Three committed artefacts are **projections of the config-key registry** (`ConfigKeys.all` in
+Four committed artefacts are **projections of the config-key registry** (`ConfigKeys.keys` in
 `src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs`), not hand-maintained documents:
 
 | Artefact | What is generated | Projected by |
@@ -427,17 +427,20 @@ Three committed artefacts are **projections of the config-key registry** (`Confi
 | `docs/reference/config-reference.md` | the whole file | `ReferenceDoc.render` |
 | `docs/reference/toolup.config.schema.json` | the whole file | `ConfigSchema.render` |
 | `docs/operations/env-vars.md` | the **`Description` column** of every table headed `Variable` | `OperationsDoc.render` |
+| `DEPLOYMENT.md` | the region between the `BEGIN GENERATED` / `END GENERATED` markers: each key's direction, and the boot seal's coverage | `DeploymentDoc.render` |
 
-One command refreshes all three:
+One command refreshes all four:
 
 ```
-pwsh dev-scripts/generate-config-reference.ps1
+dotnet run --project Build.fsproj -- GenerateConfigReference
 ```
 
-It runs the `ConfigReference` test list with `TOOLUP_REGEN_CONFIG_REFERENCE=1`, which flips those
-three arms from *comparing* to *writing*. Without the variable they compare, and `VerifyAll` is red
-whenever a committed artefact disagrees with the registry — so **a descriptor edit and its three
-regenerated artefacts land in the same commit**, or the gate says so.
+(`pwsh dev-scripts/generate-config-reference.ps1` is the same target under a shorter name.) It
+builds the Platform pack and runs its `ConfigReference` test list with
+`TOOLUP_REGEN_CONFIG_REFERENCE=1`, which flips those four arms from *comparing* to *writing*. Without
+the variable they compare, and `VerifyAll` is red whenever a committed artefact disagrees with the
+registry — so **a registry edit and its regenerated artefacts land in the same commit**, or the gate
+says so.
 
 **The operations page is the interesting one, because only a column of it is generated.** Whole-file
 generation was rejected for it: it covers a curated subset of the registry and each row carries two

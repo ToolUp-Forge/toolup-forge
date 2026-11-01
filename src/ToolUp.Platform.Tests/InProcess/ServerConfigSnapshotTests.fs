@@ -13,9 +13,10 @@ module ToolUp.Platform.Tests.InProcess.ServerConfigSnapshotTests
 //
 // Every registered key is unset for the duration of a case (and restored
 // after), so the snapshot is a function of the fixed environment below and
-// not of the host it runs on. Regenerate with TOOLUP_REGEN_CONFIG_REFERENCE=1
-// — only when a bound value is MEANT to change, which this phase's acceptance
-// rules out.
+// not of the host it runs on. There is no regeneration mode: a mismatch
+// writes what was bound to a temporary file the failure names, and replacing
+// the fixture with it is a deliberate act — for a bound value that is MEANT
+// to change.
 
 open System
 open System.IO
@@ -38,12 +39,6 @@ let private repoRoot () =
 
 let private snapshotPath () =
     Path.Combine(repoRoot (), "src", "ToolUp.Platform.Tests", "fixtures", "server-config-fromenv-snapshot.txt")
-
-let private regenModeOn () =
-    match Environment.GetEnvironmentVariable "TOOLUP_REGEN_CONFIG_REFERENCE" with
-    | null
-    | "" -> false
-    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
 
 /// One well-formed, non-default value for every key `fromEnv` reads. A key
 /// that selects a payload-carrying case it cannot construct from a token
@@ -206,19 +201,19 @@ let tests =
 
                 let path = snapshotPath ()
 
-                if regenModeOn () then
-                    File.WriteAllText(path, rendered)
-                else
-                    Expect.isTrue
-                        (File.Exists path)
-                        (sprintf "%s is missing. Generate it with TOOLUP_REGEN_CONFIG_REFERENCE=1." path)
+                Expect.isTrue (File.Exists path) (sprintf "%s is missing." path)
+                let committed = File.ReadAllText(path).Replace("\r\n", "\n")
 
-                    let committed = File.ReadAllText(path).Replace("\r\n", "\n")
+                if rendered <> committed then
+                    let received =
+                        Path.Combine(Path.GetTempPath(), "server-config-fromenv-snapshot.received.txt")
 
-                    Expect.equal
-                        rendered
-                        committed
-                        "ServerConfig.fromEnv no longer binds the committed snapshot: a field moved, or a bound value changed for well-formed input"
+                    File.WriteAllText(received, rendered)
+
+                    failtestf
+                        "ServerConfig.fromEnv no longer binds the committed snapshot: a field moved, or a bound value changed for well-formed input. What it bound is at %s; diff it against %s."
+                        received
+                        path
 
             testCase "the fixed environment sets every key the binder reads to a value its reader accepts"
             <| fun _ ->

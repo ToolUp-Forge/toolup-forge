@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (222 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (224 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -83,7 +83,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_AZURE_KEY_VAULT_URL` | string | — | no | pending | Vault URL for the Azure Key Vault secret-store companion. |
 | `TOOLUP_AZURE_STORAGE_CONNECTION_STRING` | string | — | yes | never | Azure Blob Storage connection string used when TOOLUP_BLOB_STORAGE=azure. |
 | `TOOLUP_BLOB_STORAGE` | enum: local, azure, s3, gcs | local | no | yes | Selects the IBlobStorage backend. Unrecognised / cloud-without-credentials values warn and fall back to local. |
-| `TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES` | int (or `none` / `0`) | — | no | yes | Default per-team storage quota in bytes. Unset means unlimited. |
+| `TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES` | int (>= 1, or `none` / `0`) | — | no | yes | Default per-team storage quota in bytes. Unset means unlimited. |
 | `TOOLUP_GCP_PROJECT_ID` | string | — | no | pending | GCP project id for the Secret Manager and Cloud Storage companions. |
 | `TOOLUP_GCS_BUCKET` | string | — | no | pending | Target Google Cloud Storage bucket name used when TOOLUP_BLOB_STORAGE=gcs. |
 | `TOOLUP_GCS_CREDENTIALS_JSON` | string | — | yes | never | Service-account credentials JSON for the Google Cloud Storage companion. |
@@ -98,7 +98,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_ADMIN_TOKEN` | string | — | yes | never | Bearer token guarding the crypto-shred encryption-admin endpoints. Unset leaves those endpoints unmounted (preflight warns if the surface is composed). |
 | `TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP` | bool | false | no | yes | When true in an auth-requiring mode, the first sign-in auto-promotes to Platform Admin (privilege-escalation surface; preflight warns). |
 | `TOOLUP_AUTH_COOKIE_ISSUANCE` | enum: enabled, on, 1, disabled, off, 0 | disabled | no | yes | Issues the platform auth cookie alongside the bearer token, so SSE can authenticate without a query parameter. |
-| `TOOLUP_AUTH_MODE` | enum: oidc | (unset — dev HeaderAuthProvider) | no | yes | Selects the IAuthProvider. Unset uses the dev-only HeaderAuthProvider (trusts X-User-Id); 'oidc' requires TOOLUP_OIDC_ISSUER. An unrecognised value refuses startup. |
+| `TOOLUP_AUTH_MODE` | enum: oidc | — | no | yes | Selects the IAuthProvider. Unset uses the dev-only HeaderAuthProvider (trusts X-User-Id); 'oidc' requires TOOLUP_OIDC_ISSUER. An unrecognised value refuses startup. |
 | `TOOLUP_ENTRA_DIRECTORY_ENABLED` | bool | false | no | pending | Enables the Entra directory companion for user lookup and invitation via Microsoft Graph. |
 | `TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT` | string | — | no | pending | Microsoft Graph endpoint override for the Entra directory companion. |
 | `TOOLUP_ENTRA_DIRECTORY_SENDER_OID` | string | — | no | pending | Object id of the principal used as the sender for directory invitations. |
@@ -124,23 +124,23 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_LDAP_HOST` | string | — | no | pending | LDAP server hostname. |
 | `TOOLUP_LDAP_LOGIN_ATTR` | string | — | no | pending | LDAP attribute the login name is read from. |
 | `TOOLUP_LDAP_MEMBEROF_ATTR` | string | — | no | pending | LDAP attribute the group membership is read from. |
-| `TOOLUP_LDAP_NESTED_GROUPS` | bool | false | no | pending | Resolves nested group memberships when mapping roles. |
+| `TOOLUP_LDAP_NESTED_GROUPS` | bool | true | no | pending | Resolves nested group memberships when mapping roles. |
 | `TOOLUP_LDAP_PORT` | int | — | no | pending | LDAP server port. Defaults to the standard port for the selected channel. |
 | `TOOLUP_LDAP_SEARCH_BASE` | string | — | no | pending | Base DN for user searches. |
 | `TOOLUP_LDAP_TIMEOUT_SECONDS` | int | — | no | pending | LDAP operation timeout, in seconds. |
 | `TOOLUP_LDAP_USER_ID_ATTR` | string | — | no | pending | LDAP attribute the stable user id is read from. |
 | `TOOLUP_LDAP_USER_OBJECTCLASS` | string | — | no | pending | objectClass used to filter user entries. |
 | `TOOLUP_OAUTH_REDIRECT_BASE` | string | — | no | yes | Absolute base URL used to build OAuth-connector redirect URIs (must match the provider's registered callback origin). |
-| `TOOLUP_OIDC_API_ROLE_GRANTS` | string | (unset — no directory role is an API role) | no | yes | Comma-separated allow-list of mapped directory roles (after group aliasing) that are ALSO granted as API roles, which [<RequiresRole>] gates read. Unset grants none: role mapping then governs page audiences only. A blank entry, an entry carrying whitespace, or PlatformAdmin (resolved server-side, never from a token) refuses startup. |
+| `TOOLUP_OIDC_API_ROLE_GRANTS` | string | — | no | yes | Comma-separated allow-list of mapped directory roles (after group aliasing) that are ALSO granted as API roles, which [<RequiresRole>] gates read. Unset grants none: role mapping then governs page audiences only. A blank entry, an entry carrying whitespace, or PlatformAdmin (resolved server-side, never from a token) refuses startup. |
 | `TOOLUP_OIDC_AUDIENCE` | string | — | no | yes | Expected OIDC token audience. Unset accepts any audience (preflight warns in authenticated modes). |
-| `TOOLUP_OIDC_GROUPS_CLAIM` | string | (unset — no group claim mapped) | no | yes | Claim whose values (group ids or names) also become directory roles (page audiences only, unless TOOLUP_OIDC_API_ROLE_GRANTS names them), e.g. `groups`. Unset maps no group claim. Same shape rules as TOOLUP_OIDC_ROLES_CLAIM; a group overage (`_claim_names` naming the claim) rejects the token rather than reading as no groups. |
+| `TOOLUP_OIDC_GROUPS_CLAIM` | string | — | no | yes | Claim whose values (group ids or names) also become directory roles (page audiences only, unless TOOLUP_OIDC_API_ROLE_GRANTS names them), e.g. `groups`. Unset maps no group claim. Same shape rules as TOOLUP_OIDC_ROLES_CLAIM; a group overage (`_claim_names` naming the claim) rejects the token rather than reading as no groups. |
 | `TOOLUP_OIDC_ISSUER` | string | — | no | yes | OIDC provider discovery URL. Required when TOOLUP_AUTH_MODE=oidc; missing issuer refuses startup. |
 | `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` | int | — | no | pending | Milliseconds the OIDC preflight waits for the issuer discovery document. |
-| `TOOLUP_OIDC_ROLES_CLAIM` | string | (unset — no role claim mapped) | no | yes | Claim whose values become directory roles — the roles audience-gated pages read — e.g. `roles` for Microsoft Entra app roles. A directory role is NOT an API role ([<RequiresRole>]) unless TOOLUP_OIDC_API_ROLE_GRANTS names it. Unset maps no role claim. A string or an array of strings; any other shape rejects the token (fail-closed). |
-| `TOOLUP_OIDC_TENANT_ID_CLAIM` | string | (unset — no TenantId projection) | no | yes | Claim name projected onto AuthenticatedUser.TenantId (e.g. `tid` on Microsoft Entra). Unset leaves TenantId unpopulated. Fail-closed: a token missing the named claim is rejected. |
-| `TOOLUP_OIDC_USER_ID_CLAIM` | string | (unset — `sub`) | no | yes | Claim name projected onto AuthenticatedUser.UserId in place of `sub`, for IdPs whose `sub` is pairwise-pseudonymous (e.g. `oid` on Microsoft Entra). Unset keeps `sub`. Fail-closed: a token missing the named claim is rejected, never silently mapped back to `sub`. |
+| `TOOLUP_OIDC_ROLES_CLAIM` | string | — | no | yes | Claim whose values become directory roles — the roles audience-gated pages read — e.g. `roles` for Microsoft Entra app roles. A directory role is NOT an API role ([<RequiresRole>]) unless TOOLUP_OIDC_API_ROLE_GRANTS names it. Unset maps no role claim. A string or an array of strings; any other shape rejects the token (fail-closed). |
+| `TOOLUP_OIDC_TENANT_ID_CLAIM` | string | — | no | yes | Claim name projected onto AuthenticatedUser.TenantId (e.g. `tid` on Microsoft Entra). Unset leaves TenantId unpopulated. Fail-closed: a token missing the named claim is rejected. |
+| `TOOLUP_OIDC_USER_ID_CLAIM` | string | — | no | yes | Claim name projected onto AuthenticatedUser.UserId in place of `sub`, for IdPs whose `sub` is pairwise-pseudonymous (e.g. `oid` on Microsoft Entra). Unset keeps `sub`. Fail-closed: a token missing the named claim is rejected, never silently mapped back to `sub`. |
 | `TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD` | enum: enabled, on, yes, true, 1, disabled, off, no, false, 0 | disabled | no | yes | Requires a directory existence proof before a direct member add writes a membership row (refuses unknown ids; needs an IUserDirectory). |
-| `TOOLUP_SSE_AUTH` | enum: cookie, cookies, cookieonly, fallback, queryparam | (unset — bearer header only) | no | yes | When set to a cookie value, the OIDC provider also accepts the JWT from the toolup-auth-token cookie so EventSource SSE handshakes authenticate. Unset keeps bearer-header-only. |
+| `TOOLUP_SSE_AUTH` | enum: cookie, cookies, cookieonly, fallback, queryparam | fallback | no | yes | When set to a cookie value, the OIDC provider also accepts the JWT from the toolup-auth-token cookie so EventSource SSE handshakes authenticate. Unset keeps bearer-header-only. |
 | `TOOLUP_TEAM_CREATION_POLICY` | enum: platformadminonly, platform-admin-only, admin, anyauthenticateduser, any, authenticated | platformadminonly | no | yes | Who may create a team: platform admins only, or any authenticated user. |
 
 ## Logging & observability
@@ -152,31 +152,33 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_LOG_FORMAT` | enum: text, json | text | no | yes | Selects the default logger's output shape: human-readable text or structured JSON lines. |
 | `TOOLUP_LOG_LEVEL` | enum: trace, debug, info, warn, warning, error | info | no | yes | Floor for the default ConsoleLogger. Error is never silenced. An unrecognised value warns and uses Info. |
 | `TOOLUP_METRICS_ENDPOINT` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Exposes the Prometheus-style scrape endpoint for the registered IMetricsSink. |
-| `TOOLUP_SLOW_REQUEST_MS` | int | 1000 | no | yes | Milliseconds above which a request is logged as slow. |
+| `TOOLUP_SLOW_REQUEST_MS` | int (>= 1) | 1000 | no | yes | Milliseconds above which a request is logged as slow. |
 | `TOOLUP_TRACE_CATEGORIES` | string | — | no | yes | Comma/semicolon/space-separated whitelist of trace categories to emit. Matched case-sensitively against the categories composed emission sites declare with Logger.registerCategory; the SDK's own canonical category is ai.agent (per-provider-call tracing in the AI agent loop), and a companion or consumer adds its own. A value matching no declared category emits nothing and is reported by the trace-categories startup validator; the composed set with a currently-enabled marker is on the /dev/inspect Trace categories panel. Empty emits no Trace output. |
 
 ## Deployment shape
 
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
+| `SERVER_BIND_ADDRESS` | string | — | no | yes | Address the listener binds: an IPv4 or IPv6 literal or localhost (0.0.0.0 for every IPv4 interface, :: for every interface). Unset binds loopback only. A value that is neither refuses startup. |
+| `SERVER_PORT` | int (1–65535) | 5000 | no | yes | TCP port the server listens on. A value that is not an integer in 1-65535 refuses startup. |
 | `TOOLUP_AUDIT_ADMIN_REQUIRED` | bool | false | no | yes | When true, audit-log read endpoints require Platform Admin rather than team-level access. |
 | `TOOLUP_COMPONENT__` | string | — | no | pending | Prefix for per-component config overrides, spelled TOOLUP_COMPONENT__ComponentId__Key. Not read as a variable in its own right. |
-| `TOOLUP_CONFIG_FILE` | string | (unset — probes ./toolup.config.json) | no | n/a | Path to the deployment configuration manifest (JSON, keys are these env-var names). Set: the named file must exist. Unset: ./toolup.config.json is probed and used when present, else no manifest is loaded. |
+| `TOOLUP_CONFIG_FILE` | string | — | no | n/a | Path to the deployment configuration manifest (JSON, keys are these env-var names). Set: the named file must exist. Unset: ./toolup.config.json is probed and used when present, else no manifest is loaded. |
 | `TOOLUP_DISTRIBUTED_LOCK` | enum: inprocess, in-process, redis | inprocess | no | yes | Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into. |
 | `TOOLUP_ENABLE_DEV_ENDPOINTS` | bool | false | no | yes | Exposes the /dev/* inspection endpoints. Should stay off in production. |
 | `TOOLUP_INCLUDE_PLATFORM_DEFAULTS` | bool | true | no | yes | Merges the SDK platform default config schema into the composed surface. |
 | `TOOLUP_MAX_FILE_BYTES` | int (1024–10737418240, or `0`) | — | no | yes | Maximum accepted upload size in bytes for file-management endpoints. |
 | `TOOLUP_MAX_REQUEST_BODY_BYTES` | int (1024–10737418240, or `none` / `0`) | — | no | yes | Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default. |
-| `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | int (or `none` / `0`) | 10 | no | yes | Maximum concurrent SSE connections per scope. |
+| `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | int (>= 1, or `none` / `0`) | 10 | no | yes | Maximum concurrent SSE connections per scope. |
 | `TOOLUP_MODULE` | string | — | no | yes | Restricts the composed surface to a single named module. Intended for local iteration. |
 | `TOOLUP_MODULE_BINDING_ANCHORS` | string | — | yes | never | Semicolon-separated module-binding trust anchors, each mac:keyId:scope:key or asym:keyId:alg:base64pubkey. |
 | `TOOLUP_NOTIFICATION_CHANNEL` | enum: inprocess, in-process, redis | inprocess | no | yes | Selects the INotificationChannel backend. 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses the single-instance in-memory channel. |
 | `TOOLUP_PEER_ROUTE_PREFIXES` | string | — | no | yes | Comma-separated route prefixes served by the cross-deployment peer substrate. |
 | `TOOLUP_PLATFORM_SURFACES` | string | — | no | yes | Comma-separated surface profiles the deployment exposes, for example anonymous, user, multi-team or claim-bearer. |
 | `TOOLUP_PROCESS_PROFILE` | enum: allinone, all-in-one, web, webonly, worker, workeronly, dispatcher, dispatcheronly | allinone | no | yes | Which role this process plays when the deployment is split: everything, web only, worker only, or dispatcher only. |
-| `TOOLUP_PROFILE` | string | (unset — no profile is imported) | no | n/a | Name of the configuration profile this deployment imports — a named bundle of keys resolved one rung BELOW the manifest, so any explicit environment or manifest line still wins. A manifest selects one with its "$profile" entry instead, which takes precedence over this variable; an unrecognised name refuses startup and lists the available profiles. |
+| `TOOLUP_PROFILE` | string | — | no | n/a | Name of the configuration profile this deployment imports — a named bundle of keys resolved one rung BELOW the manifest, so any explicit environment or manifest line still wins. A manifest selects one with its "$profile" entry instead, which takes precedence over this variable; an unrecognised name refuses startup and lists the available profiles. |
 | `TOOLUP_REDIS_CONNECTION` | string | — | yes | never | Redis connection string for the distributed notification channel / caches / distributed lock used when TOOLUP_NOTIFICATION_CHANNEL=redis or TOOLUP_DISTRIBUTED_LOCK=redis. |
-| `TOOLUP_REPLICA_COUNT` | int | 1 | no | yes | Number of instances this deployment runs behind a load balancer. >1 makes multi-instance config validators refuse single-instance substrates. |
+| `TOOLUP_REPLICA_COUNT` | int (>= 1) | 1 | no | yes | Number of instances this deployment runs behind a load balancer. >1 makes multi-instance config validators refuse single-instance substrates. |
 | `TOOLUP_REQUIRE_HTTPS` | bool | false | no | yes | When true, the platform enforces HTTPS (redirect + HSTS) for browser-facing surfaces. |
 | `TOOLUP_SECURITY_HARDENING` | enum: no, off, disabled, default, on, strict | no | no | yes | Security-header and hardening posture applied to every response. |
 | `TOOLUP_SERVERLESS_HOST` | enum: kestrel, serverless | kestrel | no | yes | Host shape the server assumes: the standard Kestrel host, or a serverless host that skips long-lived background services. |
@@ -186,7 +188,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_STORE_EVICTION_MINUTES` | int (fractional values accepted) | 60 | no | yes | Idle minutes before an ephemeral in-memory store entry is evicted. |
 | `TOOLUP_STRICT_CONFIG` | bool | false | no | yes | Escalates the unknown-config-key preflight guard from a warning to a startup refusal. Off: a set TOOLUP_* variable whose name is in no registry entry is warned about once at preflight. On: it refuses the boot. |
 | `TOOLUP_TRUSTED_PROXY_CIDRS` | string | — | no | yes | Comma-separated CIDR ranges whose X-Forwarded-* headers are trusted. |
-| `TOOLUP_TRUST_FORWARDED_HEADERS` | bool | false | no | yes | When true, trusts X-Forwarded-* headers from the upstream proxy. Only safe behind a proxy that strips/re-injects them (preflight warns without RequireHttps). |
+| `TOOLUP_TRUST_FORWARDED_HEADERS` | bool | true | no | yes | When true, trusts X-Forwarded-* headers from the upstream proxy. Only safe behind a proxy that strips/re-injects them (preflight warns without RequireHttps). |
 
 ## Security preflight escape hatches
 
@@ -215,7 +217,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE` | bool | false | no | yes | Acknowledge an unset OIDC audience in an authenticated mode (token-reuse risk). |
 | `TOOLUP_ACCEPT_UNLIMITED_EVENT_RETENTION` | bool | false | no | yes | Accepts a persistent event store that prunes on neither age nor count in a production or multi-instance shape, where the blob trail grows without bound. Silences a startup preflight warning. |
 | `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE` | bool | false | no | yes | Allows publishable surfaces without artefact signing. Lowers a startup preflight refusal to a warning. |
-| `TOOLUP_MODULE_BINDING_ALLOW_UNBOUND` | bool | false | no | yes | Allows modules that carry no signed binding manifest to load. |
+| `TOOLUP_MODULE_BINDING_ALLOW_UNBOUND` | bool | true | no | yes | Allows modules that carry no signed binding manifest to load. |
 
 ## Platform subsystems
 
@@ -233,7 +235,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_CONFIG_DRIFT_DETECTION` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables startup detection of drift between persisted config and the composed defaults. |
 | `TOOLUP_DEPLOYMENT_READINESS` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the deployment-readiness report surface. |
 | `TOOLUP_DEPLOYMENT_VERIFICATION` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the one-command post-deployment verification report. |
-| `TOOLUP_ENABLE_CITATION_DEV_ENDPOINT` | bool | false | no | yes | Exposes the RAG citation inspection dev endpoint. |
+| `TOOLUP_ENABLE_CITATION_DEV_ENDPOINT` | bool | — | no | yes | Exposes the RAG citation inspection dev endpoint. |
 | `TOOLUP_ENTITY_OUTBOX` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the entity outbox, so entity saves publish transactionally instead of being discarded unpublished. |
 | `TOOLUP_ENTITY_STORE` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the IEntityStore substrate (registered entity types and persistence). |
 | `TOOLUP_EVENT_STORE` | enum: inmemory, in-memory, persistent | inmemory | no | yes | Selects the IEventStore backend. The persistent option uses the blob-backed store with the 90-day retention policy. |
@@ -298,11 +300,11 @@ A serverless host with no long-lived background services: nothing in-process sur
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
 | `TOOLUP_RATE_LIMITER` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the request rate-limiter middleware. |
-| `TOOLUP_RATE_LIMIT_PERMITS` | int | — | no | yes | Requests allowed per window. Set alongside the window and queue keys to switch rate limiting on. |
-| `TOOLUP_RATE_LIMIT_QUEUE` | int | — | no | yes | How many requests may queue once the permit count is exhausted. |
+| `TOOLUP_RATE_LIMIT_PERMITS` | int (>= 1) | — | no | yes | Requests allowed per window. Set alongside the window and queue keys to switch rate limiting on. |
+| `TOOLUP_RATE_LIMIT_QUEUE` | int (>= 1) | — | no | yes | How many requests may queue once the permit count is exhausted. |
 | `TOOLUP_RATE_LIMIT_STORE` | enum: no, off, disabled, inmemory, in-memory, external | no | no | yes | Selects where rate-limit counters live. The in-memory store is per-instance and therefore wrong for a multi-instance deployment. |
-| `TOOLUP_RATE_LIMIT_WINDOW_SECONDS` | int | — | no | yes | Length of the rate-limit window, in seconds. |
-| `TOOLUP_SLOW_RATE_LIMIT_MS` | int | 5000 | no | yes | Milliseconds a request may wait on the rate limiter before that wait is logged as slow. |
+| `TOOLUP_RATE_LIMIT_WINDOW_SECONDS` | int (>= 1) | — | no | yes | Length of the rate-limit window, in seconds. |
+| `TOOLUP_SLOW_RATE_LIMIT_MS` | int (>= 1) | 5000 | no | yes | Milliseconds a request may wait on the rate limiter before that wait is logged as slow. |
 
 ## AI
 

@@ -4,106 +4,385 @@
 namespace ToolUp.Platform
 
 open System
+open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.Narrative
 
-// ─── Phase 11.G — env-var-driven config construction ──────────
+// ─── Env-var-driven config construction ───────────────────────
 //
-// Phase 880 — the server half of the `ServerConfig` companion module. It
-// lived in ToolUp.Platform.Core behind `#if !FABLE_COMPILER` (Fable cannot
-// compile `System.Environment`), which shipped ~1,000 lines of server-only
-// source to every Fable consumer as dead text. It now compiles here, in the
-// tier that runs it. The `defaults` half stays in Core; F# resolves a name
-// under `ServerConfig` across both modules, so `ServerConfig.fromEnv` and
+// The server half of the `ServerConfig` companion module. The `defaults`
+// half stays in Core (it is Fable-visible); F# resolves a name under
+// `ServerConfig` across both modules, so `ServerConfig.fromEnv` and
 // `ServerConfig.defaults` read exactly as before at every call site.
+//
+// **Every key is read THROUGH its registry entry** (`ConfigKeys.keys`). A
+// binding below names a key by its `ConfigKeys.Names` constant, and the
+// helpers take the parser, the default and the bounds from the key's
+// `ConfigKeyKind`: a boolean's direction decides whether a malformed value
+// refuses the boot or reads as `false`, a union's direction whether an
+// unrecognised token refuses or warns, an integer's bounds what it accepts,
+// and every default is the key's typed default. Log messages take the key's
+// name and default from the same entry. The few parsers that survive below
+// (the surface list, the bind address, the public base URL, the module
+// binding anchors, the eviction minutes, the server port) each take their
+// key from the registry and read its name, default and bounds from it.
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ServerConfig =
-    /// The Fable-visible half's value, named locally so the binder below
-    /// reads each default exactly as it did when both halves shared a module.
+    /// The Fable-visible half's value, for the fields `fromEnv` does not
+    /// bind from a key.
     let private defaults = ServerConfig.defaults
 
-    /// Phase 696 — every key this reader consults now resolves through the
-    /// `ConfigResolution` seam rather than reading the environment
-    /// directly, so a deployment configuration manifest can supply the
-    /// declared base and the environment stays the per-instance override
-    /// lane. The seam's env arm folds null/empty to `None` exactly as this
-    /// helper always did, so with no manifest installed — the ordinary
-    /// state — `fromEnv` resolves byte-for-byte as before (GP 11).
-    ///
-    /// This one helper is why the whole Phase 71.A cluster (87 keys)
-    /// migrates in a single change: the ~40 private parsers below all
-    /// funnel through it. `ConfigKeys.manifestBindable` declares that set,
-    /// and the coverage test holds the declaration to this call graph.
-    let private envVar (name: string) = ConfigResolution.tryValue name
+    /// Every key resolves through the `ConfigResolution` seam, so a
+    /// deployment configuration manifest can supply the declared base and
+    /// the environment stays the per-instance override lane. With no
+    /// manifest installed this is the plain environment read.
+    let private rawValue (key: ConfigKey) : string option = ConfigResolution.tryValue key.EnvVar
 
-    /// Phase 868 — the raw text of a boolean or union key, surrounding whitespace
-    /// trimmed. A value that is only whitespace reads as unset, like the
-    /// empty string the seam already folds to `None`. Every boolean parser
-    /// below matches on this, so they agree on what `"yes "` means.
-    let private envFlagText (name: string) : string option =
-        envVar name
+    /// The raw text of a key, surrounding whitespace trimmed. A value that is
+    /// only whitespace reads as unset, like the empty string the seam already
+    /// folds to `None`.
+    let private rawText (key: ConfigKey) : string option =
+        rawValue key
         |> Option.map _.Trim()
         |> Option.filter (not << String.IsNullOrEmpty)
 
-    // ── THE DIRECTION RULE — which boolean parser a new flag takes ──────
-    //
-    // Ask what `true` does. If `true` turns a protection or a behaviour ON
-    // (`RequireHttps`, `MigrateWebhookSecretsAtRest`, `BackfillMissedTicks`),
-    // a mistyped value that read as `false` would silently leave it off, so
-    // the flag takes `envFlagOrFail`: a malformed value stops startup. If
-    // `true` DISABLES a check or acknowledges a refusal (every `Accept*`
-    // escape hatch, `SkipPreflight`), a mistyped value that reads as `false`
-    // leaves the check running, which is the safe direction, so the flag takes
-    // the lenient `envFlag`. Both trim surrounding whitespace and read
-    // whitespace-only as unset (Phase 868; the table is in DEPLOYMENT.md).
+    let private kindMismatch (key: ConfigKey) (expected: string) : 'T =
+        failwithf "%s is bound as %s, but the registry declares another kind for it." key.EnvVar expected
 
-    /// Lenient boolean: `1` / `true` / `yes` / `on` (case-insensitive,
-    /// trimmed) → `true`; anything else, including unset and a typo, →
-    /// `false`. For the flags whose `true` DISABLES a check — see the
-    /// direction rule above before reaching for it on a new flag.
-    let private envFlag (name: string) =
-        match envFlagText name |> Option.map _.ToLowerInvariant() with
-        | Some("1" | "true" | "yes" | "on") -> true
-        | _ -> false
+    let private requireDefault (key: ConfigKey) (value: 'T option) : 'T =
+        match value with
+        | Some v -> v
+        | None -> failwithf "%s is bound with its default, but the registry declares none for it." key.EnvVar
 
-    /// Phase 16d — parse a boolean env var with an explicit
-    /// `defaultWhenMissing` and **fail loud** on any unrecognised
-    /// value. Used for flags whose silently-wrong values are dangerous
-    /// (forwarded-headers trust silently off in a containerised deploy
-    /// misreports client IPs and breaks HTTPS redirects). Missing →
-    /// `defaultWhenMissing`. Recognised: `1` / `true` / `yes` / `on`
-    /// → `true`; `0` / `false` / `no` / `off` → `false` (all case-
-    /// insensitive, surrounding whitespace ignored). Any other value
-    /// throws at startup, mirroring the `SERVER_PORT` fail-fast pattern
-    /// in `SDK.Server.compose` — names the offending value as written and
-    /// points at the recognised set. Phase 868 moved every flag whose
-    /// `true` turns a protection ON here (direction rule above).
-    let private envFlagOrFail (name: string) (defaultWhenMissing: bool) =
-        match envFlagText name with
-        | None -> defaultWhenMissing
+    // ── Booleans ────────────────────────────────────────────────────
+
+    let private booleanOf (key: ConfigKey) : Direction * bool option =
+        match key.Kind with
+        | ConfigKeyKind.BoolKey(direction, defaultValue) -> direction, defaultValue
+        | _ -> kindMismatch key "a boolean"
+
+    /// A boolean read by the key's direction. `Protective`: an accepted
+    /// spelling binds, unset binds `configured`, anything else refuses the
+    /// boot naming the key, the value as written and the accepted sets.
+    /// `Permissive`: an on spelling binds `true`, unset binds `configured`,
+    /// anything else reads as `false`, which leaves the check it would have
+    /// switched off running.
+    let private readBoolean (key: ConfigKey) (configured: bool option) (unsetMeans: string) : bool option =
+        let direction, _ = booleanOf key
+
+        match rawText key with
+        | None -> configured
         | Some raw ->
-            match raw.ToLowerInvariant() with
-            | "1"
-            | "true"
-            | "yes"
-            | "on" -> true
-            | "0"
-            | "false"
-            | "no"
-            | "off" -> false
-            | _ ->
-                failwithf
-                    "%s=%s is not a recognised boolean value. Expected one of: 1, true, yes, on (case-insensitive) → on; 0, false, no, off → off. Unset the variable to use the default (%b)."
-                    name
-                    raw
-                    defaultWhenMissing
+            let token = raw.ToLowerInvariant()
 
-    /// Phase 66 Stream A.8 — parse a single token from
-    /// `TOOLUP_PLATFORM_SURFACES` into a `SurfaceProfile`. Accepts
-    /// the canonical lowercase form plus a couple of separator
-    /// tolerant aliases (`multi-team` / `multi_team` / `multiteam`).
-    /// Returns `Error <raw>` for unrecognised tokens so the caller
-    /// can surface a clear list of bad entries.
+            if trueTokens.Contains token then
+                Some true
+            else
+                match direction with
+                | Direction.Permissive -> Some false
+                | Direction.Protective when falseTokens.Contains token -> Some false
+                | Direction.Protective ->
+                    failwithf
+                        "%s=%s is not a recognised boolean value. Expected one of: 1, true, yes, on (case-insensitive) → on; 0, false, no, off → off. Unset the variable to %s."
+                        key.EnvVar
+                        raw
+                        unsetMeans
+
+    /// A boolean key, unset binding its typed default.
+    let private flag (name: string) : bool =
+        let key = ConfigKeys.key name
+        let fallback = booleanOf key |> snd |> requireDefault key
+
+        readBoolean key (Some fallback) (sprintf "use the default (%b)" fallback)
+        |> Option.defaultValue fallback
+
+    /// A boolean key with an override-record middle tier: the key, else the
+    /// override, else the typed default.
+    let private flagWith (name: string) (overrideValue: bool option) : bool =
+        let key = ConfigKeys.key name
+
+        let configured =
+            overrideValue
+            |> Option.defaultWith (fun () -> booleanOf key |> snd |> requireDefault key)
+
+        readBoolean key (Some configured) (sprintf "use the configured value (%b)" configured)
+        |> Option.defaultValue configured
+
+    /// A boolean key with no typed default: `Some` when set, `None` when
+    /// unset.
+    let private flagOption (name: string) : bool option =
+        let key = ConfigKeys.key name
+        readBoolean key (booleanOf key |> snd) "leave it unset"
+
+    // ── Unions ──────────────────────────────────────────────────────
+
+    let private choicesOf (key: ConfigKey) : string list * Direction * string option =
+        match key.Kind with
+        | ConfigKeyKind.EnumKey(choices, direction, defaultValue) -> choices, direction, defaultValue
+        | _ -> kindMismatch key "a union"
+
+    /// A union key. `cases` maps each token to `Ok` the case it selects, or
+    /// to `Error` why the case cannot be selected from a single variable (it
+    /// carries a payload a token cannot express); such a token refuses the
+    /// boot saying how to supply it. The `Ok` tokens ARE the key's declared
+    /// choices, and a table that drifts from them raises before any value is
+    /// read. Unset binds the override when there is one, else the case the
+    /// typed default token selects. An unrecognised token follows the key's
+    /// direction: `Protective` refuses the boot naming the key, the value as
+    /// written and the tokens; `Permissive` warns through `warn` and keeps
+    /// the configured value.
+    let private unionWith
+        (warn: string -> unit)
+        (name: string)
+        (cases: (string * Result<'T, string>) list)
+        (overrideValue: 'T option)
+        : 'T =
+        let key = ConfigKeys.key name
+        let choices, direction, defaultToken = choicesOf key
+
+        let selectable =
+            cases
+            |> List.choose (fun (token, case) ->
+                match case with
+                | Ok _ -> Some token
+                | Error _ -> None)
+
+        if Set.ofList selectable <> Set.ofList choices then
+            failwithf
+                "%s: the binder maps the tokens [%s] but the registry declares [%s]. The two must name the same set."
+                key.EnvVar
+                (String.concat ", " selectable)
+                (String.concat ", " choices)
+
+        let selected (token: string) =
+            cases |> List.tryFind (fun (t, _) -> t = token) |> Option.map snd
+
+        let configured () =
+            match overrideValue with
+            | Some v -> v
+            | None ->
+                match defaultToken |> requireDefault key |> selected with
+                | Some(Ok v) -> v
+                | _ -> failwithf "%s: the registry's default token selects no case." key.EnvVar
+
+        match rawText key with
+        | None -> configured ()
+        | Some raw ->
+            match selected (raw.ToLowerInvariant()) with
+            | Some(Ok v) -> v
+            | Some(Error why) -> failwithf "%s=%s cannot be selected via env var: %s" key.EnvVar raw why
+            | None ->
+                let valid = String.concat ", " selectable
+
+                match direction with
+                | Direction.Protective ->
+                    failwithf
+                        "%s=%s is not a recognised value. Expected one of: %s (case-insensitive). Unset the variable to use the configured value."
+                        key.EnvVar
+                        raw
+                        valid
+                | Direction.Permissive ->
+                    let using =
+                        match overrideValue, defaultToken with
+                        | None, Some token -> sprintf "the default (%s)" token
+                        | _ -> "the configured value"
+
+                    warn $"{key.EnvVar}={raw} not recognised. Valid: {valid}. Using {using}."
+                    configured ()
+
+    /// `unionWith` over tokens that each select a case.
+    let private union (logger: ILogger) (name: string) (cases: (string * 'T) list) (overrideValue: 'T option) : 'T =
+        unionWith logger.Warn name (cases |> List.map (fun (token, case) -> token, Ok case)) overrideValue
+
+    /// The common `No* | Enabled*` binary shape, over the six spellings
+    /// `ConfigKeys.enabledDisabledChoices` declares.
+    let private enabledDisabled
+        (logger: ILogger)
+        (name: string)
+        (disabledCase: 'T)
+        (enabledCase: 'T)
+        (overrideValue: 'T option)
+        : 'T =
+        let cases =
+            enabledDisabledChoices
+            |> List.map (fun token ->
+                token,
+                (if token = "enabled" || token = "on" || token = "yes" then
+                     enabledCase
+                 else
+                     disabledCase))
+
+        union logger name cases overrideValue
+
+    // ── Integers ────────────────────────────────────────────────────
+
+    let private boundsOf (key: ConfigKey) : IntBounds * int64 option =
+        match key.Kind with
+        | ConfigKeyKind.IntKey(bounds, defaultValue) -> bounds, defaultValue
+        | _ -> kindMismatch key "an integer"
+
+    /// What an integer key holds: unset, one of its accepted tokens, a
+    /// number inside its bounds, or a value it does not accept.
+    type private IntegerRead =
+        | IntegerUnset
+        | IntegerToken
+        | IntegerValue of int64
+        | IntegerRefused of raw: string
+
+    let private readInteger (key: ConfigKey) : IntegerRead =
+        let bounds, _ = boundsOf key
+
+        match rawValue key with
+        | None -> IntegerUnset
+        | Some raw when
+            bounds.AcceptedTokens
+            |> List.exists (fun t -> String.Equals(t, raw.Trim(), StringComparison.OrdinalIgnoreCase))
+            ->
+            IntegerToken
+        | Some raw ->
+            match Int64.TryParse raw with
+            | true, n when
+                (bounds.Min |> Option.forall (fun lo -> n >= lo))
+                && (bounds.Max |> Option.forall (fun hi -> n <= hi))
+                ->
+                IntegerValue n
+            | _ -> IntegerRefused raw
+
+    /// The phrase a warning quotes for what `key` accepts.
+    let private accepted (key: ConfigKey) : string =
+        match ConfigKeys.intKeyRuleFor key.EnvVar |> IntKeyRule.describe with
+        | Some contract -> "an integer, " + contract
+        | None -> "an integer"
+
+    /// An integer key, as the key's default when it is unset, holds one of
+    /// its tokens, or is refused (with a warning naming the key, the value,
+    /// what the key accepts and the default used). A token reads as unset.
+    let private integerOption (logger: ILogger) (name: string) : int64 option =
+        let key = ConfigKeys.key name
+        let _, defaultValue = boundsOf key
+
+        match readInteger key with
+        | IntegerValue n -> Some n
+        | IntegerUnset -> defaultValue
+        | IntegerToken -> None
+        | IntegerRefused raw ->
+            let using =
+                match defaultValue with
+                | Some d -> sprintf "Using the default (%d)." d
+                | None -> "Leaving it unset."
+
+            logger.Warn $"{key.EnvVar}={raw} is not {accepted key}. {using}"
+            defaultValue
+
+    /// An integer key whose typed default always applies: a refused value or
+    /// a token binds the default.
+    let private integer (logger: ILogger) (name: string) : int64 =
+        let key = ConfigKeys.key name
+        let fallback = boundsOf key |> snd |> requireDefault key
+        integerOption logger name |> Option.defaultValue fallback
+
+    /// An integer key bound as an `int`: a value outside `Int32` is refused
+    /// like any other out-of-range value.
+    let private int32Key (logger: ILogger) (name: string) : int =
+        let key = ConfigKeys.key name
+        let n = integer logger name
+
+        if n < int64 Int32.MinValue || n > int64 Int32.MaxValue then
+            let fallback = boundsOf key |> snd |> requireDefault key
+            logger.Warn $"{key.EnvVar}={n} is outside the range of an int. Using the default ({fallback})."
+            int fallback
+        else
+            int n
+
+    let private int32Option (logger: ILogger) (name: string) : int option =
+        integerOption logger name
+        |> Option.bind (fun n ->
+            if n > int64 Int32.MaxValue then
+                logger.Warn $"{ConfigKeys.key name |> _.EnvVar}={n} is outside the range of an int. Leaving it unset."
+                None
+            else
+                Some(int n))
+
+    /// A millisecond integer key as a `TimeSpan`.
+    let private milliseconds (logger: ILogger) (name: string) : TimeSpan =
+        TimeSpan.FromMilliseconds(float (integer logger name))
+
+    /// The server port. Fails loud rather than warning: a deployment that
+    /// asked for a port and silently listens on another is unreachable where
+    /// it was told to be.
+    let private serverPort () : int =
+        let key = ConfigKeys.key Names.serverPort
+        let fallback = boundsOf key |> snd |> requireDefault key
+
+        match readInteger key with
+        | IntegerValue n -> int n
+        | IntegerUnset
+        | IntegerToken -> int fallback
+        | IntegerRefused raw ->
+            failwithf
+                "%s=%s is not a valid TCP port. Expected %s (unset %s to use the default %d)."
+                key.EnvVar
+                raw
+                (accepted key)
+                key.EnvVar
+                fallback
+
+    /// The ephemeral-store eviction window, in minutes. The key's form is
+    /// `IntegerOrDecimal` (a fractional value is honoured), and a positive
+    /// decimal has no inclusive integer bound, so the `> 0` test is stated
+    /// here.
+    let private evictionMinutes (logger: ILogger) : float =
+        let key = ConfigKeys.key Names.storeEvictionMinutes
+        let fallback = boundsOf key |> snd |> requireDefault key |> float
+
+        match rawValue key with
+        | None -> fallback
+        | Some raw ->
+            match Double.TryParse raw with
+            | true, n when n > 0.0 -> n
+            | _ ->
+                logger.Warn $"{key.EnvVar}={raw} not a positive number. Using the default ({fallback})."
+                fallback
+
+    // ── Text ────────────────────────────────────────────────────────
+
+    let private textDefaultOf (key: ConfigKey) : string option =
+        match key.Kind with
+        | ConfigKeyKind.StringKey defaultValue -> defaultValue
+        | _ -> kindMismatch key "text"
+
+    /// A text key, as resolved.
+    let private text (name: string) : string option =
+        let key = ConfigKeys.key name
+        rawValue key |> Option.orElse (textDefaultOf key)
+
+    /// A text key with an override-record middle tier.
+    let private textWith (name: string) (overrideValue: string option) : string =
+        let key = ConfigKeys.key name
+
+        rawValue key
+        |> Option.orElse overrideValue
+        |> Option.orElse (textDefaultOf key)
+        |> requireDefault key
+
+    /// Splits on comma, semicolon and space, dropping empty entries.
+    let private tokens (raw: string) : string list =
+        raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map _.Trim()
+        |> Array.filter (fun s -> s <> "")
+        |> Array.toList
+
+    /// A list-valued text key. Unset or empty → `[]`.
+    let private textList (name: string) : string list =
+        let key = ConfigKeys.key name
+
+        match key.Kind with
+        | ConfigKeyKind.StringKey _ -> rawValue key |> Option.map tokens |> Option.defaultValue []
+        | _ -> kindMismatch key "a list of text"
+
+    // ── The parsers that survive, each reached through its key ──────
+
+    /// One token of the surface list, separator-tolerant aliases included.
     let private parseSurfaceProfile (raw: string) : Result<SurfaceProfile, string> =
         match raw with
         | "anonymous" -> Ok SurfaceProfile.anonymous
@@ -124,97 +403,160 @@ module ServerConfig =
         | "claim_bearer" -> Ok SurfaceProfile.claimBearer
         | other -> Error other
 
-    let private parseStaticPathBehaviour (logger: ILogger) =
-        match envVar ConfigKeys.Names.staticPathBehaviour |> Option.map _.ToLowerInvariant() with
-        | Some "warn"
-        | None -> Warn
-        | Some("require" | "requireexist" | "require-exist") -> RequireExist
-        | Some("skip" | "skipsilent" | "skip-silent") -> SkipSilent
-        | Some other ->
-            logger.Warn
-                $"TOOLUP_STATIC_PATH_BEHAVIOUR={other} not recognised. Valid: warn, require, skip. Falling back to Warn."
+    /// The surface list: the key when at least one token parses and none is
+    /// unrecognised, else the override record's non-empty list, else the
+    /// defaults. Consumer-authored literals never traverse this, so they
+    /// still win at the highest altitude.
+    let private surfaces (logger: ILogger) (overrides: ServerConfigOverrides) : SurfaceProfile list =
+        let key = ConfigKeys.key Names.platformSurfaces
 
-            Warn
+        let fallback =
+            match overrides.Surfaces with
+            | Some s when not (List.isEmpty s) -> s
+            | _ -> defaults.Surfaces
 
-    /// Phase 719 — `cookies` and `cookieonly` select the cookie mode here
-    /// as well as at `AuthProviderFromEnv.tokenLocationFromEnv`.
-    ///
-    /// Both readers consult `TOOLUP_SSE_AUTH` and the registry has
-    /// declared all three cookie spellings since the key was registered,
-    /// but only the auth-provider reader honoured the two aliases: a
-    /// deployment setting `TOOLUP_SSE_AUTH=cookies` got a provider that
-    /// accepts the cookie AND an SSE mode left at `QueryParamFallback` —
-    /// the mode `SseAuthModeValidator` refuses under an auth surface,
-    /// reached through a spelling the reference doc offered. Two readers
-    /// of one key must agree on what the key says.
-    let private parseSseAuthMode (logger: ILogger) =
-        match envVar ConfigKeys.Names.sseAuth |> Option.map _.ToLowerInvariant() with
-        | Some "cookie"
-        | Some "cookies"
-        | Some "cookieonly" -> CookieRequired
-        | Some "fallback"
-        | Some "queryparam"
-        | None -> QueryParamFallback
-        | Some other ->
-            logger.Warn
-                $"TOOLUP_SSE_AUTH={other} not recognised. Valid values: cookie (or cookies / cookieonly), fallback (or queryparam). Falling back to fallback (default)."
+        let validTokens =
+            "anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer"
 
-            QueryParamFallback
-
-    let private parseAuthCookieIssuance (logger: ILogger) =
-        match envVar ConfigKeys.Names.authCookieIssuance |> Option.map _.ToLowerInvariant() with
-        | Some "enabled"
-        | Some "on"
-        | Some "1" -> EnabledAuthCookieIssuance
-        | Some "disabled"
-        | Some "off"
-        | Some "0"
-        | None -> NoAuthCookieIssuance
-        | Some other ->
-            logger.Warn
-                $"TOOLUP_AUTH_COOKIE_ISSUANCE={other} not recognised. Valid values: enabled, disabled. Falling back to disabled (default)."
-
-            NoAuthCookieIssuance
-
-    let private parseReplicaCount (logger: ILogger) =
-        match envVar ConfigKeys.Names.replicaCount with
-        | None -> 1
+        match rawValue key with
+        | None -> fallback
         | Some raw ->
-            match Int32.TryParse raw with
-            | true, n when n > 0 -> n
-            | _ ->
-                logger.Warn $"TOOLUP_REPLICA_COUNT={raw} not a positive integer. Defaulting to 1."
-                1
+            let parsed =
+                tokens raw |> List.map (fun t -> parseSurfaceProfile (t.ToLowerInvariant()))
 
-    let private parseEphemeralStoreEvictionMinutes (logger: ILogger) =
-        match envVar ConfigKeys.Names.storeEvictionMinutes with
-        | None -> defaults.EphemeralStoreEvictionMinutes
-        | Some raw ->
-            match Double.TryParse raw with
-            | true, n when n > 0.0 -> n
-            | _ ->
-                logger.Warn $"TOOLUP_STORE_EVICTION_MINUTES={raw} not a positive number. Using default 60."
-                defaults.EphemeralStoreEvictionMinutes
+            let errors =
+                parsed
+                |> List.choose (function
+                    | Error e -> Some e
+                    | _ -> None)
 
-    let private parseRateLimit (logger: ILogger) =
-        let parsePositive (name: string) =
-            match envVar name with
-            | None -> None
+            match errors with
+            | [] ->
+                let resolved =
+                    parsed
+                    |> List.choose (function
+                        | Ok s -> Some s
+                        | _ -> None)
+
+                if List.isEmpty resolved then
+                    logger.Warn
+                        $"{key.EnvVar}={raw} resolved to an empty surface list. Valid tokens: {validTokens}. Falling back to the library-default override value (or defaults)."
+
+                    fallback
+                else
+                    resolved
+            | bad ->
+                let badList = String.concat ", " bad
+
+                logger.Warn
+                    $"{key.EnvVar}={raw} contains unrecognised token(s): {badList}. Valid tokens: {validTokens}. Falling back to the library-default override value (or defaults)."
+
+                fallback
+
+    /// The log level and the trace categories. The level warns on stderr
+    /// rather than through the logger: the logger is built from the same key,
+    /// and an operator misreading it once should not see the warning twice.
+    let private logging () : LogLevel * Set<string> =
+        let level =
+            let cases = [
+                "trace", Ok LogLevel.Trace
+                "debug", Ok LogLevel.Debug
+                "info", Ok LogLevel.Info
+                "warn", Ok LogLevel.Warn
+                "warning", Ok LogLevel.Warn
+                "error", Ok LogLevel.Error
+            ]
+
+            unionWith (fun message -> eprintfn $"[WRN] {message}") Names.logLevel cases None
+
+        level, textList Names.traceCategories |> Set.ofList
+
+    /// The module-binding trust anchors: a `;`-separated list of
+    /// `mac:<keyId>:<scope>:<key>` (symmetric; the key resolved via
+    /// `ISecretStore` at compose time) or `asym:<keyId>:<alg>:<base64pubkey>`.
+    /// A malformed entry is warned about and skipped; an unresolvable
+    /// symmetric secret is the compose-time validator's fail-closed concern.
+    let private moduleBindingTrust (logger: ILogger) : ModuleBindingTrustConfig =
+        let key = ConfigKeys.key Names.moduleBindingAnchors
+
+        let anchors =
+            match rawValue key with
+            | None -> []
             | Some raw ->
-                match Int32.TryParse raw with
-                | true, n when n > 0 -> Some n
-                | _ ->
-                    logger.Warn $"{name}={raw} not a positive integer. Rate limit disabled."
-                    None
+                raw.Split([| ';' |], StringSplitOptions.RemoveEmptyEntries)
+                |> Array.choose (fun entry ->
+                    match entry.Trim().Split(':') with
+                    | [| "mac"; keyId; scope; key |] -> Some(SymmetricAnchorRef(keyId, scope, key))
+                    | [| "asym"; keyId; alg; pub |] -> Some(AsymmetricAnchorRef(keyId, alg, pub))
+                    | _ ->
+                        logger.Warn
+                            $"{key.EnvVar} entry '{entry}' is malformed (expected 'mac:<keyId>:<scope>:<key>' or 'asym:<keyId>:<alg>:<base64pubkey>'); skipped."
 
-        // Phase 66 Stream C.3 — the env-var path configures a single
-        // uniform policy (one limit for every subject kind). Per-shape
-        // overrides are a code-level concern (`RateLimitConfig.perShape`
-        // / `.withOverrides`), not expressible via three scalar env vars.
+                        None)
+                |> Array.toList
+
+        {
+            Anchors = anchors
+            AllowUnbound = flag Names.moduleBindingAllowUnbound
+        }
+
+    /// The listener's bind address. An address `ServerBinding.parseBindAddress`
+    /// refuses fails loud, naming it. Unset → loopback (`None`).
+    let private bindAddress () : string option =
+        match text Names.serverBindAddress with
+        | None -> None
+        | Some raw ->
+            match ServerBinding.parseBindAddress raw with
+            | Ok address -> Some address
+            | Error reason -> failwith reason
+
+    /// The public base URL. Empty / whitespace is ambiguous → warn and leave
+    /// it unset. A trailing slash is stripped (token issuers append their own
+    /// `/r/{token}`-style segment). A value that is not an absolute http(s)
+    /// URL is warned about and ignored, because it would otherwise produce
+    /// broken share-token / public / OAuth-redirect links that only fail at
+    /// link-follow time.
+    let private publicBaseUrl (logger: ILogger) : string option =
+        let key = ConfigKeys.key Names.publicBaseUrl
+
+        match rawValue key with
+        | None -> textDefaultOf key
+        | Some raw ->
+            let trimmed = raw.Trim()
+
+            if trimmed = "" then
+                logger.Warn
+                    $"{key.EnvVar} is set but empty/whitespace; the ambiguous empty value is ignored. Unset the variable or give it a value. Falling back to no public base URL."
+
+                textDefaultOf key
+            else
+                let noTrailing = trimmed.TrimEnd('/')
+
+                if noTrailing <> trimmed then
+                    logger.Warn
+                        $"{key.EnvVar}={raw} had a trailing slash; stripped to {noTrailing} (token issuers append their own path segment)."
+
+                match Uri.TryCreate(noTrailing, UriKind.Absolute) with
+                | true, uri when uri.Scheme = Uri.UriSchemeHttp || uri.Scheme = Uri.UriSchemeHttps -> Some noTrailing
+                | _ ->
+                    logger.Warn
+                        $"{key.EnvVar}={raw} is not a valid absolute http(s) URL; ignoring it (public links fall back to relative). Set a value like https://app.example.com."
+
+                    textDefaultOf key
+
+    /// The three rate-limit keys configure one uniform policy, or none: all
+    /// three valid → the policy; none set → no limit; anything between →
+    /// a warning and no limit. Per-shape overrides are a code-level concern
+    /// (`RateLimitConfig.perShape` / `.withOverrides`).
+    let private rateLimit (logger: ILogger) : RateLimitConfig =
+        let keys =
+            [ Names.rateLimitPermits; Names.rateLimitWindowSeconds; Names.rateLimitQueue ]
+            |> List.map ConfigKeys.key
+
         match
-            parsePositive ConfigKeys.Names.rateLimitPermits,
-            parsePositive ConfigKeys.Names.rateLimitWindowSeconds,
-            parsePositive ConfigKeys.Names.rateLimitQueue
+            int32Option logger Names.rateLimitPermits,
+            int32Option logger Names.rateLimitWindowSeconds,
+            int32Option logger Names.rateLimitQueue
         with
         | Some permits, Some windowSeconds, Some queue ->
             RateLimitConfig.uniform {
@@ -224,544 +566,68 @@ module ServerConfig =
             }
         | None, None, None -> RateLimitConfig.none
         | _ ->
+            let names = keys |> List.map _.EnvVar |> String.concat " / "
+
             logger.Warn
-                "Rate limit requires all three of TOOLUP_RATE_LIMIT_PERMITS / _WINDOW_SECONDS / _QUEUE. Partial configuration ignored — rate limit disabled."
+                $"Rate limit requires all three of {names}. Partial configuration ignored — rate limit disabled."
 
             RateLimitConfig.none
 
-    let private parseDefaultTeamStorageQuotaBytes (logger: ILogger) =
-        match envVar ConfigKeys.Names.defaultStorageQuotaBytes with
-        | None -> defaults.DefaultTeamStorageQuotaBytes
-        | Some "none"
-        | Some "0" -> None
-        | Some raw ->
-            match Int64.TryParse raw with
-            | true, n when n > 0L -> Some n
-            | _ ->
-                logger.Warn $"TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES={raw} not a positive integer or 'none'. Using default."
-
-                defaults.DefaultTeamStorageQuotaBytes
-
-    let private parseSlowRequestThreshold (logger: ILogger) =
-        match envVar ConfigKeys.Names.slowRequestMs with
-        | None -> defaults.SlowRequestThreshold
-        | Some raw ->
-            match Int32.TryParse raw with
-            | true, n when n > 0 -> TimeSpan.FromMilliseconds(float n)
-            | _ ->
-                logger.Warn $"TOOLUP_SLOW_REQUEST_MS={raw} not a positive integer. Using default 1000ms."
-                defaults.SlowRequestThreshold
-
-    let private parseMaxSseConnectionsPerScope (logger: ILogger) =
-        match envVar ConfigKeys.Names.maxSseConnectionsPerScope with
-        | None -> defaults.MaxSseConnectionsPerScope
-        | Some "none"
-        | Some "0" -> None
-        | Some raw ->
-            match Int32.TryParse raw with
-            | true, n when n > 0 -> Some n
-            | _ ->
-                logger.Warn
-                    $"TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE={raw} not a positive integer or 'none'. Using default."
-
-                defaults.MaxSseConnectionsPerScope
-
-    let private parseLogLevel () : LogLevel * Set<string> =
-        let level =
-            match envVar ConfigKeys.Names.logLevel with
-            | None -> LogLevel.Info
-            | Some raw ->
-                match LogLevel.tryParse raw with
-                | Some lvl -> lvl
-                | None ->
-                    // Bootstrap problem — the SDK's `fromEnv` helpers
-                    // emit this warning via `eprintfn` because the
-                    // logger they'd use is constructed from the same
-                    // env var. `ServerConfig.fromEnv` is called AFTER
-                    // the logger is built, so it could use it here,
-                    // but using `eprintfn` keeps the warning surfacing
-                    // identical to `ConsoleLogger.envSettings`. Worth
-                    // it: an operator misreading TOOLUP_LOG_LEVEL once
-                    // shouldn't see the warning twice.
-                    eprintfn $"[WRN] TOOLUP_LOG_LEVEL={raw} not recognised. Using Info."
-                    LogLevel.Info
-
-        let categories =
-            match envVar ConfigKeys.Names.traceCategories with
-            | None -> Set.empty
-            | Some raw ->
-                raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
-                |> Array.map _.Trim()
-                |> Array.filter (fun s -> s <> "")
-                |> Set.ofArray
-
-        level, categories
-
-    /// Phase 71.A.3 — `SERVER_PORT` read inside the `fromEnv` seam so a
-    /// `/dev/inspect` config snapshot reflects the actually-bound port
-    /// (previously `Port` stayed at `defaults.Port` because the only
-    /// read lived in `SDK.Server.compose`). Non-integer / out-of-range
-    /// → fail loud, mirroring the compose-time guard. Unset → default.
-    let private parseServerPort () : int =
-        match envVar "SERVER_PORT" with
-        | None -> defaults.Port
-        | Some raw ->
-            match Int32.TryParse raw with
-            | true, p when p >= 1 && p <= 65535 -> p
-            | _ ->
-                failwithf
-                    "SERVER_PORT=%s is not a valid TCP port. Expected an integer in 1-65535 (unset SERVER_PORT to use the default %d)."
-                    raw
-                    defaults.Port
-
-    /// Phase 1000 — `SERVER_BIND_ADDRESS` read inside the `fromEnv` seam,
-    /// beside `SERVER_PORT`, so a `/dev/inspect` config snapshot reflects
-    /// the address the listener binds. An address `parseBindAddress`
-    /// refuses fails loud, naming it. Unset → `defaults.BindAddress`
-    /// (`None`, the loopback default).
-    let private parseBindAddress () : string option =
-        match envVar ServerBinding.BindAddressEnvVar with
-        | None -> defaults.BindAddress
-        | Some raw ->
-            match ServerBinding.parseBindAddress raw with
-            | Ok address -> Some address
-            | Error reason -> failwith reason
-
-    /// Phase 71.A.4 — `TOOLUP_PUBLIC_BASE_URL` runtime resolution. Empty
-    /// / whitespace is ambiguous → warn + fall back to `None`. A trailing
-    /// slash is stripped (idempotent) because token issuers append their
-    /// own `/r/{token}`-style segment and a pasted `https://x/` otherwise
-    /// produces a double slash. Unset → `defaults.PublicBaseUrl` (`None`).
-    let private parsePublicBaseUrl (logger: ILogger) : string option =
-        match envVar ConfigKeys.Names.publicBaseUrl with
-        | None -> defaults.PublicBaseUrl
-        | Some raw ->
-            let trimmed = raw.Trim()
-
-            if trimmed = "" then
-                logger.Warn
-                    "TOOLUP_PUBLIC_BASE_URL is set but empty/whitespace; the ambiguous empty value is ignored. Unset the variable or give it a value. Falling back to no public base URL."
-
-                defaults.PublicBaseUrl
-            else
-                let noTrailing = trimmed.TrimEnd('/')
-
-                if noTrailing <> trimmed then
-                    logger.Warn
-                        $"TOOLUP_PUBLIC_BASE_URL={raw} had a trailing slash; stripped to {noTrailing} (token issuers append their own path segment)."
-
-                // Validate it parses as an absolute http(s) URL. A malformed
-                // value (missing scheme, non-http scheme, stray host) would
-                // otherwise be accepted silently and produce broken
-                // share-token / public / OAuth-redirect links that only fail
-                // at link-follow time. Fail soft (warn + fall back to None),
-                // mirroring the empty-value handling above.
-                match System.Uri.TryCreate(noTrailing, System.UriKind.Absolute) with
-                | true, uri when uri.Scheme = System.Uri.UriSchemeHttp || uri.Scheme = System.Uri.UriSchemeHttps ->
-                    Some noTrailing
-                | _ ->
-                    logger.Warn
-                        $"TOOLUP_PUBLIC_BASE_URL={raw} is not a valid absolute http(s) URL; ignoring it (public links fall back to relative). Set a value like https://app.example.com."
-
-                    defaults.PublicBaseUrl
-
-    /// Phase 71.A.5 — `TOOLUP_PUBLIC_PATH`. Canonical precedence:
-    /// env var > override-record value > `defaults.PublicPath`.
-    let private resolvePublicPath (overrides: ServerConfigOverrides) : string =
-        envVar ConfigKeys.Names.publicPath
-        |> Option.orElse overrides.PublicPath
-        |> Option.defaultValue defaults.PublicPath
-
-    /// Phase 71.A.6 — boolean env var with an override-record middle tier:
-    /// env (fail loud on garbage) > override > fallback. Needed for fields
-    /// like `IncludePlatformDefaults` (default `true`) where a plain
-    /// `envFlag` (false-when-unset) would wrongly flip an unset var off.
-    let private envFlagTri (name: string) (overrideVal: bool option) (fallback: bool) : bool =
-        match envFlagText name with
-        | None -> overrideVal |> Option.defaultValue fallback
-        | Some raw ->
-            match raw.ToLowerInvariant() with
-            | "1"
-            | "true"
-            | "yes"
-            | "on" -> true
-            | "0"
-            | "false"
-            | "no"
-            | "off" -> false
-            | _ ->
-                failwithf
-                    "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to use the configured value."
-                    name
-                    raw
-
-    /// Phase 71.A.6 — optional boolean: `Some` when set (fail loud on
-    /// garbage), `None` when unset (preserves a `bool option` default).
-    let private envFlagOpt (name: string) : bool option =
-        match envFlagText name with
-        | None -> None
-        | Some raw ->
-            match raw.ToLowerInvariant() with
-            | "1"
-            | "true"
-            | "yes"
-            | "on" -> Some true
-            | "0"
-            | "false"
-            | "no"
-            | "off" -> Some false
-            | _ ->
-                failwithf
-                    "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to leave it unset."
-                    name
-                    raw
-
-    /// Phase 71.A.6 — optional positive int64: parse when set, warn + `None`
-    /// on garbage, `None` (or `none`/`0`) when unset.
-    let private envInt64Opt (logger: ILogger) (name: string) : int64 option =
-        match envVar name with
-        | None
-        | Some "none"
-        | Some "0" -> None
-        | Some raw ->
-            match Int64.TryParse raw with
-            | true, n when n > 0L -> Some n
-            | _ ->
-                logger.Warn $"{name}={raw} not a positive integer or 'none'. Leaving unset."
-                None
-
-    /// Phase 71.A.6 — positive-millisecond `TimeSpan` with a fallback;
-    /// warn + fallback on garbage.
-    let private envTimeSpanMs (logger: ILogger) (name: string) (fallback: TimeSpan) : TimeSpan =
-        match envVar name with
-        | None -> fallback
-        | Some raw ->
-            match Int32.TryParse raw with
-            | true, n when n > 0 -> TimeSpan.FromMilliseconds(float n)
-            | _ ->
-                logger.Warn
-                    $"{name}={raw} not a positive integer (milliseconds). Using default {fallback.TotalMilliseconds}ms."
-
-                fallback
-
-    /// Phase 71.A.8 — comma / semicolon / space-separated string list
-    /// (the Surfaces-parser tokenisation, reused). Empty / whitespace → `[]`.
-    let private parseStringList (name: string) : string list =
-        match envVar name with
-        | None -> []
-        | Some raw ->
-            raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
-            |> Array.map _.Trim()
-            |> Array.filter (fun s -> s <> "")
-            |> Array.toList
-
-    // ── THE DIRECTION RULE FOR UNION KEYS (Phase 1051) ─────────────────
-    //
-    // The boolean rule above, applied to a key whose value selects a union
-    // case. An unrecognised token keeps the configured value, so ask what
-    // that leaves. If an operator who mistyped the token could be left
-    // with a protection or a behaviour OFF that they asked for
-    // (`TOOLUP_SECURITY_HARDENING=stric` would boot unhardened), the key is
-    // `Protective` and a malformed value stops startup, naming the key, the
-    // value as written and the accepted tokens. If every token the key
-    // accepts from the environment only switches something off, so that
-    // keeping the configured value is the safe failure, the key is
-    // `Permissive` and keeps the lenient path: a `Warn` and the configured
-    // value. Every union arm in `fromEnv` names its direction beside its
-    // tokens; the table is in DEPLOYMENT.md.
-
-    /// Phase 1051 — which way a union key's typo fails (the rule above).
-    type private UnionKeyDirection =
-        | Protective
-        | Permissive
-
-    /// Phase 1051 — what an unrecognised token on a union key does, by
-    /// direction: refuse the boot naming the key, the value as written and
-    /// the accepted tokens (`Protective`), or warn and keep `configured`
-    /// (`Permissive`).
-    let private unrecognisedUnionToken
-        (direction: UnionKeyDirection)
-        (logger: ILogger)
-        (name: string)
-        (raw: string)
-        (tokens: string list)
-        (configured: 'T)
-        : 'T =
-        let valid = String.concat ", " tokens
-
-        match direction with
-        | Protective ->
-            failwithf
-                "%s=%s is not a recognised value. Expected one of: %s (case-insensitive). Unset the variable to use the configured value."
-                name
-                raw
-                valid
-        | Permissive ->
-            logger.Warn $"{name}={raw} not recognised. Valid: {valid}. Using the configured value."
-            configured
-
-    /// Phase 71.A.7 — generic flat-case-DU env reader. `cases` maps
-    /// lowercase tokens → the (payload-free) DU value; precedence is
-    /// env > override > fallback. The value is trimmed and matched
-    /// case-insensitively; whitespace-only reads as unset. An
-    /// unrecognised token refuses the boot on a `Protective` key and, on
-    /// a `Permissive` one, warns (naming the valid tokens) and falls
-    /// through to the configured value (Phase 1051).
-    let private parseFlatDuCase
-        (direction: UnionKeyDirection)
-        (logger: ILogger)
-        (name: string)
-        (cases: (string * 'T) list)
-        (overrideVal: 'T option)
-        (fallback: 'T)
-        : 'T =
-        let configured = overrideVal |> Option.defaultValue fallback
-
-        match envFlagText name with
-        | None -> configured
-        | Some raw ->
-            let token = raw.ToLowerInvariant()
-
-            match cases |> List.tryFind (fun (tok, _) -> tok = token) with
-            | Some(_, v) -> v
-            | None -> unrecognisedUnionToken direction logger name raw (List.map fst cases) configured
-
-    /// Phase 71.A.7 — the common `No* | Enabled*` binary shape. Accepts
-    /// `no`/`off`/`disabled` and `enabled`/`on`/`yes` (case-insensitive).
-    let private enabledDisabledTokens (disabledVal: 'T) (enabledVal: 'T) : (string * 'T) list = [
-        "no", disabledVal
-        "off", disabledVal
-        "disabled", disabledVal
-        "enabled", enabledVal
-        "on", enabledVal
-        "yes", enabledVal
-    ]
-
-    let private parseEnabledDisabled
-        (direction: UnionKeyDirection)
-        (logger: ILogger)
-        (name: string)
-        (disabledVal: 'T)
-        (enabledVal: 'T)
-        (fallback: 'T)
-        : 'T =
-        parseFlatDuCase direction logger name (enabledDisabledTokens disabledVal enabledVal) None fallback
-
-    /// Phase 71.A.7 batch 2 — `parseEnabledDisabled` with an override-record
-    /// middle tier (env > override > fallback) for binary toggles that ship
-    /// a `ServerConfigOverrides` member.
-    let private parseEnabledDisabledWith
-        (direction: UnionKeyDirection)
-        (logger: ILogger)
-        (name: string)
-        (overrideVal: 'T option)
-        (disabledVal: 'T)
-        (enabledVal: 'T)
-        (fallback: 'T)
-        : 'T =
-        parseFlatDuCase direction logger name (enabledDisabledTokens disabledVal enabledVal) overrideVal fallback
-
-    /// Phase 71.A.11 — select a hybrid DU case from an env var. `cases`
-    /// maps a token to either `Ok value` (a case that's constructible
-    /// from a default / curated factory — e.g. the nilary disabled case,
-    /// or `PersistentBlobBacked EventRetentionPolicy.ninetyDays`) or
-    /// `Error why` (the case carries a payload that can't be expressed via
-    /// a single env var — `EnabledPublicRendering` needs a `ContentRoot`
-    /// path; enabling DSR needs an explicit `ErasurePolicy`). An `Error`
-    /// token **fails loud** naming how to supply the payload; unset → the
-    /// configured value (GP 11); an unrecognised token follows the key's
-    /// direction (Phase 1051), with `parseFlatDuCase`'s trimming.
-    let private parseHybridCase
-        (direction: UnionKeyDirection)
-        (logger: ILogger)
-        (name: string)
-        (cases: (string * Result<'T, string>) list)
-        (fallback: 'T)
-        : 'T =
-        match envFlagText name with
-        | None -> fallback
-        | Some raw ->
-            match cases |> List.tryFind (fun (tok, _) -> tok = raw.ToLowerInvariant()) with
-            | Some(_, Ok v) -> v
-            | Some(_, Error why) -> failwithf "%s=%s cannot be selected via env var: %s" name raw why
-            | None -> unrecognisedUnionToken direction logger name raw (List.map fst cases) fallback
-
-    /// Build a `ServerConfig` from `TOOLUP_*` env vars + a curated
-    /// overrides record. Every env-var read, warning message, and
-    /// fallback semantics is byte-for-byte identical to the
-    /// hand-written reference composition root pre-11.G — except for
-    /// the Phase 66 Stream A.8 cutover from `TOOLUP_PLATFORM_MODE` to
-    /// `TOOLUP_PLATFORM_SURFACES` (clean cutover; no aliasing).
-    ///
-    /// Surface-resolution (Phase 71.A — env-var beats library-default
-    /// override-record value):
-    ///   1. `TOOLUP_PLATFORM_SURFACES` (comma- / semicolon- /
-    ///      space-separated token list) when set and at least one
-    ///      token parses cleanly.
-    ///   2. `overrides.Surfaces` when `Some` and non-empty (the
-    ///      library-default fallback — `ServerConfigOverrides.referenceApp`
-    ///      pins `Some Surfaces.individual`).
-    ///   3. `defaults.Surfaces` as a final fallback.
-    ///
-    /// Consumer-authored literals (`{ ServerConfig.defaults with
-    /// Surfaces = ... }`) never traverse this helper, so they still win
-    /// at the highest altitude. The flip moves operator-deployer intent
-    /// (env var) ahead of library-author defaults — fixes the
-    /// silent-precedence trap documented in
-    /// [`docs/migrations/71-runtime-config-audit.md`](../../docs/migrations/71-runtime-config-audit.md)
-    /// §3.
-    ///
-    /// An unrecognised token (or an empty-after-parse result) falls
-    /// back to the override-record value when present, else
-    /// `defaults.Surfaces`, and surfaces the bad tokens via the
-    /// supplied logger.
+    /// Build a `ServerConfig` from `TOOLUP_*` keys + a curated overrides
+    /// record. A key the deployment set beats the override record, which
+    /// beats the key's typed default; a field no key binds keeps
+    /// `ServerConfig.defaults` (or the override record's value, where it
+    /// carries one).
     let fromEnv (logger: ILogger) (overrides: ServerConfigOverrides) : ServerConfig =
-        let overridesFallback =
-            match overrides.Surfaces with
-            | Some s when not (List.isEmpty s) -> s
-            | _ -> defaults.Surfaces
-
-        let surfaces =
-            match envVar ConfigKeys.Names.platformSurfaces with
-            | None -> overridesFallback
-            | Some raw ->
-                let tokens =
-                    raw.Split([| ','; ';'; ' ' |], StringSplitOptions.RemoveEmptyEntries)
-                    |> Array.map _.Trim().ToLowerInvariant()
-                    |> Array.filter (fun s -> s <> "")
-                    |> Array.toList
-
-                let parsed = tokens |> List.map parseSurfaceProfile
-
-                let errors =
-                    parsed
-                    |> List.choose (function
-                        | Error e -> Some e
-                        | _ -> None)
-
-                match errors with
-                | [] ->
-                    let resolved =
-                        parsed
-                        |> List.choose (function
-                            | Ok s -> Some s
-                            | _ -> None)
-
-                    if List.isEmpty resolved then
-                        logger.Warn
-                            $"TOOLUP_PLATFORM_SURFACES={raw} resolved to an empty surface list. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to the library-default override value (or defaults)."
-
-                        overridesFallback
-                    else
-                        resolved
-                | bad ->
-                    let badList = String.concat ", " bad
-
-                    logger.Warn
-                        $"TOOLUP_PLATFORM_SURFACES={raw} contains unrecognised token(s): {badList}. Valid tokens: anonymous, anonymous_persistent, trial, individual, team, multi_team, claim_bearer. Falling back to the library-default override value (or defaults)."
-
-                    overridesFallback
-
-        let logLevel, traceCategories = parseLogLevel ()
-
-        // Phase 170 — module-binding trust anchors from the environment.
-        // `TOOLUP_MODULE_BINDING_ALLOW_UNBOUND` is the policy bit (default
-        // matches the off-by-default config); `TOOLUP_MODULE_BINDING_ANCHORS`
-        // is a `;`-separated list of `mac:<keyId>:<scope>:<key>` (symmetric;
-        // key resolved via ISecretStore at compose time) or
-        // `asym:<keyId>:<alg>:<base64pubkey>` (asymmetric). A malformed entry
-        // is warned + skipped; an unresolvable symmetric secret is the
-        // compose-time validator's fail-closed concern (Phase 170 validator).
-        let moduleBindingTrust =
-            let allowUnbound =
-                envFlagOrFail ConfigKeys.Names.moduleBindingAllowUnbound ModuleBindingTrustConfig.defaults.AllowUnbound
-
-            let anchors =
-                match envVar ConfigKeys.Names.moduleBindingAnchors with
-                | None -> []
-                | Some raw ->
-                    raw.Split([| ';' |], StringSplitOptions.RemoveEmptyEntries)
-                    |> Array.choose (fun entry ->
-                        match entry.Trim().Split(':') with
-                        | [| "mac"; keyId; scope; key |] -> Some(SymmetricAnchorRef(keyId, scope, key))
-                        | [| "asym"; keyId; alg; pub |] -> Some(AsymmetricAnchorRef(keyId, alg, pub))
-                        | _ ->
-                            logger.Warn
-                                $"TOOLUP_MODULE_BINDING_ANCHORS entry '{entry}' is malformed (expected 'mac:<keyId>:<scope>:<key>' or 'asym:<keyId>:<alg>:<base64pubkey>'); skipped."
-
-                            None)
-                    |> Array.toList
-
-            {
-                Anchors = anchors
-                AllowUnbound = allowUnbound
-            }
+        let logLevel, traceCategories = logging ()
 
         {
             defaults with
-                PublicPath = resolvePublicPath overrides // Phase 71.A.5
-                Surfaces = surfaces
-                ModuleFilter = envVar ConfigKeys.Names.moduleFilter
-                ModuleBindingTrust = moduleBindingTrust
-                RequireHttps = envFlagOrFail ConfigKeys.Names.requireHttps defaults.RequireHttps
-                TrustForwardedHeaders =
-                    envFlagOrFail ConfigKeys.Names.trustForwardedHeaders defaults.TrustForwardedHeaders
-                // Phase 325 — trusted-proxy CIDR allowlist + its escape hatch.
-                // Entries are validated (fail-loud on malformed CIDR) by the
-                // preflight validator + the pipeline's options builder, not here:
-                // `fromEnv` stays a pure string read so the error surfaces with
-                // the same message whichever construction path built the config.
-                TrustedProxyCidrs = parseStringList ConfigKeys.Names.trustedProxyCidrs
-                AcceptForwardedHeadersFromAnyProxy = envFlag ConfigKeys.Names.acceptForwardedHeadersFromAnyProxy
-                StaticPathBehaviour = parseStaticPathBehaviour logger
+                PublicPath = textWith Names.publicPath overrides.PublicPath
+                Surfaces = surfaces logger overrides
+                ModuleFilter = text Names.moduleFilter
+                ModuleBindingTrust = moduleBindingTrust logger
+                RequireHttps = flag Names.requireHttps
+                TrustForwardedHeaders = flag Names.trustForwardedHeaders
+                // The trusted-proxy CIDR allowlist is validated (fail-loud on
+                // a malformed CIDR) by the preflight validator and the
+                // pipeline's options builder, not here, so the error surfaces
+                // with one message whichever path built the config.
+                TrustedProxyCidrs = textList Names.trustedProxyCidrs
+                AcceptForwardedHeadersFromAnyProxy = flag Names.acceptForwardedHeadersFromAnyProxy
+                StaticPathBehaviour =
+                    union
+                        logger
+                        Names.staticPathBehaviour
+                        [
+                            "warn", Warn
+                            "require", RequireExist
+                            "requireexist", RequireExist
+                            "require-exist", RequireExist
+                            "skip", SkipSilent
+                            "skipsilent", SkipSilent
+                            "skip-silent", SkipSilent
+                        ]
+                        None
                 SlowRequestThresholdOverrides =
                     overrides.SlowRequestThresholdOverrides
                     |> Option.defaultValue defaults.SlowRequestThresholdOverrides
-                // Phase 71.A.6 — env wins over override-record value, else fallback.
-                EnableDevEndpoints =
-                    envFlagTri
-                        ConfigKeys.Names.enableDevEndpoints
-                        overrides.EnableDevEndpoints
-                        defaults.EnableDevEndpoints
+                EnableDevEndpoints = flagWith Names.enableDevEndpoints overrides.EnableDevEndpoints
                 AutoBootstrapDevAdmin = overrides.AutoBootstrapDevAdmin
-                IncludePlatformDefaults =
-                    envFlagTri
-                        ConfigKeys.Names.includePlatformDefaults
-                        overrides.IncludePlatformDefaults
-                        defaults.IncludePlatformDefaults
-                // Phase 71.A.7 batch 2 — override-bearing toggles: env > override > default.
+                IncludePlatformDefaults = flagWith Names.includePlatformDefaults overrides.IncludePlatformDefaults
                 ShareTokenStore =
-                    parseEnabledDisabledWith
-                        Protective
+                    enabledDisabled
                         logger
-                        ConfigKeys.Names.shareTokenStore
-                        overrides.ShareTokenStore
+                        Names.shareTokenStore
                         NoShareTokenStore
                         EnabledShareTokenStore
-                        defaults.ShareTokenStore
-                Webhooks =
-                    parseEnabledDisabledWith
-                        Protective
-                        logger
-                        ConfigKeys.Names.webhooks
-                        overrides.Webhooks
-                        NoWebhooks
-                        EnabledWebhooks
-                        defaults.Webhooks
-                AuditLog =
-                    parseEnabledDisabledWith
-                        Protective
-                        logger
-                        ConfigKeys.Names.auditLog
-                        overrides.AuditLog
-                        NoAuditLog
-                        EnabledAuditLog
-                        defaults.AuditLog
+                        overrides.ShareTokenStore
+                Webhooks = enabledDisabled logger Names.webhooks NoWebhooks EnabledWebhooks overrides.Webhooks
+                AuditLog = enabledDisabled logger Names.auditLog NoAuditLog EnabledAuditLog overrides.AuditLog
                 SecurityHardening =
-                    parseFlatDuCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.securityHardening
+                        Names.securityHardening
                         [
                             "no", NoSecurityHardening
                             "off", NoSecurityHardening
@@ -771,86 +637,80 @@ module ServerConfig =
                             "strict", StrictSecurityHardening
                         ]
                         overrides.SecurityHardening
-                        defaults.SecurityHardening
                 LogLevel = logLevel
                 TraceCategories = traceCategories
-                SseAuthMode = parseSseAuthMode logger
-                AuthCookieIssuance = parseAuthCookieIssuance logger
-                AcceptHeaderAuthWhenAuthRequired = envFlag ConfigKeys.Names.acceptHeaderAuthInAuthMode
-                // Phase 457 — two spellings, one acknowledgement. The
-                // shorter name is what the at-rest-posture validator's
-                // refusal prints; ORing here is what keeps it from becoming
-                // a second, separately-honoured opt-out. Unset → unchanged
-                // (GP 11).
-                AcceptPlaintextSecretsWhenAuthRequired =
-                    envFlag ConfigKeys.Names.acceptPlaintextSecretsInAuthMode
-                    || envFlag ConfigKeys.Names.acceptPlaintextSecrets
-                ReplicaCount = parseReplicaCount logger
-                AcceptInProcessSchedulerInMultiInstance = envFlag ConfigKeys.Names.acceptInProcessSchedulerMultiInstance
-                AcceptNoRateLimitWhenAuthRequired = envFlag ConfigKeys.Names.acceptNoRateLimitInAuthMode
-                AcceptUnsignedPublishable = envFlag ConfigKeys.Names.acceptUnsignedPublishable
-                AcceptQueryParamSseAuthWhenAuthRequired = envFlag ConfigKeys.Names.acceptQueryParamSseAuthInAuthMode
-                AcceptSameSiteOnlyCsrfWhenAuthRequired = envFlag ConfigKeys.Names.acceptSameSiteOnlyCsrfInAuthMode
-                AcceptInMemoryShareTokenRateLimiterInMultiInstance =
-                    envFlag ConfigKeys.Names.acceptInMemoryShareTokenRateLimiterMultiInstance
-                // Phase 71.A.2 — six `Accept*` flags whose documented env
-                // vars `fromEnv` never read (audit §7). Each preserves
-                // GP 11: unset → `false`, and the matching validator still
-                // refuses startup unless the operator opts in.
-                AcceptInProcessIngestionInMultiInstance = envFlag ConfigKeys.Names.acceptInProcessIngestionMultiInstance
-                AcceptSharedEmbeddingCacheInTeamMode = envFlag ConfigKeys.Names.acceptSharedEmbeddingCacheInTeamMode
-                // Phase 9m.B — the two RAG escape hatches this phase
-                // introduced. Same GP 11 shape as the rest of the family:
-                // unset ⇒ `false`, and the matching validator still fires.
-                AcceptEphemeralRagIndex = envFlag ConfigKeys.Names.acceptEphemeralRagIndex
-                AcceptLocalEmbedderAtScale = envFlag ConfigKeys.Names.acceptLocalEmbedderAtScale
-                AcceptStickyRoutedAiInMultiInstance = envFlag ConfigKeys.Names.acceptStickyRoutedAiMultiInstance
-                // Phase 6m — the anonymous-AI cost attestation. Same
-                // GP 11 shape as the rest of the family: unset ⇒ `false`,
-                // and `AnonymousAIModeValidator` still refuses startup.
-                AcceptAnonymousModeWithAI = envFlag ConfigKeys.Names.acceptAnonymousModeWithAi
-                AcceptUnboundAudienceWhenAuthRequired = envFlag ConfigKeys.Names.acceptUnboundAudienceInAuthMode
-                AcceptInMemoryOAuthStateInMultiInstance = envFlag ConfigKeys.Names.acceptInMemoryOAuthStateMultiInstance
-                AcceptPendingInviteStoreInMultiInstance = envFlag ConfigKeys.Names.acceptPendingInviteStoreMultiInstance
-                AcceptInviteByEmailWithoutDirectory = envFlag ConfigKeys.Names.acceptInviteByEmailWithoutDirectory
-                // Phase 547.C — inviter notification on invite expiry.
-                // Same GP 11 shape: unset ⇒ `false` (off).
-                NotifyInviterOnInviteExpiry =
-                    envFlagOrFail ConfigKeys.Names.notifyInviterOnInviteExpiry defaults.NotifyInviterOnInviteExpiry
-                // Phase 460 — the share-token ephemeral-key acknowledgement.
-                // Same GP 11 shape as the rest of the family: unset ⇒ `false`,
-                // and the provenance validator still refuses a production-shaped
-                // deployment whose signing key is unprovisioned.
-                AcceptEphemeralShareTokenKey = envFlag ConfigKeys.Names.acceptEphemeralShareTokenKey
-                // Phase 71.A.3 / 71.A.4 — Port + PublicBaseUrl now resolve
-                // inside the `fromEnv` seam (were compose-only / unread).
-                Port = parseServerPort ()
-                BindAddress = parseBindAddress ()
-                PublicBaseUrl = parsePublicBaseUrl logger
-                // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
-                // preserves GP 11: unset → the prior `defaults.X` value.
-                BackfillMissedTicks = envFlagOrFail ConfigKeys.Names.backfillMissedTicks defaults.BackfillMissedTicks
-                // Phase 598 tail — env lift for the event-trigger catch-up
-                // opt-in, 71.A.6 parity with TOOLUP_BACKFILL_MISSED_TICKS.
-                EventTriggerCatchUp = envFlagOrFail ConfigKeys.Names.eventTriggerCatchUp defaults.EventTriggerCatchUp
-                MigrateWebhookSecretsAtRest =
-                    envFlagOrFail ConfigKeys.Names.migrateWebhookSecretsAtRest defaults.MigrateWebhookSecretsAtRest
-                SkipPreflight = envFlag ConfigKeys.Names.skipPreflight
-                HealthStateTracking = envFlagOrFail ConfigKeys.Names.healthStateTracking defaults.HealthStateTracking
-                EnableCitationDevEndpoint = envFlagOpt ConfigKeys.Names.enableCitationDevEndpoint
-                MaxRequestBodyBytes = envInt64Opt logger ConfigKeys.Names.maxRequestBodyBytes
-                SlowRateLimitThreshold =
-                    envTimeSpanMs logger ConfigKeys.Names.slowRateLimitMs defaults.SlowRateLimitThreshold
-                // Phase 71.A.8 — server string lists.
-                WebhookUrlAllowedHosts = parseStringList ConfigKeys.Names.webhookUrlAllowedHosts
-                PeerRoutePrefixes = parseStringList ConfigKeys.Names.peerRoutePrefixes
-                // Phase 71.A.7 (batch 1) — flat-case DU lifts (no override
-                // member, no payload). Additive: unset → `defaults.X`.
-                AuditFailurePolicy =
-                    parseFlatDuCase
-                        Protective
+                // `cookies` and `cookieonly` select the cookie mode here as
+                // at `AuthProviderFromEnv.tokenLocationFromEnv`: two readers
+                // of one key must agree on what it says.
+                SseAuthMode =
+                    union
                         logger
-                        ConfigKeys.Names.auditFailurePolicy
+                        Names.sseAuth
+                        [
+                            "cookie", CookieRequired
+                            "cookies", CookieRequired
+                            "cookieonly", CookieRequired
+                            "fallback", QueryParamFallback
+                            "queryparam", QueryParamFallback
+                        ]
+                        None
+                AuthCookieIssuance =
+                    union
+                        logger
+                        Names.authCookieIssuance
+                        [
+                            "enabled", EnabledAuthCookieIssuance
+                            "on", EnabledAuthCookieIssuance
+                            "1", EnabledAuthCookieIssuance
+                            "disabled", NoAuthCookieIssuance
+                            "off", NoAuthCookieIssuance
+                            "0", NoAuthCookieIssuance
+                        ]
+                        None
+                AcceptHeaderAuthWhenAuthRequired = flag Names.acceptHeaderAuthInAuthMode
+                // Two spellings, one acknowledgement: the shorter name is
+                // what the at-rest-posture validator's refusal prints, and
+                // ORing here keeps it from becoming a second, separately
+                // honoured opt-out.
+                AcceptPlaintextSecretsWhenAuthRequired =
+                    flag Names.acceptPlaintextSecretsInAuthMode || flag Names.acceptPlaintextSecrets
+                ReplicaCount = int32Key logger Names.replicaCount
+                AcceptInProcessSchedulerInMultiInstance = flag Names.acceptInProcessSchedulerMultiInstance
+                AcceptNoRateLimitWhenAuthRequired = flag Names.acceptNoRateLimitInAuthMode
+                AcceptUnsignedPublishable = flag Names.acceptUnsignedPublishable
+                AcceptQueryParamSseAuthWhenAuthRequired = flag Names.acceptQueryParamSseAuthInAuthMode
+                AcceptSameSiteOnlyCsrfWhenAuthRequired = flag Names.acceptSameSiteOnlyCsrfInAuthMode
+                AcceptInMemoryShareTokenRateLimiterInMultiInstance =
+                    flag Names.acceptInMemoryShareTokenRateLimiterMultiInstance
+                AcceptInProcessIngestionInMultiInstance = flag Names.acceptInProcessIngestionMultiInstance
+                AcceptSharedEmbeddingCacheInTeamMode = flag Names.acceptSharedEmbeddingCacheInTeamMode
+                AcceptEphemeralRagIndex = flag Names.acceptEphemeralRagIndex
+                AcceptLocalEmbedderAtScale = flag Names.acceptLocalEmbedderAtScale
+                AcceptStickyRoutedAiInMultiInstance = flag Names.acceptStickyRoutedAiMultiInstance
+                AcceptAnonymousModeWithAI = flag Names.acceptAnonymousModeWithAi
+                AcceptUnboundAudienceWhenAuthRequired = flag Names.acceptUnboundAudienceInAuthMode
+                AcceptInMemoryOAuthStateInMultiInstance = flag Names.acceptInMemoryOAuthStateMultiInstance
+                AcceptPendingInviteStoreInMultiInstance = flag Names.acceptPendingInviteStoreMultiInstance
+                AcceptInviteByEmailWithoutDirectory = flag Names.acceptInviteByEmailWithoutDirectory
+                NotifyInviterOnInviteExpiry = flag Names.notifyInviterOnInviteExpiry
+                AcceptEphemeralShareTokenKey = flag Names.acceptEphemeralShareTokenKey
+                Port = serverPort ()
+                BindAddress = bindAddress ()
+                PublicBaseUrl = publicBaseUrl logger
+                BackfillMissedTicks = flag Names.backfillMissedTicks
+                EventTriggerCatchUp = flag Names.eventTriggerCatchUp
+                MigrateWebhookSecretsAtRest = flag Names.migrateWebhookSecretsAtRest
+                SkipPreflight = flag Names.skipPreflight
+                HealthStateTracking = flag Names.healthStateTracking
+                EnableCitationDevEndpoint = flagOption Names.enableCitationDevEndpoint
+                MaxRequestBodyBytes = integerOption logger Names.maxRequestBodyBytes
+                SlowRateLimitThreshold = milliseconds logger Names.slowRateLimitMs
+                WebhookUrlAllowedHosts = textList Names.webhookUrlAllowedHosts
+                PeerRoutePrefixes = textList Names.peerRoutePrefixes
+                AuditFailurePolicy =
+                    union
+                        logger
+                        Names.auditFailurePolicy
                         [
                             "log", LogAndContinue
                             "logandcontinue", LogAndContinue
@@ -860,12 +720,10 @@ module ServerConfig =
                             "degradetofile", DegradeToFile
                         ]
                         None
-                        defaults.AuditFailurePolicy
                 ResultStore =
-                    parseFlatDuCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.resultStore
+                        Names.resultStore
                         [
                             "no", NoResultStore
                             "inmemory", InMemoryResultStore
@@ -873,181 +731,64 @@ module ServerConfig =
                             "persistent", PersistentResultStore
                         ]
                         None
-                        defaults.ResultStore
-                Lineage =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.lineage
-                        NoLineageStore
-                        EnabledLineageStore
-                        defaults.Lineage
+                Lineage = enabledDisabled logger Names.lineage NoLineageStore EnabledLineageStore None
                 LineageDurability =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.lineageDurability
-                        NoDurableLineage
-                        EnabledDurableLineage
-                        defaults.LineageDurability
-                DataIngestion =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.dataIngestion
-                        NoDataIngestion
-                        EnabledDataIngestion
-                        defaults.DataIngestion
-                ColumnMapping =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.columnMapping
-                        NoColumnMapping
-                        EnabledColumnMapping
-                        defaults.ColumnMapping
+                    enabledDisabled logger Names.lineageDurability NoDurableLineage EnabledDurableLineage None
+                DataIngestion = enabledDisabled logger Names.dataIngestion NoDataIngestion EnabledDataIngestion None
+                ColumnMapping = enabledDisabled logger Names.columnMapping NoColumnMapping EnabledColumnMapping None
                 ExternalContactStore =
-                    parseEnabledDisabled
-                        Protective
+                    enabledDisabled
                         logger
-                        ConfigKeys.Names.externalContactStore
+                        Names.externalContactStore
                         NoExternalContactStore
                         EnabledExternalContactStore
-                        defaults.ExternalContactStore
+                        None
                 MappingDryRun =
-                    parseEnabledDisabled
-                        Protective
+                    enabledDisabled
                         logger
-                        ConfigKeys.Names.mappingDryRunBlock
+                        Names.mappingDryRunBlock
                         WarnOnValidationFailure
                         BlockOnValidationFailure
-                        defaults.MappingDryRun
-                OAuthRefresher =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.oauthRefresher
-                        NoOAuthRefresher
-                        EnabledOAuthRefresher
-                        defaults.OAuthRefresher
-                EntityStore =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.entityStore
-                        NoEntityStore
-                        EnabledEntityStore
-                        defaults.EntityStore
-                EntityOutbox =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.entityOutbox
-                        NoEntityOutbox
-                        EnabledEntityOutbox
-                        defaults.EntityOutbox
-                UsageMetering =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.usageMetering
-                        NoUsageMetering
-                        EnabledUsageMetering
-                        defaults.UsageMetering
-                ComputeBudget =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.computeBudget
-                        NoComputeBudget
-                        EnabledComputeBudget
-                        defaults.ComputeBudget
+                        None
+                OAuthRefresher = enabledDisabled logger Names.oauthRefresher NoOAuthRefresher EnabledOAuthRefresher None
+                EntityStore = enabledDisabled logger Names.entityStore NoEntityStore EnabledEntityStore None
+                EntityOutbox = enabledDisabled logger Names.entityOutbox NoEntityOutbox EnabledEntityOutbox None
+                UsageMetering = enabledDisabled logger Names.usageMetering NoUsageMetering EnabledUsageMetering None
+                ComputeBudget = enabledDisabled logger Names.computeBudget NoComputeBudget EnabledComputeBudget None
                 MetricsEndpoint =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.metricsEndpoint
-                        NoMetricsEndpoint
-                        EnabledMetricsEndpoint
-                        defaults.MetricsEndpoint
+                    enabledDisabled logger Names.metricsEndpoint NoMetricsEndpoint EnabledMetricsEndpoint None
                 PlatformKnowledgeBase =
-                    parseEnabledDisabled
-                        Protective
+                    enabledDisabled
                         logger
-                        ConfigKeys.Names.platformKnowledgeBase
+                        Names.platformKnowledgeBase
                         NoPlatformKnowledgeBase
                         EnabledPlatformKnowledgeBase
-                        defaults.PlatformKnowledgeBase
+                        None
                 ConfigDriftDetection =
-                    parseEnabledDisabled
-                        Protective
+                    enabledDisabled
                         logger
-                        ConfigKeys.Names.configDriftDetection
+                        Names.configDriftDetection
                         NoConfigDriftDetection
                         EnabledConfigDriftDetection
-                        defaults.ConfigDriftDetection
-                RateLimiter =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.rateLimiter
-                        NoRateLimiter
-                        EnabledRateLimiter
-                        defaults.RateLimiter
-                SmokeTest =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.smokeTest
-                        NoSmokeTest
-                        EnabledSmokeTest
-                        defaults.SmokeTest
+                        None
+                RateLimiter = enabledDisabled logger Names.rateLimiter NoRateLimiter EnabledRateLimiter None
+                SmokeTest = enabledDisabled logger Names.smokeTest NoSmokeTest EnabledSmokeTest None
                 DeploymentReadiness =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.deploymentReadiness
-                        NoReadinessReport
-                        EnabledReadinessReport
-                        defaults.DeploymentReadiness
+                    enabledDisabled logger Names.deploymentReadiness NoReadinessReport EnabledReadinessReport None
                 DeploymentVerification =
-                    parseEnabledDisabled
-                        Protective
+                    enabledDisabled
                         logger
-                        ConfigKeys.Names.deploymentVerification
+                        Names.deploymentVerification
                         NoDeploymentVerification
                         EnabledDeploymentVerification
-                        defaults.DeploymentVerification
-                AssetStore =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.assetStore
-                        NoAssetStore
-                        EnabledAssetStore
-                        defaults.AssetStore
-                ConsentAudit =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.consentAudit
-                        NoConsentAudit
-                        EnabledConsentAudit
-                        defaults.ConsentAudit
-                AdAnalytics =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.adAnalytics
-                        NoAdAnalytics
-                        EnabledAdAnalytics
-                        defaults.AdAnalytics
-                // Phase 159 — durable per-subject consent-state store mode.
+                        None
+                AssetStore = enabledDisabled logger Names.assetStore NoAssetStore EnabledAssetStore None
+                ConsentAudit = enabledDisabled logger Names.consentAudit NoConsentAudit EnabledConsentAudit None
+                AdAnalytics = enabledDisabled logger Names.adAnalytics NoAdAnalytics EnabledAdAnalytics None
                 ConsentStateStore =
-                    parseFlatDuCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.consentStateStore
+                        Names.consentStateStore
                         [
                             "no", NoConsentStateStore
                             "off", NoConsentStateStore
@@ -1058,20 +799,12 @@ module ServerConfig =
                             "entity-backed", EntityBackedConsentStateStore
                         ]
                         None
-                        defaults.ConsentStateStore
                 ServerlessHost =
-                    parseFlatDuCase
-                        Protective
-                        logger
-                        ConfigKeys.Names.serverlessHost
-                        [ "kestrel", KestrelHost; "serverless", ServerlessHost ]
-                        None
-                        defaults.ServerlessHost
+                    union logger Names.serverlessHost [ "kestrel", KestrelHost; "serverless", ServerlessHost ] None
                 ProcessProfile =
-                    parseFlatDuCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.processProfile
+                        Names.processProfile
                         [
                             "allinone", AllInOne
                             "all-in-one", AllInOne
@@ -1083,13 +816,10 @@ module ServerConfig =
                             "dispatcheronly", DispatcherOnly
                         ]
                         None
-                        defaults.ProcessProfile
-                // Phase 71.A.7 batch 2 — TeamCreationPolicy (no override member).
                 TeamCreationPolicy =
-                    parseFlatDuCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.teamCreationPolicy
+                        Names.teamCreationPolicy
                         [
                             "platformadminonly", PlatformAdminOnly
                             "platform-admin-only", PlatformAdminOnly
@@ -1099,18 +829,10 @@ module ServerConfig =
                             "authenticated", AnyAuthenticatedUser
                         ]
                         None
-                        defaults.TeamCreationPolicy
-                // Phase 549 — direct-add existence proof. Accepts the
-                // boolean spellings an operator reaches for on a
-                // `REQUIRE_*` variable as well as the estate's
-                // enabled/disabled family, so neither reading is a silent
-                // miss; an unrecognised token refuses the boot (Phase 1051 —
-                // a protective key). Unset ⇒ `NoIdentityProof` (GP 11).
                 DirectAddIdentityProof =
-                    parseFlatDuCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.requireDirectoryProofForDirectAdd
+                        Names.requireDirectoryProofForDirectAdd
                         [
                             "0", NoIdentityProof
                             "false", NoIdentityProof
@@ -1124,22 +846,11 @@ module ServerConfig =
                             "enabled", RequireDirectoryProof
                         ]
                         None
-                        defaults.DirectAddIdentityProof
-                // Phase 71.A.11 — fully-nilary DUs the audit grouped as HY
-                // (the in-tree DU carries no payload): pure flat lifts.
-                JobScheduler =
-                    parseEnabledDisabled
-                        Protective
-                        logger
-                        ConfigKeys.Names.jobScheduler
-                        NoJobScheduler
-                        InProcessJobScheduler
-                        defaults.JobScheduler
+                JobScheduler = enabledDisabled logger Names.jobScheduler NoJobScheduler InProcessJobScheduler None
                 RateLimitStore =
-                    parseFlatDuCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.rateLimitStore
+                        Names.rateLimitStore
                         [
                             "no", NoRateLimitStore
                             "off", NoRateLimitStore
@@ -1149,26 +860,22 @@ module ServerConfig =
                             "external", ExternalRateLimitStore
                         ]
                         None
-                        defaults.RateLimitStore
-                // Phase 71.A.11 — hybrid case-flips: nilary / curated-default
-                // cases select; payload-bearing cases fail loud (the payload
-                // must be supplied via overrides / a `defaults with` literal).
                 EventStore =
-                    parseHybridCase
-                        Protective
+                    union
                         logger
-                        ConfigKeys.Names.eventStore
+                        Names.eventStore
                         [
-                            "inmemory", Ok InMemoryOnly
-                            "in-memory", Ok InMemoryOnly
-                            "persistent", Ok(PersistentBlobBacked EventRetentionPolicy.ninetyDays)
+                            "inmemory", InMemoryOnly
+                            "in-memory", InMemoryOnly
+                            "persistent", PersistentBlobBacked EventRetentionPolicy.ninetyDays
                         ]
-                        defaults.EventStore
+                        None
+                // A case carrying a payload a token cannot express refuses
+                // the boot naming how to supply it.
                 ConversationStore =
-                    parseHybridCase
-                        Protective
-                        logger
-                        ConfigKeys.Names.conversationStore
+                    unionWith
+                        logger.Warn
+                        Names.conversationStore
                         [
                             "no", Ok NoConversationStore
                             "off", Ok NoConversationStore
@@ -1177,12 +884,11 @@ module ServerConfig =
                             Error
                                 "EnabledConversationStore requires a retentionDays value; set ServerConfig.ConversationStore via overrides or a `{ defaults with ... }` literal"
                         ]
-                        defaults.ConversationStore
+                        None
                 PublicRendering =
-                    parseHybridCase
-                        Protective
-                        logger
-                        ConfigKeys.Names.publicRendering
+                    unionWith
+                        logger.Warn
+                        Names.publicRendering
                         [
                             "no", Ok NoPublicRendering
                             "off", Ok NoPublicRendering
@@ -1191,15 +897,14 @@ module ServerConfig =
                             Error
                                 "EnabledPublicRendering requires a ContentRoot path; set ServerConfig.PublicRendering via overrides"
                         ]
-                        defaults.PublicRendering
-                // Phase 1051 — the one permissive union key: the environment
-                // can only switch DSR OFF, so a typo that keeps the
-                // configured value leaves the compliance surface running.
+                        None
+                // Permissive: every token the environment can select only
+                // switches DSR off, so a typo that keeps the configured value
+                // leaves the compliance surface running.
                 DataSubjectRequests =
-                    parseHybridCase
-                        Permissive
-                        logger
-                        ConfigKeys.Names.dataSubjectRequests
+                    unionWith
+                        logger.Warn
+                        Names.dataSubjectRequests
                         [
                             "disabled", Ok DataSubjectRequestMode.Disabled
                             "no", Ok DataSubjectRequestMode.Disabled
@@ -1208,21 +913,20 @@ module ServerConfig =
                             Error
                                 "Enabling DSR requires an explicit ErasurePolicy (a compliance decision, not defaulted); set ServerConfig.DataSubjectRequests via overrides"
                         ]
-                        defaults.DataSubjectRequests
-                EphemeralStoreEvictionMinutes = parseEphemeralStoreEvictionMinutes logger
-                RateLimit = parseRateLimit logger
-                DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger
-                SlowRequestThreshold = parseSlowRequestThreshold logger
-                MaxSseConnectionsPerScope = parseMaxSseConnectionsPerScope logger
+                        None
+                EphemeralStoreEvictionMinutes = evictionMinutes logger
+                RateLimit = rateLimit logger
+                DefaultTeamStorageQuotaBytes = integerOption logger Names.defaultStorageQuotaBytes
+                SlowRequestThreshold = milliseconds logger Names.slowRequestMs
+                MaxSseConnectionsPerScope = int32Option logger Names.maxSseConnectionsPerScope
         }
 
-/// Phase 1051 — the preflight row for an unrecognised token on an escape
-/// hatch.
+/// The preflight row for an unrecognised token on an escape hatch.
 ///
 /// Every `TOOLUP_ACCEPT_*` acknowledgement is read by the lenient boolean
 /// parser: a typo reads as `false`, so the refusal it would have
 /// acknowledged keeps standing. That is the safe direction, which is why
-/// it does not refuse the boot — but until this row the only trace of the
+/// it does not refuse the boot — but without this row the only trace of the
 /// typo was the refusal itself, which names the check and not the
 /// variable the operator mistyped. This validator names it: a `Warning`
 /// listing each escape-hatch key whose value is not a recognised boolean
@@ -1230,16 +934,16 @@ module ServerConfig =
 /// on the line an operator reads first, not inferred from a refusal.
 module EscapeHatchTokenValidator =
 
-    /// The tokens the boolean parsers recognise (`1`/`true`/`yes`/`on`,
-    /// `0`/`false`/`no`/`off`), case-insensitive.
-    let private recognised = set [ "1"; "true"; "yes"; "on"; "0"; "false"; "no"; "off" ]
-
-    /// The escape-hatch keys: the registry's boolean descriptors under
+    /// The escape-hatch keys: the registry's boolean keys under
     /// `ConfigKeys.EscapeHatchCategory`, read off the registry so a new
     /// hatch is covered the moment it is described.
     let escapeHatchKeys: string list =
-        ConfigKeys.all
-        |> List.filter (fun d -> d.Category = ConfigKeys.EscapeHatchCategory && d.Type = ConfigKeys.BoolKey)
+        ConfigKeys.keys
+        |> List.filter (fun k ->
+            k.Category = ConfigKeys.EscapeHatchCategory
+            && (match k.Kind with
+                | ConfigKeyKind.BoolKey _ -> true
+                | _ -> false))
         |> List.map _.EnvVar
 
     /// The outcome over `read` (an environment lookup): `Ok` when every
@@ -1250,7 +954,13 @@ module EscapeHatchTokenValidator =
         let malformed = [
             for key in escapeHatchKeys do
                 match read key |> Option.map _.Trim() with
-                | Some raw when raw <> "" && not (recognised.Contains(raw.ToLowerInvariant())) ->
+                | Some raw when
+                    raw <> ""
+                    && not (
+                        let token = raw.ToLowerInvariant()
+                        trueTokens.Contains token || falseTokens.Contains token
+                    )
+                    ->
                     sprintf "%s=%s" key raw
                 | _ -> ()
         ]

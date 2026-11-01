@@ -4538,6 +4538,44 @@ let main args =
             Trace.tracefn "▶ VerifyAll: ServiceConfigFold (the closure-fold's one home, via VerifyServiceConfigFold)"
             runVerifyServiceConfigFold __SOURCE_DIRECTORY__)
 
+    // GenerateConfigReference — regenerate every projection of the config-key
+    // registry (`ConfigKeys.keys`): `docs/reference/config-reference.md`,
+    // `docs/reference/toolup.config.schema.json`, the Description column of
+    // `docs/operations/env-vars.md`, and the generated region of
+    // `DEPLOYMENT.md` (which keys refuse a typo, and what the boot seal
+    // covers).
+    //
+    // It builds the Platform pack and runs its `ConfigReference` list in
+    // regeneration mode, where each golden-file case writes its artefact
+    // instead of comparing it. The gate is the same list run normally, in
+    // every lane of the Platform pack under `VerifyAll`: a committed
+    // projection that differs from the registry is red, naming this target.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- GenerateConfigReference`
+    Target.create "GenerateConfigReference" (fun _ ->
+        let project = "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
+
+        Proc.exec "dotnet" [ "build"; project; "--nologo"; "-v:q" ] "."
+        |> Proc.ensure
+        |> ignore
+
+        match TestPackHost.resolveTargetPath project with
+        | Error message -> failwithf "GenerateConfigReference: %s" message
+        | Ok dll ->
+            Proc.execWith
+                {
+                    Proc.options with
+                        Environment = [ "TOOLUP_REGEN_CONFIG_REFERENCE", "1" ]
+                }
+                "dotnet"
+                [ dll; "--filter-test-list"; "ConfigReference" ]
+                "."
+            |> Proc.ensure
+            |> ignore
+
+            Trace.tracefn
+                "GenerateConfigReference: regenerated the reference, the schema, the operations descriptions and the DEPLOYMENT.md region. Commit them with the registry change.")
+
     // The Fuaran co-resolution rule and the co-build probe.
     //
     // This repository's Fuaran substrate floors (`FuaranCoreVersion`,

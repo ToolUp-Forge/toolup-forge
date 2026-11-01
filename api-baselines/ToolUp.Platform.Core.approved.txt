@@ -3076,13 +3076,17 @@ ToolUp.Platform.ConfigKeys.all : Microsoft.FSharp.Collections.FSharpList`1[ToolU
 ToolUp.Platform.ConfigKeys.builtInProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile] { get }
 ToolUp.Platform.ConfigKeys.enabledDisabledChoices : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ConfigKeys.escapeHatchKeys : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
+ToolUp.Platform.ConfigKeys.falseTokens : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.ConfigKeys.intKeyRuleFor(System.String) : ToolUp.Platform.ConfigKeys+IntKeyRule
 ToolUp.Platform.ConfigKeys.intKeyRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+IntKeyRule] { get }
 ToolUp.Platform.ConfigKeys.isManifestBindable(System.String) : System.Boolean
 ToolUp.Platform.ConfigKeys.isToolingKey(System.String) : System.Boolean
+ToolUp.Platform.ConfigKeys.key(System.String) : ToolUp.Platform.ConfigKeys+ConfigKey
+ToolUp.Platform.ConfigKeys.keys : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKey] { get }
 ToolUp.Platform.ConfigKeys.manifestBindable : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.ConfigKeys.profileProblems(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile], ToolUp.Platform.ConfigKeys+ConfigProfile) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.ConfigKeys.toolingKeys : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ConfigKeys.trueTokens : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.ConfigKeys+BrandingKeys (class)
 ToolUp.Platform.ConfigKeys+BrandingKeys.AppName : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.BrandDarkColor : System.String (literal)
@@ -3092,6 +3096,14 @@ ToolUp.Platform.ConfigKeys+BrandingKeys.NegColor : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.PosColor : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.PrimaryColor : System.String (literal)
 ToolUp.Platform.ConfigKeys+BrandingKeys.SidebarColor : System.String (literal)
+ToolUp.Platform.ConfigKeys+ConfigKey (class)
+ToolUp.Platform.ConfigKeys+ConfigKey..ctor(System.String, System.String, ToolUp.Platform.ConfigKeys+ConfigKeyKind, System.Boolean, System.String, ToolUp.Platform.ConfigKeys+SealPosture)
+ToolUp.Platform.ConfigKeys+ConfigKey.Category : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigKey.Description : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigKey.EnvVar : System.String { get }
+ToolUp.Platform.ConfigKeys+ConfigKey.IsSecret : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKey.Kind : ToolUp.Platform.ConfigKeys+ConfigKeyKind { get }
+ToolUp.Platform.ConfigKeys+ConfigKey.Seal : ToolUp.Platform.ConfigKeys+SealPosture { get }
 ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor (class)
 ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor..ctor(System.String, System.String, ToolUp.Platform.ConfigKeys+ConfigKeyType, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.String)
 ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.Category : System.String { get }
@@ -3100,6 +3112,37 @@ ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.Description : System.String { get
 ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.EnvVar : System.String { get }
 ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.IsSecret : System.Boolean { get }
 ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor.Type : ToolUp.Platform.ConfigKeys+ConfigKeyType { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind.IsBoolKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind.IsEnumKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind.IsIntKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind.IsStringKey : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+BoolKey (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+BoolKey.defaultValue : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+BoolKey.direction : ToolUp.Platform.ConfigKeys+Direction { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+EnumKey (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+EnumKey.choices : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+EnumKey.defaultValue : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+EnumKey.direction : ToolUp.Platform.ConfigKeys+Direction { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+IntKey (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+IntKey.bounds : ToolUp.Platform.ConfigKeys+IntBounds { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+IntKey.defaultValue : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+StringKey (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+StringKey.defaultValue : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+Tags (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+Tags.BoolKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+Tags.EnumKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+Tags.IntKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyKind+Tags.StringKey : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeyModule (class)
+ToolUp.Platform.ConfigKeys+ConfigKeyModule.defaultText(ToolUp.Platform.ConfigKeys+ConfigKey) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ConfigKeys+ConfigKeyModule.descriptor(ToolUp.Platform.ConfigKeys+ConfigKey) : ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor
+ToolUp.Platform.ConfigKeys+ConfigKeyModule.direction(ToolUp.Platform.ConfigKeys+ConfigKey) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigKeys+Direction]
+ToolUp.Platform.ConfigKeys+ConfigKeySeal (class)
+ToolUp.Platform.ConfigKeys+ConfigKeySeal.Unset : System.String (literal)
+ToolUp.Platform.ConfigKeys+ConfigKeySeal.project(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKey]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
+ToolUp.Platform.ConfigKeys+ConfigKeySeal.render(ToolUp.Platform.ConfigKeys+ConfigKey, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.ConfigKeys+ConfigKeyType (class)
 ToolUp.Platform.ConfigKeys+ConfigKeyType.BoolKey : ToolUp.Platform.ConfigKeys+ConfigKeyType { get }
 ToolUp.Platform.ConfigKeys+ConfigKeyType.IntKey : ToolUp.Platform.ConfigKeys+ConfigKeyType { get }
@@ -3125,6 +3168,29 @@ ToolUp.Platform.ConfigKeys+ConfigProfile.Values : Microsoft.FSharp.Collections.F
 ToolUp.Platform.ConfigKeys+ConfigSchema (class)
 ToolUp.Platform.ConfigKeys+ConfigSchema.Dialect : System.String (literal)
 ToolUp.Platform.ConfigKeys+ConfigSchema.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
+ToolUp.Platform.ConfigKeys+DeploymentDoc (class)
+ToolUp.Platform.ConfigKeys+DeploymentDoc.BeginMarker : System.String (literal)
+ToolUp.Platform.ConfigKeys+DeploymentDoc.DocPath : System.String (literal)
+ToolUp.Platform.ConfigKeys+DeploymentDoc.EndMarker : System.String (literal)
+ToolUp.Platform.ConfigKeys+DeploymentDoc.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKey]) : System.String
+ToolUp.Platform.ConfigKeys+DeploymentDoc.splice(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKey], System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Platform.ConfigKeys+Direction (class)
+ToolUp.Platform.ConfigKeys+Direction.IsPermissive : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+Direction.IsProtective : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+Direction.Permissive : ToolUp.Platform.ConfigKeys+Direction { get }
+ToolUp.Platform.ConfigKeys+Direction.Protective : ToolUp.Platform.ConfigKeys+Direction { get }
+ToolUp.Platform.ConfigKeys+Direction.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigKeys+Direction+Tags (class)
+ToolUp.Platform.ConfigKeys+Direction+Tags.Permissive : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+Direction+Tags.Protective : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+IntBounds (class)
+ToolUp.Platform.ConfigKeys+IntBounds..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ConfigKeys+IntKeyNumericForm)
+ToolUp.Platform.ConfigKeys+IntBounds.AcceptedTokens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+IntBounds.Form : ToolUp.Platform.ConfigKeys+IntKeyNumericForm { get }
+ToolUp.Platform.ConfigKeys+IntBounds.Max : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.ConfigKeys+IntBounds.Min : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.ConfigKeys+IntBoundsModule (class)
+ToolUp.Platform.ConfigKeys+IntBoundsModule.unconstrained : ToolUp.Platform.ConfigKeys+IntBounds { get }
 ToolUp.Platform.ConfigKeys+IntKeyNumericForm (class)
 ToolUp.Platform.ConfigKeys+IntKeyNumericForm.IntegerOnly : ToolUp.Platform.ConfigKeys+IntKeyNumericForm { get }
 ToolUp.Platform.ConfigKeys+IntKeyNumericForm.IntegerOrDecimal : ToolUp.Platform.ConfigKeys+IntKeyNumericForm { get }
@@ -3337,6 +3403,8 @@ ToolUp.Platform.ConfigKeys+Names.securityHardening : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.sendGridEndpoint : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.sendGridFrom : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.sendGridFromName : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.serverBindAddress : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.serverPort : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.serverlessHost : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.shareTokenStore : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.skipPreflight : System.String (literal)
@@ -3383,6 +3451,19 @@ ToolUp.Platform.ConfigKeys+OperationsDoc.issues(Microsoft.FSharp.Collections.FSh
 ToolUp.Platform.ConfigKeys+OperationsDoc.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor], System.String) : System.String
 ToolUp.Platform.ConfigKeys+ReferenceDoc (class)
 ToolUp.Platform.ConfigKeys+ReferenceDoc.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
+ToolUp.Platform.ConfigKeys+SealPosture (class)
+ToolUp.Platform.ConfigKeys+SealPosture.IsSealPresence : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+SealPosture.IsSealValue : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+SealPosture.IsUnsealed : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+SealPosture.SealPresence : ToolUp.Platform.ConfigKeys+SealPosture { get }
+ToolUp.Platform.ConfigKeys+SealPosture.SealValue : ToolUp.Platform.ConfigKeys+SealPosture { get }
+ToolUp.Platform.ConfigKeys+SealPosture.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigKeys+SealPosture+Tags (class)
+ToolUp.Platform.ConfigKeys+SealPosture+Tags.SealPresence : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+SealPosture+Tags.SealValue : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+SealPosture+Tags.Unsealed : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+SealPosture+Unsealed (class)
+ToolUp.Platform.ConfigKeys+SealPosture+Unsealed.reason : System.String { get }
 ToolUp.Platform.ConfigKnobType (class)
 ToolUp.Platform.ConfigKnobType.BoolKnob : ToolUp.Platform.ConfigKnobType { get }
 ToolUp.Platform.ConfigKnobType.DurationKnob : ToolUp.Platform.ConfigKnobType { get }

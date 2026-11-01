@@ -35,7 +35,7 @@ let DefaultBindAddress = "127.0.0.1"
 /// `SERVER_PORT` it carries no `TOOLUP_` prefix: orchestrators and launchers
 /// inject the pair together.
 [<Literal>]
-let BindAddressEnvVar = "SERVER_BIND_ADDRESS"
+let BindAddressEnvVar = ConfigKeys.Names.serverBindAddress
 
 /// Which setting decided where the HTTP listener binds, in precedence order.
 type ListenSource =

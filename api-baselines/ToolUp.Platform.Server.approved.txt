@@ -1086,6 +1086,7 @@ ToolUp.Platform.BootVerificationPreflight (class)
 ToolUp.Platform.BootVerificationPreflight.BindingFramingVersion : System.String (literal)
 ToolUp.Platform.BootVerificationPreflight.BindingSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.BootVerificationPreflight.CanonicalMethodFramingVersion : System.String (literal)
+ToolUp.Platform.BootVerificationPreflight.ConfigKeyFramingVersion : System.String (literal)
 ToolUp.Platform.BootVerificationPreflight.PlanFramingVersion : System.String (literal)
 ToolUp.Platform.BootVerificationPreflight.PlatformScopeId : System.String (literal)
 ToolUp.Platform.BootVerificationPreflight.bindingCanonicalBytes(ToolUp.Platform.CompositionBinding) : System.Byte[]
@@ -1885,6 +1886,7 @@ ToolUp.Platform.CompositionDrift.IsCanonicalMethodWithdrawn : System.Boolean { g
 ToolUp.Platform.CompositionDrift.IsComponentAdded : System.Boolean { get }
 ToolUp.Platform.CompositionDrift.IsComponentImplChanged : System.Boolean { get }
 ToolUp.Platform.CompositionDrift.IsComponentRemoved : System.Boolean { get }
+ToolUp.Platform.CompositionDrift.IsConfigKeyChanged : System.Boolean { get }
 ToolUp.Platform.CompositionDrift.IsConfigKnobAdded : System.Boolean { get }
 ToolUp.Platform.CompositionDrift.IsConfigKnobChanged : System.Boolean { get }
 ToolUp.Platform.CompositionDrift.IsConfigKnobRemoved : System.Boolean { get }
@@ -1914,6 +1916,10 @@ ToolUp.Platform.CompositionDrift+ComponentImplChanged.recorded : System.String {
 ToolUp.Platform.CompositionDrift+ComponentRemoved (class)
 ToolUp.Platform.CompositionDrift+ComponentRemoved.id : System.String { get }
 ToolUp.Platform.CompositionDrift+ComponentRemoved.kind : System.String { get }
+ToolUp.Platform.CompositionDrift+ConfigKeyChanged (class)
+ToolUp.Platform.CompositionDrift+ConfigKeyChanged.key : System.String { get }
+ToolUp.Platform.CompositionDrift+ConfigKeyChanged.observed : System.String { get }
+ToolUp.Platform.CompositionDrift+ConfigKeyChanged.recorded : System.String { get }
 ToolUp.Platform.CompositionDrift+ConfigKnobAdded (class)
 ToolUp.Platform.CompositionDrift+ConfigKnobAdded.name : System.String { get }
 ToolUp.Platform.CompositionDrift+ConfigKnobAdded.value : System.String { get }
@@ -1950,6 +1956,7 @@ ToolUp.Platform.CompositionDrift+Tags.CanonicalMethodWithdrawn : System.Int32 (l
 ToolUp.Platform.CompositionDrift+Tags.ComponentAdded : System.Int32 (literal)
 ToolUp.Platform.CompositionDrift+Tags.ComponentImplChanged : System.Int32 (literal)
 ToolUp.Platform.CompositionDrift+Tags.ComponentRemoved : System.Int32 (literal)
+ToolUp.Platform.CompositionDrift+Tags.ConfigKeyChanged : System.Int32 (literal)
 ToolUp.Platform.CompositionDrift+Tags.ConfigKnobAdded : System.Int32 (literal)
 ToolUp.Platform.CompositionDrift+Tags.ConfigKnobChanged : System.Int32 (literal)
 ToolUp.Platform.CompositionDrift+Tags.ConfigKnobRemoved : System.Int32 (literal)
@@ -2072,7 +2079,7 @@ ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.o
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.rules(ToolUp.Platform.CompositionManifest, ToolUp.Platform.CompositionReferences, System.DateTime) : ToolUp.Platform.RulesView
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.surfaces : ToolUp.Platform.SurfacesView { get }
 ToolUp.Platform.CompositionManifest (class)
-ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlanEntry])
+ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlanEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob])
 ToolUp.Platform.CompositionManifest.CanonicalMethods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod] { get }
 ToolUp.Platform.CompositionManifest.CompanionSlots : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifest.ConfigKnobs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob] { get }
@@ -2083,10 +2090,12 @@ ToolUp.Platform.CompositionManifest.Modules : Microsoft.FSharp.Collections.FShar
 ToolUp.Platform.CompositionManifest.Plan : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlanEntry] { get }
 ToolUp.Platform.CompositionManifest.Purposes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifest.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.CompositionManifest.SealedConfigKeys : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob] { get }
 ToolUp.Platform.CompositionManifest.Subjects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifest.Tools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry] { get }
 ToolUp.Platform.CompositionManifestModule (class)
 ToolUp.Platform.CompositionManifestModule.CanonicalMethodSchemaVersion : System.Int32 (literal)
+ToolUp.Platform.CompositionManifestModule.ConfigKeySchemaVersion : System.Int32 (literal)
 ToolUp.Platform.CompositionManifestModule.LiveInterfaceSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.CompositionManifestModule.PlanSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.CompositionManifestModule.PreCanonicalMethodSchemaVersion : System.Int32 (literal)
@@ -2116,12 +2125,15 @@ ToolUp.Platform.CompositionManifestModule.planEntryOf(ToolUp.Platform.Contributi
 ToolUp.Platform.CompositionManifestModule.planOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Contribution]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlanEntry]
 ToolUp.Platform.CompositionManifestModule.purposeEntry(ToolUp.Platform.RegisteredPurpose) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.recordsCanonicalMethods(ToolUp.Platform.CompositionManifest) : System.Boolean
+ToolUp.Platform.CompositionManifestModule.recordsConfigKeys(ToolUp.Platform.CompositionManifest) : System.Boolean
 ToolUp.Platform.CompositionManifestModule.recordsLiveInterfaceTools(ToolUp.Platform.CompositionManifest) : System.Boolean
 ToolUp.Platform.CompositionManifestModule.recordsPlan(ToolUp.Platform.CompositionManifest) : System.Boolean
+ToolUp.Platform.CompositionManifestModule.sealedConfigKeys(ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob]
 ToolUp.Platform.CompositionManifestModule.subjectEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.teamOutputVisibilityKnobs(ToolUp.Platform.TeamOutputVisibilitySettings) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob]
 ToolUp.Platform.CompositionManifestModule.toolEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.withCanonicalMethods(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
+ToolUp.Platform.CompositionManifestModule.withConfigKeys(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionManifestModule.withGrounding(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionManifestModule.withLiveInterfaceTools(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionManifestModule.withPlan(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PlanEntry], ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionManifest
@@ -2251,15 +2263,19 @@ ToolUp.Platform.CompositionRuleVersions.toWireDocument(Microsoft.FSharp.Collecti
 ToolUp.Platform.CompositionRuleVersions.tryVersion(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RuleVersion]
 ToolUp.Platform.CompositionUnrecorded (class)
 ToolUp.Platform.CompositionUnrecorded.IsCanonicalMethodUnrecorded : System.Boolean { get }
+ToolUp.Platform.CompositionUnrecorded.IsConfigKeysUnrecorded : System.Boolean { get }
 ToolUp.Platform.CompositionUnrecorded.IsContributionPlanUnrecorded : System.Boolean { get }
 ToolUp.Platform.CompositionUnrecorded.Tag : System.Int32 { get }
 ToolUp.Platform.CompositionUnrecorded+CanonicalMethodUnrecorded (class)
 ToolUp.Platform.CompositionUnrecorded+CanonicalMethodUnrecorded.metricId : System.String { get }
 ToolUp.Platform.CompositionUnrecorded+CanonicalMethodUnrecorded.observed : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CompositionUnrecorded+ConfigKeysUnrecorded (class)
+ToolUp.Platform.CompositionUnrecorded+ConfigKeysUnrecorded.keys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionUnrecorded+ContributionPlanUnrecorded (class)
 ToolUp.Platform.CompositionUnrecorded+ContributionPlanUnrecorded.observed : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionUnrecorded+Tags (class)
 ToolUp.Platform.CompositionUnrecorded+Tags.CanonicalMethodUnrecorded : System.Int32 (literal)
+ToolUp.Platform.CompositionUnrecorded+Tags.ConfigKeysUnrecorded : System.Int32 (literal)
 ToolUp.Platform.CompositionUnrecorded+Tags.ContributionPlanUnrecorded : System.Int32 (literal)
 ToolUp.Platform.CompositionUnrecordedModule (class)
 ToolUp.Platform.CompositionUnrecordedModule.code(ToolUp.Platform.CompositionUnrecorded) : System.String

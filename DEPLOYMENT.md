@@ -238,15 +238,15 @@ Every boolean environment key is read by one of two parsers, chosen by what
 case-insensitive, surrounding whitespace ignored); what differs is what they do
 with anything else. A value that is only whitespace counts as unset.
 
-| Direction of `true` | Parser | A malformed value (`Ture`, `enabled`, `2`) | Keys |
-|---|---|---|---|
-| Turns a protection or a behaviour **on** | strict | **Stops startup**, naming the key, the value as written, and the accepted set | `TOOLUP_REQUIRE_HTTPS`, `TOOLUP_MIGRATE_WEBHOOK_SECRETS`, `TOOLUP_BACKFILL_MISSED_TICKS`, `TOOLUP_EVENT_TRIGGER_CATCHUP`, `TOOLUP_HEALTH_STATE_TRACKING`, `TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY` |
-| **Disables** a check or acknowledges a refusal | lenient | Reads as `false`, so the check keeps running | every `TOOLUP_ACCEPT_*` escape hatch, `TOOLUP_SKIP_PREFLIGHT` |
+A key whose `true` turns a protection or a behaviour **on** takes the strict
+parser: a malformed value (`Ture`, `enabled`, `2`) **stops startup**, naming the
+key, the value as written and the accepted set. A key whose `true` **disables**
+a check or acknowledges a refusal (every `TOOLUP_ACCEPT_*` escape hatch,
+`TOOLUP_SKIP_PREFLIGHT`) takes the lenient one: a malformed value reads as
+`false`, so the check keeps running. Every boolean key, its direction and its
+default are in the [generated table](#config-keys--directions-and-boot-seal-coverage).
 
-The strict keys also accept `0` / `false` / `no` / `off`, and all of them default
-to off when unset. Keys that already parsed strictly before (for example
-`TOOLUP_TRUST_FORWARDED_HEADERS` and `TOOLUP_ENABLE_DEV_ENDPOINTS`) are
-unchanged.
+The strict keys also accept `0` / `false` / `no` / `off`.
 
 The split exists because a typo has a different cost in each direction. A
 mistyped `TOOLUP_REQUIRE_HTTPS` that read as `false` would run the server
@@ -282,49 +282,149 @@ it is a lenient boolean and still reads as `false` — but it is now reported as
 the value, so the typo is on the first line an operator reads rather than
 inferred from the refusal it failed to acknowledge.
 
-| Key | Direction | Accepted tokens |
-|---|---|---|
-| `TOOLUP_SHARE_TOKEN_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_WEBHOOKS` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_AUDIT_LOG` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_SECURITY_HARDENING` | protective — **stops startup** | no, off, disabled, default, on, strict |
-| `TOOLUP_AUDIT_FAILURE_POLICY` | protective — **stops startup** | log, logandcontinue, refuse, refuseaction, degrade, degradetofile |
-| `TOOLUP_RESULT_STORE` | protective — **stops startup** | no, inmemory, in-memory, persistent |
-| `TOOLUP_LINEAGE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_LINEAGE_DURABILITY` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_DATA_INGESTION` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_COLUMN_MAPPING` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_EXTERNAL_CONTACT_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_MAPPING_DRYRUN_BLOCK` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_OAUTH_REFRESHER` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_ENTITY_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_ENTITY_OUTBOX` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_USAGE_METERING` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_COMPUTE_BUDGET` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_METRICS_ENDPOINT` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_PLATFORM_KNOWLEDGE_BASE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_CONFIG_DRIFT_DETECTION` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_RATE_LIMITER` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_SMOKE_TEST` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_DEPLOYMENT_READINESS` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_DEPLOYMENT_VERIFICATION` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_ASSET_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_CONSENT_AUDIT` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_AD_ANALYTICS` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_CONSENT_STATE_STORE` | protective — **stops startup** | no, off, disabled, inmemory, in-memory, entity, entity-backed |
-| `TOOLUP_SERVERLESS_HOST` | protective — **stops startup** | kestrel, serverless |
-| `TOOLUP_PROCESS_PROFILE` | protective — **stops startup** | allinone, all-in-one, web, webonly, worker, workeronly, dispatcher, dispatcheronly |
-| `TOOLUP_TEAM_CREATION_POLICY` | protective — **stops startup** | platformadminonly, platform-admin-only, admin, anyauthenticateduser, any, authenticated |
-| `TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD` | protective — **stops startup** | 0, false, no, off, disabled, 1, true, yes, on, enabled |
-| `TOOLUP_JOB_SCHEDULER` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
-| `TOOLUP_RATE_LIMIT_STORE` | protective — **stops startup** | no, off, disabled, inmemory, in-memory, external |
-| `TOOLUP_EVENT_STORE` | protective — **stops startup** | inmemory, in-memory, persistent |
-| `TOOLUP_CONVERSATION_STORE` | protective — **stops startup** | no, off, disabled, enabled |
-| `TOOLUP_PUBLIC_RENDERING` | protective — **stops startup** | no, off, disabled, enabled |
-| `TOOLUP_DATA_SUBJECT_REQUESTS` | permissive — warns, keeps the configured value | disabled, no, off, enabled |
+Every union key, its direction, its tokens and its default are in the
+[generated table](#config-keys--directions-and-boot-seal-coverage).
 
 Upgrading a deployment whose environment may hold a mistyped union token:
 [`docs/migrations/1051-redesign-a-defects-composition-and-config.md`](docs/migrations/1051-redesign-a-defects-composition-and-config.md).
+
+## Config keys — directions and boot-seal coverage
+
+The tables below are generated from the config-key registry
+(`ConfigKeys.keys` in `src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs`),
+the same entries `ServerConfig.fromEnv` takes each key's parser, default and
+bounds from, so they cannot disagree with what the server binds. A key read by
+build, test or analyzer tooling rather than by a running server is left out.
+
+The boot seal covers the configuration a deployment states, not only what it
+composed: every key the registry marks seal-relevant enters it, rendered from
+its resolved value (environment, then manifest, then profile), with an unset
+key rendered as its default. A change to any of them is reported as drift
+against the sealed binding. A binding sealed before this coverage existed
+reports the keys as unrecorded rather than as drift, and re-sealing once
+records them.
+
+<!-- BEGIN GENERATED: config-key directions and seal coverage. Regenerate with `dotnet run --project Build.fsproj -- GenerateConfigReference`; do not edit by hand. -->
+
+### Boolean keys
+
+| Key | A malformed value | Default |
+|---|---|---|
+| `TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_LOCAL_FALLBACK` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_PLAINTEXT_SECRETS` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_UNLIMITED_EVENT_RETENTION` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_AI_PROBE_ON_STARTUP` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ALLOW_DEV_ADMIN_BOOTSTRAP` | reads as `false` (permissive) | `false` |
+| `TOOLUP_AUDIT_ADMIN_REQUIRED` | reads as `false` (permissive) | `false` |
+| `TOOLUP_BACKFILL_MISSED_TICKS` | **stops startup** (protective) | `false` |
+| `TOOLUP_ENABLE_CITATION_DEV_ENDPOINT` | **stops startup** (protective) | — |
+| `TOOLUP_ENABLE_DEV_ENDPOINTS` | **stops startup** (protective) | `false` |
+| `TOOLUP_ENTRA_DIRECTORY_ENABLED` | reads as `false` (permissive) | `false` |
+| `TOOLUP_EVENT_TRIGGER_CATCHUP` | **stops startup** (protective) | `false` |
+| `TOOLUP_GITHUB_AUTH` | reads as `false` (permissive) | `false` |
+| `TOOLUP_GITHUB_FETCH_PRIMARY_EMAIL` | reads as `false` (permissive) | `false` |
+| `TOOLUP_HEALTH_STATE_TRACKING` | **stops startup** (protective) | `false` |
+| `TOOLUP_INCLUDE_PLATFORM_DEFAULTS` | **stops startup** (protective) | `true` |
+| `TOOLUP_LDAP_ALLOW_PLAINTEXT` | reads as `false` (permissive) | `false` |
+| `TOOLUP_LDAP_ALLOW_UNTRUSTED_CERT` | reads as `false` (permissive) | `false` |
+| `TOOLUP_LDAP_AUTH` | reads as `false` (permissive) | `false` |
+| `TOOLUP_LDAP_NESTED_GROUPS` | reads as `false` (permissive) | `true` |
+| `TOOLUP_MIGRATE_WEBHOOK_SECRETS` | **stops startup** (protective) | `false` |
+| `TOOLUP_MODULE_BINDING_ALLOW_UNBOUND` | **stops startup** (protective) | `true` |
+| `TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY` | **stops startup** (protective) | `false` |
+| `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION` | reads as `false` (permissive) | `false` |
+| `TOOLUP_REQUIRE_HTTPS` | **stops startup** (protective) | `false` |
+| `TOOLUP_SKIP_PREFLIGHT` | reads as `false` (permissive) | `false` |
+| `TOOLUP_STRICT_CONFIG` | reads as `false` (permissive) | `false` |
+| `TOOLUP_TRUST_FORWARDED_HEADERS` | **stops startup** (protective) | `true` |
+
+### Union keys
+
+| Key | Direction | Accepted tokens | Default |
+|---|---|---|---|
+| `TOOLUP_AD_ANALYTICS` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_ASSET_STORE` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_AUDIT_FAILURE_POLICY` | protective — **stops startup** | log, logandcontinue, refuse, refuseaction, degrade, degradetofile | `log` |
+| `TOOLUP_AUDIT_LOG` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_AUTH_COOKIE_ISSUANCE` | permissive — keeps the default | enabled, on, 1, disabled, off, 0 | `disabled` |
+| `TOOLUP_AUTH_MODE` | protective — **stops startup** | oidc | — |
+| `TOOLUP_BLOB_STORAGE` | permissive — keeps the default | local, azure, s3, gcs | `local` |
+| `TOOLUP_COLUMN_MAPPING` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_COMPUTE_BUDGET` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_CONFIG_DRIFT_DETECTION` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_CONSENT_AUDIT` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_CONSENT_STATE_STORE` | protective — **stops startup** | no, off, disabled, inmemory, in-memory, entity, entity-backed | `off` |
+| `TOOLUP_CONVERSATION_STORE` | protective — **stops startup** | no, off, disabled | `no` |
+| `TOOLUP_DATA_INGESTION` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_DATA_SUBJECT_REQUESTS` | permissive — keeps the default | disabled, no, off | `disabled` |
+| `TOOLUP_DEPLOYMENT_READINESS` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_DEPLOYMENT_VERIFICATION` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_DISTRIBUTED_LOCK` | permissive — keeps the default | inprocess, in-process, redis | `inprocess` |
+| `TOOLUP_ENTITY_OUTBOX` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_ENTITY_STORE` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_EVENT_STORE` | protective — **stops startup** | inmemory, in-memory, persistent | `inmemory` |
+| `TOOLUP_EXTERNAL_CONTACT_STORE` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_JOB_SCHEDULER` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_LINEAGE` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_LINEAGE_DURABILITY` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_LOG_FORMAT` | permissive — keeps the default | text, json | `text` |
+| `TOOLUP_LOG_LEVEL` | permissive — keeps the default | trace, debug, info, warn, warning, error | `info` |
+| `TOOLUP_MAPPING_DRYRUN_BLOCK` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_METRICS_ENDPOINT` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_NOTIFICATION_CHANNEL` | permissive — keeps the default | inprocess, in-process, redis | `inprocess` |
+| `TOOLUP_OAUTH_REFRESHER` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_PLATFORM_KNOWLEDGE_BASE` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_PROCESS_PROFILE` | protective — **stops startup** | allinone, all-in-one, web, webonly, worker, workeronly, dispatcher, dispatcheronly | `allinone` |
+| `TOOLUP_PUBLIC_RENDERING` | protective — **stops startup** | no, off, disabled | `no` |
+| `TOOLUP_RATE_LIMITER` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_RATE_LIMIT_STORE` | protective — **stops startup** | no, off, disabled, inmemory, in-memory, external | `no` |
+| `TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD` | protective — **stops startup** | enabled, on, yes, true, 1, disabled, off, no, false, 0 | `disabled` |
+| `TOOLUP_RESULT_STORE` | protective — **stops startup** | no, inmemory, in-memory, persistent | `no` |
+| `TOOLUP_SECRET_STORE` | permissive — keeps the default | encrypted, file, env, azure-key-vault, aws-secrets-manager, gcp-secret-manager, vault | `encrypted` |
+| `TOOLUP_SECURITY_HARDENING` | protective — **stops startup** | no, off, disabled, default, on, strict | `no` |
+| `TOOLUP_SERVERLESS_HOST` | protective — **stops startup** | kestrel, serverless | `kestrel` |
+| `TOOLUP_SHARE_TOKEN_STORE` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_SMOKE_TEST` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_SSE_AUTH` | permissive — keeps the default | cookie, cookies, cookieonly, fallback, queryparam | `fallback` |
+| `TOOLUP_STATIC_PATH_BEHAVIOUR` | permissive — keeps the default | warn, require, requireexist, require-exist, skip, skipsilent, skip-silent | `warn` |
+| `TOOLUP_TEAM_CREATION_POLICY` | protective — **stops startup** | platformadminonly, platform-admin-only, admin, anyauthenticateduser, any, authenticated | `platformadminonly` |
+| `TOOLUP_USAGE_METERING` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+| `TOOLUP_WEBHOOKS` | protective — **stops startup** | enabled, on, yes, disabled, no, off | `disabled` |
+
+### Boot seal coverage
+
+189 keys are sealed by value. 8 secrets are sealed by presence only (set or unset), so the credential is never written into the seal: `TOOLUP_ADMIN_TOKEN`, `TOOLUP_AZURE_STORAGE_CONNECTION_STRING`, `TOOLUP_GCS_CREDENTIALS_JSON`, `TOOLUP_MODULE_BINDING_ANCHORS`, `TOOLUP_REDIS_CONNECTION`, `TOOLUP_SECRETS_MASTER_KEY`, `TOOLUP_SMOKE_TOKEN`, `TOOLUP_SMTP_PASSWORD`.
+
+The 23 keys in the reference's Build & tooling section are not sealed: they are read by build, test and analyzer tooling, never by a running server. Nor are these, so changing one is not drift:
+
+| Key | Why it is not sealed |
+|---|---|
+| `TOOLUP_LOG_FORMAT` | log shape, changed on a live deployment without changing what it composes |
+| `TOOLUP_LOG_LEVEL` | log verbosity, turned up and down on a live deployment without changing what it composes |
+| `TOOLUP_REPLICA_COUNT` | scaling changes it without changing what is composed |
+| `TOOLUP_TRACE_CATEGORIES` | log verbosity, turned up and down on a live deployment without changing what it composes |
+
+<!-- END GENERATED: config-key directions and seal coverage -->
 
 ## Steady-state storage cost
 

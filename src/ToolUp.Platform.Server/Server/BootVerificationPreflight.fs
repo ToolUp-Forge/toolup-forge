@@ -196,6 +196,9 @@ type CompositionDrift =
     /// A contribution identical in both plans that runs at a different
     /// place: the order `run` applies contributions in moved.
     | ContributionMoved of owner: string * kind: string * recordedPosition: int * observedPosition: int
+    /// A seal-relevant config key, recorded by both compositions, whose
+    /// sealed rendering moved: the deployment states a different value.
+    | ConfigKeyChanged of key: string * recorded: string * observed: string
 
 [<RequireQualifiedAccess>]
 module CompositionDrift =
@@ -225,6 +228,7 @@ module CompositionDrift =
             $"contribution '{kind}' by '{owner}' at plan position {position} {observed}, recorded as {recorded}"
         | ContributionMoved(owner, kind, recordedPosition, observedPosition) ->
             $"contribution '{kind}' by '{owner}' runs at plan position {observedPosition}, recorded at {recordedPosition}"
+        | ConfigKeyChanged(key, recorded, observed) -> $"config key {key} is '{observed}', recorded as '{recorded}'"
 
 // ─── Phase 694 — what an older binding could not record ──────────────
 
@@ -249,6 +253,11 @@ type CompositionUnrecorded =
     /// running plan could not be compared. `observed` names each running
     /// contribution as `<kind> by <owner>`, in plan order.
     | ContributionPlanUnrecorded of observed: string list
+    /// Seal-relevant config keys the running composition states that the
+    /// sealed binding did not record: the whole configuration when the
+    /// binding predates config-key recording, or keys the registry gained
+    /// since it was sealed. Named by key.
+    | ConfigKeysUnrecorded of keys: string list
 
 [<RequireQualifiedAccess>]
 module CompositionUnrecorded =
@@ -264,12 +273,17 @@ module CompositionUnrecorded =
             let listed = String.concat "; " observed
 
             $"the running composition applies {observed.Length} contribution(s) ({listed}), and the sealed binding predates contribution-plan recording — so the plan could not be compared, and is not evidence that it did not move"
+        | ConfigKeysUnrecorded keys ->
+            let listed = String.concat ", " keys
+
+            $"the running composition states {keys.Length} seal-relevant config key(s) the sealed binding did not record ({listed}) — so they could not be compared, and are not evidence that they did not move"
 
     /// Stable lowercase code for a payload / dashboard cut.
     let code =
         function
         | CanonicalMethodUnrecorded _ -> "canonical-method-unrecorded"
         | ContributionPlanUnrecorded _ -> "contribution-plan-unrecorded"
+        | ConfigKeysUnrecorded _ -> "config-keys-unrecorded"
 
 // ─── Verdict ─────────────────────────────────────────────────────────
 
@@ -713,6 +727,11 @@ module BootVerificationPreflight =
     [<Literal>]
     let PlanFramingVersion = "toolup.compositionmanifest.plan.v1"
 
+    /// Framing version for the config-key block. Part of the framed bytes,
+    /// like the two above.
+    [<Literal>]
+    let ConfigKeyFramingVersion = "toolup.compositionmanifest.configkeys.v1"
+
     /// The schema version the canonical-method block frames: the newest
     /// schema whose additions the seal COVERS, never the manifest's own
     /// `SchemaVersion`.
@@ -728,7 +747,9 @@ module BootVerificationPreflight =
     let private sealedSchemaVersion (manifest: CompositionManifest) : int =
         let effective = CompositionManifest.effectiveSchemaVersion manifest
 
-        if CompositionManifest.recordsPlan manifest then
+        if CompositionManifest.recordsConfigKeys manifest then
+            min effective CompositionManifest.ConfigKeySchemaVersion
+        elif CompositionManifest.recordsPlan manifest then
             min effective CompositionManifest.PlanSchemaVersion
         else
             min effective CompositionManifest.CanonicalMethodSchemaVersion
@@ -812,6 +833,16 @@ module BootVerificationPreflight =
 
                 for seam in entry.Provides do
                     frame seam
+
+        if CompositionManifest.recordsConfigKeys manifest then
+            let configKeys = CompositionManifest.sealedConfigKeys manifest
+
+            frame ConfigKeyFramingVersion
+            frame (string configKeys.Length)
+
+            for entry in configKeys do
+                frame entry.Name
+                frame entry.Value
 
         builder.ToString()
 
@@ -1055,10 +1086,35 @@ module BootVerificationPreflight =
             else
                 []
 
+        // The seal-relevant config keys, compared only when both manifests
+        // record them, and only over the keys both record: a key the registry
+        // gained since the seal is reported by `unrecorded`, and one it
+        // dropped is no longer stated by anything.
+        let configKeyFindings =
+            if
+                CompositionManifest.recordsConfigKeys recorded
+                && CompositionManifest.recordsConfigKeys observed
+            then
+                let recordedKeys =
+                    CompositionManifest.sealedConfigKeys recorded
+                    |> List.map (fun k -> k.Name, k.Value)
+                    |> Map.ofList
+
+                [
+                    for entry in CompositionManifest.sealedConfigKeys observed do
+                        match Map.tryFind entry.Name recordedKeys with
+                        | Some recordedValue when recordedValue <> entry.Value ->
+                            ConfigKeyChanged(entry.Name, recordedValue, entry.Value)
+                        | _ -> ()
+                ]
+            else
+                []
+
         componentFindings
         @ knobFindings
         @ canonicalMethodFindings
         @ contributionFindings
+        @ configKeyFindings
 
     /// Phase 694 — every declaration the running composition makes that
     /// the sealed binding is too old to have recorded.
@@ -1107,7 +1163,30 @@ module BootVerificationPreflight =
             else
                 []
 
-        canonicalMethodItems @ planItems
+        // The config keys the running composition states and the binding did
+        // not record: all of them against a binding that predates the block,
+        // the newly registered ones against one that records it.
+        let configKeyItems =
+            if CompositionManifest.recordsConfigKeys observed then
+                let observedKeys = CompositionManifest.sealedConfigKeys observed |> List.map _.Name
+
+                let missing =
+                    if CompositionManifest.recordsConfigKeys recorded then
+                        let recordedKeys =
+                            CompositionManifest.sealedConfigKeys recorded |> List.map _.Name |> Set.ofList
+
+                        observedKeys |> List.filter (not << recordedKeys.Contains)
+                    else
+                        observedKeys
+
+                if missing.IsEmpty then
+                    []
+                else
+                    [ ConfigKeysUnrecorded missing ]
+            else
+                []
+
+        canonicalMethodItems @ planItems @ configKeyItems
 
     // ─── Verifying ───────────────────────────────────────────────────
 

@@ -203,6 +203,20 @@ type CompositionManifest = {
     /// `compare` reports an entry added, removed, changed or moved when both
     /// manifests record it.
     Plan: PlanEntry list
+    /// The configuration the deployment states: one entry per config key the
+    /// registry marks seal-relevant, named by the key and rendered by
+    /// `ConfigKeySeal.render` from its resolved value (a secret as `set` /
+    /// `unset` only).
+    ///
+    /// Read it through `CompositionManifest.sealedConfigKeys`, and only when
+    /// `recordsConfigKeys` holds: below `ConfigKeySchemaVersion` the manifest
+    /// never carried the field.
+    ///
+    /// **Sealed.** `BootVerificationPreflight.compositionCanonicalForm`
+    /// frames it, in key order, for a manifest that records it, and
+    /// `compare` reports a key whose sealed rendering moved when both
+    /// manifests record it.
+    SealedConfigKeys: ConfigKnob list
 }
 
 /// Element constructors + assembly for `CompositionManifest`. Each
@@ -216,7 +230,7 @@ module CompositionManifest =
 
     /// The schema every manifest this binary projects is stamped with.
     [<Literal>]
-    let SchemaVersion = 4
+    let SchemaVersion = 5
 
     /// The schema of every manifest projected before Phase 694 — the
     /// shape that carried no version field at all, and therefore
@@ -242,6 +256,11 @@ module CompositionManifest =
     /// Like the two above, a later schema step must not move it.
     [<Literal>]
     let PlanSchemaVersion = 4
+
+    /// The schema at which the seal-relevant config keys began to be
+    /// recorded. Like the three above, a later schema step must not move it.
+    [<Literal>]
+    let ConfigKeySchemaVersion = 5
 
     /// The schema a manifest was projected under, reading an absent or
     /// non-positive field as the pre-694 shape.
@@ -351,6 +370,26 @@ module CompositionManifest =
                 Requires = coerceStrings entry.Requires
                 Provides = coerceStrings entry.Provides
         })
+
+    // ─── Seal-relevant config keys ───────────────────────────────────
+
+    /// Whether this manifest is new enough for its `SealedConfigKeys` to be
+    /// evidence. `false` means the manifest is SILENT on the configuration,
+    /// which a comparison must report as unrecorded rather than resolve as
+    /// unchanged.
+    let recordsConfigKeys (manifest: CompositionManifest) : bool =
+        effectiveSchemaVersion manifest >= ConfigKeySchemaVersion
+
+    /// The recorded config keys, sorted and distinct by key, with the
+    /// null-list coercion a manifest deserialised from a document predating
+    /// the field needs.
+    let sealedConfigKeys (manifest: CompositionManifest) : ConfigKnob list =
+        (if isNull (box manifest.SealedConfigKeys) then
+             []
+         else
+             manifest.SealedConfigKeys)
+        |> List.distinctBy _.Name
+        |> List.sortBy _.Name
 
     let private placementLabel =
         function
@@ -525,6 +564,7 @@ module CompositionManifest =
             CanonicalMethods = []
             LiveInterfaceTools = []
             Plan = []
+            SealedConfigKeys = []
         }
 
     /// Phase 526 — attach registered grounding metric / subject entries to
@@ -584,6 +624,15 @@ module CompositionManifest =
         m with
             SchemaVersion = SchemaVersion
             Plan = (if isNull (box entries) then [] else entries)
+    }
+
+    /// Record the seal-relevant config keys, the same way `withPlan` records
+    /// the plan: it stamps `SchemaVersion` as well as the list, so a manifest
+    /// that went through it claims to speak about the configuration.
+    let withConfigKeys (entries: ConfigKnob list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            SchemaVersion = SchemaVersion
+            SealedConfigKeys = (if isNull (box entries) then [] else entries)
     }
 
     /// The empty manifest — what a pipeline that composed nothing (or was

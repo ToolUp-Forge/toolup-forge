@@ -319,7 +319,9 @@ let tests =
                     BootVerificationPreflight.verify (optionsFor sealedRecord sealedBinding) observed
                     |> Async.RunSynchronously
                 with
-                | BootVerificationVerdict.Verified -> ()
+                // The config keys joined the seal at a later schema, so a
+                // schema-2 binding is silent on them: unrecorded, never drift.
+                | BootVerificationVerdict.VerifiedUnrecorded [ ConfigKeysUnrecorded _ ] -> ()
                 | other -> failtestf "a schema-2 binding stopped verifying after the schema step: %A" other
             }
         ]

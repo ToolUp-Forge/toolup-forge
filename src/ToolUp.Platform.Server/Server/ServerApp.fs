@@ -3504,6 +3504,14 @@ module ServerApp =
         // the boot seal covers what each contributor registers and in what
         // order.
         |> CompositionManifest.withPlan (CompositionManifest.planOf (contributionPlan app))
+        // The configuration the deployment states, one entry per key the
+        // registry marks seal-relevant, read through the resolution seam the
+        // readers use. The knobs above are what the code composed; this is
+        // what the operator set.
+        |> CompositionManifest.withConfigKeys (
+            ConfigKeys.ConfigKeySeal.project ConfigResolution.tryValue ConfigKeys.keys
+            |> List.map (fun (key, rendering) -> CompositionManifest.knob key rendering)
+        )
 
     /// Phase 657 — run the boot verification preflight over the composition
     /// THIS app derived, and decide whether it may serve.

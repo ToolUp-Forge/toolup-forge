@@ -303,10 +303,8 @@ let compose (plan: CompositionPlan) =
             extensions.NotificationConsumers
 
     let serverPort =
-        match Environment.GetEnvironmentVariable "SERVER_PORT" with
-        | null
-        | "" -> string config.Port
-        | port -> port
+        ConfigResolution.tryValue ConfigKeys.Names.serverPort
+        |> Option.defaultWith (fun () -> string config.Port)
 
     // Fail fast on an out-of-range / non-numeric port. Without this the
     // raw string flows into `UseUrls($"http://<address>:{serverPort}")` and
@@ -317,15 +315,17 @@ let compose (plan: CompositionPlan) =
     | true, p when p >= 1 && p <= 65535 -> ()
     | _ ->
         failwithf
-            "SERVER_PORT / ServerConfig.Port = %s is not a valid TCP port. Expected an integer in 1-65535 (set the SERVER_PORT environment variable or ServerConfig.Port to a valid port)."
+            "%s / ServerConfig.Port = %s is not a valid TCP port. Expected an integer in 1-65535 (set the %s environment variable or ServerConfig.Port to a valid port)."
+            ConfigKeys.Names.serverPort
             serverPort
+            ConfigKeys.Names.serverPort
 
     // Phase 1000 — the configured bind address: `SERVER_BIND_ADDRESS`, else
     // `ServerConfig.BindAddress`; `None` binds the loopback default. Read
     // here, beside the port, for consumers not using `fromEnv`, and failed
     // loud by name when it is not an IP literal or `localhost`.
     let bindAddress =
-        ServerBinding.configuredBindAddress config (ServerBinding.envValue ServerBinding.BindAddressEnvVar)
+        ServerBinding.configuredBindAddress config (ConfigResolution.tryValue ServerBinding.BindAddressEnvVar)
 
     let culture = CultureInfo "en-GB"
     CultureInfo.DefaultThreadCurrentCulture <- culture

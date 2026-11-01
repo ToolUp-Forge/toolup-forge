@@ -303,7 +303,8 @@ When adding a new store substrate (an `IXxxStore` + its types), the canonical sp
 - **Opt-in wiring (GP 13):** an `XxxStoreMode` DU + a `ServerConfig.Xxx` field defaulting to `NoXxx`
   (the DU under `Shared/Config/`, the field in `SDK.Shared.fs`, its default in
   `Shared/Config/ServerConfigDefaults.fs`, any env binding in the server tier's
-  `Server/Config/ServerConfigFromEnv.fs`); a `registerXxxStore` helper in `Server/Compose/ComposeStores.fs`
+  `Server/Config/ServerConfigFromEnv.fs` — a key is first a `ConfigKey` in `ConfigKeys.keys`, and the binder
+  takes its parser, default and bounds from there); a `registerXxxStore` helper in `Server/Compose/ComposeStores.fs`
   (`TryAddSingleton` with a lazy factory); called from `Server/SDK.Server.fs` next to
   `registerTimeSeriesStore`. Note a new `ServerConfig` field retypes the record ctor and forces a
   Core api-baseline regen (see [Public-API approval baselines](#public-api-approval-baselines-phase-175)).
