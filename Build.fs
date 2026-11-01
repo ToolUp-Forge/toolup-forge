@@ -5019,6 +5019,20 @@ let main args =
                     match run clientDir "dotnet" [ "tool"; "restore" ] with
                     | 0 -> run clientDir "dotnet" [ "fable"; "-o"; "output"; "--noCache" ]
                     | code -> code)
+                // Phase 1200 — the question Vite asks of this output, without a Vite: every
+                // relative dynamic import a compiled package source spells names a file. A
+                // consumer compiles the packed sources under fable_modules as `.fs.js` while
+                // Fable spells `importValueDynamic` from the `--outDir` extension (`.js`),
+                // so a package whose runtime file ships no `.js` shim (PublishedSmoke, the
+                // packaging rule) fails here, as 0.38.0 failed its first feed consumer.
+                Aggregate.leg "client: every on-demand import the packed sources spell resolves on disk" (fun () ->
+                    let outputDir = Path.Combine(clientDir, "output")
+
+                    match PublishedSmoke.unresolvedDynamicImportsIn outputDir with
+                    | [] -> 0
+                    | unresolved ->
+                        Trace.traceError (PublishedSmoke.unresolvedDynamicImportsReport outputDir unresolved)
+                        1)
             ]
         finally
             Shell.deleteDir scratch
