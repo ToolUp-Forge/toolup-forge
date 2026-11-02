@@ -55,6 +55,11 @@ ToolUp.Facts.Presentation.PageRequestModule.ofJson(System.String) : Microsoft.FS
 ToolUp.Facts.Presentation.PageRequestModule.tableId(ToolUp.Facts.Presentation.PageRequest) : System.String
 ToolUp.Facts.Presentation.PageRequestModule.toJVal(ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.JVal, ToolUp.Facts.Presentation.PageRequestError]
 ToolUp.Facts.Presentation.PageRequestModule.toJson(ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.PageRequestError]
+ToolUp.Facts.Presentation.PageRequestSet (class)
+ToolUp.Facts.Presentation.PageRequestSet.RequestsMember : System.String (literal)
+ToolUp.Facts.Presentation.PageRequestSet.ofJson(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageRequest, ToolUp.Facts.Presentation.PageRequestError]], ToolUp.Facts.Presentation.PageRequestError]
+ToolUp.Facts.Presentation.PageRequestSet.toJVal(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest]) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.JVal, ToolUp.Facts.Presentation.PageRequestError]
+ToolUp.Facts.Presentation.PageRequestSet.toJson(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.PageRequestError]
 ToolUp.Facts.Presentation.PageResolution (class)
 ToolUp.Facts.Presentation.PageResolution..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Presentation.PageResolution.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

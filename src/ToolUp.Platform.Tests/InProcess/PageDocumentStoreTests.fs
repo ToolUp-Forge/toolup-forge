@@ -1090,6 +1090,151 @@ let private documentTests =
         }
     ]
 
+// ── The page route ───────────────────────────────────────
+
+/// A request for `path` by `caller` in `scope`, over `store`.
+let private getContext (store: IPageDocumentStore) (scope: ResolvedScope) (caller: AccessContext) (path: string) =
+    let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+    Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IPageDocumentStore>(
+        services,
+        store
+    )
+    |> ignore
+
+    Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<AccessContext>(
+        services,
+        caller
+    )
+    |> ignore
+
+    let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+
+    ctx.RequestServices <-
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+            services
+
+    StorageScopeResolver.ScopeResolution.carry ctx scope
+    ctx.Request.Method <- "GET"
+    ctx.Request.Path <- Microsoft.AspNetCore.Http.PathString path
+    ctx
+
+/// GET `path` and answer the status and body the route wrote.
+let private get (store: IPageDocumentStore) (scope: ResolvedScope) (caller: AccessContext) (path: string) =
+    let ctx = getContext store scope caller path
+    let body = new IO.MemoryStream()
+    ctx.Response.Body <- body
+
+    match
+        (PageDocumentRoute.handler (fun c -> Threading.Tasks.Task.FromResult(Some c)) ctx).GetAwaiter().GetResult()
+    with
+    | None -> failtest "the route did not match the request"
+    | Some _ -> ctx.Response.StatusCode, Encoding.UTF8.GetString(body.ToArray())
+
+let private memberOf (name: string) (v: JVal) : JVal =
+    match v with
+    | JObj members ->
+        match members |> List.tryFind (fun (k, _) -> k = name) with
+        | Some(_, m) -> m
+        | None -> failtestf "no member '%s' in %A" name v
+    | other -> failtestf "not an object: %A" other
+
+let private readJson (text: string) : JVal =
+    match Canonical.read text with
+    | Ok v -> v
+    | Error e -> failtestf "the answer is not JSON: %s" e.Message
+
+let private routeTests =
+    testList "the page route" [
+
+        test "a reader is served the page folded for them, with the read-set saved with the layer that moved it" {
+            let rig = seeded PageStoreOptions.defaults
+            let teamSidecar = Encoding.UTF8.GetBytes """{"signed":"by the team's save"}"""
+
+            rig.Store.AppendOps(
+                teamScope "t1",
+                member' "owner" "t1",
+                page,
+                PageLayer.Team,
+                [ retitle "a" "Team revenue" ],
+                Some teamSidecar
+            )
+            |> run
+            |> expectOk "team save"
+            |> ignore
+
+            let reader = member' "alice" "t1"
+
+            let status, body =
+                get rig.Store (teamScope "t1") reader (PageDocumentRoute.path page)
+
+            Expect.equal status 200 "served"
+
+            let inProcess =
+                rig.Store.ReadFolded(teamScope "t1", reader, page) |> run |> expectOk "read"
+
+            Expect.equal body (PageDocumentRoute.encode inProcess) "the route serves the in-process fold"
+
+            let served = readJson body
+
+            Expect.equal
+                (memberOf "document" served)
+                (JStr(Encoding.UTF8.GetString inProcess.Document))
+                "the folded document, verbatim"
+
+            Expect.equal (memberOf "contentHash" served) (JStr inProcess.ContentHash) "and its content hash"
+            Expect.equal (memberOf "sidecarLayer" served) (JStr "team") "the team's save moved the page"
+
+            Expect.equal
+                (memberOf "sidecar" served)
+                (JStr(Convert.ToBase64String teamSidecar))
+                "the read-set saved with it, verbatim"
+
+            match memberOf "heads" served with
+            | JObj heads -> Expect.equal (heads |> List.map fst) [ "platform"; "team" ] "one head per folded layer"
+            | other -> failtestf "no heads: %A" other
+
+            match Apply.apply (retitle "a" "Team revenue") seedTree with
+            | Ok expected -> Expect.equal (bytesOf inProcess.Tree) (bytesOf expected) "folded for the reader's team"
+            | Error e -> failtestf "%A" e
+        }
+
+        test "a reader outside the page's gate and an unknown page are refused by name" {
+            let rig = seeded PageStoreOptions.defaults
+
+            let status, body =
+                get
+                    rig.Store
+                    ResolvedScope.anonymous
+                    (AccessContext.unrestricted (AnonymousSession "visitor"))
+                    (PageDocumentRoute.path page)
+
+            Expect.equal status 403 "outside the gate"
+            Expect.equal (readJson body |> memberOf "refused" |> memberOf "code") (JStr "scope-refused") "named"
+
+            let status, body =
+                get
+                    rig.Store
+                    (teamScope "t1")
+                    (member' "alice" "t1")
+                    (PageDocumentRoute.path { page with Page = "weekly" })
+
+            Expect.equal status 404 "no such page"
+            Expect.equal (readJson body |> memberOf "refused" |> memberOf "code") (JStr "not-seeded") "named"
+        }
+
+        test "the route is mounted by withPageDocumentStore, once" {
+            let before = ServerApp.empty.Extensions.Handlers.Length
+
+            let twice =
+                ServerApp.empty
+                |> PageDocumentStoreCompose.withPageDocumentStore PageStoreOptions.defaults
+                |> PageDocumentStoreCompose.withPageDocumentStore PageStoreOptions.defaults
+
+            Expect.equal twice.Extensions.Handlers.Length (before + 1) "one route, mounted once"
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "Page store and layer fold" [ foldTests; inverseTests; storeTests; documentTests ]
+    testList "Page store and layer fold" [ foldTests; inverseTests; storeTests; documentTests; routeTests ]

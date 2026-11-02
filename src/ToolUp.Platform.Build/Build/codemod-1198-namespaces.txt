@@ -1615,6 +1615,7 @@ type ToolUp.Platform OrphanSubscription ToolUp.Platform.Compose
 type ToolUp.Platform OutcomeAttribution ToolUp.Platform.Infra
 type ToolUp.Platform OwnerTeamBootstrapLifecycle ToolUp.Platform.Compose
 type ToolUp.Platform PageAuthority ToolUp.Platform.Compose
+type ToolUp.Platform PageDocumentRoute ToolUp.Platform.Compose
 type ToolUp.Platform PageDocumentStoreCompose ToolUp.Platform.Compose
 type ToolUp.Platform PageLayer ToolUp.Platform.Compose
 type ToolUp.Platform PageLayerKey ToolUp.Platform.Compose

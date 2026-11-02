@@ -591,6 +591,169 @@ let private compositionTests =
         }
     ]
 
+// ── The resolution route ─────────────────────────────────
+
+/// Run `handler` over `ctx` and answer the status and body it wrote. A
+/// handler that did not match the request fails the test.
+let private serve (handler: Giraffe.Core.HttpHandler) (ctx: HttpContext) : int * string =
+    let body = new IO.MemoryStream()
+    ctx.Response.Body <- body
+
+    match (handler (fun c -> Threading.Tasks.Task.FromResult(Some c)) ctx).GetAwaiter().GetResult() with
+    | None -> failtest "the handler did not match the request"
+    | Some _ -> ctx.Response.StatusCode, Text.Encoding.UTF8.GetString(body.ToArray())
+
+/// Post `json` to the resolution route over `ctx`.
+let private post (ctx: HttpContext) (json: string) : int * string =
+    ctx.Request.Method <- "POST"
+    ctx.Request.Path <- PathString PageRequestRoute.Path
+    ctx.Request.Body <- new IO.MemoryStream(Text.Encoding.UTF8.GetBytes json)
+    serve PageRequestRoute.handler ctx
+
+let private memberOf (name: string) (v: JVal) : JVal =
+    match v with
+    | JObj members ->
+        match members |> List.tryFind (fun (k, _) -> k = name) with
+        | Some(_, m) -> m
+        | None -> failtestf "no member '%s' in %A" name v
+    | other -> failtestf "not an object: %A" other
+
+let private readJson (text: string) : JVal =
+    match Canonical.read text with
+    | Ok v -> v
+    | Error e -> failtestf "the answer is not JSON: %s" e.Message
+
+let private routeTests =
+    testList "the resolution route" [
+        test "a request set resolves over the route to the same bytes the in-process resolver answers" {
+            let ctx, _ = composedContext true
+
+            let set =
+                Map.ofList [
+                    "trend", PageRequest.Presentation(trendRequest, [])
+                    "totals", PageRequest.Pipeline(pipelineRequest trade.Id, [])
+                ]
+
+            let status, body =
+                match PageRequestSet.toJson set with
+                | Ok json -> post ctx json
+                | Error e -> failtest (PageRequestError.describe e)
+
+            Expect.equal status 200 "answered"
+
+            // The in-process resolver for the same caller, in a cache of its
+            // own, so the route's answer is compared with a fresh resolution
+            // rather than with its own cached one.
+            let inProcess =
+                match FactBrowseHandler.factBrowseDeps ctx with
+                | None -> failtest "the fact browse is composed"
+                | Some deps ->
+                    let scope = ScopeResolution.forRequest ctx
+                    let session = run ((PageResolutionCache None).Session(scope, "u"))
+
+                    PageRequestResolver.create session (fun () -> async.Return "gate") deps scope "u"
+
+            let resolutions = readJson body |> memberOf "resolutions"
+
+            for KeyValue(key, request) in set do
+                let expected = inProcess.Resolve request |> run |> okOf key |> PageResolution.toJson
+
+                let served =
+                    resolutions
+                    |> memberOf key
+                    |> memberOf "resolved"
+                    |> Canonical.write Rendering.CrossHost
+
+                Expect.equal served expected (sprintf "'%s' answers the in-process bytes" key)
+        }
+
+        test "a request the caller's deployment does not declare is refused by cause under its key; the others resolve" {
+            let ctx, _ = composedContext true
+
+            let set =
+                Map.ofList [
+                    "trend", PageRequest.Presentation(trendRequest, [])
+                    "elsewhere", PageRequest.Pipeline(pipelineRequest "no-such-table", [])
+                ]
+
+            let status, body =
+                match PageRequestSet.toJson set with
+                | Ok json -> post ctx json
+                | Error e -> failtest (PageRequestError.describe e)
+
+            Expect.equal status 200 "answered per key"
+            let resolutions = readJson body |> memberOf "resolutions"
+
+            let refused = resolutions |> memberOf "elsewhere" |> memberOf "refused"
+            Expect.equal (memberOf "cause" refused) (JStr "unknown-table") "refused by cause"
+            resolutions |> memberOf "trend" |> memberOf "resolved" |> ignore
+        }
+
+        test "a set naming a scope is refused whole, by the member's name; a malformed request under its key" {
+            let ctx, _ = composedContext true
+
+            let status, body = post ctx """{"requests":{},"scope":"team-someone-else"}"""
+
+            Expect.equal status 400 "refused"
+            let refused = readJson body |> memberOf "refused"
+            Expect.equal (memberOf "cause" refused) (JStr "malformed-request") "the cause"
+
+            match memberOf "reason" refused with
+            | JStr reason -> Expect.stringContains reason "'scope'" "the member is named"
+            | other -> failtestf "no reason: %A" other
+
+            let ctx, _ = composedContext true
+
+            let status, body =
+                post ctx """{"requests":{"bad":{"kind":"carrier-pigeon","payload":{}}}}"""
+
+            Expect.equal status 200 "the set's shape holds"
+
+            let refused =
+                readJson body |> memberOf "resolutions" |> memberOf "bad" |> memberOf "refused"
+
+            Expect.equal (memberOf "cause" refused) (JStr "unknown-kind") "the request is refused under its key"
+        }
+
+        test "the route is mounted by withPageRequests once, and not at all without a fact store" {
+            let enabled = {
+                ServerApp.empty with
+                    Config = {
+                        ServerConfig.defaults with
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
+                    }
+            }
+
+            let before = enabled.Extensions.Handlers.Length
+
+            let twice =
+                enabled
+                |> PresentationCompose.withPageRequests
+                |> PresentationCompose.withPageRequests
+
+            Expect.equal twice.Extensions.Handlers.Length (before + 1) "one route, mounted once"
+
+            let disabled = {
+                enabled with
+                    Config = {
+                        enabled.Config with
+                            Stores = {
+                                enabled.Config.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
+                    }
+            }
+
+            Expect.equal
+                (PresentationCompose.withPageRequests disabled).Extensions.Handlers.Length
+                before
+                "nothing is mounted"
+        }
+    ]
+
 let tests =
     testList "page request resolvers — the data a stored page renders, under the reader's gate" [
         codecTests
@@ -599,4 +762,5 @@ let tests =
         entryPointTests
         cacheTests
         compositionTests
+        routeTests
     ]
