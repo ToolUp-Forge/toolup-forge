@@ -186,6 +186,36 @@ A binding that genuinely must not run in the .NET pack — the standing case is 
 
 Three packs (`ToolUp.Stripe.Tests`, `ToolUp.Voice.Tests`, `ToolUp.Cloud.Parity.Tests`) call `runTestsInAssemblyWithCLIArgs` instead — real auto-discovery, where `[<Tests>]` **is** sufficient and this whole class cannot arise. They carry no guard, deliberately. The client-tier Fable harness is a different runner again; its floor lives in `VerifyFable`.
 
+## A companion's tests live in its own pack
+
+A case belongs in a **companion pack** (`src/<Family>/Tests/`, one per companion family of `version-groups.json`) when
+the companion's own assembly is what it exercises. Examples are a sink's wire format, a backend's binding of the SDK
+contract pack, a provider's configuration parsing, and a live arm against the real service. A case stays in
+**`ToolUp.Platform.Tests`** when its subject is the core. That covers the SDK's contract packs themselves (the laws, under
+`Contracts/`, with their self-tests against the in-tree defaults) and the cases over the core's own implementations. It
+also covers integrations whose subject is a core tier and which use a companion as one backend among others, until that
+use is factored behind a fake. A companion pack references its family, the substrate and whatever the contract packs it
+hosts need, and no other SDK tier. A case that needs one is not a companion case.
+
+Mechanics, all held by a gate:
+
+- **Contracts are source-linked, not copied.** `<Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IXContract.fs"
+  Link="Contracts\IXContract.fs" />` compiles the one copy of the laws into the companion pack. A copy under any
+  `Contracts/` directory is compared with its source up to the self-test boundary by the Build pack's `vendored contract
+  copies` list. A copy with no registered boundary fails it, and the remedy named is the link.
+- **A source-linked file that carries a `[<Tests>]` binding is exempted by name** (`withGuardExempting`). It is linked
+  for its fixtures, and its cases are the Platform pack's.
+- **Internals.** A case that reads an `internal` needs the owning assembly to grant `InternalsVisibleTo` to the pack. The
+  server tier's parts grant each companion pack that needs it, beside `ToolUp.DataSources.Tests`. A grant does not move
+  the granting assembly's reference assembly, so build that assembly clean once after adding one.
+- **Live backends are env-gated**: Pending (a `skiptest` naming the variable) without the variable, never Failed. The pack's
+  gate-manifest row declares the variable, because `VerifyAll` clears every other row's variables for each pack.
+- **One row per pack** in `GateManifest.fs`. `Gate --render` moves `EXPECTED_PACKS` and the CI table, and `GateReconcile`
+  is red for a `*.Tests.fsproj` with no row.
+
+Which files have moved, and which are still in the Platform pack and why:
+[`docs/migrations/1197-companion-test-packs.md`](../migrations/1197-companion-test-packs.md).
+
 ## The `affected` lane: run the lists a change can reach
 
 `TOOLUP_TEST_LANE=affected` with `TOOLUP_TEST_LISTS=<file>` runs the Platform pack's lists named in the file and

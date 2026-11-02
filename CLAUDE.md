@@ -63,6 +63,7 @@ toolup-forge/
 │   ├── Feliz.AgGrid.Enterprise/                      # AG Grid Enterprise init shim (opt-in)
 │   ├── ToolUp.Platform.Tests/                        # SDK contract test packs
 │   ├── ToolUp.{Forms,Scheduling,Stripe,Tabular,OpenXml,ArtefactSigning,AssetStore,Cli,AIProviders}.Tests/ # per-companion test packs
+│   ├── {Webhooks,JobSchedulers,NotificationChannels,AuditSinks,Storage,Secrets,…}/Tests/ # a companion family's pack, beside it
 │   ├── ToolUp.RAG.Evaluation/, ToolUp.RAG.Benchmarks/
 │   └── ToolUp.Sdk/                                   # coordinated-bump meta-manifest
 ├── samples/HelloWorld/                               # runnable end-to-end sample
@@ -283,6 +284,7 @@ Companion packages live under named subdirectories (`AIProviders/`, `Storage/`, 
 - Ships a `README.md` (packed into the nupkg via the auto-include in `Directory.Build.props`).
 - Optionally provides `.Server.props` / `.Client.props` for source-injection delivery (used when the companion needs to inject `.fs` files into a consuming project rather than ship a DLL).
 - Adds a per-package `<PackageTags>` override to aid discoverability.
+- **Ships with its test pack from the first commit**: `src/<Family>/Tests/ToolUp.<Family>.Tests.fsproj` beside the family (or the family's existing pack), a gate-manifest row in `GateManifest.fs`, and the SDK contract pack the companion implements bound against it. The pack references the family, the substrate and nothing else the contract does not need, and it hosts the contract by **source-linking** it from `src/ToolUp.Platform.Tests/Contracts/` (`<Compile Include="…" Link="Contracts\…" />`), never by copying it. A copy is compared with its source by the Build pack and fails it. A live backend's arm is env-gated, Pending without its variable, never Failed, and the row declares the variable. A companion's cases do not go in `ToolUp.Platform.Tests`; which cases do is in [`docs/platform/testing-conventions.md`](docs/platform/testing-conventions.md#a-companions-tests-live-in-its-own-pack). The families moved so far, and the files still waiting: [`docs/migrations/1197-companion-test-packs.md`](docs/migrations/1197-companion-test-packs.md).
 
 For HTTP-shaped companions (audit sinks, notification sinks): use BCL `HttpClient` rather than a vendor SDK where the API is permissive. This minimises the dep graph and the OSS supply-chain surface.
 
