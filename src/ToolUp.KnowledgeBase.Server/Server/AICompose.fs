@@ -243,7 +243,7 @@ type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, se
         member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
 
         member _.Validate() = async {
-            if serverConfig.ReplicaCount <= 1 then
+            if serverConfig.MultiInstance.ReplicaCount <= 1 then
                 return ConfigValidation.ValidationResult.Ok
             else
                 match composedStorage () with
@@ -251,8 +251,8 @@ type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, se
                     return
                         ConfigValidation.ValidationResult.Warning(
                             sprintf
-                                "Knowledge Base is composed with ServerConfig.ReplicaCount = %d, and the composed blob storage is not registered as an instance, so whether it supports conditional writes cannot be checked. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore); on a backend without conditional writes two replicas can lose each other's index entries. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
-                                serverConfig.ReplicaCount
+                                "Knowledge Base is composed with ServerConfig.MultiInstance.ReplicaCount = %d, and the composed blob storage is not registered as an instance, so whether it supports conditional writes cannot be checked. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore); on a backend without conditional writes two replicas can lose each other's index entries. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
+                                serverConfig.MultiInstance.ReplicaCount
                         )
                 | Some storage ->
                     let backend = storage.GetType().Name
@@ -271,16 +271,16 @@ type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, se
                         return
                             ConfigValidation.ValidationResult.Warning(
                                 sprintf
-                                    "Knowledge Base is composed with ServerConfig.ReplicaCount = %d over blob storage %s, which does not support conditional writes. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore), which on this backend falls back to unconditional writes, so two replicas writing the index concurrently can lose an entry or a status update (the document's blob and chunks persist; its index.json entry is clobbered). Use a backend implementing IConditionalBlobStorage, or funnel knowledge-base writes through a single replica."
-                                    serverConfig.ReplicaCount
+                                    "Knowledge Base is composed with ServerConfig.MultiInstance.ReplicaCount = %d over blob storage %s, which does not support conditional writes. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore), which on this backend falls back to unconditional writes, so two replicas writing the index concurrently can lose an entry or a status update (the document's blob and chunks persist; its index.json entry is clobbered). Use a backend implementing IConditionalBlobStorage, or funnel knowledge-base writes through a single replica."
+                                    serverConfig.MultiInstance.ReplicaCount
                                     backend
                             )
                     | Error reason ->
                         return
                             ConfigValidation.ValidationResult.Warning(
                                 sprintf
-                                    "Knowledge Base is composed with ServerConfig.ReplicaCount = %d over blob storage %s, and the conditional-write probe failed (%s), so index writes may fall back to unconditional writes that two replicas can clobber. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
-                                    serverConfig.ReplicaCount
+                                    "Knowledge Base is composed with ServerConfig.MultiInstance.ReplicaCount = %d over blob storage %s, and the conditional-write probe failed (%s), so index writes may fall back to unconditional writes that two replicas can clobber. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
+                                    serverConfig.MultiInstance.ReplicaCount
                                     backend
                                     reason
                             )
@@ -317,14 +317,14 @@ let register (app: ServerApp) : ServerApp =
     // opted into the tenant-lifecycle substrate. Contributed as a
     // `Contribution.service` (the seam `ServerApp.withCspContributor`
     // also feeds), gated on the same
-    // `TenantLifecycle = EnabledTenantLifecycle` switch the core
+    // `TenantLifecycle = FeatureMode.Enabled` switch the core
     // `ComposeTenantLifecycle` gates on. The hook self-`Skipped`s when no
     // `IBlobStorage` is composed, so the gate is the only condition.
     let registerLifecycleHook (s: IServiceCollection) : IServiceCollection =
         match baseWithTools.Config.TenantLifecycle with
-        | EnabledTenantLifecycle ->
+        | FeatureMode.Enabled ->
             s.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> KnowledgeBaseLifecycle.create sp)
-        | NoTenantLifecycle -> s
+        | FeatureMode.Disabled -> s
 
     // The request-free narrative-commit door. Registered
     // unconditionally with the knowledge base, on the same argument the

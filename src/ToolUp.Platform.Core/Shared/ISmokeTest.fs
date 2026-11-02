@@ -14,7 +14,7 @@ open System
 // collection, runs every probe in parallel, and reports 200 if all
 // `Pass` or 503 with per-test detail otherwise. Token-gated via
 // `TOOLUP_SMOKE_TOKEN`; opt-in via
-// `ServerConfig.SmokeTest = EnabledSmokeTest` (default `NoSmokeTest`,
+// `ServerConfig.SmokeTest = FeatureMode.Enabled` (default `FeatureMode.Disabled`,
 // GP 13).
 //
 // ## Different from `IHealthCheck`

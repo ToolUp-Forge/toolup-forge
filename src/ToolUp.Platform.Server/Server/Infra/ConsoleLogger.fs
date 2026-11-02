@@ -74,7 +74,7 @@ let private envVar (name: string) = ConfigResolution.tryValue name
 
 /// Parse `TOOLUP_LOG_LEVEL` + `TOOLUP_TRACE_CATEGORIES`. Exposed
 /// separately so `ServerConfig.fromEnv` can mirror the same resolved
-/// values into `ServerConfig.LogLevel` / `ServerConfig.TraceCategories`
+/// values into `ServerConfig.Observability.LogLevel` / `ServerConfig.Observability.TraceCategories`
 /// without re-parsing. Unset / empty env vars resolve to
 /// `LogLevel.Info` + empty trace-category set — behaviour identical to
 /// the no-arg `ConsoleLogger()` constructor.

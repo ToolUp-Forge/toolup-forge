@@ -24,7 +24,13 @@ open ToolUp.AI.McpHost
 open ToolUp.AI.McpHost.McpCompose
 
 ServerApp.empty
-|> ServerApp.withConfig { config with ServiceAccounts = EnabledServiceAccounts }
+|> ServerApp.withConfig {
+    config with
+        Stores = {
+            config.Stores with
+                ServiceAccounts = EnabledServiceAccounts
+        }
+}
 |> ServerApp.withStorage blobStorage
 |> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig assistant)
 |> McpCompose.withMcp (

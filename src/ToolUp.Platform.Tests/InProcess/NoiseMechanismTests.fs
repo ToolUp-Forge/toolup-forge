@@ -762,7 +762,10 @@ let gateTests =
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
 }
 
 let private appHosting () =

@@ -77,11 +77,14 @@ let private silentLogger =
 /// hosted-service site this guard reaches switched on.
 let configFor (profile: ProcessProfile) (host: ServerlessHostMode) : ServerConfig = {
     ServerConfig.defaults with
-        ProcessProfile = profile
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ProcessProfile = profile
+        }
         ServerlessHost = host
         JobScheduler = InProcessJobScheduler
-        TenantLifecycle = EnabledTenantLifecycle
-        ModelFitting = EnabledModelFitting
+        TenantLifecycle = FeatureMode.Enabled
+        ModelFitting = FeatureMode.Enabled
         DataSubjectRequests =
             DataSubjectRequestMode.Enabled {
                 DataSubjectRequestConfig.sync ErasurePolicy.Tombstone with

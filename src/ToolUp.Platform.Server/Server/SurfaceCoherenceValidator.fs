@@ -23,13 +23,13 @@ open ToolUp.Platform.ConfigValidation
 //   2. Duplicate `SurfaceProfile` constructors.              ERROR
 //   3. Module surface-requirement unreachable.               ERROR
 //   4. Route surface-requirement unreachable.                ERROR
-//   5. `ClaimBearer` declared with `NoShareTokenStore` set.  WARNING
+//   5. `ClaimBearer` declared with `FeatureMode.Disabled` set.  WARNING
 //      (See "Auto-promotion vs Rule 5" note below — the
 //      auto-promotion in A.7 keeps deployments booting
 //      even when the operator left the default, so this
 //      validator surfaces the dependency on auto-promotion
 //      as a Warning rather than refusing startup.)
-//   6. `EnabledShareTokenStore` but no `ClaimBearer` surface. WARNING
+//   6. `FeatureMode.Enabled` but no `ClaimBearer` surface. WARNING
 //   7. Anonymous-only `Surfaces` + non-HeaderAuth provider.   WARNING
 //   8. Any non-Anonymous surface + no auth provider declared. ERROR
 //   9. `withShareTokenStoreDecorator` wired but no
@@ -38,10 +38,10 @@ open ToolUp.Platform.ConfigValidation
 //      surface.                                              WARNING (§3.11)
 //
 // Auto-promotion vs Rule 5. A.7's `ComposeNotifications.shareTokenStoreInstance`
-// auto-promotes `NoShareTokenStore` → `EnabledShareTokenStore` when
+// auto-promotes `FeatureMode.Disabled` → `FeatureMode.Enabled` when
 // `DeploymentConfig.hasClaimBearer config` is true, so a deployment
 // with `ClaimBearer` in `Surfaces` boots cleanly even when the
-// operator never set `ShareTokenStore = EnabledShareTokenStore`. The
+// operator never set `ShareTokenStore = FeatureMode.Enabled`. The
 // design doc enumerates Rule 5 as ERROR ("validator then refuses"),
 // but emitting an error here would contradict the auto-promotion and
 // regress A.7. The compromise: Rule 5 fires as a WARNING — the
@@ -180,29 +180,29 @@ let private collectRules
                                 surfacesLabel
                         )
 
-        // Rule 5 — `ClaimBearer` declared with `NoShareTokenStore` set.
+        // Rule 5 — `ClaimBearer` declared with `FeatureMode.Disabled` set.
         // Downgraded to Warning vs the design's ERROR — see header
         // "Auto-promotion vs Rule 5" comment.
         if
             DeploymentConfig.hasClaimBearer config
-            && (match config.ShareTokenStore with
-                | NoShareTokenStore -> true
-                | EnabledShareTokenStore -> false)
+            && (match config.Stores.ShareTokenStore with
+                | FeatureMode.Disabled -> true
+                | FeatureMode.Enabled -> false)
         then
             yield
                 RuleWarning
-                    "ServerConfig.Surfaces declares SurfaceProfile.ClaimBearer but ServerConfig.ShareTokenStore = NoShareTokenStore. Compose auto-promotes the store to EnabledShareTokenStore so the surface remains reachable, but the explicit setting is incoherent. Set ServerConfig.ShareTokenStore = EnabledShareTokenStore to remove this warning, or drop the ClaimBearer surface to disable share-token-gated access."
+                    "ServerConfig.Surfaces declares SurfaceProfile.ClaimBearer but ServerConfig.Stores.ShareTokenStore = FeatureMode.Disabled. Compose auto-promotes the store to FeatureMode.Enabled so the surface remains reachable, but the explicit setting is incoherent. Set ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled to remove this warning, or drop the ClaimBearer surface to disable share-token-gated access."
 
-        // Rule 6 — `EnabledShareTokenStore` but no `ClaimBearer` surface.
+        // Rule 6 — `FeatureMode.Enabled` but no `ClaimBearer` surface.
         if
             (not (DeploymentConfig.hasClaimBearer config))
-            && (match config.ShareTokenStore with
-                | EnabledShareTokenStore -> true
-                | NoShareTokenStore -> false)
+            && (match config.Stores.ShareTokenStore with
+                | FeatureMode.Enabled -> true
+                | FeatureMode.Disabled -> false)
         then
             yield
                 RuleWarning
-                    "ServerConfig.ShareTokenStore = EnabledShareTokenStore but ServerConfig.Surfaces declares no SurfaceProfile.ClaimBearer. The store is wired but no surface accepts claim-bearer subjects, so issued tokens are unreachable. Either add SurfaceProfile.claimBearer to Surfaces or set ShareTokenStore = NoShareTokenStore."
+                    "ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled but ServerConfig.Surfaces declares no SurfaceProfile.ClaimBearer. The store is wired but no surface accepts claim-bearer subjects, so issued tokens are unreachable. Either add SurfaceProfile.claimBearer to Surfaces or set ShareTokenStore = FeatureMode.Disabled."
 
         // Rule 7 — Anonymous-only Surfaces + non-HeaderAuth provider.
         let anonymousOnly =

@@ -573,7 +573,7 @@ ToolUp.Platform.AuditReplicatorOptionsModule.defaults : ToolUp.Platform.AuditRep
 ToolUp.Platform.AuditReplicatorRetryPolicy (class)
 ToolUp.Platform.AuditReplicatorRetryPolicy.defaults : ToolUp.Platform.Transport.RetryPolicy { get }
 ToolUp.Platform.AuditViewApiHandler (class)
-ToolUp.Platform.AuditViewApiHandler.auditViewApi(ToolUp.Platform.AuditLogMode, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IAuditViewApi
+ToolUp.Platform.AuditViewApiHandler.auditViewApi(ToolUp.Platform.FeatureMode, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IAuditViewApi
 ToolUp.Platform.Auth.IdentitySanitiser (class)
 ToolUp.Platform.Auth.IdentitySanitiser.MaxLength : System.Int32 (literal)
 ToolUp.Platform.Auth.IdentitySanitiser.sanitiseScopeId(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
@@ -1634,6 +1634,7 @@ ToolUp.Platform.ComposableSurfaceModule (class)
 ToolUp.Platform.ComposableSurfaceModule.configKnobs() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnobSchema]
 ToolUp.Platform.ComposableSurfaceModule.describe() : ToolUp.Platform.ComposableSurface
 ToolUp.Platform.ComposableSurfaceModule.grounding() : ToolUp.Platform.GroundingSurface
+ToolUp.Platform.ComposableSurfaceModule.isConcernRecord(System.Type) : System.Boolean
 ToolUp.Platform.ComposableSurfaceModule.moduleContract : ToolUp.Platform.ModuleContractShape { get }
 ToolUp.Platform.ComposableSurfaceModule.slotRequirements(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SlotRequirementSet]
 ToolUp.Platform.ComposableSurfaceModule.slots() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComposableSlot]
@@ -2114,6 +2115,7 @@ ToolUp.Platform.CompositionManifestModule.contributionKindLabel(ToolUp.Platform.
 ToolUp.Platform.CompositionManifestModule.dataTypeEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.effectiveSchemaVersion(ToolUp.Platform.CompositionManifest) : System.Int32
 ToolUp.Platform.CompositionManifestModule.empty : ToolUp.Platform.CompositionManifest { get }
+ToolUp.Platform.CompositionManifestModule.featureKnob(System.String, ToolUp.Platform.FeatureMode) : ToolUp.Platform.ConfigKnob
 ToolUp.Platform.CompositionManifestModule.isLiveInterfaceTool(ToolUp.Platform.AIToolDefinition) : System.Boolean
 ToolUp.Platform.CompositionManifestModule.knob(System.String, System.String) : ToolUp.Platform.ConfigKnob
 ToolUp.Platform.CompositionManifestModule.liveInterfaceTools(ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
@@ -6812,9 +6814,9 @@ ToolUp.Platform.IPlatformAdminStore.IsPlatformAdmin(System.String) : Microsoft.F
 ToolUp.Platform.IPlatformAdminStore.ListPlatformAdmins() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.IPlatformAdminStore.RevokePlatformAdmin(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IPlatformRuntimeConfigStore (interface)
-ToolUp.Platform.IPlatformRuntimeConfigStore.GetPlatformKnowledgeBase() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PlatformKnowledgeBaseMode]
-ToolUp.Platform.IPlatformRuntimeConfigStore.SetPlatformKnowledgeBase(ToolUp.Platform.PlatformKnowledgeBaseMode) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.IPlatformRuntimeConfigStore.Snapshot() : ToolUp.Platform.PlatformKnowledgeBaseMode
+ToolUp.Platform.IPlatformRuntimeConfigStore.GetPlatformKnowledgeBase() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.FeatureMode]
+ToolUp.Platform.IPlatformRuntimeConfigStore.SetPlatformKnowledgeBase(ToolUp.Platform.FeatureMode) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IPlatformRuntimeConfigStore.Snapshot() : ToolUp.Platform.FeatureMode
 ToolUp.Platform.IPresenceTracker (interface)
 ToolUp.Platform.IPresenceTracker.Heartbeat(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceTracker.Join(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -8896,6 +8898,8 @@ ToolUp.Platform.NotificationCategoryScope.publish(ToolUp.Platform.INotificationC
 ToolUp.Platform.NotificationCategoryScope.push(System.String) : System.IDisposable
 ToolUp.Platform.NotificationChannel (class)
 ToolUp.Platform.NotificationChannel.fromEnv(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationChannel+NotificationChannelResolver]) : System.Tuple`3[ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HealthChecks+IHealthCheck], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigValidation+IConfigValidator]]
+ToolUp.Platform.NotificationChannel.isInProcess(System.String) : System.Boolean
+ToolUp.Platform.NotificationChannel.selectedChannel() : System.String
 ToolUp.Platform.NotificationChannel+InMemoryNotificationChannel (class)
 ToolUp.Platform.NotificationChannel+InMemoryNotificationChannel..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.NotificationChannel+NoOpNotificationChannel (class)
@@ -9536,7 +9540,7 @@ ToolUp.Platform.PlatformInHandlerGates.jobApi(ToolUp.Platform.ComponentId) : Mic
 ToolUp.Platform.PlatformInHandlerGates.modelExecutionApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Platform.PlatformInHandlerGates.moduleQueryBusApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Platform.PlatformRuntimeConfigStore (class)
-ToolUp.Platform.PlatformRuntimeConfigStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.PlatformKnowledgeBaseMode) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IPlatformRuntimeConfigStore]
+ToolUp.Platform.PlatformRuntimeConfigStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.FeatureMode) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IPlatformRuntimeConfigStore]
 ToolUp.Platform.PlatformSchema (class)
 ToolUp.Platform.PlatformSchema.mergeBrandingSchema(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]
 ToolUp.Platform.PlatformSchema.mergeNotificationPrefsSchema(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]
@@ -12032,7 +12036,7 @@ ToolUp.Platform.Teams.TeamInvitationHandler.teamInvitationApi(ToolUp.Platform.IS
 ToolUp.Platform.Teams.TeamInvitationHandler.tryConsumePendingForUser(ToolUp.Platform.IPendingInviteStore, ToolUp.Platform.TeamManagement+ITeamStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PendingInviteByEmail]]
 ToolUp.Platform.TelemetryApiHandler (class)
 ToolUp.Platform.TelemetryApiHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
-ToolUp.Platform.TelemetryApiHandler.routesFor(ToolUp.Platform.TelemetrySinkMode) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
+ToolUp.Platform.TelemetryApiHandler.routesFor(ToolUp.Platform.FeatureMode) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
 ToolUp.Platform.TenantComposition (class)
 ToolUp.Platform.TenantComposition..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSelection]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentConfig])
 ToolUp.Platform.TenantComposition.Config : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentConfig] { get }

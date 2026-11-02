@@ -9,7 +9,7 @@ open ToolUp.Platform
 //
 // `RequestTimingMiddleware` wraps the downstream pipeline in a
 // `Stopwatch` and emits a `Warn`-level log entry whenever the
-// elapsed time exceeds `ServerConfig.SlowRequestThreshold`. The
+// elapsed time exceeds `ServerConfig.Observability.SlowRequestThreshold`. The
 // threshold is configurable per deployment so production can tighten
 // it to surface latency regressions earlier and dev can relax it
 // without code changes.
@@ -43,11 +43,11 @@ type RequestTimingMiddleware(next: RequestDelegate, config: ServerConfig, logger
     /// the global `SlowRequestThreshold`. Case-insensitive prefix match,
     /// matching the HTTP path conventions used elsewhere in the SDK.
     static member private ResolveThreshold (config: ServerConfig) (path: string) =
-        if Map.isEmpty config.SlowRequestThresholdOverrides then
-            config.SlowRequestThreshold
+        if Map.isEmpty config.Observability.SlowRequestThresholdOverrides then
+            config.Observability.SlowRequestThreshold
         else
             let bestMatch =
-                config.SlowRequestThresholdOverrides
+                config.Observability.SlowRequestThresholdOverrides
                 |> Map.toSeq
                 |> Seq.filter (fun (prefix, _) -> path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 |> Seq.sortByDescending (fun (prefix, _) -> prefix.Length)
@@ -55,7 +55,7 @@ type RequestTimingMiddleware(next: RequestDelegate, config: ServerConfig, logger
 
             match bestMatch with
             | Some(_, threshold) -> threshold
-            | None -> config.SlowRequestThreshold
+            | None -> config.Observability.SlowRequestThreshold
 
     member _.InvokeAsync(ctx: HttpContext) = task {
         let stopwatch = Stopwatch.StartNew()

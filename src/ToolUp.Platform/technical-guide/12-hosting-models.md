@@ -17,7 +17,7 @@ This chapter is the reference for picking a host runtime, matching it against th
 
 ## When serverless is NOT appropriate
 
-- **In-process scheduler / webhook dispatcher / SSE notifications** — all need a long-running process. A serverless deployment either disables them (`JobScheduler = NoJobScheduler` / `Webhooks = NoWebhooks` / `Notifications = NoNotificationsExplicit`) or pairs with a separate worker.
+- **In-process scheduler / webhook dispatcher / SSE notifications** — all need a long-running process. A serverless deployment either disables them (`JobScheduler = NoJobScheduler` / `Webhooks = FeatureMode.Disabled` / `Notifications = NoNotificationsExplicit`) or pairs with a separate worker.
 - **Heavy ingestion paths** (RAG embedding, large file extraction) — exceed typical serverless function timeouts. Pair with a worker.
 - **Long-lived AI streaming (SSE)** — the three shipped adapters buffer response bodies before flushing, so SSE endpoints (`/api/notifications`, AI streaming) do not stream incrementally. Some serverless runtimes (Lambda Function URLs with `RESPONSE_STREAM` invoke mode; Cloud Run functions with `--no-cpu-throttling`) support streaming via dedicated handlers that bypass the bridge — out of scope for the shipped `bridge*` API.
 
@@ -45,7 +45,7 @@ Cell vocabulary: ✅ supported · ⚠ supported with caveat · ❌ unsupported. 
 
 ### `ProcessProfile`
 
-| `ServerConfig.ProcessProfile` | Kestrel | AzureFunctions | AwsLambda | GoogleCloudFunctions |
+| `ServerConfig.MultiInstance.ProcessProfile` | Kestrel | AzureFunctions | AwsLambda | GoogleCloudFunctions |
 |---|---|---|---|---|
 | `AllInOne` (default) | ✅ | ✅ — only profile that makes sense; `ServerlessHost` already gates background subsystems off | ✅ — as above | ✅ — as above |
 | `WebOnly` | ✅ — sibling `WorkerOnly` silo drains jobs | ⚠ — equivalent to `AllInOne` (background subsystems already gated off by `ServerlessHost`); set `AllInOne` for clarity | ⚠ — as above | ⚠ — as above |
@@ -62,10 +62,10 @@ Every cell in the serverless columns reads ❌ — `ServerlessHost = ServerlessH
 |---|---|---|
 | `JobScheduler = InProcessJobScheduler` | ✅ | ❌ — set `NoJobScheduler`; schedule jobs at a sibling `WorkerOnly` silo |
 | `JobScheduler = NoJobScheduler` | ✅ | ✅ — required for the serverless front-door |
-| `Webhooks = EnabledWebhooks` | ✅ | ❌ — set `NoWebhooks`; deliver from a sibling silo |
-| `Webhooks = NoWebhooks` | ✅ | ✅ |
-| `AuditLog = EnabledAuditLog` | ✅ — `AuditReplicator` fans events to external sinks | ⚠ — `IAuditLog` writes still land in `IEventStore`, but the `AuditReplicator` `BackgroundService` is gated off, so external `IAuditSink`s never receive events from this silo. Set `AuditLog = NoAuditLog` for clarity, or pair with a sibling silo that runs the replicator |
-| `UsageMetering = EnabledUsageMetering` | ✅ | ⚠ — `IUsageLog` writes still land, but the `UsageBatchFlusher` is gated off; rows accumulate without a flush. Set `NoUsageMetering`, or pair with a sibling silo |
+| `Webhooks = FeatureMode.Enabled` | ✅ | ❌ — set `FeatureMode.Disabled`; deliver from a sibling silo |
+| `Webhooks = FeatureMode.Disabled` | ✅ | ✅ |
+| `AuditLog = FeatureMode.Enabled` | ✅ — `AuditReplicator` fans events to external sinks | ⚠ — `IAuditLog` writes still land in `IEventStore`, but the `AuditReplicator` `BackgroundService` is gated off, so external `IAuditSink`s never receive events from this silo. Set `AuditLog = FeatureMode.Disabled` for clarity, or pair with a sibling silo that runs the replicator |
+| `UsageMetering = FeatureMode.Enabled` | ✅ | ⚠ — `IUsageLog` writes still land, but the `UsageBatchFlusher` is gated off; rows accumulate without a flush. Set `FeatureMode.Disabled`, or pair with a sibling silo |
 | `HealthStateTracking = true` | ✅ | ❌ — `HealthStateTrackerService` is gated off; set `HealthStateTracking = false` |
 | `OAuth` data-source connectors | ✅ — token refresher + state-cleanup run | ❌ — both gated off; pair with a sibling silo if any data source uses OAuth refresh |
 
@@ -120,11 +120,14 @@ let app =
             Surfaces = Surfaces.anonymous
             ServerlessHost = ServerlessHost
             JobScheduler = NoJobScheduler
-            Webhooks = NoWebhooks
+            Webhooks = FeatureMode.Disabled
             Notifications = NoNotificationsExplicit
-            AuditLog = NoAuditLog
-            UsageMetering = NoUsageMetering
-            HealthStateTracking = false
+            AuditLog = FeatureMode.Disabled
+            UsageMetering = FeatureMode.Disabled
+            Observability = {
+                ServerConfig.defaults.Observability with
+                    HealthStateTracking = false
+            }
     }
     |> ServerApp.addModule (MyApp.Module.register ())
 
@@ -425,8 +428,8 @@ The fourth worked example pairs any of the three serverless front-doors above wi
 | `ConfigStore` | Blob-backed | Same | Operator-set config (rate limits, kill switches) — the worker's `ConfigStoreInvalidator` `BackgroundService` is gated off in serverless mode, so the front-door re-reads on every request |
 | `SecretStore` | Provider-native (`AzureKeyVault` / `AwsSecretsManager` / `GcpSecretManager`) | Same | Both halves' managed identity is granted read on the same secret scope |
 | `JobScheduler` | `NoJobScheduler` | `InProcessJobScheduler` | The front-door never schedules directly; it `INotificationChannel.Publish`es and the worker's job handler (subscribed via `IModuleQueryBus`) picks it up |
-| `Webhooks` | `NoWebhooks` | `EnabledWebhooks` | Modules call `IWebhookEvents.publish` on either side; the dispatcher only runs on the worker, so front-door publishes queue for the worker to drain |
-| `AuditLog` / `UsageMetering` / `HealthStateTracking` | `NoAuditLog` / `NoUsageMetering` / `false` | `EnabledAuditLog` / `EnabledUsageMetering` / `true` | Writes from both halves land in the shared `IEventStore`; only the worker silo replicates / flushes / tracks state |
+| `Webhooks` | `FeatureMode.Disabled` | `FeatureMode.Enabled` | Modules call `IWebhookEvents.publish` on either side; the dispatcher only runs on the worker, so front-door publishes queue for the worker to drain |
+| `AuditLog` / `UsageMetering` / `HealthStateTracking` | `FeatureMode.Disabled` / `FeatureMode.Disabled` / `false` | `FeatureMode.Enabled` / `FeatureMode.Enabled` / `true` | Writes from both halves land in the shared `IEventStore`; only the worker silo replicates / flushes / tracks state |
 
 **Front-door composition root.** Same shape as the Anonymous worked example above, with substrate fields pointing at cloud companions and (typically) `Mode = Team` or `Mode = Individual` rather than `Anonymous`.
 
@@ -442,14 +445,23 @@ let serverHost: IServerHost =
         ServerConfig.defaults with
             Surfaces = Surfaces.team
             ServerlessHost = ServerlessHost
-            ProcessProfile = AllInOne
-            RateLimitStore = RedisRateLimitStore(Env.required "TOOLUP_REDIS_CONNECTION")
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ProcessProfile = AllInOne
+            }
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    RateLimitStore = RedisRateLimitStore(Env.required "TOOLUP_REDIS_CONNECTION")
+            }
             Notifications = RedisNotifications(Env.required "TOOLUP_REDIS_CONNECTION")
             JobScheduler = NoJobScheduler
-            Webhooks = NoWebhooks
-            AuditLog = NoAuditLog
-            UsageMetering = NoUsageMetering
-            HealthStateTracking = false
+            Webhooks = FeatureMode.Disabled
+            AuditLog = FeatureMode.Disabled
+            UsageMetering = FeatureMode.Disabled
+            Observability = {
+                ServerConfig.defaults.Observability with
+                    HealthStateTracking = false
+            }
     }
     // Blob storage is a composed companion, not a `ServerConfig` field;
     // `ISecretStore` arrives through the secret-store resolver list.
@@ -473,14 +485,23 @@ let main _ =
         ServerConfig.defaults with
             Surfaces = Surfaces.team
             ServerlessHost = KestrelHost
-            ProcessProfile = WorkerOnly
-            RateLimitStore = RedisRateLimitStore(Env.required "TOOLUP_REDIS_CONNECTION")
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ProcessProfile = WorkerOnly
+            }
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    RateLimitStore = RedisRateLimitStore(Env.required "TOOLUP_REDIS_CONNECTION")
+            }
             Notifications = RedisNotifications(Env.required "TOOLUP_REDIS_CONNECTION")
             JobScheduler = InProcessJobScheduler
-            Webhooks = EnabledWebhooks
-            AuditLog = EnabledAuditLog
-            UsageMetering = EnabledUsageMetering
-            HealthStateTracking = true
+            Webhooks = FeatureMode.Enabled
+            AuditLog = FeatureMode.Enabled
+            UsageMetering = FeatureMode.Enabled
+            Observability = {
+                ServerConfig.defaults.Observability with
+                    HealthStateTracking = true
+            }
     }
     |> ServerApp.withStorage (AzureBlobStorage.create azureBlobConfig)
     |> ServerApp.addModule (MyApp.Module.register ())

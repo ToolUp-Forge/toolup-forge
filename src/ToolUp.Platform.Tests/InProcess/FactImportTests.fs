@@ -861,7 +861,7 @@ let tests =
             let before = ServerApp.empty
             let after = FactsCompose.withFactImport [] before
 
-            Expect.isNone (ServerApp.serviceConfig after) "a NoFactStore app registers nothing"
+            Expect.isNone (ServerApp.serviceConfig after) "a FeatureMode.Disabled app registers nothing"
 
         testCaseAsync "a door composed with no anchors trusts nobody, which is not the same as no door"
         <| async {

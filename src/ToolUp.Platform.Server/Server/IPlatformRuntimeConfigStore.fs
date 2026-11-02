@@ -50,13 +50,13 @@ type IPlatformRuntimeConfigStore =
     /// Used by `RetrievalPipeline.authorisedScopes` on the request hot
     /// path — no I/O. Returns the in-memory cell value, which is kept
     /// in sync with the persisted blob by `SetPlatformKnowledgeBase`.
-    abstract Snapshot: unit -> PlatformKnowledgeBaseMode
+    abstract Snapshot: unit -> FeatureMode
 
     /// Async read of the current `PlatformKnowledgeBase` mode. Same
     /// value as `Snapshot` — exists for consistency with the API
     /// contract (`PlatformAdminApi.GetPlatformKnowledgeBase` returns
     /// `Async<_>` because ToolUp.Remoting requires it).
-    abstract GetPlatformKnowledgeBase: unit -> Async<PlatformKnowledgeBaseMode>
+    abstract GetPlatformKnowledgeBase: unit -> Async<FeatureMode>
 
     /// Update the runtime `PlatformKnowledgeBase` mode. Persists to
     /// blob and updates the in-memory cell. Permission checks happen
@@ -64,4 +64,4 @@ type IPlatformRuntimeConfigStore =
     /// `Result.Error` on persistence failure (the in-memory cell is
     /// only updated on successful save, so a failed `Set` leaves the
     /// previous value intact).
-    abstract SetPlatformKnowledgeBase: mode: PlatformKnowledgeBaseMode -> Async<Result<unit, string>>
+    abstract SetPlatformKnowledgeBase: mode: FeatureMode -> Async<Result<unit, string>>

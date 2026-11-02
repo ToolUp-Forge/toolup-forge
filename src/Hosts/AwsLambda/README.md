@@ -30,11 +30,14 @@ let serverHost: IServerHost =
             Surfaces = Surfaces.anonymous
             ServerlessHost = ServerlessHost
             JobScheduler = NoJobScheduler
-            Webhooks = NoWebhooks
+            Webhooks = FeatureMode.Disabled
             Notifications = NoNotificationsExplicit
-            AuditLog = NoAuditLog
-            UsageMetering = NoUsageMetering
-            HealthStateTracking = false
+            AuditLog = FeatureMode.Disabled
+            UsageMetering = FeatureMode.Disabled
+            Observability = {
+                ServerConfig.defaults.Observability with
+                    HealthStateTracking = false
+            }
     }
     |> ServerApp.addModule (myModule.register ())
     // Lambda drives `Invoke` per request; do NOT call

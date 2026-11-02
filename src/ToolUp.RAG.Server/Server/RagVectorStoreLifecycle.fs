@@ -11,7 +11,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // offboarded scope so RAG retrieval can never surface a dead tenant's
 // documents. Lives in the RAG companion (GP 1: the vector store is the
 // companion's substrate), registered by `composeRAG` only when
-// `TenantLifecycle = EnabledTenantLifecycle`.
+// `TenantLifecycle = FeatureMode.Enabled`.
 //
 // Resolves the active `IVectorStore` from DI per call (stateless between
 // invocations, GP 12 rule 4) and uses the portable scope-level purge

@@ -313,6 +313,13 @@ type ConfigKey = {
     Seal: SealPosture
 }
 
+/// The spellings every boolean reader that resolves through the registry
+/// accepts as on, compared case-insensitively after trimming.
+let trueTokens: Set<string> = set [ "1"; "true"; "yes"; "on" ]
+
+/// The spellings it accepts as off.
+let falseTokens: Set<string> = set [ "0"; "false"; "no"; "off" ]
+
 [<RequireQualifiedAccess>]
 module ConfigKey =
 
@@ -333,6 +340,46 @@ module ConfigKey =
         | ConfigKeyKind.EnumKey(_, direction, _) -> Some direction
         | ConfigKeyKind.IntKey _
         | ConfigKeyKind.StringKey _ -> None
+
+    /// A boolean key's value, read by its direction from the raw text the
+    /// resolution seam answered (`None` when the key is unset).
+    ///
+    /// Every reader of a `BoolKey` outside `ServerConfig.fromEnv` goes
+    /// through here, so the direction the generated reference documents
+    /// is the direction the code has: an on spelling (`trueTokens`) is
+    /// `true`, unset is the typed default (`false` when the key declares
+    /// none), and anything else is `false` under `Permissive` — a typo
+    /// keeps the safe reading — or `Error`, naming the key and the
+    /// accepted spellings, under `Protective`. A key of another kind is a
+    /// programming error and raises.
+    let readBool (key: ConfigKey) (raw: string option) : Result<bool, string> =
+        let direction, configured =
+            match key.Kind with
+            | ConfigKeyKind.BoolKey(direction, defaultValue) -> direction, defaultArg defaultValue false
+            | _ -> invalidArg (nameof key) (sprintf "%s is not a boolean key" key.EnvVar)
+
+        match raw |> Option.map _.Trim() |> Option.filter (fun v -> v <> "") with
+        | None -> Ok configured
+        | Some text ->
+            let token = text.ToLowerInvariant()
+
+            if trueTokens.Contains token then
+                Ok true
+            elif direction = Direction.Permissive || falseTokens.Contains token then
+                Ok false
+            else
+                Error(
+                    sprintf
+                        "%s=%s is not a recognised boolean value. Expected one of: 1, true, yes, on (case-insensitive) → on; 0, false, no, off → off."
+                        key.EnvVar
+                        text
+                )
+
+    /// `readBool` for a `Permissive` key, whose read never fails.
+    let readPermissiveBool (key: ConfigKey) (raw: string option) : bool =
+        match readBool key raw with
+        | Ok value -> value
+        | Error why -> failwith why
 
     /// The untyped projection.
     let descriptor (key: ConfigKey) : ConfigKeyDescriptor = {
@@ -709,7 +756,7 @@ module Names =
 
     /// Phase 457 — the second spelling of the acknowledgement above, and
     /// deliberately not a second FACT: both feed the one
-    /// `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired` field, so the
+    /// `ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired` field, so the
     /// three plaintext-secret validators cannot disagree about whether an
     /// operator has opted in. A separate flag would have produced exactly
     /// that: an operator who set one and was still refused by a validator
@@ -4654,13 +4701,6 @@ module OperationsDoc =
             |> List.ofSeq
 
         missingColumn @ rowFindings
-
-/// The spellings every boolean reader that resolves through the registry
-/// accepts as on, compared case-insensitively after trimming.
-let trueTokens: Set<string> = set [ "1"; "true"; "yes"; "on" ]
-
-/// The spellings it accepts as off.
-let falseTokens: Set<string> = set [ "0"; "false"; "no"; "off" ]
 
 /// The boot seal's view of the configuration: one rendering per key whose
 /// `Seal` posture admits it, computed from the key's resolved value.

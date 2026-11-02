@@ -129,7 +129,7 @@ let private buildPipeline
 
     // The smoke fixture is entirely `Platform`-scoped. `authorisedScopes`
     // filters `Platform` out unless the Platform KB is enabled, and the
-    // constructor defaults to `NoPlatformKnowledgeBase` — so without this
+    // constructor defaults to `FeatureMode.Disabled` — so without this
     // the pipeline early-returns `[]` for every query and the harness
     // scores 0.000 (the regression this restores: the eval is a
     // measurement tool, it must enable the KB scope its fixture lives in).
@@ -140,7 +140,7 @@ let private buildPipeline
             embedder = embedder,
             sparseIndex = leg.Index,
             tracer = tracer,
-            platformKnowledgeBase = EnabledPlatformKnowledgeBase
+            platformKnowledgeBase = FeatureMode.Enabled
         )
         :> IRetrievalPipeline,
         leg.Teardown)

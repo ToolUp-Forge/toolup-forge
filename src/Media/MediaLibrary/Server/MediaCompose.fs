@@ -23,7 +23,7 @@ open ToolUp.Platform.Server
 // the deployment resolves, to the deployment as every builder left it.
 //
 // **Strip-imports guarantee (GP 13)**: when the resolved
-// `ServerConfig.MediaLibrary = NoMediaLibrary`, the companion contributes
+// `ServerConfig.MediaLibrary = FeatureMode.Disabled`, the companion contributes
 // nothing — no DI registrations, no range handlers, no URL-signing key,
 // no health probe.
 
@@ -203,15 +203,15 @@ let private mediaApi (options: MediaLibraryOptions) (ctx: HttpContext) : IMediaA
             }
     }
 
-/// The companion's `apply`. `NoMediaLibrary` contributes nothing;
-/// `EnabledMediaLibrary` registers the signer + `IMediaLibrary` +
+/// The companion's `apply`. `FeatureMode.Disabled` contributes nothing;
+/// `FeatureMode.Enabled` registers the signer + `IMediaLibrary` +
 /// `IUploadSessionStore` DI singletons, contributes the range-serving
 /// handlers and the ToolUp.Remoting `IMediaApi`, and adds the readiness
 /// probe + options validator.
 let private composeMediaLibrary (companion: MediaLibraryCompanionOptions) (app: ServerApp) : ServerApp =
     match (ServerApp.effectiveConfig app).MediaLibrary with
-    | NoMediaLibrary -> app
-    | EnabledMediaLibrary ->
+    | FeatureMode.Disabled -> app
+    | FeatureMode.Enabled ->
         let options = companion.Options
         let notifications = app.Notifications
 
@@ -231,7 +231,7 @@ let private composeMediaLibrary (companion: MediaLibraryCompanionOptions) (app: 
                 // Phase 472 — the composed options, so the range
                 // handlers can read this deployment's declared edge
                 // cacheability. Registered under
-                // `EnabledMediaLibrary` only; the handlers fall back
+                // `FeatureMode.Enabled` only; the handlers fall back
                 // to `MediaLibraryOptions.defaults` (which declares
                 // nothing) when it is absent, so a hand-built host
                 // that never registers it emits exactly the headers
@@ -260,7 +260,7 @@ let private composeMediaLibrary (companion: MediaLibraryCompanionOptions) (app: 
                         SignedUrl.MediaUrlSigner(secrets))
                 )
                 // Phase 471 — the AES-128 HLS key store. Registered
-                // under `EnabledMediaLibrary` only, over the
+                // under `FeatureMode.Enabled` only, over the
                 // `ISecretStore` the URL signer already needs, so
                 // there is no second substrate to provision and a
                 // disabled deployment registers nothing (GP 13).
@@ -321,7 +321,7 @@ let private composeMediaLibrary (companion: MediaLibraryCompanionOptions) (app: 
                             :> IMediaLibrary)
                 )
                 // Phase 469 — the resumable-upload seam. Registered
-                // only under `EnabledMediaLibrary`, over the same
+                // only under `FeatureMode.Enabled`, over the same
                 // `IBlobStorage` and the composed `IMediaLibrary`,
                 // so there is no second substrate to provision and
                 // a disabled deployment registers nothing (GP 13).
@@ -382,7 +382,7 @@ let private composeMediaLibrary (companion: MediaLibraryCompanionOptions) (app: 
 /// the deployment resolves, onto the deployment as every builder left it —
 /// so a `ServerApp` builder applied after this call still reaches it.
 /// Contributes nothing unless the resolved `ServerConfig.MediaLibrary` is
-/// `EnabledMediaLibrary`. A second call replaces the first.
+/// `FeatureMode.Enabled`. A second call replaces the first.
 ///
 ///     ServerApp.empty
 ///     |> ServerApp.withConfig config

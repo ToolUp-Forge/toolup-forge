@@ -332,7 +332,7 @@ Auto-injected by the scheduling compose step:
 
 ## Configuration knobs
 
-- `ServerConfig.EntityStore = EnabledEntityStore` — required; `BookableResource`, `Booking` and `AvailabilityException` are entity-store records (hence the `Type` / `Version` fields).
+- `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` — required; `BookableResource`, `Booking` and `AvailabilityException` are entity-store records (hence the `Type` / `Version` fields).
 
 ## Conformance test pack
 

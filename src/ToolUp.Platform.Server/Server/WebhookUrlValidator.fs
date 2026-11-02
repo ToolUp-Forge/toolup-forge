@@ -156,7 +156,7 @@ let validate (policy: WebhookUrlPolicy) (url: string) : Result<unit, string> =
                         | Some(addr, reason) ->
                             Error(
                                 sprintf
-                                    "TargetUrl host '%s' resolves to %s — %s. Webhook URLs must point at routable public addresses to prevent SSRF against internal services. If this is an intentional internal target (staging deployment, internal mock), add the host to ServerConfig.WebhookUrlAllowedHosts."
+                                    "TargetUrl host '%s' resolves to %s — %s. Webhook URLs must point at routable public addresses to prevent SSRF against internal services. If this is an intentional internal target (staging deployment, internal mock), add the host to ServerConfig.SecurityPosture.WebhookUrlAllowedHosts."
                                     uri.Host
                                     (string addr)
                                     reason

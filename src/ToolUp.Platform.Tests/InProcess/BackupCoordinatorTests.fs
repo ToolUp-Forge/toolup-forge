@@ -951,7 +951,10 @@ let private tests_boot =
             let config = {
                 ServerConfig.defaults with
                     Port = port
-                    TrustForwardedHeaders = false
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            TrustForwardedHeaders = false
+                    }
                     Backup = BackupEnabled BackupSettings.defaults
             }
 

@@ -184,7 +184,7 @@ let isLoopbackUrl (url: string) : bool =
 ///   * `DOTNET_RUNNING_IN_CONTAINER=true` — set by the official .NET container
 ///     images, which the shipped Dockerfile templates build on;
 ///   * `KUBERNETES_SERVICE_HOST` set — present in every Kubernetes pod;
-///   * `ServerConfig.ReplicaCount > 1` — instances behind a load balancer,
+///   * `ServerConfig.MultiInstance.ReplicaCount > 1` — instances behind a load balancer,
 ///     which cannot reach a loopback listener on another host.
 let deployedSignals (config: ServerConfig) (getEnv: string -> string option) : string list = [
     match getEnv "DOTNET_RUNNING_IN_CONTAINER" with
@@ -197,8 +197,10 @@ let deployedSignals (config: ServerConfig) (getEnv: string -> string option) : s
         "KUBERNETES_SERVICE_HOST is set (the process runs in a Kubernetes pod)"
     | _ -> ()
 
-    if config.ReplicaCount > 1 then
-        sprintf "ServerConfig.ReplicaCount = %d (instances behind a load balancer)" config.ReplicaCount
+    if config.MultiInstance.ReplicaCount > 1 then
+        sprintf
+            "ServerConfig.MultiInstance.ReplicaCount = %d (instances behind a load balancer)"
+            config.MultiInstance.ReplicaCount
 ]
 
 /// Read an environment variable, folding null / empty to `None`.

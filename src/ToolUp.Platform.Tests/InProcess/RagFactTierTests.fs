@@ -296,7 +296,7 @@ let compositionTests =
                 |> deploy storage
                 |> ServerApp.withConfig config
 
-            Expect.equal app.Config.FactStore NoFactStore "the later withConfig did reset the knob"
+            Expect.equal app.Config.Stores.FactStore FeatureMode.Disabled "the later withConfig did reset the knob"
 
             let _, sp = build storage app
 
@@ -341,7 +341,10 @@ let compositionTests =
                 |> ServerApp.withStorage storage
                 |> ServerApp.withConfig {
                     config with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            config.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
                 |> FactsCompose.withFactStore
                 |> FactsCompose.withFactTableWriter
@@ -537,7 +540,10 @@ let warningTests =
 let private teamConfig: ServerConfig = {
     config with
         Surfaces = Surfaces.team
-        ReplicaCount = 2
+        MultiInstance = {
+            config.MultiInstance with
+                ReplicaCount = 2
+        }
 }
 
 /// Whether the resolved configuration carries the AI tier's budget schema,
@@ -565,7 +571,12 @@ let reachabilityTests =
             let resolved = ServerApp.resolve app
 
             Expect.contains resolved.ComposedCompanions "ToolUp.AI" "the AI tier is composed"
-            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+
+            Expect.equal
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
+
             Expect.isTrue (obj.ReferenceEquals(resolved.Storage.Value, storage)) "and the later withStorage"
             Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
             Expect.isTrue (hasBudgetSchema app) "the AI tier read the final, team-scoped configuration"

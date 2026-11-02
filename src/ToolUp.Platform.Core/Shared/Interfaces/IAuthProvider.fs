@@ -155,7 +155,7 @@ type IAuthProvider =
     /// (`HeaderAuthProviderModeValidator`, registered as `header-auth-mode`)
     /// refuses to boot an auth-requiring deployment whose composed provider
     /// reports `false`, unless the operator sets the
-    /// `ServerConfig.AcceptHeaderAuthWhenAuthRequired` escape hatch
+    /// `ServerConfig.RiskAcknowledgements.AcceptHeaderAuthWhenAuthRequired` escape hatch
     /// (intended for behind-mTLS deployments where a verified-identity
     /// proxy strips and re-injects the identity header). The check reads
     /// this capability rather than the concrete type, so a subclass /

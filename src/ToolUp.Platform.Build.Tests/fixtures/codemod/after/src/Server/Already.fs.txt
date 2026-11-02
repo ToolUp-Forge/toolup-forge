@@ -9,7 +9,10 @@ open ToolUp.Platform.Server
 let config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.anonymousAndIndividual
-        AcceptHeaderAuthWhenAuthRequired = true
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptHeaderAuthWhenAuthRequired = true
+        }
 }
 
 let label (ctx: AccessContext) =

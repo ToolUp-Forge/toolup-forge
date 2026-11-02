@@ -49,7 +49,10 @@ let private devAdminTests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    RequireHttps = true
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = true
+                    }
                     AutoBootstrapDevAdmin = Some "dev-1"
             }
 
@@ -76,7 +79,10 @@ let private devAdminTests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    RequireHttps = true
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = true
+                    }
             }
 
             withOptIn None (fun () -> Expect.equal (run (validator cfg)) Ok "no dev-admin → no finding")
@@ -93,8 +99,11 @@ let private csrfDefaultTests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = CookieRequired
-                    SecurityHardening = NoSecurityHardening
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = CookieRequired
+                            SecurityHardening = NoSecurityHardening
+                    }
             }
 
             match run (validator cfg) with
@@ -110,9 +119,15 @@ let private csrfDefaultTests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = CookieRequired
-                    SecurityHardening = NoSecurityHardening
-                    AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = CookieRequired
+                            SecurityHardening = NoSecurityHardening
+                    }
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+                    }
             }
 
             Expect.equal
@@ -125,8 +140,11 @@ let private csrfDefaultTests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = CookieRequired
-                    SecurityHardening = DefaultSecurityHardening
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = CookieRequired
+                            SecurityHardening = DefaultSecurityHardening
+                    }
             }
 
             Expect.equal (run (validator cfg)) Ok "hardening enabled → no exposure"
@@ -136,8 +154,11 @@ let private csrfDefaultTests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = QueryParamFallback
-                    SecurityHardening = NoSecurityHardening
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = QueryParamFallback
+                            SecurityHardening = NoSecurityHardening
+                    }
             }
 
             Expect.equal (run (validator cfg)) Ok "no cookie auth → no CSRF exposure here"
@@ -147,8 +168,11 @@ let private csrfDefaultTests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.anonymous
-                    SseAuthMode = CookieRequired
-                    SecurityHardening = NoSecurityHardening
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = CookieRequired
+                            SecurityHardening = NoSecurityHardening
+                    }
             }
 
             Expect.equal (run (validator cfg)) Ok "no authenticated surface → gatedAuthValidation short-circuits"

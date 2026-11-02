@@ -17,7 +17,7 @@ open System
 //
 // **Per-section auto-skip.** When the underlying substrate is disabled
 // (`ServerConfig.JobScheduler = NoJobScheduler`, `RateLimiter =
-// NoRateLimiter`, etc.) the section is built with `Disabled = true` and
+// FeatureMode.Disabled`, etc.) the section is built with `Disabled = true` and
 // no underlying read is performed — the UI renders a "disabled" badge
 // and the section does not contribute to `OverallStatus`.
 

@@ -380,7 +380,7 @@ type WebhookDeps = {
     /// `ExecuteAsync` runs, compose has populated it.
     GetRateLimiter: unit -> IRateLimiter
     /// The SSRF policy (the operator allowlist from
-    /// `ServerConfig.WebhookUrlAllowedHosts`), re-applied at delivery time
+    /// `ServerConfig.SecurityPosture.WebhookUrlAllowedHosts`), re-applied at delivery time
     /// to defeat DNS rebinding past the registration-time guard.
     UrlPolicy: WebhookUrlValidator.WebhookUrlPolicy
 }

@@ -22,7 +22,7 @@ open ToolUp.Platform.IDataExporter
 let private HandlerName = "conversations"
 
 /// Registered via `ServerApp.withErasureHandler` when
-/// `ServerConfig.ConversationStore = EnabledConversationStore _`
+/// `ServerConfig.Stores.ConversationStore = EnabledConversationStore _`
 /// AND `ServerConfig.DataSubjectRequests = Enabled _`. The
 /// adapter is a no-op when either gate is off (DSR pipeline
 /// never resolves it). The conversation-substrate-specific audit

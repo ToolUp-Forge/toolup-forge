@@ -209,7 +209,7 @@ Both endpoints emit JSON: `{"status": "Healthy" | "Degraded" | "Unhealthy", "che
 
 ### Metrics (Phase 9e)
 
-`/metrics` emits OpenMetrics 1.0 text scrapable by Prometheus, Grafana Cloud, and OTel collectors with the openmetrics receiver. Opt-in via `ServerConfig.MetricsEndpoint = EnabledMetricsEndpoint` (default `NoMetricsEndpoint` to avoid information disclosure surprises). The `IMetricsSink` interface (`Record` / `Increment` / `SetGauge`) is sync by deliberate design — Phase 9c rule 2 documented exemption for hot-path write-only emission.
+`/metrics` emits OpenMetrics 1.0 text scrapable by Prometheus, Grafana Cloud, and OTel collectors with the openmetrics receiver. Opt-in via `ServerConfig.Observability.MetricsEndpoint = FeatureMode.Enabled` (default `FeatureMode.Disabled` to avoid information disclosure surprises). The `IMetricsSink` interface (`Record` / `Increment` / `SetGauge`) is sync by deliberate design — Phase 9c rule 2 documented exemption for hot-path write-only emission.
 
 Standard SDK metrics (registered automatically when enabled):
 
@@ -227,7 +227,7 @@ Standard SDK metrics (registered automatically when enabled):
 
 **Cardinality cap.** Two-layer defence: (1) per-metric tag-key allowlist in `MetricDefinition.Tags` drops unsanctioned tags before they hit the accumulator; (2) per-metric distinct-series ceiling (default 1000, configurable per metric via `MetricsSinkConfig.PerMetricMaxSeries`). Series past the ceiling fold into a single `_overflow="true"` series and the first overflow logs `Warn` once per metric.
 
-**Auth surface.** `/metrics` is exempt from `AuthEnforcementMiddleware` so vanilla scrapers without bearer tokens can read it. Deployments needing authn gate at the network layer (LB allowlist, monitoring-network CIDR). Information disclosed is intentional — route templates, tag values, traffic patterns. Deployments that don't want that surface open keep `MetricsEndpoint = NoMetricsEndpoint`.
+**Auth surface.** `/metrics` is exempt from `AuthEnforcementMiddleware` so vanilla scrapers without bearer tokens can read it. Deployments needing authn gate at the network layer (LB allowlist, monitoring-network CIDR). Information disclosed is intentional — route templates, tag values, traffic patterns. Deployments that don't want that surface open keep `MetricsEndpoint = FeatureMode.Disabled`.
 
 **OpenTelemetry companion.** `src/Metrics/OpenTelemetry/` ships a sub-companion that implements `IMetricsSink` over BCL `System.Diagnostics.Metrics.Meter` (the OTel-native primitive on .NET 10). The companion does NOT take an OpenTelemetry SDK dep — deployments that want OTLP export add the SDK to their server project and call `MeterProviderBuilder.AddMeter("ToolUp")`. Multi-sink fan-out via `FanOutMetricsSink` so a single emission dispatches to every registered sink; Prometheus stays at the head of the chain so `/metrics` keeps returning current values even if a companion fails. Wire via `ServerApp.withMetricsSink (OtelMetricsSink.create regs logger)`.
 
@@ -349,7 +349,7 @@ The platform's non-negotiable contract: **teams cannot see anything that origina
 
 **The one write path to `VectorScope.Platform`** is `IPlatformKnowledgeApi` (Phase 4b), shipped from `ToolUp.KnowledgeBase.Core`. Every method is gated server-side on `AccessContext.canModifyPlatformConfig` — the predicate added in Phase 4b commit 4a, returning true only when the caller holds `PlatformRole.PlatformAdmin`. The role itself is bootstrapped via `TOOLUP_INITIAL_PLATFORM_ADMIN` env var on first startup; subsequent assignments go through the gated `PlatformAdminApi.AssignPlatformAdmin` endpoint.
 
-**Read access to `VectorScope.Platform`** is governed by a separate toggle: `ServerConfig.PlatformKnowledgeBase = EnabledPlatformKnowledgeBase` lifts the gate at retrieval time. `NoPlatformKnowledgeBase` (the default) filters `Platform` out of `RetrievalPipeline.authorisedScopes` regardless of caller — existing Platform-scoped chunks stay on disk but are invisible to RAG retrieval. `ListPlatformDocuments` still functions when the toggle is off so admins can pre-populate content before flipping the read switch.
+**Read access to `VectorScope.Platform`** is governed by a separate toggle: `ServerConfig.PlatformKnowledgeBase = FeatureMode.Enabled` lifts the gate at retrieval time. `FeatureMode.Disabled` (the default) filters `Platform` out of `RetrievalPipeline.authorisedScopes` regardless of caller — existing Platform-scoped chunks stay on disk but are invisible to RAG retrieval. `ListPlatformDocuments` still functions when the toggle is off so admins can pre-populate content before flipping the read switch.
 
 Read and write are orthogonal axes: admin role controls writes regardless of toggle; toggle controls reads regardless of role. The two compose, not overlap.
 
@@ -369,8 +369,8 @@ All three share the same shape: one root container / bucket holds every ToolUp l
 **Storage scoping:** Each mode resolves a `StorageScope` per request. `SessionFileStore` checks `scope.Persist` to decide whether to also write to `IBlobStorage`. Ephemeral stores are evicted after a configurable TTL (default 60 minutes).
 
 **Event store (`IEventStore`):**
-- `InMemoryEventStore` — thread-safe list, lost on restart. Default (`ServerConfig.EventStore = InMemoryOnly`).
-- `PersistentEventStore` — blob-backed, append-only JSON per event under `_platform/events/{scopeId}/`. Opt in with `ServerConfig.EventStore = PersistentBlobBacked retentionPolicy`. Uses whatever `IBlobStorage` is registered (local disk or any cloud companion). Scope isolation is structural (prefix-based). `EventRetentionPolicy` supports `MaxAge` / `MaxCountPerScope` — both optional and independent. Pruning is explicit (`store.PruneScope` / `store.PruneScopes`), not triggered by writes; apps schedule it from startup or a background job (Phase 9b).
+- `InMemoryEventStore` — thread-safe list, lost on restart. Default (`ServerConfig.Stores.EventStore = InMemoryOnly`).
+- `PersistentEventStore` — blob-backed, append-only JSON per event under `_platform/events/{scopeId}/`. Opt in with `ServerConfig.Stores.EventStore = PersistentBlobBacked retentionPolicy`. Uses whatever `IBlobStorage` is registered (local disk or any cloud companion). Scope isolation is structural (prefix-based). `EventRetentionPolicy` supports `MaxAge` / `MaxCountPerScope` — both optional and independent. Pruning is explicit (`store.PruneScope` / `store.PruneScopes`), not triggered by writes; apps schedule it from startup or a background job (Phase 9b).
 - `EventReplay.foldScope` / `foldScopeOfType` — helpers that fold a scope's history chronologically to reconstruct projections or audit trails.
 
 **Contract tests:** `src/ToolUp.Platform.Tests/` ships a parametrised Expecto contract pack per interface (`IBlobStorage`, `IEventStore`, `ISecretStore`, `IPermissionStore`) plus per-implementation bindings. Every new blob-storage provider runs the same contract tests — divergence is caught as a portability bug, not a feature gap.
@@ -467,7 +467,7 @@ All Enterprise imports and module registration calls are at module top level in 
 | `Auth/HeaderAuthProvider.fs` | Dev-only `IAuthProvider` — trusts `X-User-Id` header |
 | `Auth/StaticJwtAuthProvider.fs` | HS256 JWT validator |
 | `LocalFileStorage.fs` | Default `IBlobStorage` on the local filesystem |
-| `IShareTokenStore.fs` | Phase 21b — `IShareTokenStore` interface (`Issue` / `Validate` / `MarkUsed` / `Revoke` / `ListByResource`). Six-rule Phase 9c portability audit clean. Opt-in via `ServerConfig.ShareTokenStore = EnabledShareTokenStore` |
+| `IShareTokenStore.fs` | Phase 21b — `IShareTokenStore` interface (`Issue` / `Validate` / `MarkUsed` / `Revoke` / `ListByResource`). Six-rule Phase 9c portability audit clean. Opt-in via `ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled` |
 | `ShareTokenStore.fs` | Phase 21b — default `BlobShareTokenStore`. HMAC-SHA256-signed wire format `{tokenId}.{base64url(payload)}.{base64url(hmac)}`; persisted claims under `_platform/share-tokens/{scopeId}/{tokenId}.json`; signing key auto-resolved from `ISecretStore` under `_platform/share_token_signing_key`; resource-index entries enable `ListByResource` queries |
 | `EnvironmentSecretStore.fs` | Env-var backed `ISecretStore` (read-only) |
 | `FileSecretStore.fs` | File-backed `ISecretStore` with `baseDir` param for testability |
@@ -488,10 +488,10 @@ All Enterprise imports and module registration calls are at module top level in 
 | `Server/HealthCheck.fs` | First-party probes — `BlobStorageHealthCheck`, `AuthProviderHealthCheck`, `EventStoreHealthCheck` (refactored Phase 9k to implement the ToolUp `IHealthCheck` rather than BCL) |
 | `Server/HealthCheckAggregator.fs` | Walks `services.AddSingleton<IHealthCheck>` registrations near end-of-compose and registers each via BCL `AddCheck` through `BclHealthCheckAdapter` (per-probe timeout enforcement, exception → "probe threw:" Unhealthy with 500-char truncation) |
 | `Server/HealthCheckResponseWriter.fs` | Custom `HealthCheckOptions.ResponseWriter` emitting `{"status": ..., "checks": [...]}` JSON for both `/health` and `/ready` |
-| `RequestTimingMiddleware.fs` | Stopwatch-based slow-request logger; warns via `ILogger` when elapsed > `ServerConfig.SlowRequestThreshold` |
+| `RequestTimingMiddleware.fs` | Stopwatch-based slow-request logger; warns via `ILogger` when elapsed > `ServerConfig.Observability.SlowRequestThreshold` |
 | `RateLimiting.fs` | `RateLimiting.configure` — fixed-window `RateLimiterOptions` partitioned by team / user / IP; `429 + Retry-After`; bypasses `/health`, `/ready`, `/api/notifications` |
 | `Shared/MetricsTypes.fs` | Phase 9e — `MetricDefinition`, `MetricKind` DU (`Counter` / `Gauge` / `Histogram of buckets:float list` / `Summary`), `MetricRegistration` |
-| `Server/IMetricsSink.fs` | Phase 9e portable interface (`Record` / `Increment` / `SetGauge`); sync-by-design (Phase 9c rule 2 documented exemption — hot path, write-only, no return to await). `NoOpMetricsSink` default registered when `MetricsEndpoint = NoMetricsEndpoint` |
+| `Server/IMetricsSink.fs` | Phase 9e portable interface (`Record` / `Increment` / `SetGauge`); sync-by-design (Phase 9c rule 2 documented exemption — hot path, write-only, no return to await). `NoOpMetricsSink` default registered when `MetricsEndpoint = FeatureMode.Disabled` |
 | `Server/PrometheusMetricsSink.fs` | In-process default + `FanOutMetricsSink`. OpenMetrics text emission via `Render()`; two-layer cardinality cap (per-metric tag-key allowlist + per-metric distinct-series ceiling); concurrent-safe accumulators (per-cell lock for floats; histogram bucket counts in `ConcurrentDictionary<float,int64>`) |
 | `Server/MetricsMiddleware.fs` | Per-request emission of `toolup.requests.total` / `_latency_ms` / `errors.total` with bucketed tags (`method`, `route_class` = two-segment prefix, `status_class` = 1xx/2xx/3xx/4xx/5xx); `StandardMetrics.registrations` lists the 8 SDK-owned metrics |
 | `Server/MetricsEndpoint.fs` | `/metrics` Giraffe handler emitting OpenMetrics 1.0 text. Exempt from `AuthEnforcementMiddleware`; `Cache-Control: no-store` |

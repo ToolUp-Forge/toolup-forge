@@ -35,7 +35,7 @@ open ToolUp.Platform
 /// the retention sweep needs both and re-deriving the config would let the
 /// two drift.
 let createLogStore (config: ServerConfig) : (ILogStore * LogStoreConfig) option =
-    match config.LogStore with
+    match config.Observability.LogStore with
     | NoLogStore -> None
     | SqliteLogStore storeConfig -> Some(SqliteLogStore.create storeConfig, storeConfig)
 
@@ -91,7 +91,7 @@ let registerLogStore
 /// in-memory metric accumulators, so a silo that skipped the flush would
 /// simply lose its own metrics rather than let a peer cover for it.
 let registerMetricsHistory (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
-    match config.MetricsHistory with
+    match config.Observability.MetricsHistory with
     | NoMetricsHistory -> ()
     | EnabledMetricsHistory historyConfig ->
         Hosting.register
@@ -111,5 +111,5 @@ let registerMetricsHistory (services: IServiceCollection) (config: ServerConfig)
 /// a `WebOnly` silo still serves the endpoint, and an empty board there
 /// is what makes it answer `NotEvaluated` honestly rather than 500.
 let registerObservabilityReadback (services: IServiceCollection) (config: ServerConfig) : unit =
-    if not (List.isEmpty config.AlertRules) then
+    if not (List.isEmpty config.Observability.AlertRules) then
         services.TryAddSingleton<AlertRuleEngine.AlertRuleStatusBoard>(AlertRuleEngine.AlertRuleStatusBoard())

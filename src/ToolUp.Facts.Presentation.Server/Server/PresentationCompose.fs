@@ -26,8 +26,8 @@ module PresentationCompose =
     /// beside the three fact tools the fact store declares. The tools ride
     /// `AIOptions.AIAnsweringTools`, which `composeAI` registers through
     /// the record-form funnel, so they arm only when the AI companion is
-    /// composed; and only under `EnabledFactStore`, since they read the fact
-    /// tables. Under `NoFactStore` both are returned unchanged.
+    /// composed; and only under `FeatureMode.Enabled`, since they read the fact
+    /// tables. Under `FeatureMode.Disabled` both are returned unchanged.
     ///
     /// Idempotent: a tool already composed is not composed again. A
     /// deployment that never calls this registers neither tool and carries no
@@ -38,9 +38,9 @@ module PresentationCompose =
     /// app |> AICompose.withAI ai
     /// ```
     let withRenderTools (app: ServerApp, ai: AIOptions) : ServerApp * AIOptions =
-        match app.Config.FactStore with
-        | NoFactStore -> app, ai
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app, ai
+        | FeatureMode.Enabled ->
             let composed =
                 ai.AIAnsweringTools
                 |> List.map (fun (definition, _) -> definition.Name)
@@ -56,8 +56,8 @@ module PresentationCompose =
     /// Compose `evaluate_pipeline` onto the AI composition in the answering
     /// form, beside the render tools, and mount the re-run a reader's panel
     /// draws its block from (`IPipelineBlockApi`, at
-    /// `/api/_facts/pipeline-block/*`). Only under `EnabledFactStore`; under
-    /// `NoFactStore` both are returned unchanged.
+    /// `/api/_facts/pipeline-block/*`). Only under `FeatureMode.Enabled`; under
+    /// `FeatureMode.Disabled` both are returned unchanged.
     ///
     /// Idempotent: when the tool is already composed both are returned
     /// unchanged, so the endpoint is mounted once. A deployment that never
@@ -72,14 +72,14 @@ module PresentationCompose =
     /// app |> AICompose.withAI ai
     /// ```
     let withPipelineTool (app: ServerApp, ai: AIOptions) : ServerApp * AIOptions =
-        match app.Config.FactStore with
-        | NoFactStore -> app, ai
-        | EnabledFactStore when
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app, ai
+        | FeatureMode.Enabled when
             ai.AIAnsweringTools
             |> List.exists (fun (definition, _) -> definition.Name = ToolUp.Facts.PipelineTool.Name)
             ->
             app, ai
-        | EnabledFactStore ->
+        | FeatureMode.Enabled ->
             let mounted = {
                 app with
                     Extensions.Handlers = app.Extensions.Handlers @ [ PipelineAnsweringTool.handler ]
@@ -92,7 +92,7 @@ module PresentationCompose =
     /// presentation request and a pipeline request each answered under the
     /// caller's gate) and the per-session `PageResolutionCache`, and arms the
     /// fact-table change signal the cache is invalidated by. Only under
-    /// `EnabledFactStore`; under `NoFactStore` the app is returned unchanged
+    /// `FeatureMode.Enabled`; under `FeatureMode.Disabled` the app is returned unchanged
     /// and nothing is registered. Call it after `FactsCompose.withFactStore`,
     /// which composes the signal. Idempotent. **Adds** its registrations.
     ///
@@ -103,10 +103,11 @@ module PresentationCompose =
     /// |> ServerApp.run
     /// ```
     let withPageRequests (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore when app.Contributions |> List.exists (fun c -> c.Owner = owner) -> app
-        | EnabledFactStore -> ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register) app
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when app.Contributions |> List.exists (fun c -> c.Owner = owner) -> app
+        | FeatureMode.Enabled ->
+            ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register) app
 
     /// The layout tools' runtime is contributed under its own slot, so that
     /// composing it never reads as composing the page requests.
@@ -122,7 +123,7 @@ module PresentationCompose =
     /// registration factory) and composes the page request resolvers
     /// (`withPageRequests`) when they are not composed.
     ///
-    /// Only under `EnabledFactStore`, and only when the page store is composed
+    /// Only under `FeatureMode.Enabled`, and only when the page store is composed
     /// (`PageDocumentStoreCompose.withPageDocumentStore`, called before this):
     /// otherwise both are returned unchanged and no tool is registered, so
     /// a deployment that composes neither has the tool list it had before.
@@ -146,10 +147,10 @@ module PresentationCompose =
             ai.AIAnsweringTools
             |> List.exists (fun (definition, _) -> definition.Name = LayoutTools.name LayoutTool.Save)
 
-        match app.Config.FactStore with
-        | NoFactStore -> app, ai
-        | EnabledFactStore when not pageStore || composed -> app, ai
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app, ai
+        | FeatureMode.Enabled when not pageStore || composed -> app, ai
+        | FeatureMode.Enabled ->
             let withRuntime =
                 withPageRequests app
                 |> ServerApp.addContribution (Contribution.service layoutOwner LayoutTools.register)
@@ -160,7 +161,7 @@ module PresentationCompose =
     /// derived metric: the tool gains the `assert` argument, and the write it
     /// may make into the fact store is declared beside its read. Composes the
     /// pipeline tool first when it is not composed (`withPipelineTool`). Only
-    /// under `EnabledFactStore`; under `NoFactStore` both are returned
+    /// under `FeatureMode.Enabled`; under `FeatureMode.Disabled` both are returned
     /// unchanged. A deployment that never calls this offers no `assert`
     /// argument, and a request carrying one is refused. **Sets** the composed
     /// tool's declaration and executor; idempotent.
@@ -173,9 +174,9 @@ module PresentationCompose =
     /// app |> AICompose.withAI ai
     /// ```
     let withDerivedAssertions (app: ServerApp, ai: AIOptions) : ServerApp * AIOptions =
-        match app.Config.FactStore with
-        | NoFactStore -> app, ai
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app, ai
+        | FeatureMode.Enabled ->
             let withTool, composed = withPipelineTool (app, ai)
 
             withTool,

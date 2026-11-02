@@ -10,7 +10,10 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptHeaderAuthWhenAuthRequired = escapeHatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptHeaderAuthWhenAuthRequired = escapeHatch
+        }
 }
 
 let private headerAuthProvider () : IAuthProvider =

@@ -124,7 +124,10 @@ let private buildHandler
     services.AddSingleton<ServerConfig>(
         {
             ServerConfig.defaults with
-                WebhookUrlAllowedHosts = [ "hooks.example.com" ]
+                SecurityPosture = {
+                    ServerConfig.defaults.SecurityPosture with
+                        WebhookUrlAllowedHosts = [ "hooks.example.com" ]
+                }
         }
     )
     |> ignore

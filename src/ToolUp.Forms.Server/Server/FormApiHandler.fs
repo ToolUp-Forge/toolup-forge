@@ -82,8 +82,8 @@ let formApi
     (validatorRegistry: CustomValidatorRegistry)
     (auditLog: IAuditLog)
     (workflows: Map<WorkflowId, WorkflowDefinition>)
-    /// Phase 21b — `Some` when `ServerConfig.ShareTokenStore =
-    /// EnabledShareTokenStore`. `None` causes `IssueTokens` to fail
+    /// Phase 21b — `Some` when `ServerConfig.Stores.ShareTokenStore =
+    /// FeatureMode.Enabled`. `None` causes `IssueTokens` to fail
     /// with a clear error rather than crashing on a null DI lookup.
     (shareTokenStore: IShareTokenStore option)
     /// Phase 21b — `Some` when `ServerConfig.PublicBaseUrl` is set.
@@ -445,7 +445,7 @@ let formApi
                         return
                             Error(
                                 FormError.StorageFailed
-                                    "Share-token substrate is not enabled. Set ServerConfig.ShareTokenStore = EnabledShareTokenStore."
+                                    "Share-token substrate is not enabled. Set ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled."
                             )
                     | _, None ->
                         return
@@ -649,7 +649,7 @@ let formApi
                         return
                             Error(
                                 FormError.StorageFailed
-                                    "Share-token substrate is not enabled. Set ServerConfig.ShareTokenStore = EnabledShareTokenStore."
+                                    "Share-token substrate is not enabled. Set ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled."
                             )
                     | _, None, _, _ ->
                         return

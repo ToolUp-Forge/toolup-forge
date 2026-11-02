@@ -21,9 +21,9 @@ open ToolUp.AI
 // output tokens) keyed against the caller's resolved scope.
 //
 // Wire-in lives in `AICompose.aiServiceConfig` — when
-// `ServerConfig.UsageMetering = EnabledUsageMetering`, the SDK
+// `ServerConfig.UsageMetering = FeatureMode.Enabled`, the SDK
 // rebinds the `IAIProviderFactory` DI registration to the metered
-// wrapper. NoUsageMetering deployments keep the raw factory and pay
+// wrapper. FeatureMode.Disabled deployments keep the raw factory and pay
 // nothing.
 //
 // ProviderOrigin discrimination (Phase 43.A — reads the canonical
@@ -669,7 +669,7 @@ type SpendEnforcingProviderFactory(inner: IAIProviderFactory, enforcer: AIBudget
 // Previously AICompose wrapped inline while RAGCompose registered the
 // raw factory — RAG-using deployments silently bypassed both
 // subsystems even when `ServerConfig.UsageMetering =
-// EnabledUsageMetering` and an `ITeamQuotaPolicy` was wired. The
+// FeatureMode.Enabled` and an `ITeamQuotaPolicy` was wired. The
 // keep-in-sync comment block in RAGCompose flagged this drift; the
 // helper here removes the surface.
 
@@ -763,7 +763,7 @@ let private failoverSink (sp: System.IServiceProvider) : AIProviderFailoverRecor
 /// Build a DI factory delegate that resolves `IAIProviderFactory` with
 /// the standard Metering + Quota wrap applied over `rawFactory`:
 ///   * `MeteringProviderFactory` is stacked when
-///     `config.UsageMetering = EnabledUsageMetering` (Phase 9d).
+///     `config.UsageMetering = FeatureMode.Enabled` (Phase 9d).
 ///   * `QuotaEnforcingProviderFactory` is stacked OUTERMOST whenever an
 ///     `ITeamQuotaPolicy` resolves from DI (Phase 9 compute-quota).
 ///   * Phase 498 — `DefaultAIProviderFactory.withFailoverChain` is
@@ -803,8 +803,8 @@ let wrapFactoryForDI
 
         let baseFactory =
             match config.UsageMetering with
-            | NoUsageMetering -> failoverAware
-            | EnabledUsageMetering ->
+            | FeatureMode.Disabled -> failoverAware
+            | FeatureMode.Enabled ->
                 let usageLog = sp.GetService(typeof<IUsageLog>) :?> IUsageLog
 
                 MeteringProviderFactory(failoverAware, usageLog, providerProfile, priceTable) :> IAIProviderFactory

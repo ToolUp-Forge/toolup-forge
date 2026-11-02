@@ -312,7 +312,7 @@ type FileManagementRuntime = {
     /// contract.
     QuotaResolver: (string -> Async<int64 option>) option
     /// Phase 9d — `IUsageLog` for `storage.bytes` emission. `None`
-    /// (test-harness / `NoUsageMetering`) makes the emission sites
+    /// (test-harness / `FeatureMode.Disabled`) makes the emission sites
     /// no-op.
     UsageLog: IUsageLog option
     /// Hard per-file ceiling (bytes). Independent of the per-scope quota:
@@ -321,7 +321,7 @@ type FileManagementRuntime = {
     /// which point `upload.contents` is already a fully-materialised string
     /// — the request body was read into memory and deserialised by the
     /// transport before the handler ran. The pre-materialisation guard is
-    /// the transport-level `ServerConfig.MaxRequestBodyBytes` (stamped onto
+    /// the transport-level `ServerConfig.SecurityPosture.MaxRequestBodyBytes` (stamped onto
     /// Kestrel's `Limits.MaxRequestBodySize` in `buildHostBuilder`); this
     /// ceiling is the application-level backstop that additionally bounds
     /// the detect/parse cost. `None` disables it; the default is generous
@@ -729,7 +729,7 @@ type SessionFileStore
             // length and processed. `upload.contents` is already in memory by
             // here (the transport materialised + deserialised the body); the
             // pre-materialisation guard is Kestrel's MaxRequestBodySize set
-            // from `ServerConfig.MaxRequestBodyBytes`. `None` disables it.
+            // from `ServerConfig.SecurityPosture.MaxRequestBodyBytes`. `None` disables it.
             | _ when runtime.MaxFileBytes |> Option.exists (fun maxBytes -> sizeBytes > maxBytes) ->
                 return
                     Error
@@ -752,7 +752,7 @@ type SessionFileStore
                 do! persistFile file createdBy
 
                 // Phase 9d — emit positive `storage.bytes` for this scope.
-                // No-op when `runtime.UsageLog = None` (NoUsageMetering or
+                // No-op when `runtime.UsageLog = None` (FeatureMode.Disabled or
                 // tests). Best-effort: a failed `Record` must not fail the
                 // upload — `IUsageLog.Record` is fire-and-forget by
                 // contract, and the default impl wraps its own producer
@@ -911,7 +911,7 @@ type SessionFileStore
             match files.TryRemove(fileName) with
             | true, removed ->
                 // Phase 9d — emit negative `storage.bytes` so the running
-                // sum reflects the live footprint. Same NoUsageMetering
+                // sum reflects the live footprint. Same FeatureMode.Disabled
                 // short-circuit as `AddFile`.
                 match runtime.UsageLog with
                 | Some usageLog ->

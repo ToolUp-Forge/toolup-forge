@@ -55,7 +55,7 @@ let private stampSubmission: WorkflowAction =
         // Resolve services per-invocation — never capture transient
         // services at compose time. The cast is safe because the SDK
         // always registers `IEntityStore` (concrete impl varies per
-        // `ServerConfig.EntityStore`); deployments running without
+        // `ServerConfig.Stores.EntityStore`); deployments running without
         // an entity store would crash here at first transition,
         // which is the documented requirement of the Forms companion.
         let entityStore = ctx.Services.GetService(typeof<IEntityStore>) :?> IEntityStore

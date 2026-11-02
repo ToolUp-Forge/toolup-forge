@@ -13,7 +13,10 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptUnboundAudienceWhenAuthRequired = escapeHatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptUnboundAudienceWhenAuthRequired = escapeHatch
+        }
 }
 
 /// Set TOOLUP_AUTH_MODE / TOOLUP_OIDC_AUDIENCE (None = unset), run the

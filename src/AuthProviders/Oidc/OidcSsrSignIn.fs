@@ -557,7 +557,7 @@ let private callback (page: SignInPage) (http: HttpClient) (config: OidcSsrSignI
 /// to replace it is through the server. The route validates the bearer
 /// token it is sent before writing it `HttpOnly`, and sits behind the CSRF
 /// middleware like every mutating `/api` call. Mounting it twice (beside
-/// `AuthCookieIssuance = EnabledAuthCookieIssuance`) is harmless: the
+/// `AuthCookieIssuance = FeatureMode.Enabled`) is harmless: the
 /// handlers are the same and the first match answers.
 let routesWithPage (page: SignInPage) (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
     choose [

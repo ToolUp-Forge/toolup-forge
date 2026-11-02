@@ -398,7 +398,10 @@ let private referenceInstance () =
     |> PeerComposition.app (
         ServerApp.withConfig {
             ServerConfig.defaults with
-                PeerSubstrate = EnabledPeerSubstrate
+                MultiInstance = {
+                    ServerConfig.defaults.MultiInstance with
+                        PeerSubstrate = FeatureMode.Enabled
+                }
                 JobScheduler = InProcessJobScheduler
         }
     )

@@ -59,15 +59,21 @@ type private SeedableSecretStore(seed: (string * string * string) list) =
 /// Config with a live share-token surface unless overridden.
 let private cfg
     (surfaces: SurfaceProfile list)
-    (shareTokenStore: ShareTokenStoreMode)
+    (shareTokenStore: FeatureMode)
     (replicaCount: int)
     (publicBaseUrl: string option)
     =
     {
         ServerConfig.defaults with
             Surfaces = surfaces
-            ShareTokenStore = shareTokenStore
-            ReplicaCount = replicaCount
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    ShareTokenStore = shareTokenStore
+            }
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = replicaCount
+            }
             PublicBaseUrl = publicBaseUrl
     }
 
@@ -95,20 +101,20 @@ let private validate (config: ServerConfig) (store: Secrets.ISecretStore) : Vali
 let tests =
     testList "Wave 19 — share-token signing-key provenance validator" [
 
-        test "Surface off (NoShareTokenStore) + key absent → Ok (validator self-gates)" {
+        test "Surface off (FeatureMode.Disabled) + key absent → Ok (validator self-gates)" {
             let config =
-                cfg Surfaces.individual NoShareTokenStore 3 (Some "https://app.example.com")
+                cfg Surfaces.individual FeatureMode.Disabled 3 (Some "https://app.example.com")
 
             Expect.equal (validate config (emptyStore ())) Ok "no share-token surface → silent"
         }
 
         test "Surface live + single instance, non-public + key absent → Ok (auto-gen is fine for dev)" {
-            let config = cfg Surfaces.individual EnabledShareTokenStore 1 None
+            let config = cfg Surfaces.individual FeatureMode.Enabled 1 None
             Expect.equal (validate config (emptyStore ())) Ok "single-instance non-public → silent"
         }
 
         test "Surface live + ReplicaCount > 1 + key absent → Error (Phase 460: was Warning)" {
-            let config = cfg Surfaces.individual EnabledShareTokenStore 3 None
+            let config = cfg Surfaces.individual FeatureMode.Enabled 3 None
             let result = validate config (emptyStore ())
 
             match result with
@@ -120,7 +126,7 @@ let tests =
 
         test "Surface live + PublicBaseUrl set (inferred scale-out) + key absent → Error (Phase 460: was Warning)" {
             let config =
-                cfg Surfaces.individual EnabledShareTokenStore 1 (Some "https://app.example.com")
+                cfg Surfaces.individual FeatureMode.Enabled 1 (Some "https://app.example.com")
 
             match validate config (emptyStore ()) with
             | Error _ -> ()
@@ -129,7 +135,7 @@ let tests =
 
         test "Surface live + production shape + key already provisioned → Ok" {
             let config =
-                cfg Surfaces.individual EnabledShareTokenStore 3 (Some "https://app.example.com")
+                cfg Surfaces.individual FeatureMode.Enabled 3 (Some "https://app.example.com")
 
             Expect.equal (validate config (seededStore ())) Ok "operator-managed key → silent"
         }
@@ -137,7 +143,7 @@ let tests =
         test "Validator name is stable + non-empty" {
             let v =
                 ShareTokenSigningKeyProvenanceValidator.ShareTokenSigningKeyProvenanceValidator(
-                    cfg Surfaces.anonymous NoShareTokenStore 1 None,
+                    cfg Surfaces.anonymous FeatureMode.Disabled 1 None,
                     emptyStore ()
                 )
                 :> IConfigValidator

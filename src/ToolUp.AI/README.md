@@ -38,7 +38,7 @@ There are three exits, and the refusal message names all of them:
 
 - **Rate-limit the anonymous surface** — `ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 }`, or a `PerShape` policy covering `AnonymousKind` (`TOOLUP_RATE_LIMIT_PERMITS=N`). Anonymous traffic partitions on client IP.
 - **Use a BYOK-only `IAIProviderFactory`** — wire no platform providers, so every call is funded by a key the user supplied. This is the documented legitimate Anonymous + AI shape, and it is exempt *by construction* rather than by exception: with no platform-paid provider, resolution for an anonymous caller (who has no secret scope to hold a key) can only ever return `NoProviderConfigured`.
-- **Attest that the cost is bounded upstream** — `ServerConfig.AcceptAnonymousModeWithAI = true` (`TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`) for a deployment whose per-IP gating or request budgets live at the proxy / CDN / WAF. Like `AcceptStickyRoutedAiInMultiInstance`, this **degrades the refusal to a `Warning` rather than clearing it**: upstream rate limiting is an assertion about infrastructure the SDK cannot verify, so the residual exposure stays visible in the HealthMonitorUI Preflight tab and the `/dev/inspect` Validators panel. The deployment boots — only `Error` refuses.
+- **Attest that the cost is bounded upstream** — `ServerConfig.RiskAcknowledgements.AcceptAnonymousModeWithAI = true` (`TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`) for a deployment whose per-IP gating or request budgets live at the proxy / CDN / WAF. Like `AcceptStickyRoutedAiInMultiInstance`, this **degrades the refusal to a `Warning` rather than clearing it**: upstream rate limiting is an assertion about infrastructure the SDK cannot verify, so the residual exposure stays visible in the HealthMonitorUI Preflight tab and the `/dev/inspect` Validators panel. The deployment boots — only `Error` refuses.
 
 Single-user local development is unaffected in practice: a local shell that has wired no platform provider never reaches the rule, and one that has can set the env var.
 
@@ -293,7 +293,7 @@ An AI deployment wires health probes, config validators, and metrics sinks with 
 
 - `ServerApp.withHealthCheck` (Phase 9k) — register a companion-contributed `IHealthCheck` (e.g. `ClaudeAIProviderHealth.create secretStore`).
 - `ServerApp.withConfigValidator` (Phase 9m) — register a companion-contributed `IConfigValidator` for startup preflight.
-- `ServerApp.withMetricsSink` (Phase 9e) — register a companion-contributed `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. The fan-out wrapper makes a single `Increment` call dispatch to every registered sink. Wire `MetricsEndpoint = EnabledMetricsEndpoint` on `ServerConfig` to mount `/metrics` and activate emission.
+- `ServerApp.withMetricsSink` (Phase 9e) — register a companion-contributed `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. The fan-out wrapper makes a single `Increment` call dispatch to every registered sink. Wire `MetricsEndpoint = FeatureMode.Enabled` on `ServerConfig` to mount `/metrics` and activate emission.
 
 See [`src/ToolUp.Platform/README.md`](../ToolUp.Platform/README.md) and `TECHNICAL_GUIDE.md` for the full contract.
 

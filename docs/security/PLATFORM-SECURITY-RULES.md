@@ -543,7 +543,7 @@ carelessly.
 > governance and, across replicas, is decided by a first-write race. A
 > security-class preflight validator **refuses startup** when the share-token
 > surface is live, the deployment is production- or multi-instance-shaped, and
-> the key is still absent; `ServerConfig.AcceptEphemeralShareTokenKey`
+> the key is still absent; `ServerConfig.RiskAcknowledgements.AcceptEphemeralShareTokenKey`
 > (`TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1`) downgrades the refusal to a
 > `Warning` that names the flag rather than going silent. A key the SDK minted
 > is marked as such (`share_token_signing_key_origin`), so an unmanaged key
@@ -951,7 +951,7 @@ section eliminates structurally.
 > (refuses a declared scale-out deployment whose shred cannot reach a sibling —
 > either unwired or on an in-process channel — because shred must invalidate
 > every replica's key cache; the declaration is read from
-> `ServerConfig.ReplicaCount` as well as `TOOLUP_REPLICA_COUNT`, so configuring
+> `ServerConfig.MultiInstance.ReplicaCount` as well as `TOOLUP_REPLICA_COUNT`, so configuring
 > the count in code cannot bypass the refusal) ·
 > `src/ToolUp.Platform.Server/Server/KeyDestroyAckCoverageValidator.fs` (warns
 > when the same combination appears in a multi-tenant shape that has not declared

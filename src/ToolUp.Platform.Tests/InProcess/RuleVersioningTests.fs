@@ -134,12 +134,21 @@ let tests =
                 "a rule family ships in this assembly but is absent from CompositionRuleVersions.allRules — add a `seed` call for it and bump ManifestVersion (minor: the rule set grew)"
         }
 
-        test "rules that shipped before Phase 597 seed at 1.0.0" {
+        test "a rule seeds at 1.0.0 unless the override list moves it" {
+            let overrides = Map.ofList CompositionRuleVersions.overrides
+
             for rule in CompositionRuleVersions.allRules do
-                Expect.equal
-                    rule.RuleSemVer
-                    RuleVersion.initial
-                    (sprintf "rule '%s' seeds at the initial version" rule.VersionedRule.Code)
+                match overrides.TryFind rule.VersionedRule.Code with
+                | Some moved ->
+                    Expect.equal
+                        rule.RuleSemVer
+                        moved
+                        (sprintf "rule '%s' carries exactly its override" rule.VersionedRule.Code)
+                | None ->
+                    Expect.equal
+                        rule.RuleSemVer
+                        RuleVersion.initial
+                        (sprintf "rule '%s' seeds at the initial version" rule.VersionedRule.Code)
         }
 
         test "an unknown rule code has no version rather than a defaulted one" {
@@ -173,7 +182,16 @@ let tests =
 
             Expect.equal document.ManifestVersion "1.3.0" "the manifest version is published"
 
-            Expect.all document.Rules (fun r -> r.Version = "1.0.0") "every published rule carries its version string"
+            let seededVersion code =
+                CompositionRuleVersions.allRules
+                |> List.find (fun r -> r.VersionedRule.Code = code)
+                |> _.RuleSemVer
+                |> RuleVersion.format
+
+            Expect.all
+                document.Rules
+                (fun r -> r.Version = seededVersion r.Rule)
+                "every published rule carries its seeded version string"
 
             Expect.contains
                 (document.Rules |> List.map _.Rule)

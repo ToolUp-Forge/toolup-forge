@@ -1182,7 +1182,7 @@ module DeclaredDelivery =
         match composed.Configs, composed.Ingestor, composed.Scheduler, composed.Storage with
         | None, _, _, _
         | _, None, _, _ ->
-            Error(DeliveryUnavailable "data ingestion (ServerConfig.DataIngestion = EnabledDataIngestion)")
+            Error(DeliveryUnavailable "data ingestion (ServerConfig.DataIngestion = FeatureMode.Enabled)")
         | _, _, None, _ -> Error(DeliveryUnavailable "job scheduler")
         | _, _, _, None -> Error(DeliveryUnavailable "blob storage")
         | Some configs, Some ingestor, Some scheduler, Some storage ->

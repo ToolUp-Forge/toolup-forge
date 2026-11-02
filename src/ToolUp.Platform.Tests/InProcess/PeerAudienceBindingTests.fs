@@ -88,7 +88,10 @@ let private v1: ContractVersion = { Major = 1; Minor = 0 }
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
 }
 
 let private hostIdentity: PeerIdentity = {
@@ -277,7 +280,7 @@ let postureTests =
         }
 
         test "the strip-imports path is off entirely" {
-            // `PeerSubstrate = NoPeerSubstrate` validates no peer token
+            // `PeerSubstrate = FeatureMode.Disabled` validates no peer token
             // at all, so the question does not arise (GP 13).
             let app =
                 PeerComposition.create ()

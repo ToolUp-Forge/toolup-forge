@@ -51,7 +51,7 @@ type LedgerDisposition =
 
 /// Records hooks that have reached a terminal-success disposition for a
 /// `(scopeId, phase)` offboard run, so a re-run skips them. Registered as
-/// a DI singleton when `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`;
+/// a DI singleton when `ServerConfig.TenantLifecycle = FeatureMode.Enabled`;
 /// the blob-backed default is the zero-dependency floor.
 type ILifecycleLedger =
     /// The set of hook names already recorded `Completed`/`Skipped` for

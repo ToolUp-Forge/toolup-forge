@@ -1254,14 +1254,17 @@ let private auditTests =
                 ServerApp.empty with
                     Config = {
                         ServerApp.empty.Config with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerApp.empty.Config.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
             let composed =
                 FactsCompose.withFactPublication (FactPublicationConfig.create [ groupTarget ]) app
 
-            Expect.isTrue (obj.ReferenceEquals(app, composed)) "NoFactStore: the very same app"
+            Expect.isTrue (obj.ReferenceEquals(app, composed)) "FeatureMode.Disabled: the very same app"
         }
     ]
 
@@ -1844,7 +1847,10 @@ let startupTests =
                     ServerApp.empty with
                         Config = {
                             ServerApp.empty.Config with
-                                FactStore = EnabledFactStore
+                                Stores = {
+                                    ServerApp.empty.Config.Stores with
+                                        FactStore = FeatureMode.Enabled
+                                }
                         }
                 }
                 |> FactsCompose.withCoherenceChecksConfig CoherenceConfig.defaults (Trigger.CronTrigger "0 3 * * *") [

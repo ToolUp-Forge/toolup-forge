@@ -426,7 +426,7 @@ let tests =
 
             testCaseAsync "with NO external store composed, every external recipient resolves to nothing"
             <| async {
-                // A deployment on the default `NoExternalContactStore`
+                // A deployment on the default `FeatureMode.Disabled`
                 // holds no consent record, and no consent record means
                 // no lawful basis. `None` is the correct answer, not a
                 // degraded one.

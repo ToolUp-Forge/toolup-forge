@@ -21,8 +21,8 @@ namespace ToolUp.Platform
 // lifecycle is a destructive operator action, never client-self-serve.
 //
 // **Opt-in.** The route is mounted only when
-// `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`; the default
-// `NoTenantLifecycle` skips the mount entirely so the proxy surface
+// `ServerConfig.TenantLifecycle = FeatureMode.Enabled`; the default
+// `FeatureMode.Disabled` skips the mount entirely so the proxy surface
 // 404s and no lifecycle hooks are resolved (GP 13 — zero cost when
 // unused).
 //

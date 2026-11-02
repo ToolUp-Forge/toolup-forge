@@ -12,7 +12,7 @@ open ToolUp.Platform
 // POSTs `AdImpression` / `AdClick` to the optional server endpoint
 // at `/api/_platform/ads/impression` / `/api/_platform/ads/click`.
 // Server-side handler (mounted only when `ServerConfig.AdAnalytics
-// = EnabledAdAnalytics`) records via `IAuditLog` under `_platform`
+// = FeatureMode.Enabled`) records via `IAuditLog` under `_platform`
 // scope. Sink swallows network errors — best-effort posture per
 // `IAdAnalyticsSink` contract.
 

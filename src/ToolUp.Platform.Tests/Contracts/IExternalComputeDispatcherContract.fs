@@ -17,7 +17,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 // Three things are pinned here, and the third is the one that decays
 // quietly if it is not executable:
 //
-//   1. **The `NoExternalCompute` default is a typed refusal, not a
+//   1. **The `FeatureMode.Disabled` default is a typed refusal, not a
 //      failure.** A bare `ServerApp.empty |> ServerApp.run` deployment
 //      resolves `IExternalComputeDispatcher` and gets
 //      `Error ExternalComputeError.notConfigured` from `Submit` — never a
@@ -74,10 +74,10 @@ let private dispatcher () =
 let tests =
     testList "ExternalCompute — NoExternalComputeDispatcher default (Phase 318)" [
 
-        test "ServerConfig defaults to NoExternalCompute (GP 11 + GP 13)" {
+        test "ServerConfig defaults to FeatureMode.Disabled (GP 11 + GP 13)" {
             Expect.equal
                 ServerConfig.defaults.ExternalCompute
-                NoExternalCompute
+                FeatureMode.Disabled
                 "an existing deployment that upgrades must stay byte-for-byte identical until it opts in"
         }
 
@@ -90,7 +90,7 @@ let tests =
             | Error e ->
                 Expect.equal e ExternalComputeError.notConfigured "the canonical not-configured refusal"
                 Expect.isFalse e.Retriable "not-configured is TERMINAL — no retry composes a backend"
-                Expect.stringContains e.Message "NoExternalCompute" "the refusal names the config knob to change"
+                Expect.stringContains e.Message "FeatureMode.Disabled" "the refusal names the config knob to change"
 
                 Expect.stringContains e.Message "IExternalComputeDispatcher" "the refusal names the seam to register"
         }
@@ -144,12 +144,12 @@ let tests =
 
         // ─── Compose (318.C) — the seam always resolves ──────────────
 
-        test "NoExternalCompute registers the no-op so the seam resolves (GP 13)" {
+        test "FeatureMode.Disabled registers the no-op so the seam resolves (GP 13)" {
             let services = ServiceCollection()
 
             ComposeStores.registerExternalCompute services {
                 ServerConfig.defaults with
-                    ExternalCompute = NoExternalCompute
+                    ExternalCompute = FeatureMode.Disabled
             }
 
             use provider = services.BuildServiceProvider()
@@ -160,12 +160,12 @@ let tests =
             Expect.isTrue (resolved :? NoExternalComputeDispatcher) "the default registration is the no-op dispatcher"
         }
 
-        test "CustomExternalCompute registers nothing, leaving a companion singleton in place" {
+        test "FeatureMode.Enabled registers nothing, leaving a companion singleton in place" {
             let services = ServiceCollection()
 
             ComposeStores.registerExternalCompute services {
                 ServerConfig.defaults with
-                    ExternalCompute = CustomExternalCompute
+                    ExternalCompute = FeatureMode.Enabled
             }
 
             use provider = services.BuildServiceProvider()
@@ -175,7 +175,7 @@ let tests =
                 "compose must not overwrite a companion's own dispatcher"
         }
 
-        test "a companion registration survives compose under CustomExternalCompute" {
+        test "a companion registration survives compose under FeatureMode.Enabled" {
             let services = ServiceCollection()
             // The consumer's own registration lands first, exactly as a
             // companion's `create` would wire it.
@@ -184,7 +184,7 @@ let tests =
 
             ComposeStores.registerExternalCompute services {
                 ServerConfig.defaults with
-                    ExternalCompute = CustomExternalCompute
+                    ExternalCompute = FeatureMode.Enabled
             }
 
             use provider = services.BuildServiceProvider()

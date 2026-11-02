@@ -51,8 +51,8 @@ let registerHealthChecks
         services.AddSingleton<HealthChecks.IHealthCheck>(check) |> ignore
 
 /// Phase 9o — post-deploy smoke tests. Registered only when
-/// `ServerConfig.SmokeTest = EnabledSmokeTest`; the default
-/// `NoSmokeTest` skips this block entirely. The dispatcher resolves
+/// `ServerConfig.SmokeTest = FeatureMode.Enabled`; the default
+/// `FeatureMode.Disabled` skips this block entirely. The dispatcher resolves
 /// probes via DI at request time so companion-contributed smoke tests
 /// can register through any of the standard pathways
 /// (`ServerApp.withSmokeTest`, the `Extensions.ServiceConfig` seam,
@@ -75,8 +75,8 @@ let registerSmokeTests
     (smokeTests: SmokeTests.ISmokeTest list)
     : unit =
     match config.SmokeTest with
-    | NoSmokeTest -> ()
-    | EnabledSmokeTest ->
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         services.AddSingleton<SmokeTests.ISmokeTest>(
             SmokeTests.Defaults.BlobStorageSmoke(resolvedBlobStorage) :> SmokeTests.ISmokeTest
         )
@@ -130,7 +130,7 @@ let registerSmokeTests
 /// CDN-delivered deployment opts in via
 /// `ServerApp.withCspContributor`.
 let registerFirstPartyCspContributors (services: IServiceCollection) (config: ServerConfig) : unit =
-    if config.SecurityHardening <> NoSecurityHardening then
+    if config.SecurityPosture.SecurityHardening <> NoSecurityHardening then
         services.AddSingleton<ICspContributor>(OidcIssuerCspContributor() :> ICspContributor)
         |> ignore
 

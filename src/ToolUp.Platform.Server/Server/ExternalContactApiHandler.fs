@@ -18,7 +18,7 @@ open ToolUp.Platform.TeamManagement
 //
 // **Three gates, in this order.**
 //
-//   1. **Store composed.** `NoExternalContactStore` means the route is
+//   1. **Store composed.** `FeatureMode.Disabled` means the route is
 //      not mounted at all, so this arm only fires in a deployment that
 //      mounted the route and then failed to register the store —
 //      named rather than 500'd.

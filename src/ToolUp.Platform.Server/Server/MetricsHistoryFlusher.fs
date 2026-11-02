@@ -279,7 +279,7 @@ type MetricsHistoryFlusherService(serviceProvider: IServiceProvider, config: Met
 
                 logger.Warn(
                     "[MetricsHistory] enabled, but no PrometheusMetricsSink is composed — "
-                    + "set ServerConfig.MetricsEndpoint = EnabledMetricsEndpoint. No history is being recorded."
+                    + "set ServerConfig.Observability.MetricsEndpoint = FeatureMode.Enabled. No history is being recorded."
                 )
         | _, None ->
             if not warnedNoStore then
@@ -287,7 +287,7 @@ type MetricsHistoryFlusherService(serviceProvider: IServiceProvider, config: Met
 
                 logger.Warn(
                     "[MetricsHistory] enabled, but no ITimeSeriesStore is composed — "
-                    + "set ServerConfig.TimeSeriesStore, or register a companion store. "
+                    + "set ServerConfig.Stores.TimeSeriesStore, or register a companion store. "
                     + "No history is being recorded."
                 )
         | Some sink, Some store ->

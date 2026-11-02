@@ -333,8 +333,8 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
         }
 
 /// The scheduler + result-store pair the host fuses long-running calls
-/// onto. Present only when `ServerConfig.PeerSubstrate =
-/// EnabledPeerSubstrate` *and* the job substrate is enabled; absent (the
+/// onto. Present only when `ServerConfig.MultiInstance.PeerSubstrate =
+/// FeatureMode.Enabled` *and* the job substrate is enabled; absent (the
 /// `option` is `None`) leaves long-running methods reporting a clear
 /// "not enabled" error (GP 13 — zero cost when unused).
 type PeerJobFusion = {

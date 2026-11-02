@@ -322,7 +322,7 @@ type UserSchemaError =
 
 /// ToolUp.Remoting API for authoring, versioning, and evolving
 /// user-owned data schemas. Auto-mounted only when
-/// `ServerConfig.UserSchemaAuthoring = EnabledUserSchemaAuthoring`
+/// `ServerConfig.UserSchemaAuthoring = FeatureMode.Enabled`
 /// (default off — zero cost when unused, GP 13).
 type IUserSchemaApi = {
     /// Every schema in the caller's scope, latest version only.

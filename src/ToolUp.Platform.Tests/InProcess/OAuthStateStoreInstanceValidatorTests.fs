@@ -6,8 +6,14 @@ open ToolUp.Platform.ConfigValidation
 
 let private cfg (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
-        ReplicaCount = replicaCount
-        AcceptInMemoryOAuthStateInMultiInstance = escapeHatch
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptInMemoryOAuthStateInMultiInstance = escapeHatch
+        }
 }
 
 let private inMemoryStore () : IOAuthStateStore =

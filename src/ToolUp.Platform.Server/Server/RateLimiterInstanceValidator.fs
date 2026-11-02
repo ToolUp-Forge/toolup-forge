@@ -7,7 +7,7 @@ open ToolUp.Platform.ConfigValidation
 // ─── Multi-instance + in-process / in-memory rate limiters ──────────
 //
 // Two SDK-shipped rate limiters keep their counters in process memory:
-//   - The outbound `IRateLimiter` (`RateLimiter = EnabledRateLimiter`)
+//   - The outbound `IRateLimiter` (`RateLimiter = FeatureMode.Enabled`)
 //     tracks per-provider sliding windows in a process-local
 //     `ConcurrentDictionary` (see `InProcessRateLimiter.fs` — its own
 //     header flags the "Distributed limitation": N replicas burst past
@@ -25,7 +25,7 @@ open ToolUp.Platform.ConfigValidation
 // the correct multi-instance choice.
 //
 // Mirrors `JobSchedulerInstanceValidator` / `NotificationChannelInstanceValidator`:
-// operator-declared multi-instance via `ServerConfig.ReplicaCount`.
+// operator-declared multi-instance via `ServerConfig.MultiInstance.ReplicaCount`.
 // `Warning` (not `Error`) and no escape hatch — matching the soft-touch
 // posture of `NotificationChannelInstanceValidator`. An over-permissive
 // rate limit is a quota-imprecision / mild-DoS-surface concern, not a
@@ -35,7 +35,7 @@ open ToolUp.Platform.ConfigValidation
 // operator can make an informed call.
 
 /// Config validator that warns when an in-process outbound limiter
-/// (`RateLimiter = EnabledRateLimiter`) or an in-memory inbound store
+/// (`RateLimiter = FeatureMode.Enabled`) or an in-memory inbound store
 /// (`RateLimitStore = InMemoryRateLimitStore`) runs under
 /// `ReplicaCount > 1` — the declared limit becomes per-instance, so the
 /// effective ceiling is N× the configured value across the deployment.
@@ -47,15 +47,15 @@ type RateLimiterInstanceValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let multiInstance = config.ReplicaCount > 1
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
 
             let outboundInProcess =
                 match config.RateLimiter with
-                | EnabledRateLimiter -> true
-                | NoRateLimiter -> false
+                | FeatureMode.Enabled -> true
+                | FeatureMode.Disabled -> false
 
             let inboundInMemory =
-                match config.RateLimitStore with
+                match config.Stores.RateLimitStore with
                 | InMemoryRateLimitStore -> true
                 | NoRateLimitStore
                 | ExternalRateLimitStore -> false
@@ -64,7 +64,7 @@ type RateLimiterInstanceValidator(config: ServerConfig, ?timeout: TimeSpan) =
                 let offenders =
                     [
                         if outboundInProcess then
-                            "RateLimiter = EnabledRateLimiter (outbound per-provider quotas via the in-process sliding-window limiter)"
+                            "RateLimiter = FeatureMode.Enabled (outbound per-provider quotas via the in-process sliding-window limiter)"
                         if inboundInMemory then
                             "RateLimitStore = InMemoryRateLimitStore (inbound per-subject request budget via the process-local counter)"
                     ]
@@ -74,9 +74,9 @@ type RateLimiterInstanceValidator(config: ServerConfig, ?timeout: TimeSpan) =
                     Warning(
                         sprintf
                             "ReplicaCount = %d with %s. These limiters keep their counters in process memory, so each replica enforces the declared limit independently — the effective ceiling across the deployment is %d× the configured value. Wire the external/distributed store (set RateLimitStore = ExternalRateLimitStore and register the Redis companion's IRateLimitStore) so the budget is shared across replicas, or run a single instance. The outbound limiter has no shipped distributed backend yet — accept the N× burst knowingly until one is wired."
-                            config.ReplicaCount
+                            config.MultiInstance.ReplicaCount
                             offenders
-                            config.ReplicaCount
+                            config.MultiInstance.ReplicaCount
                     )
             else
                 return Ok

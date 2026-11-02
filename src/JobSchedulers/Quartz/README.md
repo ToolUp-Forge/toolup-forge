@@ -79,7 +79,7 @@ Three translations are the substance of this package, and each was worth writing
 ## Declared limits
 
 - **External-compute hand-off is not reconciled here.** A handler returning `JobResult.HandedOff` has its `ExternalHandle` persisted — nothing is lost — but this companion runs no reconciliation pass, so the run stays `AwaitingExternal` until something drives it. The adapter says so in a warning naming the remedy rather than leaving it to be inferred from a run that never finishes. Deployments using external compute want `InProcessJobScheduler`.
-- **The in-memory Quartz store is not clustered.** N replicas over it each fire every cron job independently. The companion's own `IConfigValidator` asks Quartz (`SchedulerMetadata.JobStoreClustered` / `JobStorePersistent`) and refuses a multi-replica deployment over a non-persistent store, naming both remedies — a persistent clustered store, or `ServerConfig.AcceptInProcessSchedulerInMultiInstance` if the jobs are idempotent and the duplication is accepted.
+- **The in-memory Quartz store is not clustered.** N replicas over it each fire every cron job independently. The companion's own `IConfigValidator` asks Quartz (`SchedulerMetadata.JobStoreClustered` / `JobStorePersistent`) and refuses a multi-replica deployment over a non-persistent store, naming both remedies — a persistent clustered store, or `ServerConfig.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance` if the jobs are idempotent and the duplication is accepted.
 - **No `IJobSchedulerTelemetry`.** The tick-drift telemetry the in-process default reports is about *its own* tick loop; Quartz has no equivalent tick to miss. `/dev/inspect`'s job-scheduler panel is therefore absent under this mode.
 
 ## Conformance

@@ -19,7 +19,10 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (surfaces: SurfaceProfile list) (ack: bool) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptInviteByEmailWithoutDirectory = ack
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptInviteByEmailWithoutDirectory = ack
+        }
 }
 
 /// Minimal stand-in directory — the validator only checks for the

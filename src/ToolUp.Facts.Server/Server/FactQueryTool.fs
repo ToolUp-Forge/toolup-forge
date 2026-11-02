@@ -40,7 +40,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // widens scope.
 //
 // **Registration (GP 13).** `FactsCompose.withFactStore` declares the
-// tool on `ServerApp.AITools` when `EnabledFactStore`; the declaration
+// tool on `ServerApp.AITools` when `FeatureMode.Enabled`; the declaration
 // reaches the AI tool registry only when the AI companion composes
 // (`composeAI` reads the accumulated `AITools`). A deployment without
 // the fact store never declares the tool; one without AI never builds a

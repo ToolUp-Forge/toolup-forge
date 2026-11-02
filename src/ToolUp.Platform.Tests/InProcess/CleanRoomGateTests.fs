@@ -540,7 +540,10 @@ let substitutionTests =
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
 }
 
 let private appHosting () =
@@ -658,7 +661,7 @@ let compositionTests =
 
             Expect.isEmpty
                 (PeerCompose.auditCleanRoomTemplates app)
-                "NoPeerSubstrate registers no contracts at all, so the short-circuit stays byte-for-byte a bare ServerApp.run"
+                "FeatureMode.Disabled registers no contracts at all, so the short-circuit stays byte-for-byte a bare ServerApp.run"
         }
     ]
 

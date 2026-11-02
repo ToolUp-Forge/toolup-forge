@@ -78,11 +78,9 @@ let private readEnv (name: string) =
     | v -> Some(v.Trim())
 
 let private probeEnabled () =
-    match readEnv probeEnvVarName with
-    | Some "1"
-    | Some "true"
-    | Some "TRUE" -> true
-    | _ -> false
+    ToolUp.Platform.ConfigKeys.ConfigKey.readPermissiveBool
+        (ToolUp.Platform.ConfigKeys.key probeEnvVarName)
+        (readEnv probeEnvVarName)
 
 let private resolveTargetDescriptor (factory: IAIProviderFactory) : AIProviderDescriptor option =
     match readEnv providerEnvVarName with

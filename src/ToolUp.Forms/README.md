@@ -94,9 +94,14 @@ let severityGuard : WorkflowGuard = fun (submission, _ctx) -> async {
     | _ -> return Error "Only Major or Critical bugs can be closed."
 }
 
-let config = { ServerConfig.defaults with
-                 Port = 5000; Surfaces = Surfaces.team
-                 EntityStore = EnabledEntityStore }   // REQUIRED — Forms rides on Phase 19
+let config = {
+    ServerConfig.defaults with
+        Port = 5000; Surfaces = Surfaces.team
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled
+        }
+}   // REQUIRED — Forms rides on Phase 19
 
 [<EntryPoint>]
 let main _ =
@@ -165,7 +170,7 @@ A `FormSchema` with `Visibility = Publishable` is a *survey* — distributable t
 5. **Multi-survey admin** — `IFormApi.ListSchemasOverview` returns every survey in scope with status (`Draft` / `Active` / `Closed`) and metric summaries in one call. `SurveyListView` is the matching stateless Feliz component. `IFormApi.CloseSurvey` closes a survey by flipping `Visibility` to `Internal`, bulk-revoking outstanding tokens, or both.
 
 **Required substrate:**
-- `ServerConfig.ShareTokenStore = EnabledShareTokenStore` — the SDK's HMAC-signed token primitive (Phase 21b slice 1)
+- `ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled` — the SDK's HMAC-signed token primitive (Phase 21b slice 1)
 - `ServerConfig.PublicBaseUrl = Some "https://your-host.example.com"` — for `IssueTokens` URL composition
 - `ServerConfig.AnonymousRoutePrefixes` includes `/api/public/forms/` — `FormsCompose` registers this automatically
 - Optional: `ServerApp.withTransactionalSink (...)` if `DispatchInvitationsByEmail` is wanted

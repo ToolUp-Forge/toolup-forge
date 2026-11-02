@@ -27,7 +27,7 @@ open ToolUp.Platform.Server
 // resolves, to the deployment as every builder left it.
 //
 // **Strip-imports guarantee**: when the resolved
-// `ServerConfig.AssetStore = NoAssetStore`, the companion contributes
+// `ServerConfig.Stores.AssetStore = FeatureMode.Disabled`, the companion contributes
 // nothing — no DI registrations, no handlers, no hosted services. The
 // deployment is byte-for-byte the one it would be without the call.
 
@@ -262,14 +262,14 @@ module AssetStoreCompanionOptions =
         }
 
 /// The companion's `apply`. When the resolved
-/// `ServerConfig.AssetStore = NoAssetStore`, contributes nothing. When
-/// `EnabledAssetStore`, registers the DI singletons and contributes the
+/// `ServerConfig.Stores.AssetStore = FeatureMode.Disabled`, contributes nothing. When
+/// `FeatureMode.Enabled`, registers the DI singletons and contributes the
 /// ToolUp.Remoting handler at `/api/assets/` and the multipart upload
 /// handler at `/api/assets/upload`.
 let private composeAssetStore (companion: AssetStoreCompanionOptions) (app: ServerApp) : ServerApp =
-    match (ServerApp.effectiveConfig app).AssetStore with
-    | NoAssetStore -> app
-    | EnabledAssetStore ->
+    match (ServerApp.effectiveConfig app).Stores.AssetStore with
+    | FeatureMode.Disabled -> app
+    | FeatureMode.Enabled ->
         let options = companion.Options
         let profiles = companion.Profiles
         let explicitRenderer = companion.RendererOverride
@@ -449,11 +449,11 @@ let private composeAssetStore (companion: AssetStoreCompanionOptions) (app: Serv
 /// profiles and handlers `options` describes are composed once, when the
 /// deployment resolves, onto the deployment as every builder left it — so a
 /// `ServerApp` builder applied after this call still reaches it. Contributes
-/// nothing unless the resolved `ServerConfig.AssetStore` is
-/// `EnabledAssetStore`. A second call replaces the first.
+/// nothing unless the resolved `ServerConfig.Stores.AssetStore` is
+/// `FeatureMode.Enabled`. A second call replaces the first.
 ///
 ///     ServerApp.empty
-///     |> ServerApp.withConfig { config with AssetStore = EnabledAssetStore }
+///     |> ServerApp.withConfig { config with Stores = { config.Stores with AssetStore = FeatureMode.Enabled } }
 ///     |> ServerApp.withStorage storage
 ///     |> AssetCompose.withAssetStore (AssetStoreCompanionOptions.create ())
 ///     |> ServerApp.run

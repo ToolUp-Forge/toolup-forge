@@ -5,7 +5,7 @@ store** — the typed *memory* tier of a grounded application. A numeric
 answer quotes facts verbatim; prose exists for comprehension, not recall.
 
 > Companion package — a deployment that composes no fact store
-> (`ServerConfig.FactStore = NoFactStore`, the default) is byte-for-byte
+> (`ServerConfig.Stores.FactStore = FeatureMode.Disabled`, the default) is byte-for-byte
 > unchanged (GP 13).
 
 ## What a fact is
@@ -966,7 +966,7 @@ touched 5 rows by its executed plan, with no sequential scan (Phase 888,
 the live test arm; the same read enumerates the scope on the blob store
 below its index threshold).
 
-**The multi-replica guard.** With `ServerConfig.ReplicaCount > 1` and the
+**The multi-replica guard.** With `ServerConfig.MultiInstance.ReplicaCount > 1` and the
 blob store composed, `FactsCompose.withFactStore` registers
 `BlobFactStoreScaleValidator`: it counts each scope's fact census, warns
 above `BlobFactStoreScale.WarnAboveFacts` (50,000) facts in one scope, and
@@ -1363,7 +1363,7 @@ returns an `ErasedModule`. What would have to change, and why it is interim work
 
 ## Composition
 
-`ServerConfig.FactStore` (default `NoFactStore`) is the introspectable
+`ServerConfig.Stores.FactStore` (default `FeatureMode.Disabled`) is the introspectable
 slot the composition manifest / composable-surface descriptor report as
 the resolved fact-store kind. Compose the store today via
 `BlobFactStore.create` (over any `IBlobStorage`, auditing to `IEventStore`). The default
@@ -1697,7 +1697,7 @@ ServerApp.empty
 |> ServerApp.run
 ```
 
-`FactsCompose.withFactTier` switches `ServerConfig.FactStore` on and
+`FactsCompose.withFactTier` switches `ServerConfig.Stores.FactStore` on and
 applies `withFactStore` and `withFactTableWriter`. `RagOptions.withFacts`
 applies it to the deployment when the RAG tier is **composed**, at resolve,
 so `withRAG` may sit on either side of `withConfig` — which replaces the

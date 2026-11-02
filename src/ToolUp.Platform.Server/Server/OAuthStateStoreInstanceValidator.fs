@@ -20,7 +20,7 @@ open ToolUp.Platform.ConfigValidation
 // The store is documented "single-instance only" but nothing
 // structural enforces it. This mirrors `JobSchedulerInstanceValidator`
 // exactly: operator-declared multi-instance via
-// `ServerConfig.ReplicaCount`. Refusal (not warning) — a broken
+// `ServerConfig.MultiInstance.ReplicaCount`. Refusal (not warning) — a broken
 // connector-authorisation path in production is not a soft degradation,
 // and the escape hatch (a distributed store or sticky sessions) is a
 // deliberate operator decision.
@@ -45,15 +45,17 @@ type OAuthStateStoreInstanceValidator(config: ServerConfig, stateStore: IOAuthSt
         member _.Validate() = async {
             let isInMemory = stateStore.GetType() = typeof<InMemoryOAuthStateStore>
 
-            let multiInstance = config.ReplicaCount > 1
-            let escapeHatch = config.AcceptInMemoryOAuthStateInMultiInstance
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
+
+            let escapeHatch =
+                config.RiskAcknowledgements.AcceptInMemoryOAuthStateInMultiInstance
 
             if isInMemory && multiInstance && not escapeHatch then
                 return
                     Error(
                         sprintf
-                            "ServerConfig uses the in-memory IOAuthStateStore with ReplicaCount = %d. OAuth CSRF/PKCE state is held in a process-local dictionary, so when the provider redirects back the /callback can land on a different replica than the one that issued the `state` — TryConsume returns None and connector authorisation fails with a state-mismatch, intermittently, depending on which replica the redirect hits. Configure a distributed IOAuthStateStore companion (the Phase 9c half-2 Redis-backed port), front the deployment with a sticky-session load balancer, or set ServerConfig.AcceptInMemoryOAuthStateInMultiInstance = true (TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE=1) if OAuth-flow traffic is already pinned to one replica. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
-                            config.ReplicaCount
+                            "ServerConfig uses the in-memory IOAuthStateStore with ReplicaCount = %d. OAuth CSRF/PKCE state is held in a process-local dictionary, so when the provider redirects back the /callback can land on a different replica than the one that issued the `state` — TryConsume returns None and connector authorisation fails with a state-mismatch, intermittently, depending on which replica the redirect hits. Configure a distributed IOAuthStateStore companion (the Phase 9c half-2 Redis-backed port), front the deployment with a sticky-session load balancer, or set ServerConfig.RiskAcknowledgements.AcceptInMemoryOAuthStateInMultiInstance = true (TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE=1) if OAuth-flow traffic is already pinned to one replica. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            config.MultiInstance.ReplicaCount
                     )
             else
                 return Ok

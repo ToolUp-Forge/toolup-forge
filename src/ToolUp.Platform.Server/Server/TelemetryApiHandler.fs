@@ -18,8 +18,8 @@ open ToolUp.Platform
 // Segment — whatever the deployment registered), tagged with the caller's
 // resolved scope.
 //
-// **Mounted only under `ServerConfig.TelemetrySink = CustomTelemetrySink`**
-// — `routesFor` returns the empty list on the `NoTelemetrySink` default, so
+// **Mounted only under `ServerConfig.Observability.TelemetrySink = FeatureMode.Enabled`**
+// — `routesFor` returns the empty list on the `FeatureMode.Disabled` default, so
 // a deployment that composes no analytics has no route, no handler and no
 // allocation (GP 13). The client helper swallows the resulting 404, which is
 // a legitimate steady state rather than an error.
@@ -172,11 +172,11 @@ let private trackHandler: HttpHandler =
 /// Routes table. Reached through `routesFor`, never mounted directly.
 let routes: HttpHandler list = [ POST >=> route "/api/_platform/telemetry" >=> trackHandler ]
 
-/// The routes for a given sink mode. `NoTelemetrySink` (the default) yields
+/// The routes for a given sink mode. `FeatureMode.Disabled` (the default) yields
 /// the empty list — no route on the routing table, no handler allocated, a
 /// clean 404 from the Giraffe terminal middleware, and a deployment that
 /// composes no analytics unchanged byte for byte (GP 13).
-let routesFor (mode: TelemetrySinkMode) : HttpHandler list =
+let routesFor (mode: FeatureMode) : HttpHandler list =
     match mode with
-    | NoTelemetrySink -> []
-    | CustomTelemetrySink -> routes
+    | FeatureMode.Disabled -> []
+    | FeatureMode.Enabled -> routes

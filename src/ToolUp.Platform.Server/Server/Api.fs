@@ -31,7 +31,7 @@ namespace ToolUp.Platform
 //     wrapper installs a per-request resolver that bridges
 //     `MethodTelemetry` to the registered `IMetricsSink` via
 //     `Record("toolup.remoting.elapsed_ms", elapsedMs, …)`. With
-//     `NoMetricsEndpoint` the sink resolves to `NoOpMetricsSink`
+//     `FeatureMode.Disabled` the sink resolves to `NoOpMetricsSink`
 //     and the bridge becomes a true no-op (GP 13). The bridge uses
 //     an `AsyncLocal<IServiceProvider>` captured from each request's
 //     `HttpContext.RequestServices` (set in the wrapped api builder)
@@ -219,10 +219,10 @@ module internal ApiSeams =
     /// events to forge's registered `IMetricsSink`. No-op when no
     /// `IServiceProvider` has been stashed (test paths that bypass the
     /// wrapper) or when `IMetricsSink` resolves to `NoOpMetricsSink`
-    /// (`NoMetricsEndpoint` deployments). Phase 69l: `Api.make` pairs
+    /// (`FeatureMode.Disabled` deployments). Phase 69l: `Api.make` pairs
     /// this bridge with `defaultBridgeGate` so the per-request
     /// `Stopwatch` + `MethodTelemetry` allocation is gated upstream of
-    /// `OnMethodCompleted` — `NoMetricsEndpoint` deployments pay
+    /// `OnMethodCompleted` — `FeatureMode.Disabled` deployments pay
     /// nothing per request, fulfilling GP 13.
     let defaultMetricsBridge: IRemotingTelemetry =
         { new IRemotingTelemetry with
@@ -424,12 +424,11 @@ module internal ApiSeams =
     /// dispatcher refuses startup (compliance-edition deployments).
     let auditAdminRequired =
         lazy
-            // Phase 698 — through the Phase-696 `ConfigResolution` seam.
-            (match ConfigResolution.tryValue ConfigKeys.Names.auditAdminRequired with
-             | None -> false
-             | Some v ->
-                 let v = v.Trim()
-                 v.Equals("true", System.StringComparison.OrdinalIgnoreCase) || v = "1")
+            // Through the `ConfigResolution` seam, parsed by the key: the
+            // registry's token set and direction, not a local one.
+            (ConfigKeys.ConfigKey.readPermissiveBool
+                (ConfigKeys.key ConfigKeys.Names.auditAdminRequired)
+                (ConfigResolution.tryValue ConfigKeys.Names.auditAdminRequired))
 
 /// Phase 801 — the API records this process has mounted, recorded at
 /// the one place every mount passes through.
@@ -604,7 +603,7 @@ type Api =
         // `IRemotingTelemetry`; Phase 69l pairs it with
         // `defaultBridgeGate` so the per-request `Stopwatch` +
         // `MethodTelemetry` allocation is skipped entirely when the
-        // registered sink is `NoOpMetricsSink` (the `NoMetricsEndpoint`
+        // registered sink is `NoOpMetricsSink` (the `FeatureMode.Disabled`
         // default). Consumer-supplied sinks are NOT gated — the
         // consumer asked for telemetry, so the dispatcher emits.
         let effectiveTelemetry: IRemotingTelemetry =

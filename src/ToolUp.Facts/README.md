@@ -67,7 +67,7 @@ let! asserted =
 let! asOfMay3 = store.Query(scopeId, FactQuery.forSubjectMetric subject metric |> FactQuery.asOf may3)
 ```
 
-`ServerConfig.FactStore` (default `NoFactStore`) is the composition slot the
+`ServerConfig.Stores.FactStore` (default `FeatureMode.Disabled`) is the composition slot the
 introspection manifest reports; `BlobFactStore.create` composes the store
 directly today.
 

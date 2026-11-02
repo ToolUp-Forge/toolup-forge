@@ -231,7 +231,7 @@ module StandardMetrics =
     ]
 
     /// SDK standard registrations — registered unconditionally by
-    /// `compose` when `MetricsEndpoint = EnabledMetricsEndpoint`.
+    /// `compose` when `MetricsEndpoint = FeatureMode.Enabled`.
     ///
     /// Phase 740 — the edge-purge outcome counters are declared beside
     /// their emission in `IEdgeCache.fs` (which compiles before this

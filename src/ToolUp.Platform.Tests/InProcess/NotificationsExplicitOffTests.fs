@@ -30,7 +30,10 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (surfaces: SurfaceProfile list) (replicas: int) (notifications: NotificationMode) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        ReplicaCount = replicas
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicas
+        }
         Notifications = notifications
 }
 

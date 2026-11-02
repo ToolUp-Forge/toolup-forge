@@ -75,7 +75,7 @@ type OAuthFlowValidator(config: ServerConfig, ?timeout: TimeSpan) =
                 // low-friction Warning (request-derivation is fine there).
                 let message =
                     sprintf
-                        "%s is not set. The OAuth substrate will derive the redirect URI from each request's Scheme + Host, which is correct only when ServerConfig.TrustForwardedHeaders is enabled and a TLS-terminating proxy is supplying X-Forwarded-Proto. Set %s=https://your-deployment.example.com to pin the redirect URI explicitly — eliminates a class of misconfigurations where /authorize and /callback see different scheme/host pairs, and closes the host-header-poisoning vector where a spoofed Host repoints the OAuth callback."
+                        "%s is not set. The OAuth substrate will derive the redirect URI from each request's Scheme + Host, which is correct only when ServerConfig.SecurityPosture.TrustForwardedHeaders is enabled and a TLS-terminating proxy is supplying X-Forwarded-Proto. Set %s=https://your-deployment.example.com to pin the redirect URI explicitly — eliminates a class of misconfigurations where /authorize and /callback see different scheme/host pairs, and closes the host-header-poisoning vector where a spoofed Host repoints the OAuth callback."
                         RedirectBaseEnvVar
                         RedirectBaseEnvVar
 

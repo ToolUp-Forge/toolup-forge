@@ -32,8 +32,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 // async at every boundary, no ordering promise across refs, stateless
 // between calls.
 //
-// Composition: `ServerConfig.Presence = EnabledPresence` registers the
-// in-memory default into DI (see `ComposeNotifications`); `NoPresence`
+// Composition: `ServerConfig.Presence = FeatureMode.Enabled` registers the
+// in-memory default into DI (see `ComposeNotifications`); `FeatureMode.Disabled`
 // (the default) registers nothing.
 //
 // Phase 622 mounts the lock half of `IPresenceApi` over this store under

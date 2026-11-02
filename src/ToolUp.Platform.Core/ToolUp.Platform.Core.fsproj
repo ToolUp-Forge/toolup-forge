@@ -371,6 +371,7 @@
              LockLease / LockEvent) + the PresenceMode opt-in DU. Before
              SDK.Shared.fs so ServerConfig can carry a `Presence` field. Pure /
              Fable-safe (BCL primitives + EntityId). -->
+        <Compile Include="Shared\Config\FeatureMode.fs" />
         <Compile Include="Shared\PresenceTypes.fs" />
         <!-- CRDT co-editing value types (CrdtDocRef /
              StateVector / CrdtUpdate / CrdtSnapshot / CrdtUpdateEvent) +

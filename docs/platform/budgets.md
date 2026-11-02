@@ -147,9 +147,9 @@ storage to satisfy an interface.
 
 ### Compute budgets
 
-Off by default: `ServerConfig.ComputeBudget = NoComputeBudget` registers nothing, wraps nothing, and
+Off by default: `ServerConfig.ComputeBudget = FeatureMode.Disabled` registers nothing, wraps nothing, and
 consults nothing, so an existing deployment is byte-for-byte what it was (GP 11 + GP 13).
-`EnabledComputeBudget` registers the blob-backed store, builds the shared guard, and wraps the
+`FeatureMode.Enabled` registers the blob-backed store, builds the shared guard, and wraps the
 composed dispatcher.
 
 Per-scope ceilings are stored under `_platform` at `compute-budget/<scope>/budget.json`, with

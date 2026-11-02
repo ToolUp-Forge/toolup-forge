@@ -58,7 +58,7 @@ open ToolUp.Platform.ConfigValidation
 //     the non-breaking route for such a deployment is one env var
 //     (below), and the correct route is provisioning the key.
 //   * **Production-shaped, key absent, acknowledged ⇒ `Warning`.**
-//     `ServerConfig.AcceptEphemeralShareTokenKey` /
+//     `ServerConfig.RiskAcknowledgements.AcceptEphemeralShareTokenKey` /
 //     `TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1` downgrades the refusal
 //     and says so. The 2026-08 lesson from the OAuth-secret validator
 //     applies verbatim: an escape hatch that suppresses SILENTLY makes
@@ -84,7 +84,7 @@ open ToolUp.Platform.ConfigValidation
 /// refusal prints, so severity changes what happens at startup and never
 /// what the operator is told to do about it.
 let private resolutions =
-    "Resolutions: (1) pre-provision 'share_token_signing_key' in the ISecretStore under the reserved '_platform' scope, as a base64url-encoded 32+ byte operator-managed secret, before first boot — and record a rotation procedure alongside it (rotating invalidates all outstanding share links, which is expected and is why the value must be backed up); (2) if the deployment is not in fact production-shaped, clear ServerConfig.PublicBaseUrl / set ReplicaCount = 1 so the share-token surface is not treated as internet-facing; (3) set ServerConfig.AcceptEphemeralShareTokenKey = true (TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1) to acknowledge a throwaway key for dev / CI / a single instance — the finding then reports as a Warning rather than refusing. See DEPLOYMENT.md, 'Share-token signing key'. After fixing, verify in the HealthMonitorUI Preflight tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+    "Resolutions: (1) pre-provision 'share_token_signing_key' in the ISecretStore under the reserved '_platform' scope, as a base64url-encoded 32+ byte operator-managed secret, before first boot — and record a rotation procedure alongside it (rotating invalidates all outstanding share links, which is expected and is why the value must be backed up); (2) if the deployment is not in fact production-shaped, clear ServerConfig.PublicBaseUrl / set ReplicaCount = 1 so the share-token surface is not treated as internet-facing; (3) set ServerConfig.RiskAcknowledgements.AcceptEphemeralShareTokenKey = true (TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1) to acknowledge a throwaway key for dev / CI / a single instance — the finding then reports as a Warning rather than refusing. See DEPLOYMENT.md, 'Share-token signing key'. After fixing, verify in the HealthMonitorUI Preflight tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
 
 /// Phase 460 — refuses a production / multi-instance share-token
 /// deployment whose HMAC signing key is unprovisioned, and reports the
@@ -110,14 +110,14 @@ type ShareTokenSigningKeyProvenanceValidator
             // explicitly enabled or auto-promoted by a claim-bearer
             // surface (Phase 66) — only then is a signing key resolved.
             let shareTokenSurfaceLive =
-                config.ShareTokenStore = EnabledShareTokenStore
+                config.Stores.ShareTokenStore = FeatureMode.Enabled
                 || DeploymentConfig.hasClaimBearer config
 
             // Production / multi-instance shape: an explicit replica
             // declaration, or an inferred public surface (commonly
             // load-balanced). A single-instance, non-public deployment
             // treats auto-generation as a fine convenience.
-            let declaredScaleOut = config.ReplicaCount > 1
+            let declaredScaleOut = config.MultiInstance.ReplicaCount > 1
 
             let inferredPublic =
                 match config.PublicBaseUrl with
@@ -147,11 +147,11 @@ type ShareTokenSigningKeyProvenanceValidator
                         )
 
                 | ShareTokenStore.AbsentWillAutoGenerate ->
-                    if config.AcceptEphemeralShareTokenKey then
+                    if config.RiskAcknowledgements.AcceptEphemeralShareTokenKey then
                         return
                             Warning(
                                 sprintf
-                                    "ServerConfig.Surfaces = %s with a live share-token surface, and the HMAC signing key '%s' is absent from the ISecretStore — BlobShareTokenStore will auto-generate and persist a 32-byte key on first use. This is NOT being refused only because ServerConfig.AcceptEphemeralShareTokenKey = true (TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1). That informed opt-out is suppressing a startup refusal: the key stays invisible to backup and rotation governance, and if the secret store is wiped or re-provisioned every issued share-token silently fails verification. Confirm this deployment really is one where throwaway share links are acceptable (dev / CI / a single instance behind no public URL); if it is not, clear the flag and pre-provision '%s'. %s"
+                                    "ServerConfig.Surfaces = %s with a live share-token surface, and the HMAC signing key '%s' is absent from the ISecretStore — BlobShareTokenStore will auto-generate and persist a 32-byte key on first use. This is NOT being refused only because ServerConfig.RiskAcknowledgements.AcceptEphemeralShareTokenKey = true (TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1). That informed opt-out is suppressing a startup refusal: the key stays invisible to backup and rotation governance, and if the secret store is wiped or re-provisioned every issued share-token silently fails verification. Confirm this deployment really is one where throwaway share links are acceptable (dev / CI / a single instance behind no public URL); if it is not, clear the flag and pre-provision '%s'. %s"
                                     label
                                     ShareTokenStore.signingKeySecretName
                                     ShareTokenStore.signingKeySecretName

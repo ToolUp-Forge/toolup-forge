@@ -22,12 +22,15 @@ open ToolUp.Platform
 
 let private defaultsAreLightweight =
     testList "ServerConfig.defaults — lightweight shape" [
-        test "Webhooks default is NoWebhooks" {
-            Expect.equal ServerConfig.defaults.Webhooks NoWebhooks "lightweight default skips webhook substrate"
+        test "Webhooks default is FeatureMode.Disabled" {
+            Expect.equal
+                ServerConfig.defaults.Webhooks
+                FeatureMode.Disabled
+                "lightweight default skips webhook substrate"
         }
 
-        test "AuditLog default is NoAuditLog" {
-            Expect.equal ServerConfig.defaults.AuditLog NoAuditLog "lightweight default uses NoOpAuditLog"
+        test "AuditLog default is FeatureMode.Disabled" {
+            Expect.equal ServerConfig.defaults.AuditLog FeatureMode.Disabled "lightweight default uses NoOpAuditLog"
         }
 
         test "Notifications default is NotificationsAuto" {
@@ -38,7 +41,10 @@ let private defaultsAreLightweight =
         }
 
         test "EventStore default is InMemoryOnly" {
-            Expect.equal ServerConfig.defaults.EventStore InMemoryOnly "lightweight default keeps events in-memory"
+            Expect.equal
+                ServerConfig.defaults.Stores.EventStore
+                InMemoryOnly
+                "lightweight default keeps events in-memory"
         }
 
         test "JobScheduler default is NoJobScheduler" {
@@ -48,19 +54,19 @@ let private defaultsAreLightweight =
                 "lightweight default registers no scheduler BackgroundService"
         }
 
-        test "DataIngestion default is NoDataIngestion" {
+        test "DataIngestion default is FeatureMode.Disabled" {
             Expect.equal
                 ServerConfig.defaults.DataIngestion
-                NoDataIngestion
+                FeatureMode.Disabled
                 "lightweight default skips ingestion substrate"
         }
 
         test "ResultStore default is NoResultStore" {
-            Expect.equal ServerConfig.defaults.ResultStore NoResultStore "lightweight default skips result store"
+            Expect.equal ServerConfig.defaults.Stores.ResultStore NoResultStore "lightweight default skips result store"
         }
 
-        test "Lineage default is NoLineageStore" {
-            Expect.equal ServerConfig.defaults.Lineage NoLineageStore "lightweight default skips lineage store"
+        test "Lineage default is FeatureMode.Disabled" {
+            Expect.equal ServerConfig.defaults.Lineage FeatureMode.Disabled "lightweight default skips lineage store"
         }
 
         test "RateLimit default is none (no limiter registered)" {
@@ -81,11 +87,13 @@ let private defaultsAreLightweight =
         }
 
         test "SecurityHeaders default is empty (Phase 1f)" {
-            Expect.isTrue ServerConfig.defaults.SecurityHeaders.IsEmpty "lightweight default stamps no security headers"
+            Expect.isTrue
+                ServerConfig.defaults.SecurityPosture.SecurityHeaders.IsEmpty
+                "lightweight default stamps no security headers"
         }
 
         test "Cors default is None (Phase 1f)" {
-            Expect.isNone ServerConfig.defaults.Cors "lightweight default registers no CORS middleware"
+            Expect.isNone ServerConfig.defaults.SecurityPosture.Cors "lightweight default registers no CORS middleware"
         }
     ]
 

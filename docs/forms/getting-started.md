@@ -4,7 +4,7 @@ End-to-end walkthrough: define a schema, render the form, persist a submission, 
 
 ## Prerequisites
 
-- A working ToolUp Platform app with `IEntityStore` enabled (`ServerConfig.EntityStore = EnabledEntityStore`).
+- A working ToolUp Platform app with `IEntityStore` enabled (`ServerConfig.Stores.EntityStore = FeatureMode.Enabled`).
 - `IAuditLog` enabled for event emission.
 
 ## 1. Add the packages
@@ -192,8 +192,11 @@ let exitCode =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            EntityStore = EnabledEntityStore
-            AuditLog = EnabledAuditLog
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    EntityStore = FeatureMode.Enabled
+            }
+            AuditLog = FeatureMode.Enabled
     }
     |> ServerApp.withAuth authProvider
     |> ServerApp.addModules modules
@@ -338,8 +341,11 @@ let exitCode =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            EntityStore = EnabledEntityStore
-            ShareTokenStore = EnabledShareTokenStore
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    EntityStore = FeatureMode.Enabled
+                    ShareTokenStore = FeatureMode.Enabled
+            }
             PublicBaseUrl = Some "https://my-app.example.com"
     }
     |> withForms (FormsOptions.create () |> FormsOptions.withFormSchema npsSchema)

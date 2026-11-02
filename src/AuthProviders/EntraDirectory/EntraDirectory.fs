@@ -509,12 +509,11 @@ let fromManagedIdentity () : IUserDirectory = create EntraDirectoryConfig.defaul
 /// wiring the typeahead without a directory companion (the SDK
 /// handler short-circuits to `Ok []` and the UI degrades gracefully).
 let fromEnv () : IUserDirectory option =
+    // Read through the key, so `yes` / `on` / `True` enable it exactly as
+    // the generated reference says they do, and a typo reads as off.
     let enabled =
-        match Environment.GetEnvironmentVariable ConfigKeys.Names.entraDirectoryEnabled with
-        | "1"
-        | "true"
-        | "TRUE" -> true
-        | _ -> false
+        let key = ConfigKeys.key ConfigKeys.Names.entraDirectoryEnabled
+        ConfigKeys.ConfigKey.readPermissiveBool key (Environment.GetEnvironmentVariable key.EnvVar |> Option.ofObj)
 
     let explicitEndpoint =
         match Environment.GetEnvironmentVariable ConfigKeys.Names.entraDirectoryGraphEndpoint with

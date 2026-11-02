@@ -105,7 +105,10 @@ let private catalogueImpl: CatalogueContract = {
 
 let private peerConfig (scheduler: JobSchedulerMode) = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
         JobScheduler = scheduler
 }
 

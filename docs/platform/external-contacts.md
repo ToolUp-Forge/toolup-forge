@@ -38,8 +38,11 @@ or in code:
 ```fsharp skip=fragment
 let serverConfig = {
     ServerConfig.defaults with
-        EntityStore = EnabledEntityStore
-        ExternalContactStore = EnabledExternalContactStore
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled
+                ExternalContactStore = FeatureMode.Enabled
+        }
 }
 
 let clientConfig = {
@@ -48,7 +51,7 @@ let clientConfig = {
 }
 ```
 
-The default is `NoExternalContactStore`. On it, no entity is registered, no store is in DI, no
+The default is `FeatureMode.Disabled`. On it, no entity is registered, no store is in DI, no
 consent filter wraps the notification channel, and no route is mounted — the composition is
 byte-for-byte what it was (GP 11 + GP 13). The shipped user-keyed address book at
 `_platform/contacts/{scopeId}/{userId}.json` is untouched either way.

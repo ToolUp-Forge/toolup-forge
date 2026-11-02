@@ -43,7 +43,7 @@ type StaticPathBehaviourValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let isProductionShape = config.RequireHttps
+            let isProductionShape = config.SecurityPosture.RequireHttps
             let isWarn = config.StaticPathBehaviour = StaticPathBehaviour.Warn
 
             let publicPathPopulated =

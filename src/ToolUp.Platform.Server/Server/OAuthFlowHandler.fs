@@ -887,7 +887,7 @@ let private callback (flowName: string) : HttpHandler =
 // ─── Routes table ───────────────────────────────────────────────────
 
 /// Routes mounted by `SDK.Server.compose` only when
-/// `ServerConfig.DataIngestion = EnabledDataIngestion` AND at least
+/// `ServerConfig.DataIngestion = FeatureMode.Enabled` AND at least
 /// one `IOAuthCredentialFlow` is registered (gating lives in A.8 —
 /// this list is the unconditional shape).
 let routes: HttpHandler list = [

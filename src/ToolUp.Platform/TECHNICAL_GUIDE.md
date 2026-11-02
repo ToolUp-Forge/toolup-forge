@@ -131,7 +131,7 @@ Picking a host runtime (Kestrel default vs the three host-adapter companions for
 
 ### [13. Deployment Shapes](technical-guide/13-deployment-shapes.md)
 
-How a pure-Kestrel deployment partitions across silos via `ServerConfig.ProcessProfile` — the three shipped shapes (single-process / web+worker / web+worker+dispatcher), the substrate every shape must share, the cross-silo coordination contract, and the `/dev/inspect` panel that surfaces the resolved matrix to operators.
+How a pure-Kestrel deployment partitions across silos via `ServerConfig.MultiInstance.ProcessProfile` — the three shipped shapes (single-process / web+worker / web+worker+dispatcher), the substrate every shape must share, the cross-silo coordination contract, and the `/dev/inspect` panel that surfaces the resolved matrix to operators.
 
 - Three pure-Kestrel deployment shapes (`AllInOne` / `WebOnly` + `WorkerOnly` / `WebOnly` + `WorkerOnly` + `DispatcherOnly`)
 - Substrate contract — what every shape must share

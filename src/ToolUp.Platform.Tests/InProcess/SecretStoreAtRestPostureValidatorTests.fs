@@ -76,7 +76,10 @@ let private declaredEncryptingStore () : ISecretStore =
 let private cfg (surfaces: SurfaceProfile list) (acknowledged: bool) = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptPlaintextSecretsWhenAuthRequired = acknowledged
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptPlaintextSecretsWhenAuthRequired = acknowledged
+        }
 }
 
 let private validator (config: ServerConfig) (store: ISecretStore) =

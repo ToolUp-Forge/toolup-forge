@@ -23,8 +23,8 @@ open ToolUp.Platform.IEntityStore
 //
 // Gated to Platform-Admin role only (Phase 4b). Audit emission on
 // every write under `_platform.ads.config`. Mounted only when
-// `ServerConfig.EntityStore = EnabledEntityStore`; the default
-// `NoEntityStore` skips the route entirely so disabled deployments
+// `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`; the default
+// `FeatureMode.Disabled` skips the route entirely so disabled deployments
 // 404 from the Giraffe terminal middleware.
 //
 // **Storage shape.** `AdSlotConfig` (in `Shared/Config/ConsentAdTypes.fs`) doesn't
@@ -122,7 +122,7 @@ let private ensureRegistered (registry: EntityRegistry) : unit =
 /// ad-analytics slot sanity check (2026-06-12 audit,
 /// Platform Gap 7). Returns the set of configured slot ids, or `None`
 /// when the deployment has no `IEntityStore` / `EntityRegistry` wired
-/// (e.g. `NoEntityStore` deployments whose slot configs live in static
+/// (e.g. `FeatureMode.Disabled` deployments whose slot configs live in static
 /// client config) — callers treat `None` as "slot ids are not managed
 /// server-side" and skip their check. `Some Set.empty` means the
 /// substrate exists but no slots are configured yet.
@@ -297,7 +297,7 @@ let private deleteHandler (slotId: string) : HttpHandler =
         })
 
 /// Routes table. Mounted by `compose` only when
-/// `ServerConfig.EntityStore = EnabledEntityStore`.
+/// `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`.
 let routes: HttpHandler list = [
     GET >=> route "/api/_platform/admin/ad-units" >=> listHandler
     GET >=> routef "/api/_platform/admin/ad-units/%s" getHandler

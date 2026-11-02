@@ -13,7 +13,7 @@ open ToolUp.Platform.TeamManagement
 // Builds the `ModelExecutionApi` remoting handler: the out-of-process
 // submitter face of the fit envelope (449), registry (453 + 599 bulk
 // reads), dataset store (448), and scorer (454). Mounted only when
-// `ServerConfig.ModelExecution = EnabledModelExecutionApi` (GP 13);
+// `ServerConfig.ModelExecution = FeatureMode.Enabled` (GP 13);
 // resolves every substrate lazily from DI per request and reports a typed
 // `SubstrateDisabled` refusal naming whichever surface is absent.
 //
@@ -331,7 +331,7 @@ let modelExecutionApi (ctx: HttpContext) : ModelExecutionApi =
                         // Phase 451 — the compute-budget guard, when the
                         // deployment composed one. Resolved per request
                         // like every other substrate here, so
-                        // `NoComputeBudget` (nothing registered) is a
+                        // `FeatureMode.Disabled` (nothing registered) is a
                         // `None` and one match (GP 13).
                         //
                         // This is where a FEDERATED peer's fit submission

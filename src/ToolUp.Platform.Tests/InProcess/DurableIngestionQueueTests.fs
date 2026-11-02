@@ -351,8 +351,14 @@ let private storeContract
 
 let private cfg (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
-        ReplicaCount = replicaCount
-        AcceptInProcessIngestionInMultiInstance = escapeHatch
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptInProcessIngestionInMultiInstance = escapeHatch
+        }
 }
 
 let private validate (config: ServerConfig) (durableQueue: bool) : ValidationResult =

@@ -19,7 +19,7 @@ module ToolUp.Platform.Tests.InProcess.FactRenderToolTests
 //      wrote and the provenance of the read; the request decodes back and the
 //      node rebuilds from it (what the conversation panel does).
 //   4. **The door.** The gate is asked at `FactToolResult`, never `FactBrowse`.
-//   5. **The composition.** Opt-in, idempotent, nothing under `NoFactStore`,
+//   5. **The composition.** Opt-in, idempotent, nothing under `FeatureMode.Disabled`,
 //      registered by `composeAI` through the record-form funnel; the fact
 //      tier itself stays free of the Fuaran-UI dependency.
 //   6. **End to end.** A scripted turn calls `render_chart` through the
@@ -517,12 +517,15 @@ let private profile =
 
 /// A deployment under `factStore` and the options of the AI tier the tools
 /// join, as the presentation builders take them.
-let private aiApp (factStore: FactStoreMode) : ServerApp * AIOptions =
+let private aiApp (factStore: FeatureMode) : ServerApp * AIOptions =
     {
         ServerApp.empty with
             Config = {
                 ServerConfig.defaults with
-                    FactStore = factStore
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            FactStore = factStore
+                    }
             }
     },
     AIOptions.create factory profile
@@ -556,7 +559,7 @@ let private composedRegistry ((app, ai): ServerApp * AIOptions) : AIToolRegistry
 let private compositionTests =
     testList "the composition" [
         test "withRenderTools composes both tools under the fact store, once however often it is called" {
-            let once = aiApp EnabledFactStore |> PresentationCompose.withRenderTools
+            let once = aiApp FeatureMode.Enabled |> PresentationCompose.withRenderTools
             Expect.equal (answeringNames once) [ "render_chart"; "render_table" ] "both tools"
 
             let twice = once |> PresentationCompose.withRenderTools
@@ -564,7 +567,7 @@ let private compositionTests =
         }
 
         test "without the fact store withRenderTools changes nothing" {
-            let before = aiApp NoFactStore
+            let before = aiApp FeatureMode.Disabled
             let after = before |> PresentationCompose.withRenderTools
             Expect.isTrue (unchanged before after) "the app itself, unchanged"
         }
@@ -572,7 +575,7 @@ let private compositionTests =
         test
             "composeAI registers the composed tools through the record-form funnel, and a deployment that does not compose them has neither" {
             let registry =
-                composedRegistry (aiApp EnabledFactStore |> PresentationCompose.withRenderTools)
+                composedRegistry (aiApp FeatureMode.Enabled |> PresentationCompose.withRenderTools)
 
             for toolName in [ RenderTools.ChartToolName; RenderTools.TableToolName ] do
                 match registry.FindByName toolName with
@@ -582,14 +585,14 @@ let private compositionTests =
                     Expect.equal tool.Definition.Effects ToolEffectDeclaration.readFacts "declares ReadFacts only"
                 | None -> failtestf "%s did not reach the AI tool registry" toolName
 
-            let plain = composedRegistry (aiApp EnabledFactStore)
+            let plain = composedRegistry (aiApp FeatureMode.Enabled)
 
             for toolName in [ RenderTools.ChartToolName; RenderTools.TableToolName ] do
                 Expect.isNone (plain.FindByName toolName) (sprintf "%s is absent unless composed" toolName)
         }
 
         test "composeAI refuses an answering tool whose name collides with a string tool" {
-            let app, ai = aiApp EnabledFactStore
+            let app, ai = aiApp FeatureMode.Enabled
 
             let colliding =
                 ai
@@ -611,7 +614,7 @@ let private compositionTests =
         }
 
         test "withPipelineTool composes evaluate_pipeline and mounts its re-run once, however often it is called" {
-            let before = aiApp EnabledFactStore
+            let before = aiApp FeatureMode.Enabled
             let once = before |> PresentationCompose.withPipelineTool
             Expect.equal (answeringNames once) [ PipelineTool.Name ] "the tool"
 
@@ -635,14 +638,14 @@ let private compositionTests =
         }
 
         test "without the fact store withPipelineTool changes nothing" {
-            let before = aiApp NoFactStore
+            let before = aiApp FeatureMode.Disabled
             let after = before |> PresentationCompose.withPipelineTool
             Expect.isTrue (unchanged before after) "the app itself, unchanged"
         }
 
         test "composeAI registers evaluate_pipeline in the record form only when it is composed" {
             let registry =
-                composedRegistry (aiApp EnabledFactStore |> PresentationCompose.withPipelineTool)
+                composedRegistry (aiApp FeatureMode.Enabled |> PresentationCompose.withPipelineTool)
 
             match registry.FindByName PipelineTool.Name with
             | Some tool ->
@@ -651,7 +654,7 @@ let private compositionTests =
             | None -> failtest "evaluate_pipeline did not reach the AI tool registry"
 
             Expect.isNone
-                ((composedRegistry (aiApp EnabledFactStore)).FindByName PipelineTool.Name)
+                ((composedRegistry (aiApp FeatureMode.Enabled)).FindByName PipelineTool.Name)
                 "absent unless composed"
         }
 
@@ -707,7 +710,10 @@ let private composedContext () : HttpContext =
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -864,7 +870,7 @@ let private endToEndTests =
             let! modelRead, state =
                 scriptedTurn
                     ctx
-                    (aiApp EnabledFactStore |> PresentationCompose.withRenderTools)
+                    (aiApp FeatureMode.Enabled |> PresentationCompose.withRenderTools)
                     "Show me daily revenue by site."
                     RenderTools.ChartToolName
                     args
@@ -902,7 +908,7 @@ let private endToEndTests =
             let! modelRead, state =
                 scriptedTurn
                     ctx
-                    (aiApp EnabledFactStore |> PresentationCompose.withPipelineTool)
+                    (aiApp FeatureMode.Enabled |> PresentationCompose.withPipelineTool)
                     "Which site took the most revenue on days above 1000?"
                     PipelineTool.Name
                     args

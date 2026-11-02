@@ -77,7 +77,7 @@ type KnowledgeApiDeps = {
     /// Optional `IAuditLog` for the Phase 107 original-document access
     /// audit (`KnowledgeOriginalRetrieved` + denial events). `None`
     /// when the audit-log substrate isn't registered (test bypass,
-    /// `NoAuditLog` deployment) — emission is best-effort and silent
+    /// `FeatureMode.Disabled` deployment) — emission is best-effort and silent
     /// when the substrate is absent, same posture as the Platform KB
     /// admin surface.
     AuditLog: IAuditLog option

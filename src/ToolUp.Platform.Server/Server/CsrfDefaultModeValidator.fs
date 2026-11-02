@@ -20,7 +20,7 @@ open ToolUp.Platform.ConfigValidation
 // when the resolved shape is auth-requiring + cookie-authenticated, the
 // safe posture (server-side CSRF) is the no-config outcome and the
 // dangerous one (SameSite-only) must be consciously opted into. The
-// escape hatch is `ServerConfig.AcceptSameSiteOnlyCsrfWhenAuthRequired =
+// escape hatch is `ServerConfig.RiskAcknowledgements.AcceptSameSiteOnlyCsrfWhenAuthRequired =
 // true` (`TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE=1`), which
 // downgrades the refusal to `Ok` for a deployment that manages CSRF out
 // of band — the standard `Accept…WhenAuthRequired` escape-hatch idiom
@@ -40,7 +40,7 @@ open ToolUp.Platform.ConfigValidation
 /// no server-side CSRF check (`SseAuthMode = CookieRequired` +
 /// `SecurityHardening = NoSecurityHardening` in an auth-requiring mode),
 /// unless the operator has acknowledged the SameSite-only posture via
-/// `ServerConfig.AcceptSameSiteOnlyCsrfWhenAuthRequired`.
+/// `ServerConfig.RiskAcknowledgements.AcceptSameSiteOnlyCsrfWhenAuthRequired`.
 type CsrfDefaultModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -56,12 +56,12 @@ type CsrfDefaultModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
             ConfigValidator.gatedAuthValidation
                 config
                 (fun () ->
-                    config.SseAuthMode = CookieRequired
-                    && config.SecurityHardening = NoSecurityHardening
-                    && not config.AcceptSameSiteOnlyCsrfWhenAuthRequired)
+                    config.SecurityPosture.SseAuthMode = CookieRequired
+                    && config.SecurityPosture.SecurityHardening = NoSecurityHardening
+                    && not config.RiskAcknowledgements.AcceptSameSiteOnlyCsrfWhenAuthRequired)
                 (fun () ->
                     Error(
                         sprintf
-                            "ServerConfig.Surfaces = %s with SseAuthMode = CookieRequired but SecurityHardening = NoSecurityHardening. Cookie-authenticated mutations have NO server-side CSRF check — the only protection is the client cookie's SameSite=Strict, which is browser-version-dependent and subdomain-bypassable. Call withSecurityHardening (DefaultSecurityHardening or StrictSecurityHardening) to enable the server-side double-submit CSRF check. If you deliberately rely on SameSite-only / out-of-band CSRF protection, set ServerConfig.AcceptSameSiteOnlyCsrfWhenAuthRequired = true (TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE=1) to acknowledge the posture and start. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            "ServerConfig.Surfaces = %s with SseAuthMode = CookieRequired but SecurityHardening = NoSecurityHardening. Cookie-authenticated mutations have NO server-side CSRF check — the only protection is the client cookie's SameSite=Strict, which is browser-version-dependent and subdomain-bypassable. Call withSecurityHardening (DefaultSecurityHardening or StrictSecurityHardening) to enable the server-side double-submit CSRF check. If you deliberately rely on SameSite-only / out-of-band CSRF protection, set ServerConfig.RiskAcknowledgements.AcceptSameSiteOnlyCsrfWhenAuthRequired = true (TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE=1) to acknowledge the posture and start. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
                     ))

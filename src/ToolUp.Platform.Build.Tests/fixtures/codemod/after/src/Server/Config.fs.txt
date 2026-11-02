@@ -1,0 +1,79 @@
+module MyApp.Server.Config
+
+open System
+open ToolUp.Platform
+
+/// The deployment's configuration, written against the flat record.
+let config = {
+    ServerConfig.defaults with
+        Port = 5000
+        Surfaces = Surfaces.team
+        Stores = {
+            ServerConfig.defaults.Stores with
+                // the entity store backs the catalog
+                EntityStore = FeatureMode.Enabled
+        }
+        AuditLog = FeatureMode.Enabled
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                RequireHttps = true
+        }
+        Observability = {
+            ServerConfig.defaults.Observability with
+                SlowRequestThresholdOverrides =
+                    Map.ofList [
+                        "/api/slow", TimeSpan.FromSeconds 5.0
+                    ]
+        }
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = 3
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptEphemeralRagIndex = true
+        }
+}
+
+/// A one-line update, and the qualified spelling of a case.
+let trial = {
+    ServerConfig.defaults with
+        Port = 1
+        Stores = {
+            ServerConfig.defaults.Stores with
+                ShareTokenStore = FeatureMode.Enabled
+        }
+        Webhooks = FeatureMode.Disabled
+}
+
+/// A base that is a plain path, with the opener on its own line.
+let hardened (app: ServerApp) =
+    {
+        app.Config with
+            SecurityPosture = {
+                app.Config.SecurityPosture with
+                    SecurityHardening = StrictSecurityHardening
+            }
+            Stores = {
+                app.Config.Stores with
+                    FactStore = FeatureMode.Enabled
+            }
+    }
+
+/// A base the codemod cannot re-read as `base.Concern`.
+let fromEnvironment logger overrides =
+    { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }
+
+/// A deps record of the app's own with a shared label: untouched, reported.
+let deps = { JobDeps.empty with EventStore = store }
+
+/// A type annotation on a retired mode.
+let describe (mode: FeatureMode) =
+    match mode with
+    | FeatureMode.Disabled -> "off"
+    | FeatureMode.Enabled -> "on"
+
+/// Reads: named as the config, a unique moved field on any receiver, and a
+/// shared label on a receiver of the app's own.
+let summary (config: ServerConfig) (deps: JobDeps) (cfg: ServerConfig) =
+    config.MultiInstance.ReplicaCount, cfg.Stores.EventStore, deps.EventStore, config.RiskAcknowledgements.AcceptEphemeralRagIndex, config.Port

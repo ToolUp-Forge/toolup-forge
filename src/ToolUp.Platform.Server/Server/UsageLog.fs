@@ -118,7 +118,7 @@ let private fromJson (bytes: byte[]) : UsageRecord list =
 // `InMemoryUsageLog` keeps records in a `ConcurrentDictionary` keyed
 // by `ScopeId`. Used by the contract pack and any test harness that
 // wants the API surface without the durability cost. NOT registered
-// by `compose` — `EnabledUsageMetering` always picks the blob-backed
+// by `compose` — `FeatureMode.Enabled` always picks the blob-backed
 // default; the `IUsageLog` interface accepts any implementation.
 
 type InMemoryUsageLog() =

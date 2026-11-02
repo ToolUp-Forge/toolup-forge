@@ -769,7 +769,10 @@ let tests =
                 ServerApp.empty
                 |> ServerApp.withConfig {
                     ServerConfig.defaults with
-                        ServiceAccounts = EnabledServiceAccounts
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                ServiceAccounts = EnabledServiceAccounts
+                        }
                 }
                 |> AICompose.withAI (AICompose.AIOptions.create (StubProviderFactory()) (StubProviderProfile()))
 

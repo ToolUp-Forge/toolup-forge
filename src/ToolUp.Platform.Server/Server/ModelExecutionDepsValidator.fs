@@ -10,7 +10,7 @@ open ToolUp.Platform.ConfigValidation
 
 // ─── Phase 728 — fail at composition, not at dispatch ────────────────────
 //
-// `ServerConfig.ModelExecution = EnabledModelExecutionApi` mounts the
+// `ServerConfig.ModelExecution = FeatureMode.Enabled` mounts the
 // `ModelExecutionApi` remoting surface. Four of its six methods resolve
 // `IModelRegistry` from DI, and no forge compose path registered one until
 // the Phase 728 leg — so the whole cost of that gap was WHERE it surfaced:
@@ -52,14 +52,14 @@ type ModelExecutionDepsValidator(config: ServerConfig, services: IServiceCollect
 
         member _.Validate() = async {
             match config.ModelExecution with
-            | NoModelExecutionApi -> return Ok
-            | EnabledModelExecutionApi ->
+            | FeatureMode.Disabled -> return Ok
+            | FeatureMode.Enabled ->
                 if isRegistered typeof<IModelRegistry> then
                     return Ok
                 else
                     return
                         Warning(
-                            "ServerConfig.ModelExecution = EnabledModelExecutionApi mounts the ModelExecutionApi surface, but no IModelRegistry is composed. "
+                            "ServerConfig.ModelExecution = FeatureMode.Enabled mounts the ModelExecutionApi surface, but no IModelRegistry is composed. "
                             + "GetOutcome, QueryOutcomes and RequestScore will each refuse with SubstrateDisabled \"model registry\" on the first request. "
                             + $"Compose the model-execution leg — {ComposeModelExecution.BuilderName} ModelExecutionComposeOptions.defaults — which registers the blob-backed BlobModelRegistry over the composed IDataObjectStore and IAuditLog; "
                             + "or register your own IModelRegistry singleton before Build. "

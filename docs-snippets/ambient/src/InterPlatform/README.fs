@@ -37,7 +37,7 @@ module PageAmbient =
 
     // ── The deployment's own substrate ────────────────────────────
 
-    /// The composed `ServerConfig` — `PeerSubstrate = EnabledPeerSubstrate`
+    /// The composed `ServerConfig` — `PeerSubstrate = FeatureMode.Enabled`
     /// in every block below the "How to enable" section.
     let config: ServerConfig = failwith "ambient"
 

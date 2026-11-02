@@ -27,7 +27,7 @@ open ToolUp.Platform.ConfigValidation
 // `RequireHttps` inverted the heuristic for exactly that (most common)
 // internet-facing shape, so the proxied case is now covered too.
 //
-// Escape hatch: `ServerConfig.AcceptNoRateLimitWhenAuthRequired`
+// Escape hatch: `ServerConfig.RiskAcknowledgements.AcceptNoRateLimitWhenAuthRequired`
 // (default `false`). Operators behind a rate-limiting proxy set
 // `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1` to silence the warning.
 
@@ -47,7 +47,7 @@ type RateLimitModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
             let requiresAuth = DeploymentConfig.requiresAnyAuth config
             let internetFacing = DeploymentConfig.isInternetFacing config
             let rateLimitOff = not (RateLimitConfig.isEnabled config.RateLimit)
-            let escapeHatch = config.AcceptNoRateLimitWhenAuthRequired
+            let escapeHatch = config.RiskAcknowledgements.AcceptNoRateLimitWhenAuthRequired
 
             // Rule 1 (Phase 6l.G, retained) — an internet-facing
             // authenticated deployment running no limiter at all is a
@@ -58,7 +58,7 @@ type RateLimitModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
                 if requiresAuth && internetFacing && rateLimitOff && not escapeHatch then
                     Some(
                         sprintf
-                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + RateLimit = RateLimitConfig.none. An internet-facing authenticated deployment with no rate limit can be DoSed by a single client running a tight request loop — CPU, upload quota, and AI-token spend are all unbounded. Enable the SDK's per-subject-kind fixed-window limiter by setting ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 } (or RateLimitConfig.withOverrides for per-shape limits), or set ServerConfig.AcceptNoRateLimitWhenAuthRequired = true (TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1) if your deployment sits behind a rate-limiting proxy that enforces per-client limits upstream."
+                            "ServerConfig.Surfaces = %s + (RequireHttps or TrustForwardedHeaders) + RateLimit = RateLimitConfig.none. An internet-facing authenticated deployment with no rate limit can be DoSed by a single client running a tight request loop — CPU, upload quota, and AI-token spend are all unbounded. Enable the SDK's per-subject-kind fixed-window limiter by setting ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 } (or RateLimitConfig.withOverrides for per-shape limits), or set ServerConfig.RiskAcknowledgements.AcceptNoRateLimitWhenAuthRequired = true (TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE=1) if your deployment sits behind a rate-limiting proxy that enforces per-client limits upstream."
                             (DeploymentConfig.surfacesLabel config)
                     )
                 else
@@ -118,15 +118,15 @@ type AdAnalyticsRateLimitValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            match config.AdAnalytics, config.RateLimitStore with
-            | EnabledAdAnalytics, NoRateLimitStore ->
+            match config.AdAnalytics, config.Stores.RateLimitStore with
+            | FeatureMode.Enabled, NoRateLimitStore ->
                 return
                     Warning(
-                        "ServerConfig.AdAnalytics = EnabledAdAnalytics with RateLimitStore = NoRateLimitStore. "
+                        "ServerConfig.AdAnalytics = FeatureMode.Enabled with RateLimitStore = NoRateLimitStore. "
                         + "The anonymous /api/_platform/ads/impression and /click endpoints accept unauthenticated "
                         + "posts into the _platform scope of the audit event store; without an IRateLimitStore their "
                         + "per-IP budget is inactive, leaving only the body-size cap and field/slot validation between "
-                        + "a hostile client and unbounded event-store writes. Set ServerConfig.RateLimitStore = "
+                        + "a hostile client and unbounded event-store writes. Set ServerConfig.Stores.RateLimitStore = "
                         + "InMemoryRateLimitStore (single instance) or wire an external store companion, or accept the "
                         + "exposure if a rate-limiting proxy enforces per-client limits upstream."
                     )

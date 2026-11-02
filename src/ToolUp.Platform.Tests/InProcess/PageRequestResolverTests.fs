@@ -494,7 +494,10 @@ let private composedContext (pages: bool) : HttpContext * IServiceProvider =
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -544,7 +547,10 @@ let private compositionTests =
                     ServerApp.empty with
                         Config = {
                             ServerConfig.defaults with
-                                FactStore = NoFactStore
+                                Stores = {
+                                    ServerConfig.defaults.Stores with
+                                        FactStore = FeatureMode.Disabled
+                                }
                         }
                 }
                 |> PresentationCompose.withPageRequests

@@ -42,7 +42,7 @@ open ToolUp.TimeSeriesStores.Timescale
 let dataSource = NpgsqlDataSource.Create "Host=...;Database=...;Username=...;Password=..."
 let store = TimescaleTimeSeriesStore.create dataSource
 // Wire it as the deployment's ITimeSeriesStore:
-//   ServerConfig.TimeSeriesStore = CustomTimeSeriesStore
+//   ServerConfig.Stores.TimeSeriesStore = CustomTimeSeriesStore
 //   services.AddSingleton<ITimeSeriesStore>(store)
 ```
 

@@ -587,14 +587,88 @@ module ServerConfig =
                 Surfaces = surfaces logger overrides
                 ModuleFilter = text Names.moduleFilter
                 ModuleBindingTrust = moduleBindingTrust logger
-                RequireHttps = flag Names.requireHttps
-                TrustForwardedHeaders = flag Names.trustForwardedHeaders
-                // The trusted-proxy CIDR allowlist is validated (fail-loud on
-                // a malformed CIDR) by the preflight validator and the
-                // pipeline's options builder, not here, so the error surfaces
-                // with one message whichever path built the config.
-                TrustedProxyCidrs = textList Names.trustedProxyCidrs
-                AcceptForwardedHeadersFromAnyProxy = flag Names.acceptForwardedHeadersFromAnyProxy
+                SecurityPosture = {
+                    defaults.SecurityPosture with
+                        RequireHttps = flag Names.requireHttps
+                        TrustForwardedHeaders = flag Names.trustForwardedHeaders
+                        // The trusted-proxy CIDR allowlist is validated (fail-loud on
+                        // a malformed CIDR) by the preflight validator and the
+                        // pipeline's options builder, not here, so the error surfaces
+                        // with one message whichever path built the config.
+                        TrustedProxyCidrs = textList Names.trustedProxyCidrs
+                        SecurityHardening =
+                            union
+                                logger
+                                Names.securityHardening
+                                [
+                                    "no", NoSecurityHardening
+                                    "off", NoSecurityHardening
+                                    "disabled", NoSecurityHardening
+                                    "default", DefaultSecurityHardening
+                                    "on", DefaultSecurityHardening
+                                    "strict", StrictSecurityHardening
+                                ]
+                                overrides.SecurityHardening
+                        // `cookies` and `cookieonly` select the cookie mode here as
+                        // at `AuthProviderFromEnv.tokenLocationFromEnv`: two readers
+                        // of one key must agree on what it says.
+                        SseAuthMode =
+                            union
+                                logger
+                                Names.sseAuth
+                                [
+                                    "cookie", CookieRequired
+                                    "cookies", CookieRequired
+                                    "cookieonly", CookieRequired
+                                    "fallback", QueryParamFallback
+                                    "queryparam", QueryParamFallback
+                                ]
+                                None
+                        AuthCookieIssuance =
+                            union
+                                logger
+                                Names.authCookieIssuance
+                                [
+                                    "enabled", FeatureMode.Enabled
+                                    "on", FeatureMode.Enabled
+                                    "1", FeatureMode.Enabled
+                                    "disabled", FeatureMode.Disabled
+                                    "off", FeatureMode.Disabled
+                                    "0", FeatureMode.Disabled
+                                ]
+                                None
+                        MaxRequestBodyBytes = integerOption logger Names.maxRequestBodyBytes
+                        WebhookUrlAllowedHosts = textList Names.webhookUrlAllowedHosts
+                }
+                RiskAcknowledgements = {
+                    defaults.RiskAcknowledgements with
+                        AcceptForwardedHeadersFromAnyProxy = flag Names.acceptForwardedHeadersFromAnyProxy
+                        AcceptHeaderAuthWhenAuthRequired = flag Names.acceptHeaderAuthInAuthMode
+                        // Two spellings, one acknowledgement: the shorter name is
+                        // what the at-rest-posture validator's refusal prints, and
+                        // ORing here keeps it from becoming a second, separately
+                        // honoured opt-out.
+                        AcceptPlaintextSecretsWhenAuthRequired =
+                            flag Names.acceptPlaintextSecretsInAuthMode || flag Names.acceptPlaintextSecrets
+                        AcceptInProcessSchedulerInMultiInstance = flag Names.acceptInProcessSchedulerMultiInstance
+                        AcceptNoRateLimitWhenAuthRequired = flag Names.acceptNoRateLimitInAuthMode
+                        AcceptUnsignedPublishable = flag Names.acceptUnsignedPublishable
+                        AcceptQueryParamSseAuthWhenAuthRequired = flag Names.acceptQueryParamSseAuthInAuthMode
+                        AcceptSameSiteOnlyCsrfWhenAuthRequired = flag Names.acceptSameSiteOnlyCsrfInAuthMode
+                        AcceptInMemoryShareTokenRateLimiterInMultiInstance =
+                            flag Names.acceptInMemoryShareTokenRateLimiterMultiInstance
+                        AcceptInProcessIngestionInMultiInstance = flag Names.acceptInProcessIngestionMultiInstance
+                        AcceptSharedEmbeddingCacheInTeamMode = flag Names.acceptSharedEmbeddingCacheInTeamMode
+                        AcceptEphemeralRagIndex = flag Names.acceptEphemeralRagIndex
+                        AcceptLocalEmbedderAtScale = flag Names.acceptLocalEmbedderAtScale
+                        AcceptStickyRoutedAiInMultiInstance = flag Names.acceptStickyRoutedAiMultiInstance
+                        AcceptAnonymousModeWithAI = flag Names.acceptAnonymousModeWithAi
+                        AcceptUnboundAudienceWhenAuthRequired = flag Names.acceptUnboundAudienceInAuthMode
+                        AcceptInMemoryOAuthStateInMultiInstance = flag Names.acceptInMemoryOAuthStateMultiInstance
+                        AcceptPendingInviteStoreInMultiInstance = flag Names.acceptPendingInviteStoreMultiInstance
+                        AcceptInviteByEmailWithoutDirectory = flag Names.acceptInviteByEmailWithoutDirectory
+                        AcceptEphemeralShareTokenKey = flag Names.acceptEphemeralShareTokenKey
+                }
                 StaticPathBehaviour =
                     union
                         logger
@@ -609,91 +683,132 @@ module ServerConfig =
                             "skip-silent", SkipSilent
                         ]
                         None
-                SlowRequestThresholdOverrides =
-                    overrides.SlowRequestThresholdOverrides
-                    |> Option.defaultValue defaults.SlowRequestThresholdOverrides
+                Observability = {
+                    defaults.Observability with
+                        SlowRequestThresholdOverrides =
+                            overrides.SlowRequestThresholdOverrides
+                            |> Option.defaultValue defaults.Observability.SlowRequestThresholdOverrides
+                        LogLevel = logLevel
+                        TraceCategories = traceCategories
+                        HealthStateTracking = flag Names.healthStateTracking
+                        MetricsEndpoint =
+                            enabledDisabled logger Names.metricsEndpoint FeatureMode.Disabled FeatureMode.Enabled None
+                        SlowRequestThreshold = milliseconds logger Names.slowRequestMs
+                }
                 EnableDevEndpoints = flagWith Names.enableDevEndpoints overrides.EnableDevEndpoints
                 AutoBootstrapDevAdmin = overrides.AutoBootstrapDevAdmin
                 IncludePlatformDefaults = flagWith Names.includePlatformDefaults overrides.IncludePlatformDefaults
-                ShareTokenStore =
-                    enabledDisabled
-                        logger
-                        Names.shareTokenStore
-                        NoShareTokenStore
-                        EnabledShareTokenStore
-                        overrides.ShareTokenStore
-                Webhooks = enabledDisabled logger Names.webhooks NoWebhooks EnabledWebhooks overrides.Webhooks
-                AuditLog = enabledDisabled logger Names.auditLog NoAuditLog EnabledAuditLog overrides.AuditLog
-                SecurityHardening =
-                    union
-                        logger
-                        Names.securityHardening
-                        [
-                            "no", NoSecurityHardening
-                            "off", NoSecurityHardening
-                            "disabled", NoSecurityHardening
-                            "default", DefaultSecurityHardening
-                            "on", DefaultSecurityHardening
-                            "strict", StrictSecurityHardening
-                        ]
-                        overrides.SecurityHardening
-                LogLevel = logLevel
-                TraceCategories = traceCategories
-                // `cookies` and `cookieonly` select the cookie mode here as
-                // at `AuthProviderFromEnv.tokenLocationFromEnv`: two readers
-                // of one key must agree on what it says.
-                SseAuthMode =
-                    union
-                        logger
-                        Names.sseAuth
-                        [
-                            "cookie", CookieRequired
-                            "cookies", CookieRequired
-                            "cookieonly", CookieRequired
-                            "fallback", QueryParamFallback
-                            "queryparam", QueryParamFallback
-                        ]
-                        None
-                AuthCookieIssuance =
-                    union
-                        logger
-                        Names.authCookieIssuance
-                        [
-                            "enabled", EnabledAuthCookieIssuance
-                            "on", EnabledAuthCookieIssuance
-                            "1", EnabledAuthCookieIssuance
-                            "disabled", NoAuthCookieIssuance
-                            "off", NoAuthCookieIssuance
-                            "0", NoAuthCookieIssuance
-                        ]
-                        None
-                AcceptHeaderAuthWhenAuthRequired = flag Names.acceptHeaderAuthInAuthMode
-                // Two spellings, one acknowledgement: the shorter name is
-                // what the at-rest-posture validator's refusal prints, and
-                // ORing here keeps it from becoming a second, separately
-                // honoured opt-out.
-                AcceptPlaintextSecretsWhenAuthRequired =
-                    flag Names.acceptPlaintextSecretsInAuthMode || flag Names.acceptPlaintextSecrets
-                ReplicaCount = int32Key logger Names.replicaCount
-                AcceptInProcessSchedulerInMultiInstance = flag Names.acceptInProcessSchedulerMultiInstance
-                AcceptNoRateLimitWhenAuthRequired = flag Names.acceptNoRateLimitInAuthMode
-                AcceptUnsignedPublishable = flag Names.acceptUnsignedPublishable
-                AcceptQueryParamSseAuthWhenAuthRequired = flag Names.acceptQueryParamSseAuthInAuthMode
-                AcceptSameSiteOnlyCsrfWhenAuthRequired = flag Names.acceptSameSiteOnlyCsrfInAuthMode
-                AcceptInMemoryShareTokenRateLimiterInMultiInstance =
-                    flag Names.acceptInMemoryShareTokenRateLimiterMultiInstance
-                AcceptInProcessIngestionInMultiInstance = flag Names.acceptInProcessIngestionMultiInstance
-                AcceptSharedEmbeddingCacheInTeamMode = flag Names.acceptSharedEmbeddingCacheInTeamMode
-                AcceptEphemeralRagIndex = flag Names.acceptEphemeralRagIndex
-                AcceptLocalEmbedderAtScale = flag Names.acceptLocalEmbedderAtScale
-                AcceptStickyRoutedAiInMultiInstance = flag Names.acceptStickyRoutedAiMultiInstance
-                AcceptAnonymousModeWithAI = flag Names.acceptAnonymousModeWithAi
-                AcceptUnboundAudienceWhenAuthRequired = flag Names.acceptUnboundAudienceInAuthMode
-                AcceptInMemoryOAuthStateInMultiInstance = flag Names.acceptInMemoryOAuthStateMultiInstance
-                AcceptPendingInviteStoreInMultiInstance = flag Names.acceptPendingInviteStoreMultiInstance
-                AcceptInviteByEmailWithoutDirectory = flag Names.acceptInviteByEmailWithoutDirectory
+                Stores = {
+                    defaults.Stores with
+                        ShareTokenStore =
+                            enabledDisabled
+                                logger
+                                Names.shareTokenStore
+                                FeatureMode.Disabled
+                                FeatureMode.Enabled
+                                overrides.ShareTokenStore
+                        ResultStore =
+                            union
+                                logger
+                                Names.resultStore
+                                [
+                                    "no", NoResultStore
+                                    "inmemory", InMemoryResultStore
+                                    "in-memory", InMemoryResultStore
+                                    "persistent", PersistentResultStore
+                                ]
+                                None
+                        ExternalContactStore =
+                            enabledDisabled
+                                logger
+                                Names.externalContactStore
+                                FeatureMode.Disabled
+                                FeatureMode.Enabled
+                                None
+                        EntityStore =
+                            enabledDisabled logger Names.entityStore FeatureMode.Disabled FeatureMode.Enabled None
+                        EntityOutbox =
+                            enabledDisabled logger Names.entityOutbox FeatureMode.Disabled FeatureMode.Enabled None
+                        AssetStore =
+                            enabledDisabled logger Names.assetStore FeatureMode.Disabled FeatureMode.Enabled None
+                        ConsentStateStore =
+                            union
+                                logger
+                                Names.consentStateStore
+                                [
+                                    "no", NoConsentStateStore
+                                    "off", NoConsentStateStore
+                                    "disabled", NoConsentStateStore
+                                    "inmemory", InMemoryConsentStateStore
+                                    "in-memory", InMemoryConsentStateStore
+                                    "entity", EntityBackedConsentStateStore
+                                    "entity-backed", EntityBackedConsentStateStore
+                                ]
+                                None
+                        RateLimitStore =
+                            union
+                                logger
+                                Names.rateLimitStore
+                                [
+                                    "no", NoRateLimitStore
+                                    "off", NoRateLimitStore
+                                    "disabled", NoRateLimitStore
+                                    "inmemory", InMemoryRateLimitStore
+                                    "in-memory", InMemoryRateLimitStore
+                                    "external", ExternalRateLimitStore
+                                ]
+                                None
+                        EventStore =
+                            union
+                                logger
+                                Names.eventStore
+                                [
+                                    "inmemory", InMemoryOnly
+                                    "in-memory", InMemoryOnly
+                                    "persistent", PersistentBlobBacked EventRetentionPolicy.ninetyDays
+                                ]
+                                None
+                        // A case carrying a payload a token cannot express refuses
+                        // the boot naming how to supply it.
+                        ConversationStore =
+                            unionWith
+                                logger.Warn
+                                Names.conversationStore
+                                [
+                                    "no", Ok NoConversationStore
+                                    "off", Ok NoConversationStore
+                                    "disabled", Ok NoConversationStore
+                                    "enabled",
+                                    Error
+                                        "EnabledConversationStore requires a retentionDays value; set ServerConfig.Stores.ConversationStore via overrides or a `{ defaults with ... }` literal"
+                                ]
+                                None
+                }
+                Webhooks =
+                    enabledDisabled logger Names.webhooks FeatureMode.Disabled FeatureMode.Enabled overrides.Webhooks
+                AuditLog =
+                    enabledDisabled logger Names.auditLog FeatureMode.Disabled FeatureMode.Enabled overrides.AuditLog
+                MultiInstance = {
+                    defaults.MultiInstance with
+                        ReplicaCount = int32Key logger Names.replicaCount
+                        PeerRoutePrefixes = textList Names.peerRoutePrefixes
+                        ProcessProfile =
+                            union
+                                logger
+                                Names.processProfile
+                                [
+                                    "allinone", AllInOne
+                                    "all-in-one", AllInOne
+                                    "web", WebOnly
+                                    "webonly", WebOnly
+                                    "worker", WorkerOnly
+                                    "workeronly", WorkerOnly
+                                    "dispatcher", DispatcherOnly
+                                    "dispatcheronly", DispatcherOnly
+                                ]
+                                None
+                }
                 NotifyInviterOnInviteExpiry = flag Names.notifyInviterOnInviteExpiry
-                AcceptEphemeralShareTokenKey = flag Names.acceptEphemeralShareTokenKey
                 Port = serverPort ()
                 BindAddress = bindAddress ()
                 PublicBaseUrl = publicBaseUrl logger
@@ -701,12 +816,8 @@ module ServerConfig =
                 EventTriggerCatchUp = flag Names.eventTriggerCatchUp
                 MigrateWebhookSecretsAtRest = flag Names.migrateWebhookSecretsAtRest
                 SkipPreflight = flag Names.skipPreflight
-                HealthStateTracking = flag Names.healthStateTracking
                 EnableCitationDevEndpoint = flagOption Names.enableCitationDevEndpoint
-                MaxRequestBodyBytes = integerOption logger Names.maxRequestBodyBytes
                 SlowRateLimitThreshold = milliseconds logger Names.slowRateLimitMs
-                WebhookUrlAllowedHosts = textList Names.webhookUrlAllowedHosts
-                PeerRoutePrefixes = textList Names.peerRoutePrefixes
                 AuditFailurePolicy =
                     union
                         logger
@@ -720,29 +831,11 @@ module ServerConfig =
                             "degradetofile", DegradeToFile
                         ]
                         None
-                ResultStore =
-                    union
-                        logger
-                        Names.resultStore
-                        [
-                            "no", NoResultStore
-                            "inmemory", InMemoryResultStore
-                            "in-memory", InMemoryResultStore
-                            "persistent", PersistentResultStore
-                        ]
-                        None
-                Lineage = enabledDisabled logger Names.lineage NoLineageStore EnabledLineageStore None
+                Lineage = enabledDisabled logger Names.lineage FeatureMode.Disabled FeatureMode.Enabled None
                 LineageDurability =
-                    enabledDisabled logger Names.lineageDurability NoDurableLineage EnabledDurableLineage None
-                DataIngestion = enabledDisabled logger Names.dataIngestion NoDataIngestion EnabledDataIngestion None
-                ColumnMapping = enabledDisabled logger Names.columnMapping NoColumnMapping EnabledColumnMapping None
-                ExternalContactStore =
-                    enabledDisabled
-                        logger
-                        Names.externalContactStore
-                        NoExternalContactStore
-                        EnabledExternalContactStore
-                        None
+                    enabledDisabled logger Names.lineageDurability FeatureMode.Disabled FeatureMode.Enabled None
+                DataIngestion = enabledDisabled logger Names.dataIngestion FeatureMode.Disabled FeatureMode.Enabled None
+                ColumnMapping = enabledDisabled logger Names.columnMapping FeatureMode.Disabled FeatureMode.Enabled None
                 MappingDryRun =
                     enabledDisabled
                         logger
@@ -750,72 +843,24 @@ module ServerConfig =
                         WarnOnValidationFailure
                         BlockOnValidationFailure
                         None
-                OAuthRefresher = enabledDisabled logger Names.oauthRefresher NoOAuthRefresher EnabledOAuthRefresher None
-                EntityStore = enabledDisabled logger Names.entityStore NoEntityStore EnabledEntityStore None
-                EntityOutbox = enabledDisabled logger Names.entityOutbox NoEntityOutbox EnabledEntityOutbox None
-                UsageMetering = enabledDisabled logger Names.usageMetering NoUsageMetering EnabledUsageMetering None
-                ComputeBudget = enabledDisabled logger Names.computeBudget NoComputeBudget EnabledComputeBudget None
-                MetricsEndpoint =
-                    enabledDisabled logger Names.metricsEndpoint NoMetricsEndpoint EnabledMetricsEndpoint None
+                OAuthRefresher =
+                    enabledDisabled logger Names.oauthRefresher FeatureMode.Disabled FeatureMode.Enabled None
+                UsageMetering = enabledDisabled logger Names.usageMetering FeatureMode.Disabled FeatureMode.Enabled None
+                ComputeBudget = enabledDisabled logger Names.computeBudget FeatureMode.Disabled FeatureMode.Enabled None
                 PlatformKnowledgeBase =
-                    enabledDisabled
-                        logger
-                        Names.platformKnowledgeBase
-                        NoPlatformKnowledgeBase
-                        EnabledPlatformKnowledgeBase
-                        None
+                    enabledDisabled logger Names.platformKnowledgeBase FeatureMode.Disabled FeatureMode.Enabled None
                 ConfigDriftDetection =
-                    enabledDisabled
-                        logger
-                        Names.configDriftDetection
-                        NoConfigDriftDetection
-                        EnabledConfigDriftDetection
-                        None
-                RateLimiter = enabledDisabled logger Names.rateLimiter NoRateLimiter EnabledRateLimiter None
-                SmokeTest = enabledDisabled logger Names.smokeTest NoSmokeTest EnabledSmokeTest None
+                    enabledDisabled logger Names.configDriftDetection FeatureMode.Disabled FeatureMode.Enabled None
+                RateLimiter = enabledDisabled logger Names.rateLimiter FeatureMode.Disabled FeatureMode.Enabled None
+                SmokeTest = enabledDisabled logger Names.smokeTest FeatureMode.Disabled FeatureMode.Enabled None
                 DeploymentReadiness =
-                    enabledDisabled logger Names.deploymentReadiness NoReadinessReport EnabledReadinessReport None
+                    enabledDisabled logger Names.deploymentReadiness FeatureMode.Disabled FeatureMode.Enabled None
                 DeploymentVerification =
-                    enabledDisabled
-                        logger
-                        Names.deploymentVerification
-                        NoDeploymentVerification
-                        EnabledDeploymentVerification
-                        None
-                AssetStore = enabledDisabled logger Names.assetStore NoAssetStore EnabledAssetStore None
-                ConsentAudit = enabledDisabled logger Names.consentAudit NoConsentAudit EnabledConsentAudit None
-                AdAnalytics = enabledDisabled logger Names.adAnalytics NoAdAnalytics EnabledAdAnalytics None
-                ConsentStateStore =
-                    union
-                        logger
-                        Names.consentStateStore
-                        [
-                            "no", NoConsentStateStore
-                            "off", NoConsentStateStore
-                            "disabled", NoConsentStateStore
-                            "inmemory", InMemoryConsentStateStore
-                            "in-memory", InMemoryConsentStateStore
-                            "entity", EntityBackedConsentStateStore
-                            "entity-backed", EntityBackedConsentStateStore
-                        ]
-                        None
+                    enabledDisabled logger Names.deploymentVerification FeatureMode.Disabled FeatureMode.Enabled None
+                ConsentAudit = enabledDisabled logger Names.consentAudit FeatureMode.Disabled FeatureMode.Enabled None
+                AdAnalytics = enabledDisabled logger Names.adAnalytics FeatureMode.Disabled FeatureMode.Enabled None
                 ServerlessHost =
                     union logger Names.serverlessHost [ "kestrel", KestrelHost; "serverless", ServerlessHost ] None
-                ProcessProfile =
-                    union
-                        logger
-                        Names.processProfile
-                        [
-                            "allinone", AllInOne
-                            "all-in-one", AllInOne
-                            "web", WebOnly
-                            "webonly", WebOnly
-                            "worker", WorkerOnly
-                            "workeronly", WorkerOnly
-                            "dispatcher", DispatcherOnly
-                            "dispatcheronly", DispatcherOnly
-                        ]
-                        None
                 TeamCreationPolicy =
                     union
                         logger
@@ -847,44 +892,6 @@ module ServerConfig =
                         ]
                         None
                 JobScheduler = enabledDisabled logger Names.jobScheduler NoJobScheduler InProcessJobScheduler None
-                RateLimitStore =
-                    union
-                        logger
-                        Names.rateLimitStore
-                        [
-                            "no", NoRateLimitStore
-                            "off", NoRateLimitStore
-                            "disabled", NoRateLimitStore
-                            "inmemory", InMemoryRateLimitStore
-                            "in-memory", InMemoryRateLimitStore
-                            "external", ExternalRateLimitStore
-                        ]
-                        None
-                EventStore =
-                    union
-                        logger
-                        Names.eventStore
-                        [
-                            "inmemory", InMemoryOnly
-                            "in-memory", InMemoryOnly
-                            "persistent", PersistentBlobBacked EventRetentionPolicy.ninetyDays
-                        ]
-                        None
-                // A case carrying a payload a token cannot express refuses
-                // the boot naming how to supply it.
-                ConversationStore =
-                    unionWith
-                        logger.Warn
-                        Names.conversationStore
-                        [
-                            "no", Ok NoConversationStore
-                            "off", Ok NoConversationStore
-                            "disabled", Ok NoConversationStore
-                            "enabled",
-                            Error
-                                "EnabledConversationStore requires a retentionDays value; set ServerConfig.ConversationStore via overrides or a `{ defaults with ... }` literal"
-                        ]
-                        None
                 PublicRendering =
                     unionWith
                         logger.Warn
@@ -917,7 +924,6 @@ module ServerConfig =
                 EphemeralStoreEvictionMinutes = evictionMinutes logger
                 RateLimit = rateLimit logger
                 DefaultTeamStorageQuotaBytes = integerOption logger Names.defaultStorageQuotaBytes
-                SlowRequestThreshold = milliseconds logger Names.slowRequestMs
                 MaxSseConnectionsPerScope = int32Option logger Names.maxSseConnectionsPerScope
         }
 

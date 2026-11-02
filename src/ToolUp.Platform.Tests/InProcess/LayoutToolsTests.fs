@@ -1048,7 +1048,7 @@ let private names ((_, ai): ServerApp * AIOptions) =
 let private compositionTests =
     testList "the composition" [
         test "withLayoutTools composes the nine tools with a fact store and a page store, once" {
-            let once = aiApp EnabledFactStore true |> PresentationCompose.withLayoutTools
+            let once = aiApp FeatureMode.Enabled true |> PresentationCompose.withLayoutTools
             Expect.equal (names once) (LayoutTools.all |> List.map LayoutTools.name) "the nine tools"
 
             let twice = once |> PresentationCompose.withLayoutTools
@@ -1059,7 +1059,12 @@ let private compositionTests =
         }
 
         test "no fact store, or no page store, registers nothing and returns the app itself" {
-            for factStore, pageStore in [ NoFactStore, true; EnabledFactStore, false; NoFactStore, false ] do
+            for factStore, pageStore in
+                [
+                    FeatureMode.Disabled, true
+                    FeatureMode.Enabled, false
+                    FeatureMode.Disabled, false
+                ] do
                 let before = aiApp factStore pageStore
                 let after = before |> PresentationCompose.withLayoutTools
 
@@ -1071,7 +1076,7 @@ let private compositionTests =
 
         test "the runtime is registered in a factory over the page store and the resolvers" {
             let app =
-                let app, ai = aiApp EnabledFactStore true |> PresentationCompose.withLayoutTools
+                let app, ai = aiApp FeatureMode.Enabled true |> PresentationCompose.withLayoutTools
                 app |> withAI ai
 
             let services = ServiceCollection() :> IServiceCollection

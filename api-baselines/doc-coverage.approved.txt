@@ -34,7 +34,7 @@ ToolUp.ArtefactSigning 156/323
 ToolUp.ArtefactSigning.AwsKms 2/4
 ToolUp.ArtefactSigning.AzureKeyVault 3/5
 ToolUp.ArtefactSigning.GoogleCloudKms 3/5
-ToolUp.AssetStore 192/429
+ToolUp.AssetStore 191/419
 ToolUp.AuditSinks.AzureBlobArchive 7/11
 ToolUp.AuditSinks.Cef 69/107
 ToolUp.AuditSinks.ChainedLedger 188/324
@@ -136,10 +136,10 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 484/900
+ToolUp.Platform.Build 492/910
 ToolUp.Platform.Client 2947/7264
-ToolUp.Platform.Core 7416/15661
-ToolUp.Platform.Server 7472/13630
+ToolUp.Platform.Core 7353/15371
+ToolUp.Platform.Server 7475/13634
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 72/184

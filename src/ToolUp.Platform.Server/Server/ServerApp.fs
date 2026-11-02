@@ -76,12 +76,12 @@ type ServerModule = {
     /// Per-route latency ceilings for this module's endpoints. Each
     /// entry is a case-insensitive route-prefix → `TimeSpan` pair that
     /// `RequestTimingMiddleware` consults instead of the global
-    /// `ServerConfig.SlowRequestThreshold`. Modules whose handlers have
+    /// `ServerConfig.Observability.SlowRequestThreshold`. Modules whose handlers have
     /// a happy-path latency genuinely above the 1s default (e.g. AI
     /// inference, large uploads, multi-stage ingestion) declare their
     /// own ceilings here rather than forcing the composition root to
     /// hardcode SDK route strings. `addModule` merges per-module
-    /// overrides into the aggregate `ServerConfig.SlowRequestThresholdOverrides`
+    /// overrides into the aggregate `ServerConfig.Observability.SlowRequestThresholdOverrides`
     /// at `run` time. Empty (the default) — modules without
     /// latency-sensitive endpoints leave it empty.
     SlowRequestThresholdOverrides: Map<string, TimeSpan>
@@ -524,7 +524,7 @@ module ServerModule =
     /// starts with the reserved `toolup.` prefix is rejected when the
     /// sink is constructed. Modules emit against the namespaced name by
     /// resolving `IMetricsSink` from DI. No-op unless the deployment
-    /// opts into `ServerConfig.MetricsEndpoint = EnabledMetricsEndpoint`.
+    /// opts into `ServerConfig.Observability.MetricsEndpoint = FeatureMode.Enabled`.
     /// **Adds** to the module's metric list.
     let withMetrics (defs: Metrics.MetricDefinition list) (m: ServerModule) : ServerModule = {
         m with
@@ -594,7 +594,7 @@ module ServerModule =
     /// Declare a per-route latency ceiling for one of this module's
     /// endpoints. `routePrefix` is matched case-insensitively as a
     /// prefix by `RequestTimingMiddleware`; the longest prefix match
-    /// wins, falling back to the global `ServerConfig.SlowRequestThreshold`.
+    /// wins, falling back to the global `ServerConfig.Observability.SlowRequestThreshold`.
     ///
     /// Use this when a happy-path response time is genuinely above the
     /// 1s default (AI inference, large uploads, multi-stage ingestion) —
@@ -920,7 +920,7 @@ type ServerApp = {
     /// `ServerApp.withEntity<'T>(reg)` and the closure carries the
     /// type witness through to compose time. Empty list = no entity
     /// types declared; only meaningful when
-    /// `ServerConfig.EntityStore = EnabledEntityStore`.
+    /// `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`.
     EntityRegistrations: (EntityStore.EntityRegistry -> unit) list
     /// Phase 447 — module-contributed seed / fixture packs. Apps (or
     /// modules) register a deterministic `ISeedPack` via
@@ -936,8 +936,8 @@ type ServerApp = {
     /// policy. When `None` (default), `compose` registers the SDK
     /// default — `BlobBackedTeamQuotaPolicy` reading from the reserved
     /// `_platform.usage` config schema when `UsageMetering =
-    /// EnabledUsageMetering`, or `NoOpTeamQuotaPolicy` when
-    /// `NoUsageMetering`. Deployments needing custom logic (e.g. a
+    /// FeatureMode.Enabled`, or `NoOpTeamQuotaPolicy` when
+    /// `FeatureMode.Disabled`. Deployments needing custom logic (e.g. a
     /// SaaS billing provider that gates by subscription tier rather
     /// than fixed thresholds) supply their own `ITeamQuotaPolicy`
     /// here.
@@ -963,8 +963,8 @@ type ServerApp = {
     /// `FanOutMetricsSink` so a single `Increment` call dispatches to
     /// every registered sink. Empty list = only the in-process
     /// Prometheus default participates. Only meaningful when
-    /// `ServerConfig.MetricsEndpoint = EnabledMetricsEndpoint`;
-    /// `NoMetricsEndpoint` ignores the list.
+    /// `ServerConfig.Observability.MetricsEndpoint = FeatureMode.Enabled`;
+    /// `FeatureMode.Disabled` ignores the list.
     MetricsSinks: Metrics.IMetricsSink list
     /// Phase 9g — audit-log external-export sinks. Apps register one
     /// per destination (Splunk HEC, Datadog Logs, S3 Object Lock
@@ -1053,8 +1053,8 @@ type ServerApp = {
     /// `IRateLimiter` admits every call regardless of `RateLimiter`
     /// mode (a registered descriptor is required to actually gate
     /// emission sites). Only meaningful when
-    /// `ServerConfig.RateLimiter = EnabledRateLimiter`;
-    /// `NoRateLimiter` ignores the list and resolves to a pass-through.
+    /// `ServerConfig.RateLimiter = FeatureMode.Enabled`;
+    /// `FeatureMode.Disabled` ignores the list and resolves to a pass-through.
     RateLimitDescriptors: RateLimitDescriptor list
     /// Phase 9o — companion-contributed post-deploy smoke tests. Apps
     /// add one per backend whose end-to-end integration needs deploy-
@@ -1064,7 +1064,7 @@ type ServerApp = {
     /// `GET /api/_internal/smoke`. Empty list = only the SDK's first-
     /// party probes participate (blob storage, notification channel,
     /// job scheduler, event store, data-object store, audit log)
-    /// when `ServerConfig.SmokeTest = EnabledSmokeTest`.
+    /// when `ServerConfig.SmokeTest = FeatureMode.Enabled`.
     SmokeTests: SmokeTests.ISmokeTest list
     /// Phase 9h — DSR data exporters. Each per-store exporter
     /// (`EventStoreErasureHandler.exporter`,
@@ -1093,7 +1093,7 @@ type ServerApp = {
     /// `/api/oauth/{flowName}/*` handlers resolve the matching flow
     /// per-request by `Name` (via `OAuthFlowHandler.findFlow`). Empty
     /// list = no flow registered, so every `/api/oauth/*` path 404s even
-    /// under `DataIngestion = EnabledDataIngestion` — a deployment that
+    /// under `DataIngestion = FeatureMode.Enabled` — a deployment that
     /// enables data-ingestion without registering a flow has wiring
     /// drift, not a substrate bug (mirrors the DataExporters gating note).
     OAuthCredentialFlows: IOAuthCredentialFlow list
@@ -1101,7 +1101,7 @@ type ServerApp = {
     /// `run` folds each into DI as an `IOAuth1aFlow` singleton so the
     /// `/api/oauth1a/{flowName}/*` handlers resolve it by `Name`. Empty
     /// (the default) registers nothing (GP 13); only meaningful when
-    /// `ServerConfig.OAuth1a = EnabledOAuth1a`.
+    /// `ServerConfig.OAuth1a = FeatureMode.Enabled`.
     OAuth1aFlows: IOAuth1aFlow list
     /// Phase 5h — optional override for the email-keyed pending-invitation
     /// store (`IPendingInviteStore`). When `None` (default), `compose`
@@ -1592,7 +1592,7 @@ module ServerApp =
     ///
     /// ```fsharp
     /// ServerApp.empty
-    /// |> ServerApp.withConfig { ServerConfig.defaults with ModelExecution = EnabledModelExecutionApi }
+    /// |> ServerApp.withConfig { ServerConfig.defaults with ModelExecution = FeatureMode.Enabled }
     /// |> ServerApp.withModelExecution ComposeModelExecution.ModelExecutionComposeOptions.defaults
     /// ```
     ///
@@ -1670,7 +1670,7 @@ module ServerApp =
 
     /// Phase 159 — select the durable per-subject consent-state store
     /// mode. `EntityBackedConsentStateStore` registers the durable store
-    /// over `IEntityStore` (requires `EntityStore = EnabledEntityStore`;
+    /// over `IEntityStore` (requires `EntityStore = FeatureMode.Enabled`;
     /// the compose path registers the `ConsentRecord` entity type
     /// automatically). Default `NoConsentStateStore` registers nothing
     /// (GP 13). Sugar over a `Config` update so the consent store reads
@@ -1678,9 +1678,12 @@ module ServerApp =
     /// **Sets** one `ServerConfig` field; a later call replaces it.
     let withConsentStateStore (mode: ConsentStateStoreMode) (app: ServerApp) : ServerApp =
         app
-        |> addOverride (nameof ServerConfig.defaults.ConsentStateStore) (fun config -> {
+        |> addOverride (nameof ServerConfig.defaults.Stores.ConsentStateStore) (fun config -> {
             config with
-                ConsentStateStore = mode
+                Stores = {
+                    config.Stores with
+                        ConsentStateStore = mode
+                }
         })
 
     /// Phase 447 — register a deterministic seed / fixture pack. Modules
@@ -1740,12 +1743,15 @@ module ServerApp =
     /// "/api/peer/echo"` for the bearer flavour and a Phase 18
     /// substrate at `/api/peer/federated/` at the same time.
     ///
-    /// **Adds** to `ServerConfig.PeerRoutePrefixes`.
+    /// **Adds** to `ServerConfig.MultiInstance.PeerRoutePrefixes`.
     let withPeerRoutePrefix (prefix: string) (app: ServerApp) : ServerApp =
         app
-        |> addOverride (nameof ServerConfig.defaults.PeerRoutePrefixes) (fun config -> {
+        |> addOverride (nameof ServerConfig.defaults.MultiInstance.PeerRoutePrefixes) (fun config -> {
             config with
-                PeerRoutePrefixes = config.PeerRoutePrefixes @ [ prefix ]
+                MultiInstance = {
+                    config.MultiInstance with
+                        PeerRoutePrefixes = config.MultiInstance.PeerRoutePrefixes @ [ prefix ]
+                }
         })
 
     /// **Sets** the value; a later call replaces it.
@@ -1804,21 +1810,27 @@ module ServerApp =
     /// without alerting omit the call entirely — zero runtime cost (GP 13).
     /// Rule `Name`s must be unique within a deployment (the engine keys its
     /// per-rule breach window on the name). **Adds** to
-    /// `ServerConfig.AlertRules`.
+    /// `ServerConfig.Observability.AlertRules`.
     let withAlertRule (rule: AlertRule) (app: ServerApp) : ServerApp =
         app
-        |> addOverride (nameof ServerConfig.defaults.AlertRules) (fun config -> {
+        |> addOverride (nameof ServerConfig.defaults.Observability.AlertRules) (fun config -> {
             config with
-                AlertRules = config.AlertRules @ [ rule ]
+                Observability = {
+                    config.Observability with
+                        AlertRules = config.Observability.AlertRules @ [ rule ]
+                }
         })
 
     /// Phase 178 — register several alert rules at once. **Adds** to any
     /// already registered; see `withAlertRule` for the hosting contract.
     let withAlertRules (rules: AlertRule list) (app: ServerApp) : ServerApp =
         app
-        |> addOverride (nameof ServerConfig.defaults.AlertRules) (fun config -> {
+        |> addOverride (nameof ServerConfig.defaults.Observability.AlertRules) (fun config -> {
             config with
-                AlertRules = config.AlertRules @ rules
+                Observability = {
+                    config.Observability with
+                        AlertRules = config.Observability.AlertRules @ rules
+                }
         })
 
     /// Phase 441 — declare a notification category at the composition
@@ -1889,11 +1901,11 @@ module ServerApp =
     /// sink into a `FanOutMetricsSink` that dispatches every emission
     /// to all wrapped sinks. Apps that only want the in-process
     /// Prometheus default omit this call entirely. The list is
-    /// ignored when `ServerConfig.MetricsEndpoint = NoMetricsEndpoint`
+    /// ignored when `ServerConfig.Observability.MetricsEndpoint = FeatureMode.Disabled`
     /// — emission sites resolve `IMetricsSink` to `NoOpMetricsSink`
     /// regardless of registered companion sinks, so the deployment
     /// must opt in to metrics through `MetricsEndpoint =
-    /// EnabledMetricsEndpoint` first. **Adds** to the app's sink list.
+    /// FeatureMode.Enabled` first. **Adds** to the app's sink list.
     let withMetricsSink (sink: Metrics.IMetricsSink) (app: ServerApp) : ServerApp = {
         app with
             MetricsSinks = app.MetricsSinks @ [ sink ]
@@ -1975,8 +1987,8 @@ module ServerApp =
     /// admit immediately (the SDK fails open on missing
     /// declarations rather than failing closed on every outbound
     /// call). Only meaningful when
-    /// `ServerConfig.RateLimiter = EnabledRateLimiter`;
-    /// `NoRateLimiter` (the default) ignores the registered
+    /// `ServerConfig.RateLimiter = FeatureMode.Enabled`;
+    /// `FeatureMode.Disabled` (the default) ignores the registered
     /// descriptors and resolves `IRateLimiter` to `NoOpRateLimiter`.
     ///
     /// Calling twice with the same `Provider` keeps the last
@@ -2044,7 +2056,7 @@ module ServerApp =
     /// scope `"_smoke"` and clean up after themselves. Apps that
     /// don't register a smoke for a given subsystem pay nothing —
     /// the empty list flows through compose as a no-op when
-    /// `SmokeTest = NoSmokeTest`. **Adds** to the app's smoke-test list.
+    /// `SmokeTest = FeatureMode.Disabled`. **Adds** to the app's smoke-test list.
     let withSmokeTest (test: SmokeTests.ISmokeTest) (app: ServerApp) : ServerApp = {
         app with
             SmokeTests = app.SmokeTests @ [ test ]
@@ -2093,7 +2105,7 @@ module ServerApp =
     /// multi-registration is the design (one flow per upstream provider).
     /// `compose` folds each into DI so `OAuthFlowHandler.findFlow`
     /// resolves it per-request. Routes only mount under
-    /// `DataIngestion = EnabledDataIngestion`. Mirrors `withDataExporter`
+    /// `DataIngestion = FeatureMode.Enabled`. Mirrors `withDataExporter`
     /// / `withErasureHandler` in shape and gating behaviour. **Adds** to
     /// the app's flow list.
     let withOAuthFlow (flow: IOAuthCredentialFlow) (app: ServerApp) : ServerApp = {
@@ -2103,7 +2115,7 @@ module ServerApp =
 
     /// Phase 10g — register an OAuth 1.0a flow (one per 1.0a provider).
     /// `run` folds it into DI; the `/api/oauth1a/{name}/*` routes (mounted
-    /// when `ServerConfig.OAuth1a = EnabledOAuth1a`) resolve it by `Name`.
+    /// when `ServerConfig.OAuth1a = FeatureMode.Enabled`) resolve it by `Name`.
     /// **Adds** (append-only), so several providers each add their own.
     let withOAuth1aFlow (flow: IOAuth1aFlow) (app: ServerApp) : ServerApp = {
         app with
@@ -2136,9 +2148,12 @@ module ServerApp =
     /// `connect-src` automatically.
     let withSecurityHardening (mode: SecurityHardeningMode) (app: ServerApp) : ServerApp =
         app
-        |> addOverride (nameof ServerConfig.defaults.SecurityHardening) (fun config -> {
+        |> addOverride (nameof ServerConfig.defaults.SecurityPosture.SecurityHardening) (fun config -> {
             config with
-                SecurityHardening = mode
+                SecurityPosture = {
+                    config.SecurityPosture with
+                        SecurityHardening = mode
+                }
         })
 
     /// Phase 9j — register a CSP contributor so its required origins
@@ -2336,7 +2351,7 @@ module ServerApp =
     /// register their entity types without seeing the registry
     /// directly.
     ///
-    /// Requires `ServerConfig.EntityStore = EnabledEntityStore` to be
+    /// Requires `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` to be
     /// set; otherwise the registrations are accumulated but never
     /// flushed. (No runtime warning — silent for ergonomic reasons,
     /// since modules call this at module-load time before the
@@ -2350,10 +2365,10 @@ module ServerApp =
     }
 
     /// Phase 68d — opt into the entity→graph projection bridge. Flips
-    /// `ServerConfig.EntityGraphProjection = EnabledEntityGraphProjection`,
+    /// `ServerConfig.EntityGraphProjection = FeatureMode.Enabled`,
     /// the flag the `ToolUp.Graph.Projection` bridge's
     /// `EntityGraphProjectionCompose.wire` reads to decide whether to run.
-    /// Requires `ServerConfig.EntityStore = EnabledEntityStore` + an `IGraphStore` (the default
+    /// Requires `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` + an `IGraphStore` (the default
     /// suffices). Like a graph *engine* companion, the concrete bridge lives
     /// in its own package and is wired by the deployment (it references
     /// `IEntityStore`, so the SDK cannot reference it back without a cycle);
@@ -2365,7 +2380,7 @@ module ServerApp =
         app
         |> addOverride (nameof ServerConfig.defaults.EntityGraphProjection) (fun config -> {
             config with
-                EntityGraphProjection = EnabledEntityGraphProjection
+                EntityGraphProjection = FeatureMode.Enabled
         })
 
     /// **Sets** the consumer's `ComposeExtensions` record, replacing any
@@ -2469,7 +2484,7 @@ module ServerApp =
     /// per-claim retention policies) compose via this list without
     /// restructuring the substrate registration.
     ///
-    /// No-op when `ServerConfig.ShareTokenStore = NoShareTokenStore`
+    /// No-op when `ServerConfig.Stores.ShareTokenStore = FeatureMode.Disabled`
     /// — the underlying store is `None` so the decorators are never
     /// applied. `SurfaceCoherenceValidator` (Stream B.2) warns at
     /// startup when decorators are registered but no `ClaimBearer`
@@ -2627,7 +2642,7 @@ module ServerApp =
     /// `withAuditFallbackDirectory`, default `audit-fallback/` under
     /// the working directory — and the replay service re-ingests it
     /// once the store recovers). Only consulted when
-    /// `AuditLog = EnabledAuditLog`.
+    /// `AuditLog = FeatureMode.Enabled`.
     /// **Sets** one `ServerConfig` field; a later call replaces it.
     let withAuditFailurePolicy (policy: AuditFailurePolicy) (app: ServerApp) : ServerApp =
         app
@@ -2648,7 +2663,7 @@ module ServerApp =
 
     /// Phase 599 — opt into the entity-write outbox. Default: off.
     /// When enabled (requires
-    /// `EntityStore = EnabledEntityStore`),
+    /// `EntityStore = FeatureMode.Enabled`),
     /// `OutboxEntityStore.SaveWithEvents` durably couples an entity
     /// save to the `IEventStore` events it implies: a write-ahead
     /// intent stages the events atomically before the save, and the
@@ -2659,15 +2674,22 @@ module ServerApp =
     /// **Sets** one `ServerConfig` field; a later call replaces it.
     let withEntityOutbox (enabled: bool) (app: ServerApp) : ServerApp =
         app
-        |> addOverride (nameof ServerConfig.defaults.EntityOutbox) (fun config -> {
+        |> addOverride (nameof ServerConfig.defaults.Stores.EntityOutbox) (fun config -> {
             config with
-                EntityOutbox = if enabled then EnabledEntityOutbox else NoEntityOutbox
+                Stores = {
+                    config.Stores with
+                        EntityOutbox =
+                            if enabled then
+                                FeatureMode.Enabled
+                            else
+                                FeatureMode.Disabled
+                }
         })
 
     /// Phase 1027 — opt into durable lineage. Default: off, where a
     /// lineage link the store fails to record is logged with everything
     /// needed to re-record it by hand, and dropped (Phase 1025). When
-    /// enabled (requires `Lineage = EnabledLineageStore` and a result
+    /// enabled (requires `Lineage = FeatureMode.Enabled` and a result
     /// store), a result save's links are staged in the lineage outbox
     /// (the Phase 599 write-ahead shape) and the relay retries them —
     /// at least once, deduplicated by link id — until each is recorded or
@@ -2680,23 +2702,27 @@ module ServerApp =
         app
         |> addOverride (nameof ServerConfig.defaults.LineageDurability) (fun config -> {
             config with
-                LineageDurability = if enabled then EnabledDurableLineage else NoDurableLineage
+                LineageDurability =
+                    if enabled then
+                        FeatureMode.Enabled
+                    else
+                        FeatureMode.Disabled
         })
 
     /// Phase 177 — opt into the deployment-readiness scorecard. Flips
-    /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
+    /// `ServerConfig.DeploymentReadiness` to `FeatureMode.Enabled` so
     /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`
     /// read that consolidates the `IConfigValidator` / `ISmokeTest` /
     /// `ConfigDrift` / `IHealthCheck` signals into one go/no-go verdict.
     /// Pure projection over signals that already exist — no new gate, no
     /// new control-plane behaviour. A deployment that never calls this
-    /// stays `NoReadinessReport` and is byte-for-byte unchanged (GP 13).
+    /// stays `FeatureMode.Disabled` and is byte-for-byte unchanged (GP 13).
     /// **Sets** one `ServerConfig` field; a later call replaces it.
     let withDeploymentReadiness (app: ServerApp) : ServerApp =
         app
         |> addOverride (nameof ServerConfig.defaults.DeploymentReadiness) (fun config -> {
             config with
-                DeploymentReadiness = EnabledReadinessReport
+                DeploymentReadiness = FeatureMode.Enabled
         })
 
     /// Phase 771 — register the holder the boot observation of the
@@ -2718,7 +2744,7 @@ module ServerApp =
 
     /// Phase 686 — mount the Platform-Admin-gated deployment
     /// verification report. Flips `ServerConfig.DeploymentVerification`
-    /// to `EnabledDeploymentVerification` so `compose` mounts
+    /// to `FeatureMode.Enabled` so `compose` mounts
     /// `IDeploymentVerificationApi`, the one read that composes the boot
     /// verification verdict, the grounding-envelope continuity walk, the
     /// audit-ledger walk, the certificate issuance log and the
@@ -2730,7 +2756,7 @@ module ServerApp =
     /// with `withDeploymentVerificationEvidence` — which is the honest
     /// state for a deployment that composed none of those substrates, and
     /// exactly what the report should say about it. A deployment that
-    /// never calls this stays `NoDeploymentVerification` and is
+    /// never calls this stays `FeatureMode.Disabled` and is
     /// byte-for-byte unchanged (GP 11 / GP 13).
     ///
     /// The `--verify-deployment` CI entry point does NOT require this
@@ -2747,7 +2773,7 @@ module ServerApp =
         app
         |> addOverride (nameof ServerConfig.defaults.DeploymentVerification) (fun config -> {
             config with
-                DeploymentVerification = EnabledDeploymentVerification
+                DeploymentVerification = FeatureMode.Enabled
         })
         |> registerHostingBaselineRecord
 
@@ -3258,9 +3284,14 @@ module ServerApp =
                     Apply =
                         fun config -> {
                             config with
-                                SlowRequestThresholdOverrides =
-                                    m.SlowRequestThresholdOverrides
-                                    |> Map.fold (fun acc k v -> Map.add k v acc) config.SlowRequestThresholdOverrides
+                                Observability = {
+                                    config.Observability with
+                                        SlowRequestThresholdOverrides =
+                                            m.SlowRequestThresholdOverrides
+                                            |> Map.fold
+                                                (fun acc k v -> Map.add k v acc)
+                                                config.Observability.SlowRequestThresholdOverrides
+                                }
                                 // Phase 10b — fan the module's declared
                                 // config-schema migration steps onto the
                                 // app-level set the compose-time registry
@@ -3420,20 +3451,20 @@ module ServerApp =
         // String-rendered DU case names — a stable, human-readable summary
         // for drift detection / dashboards without duplicating the config.
         let configKnobs = [
-            CompositionManifest.knob "ProcessProfile" (string app.Config.ProcessProfile)
-            CompositionManifest.knob "ConfigDriftDetection" (string app.Config.ConfigDriftDetection)
+            CompositionManifest.knob "ProcessProfile" (string app.Config.MultiInstance.ProcessProfile)
+            CompositionManifest.featureKnob "ConfigDriftDetection" app.Config.ConfigDriftDetection
             // Phase 1051 — the two payload-capable unions render their case
             // name only (`CompositionManifest.caseKnob`), never their `%A`.
             CompositionManifest.caseKnob "JobScheduler" app.Config.JobScheduler
-            CompositionManifest.knob "EntityStore" (string app.Config.EntityStore)
-            CompositionManifest.knob "UsageMetering" (string app.Config.UsageMetering)
-            CompositionManifest.knob "MetricsEndpoint" (string app.Config.MetricsEndpoint)
-            CompositionManifest.knob "RateLimiter" (string app.Config.RateLimiter)
-            CompositionManifest.knob "SmokeTest" (string app.Config.SmokeTest)
+            CompositionManifest.featureKnob "EntityStore" app.Config.Stores.EntityStore
+            CompositionManifest.featureKnob "UsageMetering" app.Config.UsageMetering
+            CompositionManifest.featureKnob "MetricsEndpoint" app.Config.Observability.MetricsEndpoint
+            CompositionManifest.featureKnob "RateLimiter" app.Config.RateLimiter
+            CompositionManifest.featureKnob "SmokeTest" app.Config.SmokeTest
             CompositionManifest.caseKnob "DataSubjectRequests" app.Config.DataSubjectRequests
-            CompositionManifest.knob "PeerSubstrate" (string app.Config.PeerSubstrate)
+            CompositionManifest.featureKnob "PeerSubstrate" app.Config.MultiInstance.PeerSubstrate
             // Phase 526 — the resolved grounding fact-store kind.
-            CompositionManifest.knob "FactStore" (string app.Config.FactStore)
+            CompositionManifest.featureKnob "FactStore" app.Config.Stores.FactStore
         ]
 
         // Phase 526 — registered grounding metrics / subjects, keyed by

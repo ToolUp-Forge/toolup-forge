@@ -687,11 +687,11 @@ module PlatformClientProxies =
         | ModuleExposure.Hidden -> JsonEncode.case0 "Hidden"
         | ModuleExposure.Unavailable -> JsonEncode.case0 "Unavailable"
 
-    /// Generated JSON encoder for `PlatformKnowledgeBaseMode` — members by name, cases by case name, as the writer emits them.
-    let encodePlatformKnowledgeBaseMode: JsonEncoder<PlatformKnowledgeBaseMode> =
+    /// Generated JSON encoder for `FeatureMode` — members by name, cases by case name, as the writer emits them.
+    let encodeFeatureMode: JsonEncoder<FeatureMode> =
         function
-        | PlatformKnowledgeBaseMode.NoPlatformKnowledgeBase -> JsonEncode.case0 "NoPlatformKnowledgeBase"
-        | PlatformKnowledgeBaseMode.EnabledPlatformKnowledgeBase -> JsonEncode.case0 "EnabledPlatformKnowledgeBase"
+        | FeatureMode.Disabled -> JsonEncode.case0 "Disabled"
+        | FeatureMode.Enabled -> JsonEncode.case0 "Enabled"
 
     /// Generated JSON encoder for `CreateTeamRequest` — members by name, cases by case name, as the writer emits them.
     let encodeCreateTeamRequest: JsonEncoder<CreateTeamRequest> =
@@ -3533,11 +3533,11 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.field "Grants" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.asMap JsonDecode.Key.string decodeModuleGrantRecord)))
         |> JsonDecode.apply (JsonDecode.field "Pages" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list decodePageGrant)))
 
-    /// Generated JSON decoder for `PlatformKnowledgeBaseMode` — members by name, cases by case name, read off the type's own shape.
-    let decodePlatformKnowledgeBaseMode: JsonDecoder<PlatformKnowledgeBaseMode> =
-        JsonDecode.union "PlatformKnowledgeBaseMode" (function
-            | "NoPlatformKnowledgeBase" -> Some(JsonDecode.case0 PlatformKnowledgeBaseMode.NoPlatformKnowledgeBase)
-            | "EnabledPlatformKnowledgeBase" -> Some(JsonDecode.case0 PlatformKnowledgeBaseMode.EnabledPlatformKnowledgeBase)
+    /// Generated JSON decoder for `FeatureMode` — members by name, cases by case name, read off the type's own shape.
+    let decodeFeatureMode: JsonDecoder<FeatureMode> =
+        JsonDecode.union "FeatureMode" (function
+            | "Disabled" -> Some(JsonDecode.case0 FeatureMode.Disabled)
+            | "Enabled" -> Some(JsonDecode.case0 FeatureMode.Enabled)
             | _ -> None)
 
     /// Generated JSON decoder for `PlatformInfo` — members by name, cases by case name, read off the type's own shape.
@@ -4281,7 +4281,7 @@ module PlatformClientProxies =
         let callListPlatformAdmins = Proxy.generatedMethod<string list> api "ListPlatformAdmins" false (JsonDecode.list JsonDecode.asString)
         let callAssignPlatformAdmin = Proxy.generatedMethod<Result<unit, string>> api "AssignPlatformAdmin" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
         let callRevokePlatformAdmin = Proxy.generatedMethod<Result<unit, string>> api "RevokePlatformAdmin" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
-        let callGetPlatformKnowledgeBase = Proxy.generatedMethod<PlatformKnowledgeBaseMode> api "GetPlatformKnowledgeBase" false decodePlatformKnowledgeBaseMode
+        let callGetPlatformKnowledgeBase = Proxy.generatedMethod<FeatureMode> api "GetPlatformKnowledgeBase" false decodeFeatureMode
         let callSetPlatformKnowledgeBase = Proxy.generatedMethod<Result<unit, string>> api "SetPlatformKnowledgeBase" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
 
         {
@@ -4290,7 +4290,7 @@ module PlatformClientProxies =
             AssignPlatformAdmin = fun a0 -> callAssignPlatformAdmin (JsonEncode.arguments [ JsonEncode.string a0 ])
             RevokePlatformAdmin = fun a0 -> callRevokePlatformAdmin (JsonEncode.arguments [ JsonEncode.string a0 ])
             GetPlatformKnowledgeBase = fun () -> callGetPlatformKnowledgeBase "{}"
-            SetPlatformKnowledgeBase = fun a0 -> callSetPlatformKnowledgeBase (JsonEncode.arguments [ encodePlatformKnowledgeBaseMode a0 ])
+            SetPlatformKnowledgeBase = fun a0 -> callSetPlatformKnowledgeBase (JsonEncode.arguments [ encodeFeatureMode a0 ])
         }
 
     /// Generated client proxy for `PlatformInfoApi` — 1 method(s), each a closure over its

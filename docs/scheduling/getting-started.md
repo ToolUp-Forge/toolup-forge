@@ -5,7 +5,7 @@ End-to-end walkthrough: define a bookable resource, book a slot, render a calend
 ## Prerequisites
 
 - A working ToolUp Platform app.
-- `IEntityStore` enabled — `ServerConfig.EntityStore = EnabledEntityStore`. Resources and bookings persist as entities.
+- `IEntityStore` enabled — `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`. Resources and bookings persist as entities.
 
 ## 1. Add the packages
 
@@ -59,7 +59,10 @@ let stylistOne: BookableResource = {
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
-        EntityStore = EnabledEntityStore
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled
+        }
 }
 |> ServerApp.withAuth authProvider
 |> ServerApp.addModules modules

@@ -375,7 +375,7 @@ let private causeOf (ex: exn) = (ProviderExceptions.unwrap ex).Message
 
 /// The durable lineage outbox (Phase 1027; see the section header). Built
 /// and registered by compose when `ServerConfig.LineageDurability =
-/// EnabledDurableLineage`; resolve it from DI for its read surface.
+/// FeatureMode.Enabled`; resolve it from DI for its read surface.
 type LineageOutbox
     (
         blobStorage: IBlobStorage,

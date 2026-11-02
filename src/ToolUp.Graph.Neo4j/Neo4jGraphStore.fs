@@ -33,7 +33,7 @@ open ToolUp.Graph
 
 /// Distributed `IGraphStore` over a Neo4j server. Construct via the
 /// `Neo4jGraphStore` module (`connect` / `connectWith` / `ofDriver`), register
-/// the result as a DI singleton, and select `ServerConfig.GraphStore =
+/// the result as a DI singleton, and select `ServerConfig.Stores.GraphStore =
 /// CustomGraphStore`. Implements `IDisposable` so the host disposes the driver
 /// (closing the connection pool) on shutdown when the store owns it.
 type Neo4jGraphStore(driver: IDriver, config: Neo4jGraphStoreConfig, ownsDriver: bool) =

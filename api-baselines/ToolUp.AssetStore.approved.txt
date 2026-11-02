@@ -94,16 +94,6 @@ ToolUp.AssetStore.AssetRecord.SizeBytes : System.Int64 { get }
 ToolUp.AssetStore.AssetRecord.UploadedAt : System.DateTimeOffset { get }
 ToolUp.AssetStore.AssetRecord.UploadedBy : System.String { get }
 ToolUp.AssetStore.AssetRecord.Width : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.AssetStore.AssetStoreMode (class)
-ToolUp.AssetStore.AssetStoreMode.IsEnabledAssetStore : System.Boolean { get }
-ToolUp.AssetStore.AssetStoreMode.IsNoAssetStore : System.Boolean { get }
-ToolUp.AssetStore.AssetStoreMode.NoAssetStore : ToolUp.AssetStore.AssetStoreMode { get }
-ToolUp.AssetStore.AssetStoreMode.Tag : System.Int32 { get }
-ToolUp.AssetStore.AssetStoreMode+EnabledAssetStore (class)
-ToolUp.AssetStore.AssetStoreMode+EnabledAssetStore.options : ToolUp.AssetStore.AssetStoreOptions { get }
-ToolUp.AssetStore.AssetStoreMode+Tags (class)
-ToolUp.AssetStore.AssetStoreMode+Tags.EnabledAssetStore : System.Int32 (literal)
-ToolUp.AssetStore.AssetStoreMode+Tags.NoAssetStore : System.Int32 (literal)
 ToolUp.AssetStore.AssetStoreOptions (class)
 ToolUp.AssetStore.AssetStoreOptions..ctor(System.Int64, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Int32, System.Boolean, ToolUp.AssetStore.UploadValidation)
 ToolUp.AssetStore.AssetStoreOptions.AcceptedMimeTypes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }

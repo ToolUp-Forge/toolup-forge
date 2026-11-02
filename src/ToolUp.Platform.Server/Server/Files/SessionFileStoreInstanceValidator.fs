@@ -26,7 +26,7 @@ open ToolUp.Platform.ConfigValidation
 // read-staleness until a shared read-through cache / store-change
 // notification ships. Mirrors `RateLimiterInstanceValidator` /
 // `NotificationChannelInstanceValidator`: operator-declared
-// multi-instance via `ServerConfig.ReplicaCount`; the warning surfaces
+// multi-instance via `ServerConfig.MultiInstance.ReplicaCount`; the warning surfaces
 // in the startup log + HealthMonitorUI Preflight tab + `/dev/inspect`.
 
 /// Config validator that warns when the in-memory `SessionFileStore`
@@ -42,7 +42,7 @@ type SessionFileStoreInstanceValidator(config: ServerConfig, ?timeout: TimeSpan)
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let multiInstance = config.ReplicaCount > 1
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
             let persistentSurface = DeploymentConfig.hasPersistentAuthenticatedStorage config
 
             if multiInstance && persistentSurface then
@@ -50,7 +50,7 @@ type SessionFileStoreInstanceValidator(config: ServerConfig, ?timeout: TimeSpan)
                     Warning(
                         sprintf
                             "ReplicaCount = %d with a persistent surface (%s). SessionFileStore keeps its file list and processed-data summaries in per-instance in-memory dictionaries, hydrated once from the backing store at first access and never re-read. Persistence writes through to the shared store, but each replica reads from its own snapshot — a file uploaded to one replica stays invisible to the others (a stale file list / 'my upload vanished' after a round-robin hop or a replica restart) for the process lifetime. Run a single instance, pin sticky sessions at the load balancer, or accept the read-staleness knowingly until a shared read-through cache / store-change notification ships."
-                            config.ReplicaCount
+                            config.MultiInstance.ReplicaCount
                             (DeploymentConfig.surfacesLabel config)
                     )
             else

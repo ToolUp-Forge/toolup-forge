@@ -199,7 +199,10 @@ let tests =
 
                     let config = {
                         ServerConfig.defaults with
-                            TraceCategories = Set.ofList [ "ai.agnet" ]
+                            Observability = {
+                                ServerConfig.defaults.Observability with
+                                    TraceCategories = Set.ofList [ "ai.agnet" ]
+                            }
                     }
 
                     let result = validator config |> _.Validate() |> Async.RunSynchronously

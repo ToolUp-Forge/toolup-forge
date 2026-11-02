@@ -19,7 +19,7 @@ open ToolUp.Platform.HealthChecks
 // observation flaps from a load balancer's 1–10 Hz polling don't
 // dwarf real audit activity.
 //
-// **Opt-in via `ServerConfig.HealthStateTracking = true`.** Default
+// **Opt-in via `ServerConfig.Observability.HealthStateTracking = true`.** Default
 // `false` (GP 13) — deployments that don't enable it pay nothing
 // (no DI registration, no tick, no probe runs).
 //

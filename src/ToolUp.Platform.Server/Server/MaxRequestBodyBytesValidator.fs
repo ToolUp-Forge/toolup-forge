@@ -6,7 +6,7 @@ open ToolUp.Platform.ConfigValidation
 
 // ─── Gap audit pass-2 #3 — request body cap × rate-limit interaction ─
 //
-// `ServerConfig.MaxRequestBodyBytes = None` keeps Kestrel's 30 MB
+// `ServerConfig.SecurityPosture.MaxRequestBodyBytes = None` keeps Kestrel's 30 MB
 // default. That's a high cap for an API-only deployment, but acceptable
 // for deployments serving large file uploads. When the cap is high
 // AND the deployment is internet-facing AND there's no rate-limiting,
@@ -51,13 +51,14 @@ type MaxRequestBodyBytesValidator(config: ServerConfig, ?timeout: TimeSpan) =
             let hasRateLimit = RateLimitConfig.isEnabled config.RateLimit
 
             let effectiveBytes =
-                config.MaxRequestBodyBytes |> Option.defaultValue kestrelDefaultBytes
+                config.SecurityPosture.MaxRequestBodyBytes
+                |> Option.defaultValue kestrelDefaultBytes
 
             let highCap = effectiveBytes > warningThresholdBytes
 
             if requiresAuth && internetFacing && not hasRateLimit && highCap then
                 let capDescription =
-                    match config.MaxRequestBodyBytes with
+                    match config.SecurityPosture.MaxRequestBodyBytes with
                     | None ->
                         sprintf
                             "%d MB (Kestrel default — TOOLUP_MAX_REQUEST_BODY_BYTES unset)"
@@ -67,7 +68,7 @@ type MaxRequestBodyBytesValidator(config: ServerConfig, ?timeout: TimeSpan) =
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s + RequireHttps = true + RateLimit = None + MaxRequestBodyBytes = %s. An internet-facing authenticated deployment with no rate-limiting and a high per-request body cap is a cheap memory-DoS surface — a single client can fill %s buffers per permitted request. Either tighten the body cap (set ServerConfig.MaxRequestBodyBytes = Some <bytes> to e.g. 5_242_880L for a 5 MB ceiling) or enable rate-limiting (ServerConfig.RateLimit = Some { ... }) to bound the per-client request rate. Deployments behind a rate-limiting proxy (nginx / Cloudflare / ALB) can ignore this warning."
+                            "ServerConfig.Surfaces = %s + RequireHttps = true + RateLimit = None + MaxRequestBodyBytes = %s. An internet-facing authenticated deployment with no rate-limiting and a high per-request body cap is a cheap memory-DoS surface — a single client can fill %s buffers per permitted request. Either tighten the body cap (set ServerConfig.SecurityPosture.MaxRequestBodyBytes = Some <bytes> to e.g. 5_242_880L for a 5 MB ceiling) or enable rate-limiting (ServerConfig.RateLimit = Some { ... }) to bound the per-client request rate. Deployments behind a rate-limiting proxy (nginx / Cloudflare / ALB) can ignore this warning."
                             (DeploymentConfig.surfacesLabel config)
                             capDescription
                             capDescription

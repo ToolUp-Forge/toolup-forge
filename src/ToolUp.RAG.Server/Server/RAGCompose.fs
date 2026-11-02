@@ -2003,15 +2003,15 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                         }))
 
         // RAG vector-store offboard purge hook, gated on the same
-        // `TenantLifecycle = EnabledTenantLifecycle` switch the core
+        // `TenantLifecycle = FeatureMode.Enabled` switch the core
         // `ComposeTenantLifecycle` gates on. Additive — the aggregator
         // resolves the full `seq<ITenantLifecycle>`, so this stacks with the
         // core first-party hooks.
         let s =
             match config.TenantLifecycle with
-            | EnabledTenantLifecycle ->
+            | FeatureMode.Enabled ->
                 s.AddSingleton<ITenantLifecycle>(fun (sp: System.IServiceProvider) -> RagVectorStoreLifecycle.create sp)
-            | NoTenantLifecycle -> s
+            | FeatureMode.Disabled -> s
 
         // Two `/dev/inspect` panels. Both are unconditional: they answer
         // questions ("does this deployment keep its index?", "which of my
@@ -2024,7 +2024,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 ToolUp.RAG.RagConfigValidator.RagDurabilityContributor(
                     b.Storage.IsSome,
                     options.VectorStore.IsSome,
-                    config.AcceptEphemeralRagIndex
+                    config.RiskAcknowledgements.AcceptEphemeralRagIndex
                 )
                 :> IDevDiagnosticsContributor
             )

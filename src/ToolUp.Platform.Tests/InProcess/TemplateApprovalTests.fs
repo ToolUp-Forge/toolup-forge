@@ -951,7 +951,10 @@ let gateTests =
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
 }
 
 let private appHosting () =
@@ -1045,7 +1048,7 @@ let compositionTests =
             Expect.equal
                 (PeerCompose.auditTemplateApprovals app)
                 TemplateApprovalOff
-                "NoPeerSubstrate registers nothing at all, so the short-circuit stays a bare ServerApp.run"
+                "FeatureMode.Disabled registers nothing at all, so the short-circuit stays a bare ServerApp.run"
         }
 
         test "the reserved approval contract counts as hosted, so a template on it binds" {

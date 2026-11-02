@@ -143,7 +143,10 @@ let tests =
 
             let config = {
                 ServerConfig.defaults with
-                    PeerRoutePrefixes = [ "/api/peer/consumer" ]
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            PeerRoutePrefixes = [ "/api/peer/consumer" ]
+                    }
             }
 
             let builders (app: ServerApp) =
@@ -167,7 +170,7 @@ let tests =
 
             for effective in [ configFirst; configLast ] do
                 Expect.equal
-                    effective.PeerRoutePrefixes
+                    effective.MultiInstance.PeerRoutePrefixes
                     [ "/api/peer/consumer"; "/api/peer/echo" ]
                     "the consumer's prefix, then the builder's"
 
@@ -314,7 +317,10 @@ let tests =
                 |> ServerApp.addContribution (Contribution.hosted ownerA unit)
                 |> ServerApp.withConfig {
                     ServerConfig.defaults with
-                        ProcessProfile = WebOnly
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ProcessProfile = WebOnly
+                        }
                 }
 
             let services = ServiceCollection()

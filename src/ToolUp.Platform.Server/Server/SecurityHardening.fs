@@ -238,7 +238,7 @@ let resolveSourceMode (services: IServiceCollection) : CspSourceMode =
 
 /// Walk `services` for every `AddSingleton<ICspContributor>(instance)`
 /// registration, collect their `RequiredSources`, and build the
-/// resolved policy for `config.SecurityHardening`. Mirrors
+/// resolved policy for `config.SecurityPosture.SecurityHardening`. Mirrors
 /// `HealthCheckAggregator` / `ConfigValidatorAggregator`: instance
 /// descriptors only — a factory/constructor-injected registration
 /// cannot be inspected at compose time and fails loudly rather than
@@ -249,7 +249,7 @@ let resolveSourceMode (services: IServiceCollection) : CspSourceMode =
 /// after the `ComposeExtensions.ServiceConfig` hook) and BEFORE
 /// `builder.Build()` seals the collection.
 let aggregate (services: IServiceCollection) (config: ServerConfig) : ResolvedCspPolicy =
-    match config.SecurityHardening with
+    match config.SecurityPosture.SecurityHardening with
     | NoSecurityHardening -> ResolvedCspPolicy.empty
     | mode ->
         let contributed =

@@ -12,14 +12,14 @@ open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── FactsCompose (Phase 520 wiring) ─────────────────────────────────
 //
-// Turns the introspectable `ServerConfig.FactStore` knob into real
-// composition: when `EnabledFactStore`, folds an `IFactStore`
+// Turns the introspectable `ServerConfig.Stores.FactStore` knob into real
+// composition: when `FeatureMode.Enabled`, folds an `IFactStore`
 // (BlobFactStore over the composed `IBlobStorage` + `IEventStore`), its
 // `IFactEvidenceSource` adapter, the `IFactDisclosureGate` egress gate,
 // and the `IFactResolver` retrieval adapter into DI, so the fact tier is
 // available to request handlers, the provenance graph, and fact-first
 // retrieval (Phase 558 — `RAGCompose` picks the resolver + gate up into
-// the `RetrievalPipeline` with zero extra config). `NoFactStore` (the
+// the `RetrievalPipeline` with zero extra config). `FeatureMode.Disabled` (the
 // default) folds nothing — the composition is byte-for-byte unchanged
 // (GP 11 + GP 13).
 //
@@ -37,7 +37,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // rather than leaving an operator to find out from latency.
 //
 // It speaks only when BOTH hold: more than one replica is configured
-// (`ServerConfig.ReplicaCount > 1`), and the composed store is the blob
+// (`ServerConfig.MultiInstance.ReplicaCount > 1`), and the composed store is the blob
 // default. A single-replica deployment does not register it at all, so its
 // composition is byte-for-byte unchanged (GP 11). It warns above
 // `BlobFactStoreScale.WarnAboveFacts` facts in any one scope, and warns
@@ -128,7 +128,7 @@ type internal FactStoreBackend = { Backend: string }
 /// well, in stronger terms past the upper threshold, naming
 /// `ToolUp.FactStores.Postgres` as the remedy. Warn-only in this release
 /// (operator decision, 2026-09-29) — it never refuses startup. Registered
-/// by `FactsCompose.withFactStore` only when `ServerConfig.ReplicaCount > 1`.
+/// by `FactsCompose.withFactStore` only when `ServerConfig.MultiInstance.ReplicaCount > 1`.
 type BlobFactStoreScaleValidator
     /// The guard over `storage`'s census of the scopes `scopes` enumerates,
     /// at explicit thresholds. `isBlobStore` is whether the composed store
@@ -609,7 +609,7 @@ module FactsCompose =
     // handler was never registered with a scheduler, so a job it enqueued
     // had no handler to dispatch to, and nothing ever told the fact tier a
     // data-object version had landed. The three registrations below are
-    // what take it live, and they ride the SAME `EnabledFactStore` knob as
+    // what take it live, and they ride the SAME `FeatureMode.Enabled` knob as
     // the store itself — one compose knob, never four.
     //
     //   1. `IFactRecomputer` — the deployment seam that actually
@@ -625,7 +625,7 @@ module FactsCompose =
     //      `RecomputePolicy`, so a fact deployment that declares none pays
     //      one boolean test per save.
     //
-    // A `NoFactStore` deployment reaches none of this — `withFactStore`
+    // A `FeatureMode.Disabled` deployment reaches none of this — `withFactStore`
     // returns before `registerFactStore` is ever composed into
     // `ServiceConfig` (GP 13).
 
@@ -774,13 +774,13 @@ module FactsCompose =
 
         services
 
-    /// Compose the grounding fact store per `ServerConfig.FactStore`.
-    /// `EnabledFactStore` registers `IFactStore` (`BlobFactStore`) +
+    /// Compose the grounding fact store per `ServerConfig.Stores.FactStore`.
+    /// `FeatureMode.Enabled` registers `IFactStore` (`BlobFactStore`) +
     /// `IFactEvidenceSource` + `IFactDisclosureGate` + `IFactResolver`
     /// into DI, and (Phase 623) activates reactive recomputation over it:
     /// the default `IFactRecomputer`, the recompute job handler on the
     /// composed scheduler, and the data-arrival hook that drives fact
-    /// invalidation when a data-object version lands. `NoFactStore`
+    /// invalidation when a data-object version lands. `FeatureMode.Disabled`
     /// returns the app unchanged — no registration, no hosted service, no
     /// decorator, no allocation (GP 13). Insert once in the compose
     /// pipeline before `ServerApp.run` (and before a RAG compose, so the
@@ -801,9 +801,9 @@ module FactsCompose =
     /// `IFactRecomputer` into DI to give any of them a value to compute.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactStore (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             // Phase 623 — the fact tier and its reactive activation are
             // one registration pass: the store first, then the recompute
             // engine + handler + data-arrival hook over it.
@@ -811,7 +811,7 @@ module FactsCompose =
                 registerReactiveRecomputation app.Config (registerTableChangeSignal (registerFactStore s))
                 // Phase 888 — the backend marker and, for a multi-replica
                 // deployment only, the blob store's scale guard.
-                |> registerBlobScaleGuard app.Config.ReplicaCount
+                |> registerBlobScaleGuard app.Config.MultiInstance.ReplicaCount
                 // Phase 986 — the dormant-push-door warning.
                 |> registerQuestionCompilerGuard
                 // The undescribed-declarations report (information only).
@@ -858,10 +858,10 @@ module FactsCompose =
     /// does a deployment with no fact store; registering calculations twice
     /// is refused.
     let withNarrativeCalculations (calculations: NarrativeCalculations) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore when NarrativeCalculations.isEmpty calculations -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when NarrativeCalculations.isEmpty calculations -> app
+        | FeatureMode.Enabled ->
             app
             |> contribute (fun s ->
                 if s |> Seq.exists (fun d -> d.ServiceType = typeof<NarrativeCalculations>) then
@@ -881,9 +881,9 @@ module FactsCompose =
     /// reads the container for nothing. With no fact store composed it changes
     /// nothing, and calling it before `withFactStore` is refused.
     let withFactTablesOptions (options: FactTablesOptions) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let declared (definition: AIToolDefinition, _) = definition.Name = FactTablesTool.Name
 
             if not (List.exists declared app.AITools) then
@@ -939,7 +939,7 @@ module FactsCompose =
     /// the purpose facet, and project the taxonomy + per-surface allowed
     /// sets into the composition manifest beside the Phase 526 grounding
     /// declarations — the whole purpose regime is readable before any
-    /// data flows. A `NoFactStore` deployment (or one that never calls
+    /// data flows. A `FeatureMode.Disabled` deployment (or one that never calls
     /// this) is byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -955,9 +955,9 @@ module FactsCompose =
     /// with a declared taxonomy an unclaimed check refuses at every
     /// purpose-bound surface (default-deny-by-shape).
     let withDisclosurePurposes (config: DisclosurePurposeConfig) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<DisclosurePurposeConfig>(config)
 
@@ -1017,13 +1017,13 @@ module FactsCompose =
     /// budgets. The two share one body, so there is no second
     /// registration path to drift.
     ///
-    /// A `NoFactStore` deployment is byte-for-byte unchanged (GP 11 /
+    /// A `FeatureMode.Disabled` deployment is byte-for-byte unchanged (GP 11 /
     /// GP 13).
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDeclassificationBudgetConfig (config: DeclassificationBudgetConfig) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<DeclassificationBudgetConfig>(config)
 
@@ -1038,7 +1038,7 @@ module FactsCompose =
     /// exhausted ceiling denies with the same typed, audited refusal
     /// shape a policy denial takes (GP 6) — never a silent allow.
     ///
-    /// A `NoFactStore` deployment (or one that never calls this) is
+    /// A `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -1083,7 +1083,7 @@ module FactsCompose =
     /// Bound how many fact reads one disclosure check holds in flight. A
     /// deployment that does not compose this runs the gate at
     /// `DisclosureFanOut.DefaultMaxConcurrentReads`; a bound below 1 is
-    /// raised to 1. A `NoFactStore` deployment is unchanged.
+    /// raised to 1. A `FeatureMode.Disabled` deployment is unchanged.
     ///
     /// ```fsharp skip=fragment
     /// ServerApp.create config
@@ -1092,9 +1092,9 @@ module FactsCompose =
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let bound: DisclosureFanOut = {
                 MaxConcurrentReads = max 1 maxConcurrentReads
             }
@@ -1122,7 +1122,7 @@ module FactsCompose =
     /// Compose the certificate-verified fact import door with the peer
     /// anchors this deployment accepts facts from. Registers
     /// `IFactImportDoor` over the composed `IFactStore` + `IAuditLog`; a
-    /// `NoFactStore` deployment (or one that never calls this) is
+    /// `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -1142,9 +1142,9 @@ module FactsCompose =
     /// discovered, so no key is implicitly trusted.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactImportDoor>(
                     Func<IServiceProvider, IFactImportDoor>(fun sp ->
@@ -1182,7 +1182,7 @@ module FactsCompose =
     /// Compose the audited grounding-envelope mutation door and its
     /// continuity proof (Phase 684). Registers `IGroundingEnvelopeMutator`
     /// over the composed `IAuditLog`, sealed to the grounding envelope
-    /// this app declares. A `NoFactStore` deployment (or one that never
+    /// this app declares. A `FeatureMode.Disabled` deployment (or one that never
     /// calls this) is byte-for-byte unchanged (GP 11 / GP 13).
     ///
     /// **Insert LAST among the grounding compose steps.** The envelope is
@@ -1215,9 +1215,9 @@ module FactsCompose =
         (observe: (unit -> GroundingEnvelope) option)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let sealedEnvelope =
                 GroundingEnvelope.ofComposition (ServerApp.compositionManifest app) app.RegisteredMetrics
 
@@ -1295,7 +1295,7 @@ module FactsCompose =
     /// commits one narrative per populated metric into the deployment's
     /// knowledge base through the ordinary ingestion path.
     ///
-    /// A `NoFactStore` deployment (or one that never calls this) is
+    /// A `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13), and a deployment that
     /// calls it without composing a knowledge base is inert: the trigger
     /// probes for `INarrativeIngestor` before it reads anything, so
@@ -1315,9 +1315,9 @@ module FactsCompose =
     /// and finds nothing to decorate if it runs first.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register = registerCoverageNarratives options
 
             app |> contribute register
@@ -1483,7 +1483,7 @@ module FactsCompose =
     /// sweep never reads a shard nobody resolved). Registers the coherence
     /// `IHealthCheck` when `config.HealthPrincipal` names one, and the
     /// scheduled sweep, on top of an already-enabled fact store. A
-    /// `NoFactStore` deployment (or one that never calls this) is
+    /// `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -1501,9 +1501,9 @@ module FactsCompose =
         (principals: DeclaredPrincipal list)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register = registerCoherenceChecks app.Config config cadence principals
 
             app |> contribute register
@@ -1536,8 +1536,8 @@ module FactsCompose =
     /// Compose the default `IFactTableWriter` and bind every declared fact
     /// table to it (`BindAllFactTables DefaultFactTableWriter.Destination`).
     ///
-    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`,
-    /// composed with `withFactStore`). Under `NoFactStore` this returns the
+    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`,
+    /// composed with `withFactStore`). Under `FeatureMode.Disabled` this returns the
     /// app unchanged and binds nothing, exactly as `withFactStore` does — so
     /// a composition declaring a `Required` table then refuses to start at
     /// the fact-table preflight, naming the table, rather than failing here.
@@ -1546,9 +1546,9 @@ module FactsCompose =
     /// DI when first used, so modules may be added before or after this call.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactTableWriter (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactTableWriter>(
                     Func<IServiceProvider, IFactTableWriter>(fun sp ->
@@ -1575,7 +1575,7 @@ module FactsCompose =
     // ─── Phase 986 — the fact tier as one composition, and its compiler ─
 
     /// The whole fact tier in one call: turn the fact store on
-    /// (`ServerConfig.FactStore = EnabledFactStore`), then `withFactStore`
+    /// (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`), then `withFactStore`
     /// and `withFactTableWriter` over it. Because it sets the knob itself,
     /// it does not depend on a `withConfig` having run first.
     ///
@@ -1599,7 +1599,10 @@ module FactsCompose =
             app with
                 Config = {
                     app.Config with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            app.Config.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> withFactStore
@@ -1638,8 +1641,8 @@ module FactsCompose =
     /// multi-replica scale guard, which stands down once the blob store is
     /// no longer the one composed.
     ///
-    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`);
-    /// under `NoFactStore` this returns the app unchanged, exactly as
+    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`);
+    /// under `FeatureMode.Disabled` this returns the app unchanged, exactly as
     /// `withFactStore` does. Insert straight AFTER `withFactStore` and
     /// before any knob that decorates the store (`withCoverageNarratives`):
     /// the replacement removes every `IFactStore` registration made before
@@ -1662,9 +1665,9 @@ module FactsCompose =
         (factory: IServiceProvider -> IFactStore)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.RemoveAll<IFactStore>() |> ignore
 
@@ -1763,8 +1766,8 @@ module FactsCompose =
     /// a point or population read of a delegated metric is answered from the
     /// table, minting as ordinary facts only the rows it returns.
     ///
-    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`);
-    /// under `NoFactStore` this returns the app unchanged. Insert AFTER
+    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`);
+    /// under `FeatureMode.Disabled` this returns the app unchanged. Insert AFTER
     /// `withFactStore` (and after `withFactStoreImplementation`, which drops
     /// every registration made before it) — it decorates what they
     /// registered. `withFactTableWriter` may come before or after: tables
@@ -1773,7 +1776,7 @@ module FactsCompose =
     ///
     /// ```fsharp
     /// ServerApp.empty
-    /// |> ServerApp.withConfig { ServerConfig.defaults with FactStore = EnabledFactStore }
+    /// |> ServerApp.withConfig { ServerConfig.defaults with Stores = { ServerConfig.defaults.Stores with FactStore = FeatureMode.Enabled } }
     /// |> ServerApp.addModules [ salesModule ]
     /// |> FactsCompose.withFactStore
     /// |> FactsCompose.withFactTableWriter
@@ -1781,10 +1784,10 @@ module FactsCompose =
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore, tableIds with
-        | NoFactStore, _
+        match app.Config.Stores.FactStore, tableIds with
+        | FeatureMode.Disabled, _
         | _, [] -> app
-        | EnabledFactStore, _ ->
+        | FeatureMode.Enabled, _ ->
             let register = registerDelegateFacts tableIds
 
             let bound =
@@ -1869,7 +1872,7 @@ module FactsCompose =
     ///
     /// **Not composing this is the default**, and so is composing it with
     /// `TeamVisible` as the default and no team choosing otherwise: every
-    /// check is then decided exactly as before (GP 11). A `NoFactStore`
+    /// check is then decided exactly as before (GP 11). A `FeatureMode.Disabled`
     /// deployment is unchanged. Insert after `withFactStore`:
     ///
     /// ```fsharp
@@ -1885,9 +1888,9 @@ module FactsCompose =
         (allowed: TeamVisibilityLevel list)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let settings =
                 match TeamOutputVisibilitySettings.create defaultLevel allowed with
                 | Ok settings -> settings
@@ -1985,7 +1988,7 @@ module FactsCompose =
     ///
     /// Requires the fact store, and the table writer for the tables it
     /// names; owner acts read the team's roles from the composed team store.
-    /// A `NoFactStore` deployment is unchanged. Insert after
+    /// A `FeatureMode.Disabled` deployment is unchanged. Insert after
     /// `withFactTableWriter`:
     ///
     /// ```fsharp
@@ -1998,9 +2001,9 @@ module FactsCompose =
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactPublication (config: FactPublicationConfig) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactPublication>(
                     Func<IServiceProvider, IFactPublication>(fun sp ->

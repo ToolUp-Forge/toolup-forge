@@ -49,12 +49,16 @@ Opt in via:
 ```fsharp
 let config = {
     ServerConfig.defaults with
-        EventStore =
-            PersistentBlobBacked {
-                MaxAge = Some(TimeSpan.FromDays 90.)
-                MaxCountPerScope = None
-            }
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EventStore =
+                    PersistentBlobBacked {
+                        MaxAge = Some(TimeSpan.FromDays 90.)
+                        MaxCountPerScope = None
+                    }
+        }
 }
+
 ```
 
 ### The decorator chain
@@ -70,7 +74,7 @@ JobNotifyEventStore                          position 300  (outermost)
 ```
 
 Each link is conditional — `JobNotifyEventStore` only when a job scheduler is composed,
-`HookedEventStore` only under `Webhooks = EnabledWebhooks`, `AuditReplicationHookedEventStore` only
+`HookedEventStore` only under `Webhooks = FeatureMode.Enabled`, `AuditReplicationHookedEventStore` only
 when at least one `IAuditSink` is registered — so the lightweight default registers the resolved
 store with no decorators at all and pays nothing (GP 13).
 
@@ -279,8 +283,8 @@ External tooling (typical compliance workflow): query the audit-sink destination
 
 ## Configuration knobs
 
-- `ServerConfig.EventStore = NoEventStore | InMemoryEventStore | PersistentBlobBacked of EventRetentionPolicy`
-- `ServerConfig.AuditLogMode = NoAuditLog | EnabledAuditLog` (opt-in; default off — the audit-log subsystem registers a hooked event store wrapper that has small CPU cost)
+- `ServerConfig.Stores.EventStore = NoEventStore | InMemoryEventStore | PersistentBlobBacked of EventRetentionPolicy`
+- `ServerConfig.FeatureMode = FeatureMode.Disabled | FeatureMode.Enabled` (opt-in; default off — the audit-log subsystem registers a hooked event store wrapper that has small CPU cost)
 
 Environment variables:
 - `TOOLUP_EVENT_RETENTION_DAYS=90` — propagated into `MaxAge` policy when persistent store is enabled.
@@ -297,8 +301,11 @@ The audit subsystem is opt-in at multiple layers:
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
-        EventStore = PersistentBlobBacked (MaxAge (TimeSpan.FromDays 90.))
-        AuditLogMode = EnabledAuditLog
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EventStore = PersistentBlobBacked (MaxAge (TimeSpan.FromDays 90.))
+        }
+        FeatureMode = FeatureMode.Enabled
 }
 |> ServerApp.withAuditSink (S3Archive.create "compliance" s3Settings blobStorage)
 // Adding more sinks: just chain another withAuditSink.

@@ -34,7 +34,7 @@ open ToolUp.Platform.WebhookDispatcher
 // captured and returns the same shape. Zero behaviour change.
 
 /// Build the webhook subsystem. Returns `None` when
-/// `Webhooks = NoWebhooks` — no dispatcher BackgroundService, no
+/// `Webhooks = FeatureMode.Disabled` — no dispatcher BackgroundService, no
 /// `HookedEventStore` decorator, no `IWebhookRegistry` /
 /// `IWebhookDeliveryLog` / `IWebhookDispatcher` DI services. The
 /// lightweight default carries zero webhook overhead.
@@ -59,8 +59,8 @@ let buildWebhookSubsystem
     (distributedLock: IDistributedLock)
     : (IWebhookRegistry * IWebhookDeliveryLog * WebhookDispatcher.WebhookDispatcherService * IEventStore) option =
     match config.Webhooks with
-    | NoWebhooks -> None
-    | EnabledWebhooks ->
+    | FeatureMode.Disabled -> None
+    | FeatureMode.Enabled ->
         // Phase 464 — the CONCRETE registry, so the post-channel wiring
         // step below (`wireWebhookRegistryToNotificationChannel`) can
         // reach `WireToChannel` by type test. The returned tuple still
@@ -89,7 +89,7 @@ let buildWebhookSubsystem
         // (WebhookApiHandler) — threaded into the dispatcher so delivery-time
         // re-validation honours operator-allowlisted internal hosts too.
         let urlPolicy: WebhookUrlValidator.WebhookUrlPolicy = {
-            AllowedHosts = config.WebhookUrlAllowedHosts
+            AllowedHosts = config.SecurityPosture.WebhookUrlAllowedHosts
         }
 
         let dispatcher =
@@ -226,7 +226,7 @@ let applyEventStoreDecorators
         :> _
 
 /// Phase 1g — webhook DI registrations are conditional on
-/// `ServerConfig.Webhooks`. `NoWebhooks` skips all four (registry,
+/// `ServerConfig.Webhooks`. `FeatureMode.Disabled` skips all four (registry,
 /// delivery log, dispatcher interface, dispatcher hosted-service) so the
 /// lightweight default registers zero webhook services.
 ///
@@ -287,7 +287,7 @@ let registerWebhookSubsystem
 /// the service collection, so the job scheduler can reconcile
 /// `JobResult.HandedOff` runs against it.
 ///
-/// `None` for `NoExternalCompute` (the default) is the load-bearing case:
+/// `None` for `FeatureMode.Disabled` (the default) is the load-bearing case:
 /// it leaves the reconciliation pass switched off entirely for every
 /// deployment that composes no backend, rather than switched on against a
 /// `NoExternalComputeDispatcher` that could only ever report the empty set
@@ -301,7 +301,7 @@ let registerWebhookSubsystem
 /// `IdempotencyStoreInstanceValidator` uses applies: instance
 /// registrations are seen, factory registrations are not. That would
 /// otherwise fail *silently* — the deployment sets
-/// `CustomExternalCompute`, hands off successfully, and no reconciliation
+/// `FeatureMode.Enabled`, hands off successfully, and no reconciliation
 /// ever runs, so every external run waits forever with nothing reporting
 /// why. So the miss is warned about explicitly, naming both remedies.
 let private tryResolveExternalDispatcher
@@ -310,8 +310,8 @@ let private tryResolveExternalDispatcher
     (logger: ILogger)
     : IExternalComputeDispatcher option =
     match config.ExternalCompute with
-    | NoExternalCompute -> None
-    | CustomExternalCompute ->
+    | FeatureMode.Disabled -> None
+    | FeatureMode.Enabled ->
         let found =
             services
             |> Seq.tryPick (fun d ->
@@ -332,7 +332,7 @@ let private tryResolveExternalDispatcher
         | Some _ -> found
         | None ->
             logger.Warn
-                "[ComposeJobs] event=external_dispatcher_not_introspectable ServerConfig.ExternalCompute = CustomExternalCompute but no instance-registered IExternalComputeDispatcher was found in the service collection, so the job scheduler's external hand-off reconciliation is DISABLED — a handler returning JobResult.HandedOff would leave its run AwaitingExternal forever. Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)) rather than a factory, or construct the scheduler yourself with JobScheduler.create deps { SchedulerOptions.defaults with ExternalDispatcher = Some dispatcher }."
+                "[ComposeJobs] event=external_dispatcher_not_introspectable ServerConfig.ExternalCompute = FeatureMode.Enabled but no instance-registered IExternalComputeDispatcher was found in the service collection, so the job scheduler's external hand-off reconciliation is DISABLED — a handler returning JobResult.HandedOff would leave its run AwaitingExternal forever. Register the dispatcher as an instance (services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)) rather than a factory, or construct the scheduler yourself with JobScheduler.create deps { SchedulerOptions.defaults with ExternalDispatcher = Some dispatcher }."
 
             None
 
@@ -340,7 +340,7 @@ let private tryResolveExternalDispatcher
 /// ingress: handle-to-run routing, the callback secret's hash, and the
 /// atomic `MarkTerminal` gate that makes callback-vs-poll exactly-once.
 ///
-/// `None` for `NoExternalCompute` (the default) — nothing can be
+/// `None` for `FeatureMode.Disabled` (the default) — nothing can be
 /// outstanding, so there is nothing to store and no blob layout to create
 /// (GP 13). `None` also when the deployment opted in but its blob backend
 /// cannot do conditional writes, and that arm is the interesting one:
@@ -361,13 +361,13 @@ let private tryResolveExternalHandleStore
     (logger: ILogger)
     : IExternalHandleStore option =
     match config.ExternalCompute with
-    | NoExternalCompute -> None
-    | CustomExternalCompute ->
+    | FeatureMode.Disabled -> None
+    | FeatureMode.Enabled ->
         match BlobExternalHandleStore.TryCreate resolvedBlobStorage with
         | Some store -> Some store
         | None ->
             logger.Warn
-                "[ComposeJobs] event=external_handle_store_unavailable ServerConfig.ExternalCompute = CustomExternalCompute but the composed IBlobStorage does not implement IConditionalBlobStorage, so no durable external-handle store could be built. Completion callbacks (POST /_platform/external-compute/callback) will answer 503 and every external hand-off will resolve by the reconciliation poll instead — correct, just slower. Compose a blob backend with conditional-write support (the local, Azure, S3 and GCS backends all have it) to enable push resolution."
+                "[ComposeJobs] event=external_handle_store_unavailable ServerConfig.ExternalCompute = FeatureMode.Enabled but the composed IBlobStorage does not implement IConditionalBlobStorage, so no durable external-handle store could be built. Completion callbacks (POST /_platform/external-compute/callback) will answer 503 and every external hand-off will resolve by the reconciliation poll instead — correct, just slower. Compose a blob backend with conditional-write support (the local, Azure, S3 and GCS backends all have it) to enable push resolution."
 
             None
 
@@ -495,9 +495,9 @@ let registerJobScheduler
         services.AddSingleton<JobScheduler.InProcessJobScheduler>(scheduler) |> ignore
 
         // The progress sink, registered ONLY when the deployment opted in
-        // (`JobProgress = EnabledJobProgress`), and the scheduler's own
+        // (`JobProgress = FeatureMode.Enabled`), and the scheduler's own
         // instance, so DI and the scheduler share one per-job rate-limit
-        // window. Nothing is registered under `NoJobProgress`: a resolvable
+        // window. Nothing is registered under `FeatureMode.Disabled`: a resolvable
         // no-op sink would invite consumer code to report against a
         // deployment that asked for none (GP 13).
         scheduler.ProgressSink
@@ -577,7 +577,7 @@ let registerJobScheduler
 
             Some scheduler
 
-/// Phase 10 — opt-in data ingestion. `NoDataIngestion` (default) skips
+/// Phase 10 — opt-in data ingestion. `FeatureMode.Disabled` (default) skips
 /// registration entirely — no `IDataIngestor`, no
 /// `IDataSourceConfigStore`, no `_platform/data-sources/` blob layout,
 /// no `IDataIngestionApi` route. Connectors register as `IDataSource`
@@ -600,8 +600,8 @@ let registerDataIngestion
     (resolvedLogger: ILogger)
     : unit =
     match config.DataIngestion with
-    | NoDataIngestion -> ()
-    | EnabledDataIngestion ->
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         let configStoreInstance = DataSourceConfigStore.create resolvedBlobStorage
         services.AddSingleton<IDataSourceConfigStore>(configStoreInstance) |> ignore
 
@@ -708,10 +708,10 @@ let registerDataIngestion
         |> ignore
 
 /// Phase 10h — opt-in OAuth token refresher substrate.
-/// `NoOAuthRefresher` (default) skips registration entirely: connectors
+/// `FeatureMode.Disabled` (default) skips registration entirely: connectors
 /// using OAuth Authorization Code (Phase 10e) refresh synchronously per
 /// API call via `IOAuthCredentialFlow.RefreshAccessToken`.
-/// `EnabledOAuthRefresher` registers `InProcessOAuthTokenRefresher` as
+/// `FeatureMode.Enabled` registers `InProcessOAuthTokenRefresher` as
 /// the singleton `IOAuthTokenRefresher` + registers the
 /// `OAuthRefreshJobHandler` with the scheduler under
 /// `_platform.oauth.refresh` + schedules a startup-time `Recover` to
@@ -735,12 +735,12 @@ let registerOAuthRefresher
     (resolvedLogger: ILogger)
     : unit =
     match config.OAuthRefresher with
-    | NoOAuthRefresher -> ()
-    | EnabledOAuthRefresher ->
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         match jobSchedulerInstance with
         | None ->
             resolvedLogger.Warn(
-                "[Phase 10h] OAuthRefresher = EnabledOAuthRefresher but JobScheduler = NoJobScheduler — refresher not registered. Pair with JobScheduler = InProcessJobScheduler."
+                "[Phase 10h] OAuthRefresher = FeatureMode.Enabled but JobScheduler = NoJobScheduler — refresher not registered. Pair with JobScheduler = InProcessJobScheduler."
             )
         | Some scheduler ->
             // Dedicated `HttpClient` instance for refresh-token POSTs.
@@ -860,7 +860,7 @@ let registerProviderOAuth
                 | None -> ()
 
 /// Phase 449 — register the model-fit envelope when
-/// `ServerConfig.ModelFitting = EnabledModelFitting`. Indexes every
+/// `ServerConfig.ModelFitting = FeatureMode.Enabled`. Indexes every
 /// DI-registered `IModelFitProvider` into a `ModelFitProviderRegistry`
 /// (duplicate `Kind` rejected at construction) and binds the
 /// `ModelFitJobHandler` to `_platform.modelfit.run`. The provider list is
@@ -868,7 +868,7 @@ let registerProviderOAuth
 /// constructed + validated and the handler is registered with the
 /// scheduler inside a startup `IHostedService` (mirrors the OAuth-refresher
 /// `Recover` pattern) — a duplicate-`Kind` deployment fails to start loudly.
-/// `NoModelFitting` (the default) registers nothing — zero runtime cost
+/// `FeatureMode.Disabled` (the default) registers nothing — zero runtime cost
 /// when unused (GP 13); modelling math never lives in forge (plan D10).
 let registerModelFitting
     (services: IServiceCollection)
@@ -878,12 +878,12 @@ let registerModelFitting
     (resolvedLogger: ILogger)
     : unit =
     match config.ModelFitting with
-    | NoModelFitting -> ()
-    | EnabledModelFitting ->
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         match jobSchedulerInstance with
         | None ->
             resolvedLogger.Warn(
-                "[Phase 449] ModelFitting = EnabledModelFitting but JobScheduler = NoJobScheduler — fit envelope not registered. Pair with JobScheduler = InProcessJobScheduler."
+                "[Phase 449] ModelFitting = FeatureMode.Enabled but JobScheduler = NoJobScheduler — fit envelope not registered. Pair with JobScheduler = InProcessJobScheduler."
             )
         | Some scheduler ->
             // Lazy singleton: the registry (and its duplicate-`Kind` guard)

@@ -904,11 +904,8 @@ type PgvectorVectorStore
     // metadata. A compliance deployment would rather stop than answer
     // from a corpus it cannot fully read.
     let refuseOnCorruption =
-        match Environment.GetEnvironmentVariable ConfigKeys.Names.ragRefuseOnIndexCorruption with
-        | "1"
-        | "true"
-        | "TRUE" -> true
-        | _ -> false
+        let key = ConfigKeys.key ConfigKeys.Names.ragRefuseOnIndexCorruption
+        ConfigKeys.ConfigKey.readPermissiveBool key (Environment.GetEnvironmentVariable key.EnvVar |> Option.ofObj)
 
     let sqlUpsert = Sql.upsert options
     let sqlUpsertBatch = Sql.upsertBatch options

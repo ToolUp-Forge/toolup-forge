@@ -376,7 +376,7 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
             // ClientModule.Visibility.platformAdminOnly.
             makeApi (PlatformAIKeysHandler.platformAIKeysApi aiProviderFactory)
             route "/api/ai/events"
-            >=> fun next ctx -> sseHandler (resolveManager ctx) config.SseAuthMode next ctx
+            >=> fun next ctx -> sseHandler (resolveManager ctx) config.SecurityPosture.SseAuthMode next ctx
             // Client-resident tool result POST endpoint.
             POST
             >=> route "/api/ai/tool-result"

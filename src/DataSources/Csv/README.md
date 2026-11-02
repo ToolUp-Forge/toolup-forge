@@ -144,10 +144,10 @@ open ToolUp.DataSources.Csv
 //    a LocalFileStorage over ./data here. The connector registers as an
 //    IDataSource and the ingestor resolves it by Kind. Advanced
 //    behaviour is opt-in (GP 13): a deployment that never sets
-//    EnabledDataIngestion pays nothing.
+//    FeatureMode.Enabled pays nothing.
 let config = {
     ServerConfig.defaults with
-        DataIngestion = EnabledDataIngestion
+        DataIngestion = FeatureMode.Enabled
         JobScheduler = InProcessJobScheduler
 }
 

@@ -40,12 +40,12 @@ type MultiInstanceAdminCoherenceValidator(config: ServerConfig, ?timeout: TimeSp
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            if config.ReplicaCount <= 1 then
+            if config.MultiInstance.ReplicaCount <= 1 then
                 return Ok
             else
                 let webhooksComposed =
                     match config.Webhooks with
-                    | NoWebhooks -> false
+                    | FeatureMode.Disabled -> false
                     | _ -> true
 
                 let dsrComposed =
@@ -72,8 +72,8 @@ type MultiInstanceAdminCoherenceValidator(config: ServerConfig, ?timeout: TimeSp
                     return
                         Warning(
                             sprintf
-                                "ServerConfig.ReplicaCount = %d with in-process single-writer admin subsystems composed:\n%s\nThese hold per-process state that does not cross instance boundaries — concurrent operations race (lost updates / dropped webhooks / lost previews), and a concurrent last-admin revoke can brick the platform. The cross-instance lease primitive (IDistributedLock) is composable today, but none of these subsystems takes a lease: what is still missing is single-writer election on the in-process tick and queue paths, and fenced (or ETag-CAS) writes on the stores. Until those land, run a single instance, or accept the documented degradation."
-                                config.ReplicaCount
+                                "ServerConfig.MultiInstance.ReplicaCount = %d with in-process single-writer admin subsystems composed:\n%s\nThese hold per-process state that does not cross instance boundaries — concurrent operations race (lost updates / dropped webhooks / lost previews), and a concurrent last-admin revoke can brick the platform. The cross-instance lease primitive (IDistributedLock) is composable today, but none of these subsystems takes a lease: what is still missing is single-writer election on the in-process tick and queue paths, and fenced (or ETag-CAS) writes on the stores. Until those land, run a single instance, or accept the documented degradation."
+                                config.MultiInstance.ReplicaCount
                                 listing
                         )
         }

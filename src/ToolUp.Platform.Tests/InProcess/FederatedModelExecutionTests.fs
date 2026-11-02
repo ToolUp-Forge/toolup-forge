@@ -1604,7 +1604,10 @@ let private declaredSurfaceTests =
                 |> PeerComposition.app (
                     ServerApp.withConfig {
                         ServerConfig.defaults with
-                            PeerSubstrate = EnabledPeerSubstrate
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
                     }
                 )
                 |> PeerComposition.options (
@@ -1630,7 +1633,10 @@ let private declaredSurfaceTests =
                 |> PeerComposition.app (
                     ServerApp.withConfig {
                         ServerConfig.defaults with
-                            PeerSubstrate = EnabledPeerSubstrate
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
                     }
                 )
                 |> PeerSurface.describe
@@ -2842,7 +2848,10 @@ let private transitionDeclarationTests =
                 |> PeerComposition.app (
                     ServerApp.withConfig {
                         ServerConfig.defaults with
-                            PeerSubstrate = EnabledPeerSubstrate
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
                     }
                 )
                 |> PeerComposition.options (
@@ -2893,7 +2902,10 @@ let private transitionDeclarationTests =
                 |> PeerComposition.app (
                     ServerApp.withConfig {
                         ServerConfig.defaults with
-                            PeerSubstrate = EnabledPeerSubstrate
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
                     }
                 )
                 |> PeerComposition.options (PeerOptions.withPeerTransitionAuthority approveGrant)

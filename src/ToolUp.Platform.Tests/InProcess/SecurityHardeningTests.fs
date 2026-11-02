@@ -181,7 +181,10 @@ let tests =
             let resolved =
                 SecurityHardening.aggregate services {
                     ServerConfig.defaults with
-                        SecurityHardening = NoSecurityHardening
+                        SecurityPosture = {
+                            ServerConfig.defaults.SecurityPosture with
+                                SecurityHardening = NoSecurityHardening
+                        }
                 }
 
             Expect.equal resolved.Header "" "default deployment gets no header"
@@ -199,7 +202,10 @@ let tests =
             let resolved =
                 SecurityHardening.aggregate services {
                     ServerConfig.defaults with
-                        SecurityHardening = DefaultSecurityHardening
+                        SecurityPosture = {
+                            ServerConfig.defaults.SecurityPosture with
+                                SecurityHardening = DefaultSecurityHardening
+                        }
                 }
 
             Expect.stringContains resolved.Header "https://one.example" "first contributor folded"
@@ -243,7 +249,10 @@ let tests =
             let resolved =
                 SecurityHardening.aggregate services {
                     ServerConfig.defaults with
-                        SecurityHardening = DefaultSecurityHardening
+                        SecurityPosture = {
+                            ServerConfig.defaults.SecurityPosture with
+                                SecurityHardening = DefaultSecurityHardening
+                        }
                 }
 
             Expect.equal
@@ -263,7 +272,10 @@ let tests =
             let resolved =
                 SecurityHardening.aggregate services {
                     ServerConfig.defaults with
-                        SecurityHardening = DefaultSecurityHardening
+                        SecurityPosture = {
+                            ServerConfig.defaults.SecurityPosture with
+                                SecurityHardening = DefaultSecurityHardening
+                        }
                 }
 
             Expect.isTrue resolved.NonceMode "nonce mode flagged for CspMiddleware substitution"
@@ -289,7 +301,10 @@ let tests =
 
             let cfg = {
                 ServerConfig.defaults with
-                    SecurityHardening = DefaultSecurityHardening
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SecurityHardening = DefaultSecurityHardening
+                    }
             }
 
             let r1 = SecurityHardening.aggregate services cfg
@@ -314,7 +329,10 @@ let tests =
             let resolved =
                 SecurityHardening.aggregate services {
                     ServerConfig.defaults with
-                        SecurityHardening = NoSecurityHardening
+                        SecurityPosture = {
+                            ServerConfig.defaults.SecurityPosture with
+                                SecurityHardening = NoSecurityHardening
+                        }
                 }
 
             Expect.equal resolved.Header "" "no hardening → no header even in nonce mode"
@@ -391,7 +409,10 @@ let tests =
         test "CSRF gate: peer-bearer prefixes are exempt" {
             let cfg = {
                 ServerConfig.defaults with
-                    PeerRoutePrefixes = [ "/api/peer/" ]
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            PeerRoutePrefixes = [ "/api/peer/" ]
+                    }
             }
 
             let registry = SurfaceRequirementRegistry.fromServerConfig cfg

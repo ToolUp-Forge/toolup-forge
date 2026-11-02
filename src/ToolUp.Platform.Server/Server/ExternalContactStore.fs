@@ -46,7 +46,7 @@ open ToolUp.Platform.EntityTypes
 /// composition root can register the entity itself with
 /// `ServerApp.withEntity` where it wants the address book's storage
 /// without the rest of the substrate; the SDK registers it for you when
-/// `ServerConfig.ExternalContactStore = EnabledExternalContactStore`.
+/// `ServerConfig.Stores.ExternalContactStore = FeatureMode.Enabled`.
 ///
 /// Three single-field indexes, each earning its place:
 ///   * `owner` serves `ListByOwner`, so a personal lookup in a scope that

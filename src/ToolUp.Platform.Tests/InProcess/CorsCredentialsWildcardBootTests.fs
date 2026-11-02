@@ -44,7 +44,10 @@ let private logger () = RecordingLogger()
 
 let private withCors (cors: CorsConfig) = {
     ServerConfig.defaults with
-        Cors = Some cors
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                Cors = Some cors
+        }
 }
 
 let private isEmptyCollection (services: ServiceCollection) =

@@ -1160,7 +1160,7 @@ let private servicesFor (f: EncryptedFixture) : IServiceProvider =
         .AddSingleton<HlsKeyDelivery.MediaHlsKeyStore>(f.Keys)
         .AddSingleton<IMediaLibrary>(f.Library)
         // Phase 472 — mirrors what `MediaCompose` registers under
-        // `EnabledMediaLibrary`, so a driven request sees this
+        // `FeatureMode.Enabled`, so a driven request sees this
         // deployment's declared edge cacheability. The 471 fixtures
         // register `MediaLibraryOptions.defaults`, which declares
         // nothing, so their assertions are unaffected.
@@ -3322,14 +3322,21 @@ let private companionReachTests =
                 |> MediaCompose.withMediaLibrary (MediaCompose.MediaLibraryCompanionOptions.create ())
                 |> ServerApp.withConfig {
                     ServerConfig.defaults with
-                        MediaLibrary = EnabledMediaLibrary
-                        ReplicaCount = 2
+                        MediaLibrary = FeatureMode.Enabled
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
                 }
                 |> ServerApp.withStorage storage
 
             let resolved = ServerApp.resolve app
 
-            Expect.equal (ServerApp.effectiveConfig app).ReplicaCount 2 "the later withConfig reaches the app"
+            Expect.equal
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
+
             Expect.isTrue (obj.ReferenceEquals(resolved.Storage.Value, storage)) "and the later withStorage"
 
             Expect.isGreaterThan

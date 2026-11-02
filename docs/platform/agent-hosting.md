@@ -40,8 +40,12 @@ The host authenticates agents one way and one way only. Without this, every call
 ```fsharp skip=fragment
 let config = {
     ServerConfig.defaults with
-        ServiceAccounts = EnabledServiceAccounts
+        Stores = {
+            ServerConfig.defaults.Stores with
+                ServiceAccounts = EnabledServiceAccounts
+        }
 }
+
 ```
 
 ### 2. Compose the host

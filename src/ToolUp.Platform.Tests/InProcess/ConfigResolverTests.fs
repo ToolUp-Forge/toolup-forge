@@ -163,14 +163,26 @@ let tests =
                 withEnv Names.requireHttps None (fun () ->
                     let baseline = ServerConfig.fromEnv logger ServerConfigOverrides.empty
 
-                    Expect.equal baseline.ReplicaCount 1 "no manifest, no env — the declared default stands"
-                    Expect.isFalse baseline.RequireHttps "no manifest, no env — the declared default stands"
+                    Expect.equal
+                        baseline.MultiInstance.ReplicaCount
+                        1
+                        "no manifest, no env — the declared default stands"
+
+                    Expect.isFalse
+                        baseline.SecurityPosture.RequireHttps
+                        "no manifest, no env — the declared default stands"
 
                     withManifest [ Names.replicaCount, "4"; Names.requireHttps, "true" ] (fun () ->
                         let bound = ServerConfig.fromEnv logger ServerConfigOverrides.empty
 
-                        Expect.equal bound.ReplicaCount 4 "the manifest value reaches the config record"
-                        Expect.isTrue bound.RequireHttps "the manifest value reaches the config record")))
+                        Expect.equal
+                            bound.MultiInstance.ReplicaCount
+                            4
+                            "the manifest value reaches the config record"
+
+                        Expect.isTrue
+                            bound.SecurityPosture.RequireHttps
+                            "the manifest value reaches the config record")))
 
         // ─── B — refusals ─────────────────────────────────────────────
 

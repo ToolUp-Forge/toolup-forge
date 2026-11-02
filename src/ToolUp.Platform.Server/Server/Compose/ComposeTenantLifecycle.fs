@@ -10,7 +10,7 @@ open ToolUp.Platform.BlobStorage
 //
 // Registers the four first-party `ITenantLifecycle` hooks + the
 // process-local `TenantLifecycleSnapshot` when
-// `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`. Each hook is
+// `ServerConfig.TenantLifecycle = FeatureMode.Enabled`. Each hook is
 // registered via the factory overload so it captures the runtime
 // `IServiceProvider` and resolves its substrate lazily on every call
 // (stateless between invocations, GP 12 rule 4); a hook whose substrate
@@ -18,7 +18,7 @@ open ToolUp.Platform.BlobStorage
 // under the enabled mode is safe regardless of which other subsystems
 // the deployment composed.
 //
-// **Phase 54e additions** (also gated on `EnabledTenantLifecycle`):
+// **Phase 54e additions** (also gated on `FeatureMode.Enabled`):
 //   * the blob-backed `ILifecycleSummaryStore` — durable last-summary
 //     backing for `GetLifecycleSummary` (survives restart + visible
 //     across replicas), in front of which the snapshot is a cache;
@@ -26,7 +26,7 @@ open ToolUp.Platform.BlobStorage
 //     `ITenantLifecycle` hook by name, mirroring the way
 //     `HealthCheckAggregator` health probes are surfaced.
 //
-// `NoTenantLifecycle` (the default) is a no-op — no hooks, no snapshot,
+// `FeatureMode.Disabled` (the default) is a no-op — no hooks, no snapshot,
 // no store, no contributor, no `/api/_platform/tenants/*` route (the
 // route mount in `BuildRouteHandlers` gates on the same field). Zero
 // cost when unused (GP 13).
@@ -64,8 +64,8 @@ type private TenantLifecycleDiagnosticsContributor(sp: IServiceProvider) =
 /// durable summary store + dev-diagnostics contributor.
 let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig) : unit =
     match config.TenantLifecycle with
-    | NoTenantLifecycle -> ()
-    | EnabledTenantLifecycle ->
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         services.AddSingleton<PlatformTenantApiHandler.TenantLifecycleSnapshot>(
             PlatformTenantApiHandler.TenantLifecycleSnapshot()
         )

@@ -348,7 +348,7 @@ let private sweepInterval = TimeSpan.FromHours 1.0
 
 /// Phase 828 — the hosted service that keeps the log store inside its
 /// declared retention bounds. Registered only when
-/// `ServerConfig.LogStore` opts in, so a deployment on `NoLogStore` runs
+/// `ServerConfig.Observability.LogStore` opts in, so a deployment on `NoLogStore` runs
 /// no timer at all (GP 13).
 ///
 /// Generic over `ILogStore` rather than over `SqliteLogStore`: the age

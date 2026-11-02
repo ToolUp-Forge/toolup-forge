@@ -46,7 +46,7 @@ open ToolUp.Platform.ConfigValidation
 // them. That case refuses and the operator attests — the conservative
 // direction, since the opposite error is silent unbounded spend.
 //
-// Escape hatch: `ServerConfig.AcceptAnonymousModeWithAI`
+// Escape hatch: `ServerConfig.RiskAcknowledgements.AcceptAnonymousModeWithAI`
 // (`TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`). Like
 // `AcceptStickyRoutedAiInMultiInstance` it DEGRADES the refusal to a
 // `Warning` rather than clearing it to `Ok`: per-IP gating at a proxy is
@@ -61,7 +61,7 @@ open ToolUp.Platform.ConfigValidation
 /// Phase 6m — config validator that refuses startup for an AI
 /// deployment admitting anonymous requests with no anonymous rate-limit
 /// policy and a platform-paid provider wired. The escape hatch
-/// `ServerConfig.AcceptAnonymousModeWithAI` degrades the refusal to a
+/// `ServerConfig.RiskAcknowledgements.AcceptAnonymousModeWithAI` degrades the refusal to a
 /// `Warning`.
 type AnonymousAIModeValidator(config: ServerConfig, factory: IAIProviderFactory, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
@@ -77,7 +77,7 @@ type AnonymousAIModeValidator(config: ServerConfig, factory: IAIProviderFactory,
                 (RateLimitConfig.policyFor config.RateLimit AnonymousKind) |> Option.isNone
 
             let platformPaid = factory.PlatformDescriptors
-            let attested = config.AcceptAnonymousModeWithAI
+            let attested = config.RiskAcknowledgements.AcceptAnonymousModeWithAI
 
             match anonymousSurface && anonymousUnlimited, platformPaid with
             | false, _
@@ -89,7 +89,7 @@ type AnonymousAIModeValidator(config: ServerConfig, factory: IAIProviderFactory,
                     return
                         Error(
                             sprintf
-                                "ServerConfig.Surfaces = %s admits unauthenticated requests, no RateLimit policy resolves for AnonymousKind, and the composed IAIProviderFactory wires %d platform-paid provider(s) (%s) — so anyone with the URL drives provider spend against the deployment's own API key, with no identity to attribute it to, rate-limit per, or cut off. Anonymous mode + AI without rate limit is unbounded cost surface; set TOOLUP_RATE_LIMIT_PERMITS=N or use a BYOK-only IAIProviderFactory or set TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1. The env var sets ServerConfig.AcceptAnonymousModeWithAI = true, which attests that per-IP gating or request budgets bound the cost upstream; it degrades this refusal to a warning rather than clearing it. Verify in the HealthMonitorUI Preflight tab or /dev/inspect Validators panel."
+                                "ServerConfig.Surfaces = %s admits unauthenticated requests, no RateLimit policy resolves for AnonymousKind, and the composed IAIProviderFactory wires %d platform-paid provider(s) (%s) — so anyone with the URL drives provider spend against the deployment's own API key, with no identity to attribute it to, rate-limit per, or cut off. Anonymous mode + AI without rate limit is unbounded cost surface; set TOOLUP_RATE_LIMIT_PERMITS=N or use a BYOK-only IAIProviderFactory or set TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1. The env var sets ServerConfig.RiskAcknowledgements.AcceptAnonymousModeWithAI = true, which attests that per-IP gating or request budgets bound the cost upstream; it degrades this refusal to a warning rather than clearing it. Verify in the HealthMonitorUI Preflight tab or /dev/inspect Validators panel."
                                 (DeploymentConfig.surfacesLabel config)
                                 (List.length descriptors)
                                 providerIds

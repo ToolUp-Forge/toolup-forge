@@ -72,18 +72,14 @@ let private queryRejectedJsonOptions =
 /// - Anonymous users (userId = "anonymous") may read Platform / Deployment
 ///   only; team scopes are filtered out. A session with a stable id reads
 ///   its own `User` scope (its `ctx.UserId`).
-let private authorisedScopes
-    (platformKnowledgeBase: PlatformKnowledgeBaseMode)
-    (ctx: AccessContext)
-    (scopes: VectorScope list)
-    =
+let private authorisedScopes (platformKnowledgeBase: FeatureMode) (ctx: AccessContext) (scopes: VectorScope list) =
     scopes
     |> List.filter (fun scope ->
         match scope with
         | Platform ->
             match platformKnowledgeBase with
-            | EnabledPlatformKnowledgeBase -> true
-            | NoPlatformKnowledgeBase -> false
+            | FeatureMode.Enabled -> true
+            | FeatureMode.Disabled -> false
         | Deployment -> true
         | Team teamId ->
             match ctx.TeamId with
@@ -702,8 +698,8 @@ type RetrievalPipeline
         ?sparseIndex: ISparseIndex,
         ?options: RetrievalPipelineOptions,
         ?tracer: IRetrievalTracer,
-        ?platformKnowledgeBase: PlatformKnowledgeBaseMode,
-        ?platformKnowledgeBaseSnapshot: unit -> PlatformKnowledgeBaseMode,
+        ?platformKnowledgeBase: FeatureMode,
+        ?platformKnowledgeBaseSnapshot: unit -> FeatureMode,
         // Phase 122 — when supplied, each `Retrieve` reports its per-stage
         // timing breakdown via `RecordRetrievalStages` so `/health/rag`
         // can expose per-stage P50/P95. `None` costs nothing (GP 13).
@@ -758,9 +754,9 @@ type RetrievalPipeline
     // takes effect immediately on the next request without rebuilding
     // the pipeline. When supplied, the snapshot thunk wins; otherwise
     // fall back to the static `platformKnowledgeBase` constructor
-    // parameter (test-harness compat) or `NoPlatformKnowledgeBase`
+    // parameter (test-harness compat) or `FeatureMode.Disabled`
     // (safe default matching `ServerConfig.PlatformKnowledgeBase`).
-    let staticMode = defaultArg platformKnowledgeBase NoPlatformKnowledgeBase
+    let staticMode = defaultArg platformKnowledgeBase FeatureMode.Disabled
 
     let readPlatformKbMode () =
         match platformKnowledgeBaseSnapshot with

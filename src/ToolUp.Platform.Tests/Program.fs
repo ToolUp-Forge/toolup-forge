@@ -325,6 +325,7 @@ let private registeredTests =
         ConfigStartupModeTests.tests
         ConfigResolverTests.tests
         ConfigProfileTests.tests
+        ConfigKeyReadBoolTests.tests
         UnknownConfigKeyValidatorTests.tests
         TraceCategoriesValidatorTests.tests
         HealthStateTrackerTests.tests

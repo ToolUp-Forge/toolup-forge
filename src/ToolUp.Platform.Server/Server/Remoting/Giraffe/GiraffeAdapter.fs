@@ -665,7 +665,7 @@ module internal GiraffeUtil =
                     // `IRemotingTelemetry`.
                     //
                     // Gated symmetrically with the non-streaming
-                    // branch: `Api.make` + `NoMetricsEndpoint` deployments
+                    // branch: `Api.make` + `FeatureMode.Disabled` deployments
                     // skip the Stopwatch + MethodTelemetry alloc entirely.
                     let streamingTelemetryActive =
                         options.Telemetry.IsSome
@@ -1688,7 +1688,7 @@ module internal GiraffeUtil =
                                     // Telemetry-allocation gate. Skips the
                                     // Stopwatch + MethodTelemetry alloc + Map.ofList tags
                                     // entirely when the gate returns false (the canonical
-                                    // `Api.make` + `NoMetricsEndpoint` shape — `IMetricsSink`
+                                    // `Api.make` + `FeatureMode.Disabled` shape — `IMetricsSink`
                                     // resolves to `NoOpMetricsSink`, so emitting would
                                     // do nothing anyway). Consumer-supplied sinks never
                                     // compose a gate, so they always emit.

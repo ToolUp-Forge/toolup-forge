@@ -668,7 +668,7 @@ module HostingBaseline =
     /// trusted-proxy network when there is one (forwarded-headers trust is
     /// scoped to those networks), else loopback.
     let proxyPeerFor (config: ServerConfig) : IPAddress =
-        match ForwardedHeadersTrustValidator.Cidr.parseAll config.TrustedProxyCidrs with
+        match ForwardedHeadersTrustValidator.Cidr.parseAll config.SecurityPosture.TrustedProxyCidrs with
         | Ok(network :: _) -> network.BaseAddress
         | _ -> IPAddress.Loopback
 

@@ -249,17 +249,27 @@ module HostEnvelope =
 
     // ── config knobs: the schema, plus what THIS deployment resolved ──
 
-    /// Read one `ServerConfig` field's rendered value off the live config
-    /// by reflection. Total — an absent field or a null value renders
+    /// Read one knob's rendered value off the live config by reflection,
+    /// through the concern record that holds it (Phase 877) and as the
+    /// token the knob schema admits (`FeatureModeKnob.render` for a
+    /// `FeatureMode`). Total — an absent field or a null value renders
     /// empty rather than throwing.
     let private resolvedKnobValue (config: ServerConfig) (fieldName: string) : string =
-        FSharpType.GetRecordFields typeof<ServerConfig>
-        |> Array.tryFind (fun field -> field.Name = fieldName)
-        |> Option.map (fun field ->
-            match field.GetValue(box config) with
-            | null -> ""
-            | value -> string value)
-        |> Option.defaultValue ""
+        let rec find (record: Type) (value: obj) =
+            FSharpType.GetRecordFields record
+            |> Array.tryPick (fun field ->
+                if field.Name = fieldName then
+                    Some(field.GetValue value)
+                elif ComposableSurface.isConcernRecord field.PropertyType then
+                    find field.PropertyType (field.GetValue value)
+                else
+                    None)
+
+        match find typeof<ServerConfig> (box config) with
+        | Some(:? FeatureMode as mode) -> FeatureModeKnob.render fieldName mode
+        | Some null
+        | None -> ""
+        | Some value -> string value
 
     let private knobOffers (config: ServerConfig) : HostKnobOffer list =
         ComposableSurface.configKnobs ()

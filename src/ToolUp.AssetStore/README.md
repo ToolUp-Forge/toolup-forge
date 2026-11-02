@@ -8,8 +8,8 @@ Phase 39 `IAssetStore` companion. Image-first asset substrate for ToolUp.Platfor
 - `DefaultAssetStore` — wraps `IBlobStorage` for originals + derivative cache. SHA-256 content-hash as dedup key; per-asset record at `assets/records/{assetId}.json`; alt-text + MIME-accept-list validation in `Upload`.
 - `IDerivativeRenderer` — pluggable image renderer. Default `SkiaSharpDerivativeRenderer` handles JPEG / PNG / WebP natively; AVIF returns `UnsupportedFormat` (needs a SkiaSharp AVIF plug-in not bundled).
 - `AssetUploadHandler` — ToolUp.Remoting handler + multipart endpoint at `/api/assets/upload`. Mandatory alt-text validation.
-- `AssetApi` — ToolUp.Remoting `IAssetApi` contract; mounted at `/api/assets/` when `ServerConfig.AssetStore = EnabledAssetStore`.
-- `AssetCompose` — `withAssetStore`, the companion entry point over `ServerApp`, taking `AssetStoreCompanionOptions` (`withOptions` / `withRenderer` / `withDerivativeProfile` / `withDerivativeProfileEntries` / `withMimeRenderer` / `withAssetStore` / `withAsyncDerivation` / `withDerivativeDlq`). Contributes nothing when `AssetStore = NoAssetStore`.
+- `AssetApi` — ToolUp.Remoting `IAssetApi` contract; mounted at `/api/assets/` when `ServerConfig.Stores.AssetStore = FeatureMode.Enabled`.
+- `AssetCompose` — `withAssetStore`, the companion entry point over `ServerApp`, taking `AssetStoreCompanionOptions` (`withOptions` / `withRenderer` / `withDerivativeProfile` / `withDerivativeProfileEntries` / `withMimeRenderer` / `withAssetStore` / `withAsyncDerivation` / `withDerivativeDlq`). Contributes nothing when `AssetStore = FeatureMode.Disabled`.
 - `DerivativeProfiles` — compose-time registry seeded with `web-default` (thumbnail / medium / OG / webp-medium). Deployments add profiles via `withDerivativeProfile`.
 
 ## How to enable
@@ -20,13 +20,17 @@ Phase 39 `IAssetStore` companion. Image-first asset substrate for ToolUp.Platfor
    <PackageReference Include="ToolUp.AssetStore" />
    ```
 
-2. Switch on `ServerConfig.AssetStore = EnabledAssetStore` in the composition root:
+2. Switch on `ServerConfig.Stores.AssetStore = FeatureMode.Enabled` in the composition root:
 
    ```fsharp
    let config = {
        ServerConfig.defaults with
-           AssetStore = EnabledAssetStore
+           Stores = {
+               ServerConfig.defaults.Stores with
+                   AssetStore = FeatureMode.Enabled
+           }
    }
+
    ```
 
 3. Wire via `withAssetStore` on the composition pipeline:

@@ -3879,14 +3879,14 @@ module Client =
         // id is passed through as the peer's location descriptor, so the
         // roster shows *where* each collaborator is.
         //
-        // Gated on `ClientConfig.Presence`, default `NoPresence`: an
+        // Gated on `ClientConfig.Presence`, default `FeatureMode.Disabled`: an
         // unconfigured deployment evaluates one `match` and renders
         // `withLoadingIndicator` unchanged — no provider, no heartbeat timer, no SSE
         // subscription (GP 11 + GP 13).
         let withPresence =
             match config.Presence with
-            | NoPresence -> withLoadingIndicator
-            | EnabledPresence -> PresenceMount.mount model.ActiveModuleId withLoadingIndicator
+            | FeatureMode.Disabled -> withLoadingIndicator
+            | FeatureMode.Enabled -> PresenceMount.mount model.ActiveModuleId withLoadingIndicator
 
         // Phase 5e — wrap the whole tree in the branding provider so any
         // view (shell chrome and module views alike) can read the active

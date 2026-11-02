@@ -1436,11 +1436,11 @@ let private composeTests =
                 }
 
             // `ServerConfig.defaults` carries `ExternalCompute =
-            // NoExternalCompute`, which is the whole point of the pin. The
+            // FeatureMode.Disabled`, which is the whole point of the pin. The
             // scheduler IS composed here, so the absence below is the
             // external-compute gate and not "no scheduler, nothing
             // registered".
-            Expect.equal ServerConfig.defaults.ExternalCompute NoExternalCompute "the default is off"
+            Expect.equal ServerConfig.defaults.ExternalCompute FeatureMode.Disabled "the default is off"
 
             let config = {
                 ServerConfig.defaults with
@@ -1483,7 +1483,7 @@ let private composeTests =
 
             let config = {
                 ServerConfig.defaults with
-                    ExternalCompute = CustomExternalCompute
+                    ExternalCompute = FeatureMode.Enabled
                     JobScheduler = InProcessJobScheduler
             }
 
@@ -1528,7 +1528,7 @@ let private composeTests =
 
             let config = {
                 ServerConfig.defaults with
-                    ExternalCompute = CustomExternalCompute
+                    ExternalCompute = FeatureMode.Enabled
                     JobScheduler = InProcessJobScheduler
             }
 

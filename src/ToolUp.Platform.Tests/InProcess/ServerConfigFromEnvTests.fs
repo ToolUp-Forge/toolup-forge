@@ -47,22 +47,22 @@ let private withEnv (pairs: (string * string option) list) (body: unit -> unit) 
 /// The six `Accept*` flags whose documented env vars `fromEnv` never read
 /// before Phase 71.A.2, paired with their projection out of `ServerConfig`.
 let private sixAcceptFlags: (string * (ServerConfig -> bool)) list = [
-    "TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE", _.AcceptInProcessIngestionInMultiInstance
-    "TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE", _.AcceptSharedEmbeddingCacheInTeamMode
-    "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE", _.AcceptStickyRoutedAiInMultiInstance
-    "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE", _.AcceptUnboundAudienceWhenAuthRequired
-    "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE", _.AcceptInMemoryOAuthStateInMultiInstance
-    "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE", _.AcceptPendingInviteStoreInMultiInstance
+    "TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE", _.RiskAcknowledgements.AcceptInProcessIngestionInMultiInstance
+    "TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE", _.RiskAcknowledgements.AcceptSharedEmbeddingCacheInTeamMode
+    "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE", _.RiskAcknowledgements.AcceptStickyRoutedAiInMultiInstance
+    "TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE", _.RiskAcknowledgements.AcceptUnboundAudienceWhenAuthRequired
+    "TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE", _.RiskAcknowledgements.AcceptInMemoryOAuthStateInMultiInstance
+    "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE", _.RiskAcknowledgements.AcceptPendingInviteStoreInMultiInstance
 ]
 
 /// Phase 868 — the positive-direction flags: `true` turns a protection or a
 /// behaviour ON, so a silently-`false` typo fails open. These parse strictly.
 let private positiveFlags: (string * (ServerConfig -> bool)) list = [
-    "TOOLUP_REQUIRE_HTTPS", _.RequireHttps
+    "TOOLUP_REQUIRE_HTTPS", _.SecurityPosture.RequireHttps
     "TOOLUP_MIGRATE_WEBHOOK_SECRETS", _.MigrateWebhookSecretsAtRest
     "TOOLUP_BACKFILL_MISSED_TICKS", _.BackfillMissedTicks
     "TOOLUP_EVENT_TRIGGER_CATCHUP", _.EventTriggerCatchUp
-    "TOOLUP_HEALTH_STATE_TRACKING", _.HealthStateTracking
+    "TOOLUP_HEALTH_STATE_TRACKING", _.Observability.HealthStateTracking
     "TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY", _.NotifyInviterOnInviteExpiry
 ]
 
@@ -70,11 +70,11 @@ let private positiveFlags: (string * (ServerConfig -> bool)) list = [
 /// `SkipPreflight`, where `true` DISABLES a check. A malformed value reads as
 /// `false`, which leaves the check running — the safe direction.
 let private lenientFlags: (string * (ServerConfig -> bool)) list = [
-    "TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE", _.AcceptHeaderAuthWhenAuthRequired
-    "TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE", _.AcceptInProcessSchedulerInMultiInstance
-    "TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE", _.AcceptNoRateLimitWhenAuthRequired
-    "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE", _.AcceptUnsignedPublishable
-    "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", _.AcceptEphemeralShareTokenKey
+    "TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE", _.RiskAcknowledgements.AcceptHeaderAuthWhenAuthRequired
+    "TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE", _.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance
+    "TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE", _.RiskAcknowledgements.AcceptNoRateLimitWhenAuthRequired
+    "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE", _.RiskAcknowledgements.AcceptUnsignedPublishable
+    "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", _.RiskAcknowledgements.AcceptEphemeralShareTokenKey
     "TOOLUP_SKIP_PREFLIGHT", _.SkipPreflight
 ]
 
@@ -138,8 +138,8 @@ let tests =
             // wiring unpinned would be self-defeating.
             test "Accept*: the two RAG escape-hatch env vars set to 1 land true" {
                 let ragAcceptFlags: (string * (ServerConfig -> bool)) list = [
-                    "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX", _.AcceptEphemeralRagIndex
-                    "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE", _.AcceptLocalEmbedderAtScale
+                    "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX", _.RiskAcknowledgements.AcceptEphemeralRagIndex
+                    "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE", _.RiskAcknowledgements.AcceptLocalEmbedderAtScale
                 ]
 
                 withEnv (ragAcceptFlags |> List.map (fun (n, _) -> n, Some "1")) (fun () ->
@@ -279,7 +279,7 @@ let tests =
                         let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                         Expect.isTrue cfg.BackfillMissedTicks "BackfillMissedTicks"
                         Expect.isTrue cfg.SkipPreflight "SkipPreflight"
-                        Expect.isTrue cfg.HealthStateTracking "HealthStateTracking")
+                        Expect.isTrue cfg.Observability.HealthStateTracking "HealthStateTracking")
             }
 
             test "Boolean bundle: unset stays at the false default (GP 11)" {
@@ -293,7 +293,7 @@ let tests =
                         let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                         Expect.isFalse cfg.BackfillMissedTicks "BackfillMissedTicks default"
                         Expect.isFalse cfg.SkipPreflight "SkipPreflight default"
-                        Expect.isFalse cfg.HealthStateTracking "HealthStateTracking default")
+                        Expect.isFalse cfg.Observability.HealthStateTracking "HealthStateTracking default")
             }
 
             test "EnableCitationDevEndpoint: optional bool — set → Some, unset → None" {
@@ -309,11 +309,11 @@ let tests =
             test "MaxRequestBodyBytes: positive int → Some, unset → None, garbage → None" {
                 withEnv [ "TOOLUP_MAX_REQUEST_BODY_BYTES", Some "1048576" ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                    Expect.equal cfg.MaxRequestBodyBytes (Some 1048576L) "positive int → Some")
+                    Expect.equal cfg.SecurityPosture.MaxRequestBodyBytes (Some 1048576L) "positive int → Some")
 
                 withEnv [ "TOOLUP_MAX_REQUEST_BODY_BYTES", Some "nonsense" ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                    Expect.isNone cfg.MaxRequestBodyBytes "garbage → None (warn)")
+                    Expect.isNone cfg.SecurityPosture.MaxRequestBodyBytes "garbage → None (warn)")
             }
 
             test "SlowRateLimitThreshold: ms value → TimeSpan, unset → 5s default" {
@@ -337,16 +337,16 @@ let tests =
                         let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
 
                         Expect.equal
-                            cfg.WebhookUrlAllowedHosts
+                            cfg.SecurityPosture.WebhookUrlAllowedHosts
                             [ "a.example.com"; "b.example.com"; "c.example.com" ]
                             "comma/semicolon/space split"
 
-                        Expect.equal cfg.PeerRoutePrefixes [ "/peer"; "/api/peer" ] "space split")
+                        Expect.equal cfg.MultiInstance.PeerRoutePrefixes [ "/peer"; "/api/peer" ] "space split")
 
                 withEnv [ "TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS", None; "TOOLUP_PEER_ROUTE_PREFIXES", None ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                    Expect.isEmpty cfg.WebhookUrlAllowedHosts "unset → []"
-                    Expect.isEmpty cfg.PeerRoutePrefixes "unset → []")
+                    Expect.isEmpty cfg.SecurityPosture.WebhookUrlAllowedHosts "unset → []"
+                    Expect.isEmpty cfg.MultiInstance.PeerRoutePrefixes "unset → []")
             }
 
             // ── 71.A.7 (batch 1) — flat-case DU lifts ──
@@ -372,22 +372,22 @@ let tests =
                     ]
                     (fun () ->
                         let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                        Expect.equal cfg.ResultStore PersistentResultStore "ResultStore"
-                        Expect.equal cfg.Lineage EnabledLineageStore "Lineage"
-                        Expect.equal cfg.DataIngestion EnabledDataIngestion "DataIngestion"
-                        Expect.equal cfg.OAuthRefresher EnabledOAuthRefresher "OAuthRefresher"
-                        Expect.equal cfg.EntityStore EnabledEntityStore "EntityStore"
-                        Expect.equal cfg.UsageMetering EnabledUsageMetering "UsageMetering"
-                        Expect.equal cfg.MetricsEndpoint EnabledMetricsEndpoint "MetricsEndpoint"
-                        Expect.equal cfg.PlatformKnowledgeBase EnabledPlatformKnowledgeBase "PlatformKnowledgeBase"
-                        Expect.equal cfg.ConfigDriftDetection EnabledConfigDriftDetection "ConfigDriftDetection"
-                        Expect.equal cfg.RateLimiter EnabledRateLimiter "RateLimiter"
-                        Expect.equal cfg.SmokeTest EnabledSmokeTest "SmokeTest"
-                        Expect.equal cfg.AssetStore EnabledAssetStore "AssetStore"
-                        Expect.equal cfg.ConsentAudit EnabledConsentAudit "ConsentAudit"
-                        Expect.equal cfg.AdAnalytics EnabledAdAnalytics "AdAnalytics"
+                        Expect.equal cfg.Stores.ResultStore PersistentResultStore "ResultStore"
+                        Expect.equal cfg.Lineage FeatureMode.Enabled "Lineage"
+                        Expect.equal cfg.DataIngestion FeatureMode.Enabled "DataIngestion"
+                        Expect.equal cfg.OAuthRefresher FeatureMode.Enabled "OAuthRefresher"
+                        Expect.equal cfg.Stores.EntityStore FeatureMode.Enabled "EntityStore"
+                        Expect.equal cfg.UsageMetering FeatureMode.Enabled "UsageMetering"
+                        Expect.equal cfg.Observability.MetricsEndpoint FeatureMode.Enabled "MetricsEndpoint"
+                        Expect.equal cfg.PlatformKnowledgeBase FeatureMode.Enabled "PlatformKnowledgeBase"
+                        Expect.equal cfg.ConfigDriftDetection FeatureMode.Enabled "ConfigDriftDetection"
+                        Expect.equal cfg.RateLimiter FeatureMode.Enabled "RateLimiter"
+                        Expect.equal cfg.SmokeTest FeatureMode.Enabled "SmokeTest"
+                        Expect.equal cfg.Stores.AssetStore FeatureMode.Enabled "AssetStore"
+                        Expect.equal cfg.ConsentAudit FeatureMode.Enabled "ConsentAudit"
+                        Expect.equal cfg.AdAnalytics FeatureMode.Enabled "AdAnalytics"
                         Expect.equal cfg.ServerlessHost ServerlessHost "ServerlessHost"
-                        Expect.equal cfg.ProcessProfile WorkerOnly "ProcessProfile")
+                        Expect.equal cfg.MultiInstance.ProcessProfile WorkerOnly "ProcessProfile")
             }
 
             test "Flat DUs: unset preserves every default case (GP 11)" {
@@ -401,11 +401,11 @@ let tests =
                     ]
                     (fun () ->
                         let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                        Expect.equal cfg.ResultStore NoResultStore "ResultStore default"
-                        Expect.equal cfg.Lineage NoLineageStore "Lineage default"
-                        Expect.equal cfg.EntityStore NoEntityStore "EntityStore default"
+                        Expect.equal cfg.Stores.ResultStore NoResultStore "ResultStore default"
+                        Expect.equal cfg.Lineage FeatureMode.Disabled "Lineage default"
+                        Expect.equal cfg.Stores.EntityStore FeatureMode.Disabled "EntityStore default"
                         Expect.equal cfg.ServerlessHost KestrelHost "ServerlessHost default"
-                        Expect.equal cfg.ProcessProfile AllInOne "ProcessProfile default")
+                        Expect.equal cfg.MultiInstance.ProcessProfile AllInOne "ProcessProfile default")
             }
 
             // Phase 1051 — was "warns and keeps the default". A protective
@@ -430,16 +430,16 @@ let tests =
                     (fun () ->
                         let overrides = {
                             ServerConfigOverrides.empty with
-                                Webhooks = Some EnabledWebhooks
+                                Webhooks = Some FeatureMode.Enabled
                                 SecurityHardening = Some DefaultSecurityHardening
                         }
 
                         let cfg = ServerConfig.fromEnv silentLogger overrides
-                        Expect.equal cfg.Webhooks NoWebhooks "env=disabled wins over override=Enabled"
-                        Expect.equal cfg.AuditLog EnabledAuditLog "env=enabled (no override)"
+                        Expect.equal cfg.Webhooks FeatureMode.Disabled "env=disabled wins over override=Enabled"
+                        Expect.equal cfg.AuditLog FeatureMode.Enabled "env=enabled (no override)"
 
                         Expect.equal
-                            cfg.SecurityHardening
+                            cfg.SecurityPosture.SecurityHardening
                             StrictSecurityHardening
                             "env=strict wins over override=Default")
             }
@@ -448,13 +448,17 @@ let tests =
                 withEnv [ "TOOLUP_WEBHOOKS", None; "TOOLUP_SECURITY_HARDENING", None ] (fun () ->
                     let overrides = {
                         ServerConfigOverrides.empty with
-                            Webhooks = Some EnabledWebhooks
+                            Webhooks = Some FeatureMode.Enabled
                             SecurityHardening = Some StrictSecurityHardening
                     }
 
                     let cfg = ServerConfig.fromEnv silentLogger overrides
-                    Expect.equal cfg.Webhooks EnabledWebhooks "override wins when env unset"
-                    Expect.equal cfg.SecurityHardening StrictSecurityHardening "override wins when env unset")
+                    Expect.equal cfg.Webhooks FeatureMode.Enabled "override wins when env unset"
+
+                    Expect.equal
+                        cfg.SecurityPosture.SecurityHardening
+                        StrictSecurityHardening
+                        "override wins when env unset")
             }
 
             test "Batch 2: unset + no override → default" {
@@ -466,9 +470,9 @@ let tests =
                     ]
                     (fun () ->
                         let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                        Expect.equal cfg.Webhooks NoWebhooks "default"
-                        Expect.equal cfg.AuditLog NoAuditLog "default"
-                        Expect.equal cfg.ShareTokenStore NoShareTokenStore "default")
+                        Expect.equal cfg.Webhooks FeatureMode.Disabled "default"
+                        Expect.equal cfg.AuditLog FeatureMode.Disabled "default"
+                        Expect.equal cfg.Stores.ShareTokenStore FeatureMode.Disabled "default")
             }
 
             test "TeamCreationPolicy: env token flips it; unset → PlatformAdminOnly default" {
@@ -491,12 +495,12 @@ let tests =
                     (fun () ->
                         let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                         Expect.equal cfg.JobScheduler InProcessJobScheduler "JobScheduler=enabled → InProcess"
-                        Expect.equal cfg.RateLimitStore ExternalRateLimitStore "RateLimitStore=external")
+                        Expect.equal cfg.Stores.RateLimitStore ExternalRateLimitStore "RateLimitStore=external")
 
                 withEnv [ "TOOLUP_JOB_SCHEDULER", None; "TOOLUP_RATE_LIMIT_STORE", None ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                     Expect.equal cfg.JobScheduler NoJobScheduler "JobScheduler default"
-                    Expect.equal cfg.RateLimitStore NoRateLimitStore "RateLimitStore default")
+                    Expect.equal cfg.Stores.RateLimitStore NoRateLimitStore "RateLimitStore default")
             }
 
             test "EventStore: inmemory / persistent both selectable (persistent → 90-day retention)" {
@@ -504,13 +508,13 @@ let tests =
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
 
                     Expect.equal
-                        cfg.EventStore
+                        cfg.Stores.EventStore
                         (PersistentBlobBacked EventRetentionPolicy.ninetyDays)
                         "persistent → PersistentBlobBacked(ninetyDays)")
 
                 withEnv [ "TOOLUP_EVENT_STORE", Some "inmemory" ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                    Expect.equal cfg.EventStore InMemoryOnly "inmemory → InMemoryOnly")
+                    Expect.equal cfg.Stores.EventStore InMemoryOnly "inmemory → InMemoryOnly")
             }
 
             test "Hybrid disable direction: 'no' selects the nilary case; unset → default" {
@@ -527,7 +531,11 @@ let tests =
                 withEnv [ "TOOLUP_PUBLIC_RENDERING", None; "TOOLUP_CONVERSATION_STORE", None ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                     Expect.equal cfg.PublicRendering ServerConfig.defaults.PublicRendering "unset → default"
-                    Expect.equal cfg.ConversationStore ServerConfig.defaults.ConversationStore "unset → default")
+
+                    Expect.equal
+                        cfg.Stores.ConversationStore
+                        ServerConfig.defaults.Stores.ConversationStore
+                        "unset → default")
             }
 
             test "Hybrid enable direction with a payload-bearing case fails loud" {
@@ -600,13 +608,16 @@ let tests =
             test "AcceptEphemeralShareTokenKey: TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY=1 lifts to true" {
                 withEnv [ "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", Some "1" ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                    Expect.isTrue cfg.AcceptEphemeralShareTokenKey "the env var must be read")
+                    Expect.isTrue cfg.RiskAcknowledgements.AcceptEphemeralShareTokenKey "the env var must be read")
             }
 
             test "AcceptEphemeralShareTokenKey: unset → false (the refusal stays armed)" {
                 withEnv [ "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", None ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
-                    Expect.isFalse cfg.AcceptEphemeralShareTokenKey "unset must not acknowledge anything")
+
+                    Expect.isFalse
+                        cfg.RiskAcknowledgements.AcceptEphemeralShareTokenKey
+                        "unset must not acknowledge anything")
             }
 
             // ── Phase 868 — positive hardening flags fail loud ──
@@ -706,7 +717,7 @@ let tests =
                     [
                         "TOOLUP_SECURITY_HARDENING",
                         " Strict ",
-                        (fun (c: ServerConfig) -> box c.SecurityHardening),
+                        (fun (c: ServerConfig) -> box c.SecurityPosture.SecurityHardening),
                         box StrictSecurityHardening
                         "TOOLUP_AUDIT_FAILURE_POLICY", "REFUSE", (fun c -> box c.AuditFailurePolicy), box RefuseAction
                         "TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD",

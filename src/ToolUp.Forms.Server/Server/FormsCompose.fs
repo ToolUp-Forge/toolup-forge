@@ -77,7 +77,7 @@ let private formsPublicSubmitSurfaceModule: ServerModule =
 //
 // **Required substrate**: `IEntityStore` + `IAuditLog`. Like the
 // scheduling companion, the compose step does not enforce
-// `ServerConfig.EntityStore = EnabledEntityStore` — if the consumer
+// `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` — if the consumer
 // forgets, the DI lookup at first-call time throws and the SDK's
 // error handler propagates as `500`. Documented requirement.
 //
@@ -640,7 +640,7 @@ let composeForms (options: FormsOptions) (app: ServerApp) : ServerApp =
     //     Resolves the same IFormStore + IAuditLog as the
     //     authenticated handler, plus the IShareTokenStore that
     //     the deployment registered via
-    //     ServerConfig.ShareTokenStore = EnabledShareTokenStore.
+    //     ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled.
     //     If IShareTokenStore is not in DI (deployment forgot to
     //     enable the substrate), the handler factory throws on
     //     first hit and ASP.NET surfaces a 500 — documented

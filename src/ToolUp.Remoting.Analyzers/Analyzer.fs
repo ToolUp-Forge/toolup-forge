@@ -32,13 +32,16 @@ module Analyzer =
     [<Literal>]
     let private auditEnvVar = "TOOLUP_REMOTING_ANALYZER_AUDIT"
 
+    /// The on spellings the config-key registry accepts for a boolean
+    /// (`ConfigKeys.trueTokens`), repeated here because the analyzer
+    /// cannot reference `ToolUp.Platform.Core`. The key is `Permissive`:
+    /// anything else, a typo included, reads as off.
+    let private onTokens = set [ "1"; "true"; "yes"; "on" ]
+
     let private auditEnabled () =
         match System.Environment.GetEnvironmentVariable auditEnvVar with
-        | null
-        | "" -> false
-        | v ->
-            v <> "0"
-            && not (System.String.Equals(v, "false", System.StringComparison.OrdinalIgnoreCase))
+        | null -> false
+        | v -> onTokens.Contains(v.Trim().ToLowerInvariant())
 
     let private severityOf =
         function

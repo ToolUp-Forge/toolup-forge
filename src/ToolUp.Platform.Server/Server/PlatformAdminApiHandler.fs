@@ -99,7 +99,7 @@ let platformAdminApi (ctx: HttpContext) : PlatformAdminApi =
                 | Ok rc -> return! rc.GetPlatformKnowledgeBase()
                 | Error _ ->
                     // Test-bypass path: return the safe default.
-                    return NoPlatformKnowledgeBase
+                    return FeatureMode.Disabled
             }
 
         SetPlatformKnowledgeBase =

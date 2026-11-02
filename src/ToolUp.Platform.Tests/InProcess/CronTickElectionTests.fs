@@ -209,7 +209,10 @@ let private replicaOver (storage: IBlobStorage) (eventStore: IEventStore) (handl
                 NotificationChannel = silentChannel
                 Config = {
                     ServerConfig.defaults with
-                        ProcessProfile = WorkerOnly
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ProcessProfile = WorkerOnly
+                        }
                 }
                 Logger = logger
                 ActivitySink = NoOpActivitySink() :> IActivitySink

@@ -125,6 +125,7 @@ let tests =
                             "src/Client/Grid.fs"
                             "src/Client/Shell.fs"
                             "src/Server/Assistant.fs"
+                            "src/Server/Config.fs"
                             "src/Server/Connectors.fs"
                             "src/Server/Facts.fs"
                             "src/Server/Hosting.fs"
@@ -168,6 +169,7 @@ let tests =
                             "src/Server/AiRag.fs"
                             "src/Server/Already.fs"
                             "src/Server/Assistant.fs"
+                            "src/Server/Config.fs"
                             "src/Server/Connectors.fs"
                             "src/Server/Facts.fs"
                             "src/Server/Guarded.fs"
@@ -251,7 +253,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 17 file(s) visited, 74 rewrite(s) in 13 file(s), 72 site(s) for review."
+                        "Codemod: 18 file(s) visited, 88 rewrite(s) in 14 file(s), 75 site(s) for review."
                         "summary")
         ]
 
@@ -409,6 +411,145 @@ let tests =
                     "a string scope has no mechanical target, so it is listed for review"
 
                 Expect.isEmpty (snd (rewriteSource rewritten)) "a second run adds nothing"
+        ]
+
+        testList "Phase 877 — nested config and FeatureMode" [
+            testCase "a record update regroups its moved labels under their concern, the base re-read as base.Concern"
+            <| fun () ->
+                let before =
+                    "let config = {\n    ServerConfig.defaults with\n        Port = 5000\n        // the entity store backs the catalog\n        EntityStore = EnabledEntityStore\n        RequireHttps = true\n        SlowRequestThresholdOverrides =\n            Map.ofList [\n                \"/api/slow\", TimeSpan.FromSeconds 5.0\n            ]\n        ReplicaCount = 3\n        FactStore = FactStoreMode.EnabledFactStore\n}\n"
+
+                let after, rewrites = rewriteSource before
+
+                Expect.equal
+                    after
+                    "let config = {\n    ServerConfig.defaults with\n        Port = 5000\n        Stores = {\n            ServerConfig.defaults.Stores with\n                // the entity store backs the catalog\n                EntityStore = FeatureMode.Enabled\n                FactStore = FeatureMode.Enabled\n        }\n        SecurityPosture = {\n            ServerConfig.defaults.SecurityPosture with\n                RequireHttps = true\n        }\n        Observability = {\n            ServerConfig.defaults.Observability with\n                SlowRequestThresholdOverrides =\n                    Map.ofList [\n                        \"/api/slow\", TimeSpan.FromSeconds 5.0\n                    ]\n        }\n        MultiInstance = {\n            ServerConfig.defaults.MultiInstance with\n                ReplicaCount = 3\n        }\n}\n"
+                    "nested by concern, in order of first appearance, continuations shifted with their item"
+
+                Expect.contains (rewrites |> List.map _.RuleId) "877-record-update" "the structural rewrite is recorded"
+
+            testCase "a one-line update and a two-line opener both nest, and the opener keeps its column"
+            <| fun () ->
+                let oneLine, _ =
+                    rewriteSource
+                        "let trial = { defaults with Port = 1; ShareTokenStore = EnabledShareTokenStore; Webhooks = NoWebhooks }\n"
+
+                Expect.equal
+                    oneLine
+                    "let trial = {\n    defaults with\n        Port = 1\n        Stores = {\n            defaults.Stores with\n                ShareTokenStore = FeatureMode.Enabled\n        }\n        Webhooks = FeatureMode.Disabled\n}\n"
+                    "one line"
+
+                let twoLine, _ =
+                    rewriteSource
+                        "let hardened =\n    {\n        app.Config with\n            SecurityHardening = StrictSecurityHardening\n            Port = 8080\n    }\n"
+
+                Expect.equal
+                    twoLine
+                    "let hardened =\n    {\n        app.Config with\n            SecurityPosture = {\n                app.Config.SecurityPosture with\n                    SecurityHardening = StrictSecurityHardening\n            }\n            Port = 8080\n    }\n"
+                    "two-line opener"
+
+            testCase "a nested update is a fixed point, and a record update in a comment is prose"
+            <| fun () ->
+                let once, _ =
+                    rewriteSource
+                        "let c = { ServerConfig.defaults with ReplicaCount = 2; AuditLog = EnabledAuditLog }\n"
+
+                let twice, rewrites = rewriteSource once
+                Expect.equal twice once "fixed point"
+                Expect.isEmpty rewrites "nothing fires on migrated text"
+
+                let comment =
+                    "// a deployment that sets `{ config with ReplicaCount = 3 }` in code\n"
+
+                let after, _ = rewriteSource comment
+                Expect.equal after comment "a comment is not nested"
+
+            testCase
+                "a base the pass cannot re-read, or only shared labels on an unnamed base, is reported and untouched"
+            <| fun () ->
+                let dir =
+                    Path.Combine(Path.GetTempPath(), "codemod-877-" + Guid.NewGuid().ToString("N"))
+
+                Directory.CreateDirectory dir |> ignore
+
+                try
+                    let text =
+                        "let a = { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }\nlet deps = { JobDeps.empty with EventStore = store }\nlet ok = { ServerConfig.defaults with EventStore = InMemoryOnly }\n"
+
+                    let path = Path.Combine(dir, "Config.fs")
+                    File.WriteAllText(path, text)
+                    let result = Codemod.analyseFile dir CodemodFileClass.Source path
+
+                    Expect.equal
+                        (result.Findings |> List.map (fun f -> f.Line, f.RuleId))
+                        [ 1, "877-record-update-unprovable"; 2, "877-record-update-unprovable" ]
+                        "both unprovable sites are findings, with their own line"
+
+                    Expect.stringContains result.Findings[0].Guidance "could not nest it" "the base is the problem"
+
+                    Expect.stringContains
+                        result.Findings[1].Guidance
+                        "other records carry too"
+                        "the label is the problem"
+
+                    Expect.equal
+                        result.Rewritten
+                        "let a = { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }\nlet deps = { JobDeps.empty with EventStore = store }\nlet ok = {\n    ServerConfig.defaults with\n        Stores = {\n            ServerConfig.defaults.Stores with\n                EventStore = InMemoryOnly\n        }\n}\n"
+                        "the named base nests a shared label; the others are left as written"
+                finally
+                    Directory.Delete(dir, true)
+
+            testCase "a moved field reads through its concern on a value receiver, and a module path is never a field"
+            <| fun () ->
+                let after, _ =
+                    rewriteSource
+                        "let x = config.ReplicaCount, cfg.EventStore, deps.EventStore, app.Config.LogLevel, ctx.Config.DatadogReadback\nopen ToolUp.AssetStore\nmodule ToolUp.Platform.EntityOutbox\nlet y = Consent.ConsentStateStore.inMemory, _.AcceptEphemeralRagIndex, config.Stores.EventStore\n"
+
+                Expect.equal
+                    after
+                    "let x = config.MultiInstance.ReplicaCount, cfg.Stores.EventStore, deps.EventStore, app.Config.Observability.LogLevel, ctx.Config.DatadogReadback\nopen ToolUp.AssetStore\nmodule ToolUp.Platform.EntityOutbox\nlet y = Consent.ConsentStateStore.inMemory, _.RiskAcknowledgements.AcceptEphemeralRagIndex, config.Stores.EventStore\n"
+                    "value receivers re-home; capitalised path segments, a client config's DatadogReadback and an already-nested read do not"
+
+                let findings = reviewSource after
+
+                Expect.equal
+                    (findings |> List.map _.RuleId |> List.distinct)
+                    [ "877-shared-label-receiver" ]
+                    "the shared labels on other receivers are reported"
+
+            testCase "the retired modes read as FeatureMode in every spelling, and --phase selects one migration"
+            <| fun () ->
+                let after, _ =
+                    rewriteSource
+                        "let m (mode: AuditLogMode) = match mode with | NoAuditLog -> 0 | AuditLogMode.EnabledAuditLog -> 1\nlet t = CustomTelemetrySink, PresenceMode.NoPresence\nopen Fable.Remoting.Server\n"
+
+                Expect.equal
+                    after
+                    "let m (mode: FeatureMode) = match mode with | FeatureMode.Disabled -> 0 | FeatureMode.Enabled -> 1\nlet t = FeatureMode.Enabled, FeatureMode.Disabled\nopen ToolUp.Remoting.Server\n"
+                    "every migration applies without a filter"
+
+                let only, _ =
+                    Codemod.rewriteTextFor
+                        [ CodemodMigration.NestedConfig ]
+                        CodemodFileClass.Source
+                        "let t = NoAuditLog\nopen Fable.Remoting.Server\n"
+
+                Expect.equal
+                    only
+                    "let t = FeatureMode.Disabled\nopen Fable.Remoting.Server\n"
+                    "the filter leaves the other migrations' rules unapplied"
+
+                Expect.equal (Codemod.migrationOfPhase "877") (Some CodemodMigration.NestedConfig) "by label number"
+                Expect.equal (Codemod.migrationOfPhase "1") None "an unknown number"
+
+            testCase "the concern table and the mode table are total and disjoint"
+            <| fun () ->
+                let fields = Codemod.concernFields |> List.collect snd
+                Expect.equal (List.distinct fields) fields "a field has one home"
+                Expect.equal (Codemod.concernFields |> List.length) 5 "five concern records"
+                Expect.equal (Codemod.featureModes |> List.length) 37 "thirty-seven retired modes"
+                let types = Codemod.featureModes |> List.map (fun (t, _, _) -> t)
+                Expect.equal (List.distinct types) types "a type is retired once"
         ]
 
         testList "idempotence" [

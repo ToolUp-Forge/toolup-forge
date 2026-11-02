@@ -1283,7 +1283,7 @@ let aiAssistantApi
 
     // Opt-in conversation persistence. Resolves `IConversationStore`
     // once per handler invocation; `null` (the default,
-    // `ServerConfig.ConversationStore = NoConversationStore`) gates
+    // `ServerConfig.Stores.ConversationStore = NoConversationStore`) gates
     // every substrate-hook closure below to a no-op. The `ConvBridge`
     // closures stringify the existing `Guid`-typed `conversationId` at
     // the seam — see `ConversationTypes.fs` for the identity-by-value

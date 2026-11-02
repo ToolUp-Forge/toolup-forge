@@ -1,6 +1,6 @@
 # ToolUp.InterPlatform
 
-Opt-in **inter-platform peer substrate** for ToolUp.Platform. One ToolUp deployment calls a **typed contract** hosted by another ToolUp deployment (a *peer*) over the wire — with identity propagation, a version handshake, long-running-call resolution fused onto the job substrate, and audit. Companion package — deployments that leave `ServerConfig.PeerSubstrate = NoPeerSubstrate` (the default) pay **zero runtime cost** (GP 13).
+Opt-in **inter-platform peer substrate** for ToolUp.Platform. One ToolUp deployment calls a **typed contract** hosted by another ToolUp deployment (a *peer*) over the wire — with identity propagation, a version handshake, long-running-call resolution fused onto the job substrate, and audit. Companion package — deployments that leave `ServerConfig.MultiInstance.PeerSubstrate = FeatureMode.Disabled` (the default) pay **zero runtime cost** (GP 13).
 
 ## What this is
 
@@ -50,7 +50,7 @@ The companion is a *consumer* of substrate (`IBlobStorage` for the directory + j
 
 ## How to enable
 
-The substrate is selected by a single `ServerConfig` field — `PeerSubstrate`, mirroring `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in). Compose the [`PeerCompose`](Server/PeerCompose.fs) companion onto your `ServerApp` with `withPeer`, which takes a `PeerOptions` record of the peer-specific settings:
+The substrate is selected by a single `ServerConfig` field — `PeerSubstrate`, mirroring `FeatureMode` / `JobSchedulerMode` (binary, opt-in). Compose the [`PeerCompose`](Server/PeerCompose.fs) companion onto your `ServerApp` with `withPeer`, which takes a `PeerOptions` record of the peer-specific settings:
 
 ```fsharp
 open ToolUp.InterPlatform
@@ -60,7 +60,10 @@ let config = {
     ServerConfig.defaults with
         Port = 5000
         Surfaces = Surfaces.team
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
         // Required ONLY for long-running contract methods; immediate-only
         // contracts need no scheduler:
         JobScheduler = InProcessJobScheduler
@@ -82,7 +85,7 @@ let main _ =
     |> ServerApp.run
 ```
 
-`PeerCompose.withPeer`, when `PeerSubstrate = EnabledPeerSubstrate`:
+`PeerCompose.withPeer`, when `PeerSubstrate = FeatureMode.Enabled`:
 
 1. Registers the peer DI singletons resolved from already-present substrate:
    `IPeerAuthProvider` (`JwtPeerAuthProvider` over `ISecretStore`), `IPeerJobResultStore` + `IPeerRegistry` (over `IBlobStorage`), `IPlatformPeer` (`DefaultPlatformPeer`), `IPeerClient` (`HttpPeerClient`), `IPeerHandshake` (`InMemoryPeerHandshake`).
@@ -90,7 +93,7 @@ let main _ =
 3. On first `IPlatformPeer` resolution, runs every registered contract builder — registering each contract on the peer and its long-running job handlers on the scheduler.
 4. Mounts `JsonRpcPeerHost.routes` onto the SDK route chain.
 
-When `PeerSubstrate = NoPeerSubstrate`, `run` short-circuits to `ServerApp.run app.Base` — **byte-for-byte** the shape of a base `ServerApp.run`: no DI registrations, no `/peer/v1` routes, no peer audit (GP 13).
+When `PeerSubstrate = FeatureMode.Disabled`, `run` short-circuits to `ServerApp.run app.Base` — **byte-for-byte** the shape of a base `ServerApp.run`: no DI registrations, no `/peer/v1` routes, no peer audit (GP 13).
 
 ### Required keys
 
@@ -102,7 +105,7 @@ secrets.SetSecret("_platform", "peers/buyer/signing-key", sharedKey) |> Async.Ru
 
 ### Don't guard `/peer/` with the *other* peer-auth substrate
 
-The SDK also ships a **static shared-bearer** peer gate — `ServerConfig.PeerRoutePrefixes` + `PeerBearerAuthMiddleware`, in `ToolUp.Platform.Server`. It is a different tool with weaker guarantees: no expiry, no audience, no per-call minting or replay window, no delegated-originator verification, no asymmetric-key option. The two are documented as coexisting on **different prefixes**, and that is load-bearing.
+The SDK also ships a **static shared-bearer** peer gate — `ServerConfig.MultiInstance.PeerRoutePrefixes` + `PeerBearerAuthMiddleware`, in `ToolUp.Platform.Server`. It is a different tool with weaker guarantees: no expiry, no audience, no per-call minting or replay window, no delegated-originator verification, no asymmetric-key option. The two are documented as coexisting on **different prefixes**, and that is load-bearing.
 
 `PeerRoutePrefixes` entries are case-insensitive `StartsWith` prefixes, so a `"/peer/"` entry claims the whole `/peer/v1/` namespace these routes serve — and the bearer middleware runs *ahead of the router*, so it then decides who reaches this companion at all. A typed peer client sends a signed JWT and no `X-Peer-Name` header, so every federation call is answered `401` before dispatch while the composition still looks correct. Mount the bearer flavour on a prefix of its own (`"/api/peer/echo"`).
 
@@ -288,7 +291,7 @@ The substrate records one `PeerCallCompleted` audit row per inbound call, keyed 
 
 ```fsharp
 ServerApp.empty
-|> ServerApp.withConfig config            // PeerSubstrate = EnabledPeerSubstrate
+|> ServerApp.withConfig config            // PeerSubstrate = FeatureMode.Enabled
 |> withPeer (
     PeerOptions.create ()
     |> PeerOptions.withContract directoryHost
@@ -326,7 +329,7 @@ let myFailedCalls () = async {
 }
 ```
 
-**Scoping is the load-bearing guarantee:** the receiver answers only with rows where the *authenticated* caller made the call. `PeerAuditQuery` carries no caller-id field, so a peer cannot widen its scope, and `PeerAuditEntry` omits `CallerPeerId` (always the querying peer) — cross-peer leakage is impossible by construction. A deployment with `AuditLog = NoAuditLog` still registers the contract but answers with an empty trail.
+**Scoping is the load-bearing guarantee:** the receiver answers only with rows where the *authenticated* caller made the call. `PeerAuditQuery` carries no caller-id field, so a peer cannot widen its scope, and `PeerAuditEntry` omits `CallerPeerId` (always the querying peer) — cross-peer leakage is impossible by construction. A deployment with `AuditLog = FeatureMode.Disabled` still registers the contract but answers with an empty trail.
 
 ## Capability negotiation (Phase 18d)
 
@@ -398,7 +401,7 @@ let surface = PeerSurface.describe (app, options)   // pure, on demand
 let pinned  = PeerSurface.exportJson surface // canonical JSON + SHA-256 stamp
 ```
 
-The export is **deterministic and hash-stamped**: every list is sorted before serialisation, so the same composition always yields the same bytes and the same `SurfaceHash` regardless of registration order — and any registration change produces a new hash. A counterparty (or an external federation-composition tool) pins the export of an instance it can never introspect live and detects staleness by re-hashing; the live handshake endpoints answer "what do you serve *right now*", the export answers "what did the instance I validated against look like". A deployment on `NoPeerSubstrate` yields the empty surface without running a single contract builder — zero cost when unused.
+The export is **deterministic and hash-stamped**: every list is sorted before serialisation, so the same composition always yields the same bytes and the same `SurfaceHash` regardless of registration order — and any registration change produces a new hash. A counterparty (or an external federation-composition tool) pins the export of an instance it can never introspect live and detects staleness by re-hashing; the live handshake endpoints answer "what do you serve *right now*", the export answers "what did the instance I validated against look like". A deployment on `FeatureMode.Disabled` yields the empty surface without running a single contract builder — zero cost when unused.
 
 ## Federation-graph preflight (Phase 591)
 

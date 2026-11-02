@@ -103,7 +103,7 @@ type Model = {
     /// Phase 4b deferred follow-up — current runtime PlatformKnowledgeBase
     /// state. Loaded on shell init via `GetPlatformKnowledgeBase`;
     /// updated optimistically after a successful `Set`.
-    PlatformKnowledgeBase: LoadState<PlatformKnowledgeBaseMode>
+    PlatformKnowledgeBase: LoadState<FeatureMode>
     /// Inline error from a SetPlatformKnowledgeBase attempt.
     SettingsError: string option
     /// Resolved directory entries keyed by user id, populated lazily via
@@ -139,9 +139,9 @@ type Msg =
     | CancelDeleteTeam
     | ConfirmDeleteTeam
     | DeleteTeamResolved of teamId: string * Result<unit, string>
-    | PlatformKnowledgeBaseLoaded of Result<PlatformKnowledgeBaseMode, string>
-    | TogglePlatformKnowledgeBase of PlatformKnowledgeBaseMode
-    | TogglePlatformKnowledgeBaseResolved of requested: PlatformKnowledgeBaseMode * Result<unit, string>
+    | PlatformKnowledgeBaseLoaded of Result<FeatureMode, string>
+    | TogglePlatformKnowledgeBase of FeatureMode
+    | TogglePlatformKnowledgeBaseResolved of requested: FeatureMode * Result<unit, string>
     | DirectoryResolved of Result<UserSummary list, string>
 
 // ─── API proxy ───────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ let private loadPlatformKnowledgeBaseCmd () =
         (fun mode -> PlatformKnowledgeBaseLoaded(Ok mode))
         (fun ex -> PlatformKnowledgeBaseLoaded(Error ex.Message))
 
-let private setPlatformKnowledgeBaseCmd (mode: PlatformKnowledgeBaseMode) =
+let private setPlatformKnowledgeBaseCmd (mode: FeatureMode) =
     Cmd.OfRemoting.call
         platformAdminApi.SetPlatformKnowledgeBase
         mode
@@ -1145,28 +1145,28 @@ let private teamsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch:
         ]
     ]
 
-let private platformKnowledgeBaseLabel (msgs: PlatformAdminMessages) (mode: PlatformKnowledgeBaseMode) =
+let private platformKnowledgeBaseLabel (msgs: PlatformAdminMessages) (mode: FeatureMode) =
     match mode with
-    | EnabledPlatformKnowledgeBase -> msgs.Enabled
-    | NoPlatformKnowledgeBase -> msgs.Disabled
+    | FeatureMode.Enabled -> msgs.Enabled
+    | FeatureMode.Disabled -> msgs.Disabled
 
 let private platformKnowledgeBaseToggle (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    let renderToggle (current: PlatformKnowledgeBaseMode) =
+    let renderToggle (current: FeatureMode) =
         let other =
             match current with
-            | EnabledPlatformKnowledgeBase -> NoPlatformKnowledgeBase
-            | NoPlatformKnowledgeBase -> EnabledPlatformKnowledgeBase
+            | FeatureMode.Enabled -> FeatureMode.Disabled
+            | FeatureMode.Disabled -> FeatureMode.Enabled
 
         let buttonLabel =
             match current with
-            | EnabledPlatformKnowledgeBase -> msgs.DisableAction
-            | NoPlatformKnowledgeBase -> msgs.EnableAction
+            | FeatureMode.Enabled -> msgs.DisableAction
+            | FeatureMode.Disabled -> msgs.EnableAction
 
         let buttonClass =
             match current with
-            | EnabledPlatformKnowledgeBase ->
+            | FeatureMode.Enabled ->
                 "px-3 py-1 text-xs font-medium rounded border border-red-300 text-red-700 hover:bg-red-50"
-            | NoPlatformKnowledgeBase -> "px-3 py-1 text-xs font-medium rounded bg-brand text-white hover:bg-brand-dark"
+            | FeatureMode.Disabled -> "px-3 py-1 text-xs font-medium rounded bg-brand text-white hover:bg-brand-dark"
 
         Html.div [
             prop.className "flex items-center justify-between gap-3"

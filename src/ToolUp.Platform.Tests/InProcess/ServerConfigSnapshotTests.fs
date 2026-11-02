@@ -165,13 +165,229 @@ let private withEnvironment (pairs: (string * string) list) (body: unit -> 'T) :
             Environment.SetEnvironmentVariable(n, prior)
 
 /// Every field of `config`, by name, in declaration order.
+// ── Phase 877 — the flat rendering, projected from the nested record ──
+//
+// The fixture was taken before `ServerConfig` was nested by concern and
+// before the payload-free modes became `FeatureMode`, and it is NOT
+// regenerated to match: it is the oracle that the same environment still
+// binds the same effective configuration. So the render walks the FLAT
+// field list below in the fixture's order, reads each field through its
+// concern (`Codemod.concernFields` — the same table the consumer codemod
+// nests by, so the two cannot disagree), and prints a `FeatureMode` as the
+// case name the retired mode spelled (`Codemod.featureModes`). A field
+// that moves, a field that is dropped, or a bound value that changes is a
+// diff against unchanged bytes.
+
+/// A flat field that kept its own type.
+let private flat (name: string) : string * string option = name, None
+
+/// A flat field whose type was one of the retired two-case modes.
+let private mode (name: string) (retiredType: string) : string * string option = name, Some retiredType
+
+/// Every field of the flat `ServerConfig`, in the order the fixture
+/// renders them, with the retired mode type where there was one.
+let private flatFields: (string * string option) list = [
+    flat "Port"
+    flat "BindAddress"
+    flat "PublicPath"
+    flat "Surfaces"
+    flat "ModuleNames"
+    flat "EventStore"
+    mode "PlatformKnowledgeBase" "PlatformKnowledgeBaseMode"
+    flat "AutoBootstrapDevAdmin"
+    flat "ModuleConfigs"
+    flat "IncludePlatformDefaults"
+    flat "FeatureFlags"
+    flat "ModuleFilter"
+    flat "ModuleBindingTrust"
+    flat "RequireHttps"
+    flat "TrustForwardedHeaders"
+    flat "TrustedProxyCidrs"
+    flat "AcceptForwardedHeadersFromAnyProxy"
+    flat "StaticPathBehaviour"
+    flat "SlowRequestThreshold"
+    flat "SlowRequestThresholdOverrides"
+    flat "DefaultTeamStorageQuotaBytes"
+    flat "RateLimit"
+    flat "ResultStore"
+    mode "Lineage" "LineageStoreMode"
+    mode "LineageDurability" "LineageDurabilityMode"
+    flat "JobScheduler"
+    mode "JobProgress" "JobProgressMode"
+    flat "BackfillMissedTicks"
+    flat "EventTriggerCatchUp"
+    mode "ShareTokenStore" "ShareTokenStoreMode"
+    flat "ServiceAccounts"
+    flat "PeerRoutePrefixes"
+    flat "MaxRequestBodyBytes"
+    flat "WebhookUrlAllowedHosts"
+    flat "MigrateWebhookSecretsAtRest"
+    flat "PublicBaseUrl"
+    mode "DataIngestion" "DataIngestionMode"
+    mode "ColumnMapping" "ColumnMappingMode"
+    flat "MappingDryRun"
+    mode "OAuthRefresher" "OAuthRefresherMode"
+    mode "OAuth1a" "OAuth1aMode"
+    mode "EntityStore" "EntityStoreMode"
+    mode "EntityOutbox" "EntityOutboxMode"
+    flat "SeedData"
+    flat "GraphStore"
+    mode "EntityGraphProjection" "EntityGraphProjectionMode"
+    flat "TimeSeriesStore"
+    flat "DataMigrations"
+    flat "ConfigMigrations"
+    flat "Datasets"
+    flat "SessionRegistry"
+    mode "ModelFitting" "ModelFittingMode"
+    mode "ModelExecution" "ModelExecutionApiMode"
+    mode "ExternalCompute" "ExternalComputeMode"
+    mode "ComputeBudget" "ComputeBudgetMode"
+    mode "TelemetrySink" "TelemetrySinkMode"
+    mode "UsageMetering" "UsageMeteringMode"
+    mode "MetricsEndpoint" "MetricsEndpointMode"
+    flat "MetricsSink"
+    mode "Webhooks" "WebhookMode"
+    mode "AuditLog" "AuditLogMode"
+    flat "AuditSamplingPolicy"
+    flat "AuditFailurePolicy"
+    flat "AuditFallbackDirectory"
+    flat "Notifications"
+    flat "SecurityHeaders"
+    flat "SecurityHardening"
+    flat "Cors"
+    flat "EnableDevEndpoints"
+    flat "EnableCitationDevEndpoint"
+    flat "SkipPreflight"
+    flat "HealthStateTracking"
+    flat "AlertRules"
+    flat "NotificationPreferences"
+    mode "ExternalContactStore" "ExternalContactStoreMode"
+    flat "NotificationCategories"
+    flat "LogLevel"
+    flat "TraceCategories"
+    flat "SseAuthMode"
+    mode "AuthCookieIssuance" "AuthCookieIssuanceMode"
+    flat "MaxSseConnectionsPerScope"
+    flat "AcceptHeaderAuthWhenAuthRequired"
+    flat "AcceptPlaintextSecretsWhenAuthRequired"
+    flat "ReplicaCount"
+    flat "AcceptInProcessSchedulerInMultiInstance"
+    flat "AcceptInProcessIngestionInMultiInstance"
+    flat "AcceptSharedEmbeddingCacheInTeamMode"
+    flat "AcceptEphemeralRagIndex"
+    flat "AcceptLocalEmbedderAtScale"
+    flat "AcceptStickyRoutedAiInMultiInstance"
+    flat "AcceptNoRateLimitWhenAuthRequired"
+    flat "AcceptUnsignedPublishable"
+    flat "AcceptQueryParamSseAuthWhenAuthRequired"
+    flat "AcceptSameSiteOnlyCsrfWhenAuthRequired"
+    flat "AcceptUnboundAudienceWhenAuthRequired"
+    flat "AcceptInMemoryOAuthStateInMultiInstance"
+    flat "AcceptInMemoryShareTokenRateLimiterInMultiInstance"
+    flat "AcceptPendingInviteStoreInMultiInstance"
+    flat "AcceptInviteByEmailWithoutDirectory"
+    flat "NotifyInviterOnInviteExpiry"
+    flat "AcceptEphemeralShareTokenKey"
+    flat "EphemeralStoreEvictionMinutes"
+    flat "NotifyOnSessionStoreReset"
+    flat "DataSubjectRequests"
+    mode "ConfigDriftDetection" "ConfigDriftDetectionMode"
+    mode "RateLimiter" "RateLimiterMode"
+    flat "SlowRateLimitThreshold"
+    mode "SmokeTest" "SmokeTestMode"
+    flat "ConversationStore"
+    flat "PublicRendering"
+    mode "AssetStore" "AssetStoreMode"
+    mode "MediaLibrary" "MediaLibraryMode"
+    flat "DeployPlane"
+    flat "ServerlessHost"
+    flat "ProcessProfile"
+    flat "RateLimitStore"
+    flat "RateLimits"
+    flat "ResourceEnvelopes"
+    mode "ConsentAudit" "ConsentAuditMode"
+    flat "ConsentStateStore"
+    mode "AdAnalytics" "AdAnalyticsMode"
+    flat "TeamCreationPolicy"
+    flat "TeamCreationQuota"
+    flat "DirectAddIdentityProof"
+    flat "NarrativeRetention"
+    mode "PeerSubstrate" "PeerSubstrateMode"
+    mode "UserSchemaAuthoring" "UserSchemaAuthoringMode"
+    mode "FactStore" "FactStoreMode"
+    mode "TenantLifecycle" "TenantLifecycleMode"
+    flat "TenantOffboardConfirmation"
+    mode "DeploymentReadiness" "DeploymentReadinessMode"
+    mode "DeploymentVerification" "DeploymentVerificationMode"
+    flat "RegisteredLocales"
+    flat "I18nCoverageMode"
+    mode "Presence" "PresenceMode"
+    flat "CrdtDocuments"
+    flat "ModuleVisibility"
+    flat "AdminMutationPolicy"
+    flat "GrantConsent"
+    flat "Backup"
+    flat "PinnedVocabularyPacks"
+    flat "DeclaredDataSchemas"
+    flat "ExpectedModules"
+    flat "AcceptAnonymousModeWithAI"
+    flat "LogStore"
+    flat "MetricsHistory"
+    flat "DatadogReadback"
+]
+
+let private concernOf: Map<string, string> =
+    Codemod.concernFields
+    |> List.collect (fun (concern, fields) -> fields |> List.map (fun f -> f, concern))
+    |> Map.ofList
+
+let private legacyCases: Map<string, string * string> =
+    Codemod.featureModes
+    |> List.map (fun (retiredType, off, on) -> retiredType, (off, on))
+    |> Map.ofList
+
+let private fieldOf (record: Type) (name: string) =
+    FSharpType.GetRecordFields record
+    |> Array.tryFind (fun f -> f.Name = name)
+    |> Option.defaultWith (fun () -> failwithf "%s has no field %s" record.Name name)
+
+/// The flat field's value, read through its concern record when it has one.
+let private readFlat (config: ServerConfig) (name: string) : obj =
+    match concernOf.TryFind name with
+    | None -> (fieldOf typeof<ServerConfig> name).GetValue(box config)
+    | Some concern ->
+        let nested = (fieldOf typeof<ServerConfig> concern).GetValue(box config)
+        (fieldOf (nested.GetType()) name).GetValue nested
+
 let private render (config: ServerConfig) : string =
-    FSharpType.GetRecordFields(typeof<ServerConfig>)
-    |> Array.map (fun field ->
-        let value = field.GetValue(box config)
-        let text = sprintf "%A" value
-        sprintf "%s = %s" field.Name (text.Replace("\r\n", "\n")))
+    flatFields
+    |> List.map (fun (name, retiredType) ->
+        let value = readFlat config name
+
+        let text =
+            match retiredType, value with
+            | Some retired, (:? FeatureMode as m) ->
+                let off, on = legacyCases[retired]
+                if FeatureMode.isEnabled m then on else off
+            | Some retired, other ->
+                failwithf "%s was a %s and is rendered as a FeatureMode, but holds %A" name retired other
+            | None, other -> sprintf "%A" other
+
+        sprintf "%s = %s" name (text.Replace("\r\n", "\n")))
     |> String.concat "\n"
+
+/// Every field the nested record declares, as (concern option, name).
+let private nestedFields () =
+    let concerns = Codemod.concernFields |> List.map fst |> Set.ofList
+
+    [
+        for f in FSharpType.GetRecordFields typeof<ServerConfig> do
+            if concerns.Contains f.Name then
+                for inner in FSharpType.GetRecordFields f.PropertyType do
+                    yield Some f.Name, inner.Name
+            else
+                yield None, f.Name
+    ]
 
 let private cases () = [
     "no environment, empty overrides",
@@ -228,5 +444,45 @@ let tests =
                         ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty)
 
                 Expect.notEqual set unset "the fixed environment bound nothing"
+
+            testCase
+                "the flat field list names every nested field exactly once, under the concern the codemod nests it by"
+            <| fun _ ->
+                let declared = nestedFields () |> List.map (fun (concern, name) -> name, concern)
+
+                let projected =
+                    flatFields |> List.map (fun (name, _) -> name, concernOf.TryFind name)
+
+                Expect.equal
+                    (List.sort projected)
+                    (List.sort declared)
+                    "a field was added, dropped or re-homed without the flat projection (and the codemod's concern table) following it"
+
+                Expect.equal (List.length flatFields) 147 "the flat record had 147 fields"
+
+            testCase
+                "every retired mode the flat list names is in the codemod's mode table, and renders its legacy case names"
+            <| fun _ ->
+                for name, retired in flatFields do
+                    match retired with
+                    | None -> ()
+                    | Some t ->
+                        Expect.isTrue
+                            (legacyCases.ContainsKey t)
+                            (sprintf "%s: %s is not in Codemod.featureModes" name t)
+
+                        let off, on = legacyCases[t]
+                        Expect.stringStarts off "No" (sprintf "%s: the off case" t)
+                        Expect.isTrue (on.StartsWith "Enabled" || on.StartsWith "Custom") (sprintf "%s: the on case" t)
+
+                        Expect.equal
+                            (FeatureModeKnob.legacyNames.TryFind name)
+                            (Some(off, on))
+                            (sprintf "%s: the knob table Core seals by agrees with the codemod's mode table" name)
+
+                Expect.equal
+                    (FeatureModeKnob.legacyNames.Count)
+                    (flatFields |> List.filter (snd >> Option.isSome) |> List.length)
+                    "the knob table names every FeatureMode field and no other"
         ]
     )

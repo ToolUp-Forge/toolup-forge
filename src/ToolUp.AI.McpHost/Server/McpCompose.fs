@@ -150,16 +150,16 @@ module McpOptions =
     ///
     /// The MCP host authenticates exactly one way: a service
     /// account token on the standard bearer header, validated by the
-    /// middleware `ServerConfig.ServiceAccounts = EnabledServiceAccounts`
+    /// middleware `ServerConfig.Stores.ServiceAccounts = EnabledServiceAccounts`
     /// registers. Without it no request can ever resolve to an agent, so
     /// every call answers 401 — a deployment that looks composed and
     /// serves nothing. Caught here rather than discovered there.
     let internal enforceServiceAccounts (config: ServerConfig) : unit =
-        match config.ServiceAccounts with
+        match config.Stores.ServiceAccounts with
         | NoServiceAccounts ->
             failwith
                 "The MCP host authenticates agents with service-account tokens, and this composition has \
-                 ServerConfig.ServiceAccounts = NoServiceAccounts — so no request could ever resolve to an agent \
+                 ServerConfig.Stores.ServiceAccounts = NoServiceAccounts — so no request could ever resolve to an agent \
                  principal and every MCP call would answer 401. Set ServiceAccounts to EnabledServiceAccounts (or \
                  supply an external store) alongside McpCompose.withMcp, or compose McpOptions.withMcpHost NoMcpHost \
                  if the agent surface is deliberately off in this environment."

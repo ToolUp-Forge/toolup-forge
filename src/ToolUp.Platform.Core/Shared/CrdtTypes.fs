@@ -252,8 +252,8 @@ module CrdtSnapshotPolicy =
 /// store (Phase 535). Default `NoCrdtDocuments` — no
 /// `ICrdtDocumentStore` in DI, no allocation, no `_platform.crdt`
 /// fan-out; an existing deployment that upgrades stays byte-for-byte
-/// identical until it opts in (GP 11 + GP 13). Mirrors `PresenceMode` /
-/// `PeerSubstrateMode` (binary, opt-in).
+/// identical until it opts in (GP 11 + GP 13). Mirrors `FeatureMode` /
+/// `FeatureMode` (binary, opt-in).
 type CrdtDocumentMode =
     /// No co-editing substrate registered. The default.
     | NoCrdtDocuments
@@ -261,7 +261,7 @@ type CrdtDocumentMode =
     /// wrapped in the notifying relay so appends and compactions fan out
     /// on the reserved `_platform.crdt` key, scope-isolated per team.
     ///
-    /// Substrate only — as with `EnabledPresence`, the SDK registers the
+    /// Substrate only — as with `FeatureMode.Enabled`, the SDK registers the
     /// store and a deployment exposes its own module-owned API over the
     /// resolved service. The in-memory default is **single-instance**: a
     /// multi-instance deployment supplies a distributed implementation

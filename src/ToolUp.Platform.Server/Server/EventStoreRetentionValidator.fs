@@ -61,9 +61,9 @@ type EventStoreRetentionValidator(config: ServerConfig, ?timeout: TimeSpan) =
 
         member _.Validate() = async {
             let productionShaped =
-                DeploymentConfig.requiresAnyAuth config || config.ReplicaCount > 1
+                DeploymentConfig.requiresAnyAuth config || config.MultiInstance.ReplicaCount > 1
 
-            match config.EventStore with
+            match config.Stores.EventStore with
             | PersistentBlobBacked policy when
                 policy.MaxAge.IsNone
                 && policy.MaxCountPerScope.IsNone
@@ -73,9 +73,9 @@ type EventStoreRetentionValidator(config: ServerConfig, ?timeout: TimeSpan) =
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.EventStore = PersistentBlobBacked with MaxAge = None and MaxCountPerScope = None, in a %s deployment. The blob-backed store writes one object per event under _platform/events/{scopeId}/ and prunes on neither dimension, so the trail — and its storage cost and listing latency — grows for the life of the deployment. Pruning is never automatic; the app runs it. Set a policy the deployment can defend: the SDK's policy is deployment-wide, so take the longest retention you owe — 365 days where the _platform.audit scope is your compliance record, 90 days otherwise (EventRetentionPolicy.byAge (TimeSpan.FromDays 365.0) / EventRetentionPolicy.ninetyDays) — and add a per-scope ceiling of MaxCountPerScope = Some 100_000 so one noisy scope cannot dominate the store. If unlimited retention is the deliberate choice because the event log IS the audit trail your regime requires in full, set %s=1 to record that and silence this warning."
-                            (if config.ReplicaCount > 1 then
-                                 sprintf "multi-instance (ReplicaCount = %d)" config.ReplicaCount
+                            "ServerConfig.Stores.EventStore = PersistentBlobBacked with MaxAge = None and MaxCountPerScope = None, in a %s deployment. The blob-backed store writes one object per event under _platform/events/{scopeId}/ and prunes on neither dimension, so the trail — and its storage cost and listing latency — grows for the life of the deployment. Pruning is never automatic; the app runs it. Set a policy the deployment can defend: the SDK's policy is deployment-wide, so take the longest retention you owe — 365 days where the _platform.audit scope is your compliance record, 90 days otherwise (EventRetentionPolicy.byAge (TimeSpan.FromDays 365.0) / EventRetentionPolicy.ninetyDays) — and add a per-scope ceiling of MaxCountPerScope = Some 100_000 so one noisy scope cannot dominate the store. If unlimited retention is the deliberate choice because the event log IS the audit trail your regime requires in full, set %s=1 to record that and silence this warning."
+                            (if config.MultiInstance.ReplicaCount > 1 then
+                                 sprintf "multi-instance (ReplicaCount = %d)" config.MultiInstance.ReplicaCount
                              else
                                  sprintf "production-shaped (Surfaces = %s)" (DeploymentConfig.surfacesLabel config))
                             ConfigKeys.Names.acceptUnlimitedEventRetention

@@ -30,7 +30,7 @@ open ToolUp.ModelProviders.Reference
 
 // Register the provider, then enable the envelope:
 services.AddSingleton<IModelFitProvider>(ReferenceModelFitProvider.create ()) |> ignore
-// ServerConfig.ModelFitting = EnabledModelFitting  (requires a composed JobScheduler)
+// ServerConfig.ModelFitting = FeatureMode.Enabled  (requires a composed JobScheduler)
 ```
 
 Licensed under Apache-2.0.

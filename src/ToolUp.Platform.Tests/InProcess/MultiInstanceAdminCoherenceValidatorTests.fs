@@ -18,7 +18,10 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.team
-                    ReplicaCount = 1
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 1
+                    }
             }
 
             Expect.equal (run cfg) Ok "no warning on a single instance"
@@ -28,7 +31,10 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.team
-                    ReplicaCount = 2
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 2
+                    }
             }
 
             match run cfg with
@@ -42,7 +48,10 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.anonymous
-                    ReplicaCount = 2
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 2
+                    }
             }
 
             Expect.equal (run cfg) Ok "no in-process admin subsystems composed"
@@ -52,8 +61,11 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.anonymous
-                    ReplicaCount = 2
-                    Webhooks = EnabledWebhooks
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 2
+                    }
+                    Webhooks = FeatureMode.Enabled
             }
 
             match run cfg with

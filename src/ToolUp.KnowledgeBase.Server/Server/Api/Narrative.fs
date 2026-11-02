@@ -560,7 +560,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         // anything retrievable (GP 6 + GP 9). `IAuditLog.Record` is
         // contractually best-effort and swallows its own failures, so an
         // audit gap never fails the reset. No-op when no `IAuditLog` is
-        // composed (test harness / `NoAuditLog` deployment).
+        // composed (test harness / `FeatureMode.Disabled` deployment).
         match deps.AuditLog with
         | Some auditLog ->
             do!

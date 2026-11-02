@@ -50,13 +50,13 @@ let githubFlow =
     create httpClient secretStore (GitHubAppFlowConfig.create [ "read:user"; "repo" ])
 
 ServerApp.empty
-|> ServerApp.withConfig { ServerConfig.defaults with DataIngestion = EnabledDataIngestion }
+|> ServerApp.withConfig { ServerConfig.defaults with DataIngestion = FeatureMode.Enabled }
 |> ServerApp.withOAuthFlow githubFlow          // ← registers the flow into the substrate
 |> ServerApp.run
 ```
 
 `withOAuthFlow` registers the flow as an `IOAuthCredentialFlow` singleton; the substrate's
-`/api/oauth/github/*` routes (mounted under `DataIngestion = EnabledDataIngestion`) resolve
+`/api/oauth/github/*` routes (mounted under `DataIngestion = FeatureMode.Enabled`) resolve
 it per-request by its `Name`. Register one flow per upstream provider.
 
 ### Per-connection credentials

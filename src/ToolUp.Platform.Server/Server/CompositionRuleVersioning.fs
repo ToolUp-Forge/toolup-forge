@@ -531,10 +531,14 @@ module CompositionRuleVersions =
         RulePatch = 0
     }
 
-    /// Per-rule version overrides, keyed by rule code. **Empty today by
-    /// construction** — every rule that shipped before Phase 597 seeds
-    /// at 1.0.0, because they were all enforced under the same
-    /// unversioned manifest and no earlier state exists to distinguish.
+    /// Per-rule version overrides, keyed by rule code. Every rule that
+    /// shipped before Phase 597 seeded at 1.0.0, because they were all
+    /// enforced under the same unversioned manifest and no earlier state
+    /// exists to distinguish; a rule stays there until an entry here moves
+    /// it. The first entry landed with Phase 877: the scale-readiness
+    /// refusal's message names the nested `ServerConfig` fields, and a
+    /// message change is a patch bump, so the rule is 1.0.1 while the
+    /// compositions it passes and fails are unchanged.
     ///
     /// **This list is the bump surface.** Tightening
     /// `orphaned-tool-reference` means adding
@@ -542,7 +546,16 @@ module CompositionRuleVersions =
     /// here in the same commit as the evaluator change — and the golden
     /// rule-manifest baseline turns that into a reviewed diff rather
     /// than a silent behaviour change.
-    let overrides: (string * RuleVersion) list = []
+    let overrides: (string * RuleVersion) list = [
+        // Phase 877 — the refusal names `ServerConfig.MultiInstance.PeerSubstrate = FeatureMode.Enabled`
+        // where it named the retired `EnabledPeerSubstrate`: a message change.
+        ScaleReadinessPreflight.IntentUnsatisfiableRule,
+        {
+            RuleMajor = 1
+            RuleMinor = 0
+            RulePatch = 1
+        }
+    ]
 
     /// Version a family's exported descriptors. Generic over any
     /// exported rule id: a rule with no override seeds at 1.0.0, so a

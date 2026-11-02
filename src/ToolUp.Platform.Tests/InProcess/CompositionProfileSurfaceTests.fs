@@ -773,10 +773,27 @@ let reflectedSurface () : Surface = {
     Slots = ComposableSurface.slots () |> List.map _.Interface
     Knobs = ComposableSurface.configKnobs () |> List.map (fun k -> k.Name, k.Values)
     ConfigFields =
-        FSharpType.GetRecordFields(typeof<ServerConfig>)
-        |> Array.map (fun f -> f.Name, f.PropertyType)
-        |> List.ofArray
+        // Phase 877 — through the concern records, under the flat names the
+        // profile's settings carry.
+        let rec fields (record: Type) = [
+            for f in FSharpType.GetRecordFields record do
+                if ComposableSurface.isConcernRecord f.PropertyType then
+                    yield! fields f.PropertyType
+                else
+                    yield f.Name, f.PropertyType
+        ]
+
+        fields typeof<ServerConfig>
 }
+
+/// The values a setting's field admits: the knob tokens for a `FeatureMode`
+/// field (the spelling the profile registers and the manifest seals, Phase
+/// 877), else the union's case names.
+let private casesOf (field: string) (t: Type) : string list =
+    if t = typeof<FeatureMode> then
+        FeatureModeKnob.values field
+    else
+        FSharpType.GetUnionCases t |> Array.map _.Name |> List.ofArray
 
 let private clrName (t: Type) = t.FullName.Replace('+', '.')
 
@@ -896,7 +913,7 @@ let surfaceFindings (p: Profile) (surface: Surface) : string list = [
             | Some t when not (FSharpType.IsUnion t) -> sprintf "setting %s: ServerConfig.%s is not a union" key field
             | Some t ->
                 caseKnobs.Add field
-                let cases = FSharpType.GetUnionCases t |> Array.map _.Name |> List.ofArray
+                let cases = casesOf field t
                 let unregisteredValues = members (prop "unregisteredValues" s) |> List.map fst
 
                 for v in registeredValues do

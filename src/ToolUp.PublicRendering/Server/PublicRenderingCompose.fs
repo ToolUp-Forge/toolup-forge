@@ -841,7 +841,7 @@ type private RenderCacheInstanceValidator(usingInMemory: bool, replicaCount: int
                 return
                     ConfigValidation.Warning(
                         sprintf
-                            "PublicRendering is composed with the in-process InMemoryRenderCache and ServerConfig.ReplicaCount = %d. The cache is process-local: each replica caches and invalidates SSR pages independently — one replica can serve stale HTML while another serves fresh, and a CMS slug-purge only clears the replica that handled it. Compose BlobRenderCache.create storage (shared across replicas) for multi-instance deployments."
+                            "PublicRendering is composed with the in-process InMemoryRenderCache and ServerConfig.MultiInstance.ReplicaCount = %d. The cache is process-local: each replica caches and invalidates SSR pages independently — one replica can serve stale HTML while another serves fresh, and a CMS slug-purge only clears the replica that handled it. Compose BlobRenderCache.create storage (shared across replicas) for multi-instance deployments."
                             replicaCount
                     )
             else
@@ -961,7 +961,10 @@ let composePublicRendering (options: PublicRenderingOptions) (app: ServerApp) : 
         let app =
             app
             |> ServerApp.withConfigValidator (
-                RenderCacheInstanceValidator(usingInMemoryRenderCache, (ServerApp.effectiveConfig app).ReplicaCount)
+                RenderCacheInstanceValidator(
+                    usingInMemoryRenderCache,
+                    (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                )
                 :> ConfigValidation.IConfigValidator
             )
             |> ServerApp.withConfigValidator (

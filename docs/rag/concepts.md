@@ -177,7 +177,7 @@ results depending on which replica served the turn.
 | Ingestion queue | process-local channel | yes | `ToolUp.IngestionQueues.Redis` (`withDurableIngestionQueue`) |
 | Embedding cache | `InMemoryEmbeddingCache` | yes (correct, but per replica) | `ToolUp.EmbeddingCaches.Redis` (`withEmbeddingCache`) |
 
-Startup validators hold this table against `ServerConfig.ReplicaCount`. At a replica count above one:
+Startup validators hold this table against `ServerConfig.MultiInstance.ReplicaCount`. At a replica count above one:
 
 - `rag-in-process-index-replicas` **warns** when the vector store or the keyword index is in-process, naming
   the store and the companion that replaces it.

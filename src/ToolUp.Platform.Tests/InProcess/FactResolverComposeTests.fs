@@ -33,7 +33,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 // (`FactsCompose.withFactStore` registers store + gate + resolver
 // together), and the composed Stage-1 loop: a store-asserted fact answers
 // a fact-clause retrieval as the top source with disclosure filtering
-// armed, while a `NoFactStore` deployment retrieves byte-identically.
+// armed, while a `FeatureMode.Disabled` deployment retrieves byte-identically.
 
 // ── Shared harness ────────────────────────────────────────────────
 
@@ -284,13 +284,16 @@ let resolverTests =
 /// Build the fact-tier DI exactly the way a composed deployment does:
 /// `FactsCompose.withFactStore` under the given knob, its service config
 /// run over a substrate-seeded collection. Returns the built provider.
-let private builtProviderUnder (knob: FactStoreMode) : ServiceProvider =
+let private builtProviderUnder (knob: FeatureMode) : ServiceProvider =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -311,16 +314,16 @@ let private builtProviderUnder (knob: FactStoreMode) : ServiceProvider =
 let registrationTests =
     testList "Phase 558 one-knob registration" [
 
-        test "EnabledFactStore registers the resolver alongside the store + gate — one knob, never three" {
-            let sp = builtProviderUnder EnabledFactStore
+        test "FeatureMode.Enabled registers the resolver alongside the store + gate — one knob, never three" {
+            let sp = builtProviderUnder FeatureMode.Enabled
 
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "IFactStore resolves"
             Expect.isFalse (isNull (box (sp.GetService<IFactDisclosureGate>()))) "IFactDisclosureGate resolves"
             Expect.isFalse (isNull (box (sp.GetService<IFactResolver>()))) "IFactResolver resolves"
         }
 
-        test "NoFactStore registers none of the fact tier" {
-            let sp = builtProviderUnder NoFactStore
+        test "FeatureMode.Disabled registers none of the fact tier" {
+            let sp = builtProviderUnder FeatureMode.Disabled
 
             Expect.isTrue (isNull (box (sp.GetService<IFactResolver>()))) "no resolver"
             Expect.isTrue (isNull (box (sp.GetService<IFactDisclosureGate>()))) "no gate"
@@ -399,7 +402,7 @@ let composedLoopTests =
     testList "Phase 558 composed Stage-1 loop" [
 
         testCaseAsync
-            "EnabledFactStore + RAG: a store-asserted fact answers the clause as the top source, freshness-stamped, with the gate armed"
+            "FeatureMode.Enabled + RAG: a store-asserted fact answers the clause as the top source, freshness-stamped, with the gate armed"
         <| async {
             let vectorStore, dispose = newVectorStore ()
 
@@ -410,7 +413,7 @@ let composedLoopTests =
                         Metadata = Map.empty
                     }
 
-                let sp = builtProviderUnder EnabledFactStore
+                let sp = builtProviderUnder FeatureMode.Enabled
                 let factStore = sp.GetRequiredService<IFactStore>()
 
                 // The pipeline hands the resolver the request's resolved
@@ -462,7 +465,7 @@ let composedLoopTests =
                 dispose.Dispose()
         }
 
-        testCaseAsync "NoFactStore ⇒ retrieval is byte-identical to a fact-less pipeline (GP 11 / GP 13)"
+        testCaseAsync "FeatureMode.Disabled ⇒ retrieval is byte-identical to a fact-less pipeline (GP 11 / GP 13)"
         <| async {
             let vectorStore, dispose = newVectorStore ()
 
@@ -475,9 +478,9 @@ let composedLoopTests =
 
                 let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
 
-                // The NoFactStore composition: withFactStore is a no-op, so
+                // The FeatureMode.Disabled composition: withFactStore is a no-op, so
                 // the pickup resolves nothing and the ctor args are omitted.
-                let composed = pipelineOver vectorStore (builtProviderUnder NoFactStore)
+                let composed = pipelineOver vectorStore (builtProviderUnder FeatureMode.Disabled)
 
                 // A pipeline that never had fact wiring at all.
                 let plain =
@@ -512,7 +515,7 @@ let divergenceTests =
             let vectorStore, dispose = newVectorStore ()
 
             try
-                let sp = builtProviderUnder EnabledFactStore
+                let sp = builtProviderUnder FeatureMode.Enabled
                 let factStore = sp.GetRequiredService<IFactStore>()
 
                 // The resolver minted the user's own scope; the access
@@ -580,7 +583,7 @@ let divergenceTests =
             let vectorStore, dispose = newVectorStore ()
 
             try
-                let sp = builtProviderUnder EnabledFactStore
+                let sp = builtProviderUnder FeatureMode.Enabled
                 let factStore = sp.GetRequiredService<IFactStore>()
                 let userFact = assertFact factStore "u" (draft "revenue" q2 [ "h-user" ] 21800m)
 

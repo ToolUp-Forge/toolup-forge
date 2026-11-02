@@ -84,7 +84,10 @@ let private groundedApp (canonical: string option) =
         ServerApp.empty with
             Config = {
                 ServerConfig.defaults with
-                    FactStore = EnabledFactStore
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            FactStore = FeatureMode.Enabled
+                    }
             }
     }
     |> ServerApp.addModules [ sales ]
@@ -717,11 +720,11 @@ let tests =
 
         // ─── Compose ──────────────────────────────────────────────────
 
-        test "the seal composes over the fact store, and a NoFactStore deployment is unchanged" {
+        test "the seal composes over the fact store, and a FeatureMode.Disabled deployment is unchanged" {
             let bare =
                 FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None ServerApp.empty
 
-            Expect.isNone (ServerApp.serviceConfig bare) "a NoFactStore deployment composes nothing (GP 11/13)"
+            Expect.isNone (ServerApp.serviceConfig bare) "a FeatureMode.Disabled deployment composes nothing (GP 11/13)"
 
             let composed =
                 FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None (groundedApp None)

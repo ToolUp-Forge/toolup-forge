@@ -104,7 +104,7 @@ type GoogleIdentityCspValidator(config: ServerConfig, services: IServiceCollecti
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            match config.SecurityHardening with
+            match config.SecurityPosture.SecurityHardening with
             | NoSecurityHardening -> return Ok
             | _ ->
                 if googleOriginsAllowed services then

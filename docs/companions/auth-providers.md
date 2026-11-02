@@ -167,7 +167,7 @@ Either field may be set alone. `ClaimMapping = None` (the default, and what both
 
 #### Wiring `IMetricsSink`
 
-When the deployment registers a real `IMetricsSink` (default-shipped Prometheus sink under `MetricsEndpoint = EnabledMetricsEndpoint`, or the `OtelMetricsSink` companion), construct the auth provider via the metered overloads so the auth pipeline emits `toolup.auth.validate.*` counters tagged `provider=oidc` alongside the SDK's other observability metrics:
+When the deployment registers a real `IMetricsSink` (default-shipped Prometheus sink under `MetricsEndpoint = FeatureMode.Enabled`, or the `OtelMetricsSink` companion), construct the auth provider via the metered overloads so the auth pipeline emits `toolup.auth.validate.*` counters tagged `provider=oidc` alongside the SDK's other observability metrics:
 
 ```fsharp
 open ToolUp.Platform.Metrics
@@ -856,15 +856,15 @@ By default (`ClientConfig.AuthTokenStorage = ClientCookieAndLocalStorage`) the c
 
 On this default path the client checks its cookie write (Phase 1047). The server-rendered sign-in (`OidcSsrSignIn`) writes the same cookie name `HttpOnly`, and a browser drops a script write over an `HttpOnly` cookie without an error. When the token the client just wrote is not in `document.cookie`, the client sends it to `POST /api/auth/session` instead, and the server replaces its own cookie. The event streams then authenticate on the SPA's token rather than on a server token that expires first. Composing the server sign-in mounts that route, so no extra configuration is needed. See [the SSE auth caveat](../platform/auth.md#sse-auth-caveat).
 
-The production-shape alternative is the **server-set HttpOnly cookie**. Set `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` and `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie`: the client POSTs its freshly-acquired JWT once to `POST /api/auth/session`, the server validates it through the registered `IAuthProvider`, and reflects it into an `HttpOnly; Secure; SameSite=Strict` cookie. The JWT never enters `localStorage` or a JS-readable cookie; the browser sends the cookie automatically for SSE and same-origin XHR. Pair with `TokenLocation = BearerOrCookie "toolup-auth-token"` (the reflect call reads the header; every later request + SSE reads the cookie) and the `IAuthBridge` refresh model. See [`docs/migrations/133-httponly-auth-cookie.md`](../migrations/133-httponly-auth-cookie.md) for the full adoption recipe and the OidcClient-PKCE compatibility caveat.
+The production-shape alternative is the **server-set HttpOnly cookie**. Set `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` and `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie`: the client POSTs its freshly-acquired JWT once to `POST /api/auth/session`, the server validates it through the registered `IAuthProvider`, and reflects it into an `HttpOnly; Secure; SameSite=Strict` cookie. The JWT never enters `localStorage` or a JS-readable cookie; the browser sends the cookie automatically for SSE and same-origin XHR. Pair with `TokenLocation = BearerOrCookie "toolup-auth-token"` (the reflect call reads the header; every later request + SSE reads the cookie) and the `IAuthBridge` refresh model. See [`docs/migrations/133-httponly-auth-cookie.md`](../migrations/133-httponly-auth-cookie.md) for the full adoption recipe and the OidcClient-PKCE compatibility caveat.
 
 ## Hardening checklist for production
 
 - Real auth provider (not `HeaderAuthProvider`).
-- `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` + `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie` + `TokenLocation = BearerOrCookie "toolup-auth-token"` — move the JWT out of JS-readable storage into a server-set HttpOnly cookie (Phase 133). For paths that must keep a JS-readable bearer, ship a strict CSP instead.
-- `ServerConfig.RequireHttps = true`.
-- `ServerConfig.TrustForwardedHeaders = true` (default; opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0` only on a direct-bind dev shell).
-- `ServerConfig.SecurityHeaders = StrictSecurityHeaders`.
+- `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` + `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie` + `TokenLocation = BearerOrCookie "toolup-auth-token"` — move the JWT out of JS-readable storage into a server-set HttpOnly cookie (Phase 133). For paths that must keep a JS-readable bearer, ship a strict CSP instead.
+- `ServerConfig.SecurityPosture.RequireHttps = true`.
+- `ServerConfig.SecurityPosture.TrustForwardedHeaders = true` (default; opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0` only on a direct-bind dev shell).
+- `ServerConfig.SecurityPosture.SecurityHeaders = StrictSecurityHeaders`.
 - `ServerConfig.CorsConfig` — explicit allow-list for browser callers.
 - `TOOLUP_INITIAL_PLATFORM_ADMIN` set for the bootstrap admin user.
 - OIDC issuer trusted at the network layer (TLS pin if possible).

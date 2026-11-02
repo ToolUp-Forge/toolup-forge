@@ -267,7 +267,7 @@ let assertCorsCredentialsCompatible (config: ServerConfig) (resolvedLogger: ILog
 /// composition root calls immediately before this — there is no
 /// warn-and-downgrade path here any more.
 let registerCors (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
-    match config.Cors with
+    match config.SecurityPosture.Cors with
     | None -> ()
     | Some cors ->
         services.AddCors(fun options ->
@@ -333,10 +333,10 @@ let registerPlatformHttpClient (services: IServiceCollection) (auditLog: IAuditL
 
     resolvedLogger.Info(EgressPosture.describe (EgressEnforcement.current ()).Posture)
 
-/// Phase 9d — usage metering substrate. `NoUsageMetering` (default)
+/// Phase 9d — usage metering substrate. `FeatureMode.Disabled` (default)
 /// resolves `IUsageLog` / `ITeamQuotaPolicy` to no-ops and skips the
 /// flusher BackgroundService + the `IUsageQueryApi` route.
-/// `EnabledUsageMetering` registers the blob-backed defaults; the
+/// `FeatureMode.Enabled` registers the blob-backed defaults; the
 /// policy is registered as a factory because
 /// `BlobBackedTeamQuotaPolicy` needs both `IUsageLog` and
 /// `IConfigStore` (the latter is registered later in `compose`, so
@@ -363,8 +363,8 @@ let registerUsageMetering
 
     let (usageLogInstance: IUsageLog), (usageBatchFlusher: UsageLog.UsageBatchFlusher option) =
         match config.UsageMetering with
-        | NoUsageMetering -> NoOpUsageLog() :> IUsageLog, None
-        | EnabledUsageMetering ->
+        | FeatureMode.Disabled -> NoOpUsageLog() :> IUsageLog, None
+        | FeatureMode.Enabled ->
             let flusher =
                 new UsageLog.UsageBatchFlusher(
                     resolvedBlobStorage,
@@ -396,10 +396,10 @@ let registerUsageMetering
     | Some explicit -> services.AddSingleton<ITeamQuotaPolicy>(explicit) |> ignore
     | None ->
         match config.UsageMetering with
-        | NoUsageMetering ->
+        | FeatureMode.Disabled ->
             services.AddSingleton<ITeamQuotaPolicy>(NoOpTeamQuotaPolicy() :> ITeamQuotaPolicy)
             |> ignore
-        | EnabledUsageMetering ->
+        | FeatureMode.Enabled ->
             services.AddSingleton<ITeamQuotaPolicy>(
                 System.Func<System.IServiceProvider, ITeamQuotaPolicy>(fun sp ->
                     let cs = sp.GetService(typeof<IConfigStore>) :?> IConfigStore
@@ -420,10 +420,10 @@ let registerUsageMetering
 
     usageLogInstance
 
-/// Phase 9e — `IMetricsSink`. `NoMetricsEndpoint` (default) registers
+/// Phase 9e — `IMetricsSink`. `FeatureMode.Disabled` (default) registers
 /// `NoOpMetricsSink` so emission sites in middleware / scheduler / SSE
 /// manager / FileManagement never get `null` when they resolve the
-/// service. `EnabledMetricsEndpoint` registers `PrometheusMetricsSink`
+/// service. `FeatureMode.Enabled` registers `PrometheusMetricsSink`
 /// pre-loaded with the SDK standard metrics. Companion sinks
 /// (OpenTelemetry exporter etc.) self-register an additional
 /// `IMetricsSink` alongside this default; multiple sinks compose
@@ -446,12 +446,12 @@ let buildMetricsSink
     (moduleMetricRegistrations: Metrics.MetricRegistration list)
     (resolvedLogger: ILogger)
     : Metrics.IMetricsSink * Metrics.PrometheusMetricsSink option =
-    match config.MetricsEndpoint with
-    | NoMetricsEndpoint -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink, None
-    | EnabledMetricsEndpoint ->
+    match config.Observability.MetricsEndpoint with
+    | FeatureMode.Disabled -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink, None
+    | FeatureMode.Enabled ->
         let promSink =
             Metrics.PrometheusMetricsSink(
-                config.MetricsSink,
+                config.Observability.MetricsSink,
                 Metrics.StandardMetrics.registrations @ moduleMetricRegistrations,
                 resolvedLogger
             )
@@ -505,8 +505,8 @@ let registerMetricsAndObservability
 /// `NoOpUsageLog` / `NoOpAuditLog` / `NoOpMetricsSink` pattern so
 /// emission sites resolve the service unconditionally and the call
 /// elides at zero cost when the deployment hasn't opted in.
-/// `NoRateLimiter` (the default) registers `NoOpRateLimiter`;
-/// `EnabledRateLimiter` registers the SDK-shipped sliding-window
+/// `FeatureMode.Disabled` (the default) registers `NoOpRateLimiter`;
+/// `FeatureMode.Enabled` registers the SDK-shipped sliding-window
 /// default fed with the compose-time `rateLimitDescriptors`,
 /// `auditLog`, `resolvedMetricsSink`, and the configured
 /// `SlowRateLimitThreshold`.
@@ -529,8 +529,8 @@ let registerOutboundRateLimiter
 
     let rateLimiter: IRateLimiter =
         match config.RateLimiter with
-        | NoRateLimiter -> NoOpRateLimiter() :> IRateLimiter
-        | EnabledRateLimiter ->
+        | FeatureMode.Disabled -> NoOpRateLimiter() :> IRateLimiter
+        | FeatureMode.Enabled ->
             InProcessRateLimiter(
                 rateLimitDescriptors,
                 resolvedMetricsSink,
@@ -571,7 +571,7 @@ let registerHealthStateTracker
     (auditLog: IAuditLog)
     (resolvedLogger: ILogger)
     : unit =
-    if config.HealthStateTracking then
+    if config.Observability.HealthStateTracking then
         Hosting.register
             services
             (BackgroundUnit.create "health-state-tracker" SharedWork (fun sp ->
@@ -597,7 +597,7 @@ let internal registerRemotingAuditQueue
     (resolvedLogger: ILogger)
     : unit =
     let composed =
-        config.AuditLog = EnabledAuditLog
+        config.AuditLog = FeatureMode.Enabled
         && config.AuditFailurePolicy <> RefuseAction
         && Hosting.admitsPlacement config ProcessLocal false
         && ProcessProfileGate.shouldRegisterHttpPipeline config
@@ -619,7 +619,7 @@ let internal registerRemotingAuditQueue
         |> ignore
 
 /// Phase 178 — opt-in alert-rule / threshold engine BackgroundService.
-/// Hosted only when `config.AlertRules` is non-empty (GP 13 — an empty
+/// Hosted only when `config.Observability.AlertRules` is non-empty (GP 13 — an empty
 /// set registers no service and pays no tick cost); shared work, so
 /// `AllInOne` / `WorkerOnly` run it and `WebOnly` / `DispatcherOnly` /
 /// `ServerlessHost` skip it. The `notificationChannel`
@@ -634,11 +634,16 @@ let registerAlertRuleEngine
     (notificationChannel: INotificationChannel)
     (resolvedLogger: ILogger)
     : unit =
-    if not (List.isEmpty config.AlertRules) then
+    if not (List.isEmpty config.Observability.AlertRules) then
         Hosting.register
             services
             (BackgroundUnit.create "alert-rule-engine" SharedWork (fun sp ->
-                new AlertRuleEngine.AlertRuleEngineService(sp, notificationChannel, config.AlertRules, resolvedLogger)
+                new AlertRuleEngine.AlertRuleEngineService(
+                    sp,
+                    notificationChannel,
+                    config.Observability.AlertRules,
+                    resolvedLogger
+                )
                 :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
 
@@ -646,7 +651,7 @@ let registerAlertRuleEngine
 /// single fixed-window team-keyed policy (opt-in via
 /// `ServerConfig.RateLimit`); Phase 56 is a portable per-route-policy
 /// substrate with pluggable storage (opt-in via
-/// `ServerConfig.RateLimitStore`). The two can coexist — Phase 56
+/// `ServerConfig.Stores.RateLimitStore`). The two can coexist — Phase 56
 /// middleware runs FIRST so a route-specific cap short-circuits before
 /// the Phase 9 limiter consumes a token.
 let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerConfig) : unit =
@@ -676,7 +681,7 @@ let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerCo
     // `ComposeExtensions.ServiceConfig` (or a sub-companion's
     // composition extension) registers the external impl as the
     // `IRateLimitStore` singleton.
-    match config.RateLimitStore with
+    match config.Stores.RateLimitStore with
     | NoRateLimitStore -> ()
     | ToolUp.Platform.RateLimitStoreMode.InMemoryRateLimitStore ->
         services.AddSingleton<IRateLimitStore>(InMemoryRateLimitStore.create ())

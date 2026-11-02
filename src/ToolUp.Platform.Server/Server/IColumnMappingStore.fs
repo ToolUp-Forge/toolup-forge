@@ -11,7 +11,7 @@ open ColumnMappingTypes
 /// targetType)`) and the per-object **provenance records**
 /// (`ConversionRecord`, keyed by produced file). Backs the mapping-aware
 /// Data Manager (`ClientConfig.DataManager = MappingDataManager` +
-/// `ServerConfig.ColumnMapping = EnabledColumnMapping`). The default
+/// `ServerConfig.ColumnMapping = FeatureMode.Enabled`). The default
 /// implementation (`ColumnMappingStore.create`) wraps `IDataObjectStore`;
 /// the `scopeId` becomes the storage container, so cross-scope reads are
 /// structurally impossible.

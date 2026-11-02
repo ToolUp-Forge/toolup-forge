@@ -455,8 +455,8 @@ module ScaleReadiness =
         match config.ServerlessHost with
         | ServerlessHost -> ScaleIntent.Serverless
         | KestrelHost ->
-            if config.ReplicaCount > 1 then
-                ScaleIntent.MultiInstance config.ReplicaCount
+            if config.MultiInstance.ReplicaCount > 1 then
+                ScaleIntent.MultiInstance config.MultiInstance.ReplicaCount
             else
                 ScaleIntent.SingleInstance
 
@@ -476,9 +476,9 @@ module ScaleReadiness =
     let describeIntent (intent: ScaleIntent) : string =
         match intent with
         | ScaleIntent.SingleInstance ->
-            "a single instance (ServerConfig.ReplicaCount = 1, ServerlessHost = KestrelHost)"
+            "a single instance (ServerConfig.MultiInstance.ReplicaCount = 1, ServerlessHost = KestrelHost)"
         | ScaleIntent.MultiInstance instances ->
-            sprintf "%d instances (ServerConfig.ReplicaCount = %d)" instances instances
+            sprintf "%d instances (ServerConfig.MultiInstance.ReplicaCount = %d)" instances instances
         | ScaleIntent.Serverless -> "a serverless host profile (ServerConfig.ServerlessHost = ServerlessHost)"
 
     /// Whether a composition verdict can satisfy a declared intent.
@@ -549,7 +549,7 @@ module ScaleReadinessPreflight =
             Code = IntentUnsatisfiableRule
             Severity = DefectError
             Description =
-                "A deployment declaring more than one instance (ServerConfig.ReplicaCount > 1) or a serverless host profile (ServerConfig.ServerlessHost = ServerlessHost) must compose only components declaring Readiness = DistributedReady, with every declared distributed prerequisite composed."
+                "A deployment declaring more than one instance (ServerConfig.MultiInstance.ReplicaCount > 1) or a serverless host profile (ServerConfig.ServerlessHost = ServerlessHost) must compose only components declaring Readiness = DistributedReady, with every declared distributed prerequisite composed."
         }
     ]
 
@@ -592,7 +592,7 @@ module ScaleReadinessPreflight =
                     Severity = DefectError
                     Message =
                         sprintf
-                            "This deployment declares %s, but the composition is %s. Scale-limiting components:%s\nEither compose distributed-ready implementations of the components named above, or declare the topology the composition can actually serve (ServerConfig.ReplicaCount = 1 with ServerlessHost = KestrelHost)."
+                            "This deployment declares %s, but the composition is %s. Scale-limiting components:%s\nEither compose distributed-ready implementations of the components named above, or declare the topology the composition can actually serve (ServerConfig.MultiInstance.ReplicaCount = 1 with ServerlessHost = KestrelHost)."
                             (ScaleReadiness.describeIntent intent)
                             (ComponentScale.describe report.Verdict)
                             limiting

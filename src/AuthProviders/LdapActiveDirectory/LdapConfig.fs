@@ -306,9 +306,9 @@ module LdapConfig =
                 SearchBase = envVar ToolUp.Platform.ConfigKeys.Names.ldapSearchBase |> Option.defaultValue ""
                 Schema = schema
                 NestedGroupResolution =
-                    envVar ToolUp.Platform.ConfigKeys.Names.ldapNestedGroups
-                    |> Option.map parseBool
-                    |> Option.defaultValue true
+                    ToolUp.Platform.ConfigKeys.ConfigKey.readPermissiveBool
+                        (ToolUp.Platform.ConfigKeys.key ToolUp.Platform.ConfigKeys.Names.ldapNestedGroups)
+                        (envVar ToolUp.Platform.ConfigKeys.Names.ldapNestedGroups)
                 CacheTtlSeconds = intVar ToolUp.Platform.ConfigKeys.Names.ldapCacheTtlSeconds DefaultCacheTtlSeconds
                 TimeoutSeconds = intVar ToolUp.Platform.ConfigKeys.Names.ldapTimeoutSeconds DefaultTimeoutSeconds
         }

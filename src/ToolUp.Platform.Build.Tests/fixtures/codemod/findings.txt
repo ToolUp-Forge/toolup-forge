@@ -1,4 +1,4 @@
-Codemod: 72 site(s) in 14 file(s) need human review (not rewritten):
+Codemod: 75 site(s) in 15 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -70,6 +70,13 @@ Codemod: 72 site(s) in 14 file(s) need human review (not rewritten):
       -> Phase 1077: the history window is `AIAssistantServerConfig.Limits.HistoryWindow` now: set `Limits = { AgentLoopLimits.defaults with HistoryWindow = <n> }`, and read it as `AIAssistantServerConfig.limits cfg |> AgentLoopLimits.historyWindow`
     L25 [1077-run-agent-loop] AIAgentEngine.runAgentLoop provider registry dispatch ctx taskId conversationId AISurface.SidePanel None None CancellationToken.None messages prompt onEvent
       -> Phase 1077: `AIAgentEngine.runAgentLoop` is removed: call `runAgentLoopWithInput` with the same arguments, passing `ModelInput.ofSystemPrompt "SystemPromptBuilder" systemPrompt messages` where the system prompt was (or build an `AIAgentEngine.TurnContext` and call `AIAgentEngine.run`)
+  src/Server/Config.fs
+    L65 [877-record-update-unprovable] { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }
+      -> Phase 877: this record update sets a field that moved into a concern record, and the codemod could not nest it: `(ServerConfig.fromEnv logger overrides)` is not named as the config and every moved label it sets (LogLevel) is one other records carry too; if it is a `ServerConfig`, nest by hand, otherwise nothing changes. Bind the base to a name and write `<Concern> = { <base>.<Concern> with <Field> = … }` by hand
+    L68 [877-record-update-unprovable] let deps = { JobDeps.empty with EventStore = store }
+      -> Phase 877: this record update sets a field that moved into a concern record, and the codemod could not nest it: `JobDeps.empty` is not named as the config and every moved label it sets (EventStore) is one other records carry too; if it is a `ServerConfig`, nest by hand, otherwise nothing changes. Bind the base to a name and write `<Concern> = { <base>.<Concern> with <Field> = … }` by hand
+    L79 [877-shared-label-receiver] config.MultiInstance.ReplicaCount, cfg.Stores.EventStore, deps.EventStore, config.RiskAcknowledgements.AcceptEphemeralRagIndex, config.Port
+      -> Phase 877: if this receiver is a `ServerConfig`, the field moved: `EventStore` / `EntityStore` / `ResultStore` / `Datasets` / `ShareTokenStore` / `RateLimitStore` read `.Stores.<Field>`, `MetricsSink` / `SlowRequestThresholdOverrides` / `DatadogReadback` / `LogLevel` read `.Observability.<Field>`, `SecurityHardening` / `Cors` read `.SecurityPosture.<Field>` and `ProcessProfile` reads `.MultiInstance.ProcessProfile`; a deps or options record of your own with the same label is unchanged
   src/Server/Connectors.fs
     L56 [1095-capability-probe] | :? IWatchableFileSource -> true
       -> Phase 1095: a connector's capabilities are its declared `Capabilities` record now: read `ConnectorCapabilities.watchable` / `ConnectorCapabilities.native` (or `source.Capabilities`), never the type — a decorator forwards its inner connector's record
@@ -117,15 +124,15 @@ Codemod: 72 site(s) in 14 file(s) need human review (not rewritten):
       -> Phase 73: a `Fable.Remoting` namespace the ToolUp fork does not carry (only Server / Client / Json / Giraffe / MsgPack moved) — check the `ToolUp.Remoting.*` surface for the equivalent, or keep the upstream package
     L12 [66-auth-enforcement-middleware] // AuthEnforcementMiddleware honoured.
       -> Phase 66: `AuthEnforcementMiddleware` is retired; `SurfaceEnforcementMiddleware` driven by `SurfaceRequirementRegistry` replaces it — a direct reference usually means a hand-wired pipeline that should now come from the composition root
-    L18 [66-rate-limit-option] RateLimit = Some RateLimitPolicy.defaults
+    L21 [66-rate-limit-option] RateLimit = Some RateLimitPolicy.defaults
       -> Phase 66: `ServerConfig.RateLimit` is no longer an option: `RateLimitConfig.none` is the default, and a policy is `{ Default = Some policy; PerShape = Map.empty }` (per-shape keyed by `SubjectKind`)
-    L22 [66-mode-match] match ctx.Mode with
+    L25 [66-mode-match] match ctx.Mode with
       -> Phase 66: §4 — the arm mapping onto `Subject` is per site: a predicate read becomes `AccessContext.isAnonymous` / `isAuthenticated` / `inTeamScope` / `isClaimBearer`; a scope read becomes `match ctx.Subject with TeamMember(uid, tid) -> … | _ -> …`
-    L27 [66-mode-read] let isPublic (ctx: AccessContext) = ctx.Mode = Anonymous
+    L30 [66-mode-read] let isPublic (ctx: AccessContext) = ctx.Mode = Anonymous
       -> Phase 66: a `.Mode` read: on `ServerConfig` / `ClientConfig` it is now `.Surfaces` (a list), on `AccessContext` it is `.Subject` — an equality test against a `PlatformMode` case becomes the matching `AccessContext.is*` predicate (§4); a consumer-owned `Mode` field is a false positive here
-    L29 [66-platform-mode-type] let submitHandler (config: ServerConfig) (mode: PlatformMode) : HttpHandler = fun next ctx -> next ctx
+    L32 [66-platform-mode-type] let submitHandler (config: ServerConfig) (mode: PlatformMode) : HttpHandler = fun next ctx -> next ctx
       -> Phase 66: `PlatformMode` is retired: `ServerConfig.Mode` / `ClientConfig.Mode` became `Surfaces: SurfaceProfile list`, `AccessContext.Mode` became `Subject: Subject`, and a handler-factory `mode: PlatformMode` parameter drops (§6 — read the subject from `HttpContext.Items["ToolUp.Subject"]`)
-    L36 [66-anonymous-route-prefix] |> ServerApp.withAnonymousRoute "/api/forms/public/"
+    L39 [66-anonymous-route-prefix] |> ServerApp.withAnonymousRoute "/api/forms/public/"
       -> Phase 66: §5 — anonymous route prefixes are deleted; declare a per-route `SurfaceRequirement.claimBearerOnly` / `.anonymousOnly` / `.public_` via `ServerModule.withRouteSurfaceRequirement`
   src/Server/RemotingLeftovers.fs
     L3 [1053-thread-safe-cell] let summary = ThreadSafeCell.computeOnce expensive
@@ -170,4 +177,5 @@ Codemod: 72 site(s) in 14 file(s) need human review (not rewritten):
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
     Phase 815 — docs/migrations/815-remove-open-deprecations.md
     Phase 876 — docs/migrations/876-composition-contributions.md
+    Phase 877 — docs/migrations/877-nested-server-config.md
     Phase 879 — docs/migrations/879-shell-slots.md

@@ -85,7 +85,10 @@ let private cfg (surfaces: SurfaceProfile list) (rateLimit: RateLimitConfig) (ha
     ServerConfig.defaults with
         Surfaces = surfaces
         RateLimit = rateLimit
-        AcceptAnonymousModeWithAI = hatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptAnonymousModeWithAI = hatch
+        }
 }
 
 let private validator (config: ServerConfig) (factory: IAIProviderFactory) : IConfigValidator =

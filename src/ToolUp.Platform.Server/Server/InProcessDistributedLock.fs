@@ -19,7 +19,7 @@ open System.Threading
 //
 // **It is NOT a distributed lock and never pretends to be.** Two replicas
 // each hold their own table and so exclude nothing from each other; that
-// is the whole reason `ServerConfig.ReplicaCount > 1` is refused at
+// is the whole reason `ServerConfig.MultiInstance.ReplicaCount > 1` is refused at
 // preflight for the in-process single-writer subsystems
 // (`MultiInstanceAdminCoherenceValidator`). Composing a store-backed
 // companion is what makes exclusion cross a process boundary.
