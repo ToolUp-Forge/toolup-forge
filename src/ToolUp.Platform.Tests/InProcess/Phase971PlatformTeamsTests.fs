@@ -10,7 +10,6 @@ open ToolUp.Platform.Scope.MembershipDoctor
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.DataObjectStoreTests
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── Phase 971 — Teams: a refused delete that is the operation ─────────
 //

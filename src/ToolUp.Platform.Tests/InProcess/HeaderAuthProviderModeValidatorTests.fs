@@ -6,7 +6,6 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 

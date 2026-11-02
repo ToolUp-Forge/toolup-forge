@@ -48,7 +48,6 @@ let private registeredTests =
         IngestionEmbedderRetryTests.tests
         IngestionBackpressureTests.tests
         DurableIngestionQueueTests.tests
-        IGrantConsentStoreContract.tests
         IUserSchemaStoreContract.tests
         INotificationPreferenceStoreContract.tests
         MetricRegistryTests.tests
@@ -131,8 +130,6 @@ let private registeredTests =
         OAuthSubstrateTests.pkceFlowTests
         OAuthSubstrateTests.refresherScrubTests
         SecretStoreAtRestPostureValidatorTests.tests
-        ShareTokenSigningKeyProvenanceValidatorTests.tests
-        ShareTokenSigningKeyGovernanceTests.tests
         DataProtectionBackendTests.tests
         WebhookSecretRotationTests.tests
         WebhookSecretMigrationTests.tests
@@ -144,11 +141,8 @@ let private registeredTests =
         IPresenceTrackerContract.tests
         IEntityLockStoreContract.tests
         ICrdtDocumentStoreContract.tests
-        PermissionStoreTests.tests
-        StorageScopeResolverTests.tests
         AuthProviderTests.tests
         OidcJwksTtlTests.tests
-        AuthorizationTests.tests
         AuditTests.tests
         RateLimitTests.tests
         IdempotencyTests.tests
@@ -252,7 +246,6 @@ let private registeredTests =
         AIProviderHealthTests.openAiTests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
-        GoogleIdentityCompanionTests.tests
         OidcSignInContractTests.tests
         OidcBearerStrategyTests.tests
         GitHubAuthProviderTests.tests
@@ -287,16 +280,7 @@ let private registeredTests =
         ObservabilityHandlersTests.datadogReadbackTests
         AuditReplicatorTests.tests
         Ed25519ArtifactSubstrateTests.tests
-        ShareTokenStoreTests.tests
-        ShareTokenStoreTests.readPathTests
-        ShareTokenAuthMiddlewareTests.tests
-        ShareTokenMiddlewareRateLimitTests.tests
-        ServiceAccountStoreTests.tests
-        ServiceAccountStoreTests.pureTests
-        ServiceAccountStoreTests.persistenceTests
-        AnonymousSessionMigrationTests.tests
         AnonymousSessionBindingTests.tests
-        StoreIdSanitisingTests.tests
         SecureByDefaultValidatorTests.tests
         InMemoryPendingInviteStoreTests.tests
         BlobPendingInviteStoreTests.tests
@@ -328,7 +312,6 @@ let private registeredTests =
         ProviderOAuthFlowTests.tests
         SseTraceContributorTests.tests
         SsePerConnectionWriterTests.tests
-        HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests
         EventStoreChainValidatorTests.tests
         AuditLogHealthCheckTests.tests
@@ -343,23 +326,15 @@ let private registeredTests =
         AICancellationDispatchInstanceValidatorTests.tests
         AnonymousAIModeValidatorTests.tests
         NotificationChannelInstanceValidatorTests.tests
-        MultiInstanceAdminCoherenceValidatorTests.tests
         NotificationsExplicitOffTests.tests
         SseAuthModeValidatorTests.tests
-        OidcAudienceBindingValidatorTests.tests
-        OidcClaimMappingAdvisoryValidatorTests.tests
-        InviteEmailCapabilityValidatorTests.tests
         SecurityHeadersValidatorTests.tests
         SecurityHeadersValidatorTests.cspNonceCacheValidatorTests
         SecurityHeadersValidatorTests.baselineFloorTests
-        SecurityHardeningTests.tests
-        SecurityHardeningTests.cspMiddlewareTests
         InternetReadinessScorecardTests.tests
-        ForwardedHeadersTrustValidatorTests.tests
         ForwardedHeadersTrustTests.tests
         FileManagementTests.tests
         ModuleApiFactoryTests.tests
-        PeerBearerAuthTests.tests
         ConversationExportAuditTests.tests
         ConversationExporterTests.tests
         FastPathBeaconOwnershipTests.tests
@@ -367,7 +342,6 @@ let private registeredTests =
         FastPathSequencerTelemetryTests.tests
         FastPathTriageResolverTests.tests
         HnswFidelityTests.tests
-        PermissionStoreFailClosedTests.tests
         ScopeResolutionFailClosedTests.tests
         AccessContextFactoryTests.tests
         AuditStreamKeyTests.tests
@@ -392,13 +366,10 @@ let private registeredTests =
         UiInspectionContractBindings.tests
         ListActiveActionsToolTests.tests
         McpHostTests.tests
-        ActionAuthorizerTests.tests
-        HostCapabilityRegistryTests.tests
         HostRenderBoundaryTests.tests
         HostedTreeUsageExportTests.tests
         HostedTreeA11yTests.tests
         AccessibilityAssertionsTests.tests
-        ModuleExposureMigrationTests.tests
         LiveSessionHostTests.tests
         TreePatchChannelTests.tests
         HostStateProjectionTests.tests
@@ -463,9 +434,7 @@ let private registeredTests =
         AIToolDispatchRbacTests.tests
         ToolApprovalTests.tests
         GrantPolicyTests.tests
-        AdminMutationApprovalTests.tests
         GrantNotificationTests.tests
-        GrantConsentTests.tests
         AccessAttestationTests.tests
         GrantGovernanceTests.tests
         AIQueryabilityOptInTests.tests
@@ -511,7 +480,6 @@ let private registeredTests =
         TeamOwnershipTransferTests.tests
         TeamAdminLifecycleTests.tests
         UserMembershipTeardownTests.tests
-        MembershipDoctorTests.tests
         TeamInvitationTests.tests
         TeamInvitationTests.pendingInviteExpiryAuditTests
         TeamInvitationTests.expiredInviteVisibilityTests
@@ -521,9 +489,6 @@ let private registeredTests =
         ConsentStateStoreTests.tests
         ConsentStateStoreTests.entityBackedTests
         ConsentStateStoreTests.restartPersistenceTests
-        SessionRegistryTests.tests
-        SessionRegistryTests.derivationTests
-        SessionRegistryTests.blobBackedTests
         AdAnalyticsObservabilityTests.tests
         HttpBodyBindingTests.tests
         ModuleIdentityTests.tests
@@ -531,12 +496,6 @@ let private registeredTests =
         AnonymousModeContractTests.exposureTests
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
-        BuiltInModuleSurfaceTests.tests
-        ModuleVisibilityContractTests.resolutionTests
-        ModuleVisibilityContractTests.ungovernedTests
-        ModuleVisibilityContractTests.scopeWalkTests
-        ModuleVisibilityContractTests.foldTests
-        ModuleVisibilityContractTests.routeRegistryTests
         AuditViewApiHandlerTests.roleGateTests
         AuditViewApiHandlerTests.scopeIsolationTests
         AuditViewApiHandlerTests.filterTests
@@ -555,12 +514,7 @@ let private registeredTests =
         HomeOverviewTests.widgetDataTests
         HomeOverviewTests.pinningTests
         RevokeOnIssuerRemovedTests.tests
-        AnonymousSessionMigratorTests.tests
-        DefaultSubjectResolverTests.tests
         SubjectDowngradeObservabilityTests.tests
-        CsrfCarveOutDerivationTests.tests
-        SurfaceEnforcementMiddlewareTests.tests
-        AnonymousSessionMigrationMiddlewareTests.tests
         TelemetryZeroCostGateTests.tests
         DispatcherBodyAndArgFastpathTests.tests
         ServerRemotingTailTests.tests
@@ -723,9 +677,6 @@ let private registeredTests =
         ModuleContract.selfTests
         ThreatLensRegressionSuite.tests
         ReactiveRecomputeComposeTests.tests
-        PeerAuthPostureTests.ladderTests
-        PeerAuthPostureTests.overlapTests
-        PeerAuthPostureTests.advisoryTests
         UploadValidationTests.contractTests
         UploadValidationTests.tests
         SessionStoreResetTests.tests
@@ -752,7 +703,6 @@ let private registeredTests =
         JobProgressTests.tests
         FederatedModelExecutionTests.tests
         ExternalModelFitTests.tests
-        FailClosedDispatchTests.tests
         ScopeEnumerationSweepTests.tests
         CountersignatureRegistryTests.subjectTests
         CountersignatureRegistryTests.completenessTests
@@ -781,7 +731,6 @@ let private registeredTests =
         Phase971InterPlatformTests.tests
         Phase971KnowledgeBaseTests.tests
         FactPublicationTests.phase971Tests
-        Phase971PlatformTeamsTests.tests
         Phase971PlatformStoresTests.tests
         Phase971PlatformRecordsTests.tests
         Phase971AITests.tests
@@ -809,21 +758,7 @@ let private registeredTests =
         NarrativeCalculationTests.tests
     ]
 
-/// The `[<Tests>]` bindings this pack deliberately does not run, each
-/// with the reason. A deliberate omission is declared data the
-/// guard reads, not prose beside the list — a stale entry here fails the
-/// guard rather than quietly excusing something.
-let private deliberatelyUnregistered = [
-    {
-        TestRegistrationGuard.Binding = "ToolUp.Platform.Tests.InProcess.BuiltInModuleSurfaceTests.visibilityTests"
-        TestRegistrationGuard.Reason =
-            "constructs the SDK's built-in CLIENT-side UI modules (FileManagerUI.create, "
-            + "DataSubjectRequestAdminUI.create, HealthMonitorUI.create, …), whose bodies touch `Icons` — "
-            + "Fable `importDefault` dummy code that throws under .NET. It is a Fable-tier pack, same class "
-            + "as the HomeOverviewTests client-tier landing test in the ToolUp.AI.Client.Tests Fable "
-            + "harness. See the 2026-07-20 orphaned-pack audit report."
-    }
-]
+let private deliberatelyUnregistered: TestRegistrationGuard.Exemption list = []
 
 /// What this pack declares about its own lists for the
 /// `TOOLUP_TEST_LANE` lanes. See `Support/TestLane.fs` for the lane
@@ -893,7 +828,7 @@ let main argv =
         {
             Row = "Platform"
             Assembly = Assembly.GetExecutingAssembly()
-            GuardFloor = 143
+            GuardFloor = 124
             Exemptions = deliberatelyUnregistered
             Lanes = laneDeclaration
             Registered = registeredTests

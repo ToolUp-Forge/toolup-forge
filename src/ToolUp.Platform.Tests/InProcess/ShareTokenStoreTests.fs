@@ -10,7 +10,6 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── BlobShareTokenStore — IShareTokenStore contract binding ─────────
 //

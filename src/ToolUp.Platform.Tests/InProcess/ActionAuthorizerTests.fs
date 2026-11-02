@@ -8,7 +8,6 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Audit
 
 // ─── Phase 113 — action-authorizer tests ─────────────────────────────
 //

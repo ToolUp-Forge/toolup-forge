@@ -7,8 +7,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Audit
-open ToolUp.Platform.Compose
 
 // ─── Phase 637 — module-visibility profile contract pack ─────────────
 //

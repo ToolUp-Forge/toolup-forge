@@ -25,6 +25,7 @@
         <InternalsVisibleTo Include="ToolUp.Platform.Server.Audit" />
         <InternalsVisibleTo Include="ToolUp.Platform.Server" />
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests.Scope" />
         <InternalsVisibleTo Include="ToolUp.Platform.Tests.Config" />
         <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
         <InternalsVisibleTo Include="ToolUp.Storage.Tests" />

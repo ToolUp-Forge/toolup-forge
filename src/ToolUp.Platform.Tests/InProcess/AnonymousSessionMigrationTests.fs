@@ -7,7 +7,6 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── Phase 135 — anonymous-session ownership binding ────────────────
 //

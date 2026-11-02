@@ -306,6 +306,11 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "TOOLUP_SECRET_STORE"
          ])
     |> budget (seconds 10.)
+    pack
+        "Platform.Scope"
+        "src/ToolUp.Platform.Tests.Scope/ToolUp.Platform.Tests.Scope.fsproj"
+        ([ Input.Tree ] @ env [ "TOOLUP_AUTH_MODE"; "TOOLUP_OIDC_AUDIENCE" ])
+    |> budget (seconds 10.)
     pack "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj" [ Input.Tree ]
     pack "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj" [ Input.Tree ]
     // Each per-provider arm runs when its key is set and reports Pending

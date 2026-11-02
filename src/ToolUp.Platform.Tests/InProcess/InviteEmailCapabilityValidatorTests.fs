@@ -11,7 +11,6 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // Phase 247 — `InviteEmailCapabilityValidator` warns when a team-scoped,
 // auth-required deployment mounts the invite-by-email surface with no

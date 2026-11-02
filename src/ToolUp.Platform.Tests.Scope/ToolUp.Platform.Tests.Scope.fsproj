@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The Scope pack: the lists whose test files reach the Scope part and no later one.
+         The test sources stay under src/ToolUp.Platform.Tests/ and this project
+         compiles them from there, because other packs source-link them and
+         their citations and __SOURCE_DIRECTORY__ paths must not move. Which
+         file is in which pack, and why: docs/migrations/1194-platform-pack-partition.md. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDataObjectStoreContract.fs" Link="Contracts\IDataObjectStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IPermissionStoreContract.fs" Link="Contracts\IPermissionStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IGrantConsentStoreContract.fs" Link="Contracts\IGrantConsentStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IShareTokenStoreContract.fs" Link="Contracts\IShareTokenStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IServiceAccountStoreContract.fs" Link="Contracts\IServiceAccountStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\StoreIdSanitisingContract.fs" Link="Contracts\StoreIdSanitisingContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IPeerBearerAuthContract.fs" Link="Contracts\IPeerBearerAuthContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IActionAuthorizerContract.fs" Link="Contracts\IActionAuthorizerContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ISessionRegistryContract.fs" Link="Contracts\ISessionRegistryContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ISubjectResolverContract.fs" Link="Contracts\ISubjectResolverContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DataObjectStoreTests.fs" Link="InProcess\DataObjectStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PermissionStoreTests.fs" Link="InProcess\PermissionStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AdminMutationApprovalTests.fs" Link="InProcess\AdminMutationApprovalTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\GrantConsentTests.fs" Link="InProcess\GrantConsentTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StorageScopeResolverTests.fs" Link="InProcess\StorageScopeResolverTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\GoogleIdentityCompanionTests.fs" Link="InProcess\GoogleIdentityCompanionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ShareTokenStoreTests.fs" Link="InProcess\ShareTokenStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ServiceAccountStoreTests.fs" Link="InProcess\ServiceAccountStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ShareTokenAuthMiddlewareTests.fs" Link="InProcess\ShareTokenAuthMiddlewareTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ShareTokenMiddlewareRateLimitTests.fs" Link="InProcess\ShareTokenMiddlewareRateLimitTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigrationTests.fs" Link="InProcess\AnonymousSessionMigrationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StoreIdSanitisingTests.fs" Link="InProcess\StoreIdSanitisingTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HeaderAuthProviderModeValidatorTests.fs" Link="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" Link="InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ShareTokenSigningKeyGovernanceTests.fs" Link="InProcess\ShareTokenSigningKeyGovernanceTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MultiInstanceAdminCoherenceValidatorTests.fs" Link="InProcess\MultiInstanceAdminCoherenceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcAudienceBindingValidatorTests.fs" Link="InProcess\OidcAudienceBindingValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcClaimMappingAdvisoryValidatorTests.fs" Link="InProcess\OidcClaimMappingAdvisoryValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InviteEmailCapabilityValidatorTests.fs" Link="InProcess\InviteEmailCapabilityValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SecurityHardeningTests.fs" Link="InProcess\SecurityHardeningTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ForwardedHeadersTrustValidatorTests.fs" Link="InProcess\ForwardedHeadersTrustValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PeerBearerAuthTests.fs" Link="InProcess\PeerBearerAuthTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PermissionStoreFailClosedTests.fs" Link="InProcess\PermissionStoreFailClosedTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ActionAuthorizerTests.fs" Link="InProcess\ActionAuthorizerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostCapabilityRegistryTests.fs" Link="InProcess\HostCapabilityRegistryTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModuleExposureMigrationTests.fs" Link="InProcess\ModuleExposureMigrationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MembershipDoctorTests.fs" Link="InProcess\MembershipDoctorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SessionRegistryTests.fs" Link="InProcess\SessionRegistryTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BuiltInModuleSurfaceTests.fs" Link="InProcess\BuiltInModuleSurfaceTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModuleVisibilityContractTests.fs" Link="InProcess\ModuleVisibilityContractTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigratorTests.fs" Link="InProcess\AnonymousSessionMigratorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DefaultSubjectResolverTests.fs" Link="InProcess\DefaultSubjectResolverTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\CsrfCarveOutDerivationTests.fs" Link="InProcess\CsrfCarveOutDerivationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SurfaceEnforcementMiddlewareTests.fs" Link="InProcess\SurfaceEnforcementMiddlewareTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigrationMiddlewareTests.fs" Link="InProcess\AnonymousSessionMigrationMiddlewareTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuthorizationTests.fs" Link="InProcess\AuthorizationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PeerAuthPostureTests.fs" Link="InProcess\PeerAuthPostureTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FailClosedDispatchTests.fs" Link="InProcess\FailClosedDispatchTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\Phase971PlatformTeamsTests.fs" Link="InProcess\Phase971PlatformTeamsTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
+        <ProjectReference Include="..\AuthProviders\GoogleIdentityClient\GoogleIdentityClient.fsproj" />
+        <ProjectReference Include="..\AuthProviders\OidcClient\OidcClient.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Scope\ToolUp.Platform.Server.Scope.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

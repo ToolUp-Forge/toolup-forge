@@ -530,6 +530,7 @@
          on .NET and under Fable. Test-only visibility; no shipped public
          surface (the OidcAuthProvider / ContentAuthoring precedent). -->
     <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+    <InternalsVisibleTo Include="ToolUp.Platform.Tests.Scope" />
     <InternalsVisibleTo Include="ToolUp.Platform.Tests.Infra" />
     <InternalsVisibleTo Include="ToolUp.Platform.Tests.Remoting" />
     <InternalsVisibleTo Include="ToolUp.AI.Client.Tests" />

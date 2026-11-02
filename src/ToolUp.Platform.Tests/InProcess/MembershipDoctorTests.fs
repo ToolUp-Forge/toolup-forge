@@ -9,7 +9,6 @@ open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Scope.MembershipDoctor
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── Phase 546 — membership-integrity doctor ─────────────────────────
 //

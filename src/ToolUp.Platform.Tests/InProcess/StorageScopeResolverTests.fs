@@ -12,7 +12,6 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── Shared helpers ──────────────────────────────────────────────────
 

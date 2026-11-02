@@ -5,7 +5,6 @@ open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── ISubjectResolver contract pack — Phase 66 Stream D.1 ────────────
 //

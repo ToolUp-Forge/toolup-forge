@@ -9,7 +9,6 @@ open ToolUp.Platform.Scope.PeerBearerAuthMiddleware
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── IPeerBearerAuthContract — Phase 37 contract pack ────────────────
 //

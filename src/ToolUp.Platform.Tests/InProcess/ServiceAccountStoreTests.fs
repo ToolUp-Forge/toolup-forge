@@ -8,7 +8,6 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── BlobServiceAccountStore — contract binding (Phase 527) ──────────
 //
