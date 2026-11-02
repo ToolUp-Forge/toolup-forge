@@ -179,7 +179,6 @@ let private platformEnv =
         "TOOLUP_SECRET_STORE"
         "TOOLUP_TEST_AGE_CONNSTRING"
         "TOOLUP_TEST_POSTGRES"
-        "TOOLUP_TIMESCALE_CONN"
         "TOOLUP_TRANSITION_PIN_OUT"
     ]
 
@@ -381,6 +380,14 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "VAULT_NAMESPACE"
              "VAULT_TOKEN"
          ])
+    pack "EmbeddingProviders" "src/EmbeddingProviders/Tests/ToolUp.EmbeddingProviders.Tests.fsproj" [ Input.Tree ]
+    pack "EntityStores" "src/EntityStores/Tests/ToolUp.EntityStores.Tests.fsproj" (env [ "TOOLUP_TEST_POSTGRES" ])
+    pack
+        "TimeSeriesStores"
+        "src/TimeSeriesStores/Tests/ToolUp.TimeSeriesStores.Tests.fsproj"
+        (env [ "TOOLUP_TIMESCALE_CONN" ])
+    pack "FeatureFlagProviders" "src/FeatureFlagProviders/Tests/ToolUp.FeatureFlagProviders.Tests.fsproj" [ Input.Tree ]
+    pack "Media" "src/Media/Tests/ToolUp.Media.Tests.fsproj" [ Input.Tree ]
 
     // ── The legs `VerifyAll` runs after the packs ──────────────────────
     // Every `*.Tests.fsproj` is a pack row or a named exclusion. Pure file

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 1197 - the IEntityStore companions (Postgres). Hosts IEntityStoreContract against the Postgres store; the live arm reads TOOLUP_TEST_POSTGRES and is ignored without it.
+
+         A companion family's tests live beside the family and build against
+         its closure, not the Platform pack's. The contract packs the family
+         conforms to are SOURCE-LINKED from ToolUp.Platform.Tests (Link=…), so
+         there is one copy of each law and nothing to drift; the linked
+         support files are the closure the moved cases compile against. -->
+    <ItemGroup>
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IEntityStoreContract.fs" Link="Contracts\IEntityStoreContract.fs" />
+        <Compile Include="PostgresEntityStoreTests.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\Postgres\PostgresEntityStore.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.EmbeddingProviderEnvTests
+module ToolUp.EmbeddingProviders.Tests.EmbeddingProviderEnvTests
 
 open System
 open System.Collections.Concurrent
@@ -7,6 +7,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
+open ToolUp.Platform.Tests.InProcess
 
 // ─── Phase 671 — `EmbeddingProviderEnv.fromEnv` ──────────────────────
 //

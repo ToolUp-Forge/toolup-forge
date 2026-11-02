@@ -131,7 +131,6 @@
         <Compile Include="Contracts\IContentSourceContract.fs" />
         <Compile Include="Contracts\IRenderCacheContract.fs" />
         <Compile Include="Contracts\IAssetStoreContract.fs" />
-        <Compile Include="Contracts\IMediaLibraryContract.fs" />
         <Compile Include="Contracts\IEdgeCacheContract.fs" />
         <Compile Include="Contracts\IConsentProviderContract.fs" />
         <Compile Include="Contracts\IConsentStateStoreContract.fs" />
@@ -241,7 +240,6 @@
         <Compile Include="InProcess\PresenceApiTests.fs" />
         <Compile Include="InProcess\ExperimentSubstrateTests.fs" />
         <Compile Include="InProcess\WorkflowEngineTests.fs" />
-        <Compile Include="InProcess\FlagSourceTests.fs" />
         <Compile Include="InProcess\TransientFaultPolicyTests.fs" />
         <Compile Include="InProcess\PermissionStoreTests.fs" />
         <Compile Include="InProcess\GrantPolicyTests.fs" />
@@ -282,9 +280,7 @@
         <Compile Include="InProcess\SidecarStoreTests.fs" />
         <Compile Include="InProcess\RunJobTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
-        <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\SqliteLogStoreTests.fs" />
-        <Compile Include="InProcess\PostgresEntityStoreTests.fs" />
         <Compile Include="InProcess\PostgresFactStoreTests.fs" />
         <Compile Include="InProcess\TelemetrySinkTests.fs" />
         <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
@@ -458,8 +454,6 @@
         <Compile Include="InProcess\HostActionAuditTests.fs" />
         <Compile Include="InProcess\NotificationSilentlySkippedTests.fs" />
         <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
-        <Compile Include="InProcess\EmbeddingProviderEnvTests.fs" />
-        <Compile Include="InProcess\EmbeddingProviderKeyRotationTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
         <Compile Include="InProcess\SecretStoreAtRestPostureValidatorTests.fs" />
         <Compile Include="InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" />
@@ -663,7 +657,6 @@
         <Compile Include="InProcess\BrandKitLayoutTests.fs" />
         <Compile Include="InProcess\FelizLayoutAdapterTests.fs" />
         <Compile Include="InProcess\AssetStoreTests.fs" />
-        <Compile Include="InProcess\MediaLibraryTests.fs" />
         <Compile Include="InProcess\EdgeCacheTests.fs" />
         <Compile Include="InProcess\DeliveredEgressTests.fs" />
         <Compile Include="InProcess\ContentAuthoringTests.fs" />
@@ -811,7 +804,6 @@
         <Compile Include="InProcess\SparseIndexCompositionTests.fs" />
         <Compile Include="InProcess\RedisEmbeddingCacheTests.fs" />
         <Compile Include="InProcess\LocalEmbeddingScopeTests.fs" />
-        <Compile Include="InProcess\LocalEmbeddingHashingTests.fs" />
         <Compile Include="InProcess\OcrProviderTests.fs" />
         <Compile Include="InProcess\PeerAuthPostureTests.fs" />
         <Compile Include="InProcess\FederationWireCorpus.fs" />
@@ -864,7 +856,6 @@
         <Compile Include="InProcess\Phase971PlatformTeamsTests.fs" />
         <Compile Include="InProcess\Phase971PlatformStoresTests.fs" />
         <Compile Include="InProcess\Phase971PlatformRecordsTests.fs" />
-        <Compile Include="InProcess\Phase971EmbeddingTests.fs" />
         <Compile Include="InProcess\Phase971AITests.fs" />
         <Compile Include="InProcess\Phase971PublicRenderingTests.fs" />
         <Compile Include="InProcess\Phase971PlatformTenantTests.fs" />
@@ -906,7 +897,6 @@
         <ProjectReference Include="..\ToolUp.Graph.Projection\ToolUp.Graph.Projection.fsproj" />
         <ProjectReference Include="..\ToolUp.BrandKit\ToolUp.BrandKit.fsproj" />
         <ProjectReference Include="..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" />
-        <ProjectReference Include="..\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj" />
         <ProjectReference Include="..\EntityStores\Postgres\PostgresEntityStore.fsproj" />
         <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" />
         <ProjectReference Include="..\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj" />
@@ -976,7 +966,6 @@
         <ProjectReference Include="..\ToolUp.Experiments.Server\ToolUp.Experiments.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.Workflow.Core\ToolUp.Workflow.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Workflow.Server\ToolUp.Workflow.Server.fsproj" />
-        <ProjectReference Include="..\FeatureFlagProviders\OpenFeature\ToolUp.FeatureFlagProviders.OpenFeature.fsproj" />
         <ProjectReference Include="..\ExternalCompute\ToolUp.ExternalCompute.Http\ToolUp.ExternalCompute.Http.fsproj" />
     <ProjectReference Include="..\RateLimit\AzureTableStorage\ToolUp.RateLimit.AzureTableStorage.fsproj" />
     </ItemGroup>

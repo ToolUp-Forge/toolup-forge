@@ -177,7 +177,6 @@ let private registeredTests =
         ICrdtDocumentStoreContract.tests
         ExperimentSubstrateTests.tests
         WorkflowEngineTests.tests
-        FlagSourceTests.tests
         PermissionStoreTests.tests
         FeatureFlagStoreTests.tests
         FlagEvaluatorTests.tests
@@ -215,8 +214,6 @@ let private registeredTests =
         DataSubjectRequestTests.authorizationTests
         SignedExportTests.tests
         TimeSeriesStoreTests.tests
-        TimescaleTimeSeriesStoreTests.tests
-        PostgresEntityStoreTests.tests
         PostgresFactStoreTests.offlineTests
         PostgresFactStoreTests.tests
         TelemetrySinkTests.tests
@@ -239,8 +236,6 @@ let private registeredTests =
         LocalEmbeddingScopeTests.capabilityProbeTests
         LocalEmbeddingScopeTests.cacheKeyingTests
         LocalEmbeddingScopeTests.crossScopeRetrievalTests
-        LocalEmbeddingHashingTests.dimensionAssignmentTests
-        LocalEmbeddingHashingTests.spaceAlignmentTests
         OcrProviderTests.tests
         ContentScannerTests.tests
         KnowledgeUserScopeIsolationTests.tests
@@ -321,13 +316,11 @@ let private registeredTests =
                 AIProviderEnvValidatorTests.modelTests
                 AIProviderProbeValidatorTests.tests
                 OidcAuthValidatorTimeoutTests.tests
-                EmbeddingProviderEnvTests.tests
                 ConfigBoundsValidatorTests.intKeyTests
                 ConfigBoundsValidatorTests.retentionTests
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
-        EmbeddingProviderKeyRotationTests.tests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
@@ -628,7 +621,6 @@ let private registeredTests =
         AssetStoreTests.tests
         AssetStoreTests.rendererContract
         AssetStoreTests.phase967Tests
-        MediaLibraryTests.tests
         EdgeCacheTests.tests
         DeliveredEgressTests.tests
         ContentAuthoringTests.tests
@@ -1010,13 +1002,11 @@ let private registeredTests =
         TeamOutputVisibilityTests.tests
         FactPublicationTests.tests
         Phase971InterPlatformTests.tests
-        MediaLibraryTests.phase971Tests
         Phase971KnowledgeBaseTests.tests
         FactPublicationTests.phase971Tests
         Phase971PlatformTeamsTests.tests
         Phase971PlatformStoresTests.tests
         Phase971PlatformRecordsTests.tests
-        Phase971EmbeddingTests.tests
         Phase971AITests.tests
         Phase971PublicRenderingTests.tests
         Phase971PlatformTenantTests.tests

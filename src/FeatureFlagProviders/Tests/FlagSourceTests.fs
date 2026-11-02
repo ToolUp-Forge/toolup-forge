@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.FlagSourceTests
+module ToolUp.FeatureFlagProviders.Tests.FlagSourceTests
 
 open System
 open System.Collections.Generic

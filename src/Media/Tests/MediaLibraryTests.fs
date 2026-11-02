@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Tests.InProcess.MediaLibraryTests
+module ToolUp.Media.Tests.MediaLibraryTests
 
 // Phase 971 - Media: a refused delete that is the operation propagates.
 
@@ -28,6 +28,7 @@ open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Infra.Usage
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.InProcess
 
 // ─── Phase 88 — media library tests ───────────────────────────────────
 //

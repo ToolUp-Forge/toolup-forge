@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.EmbeddingProviderKeyRotationTests
+module ToolUp.EmbeddingProviders.Tests.EmbeddingProviderKeyRotationTests
 
 open System
 open System.Collections.Concurrent
@@ -12,6 +12,7 @@ open Expecto
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Tests.InProcess
 
 // ─── Phase 459 — the three properties C/D pin, tested on the wire ────
 //

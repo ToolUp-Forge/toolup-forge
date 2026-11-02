@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.Phase971EmbeddingTests
+module ToolUp.EmbeddingProviders.Tests.Phase971EmbeddingTests
 
 open Expecto
 open ToolUp.Platform
@@ -6,6 +6,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.DataObjectStoreTests
+open ToolUp.Platform.Tests.InProcess
 
 // ─── Phase 971 — Embedding: a refused scope-state delete is reported ──
 //

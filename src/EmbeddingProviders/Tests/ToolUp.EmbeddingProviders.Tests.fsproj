@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 1197 - the IEmbeddingProvider companions (the local hashing provider, OpenAI). The OpenAI live arm is env-gated and ignored without its key.
+
+         A companion family's tests live beside the family and build against
+         its closure, not the Platform pack's. The contract packs the family
+         conforms to are SOURCE-LINKED from ToolUp.Platform.Tests (Link=…), so
+         there is one copy of each law and nothing to drift; the linked
+         support files are the closure the moved cases compile against. -->
+    <ItemGroup>
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IDataObjectStoreContract.fs" Link="Contracts\IDataObjectStoreContract.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\InProcess\DataObjectStoreTests.fs" Link="InProcess\DataObjectStoreTests.fs" />
+        <Compile Include="EmbeddingProviderEnvTests.fs" />
+        <Compile Include="EmbeddingProviderKeyRotationTests.fs" />
+        <Compile Include="LocalEmbeddingHashingTests.fs" />
+        <Compile Include="Phase971EmbeddingTests.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\Local\LocalEmbeddingProvider.fsproj" />
+        <ProjectReference Include="..\OpenAI\OpenAIEmbeddingProvider.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

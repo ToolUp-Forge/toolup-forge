@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Tests.InProcess.PostgresEntityStoreTests
+module ToolUp.EntityStores.Tests.PostgresEntityStoreTests
 
 open System
 open Expecto
