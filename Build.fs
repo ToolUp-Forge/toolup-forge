@@ -4635,7 +4635,12 @@ let main args =
                                     let inc = r.Attribute(System.Xml.Linq.XName.Get "Include")
 
                                     if not (isNull inc) then
-                                        walk (Path.GetFullPath(Path.Combine(Path.GetDirectoryName proj, inc.Value)))
+                                        // An `Include` is spelt with backslashes in most of
+                                        // the tree; MSBuild reads it on every OS, and so
+                                        // must this walk (the gate ran only on Windows
+                                        // before this line).
+                                        let rel = inc.Value.Replace('\', Path.DirectorySeparatorChar)
+                                        walk (Path.GetFullPath(Path.Combine(Path.GetDirectoryName proj, rel)))
 
                     for r in fuaranCoBuildRoots do
                         walk (Path.GetFullPath(Path.Combine(root, r)))
