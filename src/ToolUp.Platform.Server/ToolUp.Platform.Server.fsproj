@@ -120,6 +120,7 @@
         <Compile Include="Server\HttpBodyBinding.fs" />
     </ItemGroup>
     <ItemGroup>
+        <!-- 1193 part: Infra: the store, data, compute, RAG, metrics and secret-store substrate -->
         <!-- What only a server can run, moved out of
              ToolUp.Platform.Core, where each file shipped to every Fable
              consumer behind a `#if !FABLE_COMPILER` guard. Namespaces and
@@ -135,12 +136,6 @@
              Server files. -->
         <Compile Include="Server\HttpClientTransport.fs" />
         <Compile Include="Server\JwtCrypto.fs" />
-        <Compile Include="Server\Config\ConfigResolution.fs" />
-        <!-- The listen-address resolution and its preflight.
-             Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
-             validates through it; ComposeBootstrap.fs applies the plan. -->
-        <Compile Include="Server\ServerBinding.fs" />
-        <Compile Include="Server\Config\ServerConfigFromEnv.fs" />
         <Compile Include="Server\DataVocabularyPins.fs" />
         <Compile Include="Server\BlobStorageSignedUrl.fs" />
         <Compile Include="Server\Rag\IEmbeddingProvider.fs" />
@@ -178,99 +173,8 @@
         <Compile Include="Server\DatadogReadbackMetrics.fs" />
         <Compile Include="Server\Logger.fs" />
         <Compile Include="Server\LoggerScope.fs" />
-        <!-- The deployment configuration manifest loader:
-             discovery, strict JSON parse, unknown/secret-key refusals,
-             SHA-256 over the raw bytes, and installation into Core's
-             `ConfigResolution` seam. Server-side because Core ships its
-             source for Fable consumers and cannot carry System.IO. Before
-             ConsoleLogger.fs, which installs the manifest before building
-             the logger — the log level is itself a bindable key. -->
-        <!-- The configuration-profile registry + selector.
-             Before ConfigResolver.fs, which selects the profile in the
-             same pass that installs the manifest. Depends only on Core
-             (the built-in bundles are registry data, the rung is the
-             resolution seam's), so it sits as early as the loader does. -->
-        <Compile Include="Server\ConfigProfiles.fs" />
-        <Compile Include="Server\ConfigResolver.fs" />
-        <Compile Include="Server\Infra\ConsoleLogger.fs" />
         <Compile Include="Server\Infra\JsonConsoleLogger.fs" />
-        <Compile Include="Server\Api.fs" />
         <Compile Include="Server\Infra\InMemoryEventStore.fs" />
-        <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
-        <Compile Include="Server\SseTraceContributor.fs" />
-        <Compile Include="Server\Notifications\NotificationChannel.fs" />
-        <!-- In-memory presence channel (single-instance default). -->
-        <Compile Include="Server\Notifications\PresenceChannel.fs" />
-        <!-- Presence tracker + advisory soft-lock store
-             (interfaces + single-instance in-memory defaults). Publish
-             join/move/leave + lock taken/released/expired events on the
-             reserved `_platform.*` keys via INotificationChannel;
-             no new transport. -->
-        <Compile Include="Server\IPresenceTracker.fs" />
-        <Compile Include="Server\IEntityLockStore.fs" />
-        <!-- CRDT co-editing substrate: the append-only opaque
-             update log (seam) plus the single-instance in-memory default
-             and the INotificationChannel fan-out decorator. After
-             IEntityLockStore.fs (the awareness floor it sits above) and
-             after NotificationChannel.fs (the relay's transport). No CRDT
-             library server-side — payloads are opaque bytes. -->
-        <Compile Include="Server\ICrdtDocumentStore.fs" />
-        <Compile Include="Server\InMemoryCrdtDocumentStore.fs" />
-        <!-- The durable arm of the same seam: an IBlobStorage-backed
-             append log + snapshot fold, so a co-edited document survives a
-             restart. After InMemoryCrdtDocumentStore.fs because it reuses the
-             NotifyingCrdtDocumentStore relay declared there rather than
-             re-implementing fan-out. Still no CRDT library server-side. -->
-        <Compile Include="Server\BlobCrdtDocumentStore.fs" />
-        <Compile Include="Server\INotificationSink.fs" />
-        <!-- The external address book seam. Only the
-             INTERFACE sits here: it needs nothing but the Core types, and
-             NotificationAddressBook.fs below takes it as an optional
-             constructor argument to resolve the External recipient arm.
-             The entity-backed default lives with the entity substrate,
-             far below. -->
-        <Compile Include="Server\IExternalContactStore.fs" />
-        <Compile Include="Server\INotificationAddressBook.fs" />
-        <Compile Include="Server\NotificationAddressBook.fs" />
-        <!-- The WhatsApp template registry seam + its blob-backed
-             and no-op defaults. Needs only Core types and IBlobStorage;
-             before WhatsAppSendPolicyFilter.fs, which consults it. -->
-        <Compile Include="Server\IWhatsAppTemplateRegistry.fs" />
-        <Compile Include="Server\WhatsAppTemplateRegistry.fs" />
-        <!-- Fire-and-forget starts that catch, log and are drained
-             at stop, and the observed start of a
-             fire-and-forget write with its warning. Depends only on Core
-             (ILogger, ProviderExceptions) and ASP.NET Core's HttpContext; before
-             its first user (the SSE mismatch audit below). -->
-        <Compile Include="Server\Background.fs" />
-        <!-- Shared SSE scope resolution. One resolution path
-             (principal-wins + SseAuthMode-gated fallback + mismatch audit)
-             consumed by both NotificationHandler below and
-             ToolUp.AI.Server's SSEHandler so the two cannot drift. -->
-        <Compile Include="Server\Notifications\SseScopeResolution.fs" />
-        <Compile Include="Server\Notifications\NotificationHandler.fs" />
-        <!-- Scope-isolated server-driven live-session host:
-             ILiveChannel / ILiveSessionHost (six-rule, GP 4 structural
-             scope partition) + the in-process default. After the SSE
-             substrate it rides; the compose hook + endpoint live in
-             Server\Compose\LiveSessionsCompose.fs (after ServerApp). -->
-        <Compile Include="Server\Notifications\LiveSessionHost.fs" />
-        <!-- Neutral tree-patch transport envelope: TreePatchEnvelope
-             (monotonic seq / diff-base) + ITreePatchChannel (push / ack /
-             resync-on-gap) layered over the ILiveChannel. Opaque
-             payload (GP 1), scope isolation inherited from the wrapped channel
-             (GP 4), six-rule (GP 12). After LiveSessionHost.fs it wraps. -->
-        <Compile Include="Server\Notifications\TreePatchChannel.fs" />
-        <!-- Server-tier `RequestContext.ofHttpContext`
-             constructor for the Core-tier `RequestContext` newtype. Must
-             precede every `IAuthProvider` impl so they can compile against
-             the shared boxing path. -->
-        <Compile Include="Server\Auth\RequestContext.fs" />
-        <Compile Include="Auth\IdentitySanitiser.fs" />
-        <Compile Include="Auth\HeaderAuthProvider.fs" />
-        <Compile Include="Auth\StaticJwtAuthProvider.fs" />
-        <!-- `AuthProvider.fromEnv` (env-var-driven dispatch). -->
-        <Compile Include="Auth\AuthProviderFromEnv.fs" />
         <Compile Include="Server\Infra\LocalFileStorage.fs" />
         <!-- Dev/test in-memory ITimeSeriesStore default. -->
         <Compile Include="Server\Infra\InMemoryTimeSeriesStore.fs" />
@@ -282,15 +186,6 @@
         <Compile Include="Server\Infra\SqliteLogStore.fs" />
         <Compile Include="Server\Infra\NoOpLogStore.fs" />
         <Compile Include="Server\LogStoreLogger.fs" />
-        <!-- `BlobStorage.fromEnv` (env-var-driven dispatch).
-             Module name is `BlobStorageEnv` because `BlobStorage` is
-             reserved in Core for the interface module. -->
-        <Compile Include="Server\Infra\BlobStorageFromEnv.fs" />
-        <!-- `EmbeddingProviderEnv.fromEnv` (env-var-driven
-             embedding-provider selection). Module name is
-             `EmbeddingProviderEnv` because `IEmbeddingProvider` is
-             reserved for the interface module compiled above. -->
-        <Compile Include="Server\Infra\EmbeddingProviderFromEnv.fs" />
         <Compile Include="Server\SecondaryIndex.fs" />
         <Compile Include="Server\Infra\PersistentEventStore.fs" />
         <Compile Include="Server\IDataObjectStore.fs" />
@@ -311,10 +206,6 @@
              FileManagement can join status onto the file-list read; RAG owns
              the writes. -->
         <Compile Include="Server\IngestionStatusStore.fs" />
-        <!-- Mapping dry-run validation seam + default BCL-only
-             validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
-        <Compile Include="Server\IMappingDryRunValidator.fs" />
-        <Compile Include="Server\MappingDryRunValidator.fs" />
         <Compile Include="Server\IEntityStore.fs" />
         <!-- Write-ahead-intent outbox coupling entity saves to
              event publication; after the store surface it wraps, before the
@@ -324,11 +215,6 @@
 
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
-        <!-- The SDK-default IExternalContactStore, over
-             IEntityStore for the versioning, the dedupe indexes and the
-             per-scope container. After EntityStore.fs; before
-             ComposeStores.fs registers it. -->
-        <Compile Include="Server\ExternalContactStore.fs" />
         <!-- User-authored schema store (substrate slice): the
              IUserSchemaStore seam + blob-backed default over IDataObjectStore
              (versioned schema definitions + typed migration execution).
@@ -440,7 +326,6 @@
              IBlobStorage) and before ServerApp.fs (which accumulates packs). -->
         <Compile Include="Server\ISeedPack.fs" />
         <Compile Include="Server\ILineageStore.fs" />
-        <Compile Include="Server\ResultStore.fs" />
         <Compile Include="Server\LineageStore.fs" />
         <!-- Read-only provenance chain traversal (grounding ledger v0). -->
         <Compile Include="Server\IProvenanceGraph.fs" />
@@ -452,45 +337,6 @@
              after ProvenanceGraph.fs (its only server-tier dependency);
              consumer-wired, so nothing below composes it. -->
         <Compile Include="Server\ProvenanceApiHandler.fs" />
-        <!-- SDK-wide cross-instance lease primitive
-             (IDistributedLock + Lease + the in-process default). Sits
-             before every consumer: the job scheduler's per-JobId dispatch
-             mutex, the blob-backed Platform-Admin store's read-modify-write
-             serialisation, and SDK.Server's DI registration. Depends only
-             on ILogger, so it can sit this early. -->
-        <Compile Include="Server\IDistributedLock.fs" />
-        <Compile Include="Server\InProcessDistributedLock.fs" />
-        <Compile Include="Server\IJobStore.fs" />
-        <Compile Include="Server\IJobHandler.fs" />
-        <!-- RunJob: a platform job as a name, a parse and a run; the one
-             handler shape and the one job-payload codec. -->
-        <Compile Include="Server\RunJob.fs" />
-        <!-- The platform-owned scope carrier. Before
-             IJobScheduler.fs, whose carried job scope redeems through it. -->
-        <Compile Include="Server\CarriedScopeToken.fs" />
-        <Compile Include="Server\IJobScheduler.fs" />
-        <!-- The job-progress-checkpoint seam + its fan-out
-             default, plus the ctx.Progress JobContext extension. Before
-             JobScheduler.fs (which constructs the sink and pushes the
-             ambient reporter around each handler dispatch) and after
-             IJobHandler.fs, so a handler file can see ctx.Progress. Needs
-             only INotificationChannel / IEventStore / ILogger from Core. -->
-        <Compile Include="Server\IJobProgressSink.fs" />
-        <!-- Resource-envelope seam adapters: the concurrency
-             gate that decorates a budgeted component's IJobHandler, the
-             RouteLimit projection that folds a component's declared
-             requests-per-minute into the middleware's own policy
-             list, and the typed queue-depth admission. Reads the Core
-             EnvelopeSignature; adds no hosted service and no dependency.
-             After IJobHandler/IJobScheduler (decorates the handler) and
-             IMetricsSink (emits the refusal counter); before ServerApp,
-             which applies the gate where a module's ComponentId is in
-             scope. -->
-        <Compile Include="Server\ResourceEnvelopeEnforcement.fs" />
-        <!-- Schema-migration IJobHandler binding: long-running
-             MigrationPlan executions run through IJobScheduler and survive
-             restarts. After IJobHandler/IJobScheduler + IUserSchemaStore. -->
-        <Compile Include="Server\SchemaMigrationJobHandler.fs" />
         <!-- Model-fit envelope: core types, provider seam +
              registry, then the fit-run job handler (needs IJobHandler above +
              IAuditLog from Core). Composed by ComposeJobs.registerModelFitting. -->
@@ -501,16 +347,6 @@
              version. -->
         <Compile Include="Server\DatasetProvenanceOps.fs" />
         <Compile Include="Server\IModelFitProvider.fs" />
-        <Compile Include="Server\ModelFitJobHandler.fs" />
-        <!-- The EXTERNAL execution binding of the fit
-             envelope: the versioned `modelfit/v1` work-spec convention, the
-             completion rendezvous a callback resolves, and the
-             IModelFitProvider that submits through IExternalComputeDispatcher.
-             Compiles after IModelFitProvider.fs (the seam it implements) and
-             needs IDatasetStore + IExternalComputeDispatcher +
-             IExternalHandleStore + IJobProgressSink, all above. Nothing
-             composes it — a deployment wires the worker itself (GP 13). -->
-        <Compile Include="Server\ExternalModelFitProvider.fs" />
         <!-- Model registry: governed-artifact types, the seam,
              then the blob-backed default (rides IDataObjectStore + ILineageStore
              above; carries the fit envelope's composite key). -->
@@ -554,73 +390,23 @@
              path exactly (GP 11) and constructs none of it (GP 13). -->
         <Compile Include="Server\ModelArtifactProvenance.fs" />
         <Compile Include="Server\ModelPromotionTransfer.fs" />
-        <!-- Batch item execution: the `_platform.modelfit.batchitem`
-             IJobHandler (fit envelope + batch-annotated registry registration).
-             Consumer-wired like the scoring handler. -->
-        <Compile Include="Server\ModelFitBatchItemJobHandler.fs" />
         <!-- Model scoring: the IModelScorer seam + default
              envelope (rides IDatasetStore for the output vintage, the
              ArtifactRef / DatasetVersionRef, and the ModelArtifact),
              then the batch IJobHandler over IModelRegistry + IJobScheduler. -->
         <Compile Include="Server\IModelScorer.fs" />
-        <Compile Include="Server\ModelScoringJobHandler.fs" />
-        <!-- The opt-in model-execution compose leg (registers
-             IModelRegistry, and optionally the scorer / executor policy /
-             observers) plus the startup validator that names a
-             mounted ModelExecutionApi with no registry composed. Placed
-             here: it needs only the model seams above (BlobModelRegistry,
-             ModelRegistrationObservers, IModelScorer) and must compile
-             before Compose/ComposeConfigValidators.fs, which registers the
-             validator, and before ServerApp.fs, whose withModelExecution
-             builder folds `register` into the DI graph. -->
-        <Compile Include="Server\Compose\ServiceComposition.fs" />
-        <Compile Include="Server\ComposeModelExecution.fs" />
-        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
         <!-- Dataset assembly (transforms-as-data): the spec +
              closed transform DU, then the executor (rides IDatasetStore for
              output + ITimeSeriesStore for range sources; propagates
              labels). Algorithm-free plumbing; forge never computes a derived
              value outside the closed aggregate list. -->
         <Compile Include="Server\DatasetAssemblyTypes.fs" />
-        <Compile Include="Server\DatasetAssemblyExecutor.fs" />
         <!-- Model evaluation & champion-challenger harness: the
              evaluation types + provider-seam Evaluate extension member, then
              the runner (rides + IDataObjectStore), the
              opt-in promotion gate, and the evaluation / re-vintage job
              handlers. Nothing composed by default (GP 13). -->
         <Compile Include="Server\ModelEvaluationTypes.fs" />
-        <Compile Include="Server\ModelEvaluationRunner.fs" />
-        <!-- Declared promotion policies: tolerance predicates
-             over score / comparison output decide auto-promote vs queue for
-             curation vs reject, and every verdict that moves an artifact is
-             executed through the transition seam as
-             `PolicyVerdict` (no second state machine). Compiles AFTER
-             ModelEvaluationRunner.fs (it reads the track record as
-             one of its two metric sources) and after ModelTransitionSeam.fs
-             (it drives that seam). Nothing composes it: a deployment that
-             never constructs the evaluator keeps the pre-645 path exactly
-             (GP 11) and pays nothing (GP 13). -->
-        <Compile Include="Server\ModelPromotionPolicy.fs" />
-        <Compile Include="Server\JobStore.fs" />
-        <Compile Include="Server\CronExpression.fs" />
-        <!-- Persisted per-scope OnEvent trigger cursor; before the
-             scheduler (startup scan / sweep / flush) and the notify decorator
-             (live advance), both of which consume it. -->
-        <Compile Include="Server\JobTriggerWatermark.fs" />
-        <Compile Include="Server\SchedulerPolicy.fs" />
-        <Compile Include="Server\JobLifecycle.fs" />
-        <Compile Include="Server\JobScheduler.fs" />
-        <!-- Opt-in TTL sweep for BlobIdempotencyStore. After the
-             job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;
-             the shared layout stays in Remoting/Idempotency.fs. -->
-        <Compile Include="Server\IdempotencySweepJob.fs" />
-        <Compile Include="Server\JobSchedulerDiagnosticsContributor.fs" />
-        <Compile Include="Server\JobNotifyEventStore.fs" />
-        <!-- Single-node default IBuildOrchestrator over IJobScheduler.
-             Registers handler "_platform.build" + dispatches builds via
-             Schedule(Manual) + TriggerOnce; per-AppSlug SemaphoreSlim
-             enforces no-cross-shard ordering at single-node scale. -->
-        <Compile Include="Server\JobSchedulerBuildOrchestrator.fs" />
         <!-- Single-node default IDeployPipeline. Composes
              IBuildOrchestrator + IContainerScheduler + IEventStore.
              State persisted as DeployStateChanged events under the
@@ -673,22 +459,7 @@
              IEmitsNativePayload seams (vendor readers live in companions). -->
         <Compile Include="Server\IPayloadReader.fs" />
         <Compile Include="Server\DataIngestor.fs" />
-        <Compile Include="Server\DataIngestionJobHandler.fs" />
-        <!-- The delivery-completed hook: after IDataIngestor and
-             IJobHandler (it decorates the one and wraps the other), before
-             ComposeJobs (which applies both) and ServerApp (the compose surface). -->
-        <Compile Include="Server\DeliveryCompleted.fs" />
         <Compile Include="Server\Infra\EnvironmentSecretStore.fs" />
-        <!-- `IOAuthTokenRefresher` substrate (InProcessOAuthTokenRefresher
-             uses ISecretStore + IRateLimiter; placed after the secret-store
-             infra files so all transitive dependencies have already loaded). -->
-        <Compile Include="Server\InProcessOAuthTokenRefresher.fs" />
-        <Compile Include="Server\OAuthRefreshJobHandler.fs" />
-        <Compile Include="Server\Infra\FileSecretStore.fs" />
-        <Compile Include="Server\Infra\EncryptedSecretStore.fs" />
-        <!-- `SecretStore.fromEnv` (env-var-driven dispatch
-             with cloud-companion resolver list). -->
-        <Compile Include="Server\Infra\SecretStoreFromEnv.fs" />
         <!-- Transient-fault decorator substrate: the
              TransientFaultPolicy record + shared runner (retry / breaker /
              per-call timeout), then the IBlobStorage / ISecretStore
@@ -702,6 +473,339 @@
         <Compile Include="Server\IBlobEncryptionKeyResolver.fs" />
         <Compile Include="Server\EncryptedBlobStorage.fs" />
         <Compile Include="Server\SingleKeyResolver.fs" />
+        <Compile Include="Server\NoOpRateLimiter.fs" />
+        <Compile Include="Server\InProcessRateLimiter.fs" />
+        <Compile Include="Server\IConversationStore.fs" />
+        <Compile Include="Server\IPlatformAdminStore.fs" />
+        <Compile Include="Server\IPlatformRuntimeConfigStore.fs" />
+        <Compile Include="Server\Infra\PlatformRuntimeConfigStore.fs" />
+        <Compile Include="Server\PlatformAdminDevDiagnostics.fs" />
+        <!-- The guarded read-modify-write helper over IBlobStorage /
+             IConditionalBlobStorage (BlobMapStore). Before its adopters:
+             ShareTokenStore.fs below, Teams/TeamManagement.fs, and the KB index. -->
+        <Compile Include="Server\BlobMapStore.fs" />
+        <Compile Include="Server\IRateLimitStore.fs" />
+        <Compile Include="Server\InMemoryRateLimitStore.fs" />
+        <Compile Include="Server\Providers\BlobProviderProfile.fs" />
+        <!-- Provider-profile OAuth connect + auto-refresh
+             and the live-status probe seam. After IProviderProfile (Core)
+             + IOAuthCredentialFlow + IJobHandler/IJobScheduler, and before
+             OAuthFlowHandler (whose callback binds an entry through
+             ProviderOAuthConnect) and SDK.Server / ServerApp (which wire
+             the job handlers). -->
+        <Compile Include="Server\Providers\IProviderOAuthFlow.fs" />
+        <Compile Include="Server\Providers\IProviderEntryProbe.fs" />
+        <Compile Include="Server\Providers\ProviderOAuthFlowBuilder.fs" />
+        <Compile Include="Server\IUsageLog.fs" />
+        <Compile Include="Server\UsageLog.fs" />
+        <Compile Include="Server\ITeamQuotaPolicy.fs" />
+        <!-- The external-compute completion-callback ingress.
+             After JobScheduler.fs (which implements the
+             IExternalCompletionSink it resolves) and before
+             BuildRouteHandlers (which mounts it, only when the deployment
+             composed an external-compute backend — GP 13). -->
+        <Compile Include="Server\ExternalComputeCallback.fs" />
+        <Compile Include="Server\HealthCheck.fs" />
+        <!-- Degraded-capability registry + /dev/inspect
+             contributor. Before HealthCheckResponseWriter (consumes the
+             registry for the /health degraded section) and the compose
+             files that register + adopt it. -->
+        <Compile Include="Server\DegradedCapabilities.fs" />
+        <Compile Include="Server\HealthCheckResponseWriter.fs" />
+        <Compile Include="Server\HealthCheckAggregator.fs" />
+        <Compile Include="Server\HealthCheckRunner.fs" />
+        <!-- End-user product-telemetry fan-out endpoint. Beside
+             the other analytics sinks; needs only ITelemetrySink +
+             AccessContext from Core, and must precede
+             Compose/BuildRouteHandlers.fs, which mounts it via routesFor. -->
+        <Compile Include="Server\TelemetryApiHandler.fs" />
+        <Compile Include="Server\PlatformAdmin\RateLimitEventApi.fs" />
+        <Compile Include="Server\DatadogReadbackHandlers.fs" />
+        <Compile Include="Server\RequestTimingMiddleware.fs" />
+        <Compile Include="Server\MetricsEndpoint.fs" />
+        <!-- Prerendered-routes middleware. Maps GET /route to
+             PublicPath/route.html when the FAKE Prerender target wrote
+             one; no-op when the file is absent. Composed ahead of
+             UseStaticFiles so the rewrite short-circuits before the
+             SPA index.html fallback. -->
+        <Compile Include="Server\Static\PrerenderedRoutesHandler.fs" />
+        <!-- SPA shell fallback. Runs after UseStaticFiles
+             and serves PublicPath/index.html for any GET that didn't
+             match a static file or prerendered route, so OIDC callback
+             URLs and SPA deep links don't 404 server-side before the
+             SPA's client-side router can take over. -->
+        <Compile Include="Server\Static\SpaFallbackMiddleware.fs" />
+        <Compile Include="Server\RateLimiting.fs" />
+        <!-- Server-authoritative module-visibility profiles.
+             Store + blob impl + the scope walk + the admin handler + the
+             opt-in route-hardening middleware, in dependency order.
+             Beside the feature-flag family because the two share the
+             FlagScope vocabulary and the same scope set (the walk
+             direction differs — see ModuleVisibilityResolver). Before
+             PlatformApiHandler.fs, which attaches the resolution to the
+             accessible-modules response. -->
+        <Compile Include="Server\IModuleVisibilityStore.fs" />
+        <!-- The request-free door onto the narrative-ingestion
+             path, for a server-side producer that has a resolved scope and
+             a document but no request. Declared here because the producing
+             companion and the ingesting companion do not reference each
+             other; both reference this assembly. -->
+        <Compile Include="Server\INarrativeIngestor.fs" />
+        <Compile Include="Server\HealthStateTracker.fs" />
+        <!-- Alert-rule / threshold engine (pure evaluator +
+             BackgroundService). After HealthStateTracker (shares the tick
+             shape) + PrometheusMetricsSink (the metric-read tap) +
+             INotificationSink; before Compose/ (ComposeRuntimeServices
+             hosts it). -->
+        <Compile Include="Server\AlertRuleEngine.fs" />
+        <!-- Metrics history: the BackgroundService that samples the
+             live metric registry into ITimeSeriesStore on a cadence. After
+             PrometheusMetricsSink (the Snapshot read tap it reads through) and
+             AlertRuleEngine (whose resolve-per-tick shape it mirrors); before
+             Compose/ComposeObservability.fs, which registers it. -->
+        <Compile Include="Server\MetricsHistoryFlusher.fs" />
+        <!-- The self-hosted observability endpoints (sources / logs
+             / metrics / alerts). After AlertRuleEngine (the status board it
+             reads) and MetricsHistoryFlusher (the series scope); before
+             Compose/BuildRouteHandlers.fs, which mounts it. -->
+        <Compile Include="Server\ObservabilityHandlers.fs" />
+        <!-- Inbound HTTP rate-limit middleware. Composes
+             against `IRateLimitStore` (registered earlier in the build
+             order) and `ServerConfig.RateLimits`. -->
+        <Compile Include="Server\RateLimitMiddleware.fs" />
+        <Compile Include="Server\BlobXmlRepository.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Server\Config\ConfigResolution.fs" />
+        <!-- The listen-address resolution and its preflight.
+             Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
+             validates through it; ComposeBootstrap.fs applies the plan. -->
+        <Compile Include="Server\ServerBinding.fs" />
+        <Compile Include="Server\Config\ServerConfigFromEnv.fs" />
+        <!-- The deployment configuration manifest loader:
+             discovery, strict JSON parse, unknown/secret-key refusals,
+             SHA-256 over the raw bytes, and installation into Core's
+             `ConfigResolution` seam. Server-side because Core ships its
+             source for Fable consumers and cannot carry System.IO. Before
+             ConsoleLogger.fs, which installs the manifest before building
+             the logger — the log level is itself a bindable key. -->
+        <!-- The configuration-profile registry + selector.
+             Before ConfigResolver.fs, which selects the profile in the
+             same pass that installs the manifest. Depends only on Core
+             (the built-in bundles are registry data, the rung is the
+             resolution seam's), so it sits as early as the loader does. -->
+        <Compile Include="Server\ConfigProfiles.fs" />
+        <Compile Include="Server\ConfigResolver.fs" />
+        <Compile Include="Server\Infra\ConsoleLogger.fs" />
+        <Compile Include="Server\Api.fs" />
+        <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
+        <Compile Include="Server\SseTraceContributor.fs" />
+        <Compile Include="Server\Notifications\NotificationChannel.fs" />
+        <!-- In-memory presence channel (single-instance default). -->
+        <Compile Include="Server\Notifications\PresenceChannel.fs" />
+        <!-- Presence tracker + advisory soft-lock store
+             (interfaces + single-instance in-memory defaults). Publish
+             join/move/leave + lock taken/released/expired events on the
+             reserved `_platform.*` keys via INotificationChannel;
+             no new transport. -->
+        <Compile Include="Server\IPresenceTracker.fs" />
+        <Compile Include="Server\IEntityLockStore.fs" />
+        <!-- CRDT co-editing substrate: the append-only opaque
+             update log (seam) plus the single-instance in-memory default
+             and the INotificationChannel fan-out decorator. After
+             IEntityLockStore.fs (the awareness floor it sits above) and
+             after NotificationChannel.fs (the relay's transport). No CRDT
+             library server-side — payloads are opaque bytes. -->
+        <Compile Include="Server\ICrdtDocumentStore.fs" />
+        <Compile Include="Server\InMemoryCrdtDocumentStore.fs" />
+        <!-- The durable arm of the same seam: an IBlobStorage-backed
+             append log + snapshot fold, so a co-edited document survives a
+             restart. After InMemoryCrdtDocumentStore.fs because it reuses the
+             NotifyingCrdtDocumentStore relay declared there rather than
+             re-implementing fan-out. Still no CRDT library server-side. -->
+        <Compile Include="Server\BlobCrdtDocumentStore.fs" />
+        <Compile Include="Server\INotificationSink.fs" />
+        <!-- The external address book seam. Only the
+             INTERFACE sits here: it needs nothing but the Core types, and
+             NotificationAddressBook.fs below takes it as an optional
+             constructor argument to resolve the External recipient arm.
+             The entity-backed default lives with the entity substrate,
+             far below. -->
+        <Compile Include="Server\IExternalContactStore.fs" />
+        <Compile Include="Server\INotificationAddressBook.fs" />
+        <Compile Include="Server\NotificationAddressBook.fs" />
+        <!-- The WhatsApp template registry seam + its blob-backed
+             and no-op defaults. Needs only Core types and IBlobStorage;
+             before WhatsAppSendPolicyFilter.fs, which consults it. -->
+        <Compile Include="Server\IWhatsAppTemplateRegistry.fs" />
+        <Compile Include="Server\WhatsAppTemplateRegistry.fs" />
+        <!-- Fire-and-forget starts that catch, log and are drained
+             at stop, and the observed start of a
+             fire-and-forget write with its warning. Depends only on Core
+             (ILogger, ProviderExceptions) and ASP.NET Core's HttpContext; before
+             its first user (the SSE mismatch audit below). -->
+        <Compile Include="Server\Background.fs" />
+        <!-- Shared SSE scope resolution. One resolution path
+             (principal-wins + SseAuthMode-gated fallback + mismatch audit)
+             consumed by both NotificationHandler below and
+             ToolUp.AI.Server's SSEHandler so the two cannot drift. -->
+        <Compile Include="Server\Notifications\SseScopeResolution.fs" />
+        <Compile Include="Server\Notifications\NotificationHandler.fs" />
+        <!-- Scope-isolated server-driven live-session host:
+             ILiveChannel / ILiveSessionHost (six-rule, GP 4 structural
+             scope partition) + the in-process default. After the SSE
+             substrate it rides; the compose hook + endpoint live in
+             Server\Compose\LiveSessionsCompose.fs (after ServerApp). -->
+        <Compile Include="Server\Notifications\LiveSessionHost.fs" />
+        <!-- Neutral tree-patch transport envelope: TreePatchEnvelope
+             (monotonic seq / diff-base) + ITreePatchChannel (push / ack /
+             resync-on-gap) layered over the ILiveChannel. Opaque
+             payload (GP 1), scope isolation inherited from the wrapped channel
+             (GP 4), six-rule (GP 12). After LiveSessionHost.fs it wraps. -->
+        <Compile Include="Server\Notifications\TreePatchChannel.fs" />
+        <!-- Server-tier `RequestContext.ofHttpContext`
+             constructor for the Core-tier `RequestContext` newtype. Must
+             precede every `IAuthProvider` impl so they can compile against
+             the shared boxing path. -->
+        <Compile Include="Server\Auth\RequestContext.fs" />
+        <Compile Include="Auth\IdentitySanitiser.fs" />
+        <Compile Include="Auth\HeaderAuthProvider.fs" />
+        <Compile Include="Auth\StaticJwtAuthProvider.fs" />
+        <!-- `AuthProvider.fromEnv` (env-var-driven dispatch). -->
+        <Compile Include="Auth\AuthProviderFromEnv.fs" />
+        <!-- `BlobStorage.fromEnv` (env-var-driven dispatch).
+             Module name is `BlobStorageEnv` because `BlobStorage` is
+             reserved in Core for the interface module. -->
+        <Compile Include="Server\Infra\BlobStorageFromEnv.fs" />
+        <!-- `EmbeddingProviderEnv.fromEnv` (env-var-driven
+             embedding-provider selection). Module name is
+             `EmbeddingProviderEnv` because `IEmbeddingProvider` is
+             reserved for the interface module compiled above. -->
+        <Compile Include="Server\Infra\EmbeddingProviderFromEnv.fs" />
+        <!-- Mapping dry-run validation seam + default BCL-only
+             validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
+        <Compile Include="Server\IMappingDryRunValidator.fs" />
+        <Compile Include="Server\MappingDryRunValidator.fs" />
+        <!-- The SDK-default IExternalContactStore, over
+             IEntityStore for the versioning, the dedupe indexes and the
+             per-scope container. After EntityStore.fs; before
+             ComposeStores.fs registers it. -->
+        <Compile Include="Server\ExternalContactStore.fs" />
+        <Compile Include="Server\ResultStore.fs" />
+        <!-- SDK-wide cross-instance lease primitive
+             (IDistributedLock + Lease + the in-process default). Sits
+             before every consumer: the job scheduler's per-JobId dispatch
+             mutex, the blob-backed Platform-Admin store's read-modify-write
+             serialisation, and SDK.Server's DI registration. Depends only
+             on ILogger, so it can sit this early. -->
+        <Compile Include="Server\IDistributedLock.fs" />
+        <Compile Include="Server\InProcessDistributedLock.fs" />
+        <Compile Include="Server\IJobStore.fs" />
+        <Compile Include="Server\IJobHandler.fs" />
+        <!-- RunJob: a platform job as a name, a parse and a run; the one
+             handler shape and the one job-payload codec. -->
+        <Compile Include="Server\RunJob.fs" />
+        <!-- The platform-owned scope carrier. Before
+             IJobScheduler.fs, whose carried job scope redeems through it. -->
+        <Compile Include="Server\CarriedScopeToken.fs" />
+        <Compile Include="Server\IJobScheduler.fs" />
+        <!-- The job-progress-checkpoint seam + its fan-out
+             default, plus the ctx.Progress JobContext extension. Before
+             JobScheduler.fs (which constructs the sink and pushes the
+             ambient reporter around each handler dispatch) and after
+             IJobHandler.fs, so a handler file can see ctx.Progress. Needs
+             only INotificationChannel / IEventStore / ILogger from Core. -->
+        <Compile Include="Server\IJobProgressSink.fs" />
+        <!-- Resource-envelope seam adapters: the concurrency
+             gate that decorates a budgeted component's IJobHandler, the
+             RouteLimit projection that folds a component's declared
+             requests-per-minute into the middleware's own policy
+             list, and the typed queue-depth admission. Reads the Core
+             EnvelopeSignature; adds no hosted service and no dependency.
+             After IJobHandler/IJobScheduler (decorates the handler) and
+             IMetricsSink (emits the refusal counter); before ServerApp,
+             which applies the gate where a module's ComponentId is in
+             scope. -->
+        <Compile Include="Server\ResourceEnvelopeEnforcement.fs" />
+        <!-- Schema-migration IJobHandler binding: long-running
+             MigrationPlan executions run through IJobScheduler and survive
+             restarts. After IJobHandler/IJobScheduler + IUserSchemaStore. -->
+        <Compile Include="Server\SchemaMigrationJobHandler.fs" />
+        <Compile Include="Server\ModelFitJobHandler.fs" />
+        <!-- The EXTERNAL execution binding of the fit
+             envelope: the versioned `modelfit/v1` work-spec convention, the
+             completion rendezvous a callback resolves, and the
+             IModelFitProvider that submits through IExternalComputeDispatcher.
+             Compiles after IModelFitProvider.fs (the seam it implements) and
+             needs IDatasetStore + IExternalComputeDispatcher +
+             IExternalHandleStore + IJobProgressSink, all above. Nothing
+             composes it — a deployment wires the worker itself (GP 13). -->
+        <Compile Include="Server\ExternalModelFitProvider.fs" />
+        <!-- Batch item execution: the `_platform.modelfit.batchitem`
+             IJobHandler (fit envelope + batch-annotated registry registration).
+             Consumer-wired like the scoring handler. -->
+        <Compile Include="Server\ModelFitBatchItemJobHandler.fs" />
+        <Compile Include="Server\ModelScoringJobHandler.fs" />
+        <!-- The opt-in model-execution compose leg (registers
+             IModelRegistry, and optionally the scorer / executor policy /
+             observers) plus the startup validator that names a
+             mounted ModelExecutionApi with no registry composed. Placed
+             here: it needs only the model seams above (BlobModelRegistry,
+             ModelRegistrationObservers, IModelScorer) and must compile
+             before Compose/ComposeConfigValidators.fs, which registers the
+             validator, and before ServerApp.fs, whose withModelExecution
+             builder folds `register` into the DI graph. -->
+        <Compile Include="Server\Compose\ServiceComposition.fs" />
+        <Compile Include="Server\ComposeModelExecution.fs" />
+        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
+        <Compile Include="Server\DatasetAssemblyExecutor.fs" />
+        <Compile Include="Server\ModelEvaluationRunner.fs" />
+        <!-- Declared promotion policies: tolerance predicates
+             over score / comparison output decide auto-promote vs queue for
+             curation vs reject, and every verdict that moves an artifact is
+             executed through the transition seam as
+             `PolicyVerdict` (no second state machine). Compiles AFTER
+             ModelEvaluationRunner.fs (it reads the track record as
+             one of its two metric sources) and after ModelTransitionSeam.fs
+             (it drives that seam). Nothing composes it: a deployment that
+             never constructs the evaluator keeps the pre-645 path exactly
+             (GP 11) and pays nothing (GP 13). -->
+        <Compile Include="Server\ModelPromotionPolicy.fs" />
+        <Compile Include="Server\JobStore.fs" />
+        <Compile Include="Server\CronExpression.fs" />
+        <!-- Persisted per-scope OnEvent trigger cursor; before the
+             scheduler (startup scan / sweep / flush) and the notify decorator
+             (live advance), both of which consume it. -->
+        <Compile Include="Server\JobTriggerWatermark.fs" />
+        <Compile Include="Server\SchedulerPolicy.fs" />
+        <Compile Include="Server\JobLifecycle.fs" />
+        <Compile Include="Server\JobScheduler.fs" />
+        <!-- Opt-in TTL sweep for BlobIdempotencyStore. After the
+             job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;
+             the shared layout stays in Remoting/Idempotency.fs. -->
+        <Compile Include="Server\IdempotencySweepJob.fs" />
+        <Compile Include="Server\JobSchedulerDiagnosticsContributor.fs" />
+        <Compile Include="Server\JobNotifyEventStore.fs" />
+        <!-- Single-node default IBuildOrchestrator over IJobScheduler.
+             Registers handler "_platform.build" + dispatches builds via
+             Schedule(Manual) + TriggerOnce; per-AppSlug SemaphoreSlim
+             enforces no-cross-shard ordering at single-node scale. -->
+        <Compile Include="Server\JobSchedulerBuildOrchestrator.fs" />
+        <Compile Include="Server\DataIngestionJobHandler.fs" />
+        <!-- The delivery-completed hook: after IDataIngestor and
+             IJobHandler (it decorates the one and wraps the other), before
+             ComposeJobs (which applies both) and ServerApp (the compose surface). -->
+        <Compile Include="Server\DeliveryCompleted.fs" />
+        <!-- `IOAuthTokenRefresher` substrate (InProcessOAuthTokenRefresher
+             uses ISecretStore + IRateLimiter; placed after the secret-store
+             infra files so all transitive dependencies have already loaded). -->
+        <Compile Include="Server\InProcessOAuthTokenRefresher.fs" />
+        <Compile Include="Server\OAuthRefreshJobHandler.fs" />
+        <Compile Include="Server\Infra\FileSecretStore.fs" />
+        <Compile Include="Server\Infra\EncryptedSecretStore.fs" />
+        <!-- `SecretStore.fromEnv` (env-var-driven dispatch
+             with cloud-companion resolver list). -->
+        <Compile Include="Server\Infra\SecretStoreFromEnv.fs" />
         <!-- Bounded local spill for DegradeToFile audit-write
              failure policy; before AuditLog.fs (the log spills into it) and
              the replay service (which drains it back into IEventStore). -->
@@ -741,8 +845,6 @@
         <Compile Include="Server\Classification\IFieldClassifier.fs" />
         <Compile Include="Server\Classification\DefaultFieldClassifier.fs" />
         <Compile Include="Server\Classification\ClassificationGate.fs" />
-        <Compile Include="Server\NoOpRateLimiter.fs" />
-        <Compile Include="Server\InProcessRateLimiter.fs" />
         <Compile Include="Server\IDataExporter.fs" />
         <Compile Include="Server\ErasurePipeline.fs" />
         <!-- IBackgroundExportStore interface ahead of the
@@ -807,37 +909,16 @@
              preflight validator into the first-party set. -->
         <Compile Include="Server\DataObjectOrphanSweepJobHandler.fs" />
         <Compile Include="Server\LineageStoreErasureHandler.fs" />
-        <Compile Include="Server\IConversationStore.fs" />
         <Compile Include="Server\ConversationStore.fs" />
         <Compile Include="Server\ConversationEraseHandler.fs" />
         <Compile Include="Server\ConversationExporter.fs" />
-        <Compile Include="Server\IPlatformAdminStore.fs" />
         <Compile Include="Server\Infra\PlatformAdminStore.fs" />
-        <Compile Include="Server\IPlatformRuntimeConfigStore.fs" />
-        <Compile Include="Server\Infra\PlatformRuntimeConfigStore.fs" />
-        <Compile Include="Server\PlatformAdminDevDiagnostics.fs" />
-        <!-- The guarded read-modify-write helper over IBlobStorage /
-             IConditionalBlobStorage (BlobMapStore). Before its adopters:
-             ShareTokenStore.fs below, Teams/TeamManagement.fs, and the KB index. -->
-        <Compile Include="Server\BlobMapStore.fs" />
         <Compile Include="Server\IShareTokenStore.fs" />
         <Compile Include="Server\ShareTokenStore.fs" />
         <!-- Service accounts. Interface then blob-backed default,
              adjacent, mirroring the share-token pair above. -->
         <Compile Include="Server\IServiceAccountStore.fs" />
         <Compile Include="Server\ServiceAccountStore.fs" />
-        <Compile Include="Server\IRateLimitStore.fs" />
-        <Compile Include="Server\InMemoryRateLimitStore.fs" />
-        <Compile Include="Server\Providers\BlobProviderProfile.fs" />
-        <!-- Provider-profile OAuth connect + auto-refresh
-             and the live-status probe seam. After IProviderProfile (Core)
-             + IOAuthCredentialFlow + IJobHandler/IJobScheduler, and before
-             OAuthFlowHandler (whose callback binds an entry through
-             ProviderOAuthConnect) and SDK.Server / ServerApp (which wire
-             the job handlers). -->
-        <Compile Include="Server\Providers\IProviderOAuthFlow.fs" />
-        <Compile Include="Server\Providers\IProviderEntryProbe.fs" />
-        <Compile Include="Server\Providers\ProviderOAuthFlowBuilder.fs" />
         <Compile Include="Server\Providers\ProviderOAuthConnect.fs" />
         <Compile Include="Server\Providers\ProviderOAuthRefreshJobHandler.fs" />
         <Compile Include="Server\Providers\ProviderStatusProbeJobHandler.fs" />
@@ -845,9 +926,6 @@
         <Compile Include="Server\AuditReplicatorTypes.fs" />
         <Compile Include="Server\InMemoryAuditSink.fs" />
         <Compile Include="Server\AuditReplicator.fs" />
-        <Compile Include="Server\IUsageLog.fs" />
-        <Compile Include="Server\UsageLog.fs" />
-        <Compile Include="Server\ITeamQuotaPolicy.fs" />
         <Compile Include="Server\PerScopeKeyResolver.fs" />
         <!-- The per-source-IP failed-token throttle, lifted out
              of EncryptionAdminHandler so the window transition is one
@@ -855,25 +933,10 @@
              without a wall clock). Must precede its consumers. -->
         <Compile Include="Server\TokenAttemptThrottle.fs" />
         <Compile Include="Server\EncryptionAdminHandler.fs" />
-        <!-- The external-compute completion-callback ingress.
-             After JobScheduler.fs (which implements the
-             IExternalCompletionSink it resolves) and before
-             BuildRouteHandlers (which mounts it, only when the deployment
-             composed an external-compute backend — GP 13). -->
-        <Compile Include="Server\ExternalComputeCallback.fs" />
         <Compile Include="Server\LocalStorageEncryptionValidator.fs" />
         <Compile Include="Server\AdminTokenValidator.fs" />
         <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />
         <Compile Include="Server\KeyDestroyAckCoverageValidator.fs" />
-        <Compile Include="Server\HealthCheck.fs" />
-        <!-- Degraded-capability registry + /dev/inspect
-             contributor. Before HealthCheckResponseWriter (consumes the
-             registry for the /health degraded section) and the compose
-             files that register + adopt it. -->
-        <Compile Include="Server\DegradedCapabilities.fs" />
-        <Compile Include="Server\HealthCheckResponseWriter.fs" />
-        <Compile Include="Server\HealthCheckAggregator.fs" />
-        <Compile Include="Server\HealthCheckRunner.fs" />
         <Compile Include="Server\ConfigValidator.fs" />
         <Compile Include="Server\BlobStorageSelectionValidator.fs" />
         <Compile Include="Server\ServiceStatusBoardDepsValidator.fs" />
@@ -921,13 +984,6 @@
         <!-- After AdUnitConfigApi: the ad-analytics slot sanity check
              reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
         <Compile Include="Server\AdAnalyticsApiHandler.fs" />
-        <!-- End-user product-telemetry fan-out endpoint. Beside
-             the other analytics sinks; needs only ITelemetrySink +
-             AccessContext from Core, and must precede
-             Compose/BuildRouteHandlers.fs, which mounts it via routesFor. -->
-        <Compile Include="Server\TelemetryApiHandler.fs" />
-        <Compile Include="Server\PlatformAdmin\RateLimitEventApi.fs" />
-        <Compile Include="Server\DatadogReadbackHandlers.fs" />
         <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
         <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />
         <Compile Include="Server\OAuthSecretEncryptionModeValidator.fs" />
@@ -986,9 +1042,7 @@
              (must compile after ConfigValidatorAggregator, which defines
              ValidatorOutcome). Introduces no new validation. -->
         <Compile Include="Server\InternetReadinessScorecard.fs" />
-        <Compile Include="Server\RequestTimingMiddleware.fs" />
         <Compile Include="Server\MetricsMiddleware.fs" />
-        <Compile Include="Server\MetricsEndpoint.fs" />
         <Compile Include="Server\SecurityHeadersMiddleware.fs" />
         <Compile Include="Server\CspMiddleware.fs" />
         <Compile Include="Server\CsrfMiddleware.fs" />
@@ -999,19 +1053,6 @@
              JS-readable storage. Mounted by BuildRouteHandlers when
              ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance. -->
         <Compile Include="Server\AuthSessionHandler.fs" />
-        <!-- Prerendered-routes middleware. Maps GET /route to
-             PublicPath/route.html when the FAKE Prerender target wrote
-             one; no-op when the file is absent. Composed ahead of
-             UseStaticFiles so the rewrite short-circuits before the
-             SPA index.html fallback. -->
-        <Compile Include="Server\Static\PrerenderedRoutesHandler.fs" />
-        <!-- SPA shell fallback. Runs after UseStaticFiles
-             and serves PublicPath/index.html for any GET that didn't
-             match a static file or prerendered route, so OIDC callback
-             URLs and SPA deep links don't 404 server-side before the
-             SPA's client-side router can take over. -->
-        <Compile Include="Server\Static\SpaFallbackMiddleware.fs" />
-        <Compile Include="Server\RateLimiting.fs" />
         <Compile Include="Server\Teams\TeamManagement.fs" />
         <Compile Include="Server\Teams\MembershipDoctor.fs" />
         <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />
@@ -1207,15 +1248,6 @@
         <Compile Include="Server\FeatureFlagSources.fs" />
         <Compile Include="Server\FlagEvaluator.fs" />
         <Compile Include="Server\FeatureFlagHandler.fs" />
-        <!-- Server-authoritative module-visibility profiles.
-             Store + blob impl + the scope walk + the admin handler + the
-             opt-in route-hardening middleware, in dependency order.
-             Beside the feature-flag family because the two share the
-             FlagScope vocabulary and the same scope set (the walk
-             direction differs — see ModuleVisibilityResolver). Before
-             PlatformApiHandler.fs, which attaches the resolution to the
-             accessible-modules response. -->
-        <Compile Include="Server\IModuleVisibilityStore.fs" />
         <Compile Include="Server\ModuleVisibilityStore.fs" />
         <Compile Include="Server\ModuleVisibilityResolver.fs" />
         <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
@@ -1248,12 +1280,6 @@
         <Compile Include="Server\Files\FileManagement.fs" />
         <Compile Include="Server\ColumnMappingApiHandler.fs" />
         <Compile Include="Server\INarrativeStore.fs" />
-        <!-- The request-free door onto the narrative-ingestion
-             path, for a server-side producer that has a resolved scope and
-             a document but no request. Declared here because the producing
-             companion and the ingesting companion do not reference each
-             other; both reference this assembly. -->
-        <Compile Include="Server\INarrativeIngestor.fs" />
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
         <Compile Include="Server\Infra\PersistentNarrativeStore.fs" />
         <Compile Include="Server\NotifyingNarrativeStore.fs" />
@@ -1297,24 +1323,6 @@
              factory. After the report (it produces the report's EgressIntegrity) and before
              Compose/ComposeRuntimeServices.fs (which registers the named client). -->
         <Compile Include="Server\EgressPolicyHandler.fs" />
-        <Compile Include="Server\HealthStateTracker.fs" />
-        <!-- Alert-rule / threshold engine (pure evaluator +
-             BackgroundService). After HealthStateTracker (shares the tick
-             shape) + PrometheusMetricsSink (the metric-read tap) +
-             INotificationSink; before Compose/ (ComposeRuntimeServices
-             hosts it). -->
-        <Compile Include="Server\AlertRuleEngine.fs" />
-        <!-- Metrics history: the BackgroundService that samples the
-             live metric registry into ITimeSeriesStore on a cadence. After
-             PrometheusMetricsSink (the Snapshot read tap it reads through) and
-             AlertRuleEngine (whose resolve-per-tick shape it mirrors); before
-             Compose/ComposeObservability.fs, which registers it. -->
-        <Compile Include="Server\MetricsHistoryFlusher.fs" />
-        <!-- The self-hosted observability endpoints (sources / logs
-             / metrics / alerts). After AlertRuleEngine (the status board it
-             reads) and MetricsHistoryFlusher (the series scope); before
-             Compose/BuildRouteHandlers.fs, which mounts it. -->
-        <Compile Include="Server\ObservabilityHandlers.fs" />
         <!-- credential-suffix allowlist, extracted at the third
              consumer (ConfigDriftDetector, DiagnosticBundleHandler,
              ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
@@ -1348,10 +1356,6 @@
              AnonymousSessionBinding (moved ahead of Middleware.fs by
 ). -->
         <Compile Include="Server\AnonymousSessionMigrationMiddleware.fs" />
-        <!-- Inbound HTTP rate-limit middleware. Composes
-             against `IRateLimitStore` (registered earlier in the build
-             order) and `ServerConfig.RateLimits`. -->
-        <Compile Include="Server\RateLimitMiddleware.fs" />
         <Compile Include="Server\RemotingHelpers.fs" />
         <!-- The IProviderProfileApi handler, delegating to the
              registered IProviderProfile, plus the `routeHandlers` gate compose
@@ -1376,7 +1380,6 @@
              to the registered IUserDirectory companion; short-circuits
              to Ok [] when no companion is wired. -->
         <Compile Include="Server\UserDirectoryApiHandler.fs" />
-        <Compile Include="Server\BlobXmlRepository.fs" />
         <!-- DataProtection key-ring backend preflight. After
              BlobXmlRepository.fs (shares its BlobDpKeyRing constants). -->
         <Compile Include="Server\DataProtectionBackendValidator.fs" />
