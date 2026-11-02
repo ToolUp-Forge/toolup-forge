@@ -5,7 +5,7 @@
 ToolUp Platform is a modular F# full-stack SDK for building production multi-tenant analytical applications. It ships as a set of independently-versioned NuGet packages under the `ToolUp.*` namespace; consumers compose them with their own domain modules.
 
 Core foundations:
-- **Server**: Giraffe over ASP.NET Core; the in-tree **ToolUp.Remoting** transport (distributed inside `ToolUp.Platform.Server`) for type-safe APIs. Consumers write `open ToolUp.Remoting.Server` / `open ToolUp.Remoting.Giraffe`; no separate `PackageReference` is needed.
+- **Server**: Giraffe over ASP.NET Core; the in-tree **ToolUp.Remoting** transport (the `ToolUp.Platform.Server.Remoting` part, which `ToolUp.Platform.Server` references) for type-safe APIs. Consumers write `open ToolUp.Remoting.Server` / `open ToolUp.Remoting.Giraffe`; no separate `PackageReference` is needed.
 - **Client**: Fable + Feliz (React bindings) with the in-tree **ToolUp.Elmish** MVU runtime (distributed inside `ToolUp.Platform.Client`). Consumers write `open ToolUp.Elmish` and see classical Elm Architecture plus ToolUp additions (`IDispatcher<'msg>`, `Prefetch<'a>`, structured `ErrorContext`, `EffectHandle` lifetimes, `Cmd.OfRemoting`).
 - **Build**: FAKE targets in a Pack-able `ToolUp.Platform.Build` package.
 
@@ -26,7 +26,8 @@ Both substrates began as forks — ToolUp.Remoting from Zaid Ajaj's Fable.Remoti
 ```
 toolup-forge/
 ├── src/
-│   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK (4 packages)
+│   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK; Server is the umbrella over the six parts below
+│   ├── ToolUp.Platform.Server.{Remoting,Infra,Config,Scope,Jobs,Audit}/ # the server tier's part assemblies (sources stay under ToolUp.Platform.Server/)
 │   ├── ToolUp.Platform.UI/                           # the standalone UI toolkit (Feliz component library)
 │   ├── ToolUp.AI.{Core,Server,Client}/               # AI agent loop + SSE + tools
 │   ├── ToolUp.Platform.Transport/                    # lowest tier: HTTP seam, RetryPolicy, retry loop (FSharp.Core only)
@@ -82,6 +83,18 @@ Pure infrastructure with zero domain knowledge. Per-tier packages:
 
 - **`Core`** — shared types + interfaces (`ILogger`, `IBlobStorage`, `IAuthProvider`, `IAIProvider`, `INotificationChannel`, `IHealthCheck`, `IConfigValidator`, `IEventStore`, `ISecretStore`, etc.). No server or client deps; the "minimum viable consumer" floor. Source ships in the nupkg under `fable/` for Fable consumers.
 - **`Server`** — Giraffe-over-ASP.NET Core implementation: `ServerApp` composition root, `StorageScope` / scope resolvers, `ITeamStore`, `IConfigStore`, `IPermissionStore`, `IEntityStore`, `IDataObjectStore`, `IShareTokenStore`, `IJobScheduler`, `IDataIngestor`, `IAuditLog`, transactional dispatch, rate limiting, security headers middleware, `MetricsMiddleware`, `RequestTimingMiddleware`, OAuth flow handler, encryption-at-rest decorator, default in-process implementations of every interface, etc.
+  **The tier is seven assemblies (Phase 1193).** `ToolUp.Platform.Server` is the umbrella: it holds file management and the composition root (`ServerApp`, the plan, boot, preflight, the composition and module surfaces) and references six parts, each cut along a contiguous run of the tier's compile order and referencing only the parts before it:
+
+  | Part | Holds |
+  |---|---|
+  | `ToolUp.Platform.Server.Remoting` | the transport: codecs, decoder gates, dispatcher, Giraffe and ASP.NET Core adapters |
+  | `ToolUp.Platform.Server.Infra` | the substrate: logging, metrics and RAG seams; event, log, data-object, dataset, entity, result and lineage stores; compute dispatch; model registry types; data sources; secret stores; health checks |
+  | `ToolUp.Platform.Server.Config` | config resolution and the env binder, profiles, the config store, migrations, feature flags, the config validators |
+  | `ToolUp.Platform.Server.Scope` | auth providers, scope resolution, teams, sessions, permissions and grants, share tokens, service accounts, the security middleware |
+  | `ToolUp.Platform.Server.Jobs` | the job store and scheduler, notifications, presence, transactional dispatch, webhooks |
+  | `ToolUp.Platform.Server.Audit` | the audit log and replication, artefact signing, classification, consent, erasure, data-subject requests, evidence |
+
+  A consumer references `ToolUp.Platform.Server` and gets every part transitively; namespaces did not move, so no `open` changes. The sources all stay under `src/ToolUp.Platform.Server/` and each part's `.fsproj` compiles its run from there, so a file's part is read from the project files, not from its folder. The parts' order is the dependency order: a file may only use files in its own part or an earlier one. Which file sits where, the files that reach across two subsystems, and what the cut costs and saves: [`docs/migrations/1193-platform-server-subsystem-assemblies.md`](docs/migrations/1193-platform-server-subsystem-assemblies.md).
 - **`Client`** — Fable + Feliz shell with the in-tree ToolUp.Elmish runtime (under `Client/Elmish/`): MVU, sidebar navigation, the app-shell layout, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`. The AG Grid / AG Charts bindings are no longer part of this tier — Phase 344 promoted them to the standalone `Feliz.AgGrid` / `Feliz.AgCharts` packages, which the tier depends on (the compat re-exports under the old module names were retired in Phase 815). Nor is the `UIToolkit` component set — Phase 307 promoted it, the icon primitives and the typed prop helpers to `ToolUp.Platform.UI`, which the tier likewise depends on; there every namespace is preserved, so no re-export was needed.
 - **`UI`** — the toolkit `ToolUp.Platform.Client` composes and re-exposes: `Toolup.UIToolkit.*` (design tokens, typography, form controls, tabular + KPI views, empty / error / loading state views), `ToolUp.Platform.{Icon,Icons}`, and the `{Svg,Data,Aria}Prop` typed `prop.custom` helpers. Depends on `Platform.Core` only, so a consumer can take the components without the SDK client tier. `Layout.fs` — the shell composition half of the same namespace — deliberately stayed in `Client`.
 - **`Build`** — FAKE pipeline targets (`Run` / `Bundle` / `Format` / `Pack` / `ThirdPartyNotices`).
@@ -297,6 +310,13 @@ When adding a new store substrate (an `IXxxStore` + its types), the canonical sp
   are Fable-compilable. Register the file in `ToolUp.Platform.Core.fsproj` near `DataObjectTypes.fs`.
 - **Server-only interface + default impl → `src/ToolUp.Platform.Server/Server/IXxxStore.fs` +
   `XxxStore.fs`** (canonical precedent: `IDataObjectStore` — types in Core, interface in Server).
+  **Register both in the `ToolUp.Platform.Server.Infra` part's `.fsproj`** (Phase 1193), beside
+  `IDataObjectStore.fs` / `DataObjectStore.fs`: a persistence substrate is Infra. Only when the store's
+  interface or default needs a later subsystem does it go there instead — the earliest part that
+  holds everything it uses (a store that audits its writes goes in `Audit`, one that schedules
+  jobs in `Jobs`). The compile order enforces it: a file placed in a part before one it uses does
+  not compile. Its `Contribution` and any `ServerApp` builder stay in the umbrella
+  (`ToolUp.Platform.Server.fsproj`), which is where the composition root lives.
 - **Crypto-addressed / server-only-compute types stay in Server** — e.g. SHA-256-addressed envelope
   types use `System.Security.Cryptography`, which is not Fable-compilable, and belong in
   `Platform.Server/Server/` even though "types" usually go to Core.
@@ -438,9 +458,9 @@ The lane filter is applied **after** the Phase 722 registration guard, not befor
 
 **Shortcut for the Fable tier**: `dotnet run --project Build.fsproj -- VerifyFable` (Phase 614) runs the client-tier harness end to end — `dotnet tool restore`, `npm ci`, `dotnet fable -o output --noCache`, then `node --test` over the transpiled output. It asserts the TAP **pass / fail counts**, not just the exit status, because `node --test` exits 0 when it matched no test file at all; a harness that stopped emitting cases is otherwise indistinguishable from a green run. The floor is a lower bound (currently 100 against 258 shipped cases), so adding a case never needs an edit here. The same recipe is the body of the `Fable` leg `VerifyAll` runs (Phase 803) — the target is the shortcut for iterating on that tier alone; the leg is what makes the canonical gate cover it.
 
-**Shortcut for the template content**: `dotnet run --project Build.fsproj -- VerifyTemplates` compiles the `dotnet new` scaffolds under `templates/`. It packs the package closure the templates reference (`ToolUp.Platform.{Core,Client,Server,Transport}` + `ToolUp.AI.Wire` + `ToolUp.Graph.{InMemory,Core}`, plus the `ToolUp.Feliz.*` bindings — `templateGatePackages` in `Build.fs` is the authoritative list) at a throwaway `0.0.0-templategate` version into a scratch feed, then builds each template against it.
+**Shortcut for the template content**: `dotnet run --project Build.fsproj -- VerifyTemplates` compiles the `dotnet new` scaffolds under `templates/`. It packs the package closure the templates reference (`ToolUp.Platform.{Core,Client,Server,Transport}` and the six `ToolUp.Platform.Server.*` parts + `ToolUp.AI.Wire` + `ToolUp.Graph.{InMemory,Core}`, plus the `ToolUp.Feliz.*` bindings — `TemplateGatePackages.templates` in `TemplateGatePackages.fs` is the authoritative list) at a throwaway `0.0.0-templategate` version into a scratch feed, then builds each template against it.
 
-The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVersion)` would be a same-version repack, and NuGet would resolve from the already-extracted global-packages entry — so the gate would compile the templates against **whatever was packed last** rather than current source. The target wipes those cache entries first. NU1603 is escalated to an error for the same reason: it fires when a gate-versioned package declares a `ToolUp.*` dependency that was not packed at the gate version, and NuGet then silently falls back to an older feed version. **Adding an SDK→SDK dependency therefore fails this gate by name** until the package is added to `templateGatePackages` in `Build.fs`.
+The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVersion)` would be a same-version repack, and NuGet would resolve from the already-extracted global-packages entry — so the gate would compile the templates against **whatever was packed last** rather than current source. The target wipes those cache entries first. NU1603 is escalated to an error for the same reason: it fires when a gate-versioned package declares a `ToolUp.*` dependency that was not packed at the gate version, and NuGet then silently falls back to an older feed version. **Adding an SDK→SDK dependency therefore fails this gate by name** until the package is added to `TemplateGatePackages.templates` in `TemplateGatePackages.fs`.
 
 `templates/safer/` and `templates/platformsdk-solution/` are deliberately **not** covered — they are standalone solutions carrying their own `nuget.config` (a `../local-nuget-feed` path resolved relative to the consumer's instantiated location) and, in `safer`'s case, a literal `TOOLUP_SDK_VERSION` placeholder substituted at instantiation. Neither is buildable in-repo without rewriting what makes it a template; gating them needs an instantiate-then-build harness.
 
@@ -449,7 +469,7 @@ The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVers
 Three things it checks that a build alone would not:
 
 - **The vendored contract pack has not drifted.** The template's test project copies the laws region of `src/ToolUp.Platform.Tests/Contracts/ModuleContract.fs`, because that project is `IsPackable=false` and copying is the documented adoption route for every SDK contract pack. A copy drifts silently by construction, and this one ships to consumers as "born conformant", so it is compared against its source (up to the `// ── a conforming reference module` boundary — the self-test half stays SDK-side).
-- **Every `ToolUp.*` resolved at the gate version.** The equivalent of `VerifyTemplates`' NU1603 escalation, read off the scaffold's `project.assets.json` rather than passed as a warning flag — the scaffold runs its own build driver, so there is nowhere to inject one. A stray version means `packagedModuleTemplateGatePackages` is missing a package and the scaffold compiled against a MIX of current source and a released SDK.
+- **Every `ToolUp.*` resolved at the gate version.** The equivalent of `VerifyTemplates`' NU1603 escalation, read off the scaffold's `project.assets.json` rather than passed as a warning flag — the scaffold runs its own build driver, so there is nowhere to inject one. A stray version means `TemplateGatePackages.packagedModule` is missing a package and the scaffold compiled against a MIX of current source and a released SDK.
 - **The produced nupkg's `fable/` layout**, which is the half a pre-`Pack` declaration check structurally cannot prove: the shadow project, the four client sources and the icon asset are present, and `Server.fs` is not.
 
 Adding an SDK→SDK dependency reachable from the packaged-module template therefore fails this gate by name, exactly as it does the other one. All three checks were demonstrated red before landing — a drifted vendored copy, a client file dropped from the shadow project, and a client id pinned away from the server's — each naming its own law.
@@ -533,7 +553,11 @@ so an edit that leaves a project's public surface unchanged recompiles only that
 `ToolUp.Platform.Server` rebuilds 2 projects instead of 129. A public change still rebuilds every dependant, and the
 approval gate still renders the implementation DLLs in `bin/`. **One gap: F#'s reference assembly does not change when
 a `[<Literal>]` is added or its value changes.** After touching a literal, build its dependants clean
-(`--no-incremental`), or an incremental build keeps the old value. `ParallelCompilation` is deliberately unset: measured
+(`--no-incremental`), or an incremental build keeps the old value. **The same gap, measured by Phase 1193: the
+reference assembly's identity also stays put when an `InternalsVisibleTo` is added, or when a type its surface names
+moves to another assembly.** The copy into `obj/<config>/<tfm>/ref/` is skipped, and a dependant goes on compiling
+against the stale copy. The symptoms are an internal that is "not accessible" or a nonsense type error in a project
+whose source did not change. Build clean once after such a change. `ParallelCompilation` is deliberately unset: measured
 here it slowed both bottleneck projects, and the compiler marks it test-only (FS0075). `ToolUp.Platform.Build.Tests`
 (`CompilerLeversTests.fs`) holds both decisions. The tables and the re-measure rule are in
 [`docs/migrations/1195-compiler-levers.md`](docs/migrations/1195-compiler-levers.md).
