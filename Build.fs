@@ -2373,6 +2373,23 @@ let main args =
             "open System"
             "open System.Threading.Tasks"
             "open ToolUp.Platform"
+            // Phase 1198 — the server tier's parts each own a namespace. A
+            // page is an excerpt of a deployment that reaches the whole
+            // tier, so the preamble opens every part, exactly the context
+            // `open ToolUp.Platform` gave a snippet before the move; a
+            // consumer's own source derives its opens with the codemod.
+            "open ToolUp.Remoting.Server.Http"
+            "open ToolUp.Platform.Infra"
+            "open ToolUp.Platform.Infra.Metrics"
+            "open ToolUp.Platform.Infra.Tracing"
+            "open ToolUp.Platform.Infra.Transport"
+            "open ToolUp.Platform.Infra.Usage"
+            "open ToolUp.Platform.Config"
+            "open ToolUp.Platform.Scope"
+            "open ToolUp.Platform.Jobs"
+            "open ToolUp.Platform.Audit"
+            "open ToolUp.Platform.Compose"
+            "open ToolUp.Platform.Files"
             "open ToolUp.Platform.Transport"
             "open ToolUp.Platform.Auth"
             "open ToolUp.Platform.VectorKnowledgeTypes"
@@ -6602,6 +6619,55 @@ let main args =
     // docs/platform/testing-conventions.md.
     //
     // Usage: `dotnet run --project Build.fsproj -- Census [--check]`
+    // Phase 1198 — the server tier's per-part namespaces. Three forge-side
+    // acts over the scan `SubsystemNamespaces.scan` performs on the part
+    // project files and their sources: `--write-table` regenerates the
+    // name table the Codemod target's 1198 migration ships as an embedded
+    // resource; `--apply-declarations` rewrites each tier file's header to
+    // the namespace the map says (idempotent); `--map <file>` writes the
+    // migration doc's file table. With no option it checks the committed
+    // table against a fresh scan and fails on a drift.
+    Target.create "SubsystemNamespaces" (fun _ ->
+        let root = Path.getFullName "."
+
+        let tablePath =
+            Path.Combine(root, "src", "ToolUp.Platform.Build", "Build", SubsystemNamespaces.resourceName)
+
+        let moves, entries = SubsystemNamespaces.scan root
+        let rendered = SubsystemNamespaces.render entries
+        let mutable acted = false
+
+        if Flags.has "--write-table" flags then
+            File.WriteAllText(tablePath, rendered, System.Text.UTF8Encoding false)
+            Trace.tracefn "▶ SubsystemNamespaces: wrote %d entries to %s" entries.Length tablePath
+            acted <- true
+
+        if Flags.has "--apply-declarations" flags then
+            let written = SubsystemNamespaces.applyDeclarations root moves
+            Trace.tracefn "▶ SubsystemNamespaces: rewrote the header of %d file(s)." written.Length
+            acted <- true
+
+        match Flags.value "--map" flags with
+        | Some out ->
+            File.WriteAllText(out, SubsystemNamespaces.renderMap moves, System.Text.UTF8Encoding false)
+            Trace.tracefn "▶ SubsystemNamespaces: wrote the %d-file map to %s" moves.Length out
+            acted <- true
+        | None -> ()
+
+        if not acted then
+            let committed =
+                if File.Exists tablePath then
+                    File.ReadAllText tablePath
+                else
+                    ""
+
+            if committed.Replace("\r\n", "\n") <> rendered then
+                failwithf
+                    "SubsystemNamespaces: %s does not match a fresh scan of the tier. Regenerate with `dotnet run --project Build.fsproj -- SubsystemNamespaces --write-table`."
+                    SubsystemNamespaces.resourceName
+
+            Trace.tracefn "▶ SubsystemNamespaces: the committed table matches the tier (%d entries)." entries.Length)
+
     Target.create "Census" (fun _ ->
         let root = Path.getFullName "."
         let solution = "ToolUp.Forge.sln"
