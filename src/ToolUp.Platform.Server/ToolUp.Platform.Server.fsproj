@@ -731,6 +731,201 @@
         <Compile Include="Server\LocaleResolver.fs" />
     </ItemGroup>
     <ItemGroup>
+        <!-- 1193 part: Scope: scope resolution, teams, auth providers, sessions, permissions and the security middleware -->
+        <!-- Server-tier `RequestContext.ofHttpContext`
+             constructor for the Core-tier `RequestContext` newtype. Must
+             precede every `IAuthProvider` impl so they can compile against
+             the shared boxing path. -->
+        <Compile Include="Server\Auth\RequestContext.fs" />
+        <Compile Include="Auth\StaticJwtAuthProvider.fs" />
+        <!-- `AuthProvider.fromEnv` (env-var-driven dispatch). -->
+        <Compile Include="Auth\AuthProviderFromEnv.fs" />
+        <Compile Include="Server\IShareTokenStore.fs" />
+        <Compile Include="Server\ShareTokenStore.fs" />
+        <!-- Service accounts. Interface then blob-backed default,
+             adjacent, mirroring the share-token pair above. -->
+        <Compile Include="Server\IServiceAccountStore.fs" />
+        <Compile Include="Server\ServiceAccountStore.fs" />
+        <!-- The per-source-IP failed-token throttle, lifted out
+             of EncryptionAdminHandler so the window transition is one
+             atomic step against a single clock snapshot (and testable
+             without a wall clock). Must precede its consumers. -->
+        <Compile Include="Server\TokenAttemptThrottle.fs" />
+        <Compile Include="Server\EncryptionAdminHandler.fs" />
+        <Compile Include="Server\AdminTokenValidator.fs" />
+        <Compile Include="Server\OidcConfigCompletenessValidator.fs" />
+        <Compile Include="Server\OidcAudienceBindingValidator.fs" />
+        <Compile Include="Server\OidcClaimMappingAdvisoryValidator.fs" />
+        <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
+        <Compile Include="Server\InviteEmailCapabilityValidator.fs" />
+        <!-- Direct-add existence-proof preflight. Anywhere
+             before Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="Server\DirectAddIdentityProofValidator.fs" />
+        <Compile Include="Server\CsrfDefaultModeValidator.fs" />
+        <Compile Include="Server\Premium\PremiumGate.fs" />
+        <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
+        <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
+        <Compile Include="Server\ShareTokenSigningKeyProvenanceValidator.fs" />
+        <Compile Include="Server\MultiInstanceAdminCoherenceValidator.fs" />
+        <Compile Include="Server\SecurityHeaders.fs" />
+        <Compile Include="Server\ICspContributor.fs" />
+        <!-- GIS CSP preflight — probes the live IServiceCollection for a
+             contributor covering accounts.google.com, so must follow
+             ICspContributor.fs. -->
+        <Compile Include="Server\GoogleIdentityCspValidator.fs" />
+        <Compile Include="Server\SecurityHardening.fs" />
+        <!-- SecurityHeadersValidator moved after SecurityHardening:
+             its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
+        <Compile Include="Server\SecurityHeadersValidator.fs" />
+        <Compile Include="Server\ForwardedHeadersTrustValidator.fs" />
+        <Compile Include="Server\CsrfHardeningValidator.fs" />
+        <Compile Include="Server\PeerRouteRegistry.fs" />
+        <Compile Include="Server\PeerBearerAuthMiddleware.fs" />
+        <Compile Include="Server\ShareTokenAuthMiddleware.fs" />
+        <!-- Service-account bearer-token middleware. AFTER
+             ShareTokenAuthMiddleware.fs (it writes that module's
+             ShareTokenClaimItemsKey) and after IUsageLog.fs (
+             per-account attribution). -->
+        <Compile Include="Server\ServiceAccountTokenHandler.fs" />
+        <Compile Include="Server\SurfaceEnforcementMiddleware.fs" />
+        <Compile Include="Server\PeerBearerConfigValidator.fs" />
+        <Compile Include="Server\SecurityHeadersMiddleware.fs" />
+        <Compile Include="Server\CspMiddleware.fs" />
+        <Compile Include="Server\CsrfMiddleware.fs" />
+        <!-- BFF-style server-set auth-cookie reflection
+             endpoint (POST / DELETE /api/auth/session). Validates the
+             presented bearer via IAuthProvider, then reflects it into an
+             HttpOnly; Secure; SameSite=Strict cookie so the JWT leaves
+             JS-readable storage. Mounted by BuildRouteHandlers when
+             ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance. -->
+        <Compile Include="Server\AuthSessionHandler.fs" />
+        <Compile Include="Server\Teams\MembershipDoctor.fs" />
+        <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />
+        <!-- The ETag-based multi-instance default over the
+             IConditionalBlobStorage seam. After the InMemory store (shares its
+             blob layout + codec + expiry hook), before the validator (which
+             type-tests the resolved store). -->
+        <Compile Include="Server\Teams\BlobPendingInviteStore.fs" />
+        <Compile Include="Server\Teams\PendingInviteStoreInstanceValidator.fs" />
+        <Compile Include="Server\Teams\TeamInvitationHandler.fs" />
+        <!-- The per-team visibility policy record (both axes), its
+             guarded store, the output-visibility source, startup check and API.
+             After TeamManagement (ITeamStore); before BuildRouteHandlers, which
+             mounts TeamOutputVisibilityApi. -->
+        <Compile Include="Server\Teams\TeamPolicyStore.fs" />
+        <Compile Include="Server\Infra\BootstrapTeam.fs" />
+        <Compile Include="Server\TeamCreationPolicyValidator.fs" />
+        <Compile Include="Server\BootstrapTeamValidator.fs" />
+        <Compile Include="Server\Scope\PermissionStore.fs" />
+        <!-- In-platform publication reader grants. -->
+        <Compile Include="Server\Scope\PublicationReaderGrantStore.fs" />
+        <!-- Module-declared grant policy: the compose-time
+             registry, the IPermissionStore write-guard decorator, and the
+             dispatch predicate. After PermissionStore.fs (it decorates
+             IPermissionStore) and before Middleware.fs (which stamps the
+             per-request grant records), RemotingHelpers.fs (the dispatch
+             gate), and ServerApp.fs (which builds the registry). -->
+        <Compile Include="Server\GrantPolicyGuard.fs" />
+        <!-- The consented-grant registry: IGrantConsentStore and
+             its in-memory / blob-backed implementations, the signature
+             verifier over a party's registered key material, the lifecycle
+             (propose / approve / revoke — revocation is a record, never a
+             delete), and the dispatch guard that resolves
+             RequiresCounterpartyApproval arm through it ON USE. After
+             GrantPolicyGuard.fs (it implements that file's
+             CounterpartyConsentOracle seam and extends its dispatch guard)
+             and before Middleware.fs (which stamps the per-request consent
+             verdicts) and RemotingHelpers.fs (the dispatch gate). Carries
+             crypto, so it is server-side: the wire types + the canonical
+             payload live in Platform.Core, on the IModuleBindingVerifier
+             precedent. -->
+        <Compile Include="Server\GrantConsentStore.fs" />
+        <!-- Dual control (two-person rule) for sensitive admin
+             mutations: the pending-approval store, the propose / approve /
+             reject / expire ceremony, and the IPermissionStore decorator that
+             parks a gated write instead of applying it. After
+             PermissionStore.fs (it decorates IPermissionStore) and after
+             GrantPolicyGuard.fs, which is the decorator it composes INSIDE —
+             module grant policy is evaluated first so a write the module
+             would never admit is refused rather than queued. Takes no type
+             dependency on GrantPolicyGuard: the policy-bearing question
+             arrives as a predicate from the composition root. -->
+        <Compile Include="Server\Scope\AdminMutationApproval.fs" />
+        <Compile Include="Server\Scope\StoreIdSanitising.fs" />
+        <!-- IPermissionStore/tier-backed default for the
+             host-neutral IActionAuthorizer seam (default-deny; policy as
+             data). After PermissionStore (the backing) + IUserClaims
+             (the tier provider). -->
+        <Compile Include="Server\Scope\PermissionStoreActionAuthorizer.fs" />
+        <Compile Include="Server\UsageQueryApi.fs" />
+        <!-- The Owner/Admin-gated service-account management
+             API behind ServiceAccountUI. Must follow Teams\TeamManagement.fs
+             (ITeamStore + TeamRoles are the role gate), which is why it sits
+             here rather than beside ServiceAccountTokenHandler.fs. -->
+        <Compile Include="Server\ServiceAccountApiHandler.fs" />
+        <!-- The Owner/Admin-gated publication-reader API
+             (same gate idiom as ServiceAccountApiHandler). -->
+        <Compile Include="Server\PublicationReaderApiHandler.fs" />
+        <Compile Include="Server\ModuleVisibilityStore.fs" />
+        <Compile Include="Server\ModuleVisibilityResolver.fs" />
+        <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
+        <Compile Include="Server\ModuleVisibilityRouteMiddleware.fs" />
+        <!-- Anonymous-session ownership binding (the sealed
+             HttpOnly cookie). MOVED it ahead of the scope
+             resolvers and Middleware.fs: the binding is no longer only
+             the migration gate, it is the source of the anonymous session
+             id itself, so SubjectRequestExtractor / ScopeResolutionMiddleware
+             both consume it. Depends on DataProtection + HttpContext only,
+             so it sits safely this early. -->
+        <Compile Include="Server\AnonymousSessionBinding.fs" />
+        <!-- Session registry. The interface + its blob-backed
+             default sit here, after AnonymousSessionBinding.fs (whose
+             sealed anonymous session id the derivation consumes) and
+             before Middleware.fs / SessionRevocationMiddleware.fs, which
+             are its callers. Depends on IBlobStorage + the Core session
+             types only. -->
+        <Compile Include="Server\ISessionRegistry.fs" />
+        <Compile Include="Server\SessionRegistry.fs" />
+        <Compile Include="Server\Scope\StorageScopeResolver.fs" />
+        <!-- The ambient request viewer (who is asking, as scope
+             resolution resolved it) the disclosure gate decides for. -->
+        <Compile Include="Server\Scope\RequestViewer.fs" />
+        <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
+        <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
+        <!-- Revoked-session refusal + session recording.
+             After Middleware.fs, whose ScopeResolutionMiddleware stamps
+             the Subject / StorageScope it reads; before
+             BuildRouteHandlers (which mounts ISessionApi) and
+             ConfigurePipeline (which registers the middleware). -->
+        <Compile Include="Server\SessionRevocationMiddleware.fs" />
+        <Compile Include="Server\SessionApiHandler.fs" />
+        <!-- Admin structural backstop. Path-prefix
+             authorisation middleware over the raw `_platform` admin
+             handlers; registered after ScopeResolutionMiddleware (which
+             stamps `ToolUp.PlatformRole`). Depends only on PlatformRole
+             (Core) + HttpContext. -->
+        <Compile Include="Server\PlatformAdminAuthorizationMiddleware.fs" />
+        <!-- Anonymous→authenticated
+             session-migration trigger middleware. Registered in the
+             pipeline after SurfaceEnforcementMiddleware; depends on
+             NoOpAnonymousSessionMigrator (compiled earlier) and on
+             AnonymousSessionBinding (moved ahead of Middleware.fs by
+). -->
+        <Compile Include="Server\AnonymousSessionMigrationMiddleware.fs" />
+        <!-- The team-scoped ISecretStore layer (scope pinned,
+             keys team-prefixed) and the default ITeamProviderResolver over
+             the scope chain. After Providers/BlobProviderProfile.fs
+             and Teams/TeamManagement.fs (the store and the role lookup the
+             resolver composes); nothing in the compose path depends on
+             either, so both are opt-in (GP 13). -->
+        <Compile Include="Server\TeamScopedSecretStore.fs" />
+        <Compile Include="Server\TeamProviderResolver.fs" />
+        <!-- 0.5.7 — IUserDirectoryApi handler. Proxies typeahead queries
+             to the registered IUserDirectory companion; short-circuits
+             to Ok [] when no companion is wired. -->
+        <Compile Include="Server\UserDirectoryApiHandler.fs" />
+    </ItemGroup>
+    <ItemGroup>
         <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
         <Compile Include="Server\SseTraceContributor.fs" />
         <!-- In-memory presence channel (single-instance default). -->
@@ -789,14 +984,6 @@
              payload (GP 1), scope isolation inherited from the wrapped channel
              (GP 4), six-rule (GP 12). After LiveSessionHost.fs it wraps. -->
         <Compile Include="Server\Notifications\TreePatchChannel.fs" />
-        <!-- Server-tier `RequestContext.ofHttpContext`
-             constructor for the Core-tier `RequestContext` newtype. Must
-             precede every `IAuthProvider` impl so they can compile against
-             the shared boxing path. -->
-        <Compile Include="Server\Auth\RequestContext.fs" />
-        <Compile Include="Auth\StaticJwtAuthProvider.fs" />
-        <!-- `AuthProvider.fromEnv` (env-var-driven dispatch). -->
-        <Compile Include="Auth\AuthProviderFromEnv.fs" />
         <!-- The SDK-default IExternalContactStore, over
              IEntityStore for the versioning, the dedupe indexes and the
              per-scope container. After EntityStore.fs; before
@@ -1017,40 +1204,16 @@
         <Compile Include="Server\ConversationEraseHandler.fs" />
         <Compile Include="Server\ConversationExporter.fs" />
         <Compile Include="Server\Infra\PlatformAdminStore.fs" />
-        <Compile Include="Server\IShareTokenStore.fs" />
-        <Compile Include="Server\ShareTokenStore.fs" />
-        <!-- Service accounts. Interface then blob-backed default,
-             adjacent, mirroring the share-token pair above. -->
-        <Compile Include="Server\IServiceAccountStore.fs" />
-        <Compile Include="Server\ServiceAccountStore.fs" />
         <Compile Include="Server\Providers\ProviderOAuthRefreshJobHandler.fs" />
         <Compile Include="Server\Providers\ProviderStatusProbeJobHandler.fs" />
         <Compile Include="Server\IAuditSink.fs" />
         <Compile Include="Server\AuditReplicatorTypes.fs" />
         <Compile Include="Server\InMemoryAuditSink.fs" />
         <Compile Include="Server\AuditReplicator.fs" />
-        <!-- The per-source-IP failed-token throttle, lifted out
-             of EncryptionAdminHandler so the window transition is one
-             atomic step against a single clock snapshot (and testable
-             without a wall clock). Must precede its consumers. -->
-        <Compile Include="Server\TokenAttemptThrottle.fs" />
-        <Compile Include="Server\EncryptionAdminHandler.fs" />
-        <Compile Include="Server\AdminTokenValidator.fs" />
-        <Compile Include="Server\OidcConfigCompletenessValidator.fs" />
-        <Compile Include="Server\OidcAudienceBindingValidator.fs" />
-        <Compile Include="Server\OidcClaimMappingAdvisoryValidator.fs" />
-        <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
-        <Compile Include="Server\InviteEmailCapabilityValidator.fs" />
-        <!-- Direct-add existence-proof preflight. Anywhere
-             before Compose/ComposeConfigValidators.fs, which registers it. -->
-        <Compile Include="Server\DirectAddIdentityProofValidator.fs" />
         <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
-        <Compile Include="Server\CsrfDefaultModeValidator.fs" />
         <Compile Include="Server\AuditLogModeValidator.fs" />
         <Compile Include="Server\AuditLogHealthCheck.fs" />
         <Compile Include="Server\SmokeTests.fs" />
-        <Compile Include="Server\Premium\PremiumGate.fs" />
-        <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
         <!-- Durable per-subject consent persistence over
              IEntityStore (in-memory dev impl + entity-backed production
@@ -1063,37 +1226,12 @@
         <!-- After AdUnitConfigApi: the ad-analytics slot sanity check
              reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
         <Compile Include="Server\AdAnalyticsApiHandler.fs" />
-        <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
-        <Compile Include="Server\ShareTokenSigningKeyProvenanceValidator.fs" />
         <Compile Include="Server\JobSchedulerInstanceValidator.fs" />
         <Compile Include="Server\DeployPlaneDepsValidator.fs" />
         <Compile Include="Server\SignedExportDepsValidator.fs" />
         <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
-        <Compile Include="Server\MultiInstanceAdminCoherenceValidator.fs" />
         <Compile Include="Server\Files\SessionFileStoreInstanceValidator.fs" />
         <Compile Include="Server\SseAuthModeValidator.fs" />
-        <Compile Include="Server\SecurityHeaders.fs" />
-        <Compile Include="Server\ICspContributor.fs" />
-        <!-- GIS CSP preflight — probes the live IServiceCollection for a
-             contributor covering accounts.google.com, so must follow
-             ICspContributor.fs. -->
-        <Compile Include="Server\GoogleIdentityCspValidator.fs" />
-        <Compile Include="Server\SecurityHardening.fs" />
-        <!-- SecurityHeadersValidator moved after SecurityHardening:
-             its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
-        <Compile Include="Server\SecurityHeadersValidator.fs" />
-        <Compile Include="Server\ForwardedHeadersTrustValidator.fs" />
-        <Compile Include="Server\CsrfHardeningValidator.fs" />
-        <Compile Include="Server\PeerRouteRegistry.fs" />
-        <Compile Include="Server\PeerBearerAuthMiddleware.fs" />
-        <Compile Include="Server\ShareTokenAuthMiddleware.fs" />
-        <!-- Service-account bearer-token middleware. AFTER
-             ShareTokenAuthMiddleware.fs (it writes that module's
-             ShareTokenClaimItemsKey) and after IUsageLog.fs (
-             per-account attribution). -->
-        <Compile Include="Server\ServiceAccountTokenHandler.fs" />
-        <Compile Include="Server\SurfaceEnforcementMiddleware.fs" />
-        <Compile Include="Server\PeerBearerConfigValidator.fs" />
         <Compile Include="Server\ConfigValidatorAggregator.fs" />
         <!-- Internet-readiness secure-default scorecard: a
              read-side projection over the aggregated preflight outcomes
@@ -1101,33 +1239,6 @@
              ValidatorOutcome). Introduces no new validation. -->
         <Compile Include="Server\InternetReadinessScorecard.fs" />
         <Compile Include="Server\MetricsMiddleware.fs" />
-        <Compile Include="Server\SecurityHeadersMiddleware.fs" />
-        <Compile Include="Server\CspMiddleware.fs" />
-        <Compile Include="Server\CsrfMiddleware.fs" />
-        <!-- BFF-style server-set auth-cookie reflection
-             endpoint (POST / DELETE /api/auth/session). Validates the
-             presented bearer via IAuthProvider, then reflects it into an
-             HttpOnly; Secure; SameSite=Strict cookie so the JWT leaves
-             JS-readable storage. Mounted by BuildRouteHandlers when
-             ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance. -->
-        <Compile Include="Server\AuthSessionHandler.fs" />
-        <Compile Include="Server\Teams\MembershipDoctor.fs" />
-        <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />
-        <!-- The ETag-based multi-instance default over the
-             IConditionalBlobStorage seam. After the InMemory store (shares its
-             blob layout + codec + expiry hook), before the validator (which
-             type-tests the resolved store). -->
-        <Compile Include="Server\Teams\BlobPendingInviteStore.fs" />
-        <Compile Include="Server\Teams\PendingInviteStoreInstanceValidator.fs" />
-        <Compile Include="Server\Teams\TeamInvitationHandler.fs" />
-        <!-- The per-team visibility policy record (both axes), its
-             guarded store, the output-visibility source, startup check and API.
-             After TeamManagement (ITeamStore); before BuildRouteHandlers, which
-             mounts TeamOutputVisibilityApi. -->
-        <Compile Include="Server\Teams\TeamPolicyStore.fs" />
-        <Compile Include="Server\Infra\BootstrapTeam.fs" />
-        <Compile Include="Server\TeamCreationPolicyValidator.fs" />
-        <Compile Include="Server\BootstrapTeamValidator.fs" />
         <Compile Include="Server\JobApiHandler.fs" />
         <!-- The out-of-process model-execution submitter API
              handler (fit submission via the 599 batch envelope, bulk
@@ -1138,41 +1249,6 @@
         <Compile Include="Server\ModelExecutionApi.fs" />
         <Compile Include="Server\OAuthFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
-        <Compile Include="Server\Scope\PermissionStore.fs" />
-        <!-- In-platform publication reader grants. -->
-        <Compile Include="Server\Scope\PublicationReaderGrantStore.fs" />
-        <!-- Module-declared grant policy: the compose-time
-             registry, the IPermissionStore write-guard decorator, and the
-             dispatch predicate. After PermissionStore.fs (it decorates
-             IPermissionStore) and before Middleware.fs (which stamps the
-             per-request grant records), RemotingHelpers.fs (the dispatch
-             gate), and ServerApp.fs (which builds the registry). -->
-        <Compile Include="Server\GrantPolicyGuard.fs" />
-        <!-- The consented-grant registry: IGrantConsentStore and
-             its in-memory / blob-backed implementations, the signature
-             verifier over a party's registered key material, the lifecycle
-             (propose / approve / revoke — revocation is a record, never a
-             delete), and the dispatch guard that resolves
-             RequiresCounterpartyApproval arm through it ON USE. After
-             GrantPolicyGuard.fs (it implements that file's
-             CounterpartyConsentOracle seam and extends its dispatch guard)
-             and before Middleware.fs (which stamps the per-request consent
-             verdicts) and RemotingHelpers.fs (the dispatch gate). Carries
-             crypto, so it is server-side: the wire types + the canonical
-             payload live in Platform.Core, on the IModuleBindingVerifier
-             precedent. -->
-        <Compile Include="Server\GrantConsentStore.fs" />
-        <!-- Dual control (two-person rule) for sensitive admin
-             mutations: the pending-approval store, the propose / approve /
-             reject / expire ceremony, and the IPermissionStore decorator that
-             parks a gated write instead of applying it. After
-             PermissionStore.fs (it decorates IPermissionStore) and after
-             GrantPolicyGuard.fs, which is the decorator it composes INSIDE —
-             module grant policy is evaluated first so a write the module
-             would never admit is refused rather than queued. Takes no type
-             dependency on GrantPolicyGuard: the policy-bearing question
-             arrives as a predicate from the composition root. -->
-        <Compile Include="Server\Scope\AdminMutationApproval.fs" />
         <!-- Grant-event notification to affected principals: the
              pure write-delta classifier, the per-audience message shapes, and
              the IPermissionStore observer that bridges a landed grant to
@@ -1182,12 +1258,6 @@
              observe what was actually WRITTEN. Composed only when a policy is
              declared AND a channel is resolvable. -->
         <Compile Include="Server\GrantNotificationObserver.fs" />
-        <Compile Include="Server\Scope\StoreIdSanitising.fs" />
-        <!-- IPermissionStore/tier-backed default for the
-             host-neutral IActionAuthorizer seam (default-deny; policy as
-             data). After PermissionStore (the backing) + IUserClaims
-             (the tier provider). -->
-        <Compile Include="Server\Scope\PermissionStoreActionAuthorizer.fs" />
         <!-- Hosted-tree action audit emission (GP 6): the
              IHostActionAuditHook + default IAuditLog-backed impl +
              authorize-then-audit helper. After PermissionStoreActionAuthorizer
@@ -1196,7 +1266,6 @@
         <Compile Include="Server\Scope\HostActionAuditHook.fs" />
         <Compile Include="Server\ConfigStoreErasureHandler.fs" />
         <Compile Include="Server\TeamQuotaPolicy.fs" />
-        <Compile Include="Server\UsageQueryApi.fs" />
         <Compile Include="Server\TransactionalDispatcher.fs" />
         <!-- Notification preference + digest substrate: the
              INotificationPreferenceStore seam + blob-backed default, the
@@ -1238,14 +1307,6 @@
         <Compile Include="Server\WebhookDispatcher.fs" />
         <Compile Include="Server\HookedEventStore.fs" />
         <Compile Include="Server\WebhookApiHandler.fs" />
-        <!-- The Owner/Admin-gated service-account management
-             API behind ServiceAccountUI. Must follow Teams\TeamManagement.fs
-             (ITeamStore + TeamRoles are the role gate), which is why it sits
-             here rather than beside ServiceAccountTokenHandler.fs. -->
-        <Compile Include="Server\ServiceAccountApiHandler.fs" />
-        <!-- The Owner/Admin-gated publication-reader API
-             (same gate idiom as ServiceAccountApiHandler). -->
-        <Compile Include="Server\PublicationReaderApiHandler.fs" />
         <!-- INotificationPreferenceApi handler (same AccessContext
              gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
              mounts it on the NotificationPreferences opt-in. -->
@@ -1261,32 +1322,6 @@
         <Compile Include="Server\FeatureFlagStoreErasureHandler.fs" />
         <Compile Include="Server\BlobStorageErasureHandler.fs" />
         <Compile Include="Server\VectorStoreErasureHandler.fs" />
-        <Compile Include="Server\ModuleVisibilityStore.fs" />
-        <Compile Include="Server\ModuleVisibilityResolver.fs" />
-        <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
-        <Compile Include="Server\ModuleVisibilityRouteMiddleware.fs" />
-        <!-- Anonymous-session ownership binding (the sealed
-             HttpOnly cookie). MOVED it ahead of the scope
-             resolvers and Middleware.fs: the binding is no longer only
-             the migration gate, it is the source of the anonymous session
-             id itself, so SubjectRequestExtractor / ScopeResolutionMiddleware
-             both consume it. Depends on DataProtection + HttpContext only,
-             so it sits safely this early. -->
-        <Compile Include="Server\AnonymousSessionBinding.fs" />
-        <!-- Session registry. The interface + its blob-backed
-             default sit here, after AnonymousSessionBinding.fs (whose
-             sealed anonymous session id the derivation consumes) and
-             before Middleware.fs / SessionRevocationMiddleware.fs, which
-             are its callers. Depends on IBlobStorage + the Core session
-             types only. -->
-        <Compile Include="Server\ISessionRegistry.fs" />
-        <Compile Include="Server\SessionRegistry.fs" />
-        <Compile Include="Server\Scope\StorageScopeResolver.fs" />
-        <!-- The ambient request viewer (who is asking, as scope
-             resolution resolved it) the disclosure gate decides for. -->
-        <Compile Include="Server\Scope\RequestViewer.fs" />
-        <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
-        <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
         <Compile Include="Server\Files\FileNameSanitiser.fs" />
         <!-- The server half of the ProcessedData summary envelope's codec. -->
         <Compile Include="Server\Files\ProcessedDataCodec.fs" />
@@ -1343,26 +1378,6 @@
              before BuildRouteHandlers (which mounts the route). -->
         <Compile Include="Server\AuthDenialsDiagnosticsHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
-        <!-- Revoked-session refusal + session recording.
-             After Middleware.fs, whose ScopeResolutionMiddleware stamps
-             the Subject / StorageScope it reads; before
-             BuildRouteHandlers (which mounts ISessionApi) and
-             ConfigurePipeline (which registers the middleware). -->
-        <Compile Include="Server\SessionRevocationMiddleware.fs" />
-        <Compile Include="Server\SessionApiHandler.fs" />
-        <!-- Admin structural backstop. Path-prefix
-             authorisation middleware over the raw `_platform` admin
-             handlers; registered after ScopeResolutionMiddleware (which
-             stamps `ToolUp.PlatformRole`). Depends only on PlatformRole
-             (Core) + HttpContext. -->
-        <Compile Include="Server\PlatformAdminAuthorizationMiddleware.fs" />
-        <!-- Anonymous→authenticated
-             session-migration trigger middleware. Registered in the
-             pipeline after SurfaceEnforcementMiddleware; depends on
-             NoOpAnonymousSessionMigrator (compiled earlier) and on
-             AnonymousSessionBinding (moved ahead of Middleware.fs by
-). -->
-        <Compile Include="Server\AnonymousSessionMigrationMiddleware.fs" />
         <Compile Include="Server\RemotingHelpers.fs" />
         <!-- The IProviderProfileApi handler, delegating to the
              registered IProviderProfile, plus the `routeHandlers` gate compose
@@ -1372,21 +1387,9 @@
              appends its handlers only when a provider-profile store is
              registered (GP 13). -->
         <Compile Include="Server\ProviderProfileApiHandler.fs" />
-        <!-- The team-scoped ISecretStore layer (scope pinned,
-             keys team-prefixed) and the default ITeamProviderResolver over
-             the scope chain. After Providers/BlobProviderProfile.fs
-             and Teams/TeamManagement.fs (the store and the role lookup the
-             resolver composes); nothing in the compose path depends on
-             either, so both are opt-in (GP 13). -->
-        <Compile Include="Server\TeamScopedSecretStore.fs" />
-        <Compile Include="Server\TeamProviderResolver.fs" />
         <Compile Include="Server\PlatformSchema.fs" />
         <Compile Include="Server\PlatformApiHandler.fs" />
         <Compile Include="Server\PlatformAdminApiHandler.fs" />
-        <!-- 0.5.7 — IUserDirectoryApi handler. Proxies typeahead queries
-             to the registered IUserDirectory companion; short-circuits
-             to Ok [] when no companion is wired. -->
-        <Compile Include="Server\UserDirectoryApiHandler.fs" />
         <!-- Reference-app probe + validator list helpers. -->
         <Compile Include="Server\HealthChecksFromEnv.fs" />
         <Compile Include="Server\ConfigValidatorsFromEnv.fs" />
