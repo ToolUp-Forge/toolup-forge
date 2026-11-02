@@ -492,6 +492,70 @@ let private defaultDescriptorsBaselinePath () =
 /// directory a host needs to start) through `ServerApp.run`, capture the
 /// service collection the composition registers into, and stop the host
 /// once it has started. One line per descriptor: `<service type>\t<lifetime>`.
+/// Registrations the framework adds on one operating system and not
+/// another, which the gate leaves out so that a baseline regenerated on a
+/// Windows workstation is the list CI checks on Linux. Each is named for
+/// what registers it, not guessed from a name:
+///
+/// - Kestrel's named-pipe and QUIC transports (`AddNamedPipes`,
+///   `AddQuic`): the listener factories, their options, and the
+///   `MemoryPoolMetrics` the named-pipe transport registers a second time.
+/// - `ObjectPoolProvider`: the named-pipe transport registers it as a
+///   singleton first, so routing's later transient `TryAdd` lands on Linux
+///   and not on Windows; the gate leaves the service out on both.
+/// - The Windows event-log logger provider, and the filter the default
+///   host builder adds for it (`AddFilter<EventLogLoggerProvider>`), which
+///   renders as a `ConfigureNamedOptions<LoggerFilterOptions>` instance and
+///   is told apart by the provider type its closure's method was
+///   instantiated over.
+/// - Data protection's registry policy resolver.
+let private platformSpecific (d: Microsoft.Extensions.DependencyInjection.ServiceDescriptor) : bool =
+    let windowsOnly (t: Type) =
+        not (isNull t)
+        && (let n = string t.FullName
+
+            n.StartsWith "Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes"
+            || n.StartsWith "Microsoft.AspNetCore.Server.Kestrel.Transport.Quic"
+            || n.StartsWith "Microsoft.Extensions.Logging.EventLog."
+            || n = "Microsoft.AspNetCore.DataProtection.RegistryPolicyResolver")
+
+    let perTransport (t: Type) =
+        t.FullName = "Microsoft.AspNetCore.MemoryPoolMetrics"
+        || t.FullName = "Microsoft.Extensions.ObjectPool.ObjectPoolProvider"
+
+    // A generic PARAMETER (`ILogger<TCategoryName>`'s `T`) declares the
+    // type that declares it, so the walk stops at one and descends only
+    // into a constructed type's arguments.
+    let rec mentionsWindowsOnly (t: Type) =
+        not (isNull t)
+        && not t.IsGenericParameter
+        && (windowsOnly t
+            || (t.IsConstructedGenericType
+                && t.GetGenericArguments() |> Array.exists mentionsWindowsOnly)
+            || mentionsWindowsOnly t.DeclaringType)
+
+    let closureMentionsWindowsOnly (instance: obj) =
+        not (isNull instance)
+        && instance
+            .GetType()
+            .GetFields(
+                Reflection.BindingFlags.Instance
+                ||| Reflection.BindingFlags.Public
+                ||| Reflection.BindingFlags.NonPublic
+            )
+           |> Array.exists (fun f ->
+               match f.GetValue instance with
+               | :? Delegate as del ->
+                   mentionsWindowsOnly del.Method.DeclaringType
+                   || (del.Method.IsGenericMethod
+                       && del.Method.GetGenericArguments() |> Array.exists mentionsWindowsOnly)
+               | _ -> false)
+
+    mentionsWindowsOnly d.ServiceType
+    || perTransport d.ServiceType
+    || windowsOnly d.ImplementationType
+    || closureMentionsWindowsOnly d.ImplementationInstance
+
 let private defaultDeploymentDescriptors () : string list =
     let publicDir =
         Path.Combine(Path.GetTempPath(), "toolup-descriptor-baseline", Guid.NewGuid().ToString("N"))
@@ -591,6 +655,7 @@ let private defaultDeploymentDescriptors () : string list =
         | None -> failtest "the consumer's ServiceConfig never ran"
         | Some services ->
             services
+            |> Seq.filter (platformSpecific >> not)
             |> Seq.map (fun d -> sprintf "%s\t%O" (d.ServiceType.ToString()) d.Lifetime)
             |> List.ofSeq
     finally

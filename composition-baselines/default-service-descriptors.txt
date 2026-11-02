@@ -21,7 +21,6 @@ Microsoft.Extensions.Options.IStartupValidator	Transient
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.Options.StartupValidatorOptions]	Transient
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.DependencyInjection.MetricsServiceExtensions+NoOpOptions]	Singleton
 Microsoft.Extensions.Diagnostics.Metrics.Configuration.IMetricListenerConfigurationFactory	Singleton
-Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.Logging.LoggerFilterOptions]	Singleton
 Microsoft.Extensions.Logging.Configuration.ILoggerProviderConfigurationFactory	Singleton
 Microsoft.Extensions.Logging.Configuration.ILoggerProviderConfiguration`1[T]	Singleton
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.Logging.LoggerFilterOptions]	Singleton
@@ -44,7 +43,6 @@ Microsoft.Extensions.Logging.EventSource.LoggingEventSource	Singleton
 Microsoft.Extensions.Logging.ILoggerProvider	Singleton
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.Logging.LoggerFilterOptions]	Singleton
 Microsoft.Extensions.Options.IOptionsChangeTokenSource`1[Microsoft.Extensions.Logging.LoggerFilterOptions]	Singleton
-Microsoft.Extensions.Logging.ILoggerProvider	Singleton
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.Logging.LoggerFactoryOptions]	Singleton
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.Options.StartupValidatorOptions]	Transient
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.Extensions.Diagnostics.Metrics.MetricsOptions]	Singleton
@@ -71,16 +69,9 @@ Microsoft.AspNetCore.Server.Kestrel.Core.IHttpsConfigurationService	Singleton
 Microsoft.AspNetCore.Hosting.Server.IServer	Singleton
 Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.KestrelMetrics	Singleton
 Microsoft.AspNetCore.Server.Kestrel.Core.Internal.PinnedBlockMemoryPoolFactory	Singleton
-Microsoft.AspNetCore.MemoryPoolMetrics	Singleton
 Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.IHeartbeatHandler	Singleton
 Microsoft.AspNetCore.Connections.IMemoryPoolFactory`1[System.Byte]	Singleton
-Microsoft.Extensions.ObjectPool.ObjectPoolProvider	Singleton
-Microsoft.AspNetCore.Connections.IConnectionListenerFactory	Singleton
-Microsoft.AspNetCore.MemoryPoolMetrics	Singleton
-Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes.NamedPipeTransportOptions]	Transient
 Microsoft.AspNetCore.Server.Kestrel.Core.HttpsConfigurationService+IInitializer	Singleton
-Microsoft.AspNetCore.Connections.IMultiplexedConnectionListenerFactory	Singleton
-Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.QuicTransportOptions]	Singleton
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions]	Singleton
 Microsoft.Extensions.Options.IPostConfigureOptions`1[Microsoft.AspNetCore.HostFiltering.HostFilteringOptions]	Singleton
 Microsoft.Extensions.Options.IOptionsChangeTokenSource`1[Microsoft.AspNetCore.HostFiltering.HostFilteringOptions]	Singleton
@@ -119,7 +110,6 @@ Microsoft.Extensions.Caching.Memory.IMemoryCache	Singleton
 Microsoft.Extensions.Caching.Distributed.IDistributedCache	Singleton
 Microsoft.AspNetCore.ResponseCompression.IResponseCompressionProvider	Singleton
 Microsoft.AspNetCore.DataProtection.Internal.IActivator	Singleton
-Microsoft.AspNetCore.DataProtection.IRegistryPolicyResolver	Singleton
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions]	Singleton
 Microsoft.Extensions.Options.IPostConfigureOptions`1[Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions]	Singleton
 Microsoft.Extensions.Options.IConfigureOptions`1[Microsoft.AspNetCore.DataProtection.DataProtectionOptions]	Transient
