@@ -31,13 +31,13 @@ The regrouping built green at every one of its six steps, which proves the graph
 
 | # | Package | Default name it carries | Files | Lines | New positions | Old span | Labelled here | Census cost |
 |---|---|---|---|---|---|---|---|---|
-| 1 | `ToolUp.Platform.Server.Remoting` | Remoting | 30 | 15,655 | 1–30 | 8–325 | 30 | CENSUS_REMOTING |
-| 2 | `ToolUp.Platform.Server.Infra` | Infra | 160 | 40,920 | 31–190 | 1–507 | 160 | CENSUS_INFRA |
-| 3 | `ToolUp.Platform.Server.Config` | Config | 73 | 17,443 | 191–263 | 3–509 | 51 | CENSUS_CONFIG |
-| 4 | `ToolUp.Platform.Server.Scope` | Scope, Teams and Auth | 76 | 18,110 | 264–339 | 84–506 | 75 | CENSUS_SCOPE |
-| 5 | `ToolUp.Platform.Server.Jobs` | Jobs and Notifications | 84 | 27,559 | 340–423 | 64–441 | 70 | CENSUS_JOBS |
-| 6 | `ToolUp.Platform.Server.Audit` | Audit, Classification and Consent | 53 | 12,573 | 424–476 | 226–492 | 50 | CENSUS_AUDIT |
-| 7 | `ToolUp.Platform.Server` (umbrella) | Compose and Lifecycle, and Files | 126 | 63,235 | 477–602 | 173–602 | 113 | CENSUS_UMBRELLA |
+| 1 | `ToolUp.Platform.Server.Remoting` | Remoting | 30 | 15,655 | 1–30 | 8–325 | 30 | 14.5 s, fan-in 6 |
+| 2 | `ToolUp.Platform.Server.Infra` | Infra | 160 | 40,920 | 31–190 | 1–507 | 160 | 21.4 s, fan-in 5 |
+| 3 | `ToolUp.Platform.Server.Config` | Config | 73 | 17,443 | 191–263 | 3–509 | 51 | 14.8 s, fan-in 4 |
+| 4 | `ToolUp.Platform.Server.Scope` | Scope, Teams and Auth | 76 | 18,110 | 264–339 | 84–506 | 75 | 8.4 s, fan-in 3 |
+| 5 | `ToolUp.Platform.Server.Jobs` | Jobs and Notifications | 84 | 27,559 | 340–423 | 64–441 | 70 | 12.6 s, fan-in 2 |
+| 6 | `ToolUp.Platform.Server.Audit` | Audit, Classification and Consent | 53 | 12,573 | 424–476 | 226–492 | 50 | 7.3 s, fan-in 1 |
+| 7 | `ToolUp.Platform.Server` (umbrella) | Compose and Lifecycle, and Files | 126 | 63,235 | 477–602 | 173–602 | 113 | 19.4 s, fan-in 102 |
 
 "Census cost" is the project's row in `build-census.json` after the cut: compile seconds, fan-in. Before the cut the
 one Server project was 145.7 s, 195,368 lines, fan-in 102 (`build-census.json` at `6cdf75f2`). "Labelled here" counts
@@ -169,9 +169,9 @@ from each part and ran.
 Measured on one Windows Arm64 machine, 12 logical processors, Debug, 2026-11-02, on a shared machine (other sessions
 were building). Counts are the evidence; seconds are one busy machine's.
 
-| | Before (`a1a61218`) | After (`MEASURED_TREE`) |
+| | Before (`a1a61218`) | After (census at `1ad90d66`; closures at `da1add2a`) |
 |---|---|---|
-| Solution build, clean (`Census`: `-graph --no-incremental`) | 889.8 s (census at `6cdf75f2`) | CENSUS_WALL |
+| Solution build, clean (`Census`: `-graph --no-incremental`) | 889.8 s (census at `6cdf75f2`) | 336.5 s. Not comparable: the census before summed 9,628.7 compile-seconds over its run and this one 2,573.7, so the machine was far busier then. The server tier's own chain is 98.4 s over seven projects that compile in sequence, against 145.7 s for one. |
 | Projects in the solution | 230 | 236 |
 | Implementation-only edit, one server file: projects recompiled | 2 (`1195-compiler-levers.md`) | 2: the edited part, and `ToolUp.AI.Evaluation` |
 | …lines that edit recompiles | 195,495 | the part's: 12,573 for an Audit file, 63,235 at most (umbrella) |
