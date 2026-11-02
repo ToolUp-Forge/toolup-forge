@@ -1,9 +1,10 @@
-module ToolUp.Platform.Tests.InProcess.RedisDistributedLockTests
+module ToolUp.NotificationChannels.Tests.RedisDistributedLockTests
 
 open System
 open Expecto
 open ToolUp.Platform.NotificationChannels.RedisDistributedLock
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.InProcess
 
 // ─── Env-gated (Phase 9i) ────────────────────────────────────────────
 //

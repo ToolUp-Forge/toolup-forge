@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.TwilioNotificationSinkTests
+module ToolUp.NotificationChannels.Tests.TwilioNotificationSinkTests
 
 open System.IO
 open ToolUp.Platform
@@ -7,6 +7,7 @@ open ToolUp.Platform.NotificationChannels.Sms.Twilio
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Tests.InProcess
 
 /// Bind `INotificationSinkContract` to the Twilio SMS sink. Same
 /// no-live-backend pattern as the SendGrid binding — vendor failures

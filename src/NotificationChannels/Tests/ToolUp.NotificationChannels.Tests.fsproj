@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 1197 - the notification-channel companions (Redis channel, distributed and lifecycle locks; SMTP, SendGrid, Twilio SMS and WhatsApp, Meta WhatsApp Cloud, WebPush sinks). Hosts INotificationChannelContract against the Redis channel and INotificationSinkContract against each sink; the live Redis arm reads TOOLUP_REDIS_CONNECTION and reports Pending without it.
+
+         A companion family's tests live beside the family and build against
+         its closure, not the Platform pack's. The contract packs the family
+         conforms to are SOURCE-LINKED from ToolUp.Platform.Tests (Link=…), so
+         there is one copy of each law and nothing to drift; the linked
+         support files are the closure the moved cases compile against. -->
+    <ItemGroup>
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\INotificationChannelContract.fs" Link="Contracts\INotificationChannelContract.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\INotificationSinkContract.fs" Link="Contracts\INotificationSinkContract.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IHealthCheckContract.fs" Link="Contracts\IHealthCheckContract.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IDistributedLockContract.fs" Link="Contracts\IDistributedLockContract.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\InProcess\TransactionalDispatcherTests.fs" Link="InProcess\TransactionalDispatcherTests.fs" />
+        <Compile Include="MetaWhatsAppCloudNotificationSinkTests.fs" />
+        <Compile Include="RedisDistributedLockTests.fs" />
+        <Compile Include="RedisNotificationChannelHealthTests.fs" />
+        <Compile Include="RedisNotificationChannelTests.fs" />
+        <Compile Include="SendGridNotificationSinkTests.fs" />
+        <Compile Include="SmtpNotificationSinkTests.fs" />
+        <Compile Include="TwilioNotificationSinkTests.fs" />
+        <Compile Include="TwilioWhatsAppNotificationSinkTests.fs" />
+        <Compile Include="WebPushNotificationSinkTests.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\Email\SendGrid\ToolUp.NotificationChannels.Email.SendGrid.fsproj" />
+        <ProjectReference Include="..\Email\Smtp\ToolUp.NotificationChannels.Email.Smtp.fsproj" />
+        <ProjectReference Include="..\Push\WebPush\ToolUp.NotificationChannels.Push.WebPush.fsproj" />
+        <ProjectReference Include="..\Redis\ToolUp.NotificationChannels.Redis.fsproj" />
+        <ProjectReference Include="..\Sms\Twilio\ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
+        <ProjectReference Include="..\WhatsApp\MetaCloud\ToolUp.NotificationChannels.WhatsApp.MetaCloud.fsproj" />
+        <ProjectReference Include="..\WhatsApp\Twilio\ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj" />
+        <ProjectReference Include="..\..\Webhooks\ToolUp.Webhooks.Core\ToolUp.Webhooks.Core.fsproj" />
+        <ProjectReference Include="..\..\Webhooks\ToolUp.Webhooks.Server\ToolUp.Webhooks.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

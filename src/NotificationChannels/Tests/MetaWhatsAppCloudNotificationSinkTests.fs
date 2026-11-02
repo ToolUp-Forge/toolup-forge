@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Tests.InProcess.MetaWhatsAppCloudNotificationSinkTests
+module ToolUp.NotificationChannels.Tests.MetaWhatsAppCloudNotificationSinkTests
 
 open System
 open System.Collections.Concurrent
@@ -30,6 +30,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.InProcess
 
 // ─── Phase 6f.C — the Meta WhatsApp Business Cloud companion ─────────
 //

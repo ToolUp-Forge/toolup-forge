@@ -229,19 +229,11 @@ let private registeredTests =
         PostgresFactStoreTests.tests
         TelemetrySinkTests.tests
         InMemoryNotificationChannelTests.tests
-        RedisNotificationChannelTests.tests
-        RedisDistributedLockTests.tests
         TransactionalDispatcherTests.tests
         NotificationPreferenceTests.tests
         NotificationAddressBookTests.tests
         ExternalContactTests.tests
         WhatsAppChannelTests.tests
-        SmtpNotificationSinkTests.tests
-        SendGridNotificationSinkTests.tests
-        TwilioNotificationSinkTests.tests
-        TwilioWhatsAppNotificationSinkTests.tests
-        WebPushNotificationSinkTests.tests
-        MetaWhatsAppCloudNotificationSinkTests.tests
         HnswVectorStoreTests.tests
         PgvectorVectorStoreTests.tests
         PostgresFullTextIndexTests.tests
@@ -330,7 +322,6 @@ let private registeredTests =
         AlertRuleEngineTests.tests
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests
-        RedisNotificationChannelHealthTests.tests
         testSequencedGroup
             "env-mutating-config-validators"
             (testList "env-mutating config validators (Phase 653)" [

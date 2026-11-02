@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.SendGridNotificationSinkTests
+module ToolUp.NotificationChannels.Tests.SendGridNotificationSinkTests
 
 open System.IO
 open ToolUp.Platform
@@ -7,6 +7,7 @@ open ToolUp.Platform.NotificationChannels.Email.SendGrid
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Tests.InProcess
 
 /// Bind `INotificationSinkContract` to the SendGrid sink. The factory
 /// configures the sink against a deliberately-unreachable endpoint; a

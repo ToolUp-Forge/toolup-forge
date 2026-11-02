@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Tests.InProcess.TwilioWhatsAppNotificationSinkTests
+module ToolUp.NotificationChannels.Tests.TwilioWhatsAppNotificationSinkTests
 
 open System
 open System.Collections.Concurrent
@@ -22,6 +22,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess.TransactionalDispatcherTests
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Tests.InProcess
 
 // Phase 6f.B — the Twilio WhatsApp companion. Never live: the contract
 // pack runs against an unroutable endpoint (failures must classify, not

@@ -1,10 +1,11 @@
-module ToolUp.Platform.Tests.InProcess.RedisNotificationChannelTests
+module ToolUp.NotificationChannels.Tests.RedisNotificationChannelTests
 
 open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.NotificationChannels.Redis
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.InProcess
 
 // ─── Env-gated ───────────────────────────────────────────────────────
 //

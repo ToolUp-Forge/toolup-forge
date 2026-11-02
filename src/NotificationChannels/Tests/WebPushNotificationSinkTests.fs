@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.WebPushNotificationSinkTests
+module ToolUp.NotificationChannels.Tests.WebPushNotificationSinkTests
 
 open System.IO
 open ToolUp.Platform
@@ -7,6 +7,7 @@ open ToolUp.Platform.NotificationChannels.Push.WebPush
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Tests.InProcess
 
 /// Bind `INotificationSinkContract` to the WebPush sink. The factory
 /// uses test-only VAPID key material — the sink will fail to dispatch
