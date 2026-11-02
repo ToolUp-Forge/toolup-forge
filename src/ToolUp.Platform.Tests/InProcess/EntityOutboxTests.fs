@@ -10,7 +10,6 @@ open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── Phase 599 — entity-write outbox ─────────────────────────────────
 //

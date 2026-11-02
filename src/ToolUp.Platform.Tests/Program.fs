@@ -19,23 +19,16 @@ open ToolUp.Platform.Tests.Support
 /// run, which is why the registration guard runs over it.
 let private registeredTests =
     testList "ToolUp.Platform.Tests" [
-        LocalFileStorageTests.tests
-        InMemoryEventStoreTests.tests
-        PersistentEventStoreTests.tests
-        DataObjectStoreTests.tests
         DataMigrationTests.tests
         ConfigMigrationTests.tests
         SeedDataLoaderTests.tests
-        DatasetStoreTests.tests
         ParquetDatasetCodecTests.contractTests
         ParquetDatasetCodecTests.codecTests
         DatasetAssemblyTests.tests
         DatasetRevintageTests.tests
-        VirtualDatasetTests.tests
         ProvenanceLabelTests.tests
         IModelFitProviderContract.tests
         IModelFitProviderContract.opacityTests
-        IModelRegistryContract.tests
         IModelScorerContract.tests
         IModelEvaluationPlanMetricsContract.tests
         IExternalComputeDispatcherContract.tests
@@ -43,13 +36,10 @@ let private registeredTests =
         IExternalComputeDispatcherContract.portabilityAudit
         IExternalComputeDispatcherContract.conformanceTests
         IExternalComputeDispatcherContract.selfTests
-        IExternalHandleStoreContract.tests
-        IExternalHandleStoreContract.selfTests
         ModelEvaluationTests.tests
         ModelPromotionPolicyTests.tests
         ModelRegistrationObserverTests.tests
         ModelPromotionTransferTests.tests
-        SidecarStoreTests.tests
         RunJobTests.tests
         ModelFitBatchTests.tests
         ModelExecutionApiTests.tests
@@ -60,14 +50,11 @@ let private registeredTests =
         IngestionBackpressureTests.tests
         DurableIngestionQueueTests.tests
         MappingDryRunValidationTests.tests
-        IColumnMappingStoreContract.tests
         IGrantConsentStoreContract.tests
         IUserSchemaStoreContract.tests
         INotificationPreferenceStoreContract.tests
-        DataCatalogTests.tests
         ResultStoreTests.tests
         ConversationStoreTests.tests
-        LineageStoreTests.tests
         MetricRegistryTests.tests
         IFactTableWriterContract.tests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
         IFactTableWriterContract.defaultWriterObligationTests
@@ -141,12 +128,7 @@ let private registeredTests =
         JobSchedulerTests.tests
         ScheduledJobDeclarationTests.tests
         ModuleQueryBusTests.tests
-        InMemoryDataSourceTests.tests
-        InMemoryDataSourceTests.payloadFormatTests
-        DataSourceFidelityContract.selfTests
         DataIngestorTests.tests
-        OAuth1aSubstrateTests.tests
-        OAuth1aSubstrateTests.flowTests
         OAuthSubstrateTests.stateStoreTests
         OAuthSubstrateTests.credentialFlowTests
         OAuthSubstrateTests.pkceCredentialFlowTests
@@ -160,7 +142,6 @@ let private registeredTests =
         FileSecretStoreTests.tests
         FileSecretStoreAtomicityTests.tests
         FileSecretStoreCancellationTests.tests
-        TransientFaultPolicyTests.tests
         WebhookSecretRotationTests.tests
         WebhookSecretMigrationTests.tests
         WebhookFailureStateLeaseTests.tests
@@ -192,10 +173,8 @@ let private registeredTests =
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests
         SignedExportTests.tests
-        TimeSeriesStoreTests.tests
         PostgresFactStoreTests.offlineTests
         PostgresFactStoreTests.tests
-        TelemetrySinkTests.tests
         InMemoryNotificationChannelTests.tests
         TransactionalDispatcherTests.tests
         NotificationPreferenceTests.tests
@@ -223,7 +202,6 @@ let private registeredTests =
         RagTelemetryTests.tests
         ExtractorTests.tests
         TerminalStatusAnnouncementTests.tests
-        HealthCheckAggregatorTests.tests
         ConfigValidatorAggregatorTests.tests
         ConfigValidatorSecurityClassTests.tests
         PreflightRuleClassTests.tests
@@ -277,7 +255,6 @@ let private registeredTests =
         ConfigKeyReadBoolTests.tests
         UnknownConfigKeyValidatorTests.tests
         TraceCategoriesValidatorTests.tests
-        HealthStateTrackerTests.tests
         AlertRuleEngineTests.tests
         ServiceStatusBoardApiHandlerTests.tests
         DeploymentReadinessReportTests.tests
@@ -322,16 +299,12 @@ let private registeredTests =
         IDistributedLockContract.tests
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
-        EntityOutboxTests.tests
         ConditionalDataObjectStoreTests.tests
         EntityQueryTests.tests
-        RelationshipTests.tests
         EntityGraphProjectionTests.tests
         UsageLogTests.tests
-        PrometheusMetricsSinkTests.tests
         OtelActivitySinkTests.tests
         ServerModuleMetricsTests.tests
-        JsonConsoleLoggerTests.tests
         InMemoryAuditSinkTests.tests
         ObservabilityHandlersTests.tests
         ObservabilityHandlersTests.datadogReadbackTests
@@ -369,7 +342,6 @@ let private registeredTests =
         AgentLoopRailsTests.tests
         TurnOutcomeStatusTests.tests
         InProcessOAuthTokenRefresherTests.tests
-        BlobProviderProfileTests.tests
         ProviderProfileApiTests.tests
         TeamProviderTests.tests
         ProviderOAuthFlowTests.claudeOAuthContractTests
@@ -387,7 +359,6 @@ let private registeredTests =
         AuditEventRegistryTests.tests
         AuditFailurePolicyTests.tests
         PermissionAuditChainTests.tests
-        DegradedCapabilityRegistryTests.tests
         AuthAuditHookTests.tests
         HostActionAuditTests.tests
         NotificationSilentlySkippedTests.tests
@@ -564,8 +535,6 @@ let private registeredTests =
         DeliveredEgressTests.tests
         ContentAuthoringTests.tests
         ContentAdminAuthorizationTests.tests
-        InMemoryRateLimitStoreTests.tests
-        InMemoryRateLimitStoreTests.contractTests
         TeamCreationPolicyTests.tests
         TeamCreationPolicyTests.integrityTests
         TeamCreationPolicyTests.quotaTests
@@ -640,22 +609,6 @@ let private registeredTests =
         DeployPlaneTests.deployPlanFallbackTests
         DeployPlaneTests.deployPlanMutationCheck
         DeployPlaneTests.deployPlanDiffTests
-        BuildTranscriptTests.transcriptDeterminismTests
-        BuildTranscriptTests.transcriptSensitivityTests
-        BuildTranscriptTests.provenanceTests
-        BuildTranscriptTests.deployRecordCanonicalFormTests
-        BuildTranscriptTests.deployRecordVerificationTests
-        BuildTranscriptTests.closureCanonicalFormTests
-        BuildTranscriptTests.closureAttestationTests
-        BuildTranscriptTests.closureCaptureTests
-        BuildTranscriptTests.closureBindingTests
-        WorkProvenanceSourceTests.tests
-        SbomProjectionTests.sbomSchemaConformanceTests
-        SbomProjectionTests.sbomUnattestedPresenceTests
-        SbomProjectionTests.sbomDeterminismTests
-        SbomProjectionTests.sbomHonestyTests
-        SbomProjectionTests.sbomScopeStatementTests
-        SbomProjectionTests.sbomEndpointTests
         EvidenceChainWalkerTests.hopCountInvarianceTests
         EvidenceChainWalkerTests.honestAbsenceTests
         EvidenceChainWalkerTests.verdictReachabilityTests
@@ -794,7 +747,6 @@ let private registeredTests =
         AdversarialFailClosedTests.tests
         ConstantTimeCompareTests.tests
         ModuleLoadOutcomeTests.tests
-        PrerenderDeterminismTests.tests
         HydrationParityTests.tests
         SecondBindingNeutralityTests.tests
         ComponentRegistryContract.tests
@@ -822,16 +774,7 @@ let private registeredTests =
         ComputeBackendRegistryTests.observabilityTests
         ComputeBackendRegistryTests.gp13Tests
         ComputeBackendRegistryTests.structuralTests
-        MemoizedComputeDispatcherTests.memoizationTests
-        MemoizedComputeDispatcherTests.coalescingTests
-        MemoizedComputeDispatcherTests.scopeIsolationTests
-        MemoizedComputeDispatcherTests.ttlTests
-        MemoizedComputeDispatcherTests.optInTests
-        MemoizedComputeDispatcherTests.budgetCompositionTests
-        MemoizedComputeDispatcherTests.durabilityTests
-        MemoizedComputeDispatcherTests.evictionTests
         ComputeBudgetTests.tests
-        BudgetSeamTests.tests
         DataObjectOrphanSweepTests.tests
         DataObjectOrphanSweepTests.validatorTests
         DataObjectOrphanSweepTests.composeTests
@@ -839,7 +782,6 @@ let private registeredTests =
         RagConfigValidatorExtensionTests.tests
         ExternalCallbackTests.tests
         HttpComputeDispatcherTests.tests
-        SignedWorkerOutcomeTests.tests
         JobProgressTests.tests
         FederatedModelExecutionTests.tests
         ExternalModelFitTests.tests
@@ -858,7 +800,6 @@ let private registeredTests =
         ToolEffectEnvelopeTests.tests
         ToolGateProofOracleTests.tests
         TaintFlowProofOracleTests.tests
-        SqliteLogStoreTests.tests
         MetricsHistoryFlusherTests.tests
         ConversationRetentionTests.tests
         ReportingAIToolsTests.tests
@@ -985,7 +926,7 @@ let main argv =
         {
             Row = "Platform"
             Assembly = Assembly.GetExecutingAssembly()
-            GuardFloor = 162
+            GuardFloor = 156
             Exemptions = deliberatelyUnregistered
             Lanes = laneDeclaration
             Registered = registeredTests

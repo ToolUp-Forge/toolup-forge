@@ -8,8 +8,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 324.D — IExternalHandleStore conformance pack ─────────────
 //

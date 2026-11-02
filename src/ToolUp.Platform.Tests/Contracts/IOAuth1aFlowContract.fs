@@ -8,7 +8,6 @@ open System.Net.Http
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── Phase 10g — IOAuth1aFlow conformance pack ──────────────────────────
 //

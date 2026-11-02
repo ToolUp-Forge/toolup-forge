@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The Infra pack: the lists whose test files reach the Infra part and no later one.
+         The test sources stay under src/ToolUp.Platform.Tests/ and this project
+         compiles them from there, because other packs source-link them and
+         their citations and __SOURCE_DIRECTORY__ paths must not move. Which
+         file is in which pack, and why: docs/migrations/1194-platform-pack-partition.md. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IBlobStorageContract.fs" Link="Contracts\IBlobStorageContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IProviderProfileContract.fs" Link="Contracts\IProviderProfileContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEventStoreContract.fs" Link="Contracts\IEventStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDataObjectStoreContract.fs" Link="Contracts\IDataObjectStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDataCatalogContract.fs" Link="Contracts\IDataCatalogContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ILineageStoreContract.fs" Link="Contracts\ILineageStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDataSourceContract.fs" Link="Contracts\IDataSourceContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDeclaresPayloadFormatContract.fs" Link="Contracts\IDeclaresPayloadFormatContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDeclaresCredentialNeedContract.fs" Link="Contracts\IDeclaresCredentialNeedContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\DataSourceFidelityContract.fs" Link="Contracts\DataSourceFidelityContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuth1aFlowContract.fs" Link="Contracts\IOAuth1aFlowContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ISecretStoreContract.fs" Link="Contracts\ISecretStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IColumnMappingStoreContract.fs" Link="Contracts\IColumnMappingStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IMetricsSinkContract.fs" Link="Contracts\IMetricsSinkContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IRateLimitStoreContract.fs" Link="Contracts\IRateLimitStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ITimeSeriesStoreContract.fs" Link="Contracts\ITimeSeriesStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ILogStoreContract.fs" Link="Contracts\ILogStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDatasetStoreContract.fs" Link="Contracts\IDatasetStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IModelRegistryContract.fs" Link="Contracts\IModelRegistryContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IExternalHandleStoreContract.fs" Link="Contracts\IExternalHandleStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ITelemetrySinkContract.fs" Link="Contracts\ITelemetrySinkContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\LocalFileStorageTests.fs" Link="InProcess\LocalFileStorageTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryEventStoreTests.fs" Link="InProcess\InMemoryEventStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PersistentEventStoreTests.fs" Link="InProcess\PersistentEventStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DataObjectStoreTests.fs" Link="InProcess\DataObjectStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DataCatalogTests.fs" Link="InProcess\DataCatalogTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\LineageStoreTests.fs" Link="InProcess\LineageStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryDataSourceTests.fs" Link="InProcess\InMemoryDataSourceTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OAuth1aSubstrateTests.fs" Link="InProcess\OAuth1aSubstrateTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\TransientFaultPolicyTests.fs" Link="InProcess\TransientFaultPolicyTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DatasetStoreTests.fs" Link="InProcess\DatasetStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\VirtualDatasetTests.fs" Link="InProcess\VirtualDatasetTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SidecarStoreTests.fs" Link="InProcess\SidecarStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\TimeSeriesStoreTests.fs" Link="InProcess\TimeSeriesStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SqliteLogStoreTests.fs" Link="InProcess\SqliteLogStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\TelemetrySinkTests.fs" Link="InProcess\TelemetrySinkTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HealthCheckAggregatorTests.fs" Link="InProcess\HealthCheckAggregatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HealthStateTrackerTests.fs" Link="InProcess\HealthStateTrackerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\EntityOutboxTests.fs" Link="InProcess\EntityOutboxTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RelationshipTests.fs" Link="InProcess\RelationshipTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PrometheusMetricsSinkTests.fs" Link="InProcess\PrometheusMetricsSinkTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\JsonConsoleLoggerTests.fs" Link="InProcess\JsonConsoleLoggerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DegradedCapabilityRegistryTests.fs" Link="InProcess\DegradedCapabilityRegistryTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BlobProviderProfileTests.fs" Link="InProcess\BlobProviderProfileTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryRateLimitStoreTests.fs" Link="InProcess\InMemoryRateLimitStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PrerenderDeterminismTests.fs" Link="InProcess\PrerenderDeterminismTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BuildTranscriptTests.fs" Link="InProcess\BuildTranscriptTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WorkProvenanceSourceTests.fs" Link="InProcess\WorkProvenanceSourceTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SbomProjectionTests.fs" Link="InProcess\SbomProjectionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MemoizedComputeDispatcherTests.fs" Link="InProcess\MemoizedComputeDispatcherTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BudgetSeamTests.fs" Link="InProcess\BudgetSeamTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SignedWorkerOutcomeTests.fs" Link="InProcess\SignedWorkerOutcomeTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Build\ToolUp.Platform.Build.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\TelemetrySinks\Ga4\Ga4TelemetrySink.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <PackageReference Include="JsonSchema.Net" />
+        <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Platform.Tests\fixtures\sbom-schemas\*.json"
+              Link="fixtures\sbom-schemas\%(Filename)%(Extension)"
+              CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

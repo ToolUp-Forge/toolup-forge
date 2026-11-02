@@ -293,6 +293,8 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "TOOLUP_TEST_AGE_CONNSTRING"
          ])
     |> budget (minutes 2.)
+    pack "Platform.Infra" "src/ToolUp.Platform.Tests.Infra/ToolUp.Platform.Tests.Infra.fsproj" [ Input.Tree ]
+    |> budget (seconds 20.)
     pack "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj" [ Input.Tree ]
     pack "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj" [ Input.Tree ]
     // Each per-provider arm runs when its key is set and reports Pending

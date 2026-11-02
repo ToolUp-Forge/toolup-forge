@@ -13,7 +13,6 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── Phase 717 — the dependency SBOM as a projection ─────────────────
 //

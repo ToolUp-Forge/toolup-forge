@@ -10,7 +10,6 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
 
 // ─── Phase 453 — IModelRegistry conformance pack ────────────────────────
 //

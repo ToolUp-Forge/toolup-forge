@@ -7,7 +7,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Audit
 
 /// Reaches the remoting store's insertion-order index and empties it, leaving
 /// the buckets in place: the state a lost marker leaves behind, which the

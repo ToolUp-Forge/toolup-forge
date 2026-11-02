@@ -4,7 +4,6 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── IDataSource contract pack ────────────────────────────────────
 //

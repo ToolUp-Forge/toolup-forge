@@ -9,7 +9,6 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── Phase 689 — the platform budget seam ────────────────────────────────
 //
