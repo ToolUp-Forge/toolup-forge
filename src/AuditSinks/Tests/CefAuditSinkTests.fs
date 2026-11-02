@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.CefAuditSinkTests
+module ToolUp.AuditSinks.Tests.CefAuditSinkTests
 
 open System
 open System.Collections.Concurrent

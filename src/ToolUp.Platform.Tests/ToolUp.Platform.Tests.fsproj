@@ -418,13 +418,8 @@
         <Compile Include="InProcess\JsonConsoleLoggerTests.fs" />
         <Compile Include="InProcess\InMemoryAuditSinkTests.fs" />
         <Compile Include="InProcess\Ed25519ArtifactSubstrateTests.fs" />
-        <Compile Include="InProcess\S3ArchiveAuditSinkTests.fs" />
-        <Compile Include="InProcess\SplunkHecAuditSinkTests.fs" />
-        <Compile Include="InProcess\DatadogLogsAuditSinkTests.fs" />
         <Compile Include="InProcess\DatadogReadbackClientTests.fs" />
         <Compile Include="InProcess\ObservabilityHandlersTests.fs" />
-        <Compile Include="InProcess\CefAuditSinkTests.fs" />
-        <Compile Include="InProcess\ChainedAuditLedgerTests.fs" />
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
         <Compile Include="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="InProcess\ServiceAccountStoreTests.fs" />

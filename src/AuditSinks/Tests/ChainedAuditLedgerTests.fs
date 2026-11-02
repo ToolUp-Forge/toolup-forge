@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.ChainedAuditLedgerTests
+module ToolUp.AuditSinks.Tests.ChainedAuditLedgerTests
 
 open System
 open System.Collections.Concurrent

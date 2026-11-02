@@ -366,6 +366,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "NotificationChannels"
         "src/NotificationChannels/Tests/ToolUp.NotificationChannels.Tests.fsproj"
         ([ Input.Tree ] @ env [ "TOOLUP_REDIS_CONNECTION" ])
+    pack "AuditSinks" "src/AuditSinks/Tests/ToolUp.AuditSinks.Tests.fsproj" [ Input.Tree ]
 
     // ── The legs `VerifyAll` runs after the packs ──────────────────────
     // Every `*.Tests.fsproj` is a pack row or a named exclusion. Pure file

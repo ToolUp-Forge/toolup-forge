@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.DatadogLogsAuditSinkTests
+module ToolUp.AuditSinks.Tests.DatadogLogsAuditSinkTests
 
 open System
 open System.Collections.Concurrent

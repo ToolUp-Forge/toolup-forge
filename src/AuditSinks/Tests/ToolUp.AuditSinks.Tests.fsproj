@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Phase 1197 - the audit-sink companions (CEF/syslog, the chained ledger, Datadog Logs, the S3 archive, Splunk HEC). Hosts IAuditSinkContract against each sink.
+
+         A companion family's tests live beside the family and build against
+         its closure, not the Platform pack's. The contract packs the family
+         conforms to are SOURCE-LINKED from ToolUp.Platform.Tests (Link=…), so
+         there is one copy of each law and nothing to drift; the linked
+         support files are the closure the moved cases compile against. -->
+    <ItemGroup>
+        <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IAuditSinkContract.fs" Link="Contracts\IAuditSinkContract.fs" />
+        <Compile Include="CefAuditSinkTests.fs" />
+        <Compile Include="ChainedAuditLedgerTests.fs" />
+        <Compile Include="DatadogLogsAuditSinkTests.fs" />
+        <Compile Include="S3ArchiveAuditSinkTests.fs" />
+        <Compile Include="SplunkHecAuditSinkTests.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\Cef\ToolUp.AuditSinks.Cef.fsproj" />
+        <ProjectReference Include="..\ChainedLedger\ToolUp.AuditSinks.ChainedLedger.fsproj" />
+        <ProjectReference Include="..\DatadogLogs\ToolUp.AuditSinks.DatadogLogs.fsproj" />
+        <ProjectReference Include="..\S3Archive\ToolUp.AuditSinks.S3Archive.fsproj" />
+        <ProjectReference Include="..\SplunkHec\ToolUp.AuditSinks.SplunkHec.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

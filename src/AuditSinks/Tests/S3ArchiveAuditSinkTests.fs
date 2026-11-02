@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.S3ArchiveAuditSinkTests
+module ToolUp.AuditSinks.Tests.S3ArchiveAuditSinkTests
 
 open System
 open System.Collections.Concurrent

@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.SplunkHecAuditSinkTests
+module ToolUp.AuditSinks.Tests.SplunkHecAuditSinkTests
 
 open System
 open System.Collections.Concurrent
