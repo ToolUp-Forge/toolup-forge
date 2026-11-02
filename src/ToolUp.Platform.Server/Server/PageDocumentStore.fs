@@ -1263,7 +1263,7 @@ module PageDocumentRoute =
                         Page = pageName
                     }
 
-                    let scope = StorageScopeResolver.ScopeResolution.forRequest ctx
+                    let scope = Scope.StorageScopeResolver.ScopeResolution.forRequest ctx
 
                     match! store.ReadFolded(scope, accessOf ctx, page) |> Async.StartAsTask with
                     | Ok folded -> return! respond 200 (encode folded) next ctx
