@@ -19,7 +19,6 @@ open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Phase 22b — cross-replica encryption-key destruction ────────────
 //

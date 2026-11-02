@@ -14,7 +14,6 @@ open ToolUp.Platform.Secrets
 open DataManagementTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Phase 22 EncryptedBlobStorage tests ────────────────────────────
 //

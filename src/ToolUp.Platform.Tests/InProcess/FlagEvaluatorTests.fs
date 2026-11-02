@@ -9,7 +9,6 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.FeatureFlagStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Test doubles ────────────────────────────────────────────────
 

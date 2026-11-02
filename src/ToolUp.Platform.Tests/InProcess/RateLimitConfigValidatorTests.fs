@@ -4,7 +4,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 let private cfg (rateLimit: RateLimitConfig) : ServerConfig = {
     ServerConfig.defaults with

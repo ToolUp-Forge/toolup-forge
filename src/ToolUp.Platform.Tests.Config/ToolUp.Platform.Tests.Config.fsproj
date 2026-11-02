@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The Config pack: the lists whose test files reach the Config part and no later one.
+         The test sources stay under src/ToolUp.Platform.Tests/ and this project
+         compiles them from there, because other packs source-link them and
+         their citations and __SOURCE_DIRECTORY__ paths must not move. Which
+         file is in which pack, and why: docs/migrations/1194-platform-pack-partition.md. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IResultStoreContract.fs" Link="Contracts\IResultStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ISecretStoreContract.fs" Link="Contracts\ISecretStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IFeatureFlagStoreContract.fs" Link="Contracts\IFeatureFlagStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\INotificationChannelContract.fs" Link="Contracts\INotificationChannelContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IConversationStoreContract.fs" Link="Contracts\IConversationStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IUserClaimsContract.fs" Link="Contracts\IUserClaimsContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DataMigrationTests.fs" Link="InProcess\DataMigrationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MappingDryRunValidationTests.fs" Link="InProcess\MappingDryRunValidationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ResultStoreTests.fs" Link="InProcess\ResultStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConversationStoreTests.fs" Link="InProcess\ConversationStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FileSecretStoreTests.fs" Link="InProcess\FileSecretStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FileSecretStoreAtomicityTests.fs" Link="InProcess\FileSecretStoreAtomicityTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FileSecretStoreCancellationTests.fs" Link="InProcess\FileSecretStoreCancellationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FeatureFlagStoreTests.fs" Link="InProcess\FeatureFlagStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FlagEvaluatorTests.fs" Link="InProcess\FlagEvaluatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryNotificationChannelTests.fs" Link="InProcess\InMemoryNotificationChannelTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConfigKeyReadBoolTests.fs" Link="InProcess\ConfigKeyReadBoolTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\UnknownConfigKeyValidatorTests.fs" Link="InProcess\UnknownConfigKeyValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\TraceCategoriesValidatorTests.fs" Link="InProcess\TraceCategoriesValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\EncryptedBlobStorageTests.fs" Link="InProcess\EncryptedBlobStorageTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\CrossReplicaKeyDestructionTests.fs" Link="InProcess\CrossReplicaKeyDestructionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\LocalStorageEncryptionValidatorTests.fs" Link="InProcess\LocalStorageEncryptionValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SurfaceCoherenceValidatorTests.fs" Link="InProcess\SurfaceCoherenceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\EncryptedSecretStoreModeValidatorTests.fs" Link="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OAuthSecretEncryptionModeValidatorTests.fs" Link="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OAuthStateStoreInstanceValidatorTests.fs" Link="InProcess\OAuthStateStoreInstanceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdempotencyStoreInstanceValidatorTests.fs" Link="InProcess\IdempotencyStoreInstanceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RateLimitModeValidatorTests.fs" Link="InProcess\RateLimitModeValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RateLimitConfigValidatorTests.fs" Link="InProcess\RateLimitConfigValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConfigBoundsValidatorTests.fs" Link="InProcess\ConfigBoundsValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\LocalSecretFilePermissionsValidatorTests.fs" Link="InProcess\LocalSecretFilePermissionsValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdentitySanitiserTests.fs" Link="InProcess\IdentitySanitiserTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\I18nInfrastructureTests.fs" Link="InProcess\I18nInfrastructureTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\UserClaimsTests.fs" Link="InProcess\UserClaimsTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ServerConfigFromEnvTests.fs" Link="InProcess\ServerConfigFromEnvTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ServerConfigSnapshotTests.fs" Link="InProcess\ServerConfigSnapshotTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuthClassifierAttributeIdentityTests.fs" Link="InProcess\AuthClassifierAttributeIdentityTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AttributeRecognitionSweepTests.fs" Link="InProcess\AttributeRecognitionSweepTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Build\ToolUp.Platform.Build.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

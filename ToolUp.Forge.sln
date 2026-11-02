@@ -683,6 +683,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Remot
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Infra", "src\ToolUp.Platform.Tests.Infra\ToolUp.Platform.Tests.Infra.fsproj", "{790E2B55-AFA9-408F-86D2-012DF0C52D91}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Config", "src\ToolUp.Platform.Tests.Config\ToolUp.Platform.Tests.Config.fsproj", "{A30197BA-2B7D-425C-87CF-DA367B4E0F04}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -3693,6 +3695,18 @@ Global
 		{790E2B55-AFA9-408F-86D2-012DF0C52D91}.Release|x64.Build.0 = Release|Any CPU
 		{790E2B55-AFA9-408F-86D2-012DF0C52D91}.Release|x86.ActiveCfg = Release|Any CPU
 		{790E2B55-AFA9-408F-86D2-012DF0C52D91}.Release|x86.Build.0 = Release|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Debug|x64.Build.0 = Debug|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Debug|x86.Build.0 = Debug|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Release|x64.ActiveCfg = Release|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Release|x64.Build.0 = Release|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Release|x86.ActiveCfg = Release|Any CPU
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -4009,5 +4023,6 @@ Global
 		{DF0DD6C6-AE13-4609-8A99-2B8FCDF76144} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{9F77D29B-0FC9-43F9-9570-6CA984DD8852} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{790E2B55-AFA9-408F-86D2-012DF0C52D91} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
+		{A30197BA-2B7D-425C-87CF-DA367B4E0F04} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 	EndGlobalSection
 EndGlobal

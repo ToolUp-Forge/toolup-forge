@@ -4,7 +4,6 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 /// Contract test list for any `IFeatureFlagStore` implementation.
 /// Factory produces a fresh, empty store per test. Tests GUID-suffix

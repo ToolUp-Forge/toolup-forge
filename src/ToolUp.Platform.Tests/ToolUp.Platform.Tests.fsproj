@@ -34,7 +34,6 @@
         <Compile Include="Contracts\IEventStoreDecoratorContract.fs" />
         <Compile Include="Contracts\IDataObjectStoreContract.fs" />
         <Compile Include="Contracts\IDataCatalogContract.fs" />
-        <Compile Include="Contracts\IResultStoreContract.fs" />
         <Compile Include="Contracts\IJobStoreContract.fs" />
         <Compile Include="Contracts\IJobSchedulerContract.fs" />
         <Compile Include="Contracts\IScopeCarrierBindingContract.fs" />
@@ -50,8 +49,6 @@
         <Compile Include="Contracts\IOAuthCredentialFlowContract.fs" />
         <Compile Include="Contracts\ISecretStoreContract.fs" />
         <Compile Include="Contracts\IPermissionStoreContract.fs" />
-        <Compile Include="Contracts\IFeatureFlagStoreContract.fs" />
-        <Compile Include="Contracts\INotificationChannelContract.fs" />
         <Compile Include="Contracts\INotificationSinkContract.fs" />
         <Compile Include="Contracts\IWhatsAppTemplateRegistryContract.fs" />
         <Compile Include="Contracts\INotificationAddressBookContract.fs" />
@@ -103,7 +100,6 @@
         <Compile Include="Contracts\IClientToolDispatchContract.fs" />
         <Compile Include="Contracts\IUiInspectionContract.fs" />
         <Compile Include="Contracts\ILiveSessionHostContract.fs" />
-        <Compile Include="Contracts\IConversationStoreContract.fs" />
         <Compile Include="Contracts\IPublicContentApiContract.fs" />
         <Compile Include="Contracts\IContentSourceContract.fs" />
         <Compile Include="Contracts\IRenderCacheContract.fs" />
@@ -123,7 +119,6 @@
         <Compile Include="Contracts\IHeldFactRowDisclosureGateContract.fs" />
         <Compile Include="Contracts\IFactTableWriterContract.fs" />
         <Compile Include="Contracts\IFactTableOrphanSweepContract.fs" />
-        <Compile Include="Contracts\IUserClaimsContract.fs" />
         <Compile Include="Contracts\ISubjectResolverContract.fs" />
         <Compile Include="Contracts\IPlatformPeerContract.fs" />
         <Compile Include="Contracts\IPeerAuditTransparencyContract.fs" />
@@ -143,7 +138,6 @@
         <Compile Include="Remoting\BrowserWriterFixture.fs" />
         <Compile Include="Remoting\JsonDecoderAlgebraTests.fs" />
         <Compile Include="InProcess\DataObjectStoreTests.fs" />
-        <Compile Include="InProcess\DataMigrationTests.fs" />
         <Compile Include="InProcess\ConfigMigrationTests.fs" />
         <Compile Include="InProcess\IngestionStatusTests.fs" />
         <Compile Include="InProcess\IngestionRetryTests.fs" />
@@ -151,9 +145,6 @@
         <Compile Include="Contracts\IEmbeddingProviderCallOverrideContract.fs" />
         <Compile Include="InProcess\IngestionBackpressureTests.fs" />
         <Compile Include="InProcess\DurableIngestionQueueTests.fs" />
-        <Compile Include="InProcess\MappingDryRunValidationTests.fs" />
-        <Compile Include="InProcess\ResultStoreTests.fs" />
-        <Compile Include="InProcess\ConversationStoreTests.fs" />
         <Compile Include="InProcess\MetricRegistryTests.fs" />
         <Compile Include="InProcess\CanonicalFrameTests.fs" />
         <Compile Include="InProcess\FactStoreTests.fs" />
@@ -170,9 +161,6 @@
         <Compile Include="InProcess\ModuleQueryBusTests.fs" />
         <Compile Include="InProcess\DataIngestorTests.fs" />
         <Compile Include="InProcess\OAuthSubstrateTests.fs" />
-        <Compile Include="InProcess\FileSecretStoreTests.fs" />
-        <Compile Include="InProcess\FileSecretStoreAtomicityTests.fs" />
-        <Compile Include="InProcess\FileSecretStoreCancellationTests.fs" />
         <Compile Include="InProcess\WebhookSecretRotationTests.fs" />
         <Compile Include="InProcess\WebhookSecretRotationBroadcastTests.fs" />
         <Compile Include="InProcess\WebhookSecretMigrationTests.fs" />
@@ -191,8 +179,6 @@
         <Compile Include="InProcess\AIQueryabilityOptInTests.fs" />
         <Compile Include="InProcess\AIConsentTests.fs" />
         <Compile Include="InProcess\AICrossModuleAuditTests.fs" />
-        <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
-        <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />
         <Compile Include="InProcess\MockOidcServer.fs" />
         <Compile Include="InProcess\AuthProviderTests.fs" />
@@ -214,7 +200,6 @@
         <Compile Include="InProcess\ModelPromotionTransferTests.fs" />
         <Compile Include="InProcess\RunJobTests.fs" />
         <Compile Include="InProcess\PostgresFactStoreTests.fs" />
-        <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="InProcess\TransactionalDispatcherTests.fs" />
         <Compile Include="InProcess\NotificationAddressBookTests.fs" />
         <Compile Include="InProcess\ExternalContactTests.fs" />
@@ -275,9 +260,6 @@
         <Compile Include="InProcess\ConfigStartupModeTests.fs" />
         <Compile Include="InProcess\ConfigResolverTests.fs" />
         <Compile Include="InProcess\ConfigProfileTests.fs" />
-        <Compile Include="InProcess\ConfigKeyReadBoolTests.fs" />
-        <Compile Include="InProcess\UnknownConfigKeyValidatorTests.fs" />
-        <Compile Include="InProcess\TraceCategoriesValidatorTests.fs" />
         <Compile Include="InProcess\AIProviderEnvValidatorTests.fs" />
         <Compile Include="InProcess\AIProviderProbeValidatorTests.fs" />
         <Compile Include="InProcess\AIProviderFallbackTests.fs" />
@@ -298,15 +280,12 @@
         <Compile Include="InProcess\ScimProvisioningTests.fs" />
         <Compile Include="InProcess\PasskeyAuthProviderTests.fs" />
         <Compile Include="InProcess\SSEHandshakeTests.fs" />
-        <Compile Include="InProcess\EncryptedBlobStorageTests.fs" />
-        <Compile Include="InProcess\CrossReplicaKeyDestructionTests.fs" />
         <Compile Include="InProcess\PerScopeKeyResolverWiringTests.fs" />
         <Compile Include="InProcess\TenantLifecycleAggregatorTests.fs" />
         <Compile Include="InProcess\LifecycleSummaryStoreTests.fs" />
         <Compile Include="InProcess\OffboardConfirmationTests.fs" />
         <Compile Include="InProcess\ScheduledDeprovisionTests.fs" />
         <Compile Include="InProcess\PrincipalRegistryTests.fs" />
-        <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
         <Compile Include="InProcess\ConditionalDataObjectStoreTests.fs" />
         <Compile Include="InProcess\SeedDataLoaderTests.fs" />
@@ -352,7 +331,6 @@
         <Compile Include="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogModeValidatorTests.fs" />
         <Compile Include="InProcess\EventStoreChainValidatorTests.fs" />
-        <Compile Include="InProcess\SurfaceCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />
         <Compile Include="InProcess\AuditWriteFailureMetricTests.fs" />
@@ -361,8 +339,6 @@
         <Compile Include="InProcess\AuthAuditHookTests.fs" />
         <Compile Include="InProcess\HostActionAuditTests.fs" />
         <Compile Include="InProcess\NotificationSilentlySkippedTests.fs" />
-        <Compile Include="InProcess\EncryptedSecretStoreModeValidatorTests.fs" />
-        <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
         <Compile Include="InProcess\SecretStoreAtRestPostureValidatorTests.fs" />
         <Compile Include="InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" />
         <Compile Include="InProcess\ShareTokenSigningKeyGovernanceTests.fs" />
@@ -371,14 +347,9 @@
         <Compile Include="InProcess\AICancellationDispatchInstanceValidatorTests.fs" />
         <Compile Include="InProcess\AnonymousAIModeValidatorTests.fs" />
         <Compile Include="InProcess\ScheduledJobDeclarationTests.fs" />
-        <Compile Include="InProcess\OAuthStateStoreInstanceValidatorTests.fs" />
         <Compile Include="InProcess\NotificationChannelInstanceValidatorTests.fs" />
-        <Compile Include="InProcess\IdempotencyStoreInstanceValidatorTests.fs" />
         <Compile Include="InProcess\MultiInstanceAdminCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\NotificationsExplicitOffTests.fs" />
-        <Compile Include="InProcess\RateLimitModeValidatorTests.fs" />
-        <Compile Include="InProcess\RateLimitConfigValidatorTests.fs" />
-        <Compile Include="InProcess\ConfigBoundsValidatorTests.fs" />
         <Compile Include="InProcess\SseAuthModeValidatorTests.fs" />
         <Compile Include="InProcess\OidcAudienceBindingValidatorTests.fs" />
         <Compile Include="InProcess\OidcClaimMappingAdvisoryValidatorTests.fs" />
@@ -390,8 +361,6 @@
         <Compile Include="InProcess\SecurityHardeningTests.fs" />
         <Compile Include="InProcess\ForwardedHeadersTrustValidatorTests.fs" />
         <Compile Include="InProcess\ForwardedHeadersTrustTests.fs" />
-        <Compile Include="InProcess\LocalSecretFilePermissionsValidatorTests.fs" />
-        <Compile Include="InProcess\IdentitySanitiserTests.fs" />
         <Compile Include="InProcess\FileManagementTests.fs" />
         <Compile Include="InProcess\ModuleApiFactoryTests.fs" />
         <Compile Include="InProcess\PeerBearerAuthTests.fs" />
@@ -416,7 +385,6 @@
         <Compile Include="InProcess\HttpTransportBindingTests.fs" />
         <Compile Include="InProcess\ExternalApiConnectorBindingTests.fs" />
         <Compile Include="InProcess\PlatformTestingFrameworkTests.fs" />
-        <Compile Include="InProcess\I18nInfrastructureTests.fs" />
         <Compile Include="InProcess\CitationNormaliserTests.fs" />
         <Compile Include="Contracts\ISparseIndexContract.fs" />
         <Compile Include="InProcess\InMemoryBM25IndexTests.fs" />
@@ -555,7 +523,6 @@
         <Compile Include="InProcess\SessionRegistryTests.fs" />
         <Compile Include="InProcess\AdAnalyticsObservabilityTests.fs" />
         <Compile Include="InProcess\HttpBodyBindingTests.fs" />
-        <Compile Include="InProcess\UserClaimsTests.fs" />
         <Compile Include="InProcess\ModuleIdentityTests.fs" />
         <Compile Include="InProcess\AnonymousModeContractTests.fs" />
         <Compile Include="InProcess\ModuleSurfaceRequirementTests.fs" />
@@ -565,8 +532,6 @@
         <Compile Include="InProcess\CompositionInspectorHandlerTests.fs" />
         <Compile Include="InProcess\ReflectionToolsTests.fs" />
         <Compile Include="InProcess\HomeOverviewTests.fs" />
-        <Compile Include="InProcess\ServerConfigFromEnvTests.fs" />
-        <Compile Include="InProcess\ServerConfigSnapshotTests.fs" />
         <Compile Include="InProcess\RevokeOnIssuerRemovedTests.fs" />
         <Compile Include="InProcess\AnonymousSessionMigratorTests.fs" />
         <Compile Include="InProcess\DefaultSubjectResolverTests.fs" />
@@ -575,11 +540,9 @@
         <Compile Include="InProcess\AnonymousSessionMigrationMiddlewareTests.fs" />
         <Compile Include="InProcess\TelemetryZeroCostGateTests.fs" />
         <Compile Include="InProcess\AuthorizationTests.fs" />
-        <Compile Include="InProcess\AuthClassifierAttributeIdentityTests.fs" />
         <Compile Include="InProcess\AuditTests.fs" />
         <Compile Include="InProcess\RateLimitTests.fs" />
         <Compile Include="InProcess\IdempotencyTests.fs" />
-        <Compile Include="InProcess\AttributeRecognitionSweepTests.fs" />
         <Compile Include="InProcess\DispatcherBodyAndArgFastpathTests.fs" />
         <Compile Include="InProcess\ServerRemotingTailTests.fs" />
         <Compile Include="InProcess\ShutdownDrainTests.fs" />
