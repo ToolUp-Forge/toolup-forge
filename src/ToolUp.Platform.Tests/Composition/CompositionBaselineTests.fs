@@ -659,6 +659,8 @@ let private defaultDescriptorsGate = test "a default deployment's service descri
 Only in the baseline:
 %s
 Only in this run:
+%s
+This run's full list (%d):
 %s"
                 baseline.Length
                 lines.Length
@@ -667,6 +669,8 @@ Only in this run:
                 (at lines first)
                 (render (onlyIn baseline lines))
                 (render (onlyIn lines baseline))
+                lines.Length
+                (render lines)
 }
 
 // ── Gate-mechanism fixtures: the load-bearing logic is the diff-driven
