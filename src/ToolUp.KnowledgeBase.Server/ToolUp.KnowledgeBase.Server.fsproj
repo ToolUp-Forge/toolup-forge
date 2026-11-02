@@ -40,6 +40,7 @@
              extractor module is `internal`, so that pack needs the same
              visibility. -->
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Storage.Tests" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->

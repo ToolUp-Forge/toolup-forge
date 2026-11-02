@@ -189,9 +189,6 @@ let private registeredTests =
         AgChartExportTests.tests
         AuthProviderTests.tests
         OidcJwksTtlTests.tests
-        AzureBlobStorageTests.tests
-        AwsS3StorageTests.tests
-        GoogleCloudStorageTests.tests
         AzureKeyVaultSecretStoreTests.tests
         AwsSecretsManagerSecretStoreTests.tests
         HashiCorpVaultSecretStoreTests.tests
@@ -374,7 +371,6 @@ let private registeredTests =
         LocalStorageEncryptionValidatorTests.tests
         BlobEntityStoreTests.tests
         EntityOutboxTests.tests
-        ConditionalBlobStorageTests.tests
         ConditionalDataObjectStoreTests.tests
         EntityQueryTests.tests
         RelationshipTests.tests
@@ -443,7 +439,6 @@ let private registeredTests =
         AuditLogHealthCheckTests.tests
         AuditWriteFailureMetricTests.tests
         AuditEventRegistryTests.tests
-        BlobStorageAuthAuditTests.tests
         AuditFailurePolicyTests.tests
         PermissionAuditChainTests.tests
         DegradedCapabilityRegistryTests.tests

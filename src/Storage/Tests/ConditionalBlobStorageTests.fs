@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.ConditionalBlobStorageTests
+module ToolUp.Storage.Tests.ConditionalBlobStorageTests
 
 open System
 open System.IO

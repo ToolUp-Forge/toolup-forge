@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.BlobStorageAuthAuditTests
+module ToolUp.Storage.Tests.BlobStorageAuthAuditTests
 
 open System
 open System.Net

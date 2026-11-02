@@ -164,11 +164,9 @@ let private platformEnv =
         "TOOLUP_AUTH_MODE"
         "TOOLUP_AWS_SECRETS_REGION"
         "TOOLUP_AZURE_KEY_VAULT_URL"
-        "TOOLUP_AZURE_STORAGE_CONNECTION_STRING"
         "TOOLUP_BUNDLE_FIXTURE_DIR"
         "TOOLUP_EMIT_WIRE_FIXTURES"
         "TOOLUP_GCP_PROJECT_ID"
-        "TOOLUP_GCS_BUCKET"
         "TOOLUP_HNSW_SCALE_CORPUS"
         "TOOLUP_OAUTH_REDIRECT_BASE"
         "TOOLUP_OIDC_AUDIENCE"
@@ -367,6 +365,16 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "src/NotificationChannels/Tests/ToolUp.NotificationChannels.Tests.fsproj"
         ([ Input.Tree ] @ env [ "TOOLUP_REDIS_CONNECTION" ])
     pack "AuditSinks" "src/AuditSinks/Tests/ToolUp.AuditSinks.Tests.fsproj" [ Input.Tree ]
+    pack
+        "Storage"
+        "src/Storage/Tests/ToolUp.Storage.Tests.fsproj"
+        ([ Input.Tree; Input.Network ]
+         @ env [
+             "TOOLUP_AWS_S3_BUCKET"
+             "TOOLUP_AZURE_STORAGE_CONNECTION_STRING"
+             "TOOLUP_GCS_BUCKET"
+             "GOOGLE_APPLICATION_CREDENTIALS"
+         ])
 
     // ── The legs `VerifyAll` runs after the packs ──────────────────────
     // Every `*.Tests.fsproj` is a pack row or a named exclusion. Pure file

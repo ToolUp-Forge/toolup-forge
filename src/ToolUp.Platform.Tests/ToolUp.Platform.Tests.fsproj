@@ -259,9 +259,6 @@
         <Compile Include="InProcess\MockOidcServer.fs" />
         <Compile Include="InProcess\AuthProviderTests.fs" />
         <Compile Include="InProcess\OidcJwksTtlTests.fs" />
-        <Compile Include="InProcess\AzureBlobStorageTests.fs" />
-        <Compile Include="InProcess\AwsS3StorageTests.fs" />
-        <Compile Include="InProcess\GoogleCloudStorageTests.fs" />
         <Compile Include="InProcess\AzureKeyVaultSecretStoreTests.fs" />
         <Compile Include="InProcess\AwsSecretsManagerSecretStoreTests.fs" />
         <Compile Include="InProcess\HashiCorpVaultSecretStoreTests.fs" />
@@ -406,7 +403,6 @@
         <Compile Include="InProcess\LocalStorageEncryptionValidatorTests.fs" />
         <Compile Include="InProcess\BlobEntityStoreTests.fs" />
         <Compile Include="InProcess\EntityOutboxTests.fs" />
-        <Compile Include="InProcess\ConditionalBlobStorageTests.fs" />
         <Compile Include="InProcess\ConditionalDataObjectStoreTests.fs" />
         <Compile Include="InProcess\SeedDataLoaderTests.fs" />
         <Compile Include="InProcess\EntityQueryTests.fs" />
@@ -458,7 +454,6 @@
         <Compile Include="InProcess\SurfaceCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />
-        <Compile Include="InProcess\BlobStorageAuthAuditTests.fs" />
         <Compile Include="InProcess\AuditWriteFailureMetricTests.fs" />
         <Compile Include="InProcess\AuditFailurePolicyTests.fs" />
         <Compile Include="InProcess\PermissionAuditChainTests.fs" />
@@ -921,9 +916,6 @@
         <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" />
         <ProjectReference Include="..\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj" />
         <ProjectReference Include="..\TelemetrySinks\Ga4\Ga4TelemetrySink.fsproj" />
-        <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
-        <ProjectReference Include="..\Storage\AwsS3Storage\AwsS3Storage.fsproj" />
-        <ProjectReference Include="..\Storage\GoogleCloudStorage\GoogleCloudStorage.fsproj" />
         <ProjectReference Include="..\Secrets\AzureKeyVault\AzureKeyVault.fsproj" />
         <ProjectReference Include="..\Secrets\AwsSecretsManager\AwsSecretsManager.fsproj" />
         <ProjectReference Include="..\Secrets\HashiCorpVault\HashiCorpVault.fsproj" />

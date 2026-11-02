@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.AwsS3StorageTests
+module ToolUp.Storage.Tests.AwsS3StorageTests
 
 open System
 open Expecto

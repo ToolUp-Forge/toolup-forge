@@ -13,7 +13,7 @@
          BlobStorageAuthAuditTests proves it against real SDK exception
          instances. Same mechanism ToolUp.Platform.Server uses for its own
          internal codec registry. -->
-    <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+    <InternalsVisibleTo Include="ToolUp.Storage.Tests" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="GoogleCloudStorage.fs" />

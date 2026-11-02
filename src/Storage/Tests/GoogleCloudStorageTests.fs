@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.GoogleCloudStorageTests
+module ToolUp.Storage.Tests.GoogleCloudStorageTests
 
 open System
 open System.Security.Cryptography

@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.AzureBlobStorageTests
+module ToolUp.Storage.Tests.AzureBlobStorageTests
 
 open System
 open Expecto
