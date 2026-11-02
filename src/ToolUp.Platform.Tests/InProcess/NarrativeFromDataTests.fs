@@ -11,6 +11,7 @@ open ToolUp.PublicRendering
 open ToolUp.Remoting.Json.SystemTextJson
 open ProcessedDataTypes
 open DataManagementTypes
+open ToolUp.Platform.Infra
 
 // ─── Phase 85 — NarrativeFromData projector output-shape tests ───────
 //

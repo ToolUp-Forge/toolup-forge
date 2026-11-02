@@ -15,6 +15,7 @@ open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.AI.FastPathTriageResolver
 open ToolUp.TriageCalibration.Calibration
+open ToolUp.Platform.Infra
 
 // ─── The fake provider ────────────────────────────────────────────
 

@@ -23,6 +23,8 @@ open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.GoogleCalendarOAuth
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 830 — the Google Calendar bridge ─────────────────────────
 //

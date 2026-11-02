@@ -1,8 +1,9 @@
-module ToolUp.Platform.NotificationChannelInstanceValidator
+module ToolUp.Platform.Jobs.NotificationChannelInstanceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Multi-instance + in-memory notification channel ────────────────
 //

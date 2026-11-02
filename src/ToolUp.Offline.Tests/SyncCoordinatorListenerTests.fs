@@ -23,6 +23,7 @@ module ToolUp.Offline.Tests.SyncCoordinatorListenerTests
 open System.IO
 open System.Text.RegularExpressions
 open Expecto
+open ToolUp.Platform.Infra
 
 let private repoRoot () =
     let assemblyDir =

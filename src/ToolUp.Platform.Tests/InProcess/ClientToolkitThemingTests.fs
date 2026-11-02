@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.ClientToolkitThemingTests
 open System.IO
 open System.Text.RegularExpressions
 open Expecto
+open ToolUp.Platform.Compose
 
 // ─── Client-toolkit theming contract (Phase 221/222/224) ─────────
 //

@@ -22,6 +22,9 @@ open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerApiNarrative
 open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// Records every `CustomNotification` published under the ingestion key.
 type private CapturingChannel() =

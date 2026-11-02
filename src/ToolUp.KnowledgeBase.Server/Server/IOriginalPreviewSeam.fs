@@ -11,6 +11,8 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerOriginalSourceResolver
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 200 — anchor-highlighting original-document preview ───
 //

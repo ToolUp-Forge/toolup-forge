@@ -4,18 +4,22 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IOcrProvider
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IOcrProvider
+open ToolUp.Platform.Infra.ITableExtractor
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerInventory
 open KnowledgeBase.ServerIngestionObserver
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Per-request dependency record ───────────────────────────────
 //
@@ -46,7 +50,7 @@ type KnowledgeApiDeps = {
     /// keep surfacing through the hybrid sparse leg. `None` only when
     /// no vector store is wired at all (test harnesses bypassing
     /// `composeWithRAG`).
-    IndexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle option
+    IndexLifecycle: ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle option
     EventStore: IEventStore option
     /// Phase 14z — the composed `IEmbeddingProvider`, carried solely so
     /// `resetIndex` can drop the scope's embedder state alongside its
@@ -230,8 +234,8 @@ module KnowledgeApiDeps =
         // Falls back to a no-op when `composeWithRAG` hasn't registered one
         // (deployments using KB without RAG, or test harnesses).
         let ragTelemetry =
-            match services.GetService(typeof<ToolUp.Platform.IRagTelemetry.IRagTelemetry>) with
-            | :? ToolUp.Platform.IRagTelemetry.IRagTelemetry as t -> t
+            match services.GetService(typeof<ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry>) with
+            | :? ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry as t -> t
             | _ -> ToolUp.RAG.RagTelemetry.createNoOp ()
 
         let recordEnqueue (accepted: bool) =
@@ -334,13 +338,13 @@ module KnowledgeApiDeps =
         // vector-only wrapper so the handlers have exactly one deletion
         // path — never the raw `vs.DeleteChunk` loop.
         let indexLifecycle =
-            match services.GetService(typeof<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>) with
-            | :? ToolUp.Platform.IIndexLifecycle.IIndexLifecycle as il -> Some il
+            match services.GetService(typeof<ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle>) with
+            | :? ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle as il -> Some il
             | _ ->
                 vectorStore
                 |> Option.map (fun vs ->
-                    ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(vs, None, None, logger)
-                    :> ToolUp.Platform.IIndexLifecycle.IIndexLifecycle)
+                    ToolUp.Platform.Infra.IIndexLifecycle.DefaultIndexLifecycle(vs, None, None, logger)
+                    :> ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle)
 
         let eventStore =
             match services.GetService(typeof<IEventStore>) with

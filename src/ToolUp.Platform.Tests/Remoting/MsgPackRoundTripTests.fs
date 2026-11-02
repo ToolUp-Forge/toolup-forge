@@ -76,6 +76,7 @@ open System.IO
 open Expecto
 open ToolUp.Remoting.MsgPack
 open ToolUp.Platform.Tests.Remoting.WireCorpus
+open ToolUp.Platform.Compose
 
 /// Is the writer trustworthy in this process? Consulted by every arm
 /// that writes; never by an arm that only reads.

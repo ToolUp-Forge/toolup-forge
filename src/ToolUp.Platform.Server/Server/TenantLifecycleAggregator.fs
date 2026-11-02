@@ -1,10 +1,11 @@
-module ToolUp.Platform.TenantLifecycleAggregator
+module ToolUp.Platform.Compose.TenantLifecycleAggregator
 
 open System
 open System.Diagnostics
 open System.Text.Json.Nodes
 open System.Threading
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54 — tenant-lifecycle aggregator ──────────────────────────
 //

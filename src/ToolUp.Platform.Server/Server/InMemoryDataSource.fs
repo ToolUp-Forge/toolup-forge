@@ -1,4 +1,4 @@
-module ToolUp.Platform.InMemoryDataSource
+module ToolUp.Platform.Infra.InMemoryDataSource
 
 open System.Collections.Concurrent
 open System.Text

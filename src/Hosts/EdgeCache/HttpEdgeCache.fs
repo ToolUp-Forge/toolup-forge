@@ -8,6 +8,7 @@ open System.Net.Http
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 // ─── Phase 472 — the reference IEdgeCache sub-companion ───────────────
 //

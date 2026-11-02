@@ -3,6 +3,7 @@ module ToolUp.Forms.Tests.Contracts.IShareTokenRateLimiterContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── IShareTokenRateLimiter contract pack ────────────────────────────
 //

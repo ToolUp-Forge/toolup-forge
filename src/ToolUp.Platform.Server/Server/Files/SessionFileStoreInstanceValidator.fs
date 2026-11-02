@@ -1,8 +1,9 @@
-module ToolUp.Platform.SessionFileStoreInstanceValidator
+module ToolUp.Platform.Files.SessionFileStoreInstanceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Multi-instance + in-memory session file store ──────────────────
 //

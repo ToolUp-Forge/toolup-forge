@@ -10,6 +10,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open DataManagementTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Data-Manager ingestion-status observer (Phase 173) ──────────
 //

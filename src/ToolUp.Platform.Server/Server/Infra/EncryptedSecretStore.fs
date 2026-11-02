@@ -1,4 +1,4 @@
-module EncryptedSecretStore
+module ToolUp.Platform.Config.EncryptedSecretStore
 
 open System
 open System.Security.Cryptography

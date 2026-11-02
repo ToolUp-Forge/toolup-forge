@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.PermissionAuditChain
+module ToolUp.Platform.Audit.PermissionAuditChain
 
 open System.Text
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 553.A — the in-store permission-event hash chain ──────────
 //

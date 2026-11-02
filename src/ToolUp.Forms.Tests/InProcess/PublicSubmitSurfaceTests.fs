@@ -3,8 +3,13 @@ module ToolUp.Forms.Tests.InProcess.PublicSubmitSurfaceTests
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.SurfaceEnforcement
 open ToolUp.Forms.FormsCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 66 Stream B.6 — Forms public-submit surface tests ────────
 //

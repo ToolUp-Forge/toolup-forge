@@ -6,6 +6,7 @@ namespace ToolUp.Hosts.EdgeCache
 open System
 open ToolUp.Platform
 open ToolUp.MediaLibrary
+open ToolUp.Platform.Compose
 
 // ─── Phase 472 — the reference IDelegatedUrlSigner sub-companion ──────
 //

@@ -44,6 +44,7 @@ open ToolUp.AI
 open ToolUp.Platform.AI
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
+open ToolUp.Platform.Infra
 
 // ─── Fixtures (shared with the disclosure egress pack) ──────────────
 

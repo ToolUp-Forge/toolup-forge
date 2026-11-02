@@ -1,4 +1,4 @@
-module ToolUp.Platform.ConfigurePipeline
+module ToolUp.Platform.Compose.ConfigurePipeline
 
 open Giraffe
 open Microsoft.AspNetCore.Builder
@@ -7,12 +7,16 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.FileProviders
 open ToolUp.Platform
-open ToolUp.Platform.AnonymousSessionMigration
-open ToolUp.Platform.Middleware
-open ToolUp.Platform.PlatformAdminAuthorization
-open ToolUp.Platform.PeerBearerAuthMiddleware
-open ToolUp.Platform.ShareTokenAuth
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.AnonymousSessionMigration
+open ToolUp.Platform.Compose.Middleware
+open ToolUp.Platform.Scope.PlatformAdminAuthorization
+open ToolUp.Platform.Scope.PeerBearerAuthMiddleware
+open ToolUp.Platform.Scope.ShareTokenAuth
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 // ─── compose phase: middleware pipeline ──────────────────────────────
 //

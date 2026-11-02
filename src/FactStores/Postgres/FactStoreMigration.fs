@@ -14,6 +14,10 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.ProviderExceptions
 open ToolUp.Facts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Migrating a BlobFactStore into the Postgres store ──
 //

@@ -7,12 +7,14 @@
 /// the same scope-isolation posture as `FileManagement.fileManagementApi`.
 /// Mounted by `BuildRouteHandlers` only when `ColumnMapping =
 /// FeatureMode.Enabled`.
-module ToolUp.Platform.ColumnMappingApiHandler
+module ToolUp.Platform.Files.ColumnMappingApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ColumnMappingApi
 open ColumnMappingTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 /// The storage container for this request. Prefers the scope resolved by
 /// `ScopeResolutionMiddleware` (cached in `HttpContext.Items`); falls

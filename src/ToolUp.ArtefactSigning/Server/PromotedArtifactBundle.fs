@@ -6,6 +6,7 @@ module ToolUp.ArtefactSigning.PromotedArtifactBundle
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
 
 // ─── Phase 646 — signing a promoted artifact on acceptance ───────────
 //

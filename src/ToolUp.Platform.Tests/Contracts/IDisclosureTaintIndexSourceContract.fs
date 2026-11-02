@@ -7,6 +7,8 @@ open System
 open Expecto
 open ToolUp.Facts
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── IDisclosureTaintIndexSource — the conformance pack ──────────────
 //

@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.InMemoryEventStoreTests
 
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 /// Bind the `IEventStore` contract test pack to `InMemoryEventStore`.
 /// Each factory invocation creates a fresh store — no shared state

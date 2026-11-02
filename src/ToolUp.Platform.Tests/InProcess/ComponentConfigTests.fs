@@ -3,7 +3,8 @@ module ToolUp.Platform.Tests.InProcess.ComponentConfigTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ComponentConfigResolver
+open ToolUp.Platform.Compose.ComponentConfigResolver
+open ToolUp.Platform.Audit
 
 // ─── Phase 289 — component-scoped configuration binding ───────────────
 //

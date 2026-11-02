@@ -5,12 +5,12 @@
 # still be folded into this file in the same PR.
 ToolUp.Companions.Isolation.CompanionIsolation (class)
 ToolUp.Companions.Isolation.CompanionIsolation.configValidator(ToolUp.Companions.Isolation.ICompanionIsolation) : ToolUp.Platform.ConfigValidation+IConfigValidator
-ToolUp.Companions.Isolation.CompanionIsolation.forProfile(ToolUp.Platform.CompositionProfile, ToolUp.Companions.Isolation.IsolationMode) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Companions.Isolation.ICompanionIsolation, ToolUp.Companions.Isolation.IsolationProfileRefusal]
+ToolUp.Companions.Isolation.CompanionIsolation.forProfile(ToolUp.Platform.Compose.CompositionProfile, ToolUp.Companions.Isolation.IsolationMode) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Companions.Isolation.ICompanionIsolation, ToolUp.Companions.Isolation.IsolationProfileRefusal]
 ToolUp.Companions.Isolation.CompanionIsolation.isOutOfProcess(ToolUp.Companions.Isolation.ICompanionIsolation) : System.Boolean
 ToolUp.Companions.Isolation.CompanionIsolation.ofMode(ToolUp.Companions.Isolation.IsolationMode) : ToolUp.Companions.Isolation.ICompanionIsolation
 ToolUp.Companions.Isolation.CompanionIsolation.preflight(ToolUp.Companions.Isolation.ICompanionIsolation) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Companions.Isolation.IsolationProfileRefusal]
 ToolUp.Companions.Isolation.CompanionIsolation.run`1(ToolUp.Companions.Isolation.ICompanionIsolation, ToolUp.Companions.Isolation.IsolatedRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Companions.Isolation.IsolationRefusal]]
-ToolUp.Companions.Isolation.CompanionIsolation.withIsolation(ToolUp.Companions.Isolation.ICompanionIsolation, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Companions.Isolation.CompanionIsolation.withIsolation(ToolUp.Companions.Isolation.ICompanionIsolation, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Companions.Isolation.ICompanionIsolation (interface)
 ToolUp.Companions.Isolation.ICompanionIsolation.Mode : ToolUp.Companions.Isolation.IsolationMode { get }
 ToolUp.Companions.Isolation.ICompanionIsolation.Run(System.Type, ToolUp.Companions.Isolation.IsolatedRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Companions.Isolation.IsolationRefusal]]

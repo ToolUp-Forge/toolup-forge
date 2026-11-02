@@ -7,6 +7,7 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config.Auth
 
 // ─── Layer 4 — default peer directory ────────────────────────────────
 //

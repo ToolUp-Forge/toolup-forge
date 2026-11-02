@@ -1,8 +1,9 @@
-module ToolUp.Platform.OidcClaimMappingAdvisoryValidator
+module ToolUp.Platform.Scope.OidcClaimMappingAdvisoryValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── OIDC claim mapping — startup advisory ──────────────────────────
 //

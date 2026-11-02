@@ -5,6 +5,7 @@
 // credential form. Both belong to the reader's program — the SDK ships
 // neither — so they are declared here rather than in the blocks.
 open Feliz
+open ToolUp.Platform.Jobs
 
 [<AutoOpen>]
 module PageAmbient =

@@ -10,6 +10,7 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.AI.AIToolRegistry
+open ToolUp.Platform.Compose
 
 /// The write side of the cross-module read trail.
 ///

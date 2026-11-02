@@ -2,7 +2,10 @@ module ToolUp.Platform.Tests.InProcess.SubjectDowngradeObservabilityTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.Middleware
+open ToolUp.Platform.Compose.Middleware
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 246 — two adjacent scope-resolution behaviours:
 //   1. `resolverDowngradeSignal` — the authorization-shaped resolver

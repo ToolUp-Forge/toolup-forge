@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 // ─── Phase 489 — the MCP interaction trail (GP 6) ────────────────────
 //

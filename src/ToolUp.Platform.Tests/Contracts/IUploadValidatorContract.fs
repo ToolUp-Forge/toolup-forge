@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.Contracts.IUploadValidatorContract
 
 open Expecto
 open ToolUp.AssetStore
+open ToolUp.Platform.Compose
 
 // ─── Phase 186 — IUploadValidator contract pack ─────────────────
 //

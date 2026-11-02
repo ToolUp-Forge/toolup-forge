@@ -4,14 +4,18 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Providers
 open DataManagementTypes
 open ProcessedDataTypes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.DataObjectStoreTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
+open ToolUp.Platform.Files
 
 // ─── Phase 971 — stores: a refused delete that is the operation ────────
 //

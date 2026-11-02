@@ -33,6 +33,9 @@ open ToolUp.Platform.Grounding
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
 
 // ─── BlobFactStore — IFactStore contract binding + audit / freshness ──
 //

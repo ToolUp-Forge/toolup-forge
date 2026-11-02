@@ -1,4 +1,7 @@
-namespace ToolUp.Platform.Metrics
+namespace ToolUp.Platform.Infra.Metrics
+
+open ToolUp.Platform
+open ToolUp.Platform.Metrics
 
 // ─── IMetricsSink — Phase 9e portable metrics interface ──────────────
 //

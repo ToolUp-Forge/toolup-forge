@@ -11,16 +11,21 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.TeamPolicyStore
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.TeamPolicyStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.AI
 open ToolUp.AI.TeamConversationPolicyStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 896 — team output visibility ──────────────────────────────
 //

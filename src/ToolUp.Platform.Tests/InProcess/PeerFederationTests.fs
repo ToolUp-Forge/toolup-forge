@@ -8,6 +8,8 @@ open System
 open System.Threading
 open Expecto
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 18c — federation primitives (fan-out + cascade) ───────────
 //

@@ -21,7 +21,9 @@
 ///
 /// Forge calls `UseUrls` only for rungs 3 and 4, so rungs 1 and 2 behave
 /// exactly as ASP.NET Core documents them.
-module ToolUp.Platform.ServerBinding
+module ToolUp.Platform.Config.ServerBinding
+
+open ToolUp.Platform
 
 open System
 open System.Net

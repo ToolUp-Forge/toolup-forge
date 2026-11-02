@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.DeploymentReadinessReport
+module ToolUp.Platform.Compose.DeploymentReadinessReport
 
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.SmokeTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // Deliberately NOT opening `ToolUp.Platform.ConfigValidation` — its
 // `ValidationResult` cases (`Ok | Warning | Error`) would shadow the

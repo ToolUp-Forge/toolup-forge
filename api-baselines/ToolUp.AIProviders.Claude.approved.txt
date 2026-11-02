@@ -24,7 +24,7 @@ ClaudeAIProviderHealth+ClaudeAIProviderHealthCheck (class)
 ClaudeAIProviderHealth+ClaudeAIProviderHealthCheck..ctor(ToolUp.Platform.Secrets+ISecretStore)
 ClaudeOAuth (class)
 ClaudeOAuth.FlowName : System.String (literal)
-ClaudeOAuth.configure(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig, ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig]) : ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig
-ClaudeOAuth.create(System.Net.Http.HttpClient, ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IProviderOAuthFlow
-ClaudeOAuth.createWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.OAuthError]]]], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig) : ToolUp.Platform.IProviderOAuthFlow
-ClaudeOAuth.defaults : ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig { get }
+ClaudeOAuth.configure(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Infra.ProviderOAuthFlow+ProviderOAuthFlowConfig, ToolUp.Platform.Infra.ProviderOAuthFlow+ProviderOAuthFlowConfig]) : ToolUp.Platform.Infra.ProviderOAuthFlow+ProviderOAuthFlowConfig
+ClaudeOAuth.create(System.Net.Http.HttpClient, ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IProviderOAuthFlow
+ClaudeOAuth.createWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.Infra.OAuthError]]]], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Infra.ProviderOAuthFlow+ProviderOAuthFlowConfig) : ToolUp.Platform.Infra.IProviderOAuthFlow
+ClaudeOAuth.defaults : ToolUp.Platform.Infra.ProviderOAuthFlow+ProviderOAuthFlowConfig { get }

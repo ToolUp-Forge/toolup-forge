@@ -4,8 +4,11 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.SessionRegistry
+open ToolUp.Platform.Scope.SessionRegistry
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 528 — ISessionRegistry in-process bindings ────────────────
 //

@@ -8,6 +8,7 @@ open System.Text
 open System.Text.RegularExpressions
 open Markdig
 open Markdig.Syntax
+open ToolUp.Platform.Audit
 
 // ─── Markdown-aware chunker (build-time) ─────────────────────────
 //

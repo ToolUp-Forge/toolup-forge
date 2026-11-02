@@ -12,6 +12,8 @@
 open ToolUp.Elmish
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormApi
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

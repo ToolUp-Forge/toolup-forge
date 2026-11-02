@@ -6,6 +6,9 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Facts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── IFactTableOrphanSweep contract pack (Phase 977) ─────────────────
 //
@@ -420,6 +423,7 @@ let notifyingWriterFactory: FactTableOrphanSweepFactory =
             fixture with
                 Writer =
                     FactBrowseHandler.notifyingWriter
-                        (ToolUp.Platform.NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel)
+                        (ToolUp.Platform.Config.NotificationChannel.InMemoryNotificationChannel(None)
+                        :> INotificationChannel)
                         fixture.Writer
         }

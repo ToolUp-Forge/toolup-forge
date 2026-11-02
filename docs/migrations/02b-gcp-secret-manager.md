@@ -36,7 +36,7 @@ Add the package reference next to the existing cloud-secret-manager companions:
 Add the GCP resolver to the `CloudSecretStoreResolver` list passed into `SecretStore.fromEnv`:
 
 ```fsharp
-open ToolUp.Platform.SecretStore
+open ToolUp.Platform.Config.SecretStore
 
 let secretStore =
     SecretStore.fromEnv logger [

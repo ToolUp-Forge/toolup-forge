@@ -2,6 +2,9 @@ module ToolUp.Platform.Tests.InProcess.InvariantRuleManifestTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 294 — composition invariant rule-manifest (as data) ────────
 //

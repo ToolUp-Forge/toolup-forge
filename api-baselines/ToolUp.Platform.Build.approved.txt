@@ -223,6 +223,7 @@ ToolUp.Platform.CensusEntry.Project : System.String { get }
 ToolUp.Platform.Codemod (class)
 ToolUp.Platform.Codemod.analyseFile(System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
 ToolUp.Platform.Codemod.analyseFileFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
+ToolUp.Platform.Codemod.analyseFileIn(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
 ToolUp.Platform.Codemod.apply(ToolUp.Platform.CodemodPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Codemod.classify(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CodemodFileClass]
 ToolUp.Platform.Codemod.concernFields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
@@ -240,6 +241,7 @@ ToolUp.Platform.Codemod.reviewTextFor(Microsoft.FSharp.Collections.FSharpList`1[
 ToolUp.Platform.Codemod.rewriteRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewriteRule] { get }
 ToolUp.Platform.Codemod.rewriteText(ToolUp.Platform.CodemodFileClass, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite]]
 ToolUp.Platform.Codemod.rewriteTextFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], ToolUp.Platform.CodemodFileClass, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite]]
+ToolUp.Platform.Codemod.rewriteTextIn(ToolUp.Platform.SubsystemNamespaces+FileReach, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], ToolUp.Platform.CodemodFileClass, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite]]
 ToolUp.Platform.Codemod.walk(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CodemodFileClass, System.String]]
 ToolUp.Platform.CodemodFileClass (class)
 ToolUp.Platform.CodemodFileClass.IsProject : System.Boolean { get }
@@ -288,6 +290,7 @@ ToolUp.Platform.CodemodMigration.IsOneScopeForm : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemoting : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemotingLeftovers : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsShellSlots : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsSubsystemNamespaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.JobOutcomes : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ModelCapabilities : ToolUp.Platform.CodemodMigration { get }
@@ -296,6 +299,7 @@ ToolUp.Platform.CodemodMigration.OneScopeForm : ToolUp.Platform.CodemodMigration
 ToolUp.Platform.CodemodMigration.Remoting : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.RemotingLeftovers : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ShellSlots : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.SubsystemNamespaces : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Surfaces : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Tag : System.Int32 { get }
 ToolUp.Platform.CodemodMigration+Tags (class)
@@ -312,6 +316,7 @@ ToolUp.Platform.CodemodMigration+Tags.OneScopeForm : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Remoting : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RemotingLeftovers : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ShellSlots : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.SubsystemNamespaces : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Surfaces : System.Int32 (literal)
 ToolUp.Platform.CodemodMigrationModule (class)
 ToolUp.Platform.CodemodMigrationModule.doc(ToolUp.Platform.CodemodMigration) : System.String
@@ -892,6 +897,97 @@ ToolUp.Platform.Site+Tags (class)
 ToolUp.Platform.Site+Tags.Ci : System.Int32 (literal)
 ToolUp.Platform.Site+Tags.Local : System.Int32 (literal)
 ToolUp.Platform.Site+Tags.Release : System.Int32 (literal)
+ToolUp.Platform.SubsystemNamespaces (class)
+ToolUp.Platform.SubsystemNamespaces.applyDeclarations(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+FileMove]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.SubsystemNamespaces.compileItems(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.SubsystemNamespaces.consumerReach : ToolUp.Platform.SubsystemNamespaces+FileReach { get }
+ToolUp.Platform.SubsystemNamespaces.coreDeclared(System.String) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Platform.SubsystemNamespaces.declarations(System.String[], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SubsystemNamespaces+Header]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.SubsystemNamespaces+EntryKind, System.String]]
+ToolUp.Platform.SubsystemNamespaces.embedded : System.Lazy`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+Entry]] { get }
+ToolUp.Platform.SubsystemNamespaces.embeddedIndex : System.Lazy`1[ToolUp.Platform.SubsystemNamespaces+Index] { get }
+ToolUp.Platform.SubsystemNamespaces.filesRoot : System.String { get }
+ToolUp.Platform.SubsystemNamespaces.filesSources : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.SubsystemNamespaces.formerlyGlobal : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.SubsystemNamespaces.header(System.String[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SubsystemNamespaces+Header]
+ToolUp.Platform.SubsystemNamespaces.index(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+Entry]) : ToolUp.Platform.SubsystemNamespaces+Index
+ToolUp.Platform.SubsystemNamespaces.namespaceOf(ToolUp.Platform.SubsystemNamespaces+Header) : System.String
+ToolUp.Platform.SubsystemNamespaces.parse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+Entry]
+ToolUp.Platform.SubsystemNamespaces.parts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+Part] { get }
+ToolUp.Platform.SubsystemNamespaces.placed(System.String, System.String) : System.String
+ToolUp.Platform.SubsystemNamespaces.projectPath(System.String, ToolUp.Platform.SubsystemNamespaces+Part) : System.String
+ToolUp.Platform.SubsystemNamespaces.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+Entry]) : System.String
+ToolUp.Platform.SubsystemNamespaces.renderMap(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+FileMove]) : System.String
+ToolUp.Platform.SubsystemNamespaces.resourceName : System.String { get }
+ToolUp.Platform.SubsystemNamespaces.rewrite(ToolUp.Platform.SubsystemNamespaces+Index, ToolUp.Platform.SubsystemNamespaces+FileReach, System.String[]) : System.Tuple`2[System.String[], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[System.String, System.Int32, System.String, System.String]]]
+ToolUp.Platform.SubsystemNamespaces.rewriteText(ToolUp.Platform.SubsystemNamespaces+Index, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[System.String, System.Int32, System.String, System.String]]]
+ToolUp.Platform.SubsystemNamespaces.rootFor(ToolUp.Platform.SubsystemNamespaces+Part, System.String) : System.String
+ToolUp.Platform.SubsystemNamespaces.roots : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.SubsystemNamespaces.scan(System.String) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+FileMove], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SubsystemNamespaces+Entry]]
+ToolUp.Platform.SubsystemNamespaces.unplaced(System.String, System.String) : System.String
+ToolUp.Platform.SubsystemNamespaces+Entry (class)
+ToolUp.Platform.SubsystemNamespaces+Entry..ctor(ToolUp.Platform.SubsystemNamespaces+EntryKind, System.String, System.String, System.String)
+ToolUp.Platform.SubsystemNamespaces+Entry.Kind : ToolUp.Platform.SubsystemNamespaces+EntryKind { get }
+ToolUp.Platform.SubsystemNamespaces+Entry.Name : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+Entry.NewNamespace : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+Entry.OldNamespace : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind (class)
+ToolUp.Platform.SubsystemNamespaces+EntryKind.Case : ToolUp.Platform.SubsystemNamespaces+EntryKind { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.IsCase : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.IsMember : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.IsNamespace : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.IsShared : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.IsSplit : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.IsType : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.Member : ToolUp.Platform.SubsystemNamespaces+EntryKind { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.Namespace : ToolUp.Platform.SubsystemNamespaces+EntryKind { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.Shared : ToolUp.Platform.SubsystemNamespaces+EntryKind { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.Split : ToolUp.Platform.SubsystemNamespaces+EntryKind { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.Tag : System.Int32 { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind.Type : ToolUp.Platform.SubsystemNamespaces+EntryKind { get }
+ToolUp.Platform.SubsystemNamespaces+EntryKind+Tags (class)
+ToolUp.Platform.SubsystemNamespaces+EntryKind+Tags.Case : System.Int32 (literal)
+ToolUp.Platform.SubsystemNamespaces+EntryKind+Tags.Member : System.Int32 (literal)
+ToolUp.Platform.SubsystemNamespaces+EntryKind+Tags.Namespace : System.Int32 (literal)
+ToolUp.Platform.SubsystemNamespaces+EntryKind+Tags.Shared : System.Int32 (literal)
+ToolUp.Platform.SubsystemNamespaces+EntryKind+Tags.Split : System.Int32 (literal)
+ToolUp.Platform.SubsystemNamespaces+EntryKind+Tags.Type : System.Int32 (literal)
+ToolUp.Platform.SubsystemNamespaces+FileMove (class)
+ToolUp.Platform.SubsystemNamespaces+FileMove..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.SubsystemNamespaces+FileMove.NewHeader : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+FileMove.OldHeader : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+FileMove.Path : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+FileMove.Project : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+FileReach (class)
+ToolUp.Platform.SubsystemNamespaces+FileReach..ctor(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
+ToolUp.Platform.SubsystemNamespaces+FileReach.Allowed : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
+ToolUp.Platform.SubsystemNamespaces+FileReach.LevelCap : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.SubsystemNamespaces+FileReach.ReachesServer : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+Header (class)
+ToolUp.Platform.SubsystemNamespaces+Header..ctor(System.String, System.String, System.String, System.Int32, System.Boolean)
+ToolUp.Platform.SubsystemNamespaces+Header.AutoOpen : System.Boolean { get }
+ToolUp.Platform.SubsystemNamespaces+Header.Keyword : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+Header.Line : System.Int32 { get }
+ToolUp.Platform.SubsystemNamespaces+Header.Modifiers : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+Header.Path : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+Index (class)
+ToolUp.Platform.SubsystemNamespaces+Index..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.Boolean]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[ToolUp.Platform.SubsystemNamespaces+EntryKind, System.String, System.String]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.SubsystemNamespaces+Index.Mentions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[ToolUp.Platform.SubsystemNamespaces+EntryKind, System.String, System.String]]] { get }
+ToolUp.Platform.SubsystemNamespaces+Index.Moves : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.Boolean]] { get }
+ToolUp.Platform.SubsystemNamespaces+Index.Splits : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.SubsystemNamespaces+Part (class)
+ToolUp.Platform.SubsystemNamespaces+Part..ctor(System.String, System.String)
+ToolUp.Platform.SubsystemNamespaces+Part.Project : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+Part.Root : System.String { get }
+ToolUp.Platform.SubsystemNamespaces+ProjectScope (class)
+ToolUp.Platform.SubsystemNamespaces+ProjectScope.includes(ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope, System.String) : System.Boolean
+ToolUp.Platform.SubsystemNamespaces+ProjectScope.ofTree(System.String) : ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope
+ToolUp.Platform.SubsystemNamespaces+ProjectScope.reachOf(ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope, System.String) : ToolUp.Platform.SubsystemNamespaces+FileReach
+ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope (class)
+ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
+ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope.Allowed : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
+ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope.Directories : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Boolean] { get }
+ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope.Files : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Boolean] { get }
+ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope.Levels : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32] { get }
 ToolUp.Platform.TestPack (class)
 ToolUp.Platform.TestPack..ctor(System.String, System.String)
 ToolUp.Platform.TestPack.Name : System.String { get }

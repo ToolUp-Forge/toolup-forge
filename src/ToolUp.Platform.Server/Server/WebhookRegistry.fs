@@ -1,4 +1,4 @@
-module ToolUp.Platform.WebhookRegistry
+module ToolUp.Platform.Jobs.WebhookRegistry
 
 open System
 open System.Text
@@ -8,6 +8,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
 
 // ─── Storage layout ──────────────────────────────────────────────
 //

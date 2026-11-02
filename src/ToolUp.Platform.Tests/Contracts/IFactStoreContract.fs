@@ -5,6 +5,9 @@ open Expecto
 open ToolUp.Facts
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
 
 // ─── IFactStore contract pack (Phase 520) ────────────────────────────
 //

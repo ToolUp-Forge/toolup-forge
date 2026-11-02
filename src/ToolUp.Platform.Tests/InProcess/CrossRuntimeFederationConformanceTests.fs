@@ -41,6 +41,9 @@ open ToolUp.Platform
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.InProcess.FederationWireCorpus
 open ToolUp.Platform.Tests.InProcess.CrossRuntimeConformanceHarness
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Runtime discovery, once ─────────────────────────────────────────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataObjectStore
+module ToolUp.Platform.Infra.DataObjectStore
 
 open System
 open System.Text

@@ -9,12 +9,12 @@ ToolUp.RAG.StaticCorpus.Chunker.chunk(System.String, System.Int32, System.String
 ToolUp.RAG.StaticCorpus.Chunker.slug(System.String) : System.String
 ToolUp.RAG.StaticCorpus.Packer (class)
 ToolUp.RAG.StaticCorpus.Packer.PackerVersion : System.String (literal)
-ToolUp.RAG.StaticCorpus.Packer.buildCorpus(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.Packer+PackConfig, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.RAG.StaticCorpus.StaticCorpus]
+ToolUp.RAG.StaticCorpus.Packer.buildCorpus(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.Packer+PackConfig, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.RAG.StaticCorpus.StaticCorpus]
 ToolUp.RAG.StaticCorpus.Packer.computeInputHash(ToolUp.RAG.StaticCorpus.Packer+PackConfig) : System.String
 ToolUp.RAG.StaticCorpus.Packer.embeddingText(ToolUp.RAG.StaticCorpus.RawChunk) : System.String
 ToolUp.RAG.StaticCorpus.Packer.enumerateFiles(ToolUp.RAG.StaticCorpus.Packer+PackConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.RAG.StaticCorpus.Packer.pack(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.Packer+PackConfig, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
-ToolUp.RAG.StaticCorpus.Packer.packIncremental(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.Packer+PackConfig, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.RAG.StaticCorpus.Packer+PackOutcome]
+ToolUp.RAG.StaticCorpus.Packer.pack(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.Packer+PackConfig, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.RAG.StaticCorpus.Packer.packIncremental(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.Packer+PackConfig, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.RAG.StaticCorpus.Packer+PackOutcome]
 ToolUp.RAG.StaticCorpus.Packer.parseConfig(System.String, System.String) : ToolUp.RAG.StaticCorpus.Packer+PackConfig
 ToolUp.RAG.StaticCorpus.Packer+PackConfig (class)
 ToolUp.RAG.StaticCorpus.Packer+PackConfig..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32, System.String, System.String)

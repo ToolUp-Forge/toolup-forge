@@ -7,6 +7,10 @@ open System
 open System.Text.Json
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 1015 — a declared source's delivery, run as its principal ───
 //

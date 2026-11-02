@@ -9,6 +9,7 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Compose
 
 // ─── Phase 215 — revocation + transparency-log contract tests ───────────
 //

@@ -11,6 +11,9 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.Docx
 open ToolUp.Reporting.Tests.Fakes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 575's spillover, closed (Phase 534) ───────────────────────
 //
@@ -48,7 +51,7 @@ let private scopeId = "team-alpha"
 /// resolution mints it (container = shard id) — the pack stands in for the
 /// middleware through the resolver's internal mint, as the platform pack does.
 let private resolvedShard (scopeId: string) : ToolUp.Platform.ResolvedScope =
-    ToolUp.Platform.StorageScopeResolver.ScopeResolution.ofStorageScope {
+    ToolUp.Platform.Scope.StorageScopeResolver.ScopeResolution.ofStorageScope {
         ScopeId = scopeId
         Container = scopeId
         Persist = true

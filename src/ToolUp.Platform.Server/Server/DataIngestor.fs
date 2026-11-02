@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataIngestor
+module ToolUp.Platform.Infra.DataIngestor
 
 open System
 open System.Text

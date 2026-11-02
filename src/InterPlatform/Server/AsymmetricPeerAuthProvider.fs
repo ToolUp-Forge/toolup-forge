@@ -8,6 +8,7 @@ open System.Security.Cryptography
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 // ─── Phase 343 — asymmetric peer auth (the blast-radius companion) ───
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.NotificationHandler
+module ToolUp.Platform.Jobs.NotificationHandler
 
 open System
 open System.Runtime.ExceptionServices

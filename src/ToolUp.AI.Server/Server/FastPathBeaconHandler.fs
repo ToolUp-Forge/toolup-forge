@@ -9,8 +9,10 @@ open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Fast-path audit beacon endpoint ────────────────────────────
 //

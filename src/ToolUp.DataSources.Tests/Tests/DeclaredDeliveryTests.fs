@@ -11,11 +11,15 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.DataSources.Common
 open ToolUp.DataSources.Csv
 open ToolUp.DataSources.Tests.Support
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 1015 — a declared source's data arrives as its principal ───
 //

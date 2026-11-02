@@ -5,7 +5,7 @@
 # still be folded into this file in the same PR.
 ToolUp.Platform.AuditSinks.AzureBlobArchive (class)
 ToolUp.Platform.AuditSinks.AzureBlobArchive.buildBlobName(ToolUp.Platform.AuditSinks.AzureBlobArchive+AzureBlobArchiveSettings, System.String, System.DateTime, System.Guid) : System.String
-ToolUp.Platform.AuditSinks.AzureBlobArchive.create(System.String, ToolUp.Platform.AuditSinks.AzureBlobArchive+AzureBlobArchiveSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IAuditSink
+ToolUp.Platform.AuditSinks.AzureBlobArchive.create(System.String, ToolUp.Platform.AuditSinks.AzureBlobArchive+AzureBlobArchiveSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Audit.IAuditSink
 ToolUp.Platform.AuditSinks.AzureBlobArchive+AzureBlobArchiveAuditSink (class)
 ToolUp.Platform.AuditSinks.AzureBlobArchive+AzureBlobArchiveAuditSink..ctor(System.String, ToolUp.Platform.AuditSinks.AzureBlobArchive+AzureBlobArchiveSettings, ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.AuditSinks.AzureBlobArchive+AzureBlobArchiveSettings (class)

@@ -7,6 +7,7 @@ open System.IO
 open Expecto
 open ToolUp.Cli
 open ToolUp.Cli.Dispatch
+open ToolUp.Platform.Compose
 
 let private tempDir () =
     let path =

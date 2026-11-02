@@ -11,6 +11,8 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Phase 503 — the human-in-the-loop approval gate.
 ///

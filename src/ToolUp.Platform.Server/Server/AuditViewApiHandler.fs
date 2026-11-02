@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AuditViewApiHandler
+module ToolUp.Platform.Audit.AuditViewApiHandler
 
 open System
 open System.Globalization
@@ -9,7 +9,7 @@ open System.Text
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── Phase 529 — audit-trail viewer handler ──────────────────────────
 //

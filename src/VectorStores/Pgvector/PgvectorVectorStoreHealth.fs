@@ -6,8 +6,9 @@ module ToolUp.RAG.VectorStores.Pgvector.Health
 open System
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 507 — Pgvector vector-store health probe ──────────────────
 //

@@ -23,6 +23,11 @@ open ToolUp.Platform.Usage
 open ToolUp.MediaLibrary
 open ToolUp.Media.FFmpeg
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 88 — media library tests ───────────────────────────────────
 //

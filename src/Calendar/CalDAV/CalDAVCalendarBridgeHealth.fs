@@ -9,6 +9,7 @@ open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 open ToolUp.Calendar.CalDAV
+open ToolUp.Platform.Compose
 
 // ─── Phase 20a — the CalDAV bridge's readiness probe ────────────────
 //

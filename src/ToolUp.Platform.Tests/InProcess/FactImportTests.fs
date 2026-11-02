@@ -14,6 +14,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.ArtefactSigning
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Certificate-verified fact import ────────────────────────────────────
 //

@@ -14,6 +14,10 @@ open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerJsonHelpers
 open KnowledgeBase.ServerBulkImport
 open KnowledgeBase.ServerApiDeps
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
+open ToolUp.Platform.Files
 
 // ─── Content-hash dedup (Phase 14x) ───────────────────────────────
 
@@ -427,7 +431,7 @@ let private deleteOrphanTail
                 let chunkId = sprintf "%s:chunk:%d" docId i
                 let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
 
-                if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
                     survivors <- chunkId :: survivors
 
             if not (List.isEmpty survivors) then
@@ -1592,11 +1596,11 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                 let! lifecycleReport =
                     match deps.IndexLifecycle with
                     | Some lifecycle -> lifecycle.DeleteDocument deps.VectorScope docId doc.ChunkCount
-                    | None -> async.Return ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.empty
+                    | None -> async.Return ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.empty
 
-                if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean lifecycleReport) then
+                if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean lifecycleReport) then
                     let summary =
-                        ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise lifecycleReport
+                        ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.summarise lifecycleReport
 
                     deps.Logger.Warn(
                         sprintf

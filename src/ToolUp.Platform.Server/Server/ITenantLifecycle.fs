@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
 
 // ─── ITenantLifecycle ────────────────────────────────────────────
 //

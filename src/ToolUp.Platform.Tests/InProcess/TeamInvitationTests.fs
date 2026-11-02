@@ -13,13 +13,17 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.Teams.TeamInvitationHandler
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.Teams.TeamInvitationHandler
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.ShareTokenStoreTests
 open ToolUp.Platform.Tests.Support
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Scope.Teams
+open ToolUp.Platform.Compose
 
 // ─── Phase 3d — team-invitation handler contract tests ─────────────────
 //
@@ -59,7 +63,7 @@ let private silentLogger =
 // module, so wrapping the same `storage` twice yields stores that share
 // state — exactly the production semantic.
 let private pendingStore (storage: IBlobStorage) : IPendingInviteStore =
-    ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
+    ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
 
 let private freshShareTokenStore () =
     let storage = InMemoryBlobStorage() :> IBlobStorage
@@ -445,7 +449,7 @@ let tests =
             let recipientEmail = "revoke-roundtrip-recipient@example.com"
 
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage recipientEmail {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage recipientEmail {
                     TeamId = teamId
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
@@ -453,7 +457,7 @@ let tests =
                     IssuedAt = DateTime.UtcNow
                 }
 
-            do! ToolUp.Platform.Teams.PendingInviteStore.remove storage recipientEmail
+            do! ToolUp.Platform.Scope.Teams.PendingInviteStore.remove storage recipientEmail
 
             let recipient = {
                 AuthenticatedUser.anonymous with
@@ -475,7 +479,7 @@ let tests =
             // entry succeeds silently. Mirrors the
             // `RevokePendingInviteByEmail` substrate-contract promise
             // the modal relies on for double-click safety.
-            do! ToolUp.Platform.Teams.PendingInviteStore.remove storage recipientEmail
+            do! ToolUp.Platform.Scope.Teams.PendingInviteStore.remove storage recipientEmail
         }
 
         testCaseAsync "Pending invite with email-mismatch on sign-in is a no-op; entry preserved"
@@ -557,7 +561,7 @@ let tests =
 
             // Three entries: two expired, one live.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "expired1@example.com" {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage "expired1@example.com" {
                     TeamId = "t1"
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(-1.0)
@@ -566,7 +570,7 @@ let tests =
                 }
 
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "expired2@example.com" {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage "expired2@example.com" {
                     TeamId = "t1"
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(-7.0)
@@ -575,7 +579,7 @@ let tests =
                 }
 
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "live@example.com" {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage "live@example.com" {
                     TeamId = "t1"
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
@@ -588,7 +592,7 @@ let tests =
             // landed. sweepExpired should report 0 removed. The sweep
             // path reads via loadFromStore (cache-bypass), so this
             // assertion is robust against sibling cache pollution.
-            let! firstSweep = ToolUp.Platform.Teams.PendingInviteStore.sweepExpired storage
+            let! firstSweep = ToolUp.Platform.Scope.Teams.PendingInviteStore.sweepExpired storage
             Expect.equal firstSweep 0 "upsert already compacted; sweep finds nothing left to remove"
 
             // Write a fresh near-expiry entry, wait past its expiry,
@@ -597,7 +601,7 @@ let tests =
             // scheduler jitter; well under the runner's per-case
             // budget.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "freshly-expired@example.com" {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage "freshly-expired@example.com" {
                     TeamId = "t1"
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddMilliseconds(200.0)
@@ -607,14 +611,14 @@ let tests =
 
             do! Async.Sleep 500
 
-            let! secondSweep = ToolUp.Platform.Teams.PendingInviteStore.sweepExpired storage
+            let! secondSweep = ToolUp.Platform.Scope.Teams.PendingInviteStore.sweepExpired storage
             Expect.equal secondSweep 1 "sweep removes the freshly-expired entry"
 
             // A third sweep is now a no-op: the freshly-expired entry
             // was removed by the second sweep, the live entry is still
             // valid. Demonstrates idempotence of the sweep operation
             // (also cache-bypass).
-            let! thirdSweep = ToolUp.Platform.Teams.PendingInviteStore.sweepExpired storage
+            let! thirdSweep = ToolUp.Platform.Scope.Teams.PendingInviteStore.sweepExpired storage
             Expect.equal thirdSweep 0 "subsequent sweep finds nothing further to remove"
         }
 
@@ -630,7 +634,7 @@ let tests =
             // Write a pending entry directly with a past ExpiresAt to
             // simulate an issuance that timed out before any sign-in.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "carol@example.com" {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage "carol@example.com" {
                     TeamId = teamId
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddSeconds(-60.0)
@@ -660,7 +664,7 @@ let tests =
             // tryConsume — a re-issue with a fresh expiry should succeed
             // and a subsequent sign-in should now auto-join.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "carol@example.com" {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage "carol@example.com" {
                     TeamId = teamId
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
@@ -706,7 +710,7 @@ let pendingInviteExpiryAuditTests =
             let audit = CapturingAuditLog()
 
             let store =
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // Seed three entries that are still valid at upsert time (so
@@ -754,14 +758,14 @@ let pendingInviteExpiryAuditTests =
             let audit = CapturingAuditLog()
 
             let store =
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
                 :> IPendingInviteStore
 
             let issuedAt = DateTime.UtcNow.AddDays -3.0
             // Seed via the no-audit module function so the seeding is silent
             // and only the consume path's emission is under test.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert
                     storage
                     "late@x.com"
                     (expiredEntry "teamB" "alice@example.com" issuedAt)
@@ -788,10 +792,10 @@ let pendingInviteExpiryAuditTests =
             // 2-arg constructor — no audit log wired. The store must still
             // sweep correctly; it simply records nothing.
             let store =
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
 
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert
                     storage
                     "x@x.com"
                     (expiredEntry "teamC" "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
@@ -865,7 +869,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // A live entry — must stay out of the expired list.
@@ -886,7 +890,7 @@ let expiredInviteVisibilityTests =
             // A lapsed entry — seeded silently, then dropped by the consume
             // path, which emits the TeamInviteExpired row the API reads.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert
                     storage
                     "late@x.com"
                     (expiredEntry teamId "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
@@ -939,7 +943,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
                 :> IPendingInviteStore
 
             do!
@@ -976,7 +980,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // Recorded NOW (inside the GetAuditTrail date pre-filter) with an
@@ -1059,7 +1063,7 @@ let private sweepUnderConfig (config: ServerConfig) : Async<(string * Notificati
     let store = sp.GetService(typeof<IPendingInviteStore>) :?> IPendingInviteStore
 
     do!
-        ToolUp.Platform.Teams.PendingInviteStore.upsert
+        ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert
             storage
             "lapsed@x.com"
             (expiredEntry "teamN" "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
@@ -1189,7 +1193,7 @@ let activeTeamPolicyTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage "carol@example.com" {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage "carol@example.com" {
                     TeamId = teamId
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays(7.0)
@@ -1251,7 +1255,7 @@ let checkMyInvitesTests =
             let email = "check-ondemand-happy@example.com"
 
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage email {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage email {
                     TeamId = teamId
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays 7.0
@@ -1307,13 +1311,13 @@ let checkMyInvitesTests =
             // is what drops it (and emits `TeamInviteExpired`, Phase
             // 547.A), which is exactly what this call must exercise.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert
                     storage
                     email
                     (expiredEntry teamId "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
 
             let store =
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
                 :> IPendingInviteStore
 
             let ctx = ctxForAuthenticatedUser store (signedInAs email)
@@ -1343,7 +1347,7 @@ let checkMyInvitesTests =
             // anonymous gate were missing — so the assertion below
             // cannot pass vacuously on an empty store.
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage email {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage email {
                     TeamId = teamId
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays 7.0
@@ -1379,7 +1383,7 @@ let checkMyInvitesTests =
             let email = "check-ondemand-idempotent@example.com"
 
             do!
-                ToolUp.Platform.Teams.PendingInviteStore.upsert storage email {
+                ToolUp.Platform.Scope.Teams.PendingInviteStore.upsert storage email {
                     TeamId = teamId
                     Role = Member
                     ExpiresAt = DateTime.UtcNow.AddDays 7.0

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ResilientBlobStorage
+module ToolUp.Platform.Infra.ResilientBlobStorage
+
+open ToolUp.Platform
 
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TransientFault
+open ToolUp.Platform.Infra.TransientFault
 
 // ─── Phase 176 — IBlobStorage transient-fault decorator ──────────────
 //

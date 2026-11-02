@@ -3,9 +3,10 @@ module ToolUp.Platform.Tests.InProcess.ToolAwareRagFramingTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.RAG
+open ToolUp.Platform.Infra
 
 // ─── Phase 14r — Tool-aware RAG framing ──────────────────────────────
 //

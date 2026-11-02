@@ -1,4 +1,4 @@
-module ToolUp.Platform.AuditLogHealthCheck
+module ToolUp.Platform.Audit.AuditLogHealthCheck
 
 open System
 open ToolUp.Platform

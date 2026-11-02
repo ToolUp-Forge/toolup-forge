@@ -9,7 +9,10 @@ open System.Text
 open System.Text.Json
 open System.Text.RegularExpressions
 open System.Security.Cryptography
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Static-corpus packer ────────────────────────────────────────
 //

@@ -4,6 +4,7 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.PublicRendering
 open ToolUp.BrandKit
+open ToolUp.Platform.Compose
 
 /// Phase 82 — landing-page layout for the PublicRendering side of the
 /// hybrid sample. PublicRendering loads `content/pages/index.md`

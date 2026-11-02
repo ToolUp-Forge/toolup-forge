@@ -10,6 +10,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 6g.E — client UI decoder-error observability sink ────
 //

@@ -1,9 +1,13 @@
-module ToolUp.Platform.ComposeHealthSmoke
+module ToolUp.Platform.Compose.ComposeHealthSmoke
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
 
 // ─── compose phase: health checks + smoke tests + CSP contributors ───
 //

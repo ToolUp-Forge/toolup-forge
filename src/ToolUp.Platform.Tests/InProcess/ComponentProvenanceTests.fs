@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.ComponentProvenanceTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 288 — component provenance in the manifest ─────────────────
 //

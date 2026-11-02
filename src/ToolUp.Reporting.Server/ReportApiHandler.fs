@@ -6,6 +6,8 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Report API handler factory ──────────────────────────────────────
 //

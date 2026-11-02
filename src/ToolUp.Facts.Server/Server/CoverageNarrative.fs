@@ -8,6 +8,8 @@ open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── CoverageNarrative (Phase 707) ───────────────────────────────────
 //

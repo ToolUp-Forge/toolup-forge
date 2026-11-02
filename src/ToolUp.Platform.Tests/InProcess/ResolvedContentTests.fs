@@ -11,6 +11,8 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
 
 // ─── Phase 111 — resolved-content head-metadata tests ───────────────
 //

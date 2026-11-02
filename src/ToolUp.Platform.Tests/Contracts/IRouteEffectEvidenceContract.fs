@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IRouteEffectEvidenceContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── IRouteEffectEvidence contract pack (Phase 777) ──────────────────
 //

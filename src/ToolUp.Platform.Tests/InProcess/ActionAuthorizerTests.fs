@@ -3,8 +3,12 @@ module ToolUp.Platform.Tests.InProcess.ActionAuthorizerTests
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 // ─── Phase 113 — action-authorizer tests ─────────────────────────────
 //

@@ -1,7 +1,8 @@
 module ToolUp.RAG.InMemoryEmbeddingCache
 
 open System.Collections.Generic
-open ToolUp.Platform.IEmbeddingCache
+open ToolUp.Platform.Infra.IEmbeddingCache
+open ToolUp.Platform.Infra
 
 /// In-memory LRU cache for embedding results. Bounded by `capacity` (default
 /// 10,000 entries) — when full, the least-recently-used key is evicted before
@@ -40,9 +41,9 @@ type InMemoryEmbeddingCache(?capacity: int) =
         order.AddFirst(node) |> ignore
 
     /// Process-local by construction: each replica holds its own entries.
-    interface ToolUp.Platform.IEmbeddingProvider.IEmbeddingCacheLocality with
+    interface ToolUp.Platform.Infra.IEmbeddingProvider.IEmbeddingCacheLocality with
         member _.CacheLocality =
-            Some ToolUp.Platform.IEmbeddingProvider.EmbeddingCacheLocality.InProcess
+            Some ToolUp.Platform.Infra.IEmbeddingProvider.EmbeddingCacheLocality.InProcess
 
     interface IEmbeddingCache with
 

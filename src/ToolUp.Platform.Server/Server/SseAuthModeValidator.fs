@@ -1,8 +1,9 @@
-module ToolUp.Platform.SseAuthModeValidator
+module ToolUp.Platform.Jobs.SseAuthModeValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.I — QueryParamFallback in authenticated modes ─────────
 //

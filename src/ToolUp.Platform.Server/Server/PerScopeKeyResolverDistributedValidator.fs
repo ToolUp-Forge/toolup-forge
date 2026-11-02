@@ -1,9 +1,9 @@
-module ToolUp.Platform.PerScopeKeyResolverDistributedValidator
+module ToolUp.Platform.Config.PerScopeKeyResolverDistributedValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ConfigValidation
 
 // ─── Gap #1 / Phase 458 — PerScopeKeyResolver multi-instance cache coherence ──

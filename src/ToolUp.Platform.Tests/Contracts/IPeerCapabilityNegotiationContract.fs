@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.Contracts.IPeerCapabilityNegotiationContract
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 18d — sophisticated capability negotiation contract pack ──
 //

@@ -1,8 +1,9 @@
-module ToolUp.Platform.MultiInstanceAdminCoherenceValidator
+module ToolUp.Platform.Scope.MultiInstanceAdminCoherenceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Multi-instance + in-process admin subsystems ───────────────────
 //

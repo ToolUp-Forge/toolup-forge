@@ -1,4 +1,6 @@
-module ToolUp.Platform.IEmbeddingProvider
+module ToolUp.Platform.Infra.IEmbeddingProvider
+
+open ToolUp.Platform
 
 open System
 open ToolUp.Platform.VectorKnowledgeTypes

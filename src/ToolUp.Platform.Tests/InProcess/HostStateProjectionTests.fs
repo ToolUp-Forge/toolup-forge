@@ -5,6 +5,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.PublicRendering
 open Toolup.Samples.ToyTreeBinding.ToyNode
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 264 — host-state binding-source projection seam ─────────────
 //

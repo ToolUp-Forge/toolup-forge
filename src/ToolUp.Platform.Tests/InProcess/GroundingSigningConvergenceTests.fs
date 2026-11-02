@@ -16,6 +16,10 @@ open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.ArtefactSigning
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 // ─── Grounding-tier signing convergence ──────────────────────────────────
 //

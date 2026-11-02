@@ -6,8 +6,13 @@ open System.IO
 open System.Threading
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.AuditReplicator
+open ToolUp.Platform.Audit.AuditReplicator
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 9g AuditReplicator tests ─────────────────────────────────
 //

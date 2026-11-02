@@ -1,9 +1,11 @@
-module ToolUp.Platform.DeployPlaneDepsValidator
+module ToolUp.Platform.Jobs.DeployPlaneDepsValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 26 follow-up (Investigate-gaps #6) — deploy-plane preflight ──
 //

@@ -24,17 +24,21 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.RAG.IngestionTypes
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.RAGCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private quietLogger =
     { new ILogger with
@@ -253,8 +257,8 @@ let private ingestionService (q: IngestionQueue) (pipeline: IRetrievalPipeline) 
         1
         quietLogger
         (ToolUp.RAG.RagTelemetry.createNoOp ())
-        (ToolUp.Platform.Usage.NoOpUsageLog())
-        (ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+        (ToolUp.Platform.Infra.Usage.NoOpUsageLog())
+        (ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
         IngestionRetryPolicy.defaults
         None
         (ToolUp.RAG.IngestionService.IngestionAlertState())

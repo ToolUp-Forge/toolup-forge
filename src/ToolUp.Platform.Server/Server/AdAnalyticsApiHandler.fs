@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AdAnalyticsApiHandler
+module ToolUp.Platform.Audit.AdAnalyticsApiHandler
 
 open System
 open System.Collections.Concurrent
@@ -12,6 +12,10 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Remoting.Server.Http
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
 
 // ─── Phase 60 — server-side ad-analytics endpoint ─────────────────
 //

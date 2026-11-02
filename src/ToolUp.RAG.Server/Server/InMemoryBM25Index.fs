@@ -9,8 +9,12 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.RAG.SparseAnalysis
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Tokenisation ─────────────────────────────────────────────────
 //
@@ -528,7 +532,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
     /// to blob storage but searched from memory: each replica holds its own.
     interface ISparseIndexLocality with
         member _.IndexLocality =
-            Some ToolUp.Platform.IVectorStore.VectorIndexLocality.InProcess
+            Some ToolUp.Platform.Infra.IVectorStore.VectorIndexLocality.InProcess
 
     interface ISparseIndex with
 

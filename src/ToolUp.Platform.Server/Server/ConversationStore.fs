@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ConversationStore
+module ToolUp.Platform.Config.ConversationStore
 
 open System
 open System.Collections.Concurrent
@@ -11,6 +11,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.EntityQueryTypes
+open ToolUp.Platform.Infra
 
 // ─── Conversation-store implementations ─────────────────────────
 //

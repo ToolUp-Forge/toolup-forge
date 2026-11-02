@@ -12,6 +12,7 @@ open ToolUp.Platform.HealthChecks
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.GoogleCalendarOAuth
 open ToolUp.Calendar.GoogleCalendar
+open ToolUp.Platform.Compose
 
 // ─── Phase 830 — the Google Calendar bridge's readiness probe ───────
 //

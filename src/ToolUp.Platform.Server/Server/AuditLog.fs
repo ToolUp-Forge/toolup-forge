@@ -1,9 +1,10 @@
-module ToolUp.Platform.AuditLog
+module ToolUp.Platform.Audit.AuditLog
 
 open System
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Audit log default implementation ────────────────────────────
 //

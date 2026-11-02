@@ -61,13 +61,13 @@ ToolUp.Hosts.EdgeCache.EdgePurgeRequest+Tags.PurgeRequestTags : System.Int32 (li
 ToolUp.Hosts.EdgeCache.HttpEdgeCache (class)
 ToolUp.Hosts.EdgeCache.HttpEdgeCache..ctor(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig)
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig (class)
-ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig..ctor(System.String, System.Uri, System.Net.Http.HttpMethod, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Hosts.EdgeCache.EdgeCredential], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Hosts.EdgeCache.EdgePurgeRequest, System.String], System.String, ToolUp.Platform.EdgePurgePropagation, System.Boolean, System.Boolean)
+ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig..ctor(System.String, System.Uri, System.Net.Http.HttpMethod, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Hosts.EdgeCache.EdgeCredential], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Hosts.EdgeCache.EdgePurgeRequest, System.String], System.String, ToolUp.Platform.Infra.EdgePurgePropagation, System.Boolean, System.Boolean)
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.ContentType : System.String { get }
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.Credential : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Hosts.EdgeCache.EdgeCredential] { get }
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.Endpoint : System.Uri { get }
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.Method : System.Net.Http.HttpMethod { get }
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.Name : System.String { get }
-ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.Propagation : ToolUp.Platform.EdgePurgePropagation { get }
+ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.Propagation : ToolUp.Platform.Infra.EdgePurgePropagation { get }
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.RenderBody : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Hosts.EdgeCache.EdgePurgeRequest, System.String] { get }
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.SupportsPrefix : System.Boolean { get }
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig.SupportsTags : System.Boolean { get }
@@ -75,7 +75,7 @@ ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfigModule (class)
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfigModule.create(System.String, System.Uri, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Hosts.EdgeCache.EdgePurgeRequest, System.String]) : ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfigModule.withCredential(ToolUp.Hosts.EdgeCache.EdgeCredential, ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig) : ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfigModule.withPrefixSupport(ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig) : ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig
-ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfigModule.withPropagation(ToolUp.Platform.EdgePurgePropagation, ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig) : ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig
+ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfigModule.withPropagation(ToolUp.Platform.Infra.EdgePurgePropagation, ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig) : ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfigModule.withTagSupport(ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig) : ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig
 ToolUp.Hosts.EdgeCache.HttpEdgeCacheModule (class)
-ToolUp.Hosts.EdgeCache.HttpEdgeCacheModule.create(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig) : ToolUp.Platform.IEdgeCache
+ToolUp.Hosts.EdgeCache.HttpEdgeCacheModule.create(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Hosts.EdgeCache.HttpEdgeCacheConfig) : ToolUp.Platform.Infra.IEdgeCache

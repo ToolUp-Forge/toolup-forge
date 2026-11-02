@@ -8,7 +8,10 @@ open System.Diagnostics
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 14w — RAGVacuumJobHandler ──────────────────────────────
 //

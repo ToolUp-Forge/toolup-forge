@@ -7,6 +7,8 @@ open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 309 — audience binding for contract hosts ─────────────────
 //

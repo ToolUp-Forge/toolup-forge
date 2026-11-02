@@ -1,9 +1,11 @@
-module ToolUp.Platform.TeamQuotaPolicy
+module ToolUp.Platform.Jobs.TeamQuotaPolicy
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
 
 // ─── Phase 9d — Team quota policy default impl + decorators ──────
 //

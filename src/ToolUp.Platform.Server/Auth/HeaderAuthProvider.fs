@@ -1,4 +1,7 @@
-module HeaderAuthProvider
+module ToolUp.Platform.Config.HeaderAuthProvider
+
+open ToolUp.Platform
+open ToolUp.Platform.Config.Auth
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform.Auth

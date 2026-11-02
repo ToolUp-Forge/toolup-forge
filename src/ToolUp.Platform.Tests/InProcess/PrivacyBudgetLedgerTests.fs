@@ -6,6 +6,9 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 190 — the clean-room privacy-budget ledger ────────────────
 //

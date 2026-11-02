@@ -14,6 +14,9 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Compose
 
 // ─── Phase 473 — playback + delivery telemetry ────────────────────────
 //

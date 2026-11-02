@@ -4,6 +4,9 @@ open System
 open System.Net
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 2c — the credential-rejection trail ───────────────────────
 //

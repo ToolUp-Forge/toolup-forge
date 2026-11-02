@@ -6,6 +6,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open ToolUp.Platform.Compose
 
 // ─── Startup ingestion-recovery scan ──────────────────────────────
 //

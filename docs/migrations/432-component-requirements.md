@@ -27,7 +27,7 @@ Secrets have no equivalent registration to read — a companion resolves them in
 
 ```fsharp
 open ToolUp.Platform
-open ToolUp.Platform.ComponentRequirementsPreflight
+open ToolUp.Platform.Compose.ComponentRequirementsPreflight
 
 let splunk = ComponentId.forCompanionImpl "IAuditSink" "SplunkHec"
 

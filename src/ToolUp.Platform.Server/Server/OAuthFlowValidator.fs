@@ -1,4 +1,4 @@
-module ToolUp.Platform.OAuthFlowValidator
+module ToolUp.Platform.Config.OAuthFlowValidator
 
 open System
 open ToolUp.Platform

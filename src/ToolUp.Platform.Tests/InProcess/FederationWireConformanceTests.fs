@@ -36,6 +36,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.InProcess.FederationWireCorpus
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // Regeneration runs once at module load, before any assertion reads the
 // corpus — so `TOOLUP_EMIT_WIRE_FIXTURES=1` rewrites the committed files

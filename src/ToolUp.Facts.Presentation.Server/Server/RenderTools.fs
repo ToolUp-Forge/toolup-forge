@@ -11,6 +11,9 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs.SmokeTests
 
 // ─── The render tools (Phase 1132) ──────────────────────────────────
 //

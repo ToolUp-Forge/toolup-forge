@@ -5,12 +5,13 @@ open System.IO
 open System.Text
 open System.Text.RegularExpressions
 open ToolUp.Platform
-open ToolUp.Platform.IOcrProvider
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.IOcrProvider
+open ToolUp.Platform.Infra.ITableExtractor
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.Chunking
 open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
+open ToolUp.Platform.Infra
 
 // ─── Text extraction ──────────────────────────────────────────────
 

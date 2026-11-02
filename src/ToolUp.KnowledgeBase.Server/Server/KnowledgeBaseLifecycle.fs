@@ -5,6 +5,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerInventory
+open ToolUp.Platform.Compose
 
 // ─── Phase 54d — first-party Knowledge Base lifecycle hook ───────────
 //

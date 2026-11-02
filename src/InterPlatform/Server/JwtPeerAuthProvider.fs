@@ -10,6 +10,10 @@ open System.Text.Json.Nodes
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Layer 4 — default peer auth provider ────────────────────────────
 //

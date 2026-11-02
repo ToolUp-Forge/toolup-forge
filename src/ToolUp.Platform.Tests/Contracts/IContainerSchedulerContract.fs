@@ -6,6 +6,7 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 26 IContainerScheduler contract tests ────────────────────
 //

@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Http
 open Giraffe
 open ToolUp.Platform
 open ToolUp.AI.AIToolRegistry
+open ToolUp.Platform.Audit
 
 // ─── Phase 489 — the MCP endpoint ────────────────────────────────────
 //

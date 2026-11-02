@@ -18,6 +18,8 @@ open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

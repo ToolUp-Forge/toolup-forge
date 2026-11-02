@@ -5,6 +5,9 @@ open System.IO
 open Expecto
 open ToolUp.Remoting.Server
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 69f — idempotency-key residuals ────────────────────────────
 //

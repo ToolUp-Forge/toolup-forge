@@ -13,12 +13,18 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.AIAgentEngine
 open ToolUp.AI.SSEHandler
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Every conversation-addressed entry point, and its rule ──────
 //
@@ -1712,7 +1718,7 @@ let aiAssistantApi
                             storage
                             scope.Container)
                     (fun state ->
-                        ToolUp.Platform.TeamPolicyStore.TeamPolicyViewer.resolve
+                        ToolUp.Platform.Scope.TeamPolicyStore.TeamPolicyViewer.resolve
                             turn.Background.RequestServices
                             turn.GateAccess
                             userId

@@ -5,8 +5,9 @@ open Giraffe
 open System.Text.Json
 open System.Text.Json.Nodes
 open ToolUp.Remoting.Json.SystemTextJson
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Infra
 
 let private jsonOptions = FableConverters.create ()
 

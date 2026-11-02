@@ -7,11 +7,12 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.RAG.InMemoryBM25Index
+open ToolUp.Platform.Infra
 
 // ─── InMemoryBM25Index snapshot persistence ───────────────────────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.InMemoryEventStore
+module ToolUp.Platform.Infra.InMemoryEventStore
 
 open ToolUp.Platform
 

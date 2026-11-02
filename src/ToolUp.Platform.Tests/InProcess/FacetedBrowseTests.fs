@@ -7,6 +7,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
 
 // ─── Phase 99 — faceted multi-tag browse ────────────────────────────
 

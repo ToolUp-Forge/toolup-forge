@@ -143,6 +143,8 @@ let driverFlags: FlagSpec =
             "--verbose"
             "--json"
             "--render"
+            "--write-table"
+            "--apply-declarations"
         ]
         Valued = [
             "--root"
@@ -160,6 +162,7 @@ let driverFlags: FlagSpec =
             "--boundary"
             "--run"
             "--since"
+            "--map"
         ]
     }
 

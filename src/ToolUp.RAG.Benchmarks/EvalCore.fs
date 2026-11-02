@@ -13,7 +13,8 @@ module ToolUp.RAG.Benchmarks.EvalCore
 
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra
 
 // ─── Types (mirrors `ToolUp.RAG.Evaluation.EvalTypes`) ──────────
 

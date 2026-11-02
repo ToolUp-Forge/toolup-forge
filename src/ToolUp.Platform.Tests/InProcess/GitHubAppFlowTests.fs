@@ -13,6 +13,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.DataSources.GitHubAppFlow
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── GitHub App IOAuthCredentialFlow tests ───────────────────────────
 //

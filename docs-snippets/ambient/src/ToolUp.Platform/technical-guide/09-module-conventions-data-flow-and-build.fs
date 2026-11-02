@@ -20,5 +20,5 @@ module PageAmbient =
 
     let createdBy: string = failwith "ambient"
 
-    let runtime: ToolUp.Platform.FileManagement.FileManagementRuntime =
+    let runtime: ToolUp.Platform.Files.FileManagement.FileManagementRuntime =
         failwith "ambient"

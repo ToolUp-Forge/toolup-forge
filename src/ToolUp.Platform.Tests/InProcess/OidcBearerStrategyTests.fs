@@ -18,6 +18,7 @@ open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.Oidc.OidcStateMachine
 open ToolUp.AuthProviders.Oidc.OidcClient
 open ToolUp.Platform.Tests.InProcess.MockOidcServer
+open ToolUp.Platform.Scope
 
 // ─── Bearer-token strategy ───────────────────────────────────────────
 //

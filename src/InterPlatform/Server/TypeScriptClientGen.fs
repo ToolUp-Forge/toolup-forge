@@ -5,6 +5,9 @@ module ToolUp.InterPlatform.TypeScriptClientGen
 
 open System
 open System.Text
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 18e (Stage 2) — TypeScript client generator ───────────────
 //

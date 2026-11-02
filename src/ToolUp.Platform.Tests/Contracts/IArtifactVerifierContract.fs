@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IArtifactVerifierContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 /// Phase 30a — contract assertions every `IArtifactVerifier` implementation
 /// must satisfy. The harness takes a factory that returns:

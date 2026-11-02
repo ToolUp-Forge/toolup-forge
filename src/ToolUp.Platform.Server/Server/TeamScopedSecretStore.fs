@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.TeamScopedSecretStore
+module ToolUp.Platform.Scope.TeamScopedSecretStore
+
+open ToolUp.Platform
 
 open ToolUp.Platform.Secrets
 

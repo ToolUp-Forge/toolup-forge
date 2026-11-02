@@ -12,6 +12,9 @@ open ToolUp.Forms.FormStore
 open ToolUp.Forms.WorkflowEngine
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Forms.Tests.InProcess.InMemoryAuditLog
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── IWorkflowEngine contract pack ───────────────────────────────
 //

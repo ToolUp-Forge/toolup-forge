@@ -3,7 +3,7 @@ module ToolUp.Platform.Tests.InProcess.DegradedCapabilityRegistryTests
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.DegradedCapabilities
+open ToolUp.Platform.Infra.DegradedCapabilities
 
 // ─── Phase 118 — degraded-capability registry ────────────────────────
 //

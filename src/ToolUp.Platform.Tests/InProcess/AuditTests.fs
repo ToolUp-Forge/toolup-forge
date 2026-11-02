@@ -6,6 +6,9 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 69h.tail — [<Audit>] annotation sweep + dispatcher-emitted
 // audit ──────────────────────────────────────────────────────────────

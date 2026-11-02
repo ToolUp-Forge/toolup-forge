@@ -19,18 +19,20 @@ open System
 open System.IO
 open System.Text.RegularExpressions
 open ToolUp.Platform
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IReranker
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IReranker
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
+open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.RAG.Evaluation.EvalTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Deterministic reranker double ───────────────────────────────
 

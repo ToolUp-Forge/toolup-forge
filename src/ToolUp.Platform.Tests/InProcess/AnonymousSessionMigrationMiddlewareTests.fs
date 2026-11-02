@@ -8,7 +8,9 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Primitives
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.AnonymousSessionMigration
+open ToolUp.Platform.Scope.AnonymousSessionMigration
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── AnonymousSessionMigrationMiddleware — Phase 66 D.6 ──────────────
 //

@@ -4,6 +4,7 @@
 namespace ToolUp.InterPlatform
 
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── Phase 642 — level-gated egress rides the disclosure plane ───────
 //

@@ -5,7 +5,7 @@
 # still be folded into this file in the same PR.
 ToolUp.Platform.AuditSinks.S3Archive (class)
 ToolUp.Platform.AuditSinks.S3Archive.buildBlobName(ToolUp.Platform.AuditSinks.S3Archive+S3ArchiveSettings, System.String, System.DateTime, System.Guid) : System.String
-ToolUp.Platform.AuditSinks.S3Archive.create(System.String, ToolUp.Platform.AuditSinks.S3Archive+S3ArchiveSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IAuditSink
+ToolUp.Platform.AuditSinks.S3Archive.create(System.String, ToolUp.Platform.AuditSinks.S3Archive+S3ArchiveSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Audit.IAuditSink
 ToolUp.Platform.AuditSinks.S3Archive+S3ArchiveAuditSink (class)
 ToolUp.Platform.AuditSinks.S3Archive+S3ArchiveAuditSink..ctor(System.String, ToolUp.Platform.AuditSinks.S3Archive+S3ArchiveSettings, ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.AuditSinks.S3Archive+S3ArchiveSettings (class)

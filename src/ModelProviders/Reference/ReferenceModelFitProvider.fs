@@ -7,6 +7,8 @@ open System
 open System.Text
 open System.Security.Cryptography
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 449 — reference IModelFitProvider ────────────────────────────
 //

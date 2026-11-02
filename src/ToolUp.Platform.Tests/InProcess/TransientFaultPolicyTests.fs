@@ -6,10 +6,11 @@ open System.Diagnostics
 open Expecto
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TransientFault
-open ToolUp.Platform.ResilientBlobStorage
-open ToolUp.Platform.ResilientSecretStore
+open ToolUp.Platform.Infra.TransientFault
+open ToolUp.Platform.Infra.ResilientBlobStorage
+open ToolUp.Platform.Infra.ResilientSecretStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── Phase 176 — transient-fault decorator substrate ─────────────────
 //

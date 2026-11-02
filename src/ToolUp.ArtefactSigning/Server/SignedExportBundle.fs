@@ -6,6 +6,7 @@ module ToolUp.ArtefactSigning.SignedExportBundle
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Audit
 
 // ─── Phase 162 — signed compliance export bundle (composition glue) ─────
 //

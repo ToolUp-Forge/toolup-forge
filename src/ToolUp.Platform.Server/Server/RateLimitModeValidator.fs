@@ -1,8 +1,9 @@
-module ToolUp.Platform.RateLimitModeValidator
+module ToolUp.Platform.Config.RateLimitModeValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── Phase 6l.G — rate-limit absent on internet-facing auth-mode ────
 //

@@ -11,6 +11,12 @@
     <!-- Phase 182 — SBOM/provenance emission consumed by the Publish
          target in SDK.Build.fs (compiled after this). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Sbom.fs" />
+    <!-- Phase 1198 - the server tier's per-part namespaces: the scan, the
+         shipped name table (an embedded resource) and the derived-opens
+         pass the Codemod target's 1198 migration runs (compiled before
+         SDK.Codemod.fs, which hooks it). -->
+    <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CodemodNamespaces.fs" />
+    <EmbeddedResource Include="src\ToolUp.Platform.Build\Build\codemod-1198-namespaces.txt" LogicalName="codemod-1198-namespaces.txt" />
     <!-- Phase 183 — the consumer codemod behind the Codemod target
          registerTargets registers (compiled after this). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Codemod.fs" />

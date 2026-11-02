@@ -1,12 +1,13 @@
-module ToolUp.Platform.WebhookApiHandler
+module ToolUp.Platform.Jobs.WebhookApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.WebhookDispatcher
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Jobs.WebhookDispatcher
+open ToolUp.Platform.Config
 
 // ─── Audit-event payloads ────────────────────────────────────────
 //

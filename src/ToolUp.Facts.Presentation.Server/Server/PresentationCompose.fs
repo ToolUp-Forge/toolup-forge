@@ -5,6 +5,7 @@ namespace ToolUp.Facts.Presentation
 
 open ToolUp.Platform
 open ToolUp.AI.AICompose
+open ToolUp.Platform.Compose
 
 /// Composing the render tools, the pipeline tool, the page request
 /// resolvers and the layout tools.

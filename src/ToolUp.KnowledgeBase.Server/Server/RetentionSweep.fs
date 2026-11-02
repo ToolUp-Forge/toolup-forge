@@ -10,6 +10,9 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerIngestionObserver
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 512 — per-scope age-based KB retention sweep ──────────────
 //

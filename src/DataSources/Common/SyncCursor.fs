@@ -8,10 +8,14 @@ open System.Text
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Transport
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 128 — incremental sync cursors ────────────────────────
 //
@@ -192,7 +196,8 @@ module SyncCursor =
                         cursor with
                             Version = entityRef.Version
                     }
-                | Error(VersionConflict(_, _, expected, actual)) -> Error(SyncCursorError.Conflict(expected, actual))
+                | Error(EntityError.VersionConflict(_, _, expected, actual)) ->
+                    Error(SyncCursorError.Conflict(expected, actual))
                 | Error error -> Error(SyncCursorError.Store error)
         }
 

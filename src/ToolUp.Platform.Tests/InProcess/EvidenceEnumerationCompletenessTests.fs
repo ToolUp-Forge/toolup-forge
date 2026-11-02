@@ -7,6 +7,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
 
 // ─── Phase 716 — the walk proves it enumerated everything ────────────
 //

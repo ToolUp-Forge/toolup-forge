@@ -7,6 +7,8 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.DataSubject.Tests.Support.Doubles
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 /// Phase 9h.A — contract assertions every `IBackgroundExportStore` must
 /// satisfy. The factory returns a fresh store sharing one backing blob

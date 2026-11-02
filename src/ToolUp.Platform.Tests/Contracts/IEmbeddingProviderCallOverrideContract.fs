@@ -5,7 +5,8 @@ module ToolUp.Platform.Tests.Contracts.IEmbeddingProviderCallOverrideContract
 
 open System
 open Expecto
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
 
 // ─── Phase 945 — IEmbeddingProviderCallOverride conformance pack ──────
 //

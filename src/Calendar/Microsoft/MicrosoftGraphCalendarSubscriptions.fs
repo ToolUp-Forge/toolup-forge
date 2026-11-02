@@ -14,11 +14,14 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Scheduling.CalendarSync
 open ToolUp.Scheduling.SchedulingCompose
 open ToolUp.Calendar.MicrosoftGraph
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 831 — subscriptions: the inbound half ────────────────────
 //

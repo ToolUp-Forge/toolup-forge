@@ -6,6 +6,7 @@ open System.Text
 open Expecto
 open ToolUp.Webhooks
 open ToolUp.Webhooks.Server
+open ToolUp.Platform.Jobs
 
 // ─── Phase 238 — generic inbound-webhook receiver substrate ──────────
 //

@@ -8,6 +8,7 @@ open System.Text
 open System.Text.Json.Nodes
 open ToolUp.Platform
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
+open ToolUp.Platform.Infra
 
 // ─── Session issuance ────────────────────────────────────────────────
 //

@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.Contracts.IGroundedNarrativeRunContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── IGroundedNarrativeRun contract pack ─────────────────────────────
 //

@@ -19,6 +19,8 @@ open System.Security.Cryptography
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Build transcript + sealed deploy record ─────────────────────────
 //

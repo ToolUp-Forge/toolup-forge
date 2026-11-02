@@ -1,9 +1,10 @@
-module ToolUp.Platform.JobSchedulerInstanceValidator
+module ToolUp.Platform.Jobs.JobSchedulerInstanceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open Microsoft.Extensions.DependencyInjection
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.F — multi-instance + InProcessJobScheduler ────────────
 //

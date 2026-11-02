@@ -46,6 +46,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open ToolUp.Platform.Compose
 
 /// Deterministic identity the issuer mints into every token. Assert
 /// against these in the contract fixture.

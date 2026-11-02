@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.RequestContextBuilder
+module ToolUp.Platform.Scope.RequestContextBuilder
+
+open ToolUp.Platform
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform.Auth

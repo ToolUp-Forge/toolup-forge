@@ -1,4 +1,4 @@
-module ToolUp.Platform.EntityOutboxRelayService
+module ToolUp.Platform.Infra.EntityOutboxRelayService
 
 open System
 open System.Threading

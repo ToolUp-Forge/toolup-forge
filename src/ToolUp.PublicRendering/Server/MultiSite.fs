@@ -6,6 +6,7 @@ open Giraffe.ViewEngine
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 114 — multi-host public rendering (site registry) ────────
 //

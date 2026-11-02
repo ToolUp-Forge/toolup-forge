@@ -1,8 +1,8 @@
-module ToolUp.Platform.ErasurePipeline
+module ToolUp.Platform.Audit.ErasurePipeline
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
 open ToolUp.Platform.DataSubjectRequestApi
 
 // ─── Phase 9h — DSR orchestrator ─────────────────────────────────────

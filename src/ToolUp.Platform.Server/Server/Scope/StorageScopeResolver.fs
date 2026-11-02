@@ -1,10 +1,10 @@
-module ToolUp.Platform.StorageScopeResolver
+module ToolUp.Platform.Scope.StorageScopeResolver
 
 open System
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 /// Resolves storage scope from a pre-extracted `ScopeResolutionRequest`.
 /// The interface has no `HttpContext` coupling — request extraction happens
@@ -200,7 +200,7 @@ module ScopeRequestExtractor =
     let fromHttpContext (ctx: HttpContext) (authProvider: IAuthProvider) = async {
         // Phase 11.C.5 Tier 3 — wrap `HttpContext` into `RequestContext`
         // at the single IAuthProvider boundary.
-        let! user = authProvider.GetUser(ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx)
+        let! user = authProvider.GetUser(ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext ctx)
 
         return {
             User = Some user
@@ -231,7 +231,7 @@ module ScopeRequestExtractor =
             let authProv =
                 ctx.RequestServices.GetService(typeof<IAuthProvider>) :?> IAuthProvider
 
-            let! user = authProv.GetUser(ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx)
+            let! user = authProv.GetUser(ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext ctx)
             return user.UserId
         with _ ->
             return

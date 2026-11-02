@@ -5,8 +5,8 @@
 # still be folded into this file in the same PR.
 ToolUp.DataSources.BigQuery.BigQueryDataSource (class)
 ToolUp.DataSources.BigQuery.BigQueryDataSource.Kind : System.String (literal)
-ToolUp.DataSources.BigQuery.BigQueryDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IDataSource
-ToolUp.DataSources.BigQuery.BigQueryDataSource.createWithDefaultCredentials() : ToolUp.Platform.IDataSource
+ToolUp.DataSources.BigQuery.BigQueryDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.BigQuery.BigQueryDataSource.createWithDefaultCredentials() : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.BigQuery.BigQueryDataSource.nullableFromMode(System.String) : System.Boolean
 ToolUp.DataSources.BigQuery.BigQueryDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.BigQuery.BigQueryDataSource+BigQuerySourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.BigQuery.BigQueryDataSource.toColumnType(System.String) : DataManagementTypes+ColumnType

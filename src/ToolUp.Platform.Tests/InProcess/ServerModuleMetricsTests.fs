@@ -2,8 +2,11 @@ module ToolUp.Platform.Tests.InProcess.ServerModuleMetricsTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit.Metrics
+open ToolUp.Platform.Compose
 
 // ─── ServerModule.withMetrics accumulation — Phase 9e tail ──────────
 //

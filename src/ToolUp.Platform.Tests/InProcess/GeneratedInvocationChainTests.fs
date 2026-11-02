@@ -18,6 +18,7 @@ open ToolUp.Platform
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
 open ToolUp.Remoting.Generator
+open ToolUp.Platform.Infra
 
 // ─── Phase 906 — a generated method runs INSIDE the pre-flight chain ────
 //

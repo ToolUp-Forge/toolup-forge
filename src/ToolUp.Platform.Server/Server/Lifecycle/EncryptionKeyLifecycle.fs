@@ -1,9 +1,10 @@
-module ToolUp.Platform.EncryptionKeyLifecycle
+module ToolUp.Platform.Compose.EncryptionKeyLifecycle
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Config
 
 // ─── Phase 54 — first-party encryption-key lifecycle hook ────────────
 //

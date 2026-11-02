@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.RedactionAllowlist
+module ToolUp.Platform.Config.RedactionAllowlist
+
+open ToolUp.Platform
 
 // ─── The credential-suffix allowlist (Phase 9n), extracted ───────────
 //

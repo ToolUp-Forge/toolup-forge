@@ -8,6 +8,7 @@ open System.Text
 open System.Text.Json
 open System.Text.Json.Nodes
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 // ─── Keyed byte signing over the application signing seam ───────────────
 //

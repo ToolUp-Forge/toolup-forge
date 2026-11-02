@@ -8,10 +8,13 @@
 // wraps). None of these is SDK surface —
 // they are what the page tells a module author to have beside them.
 open Microsoft.Extensions.DependencyInjection
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Scheduling.SchedulingApi
 open ToolUp.Scheduling.SchedulingEvents
 open ToolUp.Scheduling.IBookingScheduler
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 [<AutoOpen>]
 module PageAmbient =

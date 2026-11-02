@@ -6,9 +6,11 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 /// Bind the `IDataObjectStore` contract test pack to the blob-backed
 /// `DataObjectStore` over a `LocalFileStorage` substrate. Each factory

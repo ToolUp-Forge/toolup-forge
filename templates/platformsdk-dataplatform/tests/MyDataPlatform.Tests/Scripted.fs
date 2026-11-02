@@ -4,8 +4,9 @@ open System
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.AI
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.AI
+open ToolUp.Platform.Infra
 
 // ─── A scripted model and a constant embedder ─────────────────────
 //

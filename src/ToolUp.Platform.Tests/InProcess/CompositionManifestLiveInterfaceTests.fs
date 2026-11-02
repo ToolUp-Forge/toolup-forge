@@ -7,6 +7,10 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
 open ToolUp.RAG
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 860 — the live-interface posture on the composition manifest ──
 //

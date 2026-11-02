@@ -20,12 +20,15 @@ open Microsoft.Extensions.DependencyInjection
 open ProcessedDataTypes
 open ToolUp.AI
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.EmbeddingProviderEnv
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Config.EmbeddingProviderEnv
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

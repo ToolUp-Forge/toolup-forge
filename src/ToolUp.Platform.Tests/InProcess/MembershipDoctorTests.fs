@@ -5,9 +5,11 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.MembershipDoctor
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Scope.MembershipDoctor
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 546 — membership-integrity doctor ─────────────────────────
 //

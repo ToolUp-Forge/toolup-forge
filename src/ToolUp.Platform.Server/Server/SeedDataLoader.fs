@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.SeedDataLoader
+module ToolUp.Platform.Compose.SeedDataLoader
 
 open System
 open System.Text
@@ -10,6 +10,8 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── SeedDataLoader — idempotent, mode-gated pack application (447) ──
 //

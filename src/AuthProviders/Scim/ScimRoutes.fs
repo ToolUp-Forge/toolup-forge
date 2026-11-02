@@ -12,11 +12,12 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders.ScimTypes
 open ToolUp.AuthProviders.ScimHandler
+open ToolUp.Platform.Compose
 
 // ─── SCIM 2.0 endpoint host ──────────────────────────────────────────
 //

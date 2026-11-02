@@ -29,6 +29,7 @@ module ToolUp.Platform.Tests.Contracts.IClientToolAuthorizerContract
 
 open Expecto
 open ToolUp.AI
+open ToolUp.Platform.Audit
 
 /// Everything the pack needs to exercise one authorizer.
 type ClientToolAuthorizerContractFixture = {
@@ -56,13 +57,14 @@ let tests (f: ClientToolAuthorizerContractFixture) : Test =
         testCase "AllowedCall returns Allow"
         <| fun _ ->
             match call f.Authorizer f.AllowedCall with
-            | Allow -> ()
+            | ClientToolAuthDecision.Allow -> ()
             | Deny reason -> failtestf "AllowedCall must resolve Allow; got Deny: %s" reason
 
         testCase "DeniedCall returns Deny with a non-empty reason"
         <| fun _ ->
             match call f.Authorizer f.DeniedCall with
-            | Allow -> failtest "DeniedCall must resolve Deny — the impl claimed it would refuse this call"
+            | ClientToolAuthDecision.Allow ->
+                failtest "DeniedCall must resolve Deny — the impl claimed it would refuse this call"
             | Deny reason ->
                 Expect.isNotEmpty
                     reason
@@ -154,18 +156,18 @@ let tests (f: ClientToolAuthorizerContractFixture) : Test =
                 |> Async.RunSynchronously
 
             match results[0] with
-            | Allow -> ()
+            | ClientToolAuthDecision.Allow -> ()
             | Deny reason -> failtestf "parallel AllowedCall (1/2) must resolve Allow; got Deny: %s" reason
 
             match results[1] with
-            | Allow -> failtest "parallel DeniedCall (1/2) must resolve Deny"
+            | ClientToolAuthDecision.Allow -> failtest "parallel DeniedCall (1/2) must resolve Deny"
             | Deny _ -> ()
 
             match results[2] with
-            | Allow -> ()
+            | ClientToolAuthDecision.Allow -> ()
             | Deny reason -> failtestf "parallel AllowedCall (2/2) must resolve Allow; got Deny: %s" reason
 
             match results[3] with
-            | Allow -> failtest "parallel DeniedCall (2/2) must resolve Deny"
+            | ClientToolAuthDecision.Allow -> failtest "parallel DeniedCall (2/2) must resolve Deny"
             | Deny _ -> ()
     ]

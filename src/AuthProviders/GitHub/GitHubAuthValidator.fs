@@ -7,6 +7,7 @@ open System
 open System.Net.Http
 open System.Threading
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Compose
 
 // ─── GitHub API-reachability preflight ───────────────────────────────
 //
@@ -26,7 +27,7 @@ open ToolUp.Platform.ConfigValidation
 // handler in front of the same primary handler); byte-identical under
 // the default permit-all policy.
 let private httpClient =
-    lazy (ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AuthProvider)
+    lazy (ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AuthProvider)
 
 let private metaUrl (apiBaseUrl: string) : string = apiBaseUrl.TrimEnd('/') + "/meta"
 

@@ -4,6 +4,7 @@
 module ToolUp.Forms.FormsInHandlerGates
 
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 627.E declarations for `IFormApi` ─────────────────────────
 //

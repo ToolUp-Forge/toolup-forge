@@ -5,6 +5,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.NotificationChannels.Push.WebPush
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 /// Bind `INotificationSinkContract` to the WebPush sink. The factory
 /// uses test-only VAPID key material — the sink will fail to dispatch

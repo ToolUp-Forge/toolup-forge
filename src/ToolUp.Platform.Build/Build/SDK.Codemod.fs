@@ -52,6 +52,13 @@ type CodemodMigration =
     /// `RiskAcknowledgements`, `MultiInstance`, `Observability`, `Stores`)
     /// and every payload-free two-case `*Mode` is the one `FeatureMode`.
     | NestedConfig
+    /// The server tier's namespaces name the part a file is compiled
+    /// into (`ToolUp.Platform.Infra` / `.Config` / `.Scope` / `.Jobs` /
+    /// `.Audit`, the umbrella's `.Compose` and `.Files`), and a consumer's
+    /// opens are derived from the names it uses. Table-driven, so it runs
+    /// only when named (`--phase 1198`), never under the default
+    /// every-migration pass.
+    | SubsystemNamespaces
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -75,6 +82,7 @@ module CodemodMigration =
             "docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md"
         | CodemodMigration.CompanionOptions -> "docs/migrations/876-composition-contributions.md"
         | CodemodMigration.NestedConfig -> "docs/migrations/877-nested-server-config.md"
+        | CodemodMigration.SubsystemNamespaces -> "docs/migrations/1198-subsystem-namespaces.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -93,6 +101,7 @@ module CodemodMigration =
         | CodemodMigration.BackgroundPlacement -> "Phase 1067"
         | CodemodMigration.CompanionOptions -> "Phase 876"
         | CodemodMigration.NestedConfig -> "Phase 877"
+        | CodemodMigration.SubsystemNamespaces -> "Phase 1198"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1997,16 +2006,23 @@ module Codemod =
     /// terminators (`\r\n`, `\n`, `\r`) are re-emitted verbatim.
     let private lineSplitter = Regex(@"(\r\n|\n|\r)", RegexOptions.CultureInvariant)
 
-    /// Applies every rewrite rule of `cls` to `text`, line by line.
+    /// Applies every rewrite rule of `cls` to `text`, line by line, for a
+    /// file its compiling projects let `reach` (the Phase 1198 pass
+    /// derives opens within it; see `SubsystemNamespaces.ProjectScope`).
     /// Returns the rewritten text and one record per (line, rule) that
     /// changed it.
-    let rewriteTextFor
+    let rewriteTextIn
+        (reach: SubsystemNamespaces.FileReach)
         (only: CodemodMigration list)
         (cls: CodemodFileClass)
         (text: string)
         : string * CodemodRewrite list =
         let selected (migration: CodemodMigration) =
-            only.IsEmpty || List.contains migration only
+            match migration with
+            // Table-driven and derived, so never implied by "every
+            // migration": a consumer names it.
+            | CodemodMigration.SubsystemNamespaces -> List.contains migration only
+            | _ -> only.IsEmpty || List.contains migration only
 
         let rules =
             rewriteRules |> List.filter (fun r -> r.Applies = cls && selected r.Migration)
@@ -2064,8 +2080,29 @@ module Codemod =
                 else
                     nested, []
 
-            String.concat "" withMembers, List.ofSeq rewrites @ nestedRewrites @ added |> List.sortBy _.Line
+            let withNamespaces, derived =
+                if selected CodemodMigration.SubsystemNamespaces then
+                    let segments, moves =
+                        SubsystemNamespaces.rewrite SubsystemNamespaces.embeddedIndex.Value reach withMembers
+
+                    segments,
+                    moves
+                    |> List.map (fun (rule, line, before, after) -> {
+                        RuleId = rule
+                        Line = line + 1
+                        Before = before
+                        After = after
+                    })
+                else
+                    withMembers, []
+
+            String.concat "" withNamespaces,
+            List.ofSeq rewrites @ nestedRewrites @ added @ derived |> List.sortBy _.Line
         | CodemodFileClass.Project -> rewritten, List.ofSeq rewrites
+
+    /// `rewriteTextIn` for a file whose project reaches the server tier.
+    let rewriteTextFor (only: CodemodMigration list) (cls: CodemodFileClass) (text: string) =
+        rewriteTextIn SubsystemNamespaces.consumerReach only cls text
 
     /// Applies every rewrite rule of `cls` to `text`, line by line.
     let rewriteText (cls: CodemodFileClass) (text: string) : string * CodemodRewrite list = rewriteTextFor [] cls text
@@ -2120,7 +2157,10 @@ module Codemod =
         Path.GetRelativePath(root, path).Replace('\\', '/')
 
     /// Decides one file: read, rewrite, review. Pure apart from the read.
-    let analyseFileFor
+    /// `scope` says which projects under the root reach the server tier
+    /// (read once per plan); `None` decides it for this file's tree alone.
+    let analyseFileIn
+        (scope: SubsystemNamespaces.ProjectScope.Scope option)
         (only: CodemodMigration list)
         (root: string)
         (cls: CodemodFileClass)
@@ -2132,7 +2172,17 @@ module Codemod =
         let original =
             Encoding.UTF8.GetString(bytes, (if bom then 3 else 0), bytes.Length - (if bom then 3 else 0))
 
-        let rewritten, rewrites = rewriteTextFor only cls original
+        let reach =
+            if List.contains CodemodMigration.SubsystemNamespaces only then
+                let scope =
+                    scope
+                    |> Option.defaultWith (fun () -> SubsystemNamespaces.ProjectScope.ofTree root)
+
+                SubsystemNamespaces.ProjectScope.reachOf scope path
+            else
+                SubsystemNamespaces.consumerReach
+
+        let rewritten, rewrites = rewriteTextIn reach only cls original
 
         {
             Path = Path.GetFullPath path
@@ -2146,6 +2196,10 @@ module Codemod =
                 reviewTextFor only cls rewritten @ nestFindings only cls rewritten
                 |> List.sortBy _.Line
         }
+
+    /// Decides one file, deciding its project's reach for itself.
+    let analyseFileFor (only: CodemodMigration list) (root: string) (cls: CodemodFileClass) (path: string) =
+        analyseFileIn None only root cls path
 
     /// Every review-rule match over `text` (the REWRITTEN text).
     let reviewText (cls: CodemodFileClass) (text: string) : CodemodFinding list = reviewTextFor [] cls text
@@ -2191,9 +2245,17 @@ module Codemod =
 
         let full = Path.GetFullPath root
 
+        let scope =
+            if List.contains CodemodMigration.SubsystemNamespaces only then
+                Some(SubsystemNamespaces.ProjectScope.ofTree full)
+            else
+                None
+
         {
             Root = full
-            Files = walk full |> List.map (fun (cls, path) -> analyseFileFor only full cls path)
+            Files =
+                walk full
+                |> List.map (fun (cls, path) -> analyseFileIn scope only full cls path)
         }
 
     /// Decides the whole tree under `root` under every migration.
@@ -2217,6 +2279,7 @@ module Codemod =
             CodemodMigration.BackgroundPlacement
             CodemodMigration.CompanionOptions
             CodemodMigration.NestedConfig
+            CodemodMigration.SubsystemNamespaces
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

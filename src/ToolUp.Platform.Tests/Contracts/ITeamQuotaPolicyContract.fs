@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.ITeamQuotaPolicyContract
 open System
 open Expecto
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Usage
 
 // ─── ITeamQuotaPolicy contract pack ───────────────────────────────
 //

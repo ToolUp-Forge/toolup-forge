@@ -9,6 +9,8 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open SharedTypes
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 201 — redaction-aware original retrieval ───────────────
 //

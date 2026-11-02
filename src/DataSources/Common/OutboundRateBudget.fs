@@ -7,6 +7,8 @@ open System
 open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.Transport
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 128 — quota-aware outbound HTTP ───────────────────────
 //

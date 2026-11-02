@@ -11,6 +11,7 @@ open System
 open System.IO
 open DocumentFormat.OpenXml
 open DocumentFormat.OpenXml.Packaging
+open ToolUp.Platform.Config
 
 let private buildDocx (build: WordprocessingDocument -> MainDocumentPart -> unit) : byte[] =
     use stream = new MemoryStream()

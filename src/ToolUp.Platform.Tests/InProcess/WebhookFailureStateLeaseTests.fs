@@ -11,9 +11,13 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Tracing
-open ToolUp.Platform.WebhookDispatcher
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Jobs.WebhookDispatcher
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 16a — the webhook dispatcher's failure-state lease ────────
 //

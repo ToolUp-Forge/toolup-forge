@@ -9,6 +9,9 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open PeerReflection
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── Layer 4 — job-substrate fusion ──────────────────────────────────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.JobScheduler
+module ToolUp.Platform.Jobs.JobScheduler
 
 open System
 open System.Collections.Concurrent
@@ -10,7 +10,9 @@ open Microsoft.Extensions.Hosting
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Constants ───────────────────────────────────────────────────
 

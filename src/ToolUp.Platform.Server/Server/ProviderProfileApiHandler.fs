@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ProviderProfileApiHandler
+module ToolUp.Platform.Compose.ProviderProfileApiHandler
 
 open System
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Providers
-open ToolUp.Platform.RemotingHelpers
+open ToolUp.Platform.Compose.RemotingHelpers
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Jobs
 
 // ─── IProviderProfileApi handler (Phase 44) ──────────────────────
 //

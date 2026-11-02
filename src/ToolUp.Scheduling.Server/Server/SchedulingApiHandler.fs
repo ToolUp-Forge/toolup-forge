@@ -3,7 +3,7 @@ module ToolUp.Scheduling.SchedulingApiHandler
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.SchedulingApi
 open ToolUp.Scheduling.IBookingScheduler

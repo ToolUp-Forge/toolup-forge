@@ -12,6 +12,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 331 — receiver-side cascade-budget authority ──────────────
 //

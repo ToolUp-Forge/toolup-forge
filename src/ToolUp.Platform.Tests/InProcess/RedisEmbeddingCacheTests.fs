@@ -3,9 +3,11 @@ module ToolUp.Platform.Tests.InProcess.RedisEmbeddingCacheTests
 open System
 open Expecto
 open StackExchange.Redis
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IEmbeddingCache
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingCache
 open ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 513 — Redis IEmbeddingCache test pack ─────────────────────
 //
@@ -674,7 +676,8 @@ let private newApp () =
 /// the only evidence that the hook reaches `composeWithRAG` rather than
 /// merely landing in the record.
 let private composedCache (app: ToolUp.RAG.RAGCompose.RagOptions) : IEmbeddingCache =
-    let composed = ToolUp.Platform.ServerApp.empty |> ToolUp.RAG.RAGCompose.withRAG app
+    let composed =
+        ToolUp.Platform.Compose.ServerApp.empty |> ToolUp.RAG.RAGCompose.withRAG app
 
     let services =
         Microsoft.Extensions.DependencyInjection.ServiceCollection()

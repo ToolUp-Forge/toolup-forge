@@ -3,6 +3,7 @@ module ToolUp.Forms.Tests.InProcess.ValidationBridgeTests
 open Expecto
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.Server
+open ToolUp.Platform.Infra
 
 // ─── Phase 69e.F — Forms integration seam ─────────────────────────────
 //

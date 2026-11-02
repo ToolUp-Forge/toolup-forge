@@ -7,6 +7,9 @@ open FSharp.Reflection
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 654 — the signed-shape separator registry ─────────────────
 //

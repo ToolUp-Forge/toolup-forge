@@ -12,6 +12,8 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.AI.FastPathTriageResolver
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 6j.B — Tier-3 triage ──────────────────────────────────
 //

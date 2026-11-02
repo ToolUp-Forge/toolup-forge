@@ -5,6 +5,8 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── AI tool helpers ─────────────────────────────────────────────
 //

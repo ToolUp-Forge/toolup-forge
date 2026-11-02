@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ScheduledDeprovisionJobHandler
+module ToolUp.Platform.Compose.ScheduledDeprovisionJobHandler
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54f — scheduled / grace-period offboard poll handler ──────
 //

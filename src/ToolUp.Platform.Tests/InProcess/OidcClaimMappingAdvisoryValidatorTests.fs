@@ -4,6 +4,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // `OidcClaimMappingAdvisoryValidator` reads TOOLUP_AUTH_MODE +
 // TOOLUP_OIDC_ISSUER + the two claim-mapping variables from the

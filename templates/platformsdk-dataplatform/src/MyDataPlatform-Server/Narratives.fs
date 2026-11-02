@@ -3,6 +3,8 @@ module MyDataPlatform.Server.Narratives
 open ToolUp.Platform
 open ToolUp.Facts
 open ToolUp.AI.GroundedNarrativeRun
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── The day's report: model-written, every number a Fact ─────────
 //

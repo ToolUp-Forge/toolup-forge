@@ -1,4 +1,6 @@
-module ToolUp.Platform.IOcrProvider
+module ToolUp.Platform.Infra.IOcrProvider
+
+open ToolUp.Platform
 
 /// One page of OCR-extracted text. Page numbering is 1-based to round-trip
 /// back into `KnowledgeBase.SourceReference.Location = Page n` without

@@ -3,6 +3,7 @@ namespace ToolUp.PublicRendering
 open System.Text.Json
 open System.Text.Encodings.Web
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 /// JSON-LD emitters for the five most common schema.org types on
 /// content sites. Each returns a JSON string ready to embed as

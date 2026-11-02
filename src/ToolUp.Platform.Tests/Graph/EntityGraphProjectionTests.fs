@@ -8,11 +8,14 @@ open ToolUp.Graph
 open ToolUp.Graph.Projection
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.AuditLog
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Audit.AuditLog
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 68d — Entity↔Graph projection bridge test pack ───────────
 //

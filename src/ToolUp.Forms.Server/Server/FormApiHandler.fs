@@ -4,7 +4,7 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.EntityQuery
@@ -19,6 +19,11 @@ open ToolUp.Forms.PublicFormApi
 open ToolUp.Forms.AggregationTypes
 open ToolUp.Forms.AnalyserCache
 open ToolUp.Forms.IFormSubmissionAnalyser
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 21 — ToolUp.Remoting handler ──────────────────────────
 //

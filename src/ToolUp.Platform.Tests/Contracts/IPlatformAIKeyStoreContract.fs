@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.Contracts.IPlatformAIKeyStoreContract
 
 open Expecto
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 // ─── IPlatformAIKeyStore contract pack (Phase 70) ────────────────
 //

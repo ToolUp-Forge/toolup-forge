@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.ForwardedHeadersTrustValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 let private cfg (surfaces: SurfaceProfile list) (trustForwarded: bool) (requireHttps: bool) : ServerConfig = {
     ServerConfig.defaults with

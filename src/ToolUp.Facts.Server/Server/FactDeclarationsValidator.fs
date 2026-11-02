@@ -7,6 +7,7 @@ open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Compose
 
 // ─── What a deployment declared and left undescribed ─────────────────
 //

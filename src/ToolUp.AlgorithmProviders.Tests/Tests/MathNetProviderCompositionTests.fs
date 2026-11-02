@@ -10,6 +10,9 @@ open ToolUp.Algorithms.AlgorithmTypes
 open ToolUp.Algorithms.AlgorithmOperations
 open ToolUp.AlgorithmProviders
 open ToolUp.AlgorithmProviders.Tests.Support.MathNetProviderFixtures
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 11.E.3 — declaration + end-to-end composition ────────────
 //

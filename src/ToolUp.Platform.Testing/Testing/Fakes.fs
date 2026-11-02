@@ -9,7 +9,9 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Auth
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Fakes for SDK interfaces ─────────────────────────────────────────
 //

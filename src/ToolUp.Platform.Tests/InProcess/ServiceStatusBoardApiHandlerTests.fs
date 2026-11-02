@@ -6,6 +6,9 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // Deliberately NOT opening `ToolUp.Platform.ConfigValidation` here —
 // its `ValidationResult` cases (`Ok | Warning | Error`) would shadow

@@ -13,6 +13,7 @@ open Microsoft.Extensions.Primitives
 open Amazon.Lambda.APIGatewayEvents
 open Amazon.Lambda.ApplicationLoadBalancerEvents
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.AwsLambda — AWS Lambda adapter ─────────────────────
 //

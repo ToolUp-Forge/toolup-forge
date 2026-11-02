@@ -11,4 +11,4 @@ ToolUp.RateLimit.Redis.Options.MaxRecentDecisions : System.Int32 { get }
 ToolUp.RateLimit.Redis.OptionsModule (class)
 ToolUp.RateLimit.Redis.OptionsModule.defaults : ToolUp.RateLimit.Redis.Options { get }
 ToolUp.RateLimit.Redis.RedisRateLimitStore (class)
-ToolUp.RateLimit.Redis.RedisRateLimitStore.create(ToolUp.RateLimit.Redis.Options, ToolUp.Platform.ILogger) : ToolUp.Platform.IRateLimitStore
+ToolUp.RateLimit.Redis.RedisRateLimitStore.create(ToolUp.RateLimit.Redis.Options, ToolUp.Platform.ILogger) : ToolUp.Platform.Infra.IRateLimitStore

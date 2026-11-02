@@ -4,10 +4,10 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex (class)
-ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.create(System.String, ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions, ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.ISparseIndex+ISparseIndex
-ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.createWithDataSource(Npgsql.NpgsqlDataSource, ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions, ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.ISparseIndex+ISparseIndex
-ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.factory(System.String, ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.RAG.SparseAnalysis+ISparseAnalyzer) : ToolUp.Platform.ISparseIndex+ISparseIndex
-ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.health(ToolUp.Platform.ISparseIndex+ISparseIndex) : ToolUp.Platform.HealthChecks+IHealthCheck
+ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.create(System.String, ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions, ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.ISparseIndex+ISparseIndex
+ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.createWithDataSource(Npgsql.NpgsqlDataSource, ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions, ToolUp.RAG.SparseAnalysis+ISparseAnalyzer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.ISparseIndex+ISparseIndex
+ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.factory(System.String, ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.RAG.SparseAnalysis+ISparseAnalyzer) : ToolUp.Platform.Infra.ISparseIndex+ISparseIndex
+ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.health(ToolUp.Platform.Infra.ISparseIndex+ISparseIndex) : ToolUp.Platform.HealthChecks+IHealthCheck
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+AnalyzerMapping (class)
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+AnalyzerMapping.EnglishConfiguration : System.String (literal)
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+AnalyzerMapping.IdentityConfiguration : System.String (literal)
@@ -34,7 +34,7 @@ ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextIndexExcepti
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextIndexException..ctor(System.String)
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextIndexException.message : System.String { get }
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextIndexHealthCheck (class)
-ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextIndexHealthCheck..ctor(ToolUp.Platform.ISparseIndex+ISparseIndex)
+ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextIndexHealthCheck..ctor(ToolUp.Platform.Infra.ISparseIndex+ISparseIndex)
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions (class)
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions..ctor(System.String, ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+FullTextSchemaMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
 ToolUp.SparseIndices.Postgres.PostgresFullTextIndex+PostgresFullTextOptions.CommandTimeoutSeconds : System.Int32 { get }

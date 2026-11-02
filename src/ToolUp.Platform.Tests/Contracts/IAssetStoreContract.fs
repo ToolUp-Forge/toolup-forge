@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IAssetStoreContract
 open System
 open Expecto
 open ToolUp.AssetStore
+open ToolUp.Platform.Infra
 
 // ─── IAssetStore contract pack ──────────────────────────────────
 //

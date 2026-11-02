@@ -16,6 +16,8 @@ open ToolUp.AuthProviders.LdapConfig
 open ToolUp.AuthProviders.LdapDirectory
 open ToolUp.AuthProviders.LdapGroupMapper
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── LDAP / Active Directory auth-provider tests ─────────────────────
 //

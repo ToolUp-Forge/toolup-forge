@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.ExperimentSubstrateTests
 open Expecto
 open ToolUp.Experiments
 open ToolUp.Experiments.Server
+open ToolUp.Platform.Infra
 
 // ─── Phase 242 — A/B experiment substrate ────────────────────────────
 //

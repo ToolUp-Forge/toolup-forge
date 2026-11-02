@@ -1,4 +1,4 @@
-module ToolUp.Platform.ShareTokenStore
+module ToolUp.Platform.Scope.ShareTokenStore
 
 open System
 open System.Security.Cryptography
@@ -9,6 +9,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Storage layout ──────────────────────────────────────────────────
 //

@@ -9,9 +9,10 @@ open System.Text.Json
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── Phase 448 — IDatasetStore conformance ──────────────────────────────
 //

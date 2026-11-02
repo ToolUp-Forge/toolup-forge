@@ -7,6 +7,9 @@ open System
 open System.Reflection
 open Microsoft.FSharp.Reflection
 open PeerReflection
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Layer 4 — typed initiator proxy ─────────────────────────────────
 //

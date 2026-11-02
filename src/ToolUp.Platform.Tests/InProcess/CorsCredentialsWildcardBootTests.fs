@@ -5,9 +5,10 @@ open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Options
 open ToolUp.Platform
-open ToolUp.Platform.ComposeRuntimeServices
+open ToolUp.Platform.Compose.ComposeRuntimeServices
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Config
 
 // ─── Phase 462 — CORS credentials × wildcard: refuse at boot ─────────
 //

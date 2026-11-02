@@ -6,6 +6,7 @@ module ToolUp.Algorithms.Tests.InProcess.ReferenceProvider
 open ToolUp.Algorithms
 open ToolUp.Algorithms.AlgorithmTypes
 open ToolUp.Algorithms.AlgorithmOperations
+open ToolUp.Platform.Infra
 
 // ─── Phase 11.E.2 — the in-test reference provider ──────────────────
 //

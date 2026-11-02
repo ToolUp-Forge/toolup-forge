@@ -4,6 +4,9 @@
 namespace ToolUp.Facts
 
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── RecomputeJobHandler (Phase 561 — reactive fact recomputation) ────
 //

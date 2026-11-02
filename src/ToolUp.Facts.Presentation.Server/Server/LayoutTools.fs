@@ -19,6 +19,10 @@ open ToolUp.Platform.Grounding
 open ToolUp.AI.Wire
 open ToolUp.Facts
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Compose
 
 // ─── The layout tools ──────────────────────────────────────────────
 //

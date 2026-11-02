@@ -3,9 +3,11 @@
 
 namespace ToolUp.ContentAuthoring
 
+open ToolUp.Platform.Infra
+
 open ToolUp.Platform // 0.5.0 — forge-native auth + audit attributes
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.PublicRendering
 
 // ─── Phase 89 — content authoring admin API ───────────────────────────

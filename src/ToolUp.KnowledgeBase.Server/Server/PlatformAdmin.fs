@@ -10,6 +10,8 @@ open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 4b — Platform KB write surface ─────────────────────────────
 //

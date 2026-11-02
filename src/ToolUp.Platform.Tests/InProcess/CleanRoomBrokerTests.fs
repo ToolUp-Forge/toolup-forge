@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.CleanRoomBrokerTests
 
 open Expecto
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 18b — clean-room privacy-gate broker ──────────────────────
 //

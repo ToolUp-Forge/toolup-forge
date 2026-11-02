@@ -4,8 +4,10 @@ open System
 open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
 
 /// Bind the `IPermissionStore` contract test pack to the blob-backed
 /// `PermissionStore`. Each factory call creates a fresh temp-dir

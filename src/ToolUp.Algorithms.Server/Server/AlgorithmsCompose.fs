@@ -6,9 +6,10 @@ module ToolUp.Algorithms.AlgorithmsCompose
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Compose.Server
 open ToolUp.Algorithms.AlgorithmCatalogApiHandler
+open ToolUp.Platform.Compose
 
 // ─── The algorithms companion: `AlgorithmsOptions` + `withAlgorithms` ─
 //

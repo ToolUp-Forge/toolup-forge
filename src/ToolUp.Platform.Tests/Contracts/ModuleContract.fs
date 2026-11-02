@@ -7,6 +7,7 @@ open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Compose
 
 // ─── Phase 582 — IModuleContract conformance pack ─────────────────────
 //

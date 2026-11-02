@@ -132,6 +132,7 @@
         <Compile Include="CompilerLeversTests.fs" />
         <Compile Include="BuildCensusTests.fs" />
         <Compile Include="ServerPartsBaselineTests.fs" />
+        <Compile Include="SubsystemNamespacesTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

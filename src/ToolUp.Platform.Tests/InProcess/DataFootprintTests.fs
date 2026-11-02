@@ -5,9 +5,11 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.DataFootprintDerivation
-open ToolUp.Platform.DataFootprintPreflight
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Compose.DataFootprintDerivation
+open ToolUp.Platform.Compose.DataFootprintPreflight
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 433 — component data-footprint manifest ────────────────────
 //

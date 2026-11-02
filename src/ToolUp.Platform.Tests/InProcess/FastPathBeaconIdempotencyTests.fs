@@ -9,6 +9,8 @@ open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.FastPathBeaconHandler
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 6j.E — beacon endpoint idempotency ────────────────────
 //

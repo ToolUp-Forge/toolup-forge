@@ -38,6 +38,8 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 let private run = Async.RunSynchronously
 

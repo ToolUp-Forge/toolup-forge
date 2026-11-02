@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
 
 open System
 open System.Security.Cryptography
@@ -11,7 +11,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.DataProtection
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 9j — CSRF / cross-origin POST guard ───────────────────────
 //

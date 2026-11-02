@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
 open ToolUp.AI
+open ToolUp.Platform.Infra
 
 // ─── Phase 43.A — legacy `ai-config.json` migration decorator ────
 //

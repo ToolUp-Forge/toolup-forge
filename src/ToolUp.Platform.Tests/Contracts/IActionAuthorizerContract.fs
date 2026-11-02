@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IActionAuthorizerContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 // ─── Phase 113 — IActionAuthorizer contract pack ──────────────────────
 //

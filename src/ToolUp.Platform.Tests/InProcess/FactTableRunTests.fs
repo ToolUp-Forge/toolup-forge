@@ -19,6 +19,8 @@ open Expecto
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 let private t0 = DateTime(2026, 10, 30, 9, 0, 0, DateTimeKind.Utc)
 

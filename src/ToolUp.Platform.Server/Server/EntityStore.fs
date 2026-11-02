@@ -1,4 +1,4 @@
-module ToolUp.Platform.EntityStore
+module ToolUp.Platform.Infra.EntityStore
 
 open System
 open System.Collections.Concurrent
@@ -8,12 +8,12 @@ open Microsoft.FSharp.Reflection
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.SecondaryIndex
+open ToolUp.Platform.Infra.SecondaryIndex
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.ISparseIndex
 
 // ─── Phase 19 — BlobEntityStore default implementation ─────────────
 //

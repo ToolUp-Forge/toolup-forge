@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.GrantNotification
+module ToolUp.Platform.Jobs.GrantNotification
 
 open System
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
 
 // ─── Grant-event notification to affected principals (Phase 556) ─────
 //

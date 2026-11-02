@@ -4,7 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.RateLimit.AzureTableStorage.AzureTableRateLimitStore (class)
-ToolUp.RateLimit.AzureTableStorage.AzureTableRateLimitStore.create(ToolUp.RateLimit.AzureTableStorage.Options, ToolUp.Platform.ILogger) : ToolUp.Platform.IRateLimitStore
+ToolUp.RateLimit.AzureTableStorage.AzureTableRateLimitStore.create(ToolUp.RateLimit.AzureTableStorage.Options, ToolUp.Platform.ILogger) : ToolUp.Platform.Infra.IRateLimitStore
 ToolUp.RateLimit.AzureTableStorage.Options (class)
 ToolUp.RateLimit.AzureTableStorage.Options..ctor(System.String, System.String, System.Int32, System.Int32)
 ToolUp.RateLimit.AzureTableStorage.Options.ConnectionString : System.String { get }

@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.LineageStoreTests
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 /// Bind the `ILineageStore` contract test pack to
 /// `EventStoreLineageStore` over a fresh `InMemoryEventStore` per

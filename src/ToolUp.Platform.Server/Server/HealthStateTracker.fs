@@ -1,4 +1,4 @@
-module ToolUp.Platform.HealthStateTracker
+module ToolUp.Platform.Infra.HealthStateTracker
 
 open System
 open System.Collections.Concurrent

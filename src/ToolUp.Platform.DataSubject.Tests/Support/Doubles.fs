@@ -7,8 +7,11 @@ open System
 open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.DataSubjectRequestApiHandler
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// In-memory `IBlobStorage` for the background-export-store tests.
 type InMemoryBlobStorage() =

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.GrantPolicyGuard
+module ToolUp.Platform.Scope.GrantPolicyGuard
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 
 // ─── Module-declared grant policy (Phase 551) ────────────────────────
 //

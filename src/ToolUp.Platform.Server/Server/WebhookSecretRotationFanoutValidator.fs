@@ -1,9 +1,10 @@
-module ToolUp.Platform.WebhookSecretRotationFanoutValidator
+module ToolUp.Platform.Jobs.WebhookSecretRotationFanoutValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 464 tail — webhook signing-secret rotation across instances ──
 //

@@ -7,5 +7,5 @@ ToolUp.Encryption.AwsKms.AwsKmsKeyResolver (class)
 ToolUp.Encryption.AwsKms.AwsKmsKeyResolver..ctor(Amazon.KeyManagementService.IAmazonKeyManagementService, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String])
 ToolUp.Encryption.AwsKms.AwsKmsKeyResolver..ctor(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String)
 ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule (class)
-ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule.create(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver
-ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule.createPerScope(Amazon.KeyManagementService.IAmazonKeyManagementService, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String]) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver
+ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule.create(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String) : ToolUp.Platform.Infra.BlobEncryption+IBlobEncryptionKeyResolver
+ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule.createPerScope(Amazon.KeyManagementService.IAmazonKeyManagementService, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String]) : ToolUp.Platform.Infra.BlobEncryption+IBlobEncryptionKeyResolver

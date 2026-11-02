@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ComposeObservability
+module ToolUp.Platform.Compose.ComposeObservability
 
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── compose phase: observability substrate ─────────────────────────────
 //

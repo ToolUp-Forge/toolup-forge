@@ -13,6 +13,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Observability
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 9w — Datadog readback contract pack ───────────────────────
 //

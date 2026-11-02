@@ -15,7 +15,10 @@
 /// constraint / pattern / choice validation composes a richer
 /// `IMappingDryRunValidator` (e.g. `ToolUp.Tabular`-backed) over the
 /// same seam.
-module ToolUp.Platform.MappingDryRunValidator
+module ToolUp.Platform.Config.MappingDryRunValidator
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 open System
 open System.Globalization

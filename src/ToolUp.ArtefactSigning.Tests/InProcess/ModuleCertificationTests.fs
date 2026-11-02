@@ -8,6 +8,9 @@ open System.Security.Cryptography
 open Expecto
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 589 — certified-surface module binding stamp ──────────────────
 //

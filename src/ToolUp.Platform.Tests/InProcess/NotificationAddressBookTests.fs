@@ -4,6 +4,8 @@ open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 /// Bind `INotificationAddressBookContract` to the SDK-default
 /// `BlobBackedNotificationAddressBook` over a `LocalFileStorage`

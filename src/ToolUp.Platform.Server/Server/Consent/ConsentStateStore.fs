@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Consent.ConsentStateStore
+module ToolUp.Platform.Audit.Consent.ConsentStateStore
 
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 159 — durable per-subject consent persistence ───────────
 //

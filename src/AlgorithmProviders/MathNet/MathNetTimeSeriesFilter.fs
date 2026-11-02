@@ -7,6 +7,7 @@ open MathNet.Numerics.Statistics
 open ToolUp.Algorithms
 open ToolUp.Algorithms.AlgorithmOperations
 open ToolUp.AlgorithmProviders.MathNetAlgorithmSupport
+open ToolUp.Platform.Infra
 
 // ─── Phase 11.E.3 — ITimeSeriesFilter over Math.NET ─────────────────
 //

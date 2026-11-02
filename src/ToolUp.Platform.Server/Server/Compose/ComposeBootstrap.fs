@@ -1,4 +1,4 @@
-module ToolUp.Platform.ComposeBootstrap
+module ToolUp.Platform.Compose.ComposeBootstrap
 
 open Giraffe
 open Microsoft.AspNetCore.Builder
@@ -8,7 +8,10 @@ open Microsoft.Extensions.DependencyInjection.Extensions
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.ConfigurePipeline
+open ToolUp.Platform.Compose.ConfigurePipeline
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── compose phase: finalisation + Build ─────────────────────────────
 //

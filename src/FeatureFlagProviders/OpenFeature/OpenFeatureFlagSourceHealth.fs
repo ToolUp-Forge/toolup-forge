@@ -6,6 +6,7 @@ module ToolUp.FeatureFlagProviders.OpenFeature.Health
 open System
 open OpenFeature
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Config
 
 // ─── Phase 239 — OpenFeature flag-source readiness probe ─────────────
 //

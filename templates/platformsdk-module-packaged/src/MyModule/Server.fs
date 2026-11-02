@@ -3,8 +3,9 @@ module MODULE_NAMESPACE_ROOT.Server
 open System
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open MODULE_NAMESPACE_ROOT.SharedTypes
+open ToolUp.Platform.Compose
 
 // ─── Server tier ─────────────────────────────────────────────────
 //

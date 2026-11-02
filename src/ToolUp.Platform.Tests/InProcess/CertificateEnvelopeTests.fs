@@ -10,6 +10,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Facts
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
 
 // ─── Grounding-certificate envelope export (standard-statement interop) ─
 //

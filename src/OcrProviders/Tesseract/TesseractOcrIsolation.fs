@@ -8,8 +8,9 @@ open System.Buffers.Binary
 open System.IO
 open System.Text
 open ToolUp.Companions.Isolation
-open ToolUp.Platform.IOcrProvider
+open ToolUp.Platform.Infra.IOcrProvider
 open ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider
+open ToolUp.Platform.Infra
 
 // ─── Phase 687 — the OCR upload path, isolated ────────────────────────
 //

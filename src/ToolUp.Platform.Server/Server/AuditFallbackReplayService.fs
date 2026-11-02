@@ -1,4 +1,4 @@
-module ToolUp.Platform.AuditFallbackReplayService
+module ToolUp.Platform.Audit.AuditFallbackReplayService
 
 open System
 open System.Threading

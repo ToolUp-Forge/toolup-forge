@@ -6,6 +6,7 @@ open ToolUp.Platform
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
 open Toolup.Samples.ToyTreeBinding.ToyNode
+open ToolUp.Platform.Compose
 
 // ─── Phase 276 — hosted-tree navigation/route contract ─────────────────
 //

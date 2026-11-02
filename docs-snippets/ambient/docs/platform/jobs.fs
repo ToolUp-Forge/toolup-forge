@@ -1,3 +1,4 @@
+open ToolUp.Platform.Jobs
 // Ambient context for `docs/platform/jobs.md`.
 //
 // The handler example reads the module's own payload DTO, its parser, and

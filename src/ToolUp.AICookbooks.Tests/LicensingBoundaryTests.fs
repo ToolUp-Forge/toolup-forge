@@ -6,6 +6,7 @@ module ToolUp.AICookbooks.Tests.LicensingBoundaryTests
 open System.IO
 open Expecto
 open ToolUp.AI.SystemPromptBuilder
+open ToolUp.Platform.Infra
 
 // The builders ignore the PromptContext (they return content read once at
 // construction), so an unchecked default is a safe test seam that avoids

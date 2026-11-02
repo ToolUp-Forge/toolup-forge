@@ -25,8 +25,8 @@ ToolUp.DataSources.Synapse.SynapseCatalogue.toColumnType(System.String) : DataMa
 ToolUp.DataSources.Synapse.SynapseDataSource (class)
 ToolUp.DataSources.Synapse.SynapseDataSource.Kind : System.String (literal)
 ToolUp.DataSources.Synapse.SynapseDataSource.composeConnectionString(ToolUp.DataSources.Synapse.SynapseSourceSettings, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
-ToolUp.DataSources.Synapse.SynapseDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IDataSource
-ToolUp.DataSources.Synapse.SynapseDataSource.createWithDefaultCredentials() : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Synapse.SynapseDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Synapse.SynapseDataSource.createWithDefaultCredentials() : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Synapse.SynapseDataSource.parseAuth(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Synapse.SynapseAuth, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Synapse.SynapseDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Synapse.SynapseSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Synapse.SynapseDataSource.resolveStatement(ToolUp.DataSources.Synapse.SynapseSourceSettings, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]

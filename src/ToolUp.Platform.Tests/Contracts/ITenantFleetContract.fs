@@ -3,7 +3,9 @@ module ToolUp.Platform.Tests.Contracts.ITenantFleetContract
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.TenantEntity
+open ToolUp.Platform.Infra.TenantEntity
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 26 ITenantFleet contract tests ───────────────────────────
 //

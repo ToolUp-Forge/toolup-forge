@@ -1,3 +1,4 @@
+open ToolUp.Platform.Compose
 // Ambient context for `src/ToolUp.Platform/technical-guide/12-hosting-models.md`.
 //
 // The three worked examples share one composition root, shown in the

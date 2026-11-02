@@ -7,6 +7,9 @@ open System
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 490 — the enforced activation pipeline ─────────────────────
 //

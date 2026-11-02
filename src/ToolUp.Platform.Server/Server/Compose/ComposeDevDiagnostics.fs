@@ -1,9 +1,13 @@
-module ToolUp.Platform.ComposeDevDiagnostics
+module ToolUp.Platform.Compose.ComposeDevDiagnostics
 
 open Giraffe
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── compose phase: dev-diagnostics capture ──────────────────────────
 //

@@ -5,6 +5,7 @@ module ToolUp.Platform.Classification.Tests.Contracts.IFieldClassifierContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 /// Phase 41 — contract assertions every `IFieldClassifier` implementation
 /// must satisfy. The factory returns a classifier seeded with a known

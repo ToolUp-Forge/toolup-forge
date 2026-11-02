@@ -7,6 +7,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 /// Phase 1039 — why a page's layout could not be resolved. Every site that
 /// frames a page (the page handler, `/preview`, `/search`, static export,

@@ -1,4 +1,4 @@
-module ToolUp.Platform.ConfigDriftDetector
+module ToolUp.Platform.Config.ConfigDriftDetector
 
 open System
 open System.Security.Cryptography

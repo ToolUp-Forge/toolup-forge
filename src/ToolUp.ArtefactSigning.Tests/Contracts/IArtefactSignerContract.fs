@@ -5,6 +5,7 @@ module ToolUp.ArtefactSigning.Tests.Contracts.IArtefactSignerContract
 
 open Expecto
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
 
 /// Phase 40 — contract assertions every `IArtefactSigner` +
 /// `IArtefactVerifier` pair must satisfy, in-process or KMS-backed. The

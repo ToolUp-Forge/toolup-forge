@@ -9,6 +9,9 @@ open System.Net.Http
 open System.Text.Json
 open System.Threading.Tasks
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Narrow GitHub REST facade ───────────────────────────────────────
 //

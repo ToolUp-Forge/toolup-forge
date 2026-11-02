@@ -814,7 +814,7 @@ An internal GPU training service. It answers a submit with `{"job":{"id":"…"}}
 open System.Net.Http
 open ToolUp.Platform.ExternalCompute.Http
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 
 let composeTrainingCompute (secrets: ISecretStore) (httpClient: HttpClient) (logger: ILogger) =
     let jobs = "https://training.internal/api/jobs"

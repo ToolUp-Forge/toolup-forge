@@ -10,6 +10,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.ToolHelpers
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Compose
 
 /// Built-in AI tools for surfacing narrative output produced on other
 /// pages or earlier in the session. The assistant can list the user's

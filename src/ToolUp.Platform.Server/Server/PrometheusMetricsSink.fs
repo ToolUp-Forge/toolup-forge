@@ -1,9 +1,10 @@
-namespace ToolUp.Platform.Metrics
+namespace ToolUp.Platform.Infra.Metrics
 
 open System
 open System.Collections.Concurrent
 open System.Text
 open ToolUp.Platform
+open ToolUp.Platform.Metrics
 
 // ─── PrometheusMetricsSink — Phase 9e default in-process sink ───────
 //

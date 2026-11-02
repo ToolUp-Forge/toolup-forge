@@ -20,6 +20,7 @@ module ToolUp.Platform.Tests.InProcess.ReportSubscriptionEarlierNames
 open Expecto
 open ToolUp.Platform
 open ToolUp.Reporting
+open ToolUp.Platform.Jobs
 
 let earlierPrincipalNameTest = test "the standing-subscription principal IS the shared declared principal (Phase 1029)" {
     let earlier: StandingSubscriptionPrincipal = {

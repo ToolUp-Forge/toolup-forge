@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.RecurrenceExpander
+open ToolUp.Platform.Infra
 
 // ─── RecurrenceExpander — pure unit tests ────────────────────────
 //

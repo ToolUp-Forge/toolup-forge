@@ -1,4 +1,6 @@
-module ToolUp.Platform.SecondaryIndex
+module ToolUp.Platform.Infra.SecondaryIndex
+
+open ToolUp.Platform
 
 open ToolUp.Platform.BlobStorage
 

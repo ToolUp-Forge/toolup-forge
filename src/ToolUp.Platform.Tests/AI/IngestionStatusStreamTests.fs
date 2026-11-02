@@ -7,6 +7,7 @@ open Expecto
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerIngestionStatusStream
+open ToolUp.Platform.Jobs
 
 // ─── Phase 69c.tail D — KB ingestion status as a typed stream ─────
 //

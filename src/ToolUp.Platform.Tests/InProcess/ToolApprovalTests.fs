@@ -41,6 +41,8 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Test-only fakes ──────────────────────────────────────────────────
 

@@ -8,8 +8,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 // ─── Phase 70 — PlatformAIKeysApi handler RBAC tests ─────────────
 //

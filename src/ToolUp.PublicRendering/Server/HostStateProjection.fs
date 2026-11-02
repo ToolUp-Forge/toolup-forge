@@ -4,6 +4,7 @@
 namespace ToolUp.PublicRendering
 
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Phase 264 — host-state projection (server / SSR) ──────────────────
 //

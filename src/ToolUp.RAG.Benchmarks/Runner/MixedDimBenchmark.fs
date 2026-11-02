@@ -7,11 +7,13 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.RAG.Benchmarks.LatencyMetrics
 open ToolUp.RAG.Benchmarks.BenchmarkRunner
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 14k WS5 Item 3 — mixed-dim fixture latency benchmark ────
 //

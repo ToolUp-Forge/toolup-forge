@@ -5,6 +5,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.AI
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 6n — AI cancel / client-tool-dispatch multi-instance ──────
 //

@@ -10,12 +10,14 @@ open System.Threading.Tasks
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.RAG.Benchmarks.BeirTypes
 open ToolUp.RAG.Benchmarks.LatencyMetrics
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 970 — HNSW at representative scale ──────────────────────
 //

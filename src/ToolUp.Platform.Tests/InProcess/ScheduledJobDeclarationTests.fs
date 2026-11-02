@@ -6,8 +6,12 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Tracing
-open ToolUp.Platform.ComposeJobs
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Compose.ComposeJobs
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 9b.B — ComposeJobs.registerScheduledJobDeclarations ────────
 //

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.DatadogReadbackHandlers
+module ToolUp.Platform.Infra.DatadogReadbackHandlers
 
 open System
 open System.Text.Json
@@ -10,6 +10,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 9w — Datadog readback endpoints ────────────────────────────
 //

@@ -12,6 +12,9 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 119 — KB upload-policy preflight ────────────────────────
 //

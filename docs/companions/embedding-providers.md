@@ -97,7 +97,7 @@ Latency: ~50-200ms per embed call (OpenAI's API). Pair with `CachingEmbeddingPro
 The SDK auto-wraps any registered `IEmbeddingProvider` with `CachingEmbeddingProvider` — LRU cache, keyed by an `EmbeddingCacheKey`: the `(ProviderId, ModelId, Dimensions)` `EmbeddingVersion` plus `SHA256(text)`.
 
 ```fsharp
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 
 type EmbeddingCacheKey = {
     Version: EmbeddingVersion

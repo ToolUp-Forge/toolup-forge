@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.WhatsAppTemplateRegistry
+module ToolUp.Platform.Jobs.WhatsAppTemplateRegistry
 
 open System
 open System.Text

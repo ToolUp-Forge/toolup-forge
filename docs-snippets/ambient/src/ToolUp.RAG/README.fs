@@ -18,11 +18,14 @@ open ToolUp.AI
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRagTelemetry
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRagTelemetry
+open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.Providers
 open ToolUp.Platform.VectorisationTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module RagReadmeAmbient =

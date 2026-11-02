@@ -1,4 +1,4 @@
-module ToolUp.Platform.SmokeTestHandler
+module ToolUp.Platform.Config.SmokeTestHandler
 
 open System
 open System.Diagnostics
@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.SmokeTests
+open ToolUp.Platform.Infra
 
 // ─── Smoke-test endpoint handler (Phase 9o) ──────────────────────────
 //

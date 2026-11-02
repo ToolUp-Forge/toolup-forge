@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Config
+
+open ToolUp.Platform
 
 /// Scope-indexed persistent store for feature flags. One JSON document
 /// per `FlagScope`; each document is a `Map<string, FlagValue>` keyed

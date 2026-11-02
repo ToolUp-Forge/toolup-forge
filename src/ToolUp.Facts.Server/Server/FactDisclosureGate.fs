@@ -10,6 +10,8 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── FactDisclosureGate (Phase 525 + Phase 562 taint) ────────────────
 //

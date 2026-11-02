@@ -4,6 +4,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 465 — the format/range gate and the retention warning ─────
 //

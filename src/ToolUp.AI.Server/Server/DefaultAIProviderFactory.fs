@@ -5,6 +5,8 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Platform-provider bundle (Phase 70 shape) ───────────────────
 

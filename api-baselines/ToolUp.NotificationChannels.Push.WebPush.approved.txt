@@ -5,10 +5,10 @@
 # still be folded into this file in the same PR.
 ToolUp.Platform.NotificationChannels.Push.WebPush (class)
 ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSink (class)
-ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSink..ctor(ToolUp.Platform.INotificationAddressBook, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSink..ctor(ToolUp.Platform.Jobs.INotificationAddressBook, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSinkModule (class)
-ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSinkModule.create(ToolUp.Platform.INotificationAddressBook, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationSink
-ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSinkModule.fromEnv(ToolUp.Platform.INotificationAddressBook, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationSink
+ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSinkModule.create(ToolUp.Platform.Jobs.INotificationAddressBook, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Jobs.INotificationSink
+ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushNotificationSinkModule.fromEnv(ToolUp.Platform.Jobs.INotificationAddressBook, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Jobs.INotificationSink
 ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushSettings (class)
 ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushSettings..ctor(System.String, System.String)
 ToolUp.Platform.NotificationChannels.Push.WebPush+WebPushSettings.VapidPublicKey : System.String { get }

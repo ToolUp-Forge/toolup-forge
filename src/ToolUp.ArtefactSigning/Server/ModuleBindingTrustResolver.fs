@@ -6,6 +6,7 @@ namespace ToolUp.ArtefactSigning
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Compose
 
 // Aliased (not opened) so this module's `Result` `Ok`/`Error` are not
 // shadowed by `ValidationResult.Ok`/`Error`.

@@ -27,9 +27,9 @@ ToolUp.DataSources.Sql.SqlBackend+Tags.Sqlite : System.Int32 (literal)
 ToolUp.DataSources.Sql.SqlDataSource (class)
 ToolUp.DataSources.Sql.SqlDataSource.Kind : System.String (literal)
 ToolUp.DataSources.Sql.SqlDataSource.composeConnectionString(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
-ToolUp.DataSources.Sql.SqlDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IDataSource
-ToolUp.DataSources.Sql.SqlDataSource.createWithKind(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore]) : ToolUp.Platform.IDataSource
-ToolUp.DataSources.Sql.SqlDataSource.createWithoutSecrets() : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Sql.SqlDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Sql.SqlDataSource.createWithKind(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore]) : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Sql.SqlDataSource.createWithoutSecrets() : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Sql.SqlDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDataSource.resolveStatement(ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings (class)

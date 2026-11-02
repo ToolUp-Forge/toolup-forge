@@ -3,7 +3,7 @@ module ToolUp.Forms.Tests.InProcess.WorkflowEngineTests
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.IFormStore
 open ToolUp.Forms.IWorkflowEngine
@@ -15,6 +15,10 @@ open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Forms.Tests.InProcess.InMemoryAuditLog
 open ToolUp.Forms.Tests.Contracts
 open ToolUp.Forms.Tests.Contracts.IWorkflowEngineContract
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// Minimal `IServiceProvider` returning `null` for every type. The
 /// engine constructor stores the provider for use by guards / actions

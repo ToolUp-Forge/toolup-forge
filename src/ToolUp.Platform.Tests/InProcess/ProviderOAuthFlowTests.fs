@@ -7,6 +7,10 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Support
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 43.B — the Claude + OpenAI reference provider flows ─────
 //

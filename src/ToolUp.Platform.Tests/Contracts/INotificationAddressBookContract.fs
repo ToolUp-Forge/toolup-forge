@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.Contracts.INotificationAddressBookContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 /// Cross-implementation contract for `INotificationAddressBook`.
 /// Phase 6f — bound by every concrete `INotificationAddressBook`

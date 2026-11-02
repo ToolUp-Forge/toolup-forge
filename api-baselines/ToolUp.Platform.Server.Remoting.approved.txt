@@ -3,23 +3,6 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
-ToolUp.Platform.HttpBodyBinding (class)
-ToolUp.Platform.HttpBodyBinding.statusCodeFor(ToolUp.Platform.HttpBodyBinding+BodyBindError) : System.Int32
-ToolUp.Platform.HttpBodyBinding.tryBindJsonString`1(System.Text.Json.JsonSerializerOptions, System.String) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.HttpBodyBinding+BodyBindError]
-ToolUp.Platform.HttpBodyBinding.tryBindJson`1(System.Text.Json.JsonSerializerOptions, Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.HttpBodyBinding+BodyBindError]]
-ToolUp.Platform.HttpBodyBinding+BodyBindError (class)
-ToolUp.Platform.HttpBodyBinding+BodyBindError.BodyNull : ToolUp.Platform.HttpBodyBinding+BodyBindError { get }
-ToolUp.Platform.HttpBodyBinding+BodyBindError.IsBodyMalformed : System.Boolean { get }
-ToolUp.Platform.HttpBodyBinding+BodyBindError.IsBodyNull : System.Boolean { get }
-ToolUp.Platform.HttpBodyBinding+BodyBindError.Tag : System.Int32 { get }
-ToolUp.Platform.HttpBodyBinding+BodyBindError+BodyMalformed (class)
-ToolUp.Platform.HttpBodyBinding+BodyBindError+BodyMalformed.detail : System.String { get }
-ToolUp.Platform.HttpBodyBinding+BodyBindError+Tags (class)
-ToolUp.Platform.HttpBodyBinding+BodyBindError+Tags.BodyMalformed : System.Int32 (literal)
-ToolUp.Platform.HttpBodyBinding+BodyBindError+Tags.BodyNull : System.Int32 (literal)
-ToolUp.Platform.HttpBodyBinding+BodyBindErrorModule (class)
-ToolUp.Platform.HttpBodyBinding+BodyBindErrorModule.describe(ToolUp.Platform.HttpBodyBinding+BodyBindError) : System.String
-ToolUp.Platform.HttpBodyBinding+BodyBindErrorModule.reason(ToolUp.Platform.HttpBodyBinding+BodyBindError) : System.String
 ToolUp.Remoting.AspNetCore.AppBuilderExtensions (class)
 ToolUp.Remoting.AspNetCore.AppBuilderExtensions.IApplicationBuilder.UseRemoting`1(Microsoft.AspNetCore.Builder.IApplicationBuilder, ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, t]) : System.Void
 ToolUp.Remoting.AspNetCore.Extensions (class)
@@ -477,6 +460,23 @@ ToolUp.Remoting.Server.GeneratedInvocationTable`1.Methods : Microsoft.FSharp.Col
 ToolUp.Remoting.Server.GeneratedMethod`1 (class)
 ToolUp.Remoting.Server.GeneratedMethod`1.FlattenedTypes : System.Type[] { get }
 ToolUp.Remoting.Server.GeneratedMethod`1.Name : System.String { get }
+ToolUp.Remoting.Server.Http.HttpBodyBinding (class)
+ToolUp.Remoting.Server.Http.HttpBodyBinding.statusCodeFor(ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError) : System.Int32
+ToolUp.Remoting.Server.Http.HttpBodyBinding.tryBindJsonString`1(System.Text.Json.JsonSerializerOptions, System.String) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError]
+ToolUp.Remoting.Server.Http.HttpBodyBinding.tryBindJson`1(System.Text.Json.JsonSerializerOptions, Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError]]
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError (class)
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError.BodyNull : ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError { get }
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError.IsBodyMalformed : System.Boolean { get }
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError.IsBodyNull : System.Boolean { get }
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError+BodyMalformed (class)
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError+BodyMalformed.detail : System.String { get }
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError+Tags (class)
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError+Tags.BodyMalformed : System.Int32 (literal)
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError+Tags.BodyNull : System.Int32 (literal)
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindErrorModule (class)
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindErrorModule.describe(ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError) : System.String
+ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindErrorModule.reason(ToolUp.Remoting.Server.Http.HttpBodyBinding+BodyBindError) : System.String
 ToolUp.Remoting.Server.IAuditEmitter (interface)
 ToolUp.Remoting.Server.IAuditEmitter.Emit(ToolUp.Remoting.Server.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.Server.IAuthContext (interface)

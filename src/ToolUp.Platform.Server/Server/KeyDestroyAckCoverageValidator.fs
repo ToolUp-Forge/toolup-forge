@@ -1,9 +1,9 @@
-module ToolUp.Platform.KeyDestroyAckCoverageValidator
+module ToolUp.Platform.Config.KeyDestroyAckCoverageValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ConfigValidation
 
 // ─── Phase 22b — crypto-shred acknowledgement coverage ───────────────

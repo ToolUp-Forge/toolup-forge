@@ -4,7 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.AI.UiAwareness.Server.AICompose (class)
-ToolUp.AI.UiAwareness.Server.AICompose.register(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.UiAwareness.Server.AICompose.register(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.AI.UiAwareness.Server.AICompose.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
 ToolUp.AI.UiAwareness.Server.InspectActiveModuleTool (class)
 ToolUp.AI.UiAwareness.Server.InspectActiveModuleTool.serverExecutor(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]

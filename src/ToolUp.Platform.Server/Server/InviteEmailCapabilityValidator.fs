@@ -1,9 +1,10 @@
-module ToolUp.Platform.InviteEmailCapabilityValidator
+module ToolUp.Platform.Scope.InviteEmailCapabilityValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 247 — invite-by-email capability preflight ────────────────
 //

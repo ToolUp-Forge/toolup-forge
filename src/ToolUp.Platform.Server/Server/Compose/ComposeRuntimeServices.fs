@@ -1,4 +1,4 @@
-module ToolUp.Platform.ComposeRuntimeServices
+module ToolUp.Platform.Compose.ComposeRuntimeServices
 
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.DataProtection
@@ -7,10 +7,16 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Files
 
 // ─── compose phase: runtime services ─────────────────────────────────
 //

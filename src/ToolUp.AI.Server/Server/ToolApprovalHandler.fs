@@ -11,6 +11,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Phase 503 — `POST /api/ai/tool-approval`.
 ///

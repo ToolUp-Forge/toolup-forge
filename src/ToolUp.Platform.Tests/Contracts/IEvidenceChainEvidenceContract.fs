@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IEvidenceChainEvidenceContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── IEvidenceChainEvidence contract pack (Phase 944) ─────────────────
 //

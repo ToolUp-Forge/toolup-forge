@@ -41,8 +41,10 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.GrantNotification
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Jobs.GrantNotification
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

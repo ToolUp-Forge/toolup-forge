@@ -12,6 +12,8 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 114 — multi-host site registry ────────────────────────────
 //

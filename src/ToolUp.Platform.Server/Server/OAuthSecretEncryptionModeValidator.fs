@@ -1,4 +1,4 @@
-module ToolUp.Platform.OAuthSecretEncryptionModeValidator
+module ToolUp.Platform.Config.OAuthSecretEncryptionModeValidator
 
 open System
 open ToolUp.Platform

@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.DataVocabularyTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 594 — pinned data-vocabulary packs ─────────────────────────
 //

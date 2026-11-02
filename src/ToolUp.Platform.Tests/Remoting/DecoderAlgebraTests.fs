@@ -12,6 +12,10 @@ open ToolUp.Remoting.MsgPack
 // namespace that happens to share a name.
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Remoting.WireCorpus
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 785 — the reflection reader as oracle ─────────────────────
 //
@@ -391,16 +395,16 @@ let private registeredRecord: (string * string list * bool) list = [
 /// registry, mirror the facet, hand it to the report through the same
 /// wither a composition root uses.
 let private sectionFor
-    (profile: ToolUp.Platform.CompositionProfile)
+    (profile: ToolUp.Platform.Compose.CompositionProfile)
     (declared: (string * string list * bool) list)
     : ToolUp.Platform.DeploymentVerification.ReportSection =
     let integrity =
-        ToolUp.Platform.RemotingDecoderFacet.inspect profile declared
-        |> ToolUp.Platform.RemotingDecoderFacet.toIntegrity
+        ToolUp.Platform.Compose.RemotingDecoderFacet.inspect profile declared
+        |> ToolUp.Platform.Compose.RemotingDecoderFacet.toIntegrity
 
-    ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders (
-        ToolUp.Platform.DeploymentVerificationEvidence.none
-        |> ToolUp.Platform.DeploymentVerificationEvidence.withRemotingDecoders (Some integrity)
+    ToolUp.Platform.Compose.DeploymentVerificationReport.gatherRemotingDecoders (
+        ToolUp.Platform.Compose.DeploymentVerificationEvidence.none
+        |> ToolUp.Platform.Compose.DeploymentVerificationEvidence.withRemotingDecoders (Some integrity)
     )
 
 // ─── The pack ────────────────────────────────────────────────────────
@@ -1184,11 +1188,11 @@ let tests =
             // Phase 801 — the facet over what the composition SERVES.
             testCase "Api.make records the mounted record, and the served facet classifies it"
             <| fun () ->
-                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                ToolUp.Platform.Config.ServedApiRecords.resetForTests ()
                 RemotingDecoders.resetForTests ()
 
                 // A mount through the one entry point every mount uses.
-                ToolUp.Platform.Api.make (fun _ ->
+                ToolUp.Platform.Config.Api.make (fun _ ->
                     ({
                         Ping = fun () -> async { return "pong" }
                     }
@@ -1196,12 +1200,14 @@ let tests =
                 |> ignore
 
                 Expect.equal
-                    (ToolUp.Platform.ServedApiRecords.all ())
+                    (ToolUp.Platform.Config.ServedApiRecords.all ())
                     [ typeof<ProbeApi> ]
                     "the dispatcher's own mount is what the served set records"
 
                 let facet =
-                    ToolUp.Platform.RemotingDecoderFacet.inspectServed ToolUp.Platform.CompositionProfile.Standard []
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspectServed
+                        ToolUp.Platform.Compose.CompositionProfile.Standard
+                        []
 
                 Expect.equal
                     (facet.FacetBindings
@@ -1210,7 +1216,7 @@ let tests =
                     "the record is classified by its own method return types, undeclared or not"
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.coverage facet)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.coverage facet)
                     (0, 1)
                     "nothing registered: zero of one"
 
@@ -1218,33 +1224,33 @@ let tests =
 
             testCase "coverage is a ratio over the served set, and it moves when a record is opted in"
             <| fun () ->
-                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                ToolUp.Platform.Config.ServedApiRecords.resetForTests ()
                 RemotingDecoders.resetForTests ()
                 PlatformDecoders.registerAll ()
-                ToolUp.Platform.ServedApiRecords.record typeof<IHealthMonitorApi>
-                ToolUp.Platform.ServedApiRecords.record typeof<ProbeApi>
+                ToolUp.Platform.Config.ServedApiRecords.record typeof<IHealthMonitorApi>
+                ToolUp.Platform.Config.ServedApiRecords.record typeof<ProbeApi>
 
                 let before =
-                    ToolUp.Platform.RemotingDecoderFacet.inspectServedPlatform
-                        ToolUp.Platform.CompositionProfile.Verified
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspectServedPlatform
+                        ToolUp.Platform.Compose.CompositionProfile.Verified
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.coverage before)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.coverage before)
                     (1, 2)
                     "one served record decodes through the algebra, one does not"
 
                 Expect.stringContains
-                    (ToolUp.Platform.RemotingDecoderFacet.describe before)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.describe before)
                     "1 of 2 served API record(s)"
                     "the boot line carries the ratio"
 
                 // Under the verified profile the SERVED record with no
                 // decoder is what refuses — not a declared one.
-                match ToolUp.Platform.RemotingDecoderFacet.verify before with
+                match ToolUp.Platform.Compose.RemotingDecoderFacet.verify before with
                 | Ok() -> failtest "a served record with no decoder must refuse under the verified profile"
                 | Error refusal ->
                     Expect.stringContains
-                        (ToolUp.Platform.CompositionProfileRefusal.describe refusal)
+                        (ToolUp.Platform.Compose.CompositionProfileRefusal.describe refusal)
                         "ProbeApi"
                         "the refusal names the served record"
 
@@ -1252,16 +1258,16 @@ let tests =
                 RemotingDecoders.register<string> Decode.asString
 
                 let after =
-                    ToolUp.Platform.RemotingDecoderFacet.inspectServedPlatform
-                        ToolUp.Platform.CompositionProfile.Verified
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspectServedPlatform
+                        ToolUp.Platform.Compose.CompositionProfile.Verified
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.coverage after)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.coverage after)
                     (2, 2)
                     "the ratio moved with the registration"
 
                 Expect.isOk
-                    (ToolUp.Platform.RemotingDecoderFacet.verify after)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.verify after)
                     "and the verified profile admits the composition"
 
                 // Corpus coverage stays DECLARED: the platform record
@@ -1275,24 +1281,24 @@ let tests =
                     [ "IHealthMonitorApi", true; "ProbeApi", false ]
                     "a served record proves nothing about corpus coverage; the declaration does"
 
-                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                ToolUp.Platform.Config.ServedApiRecords.resetForTests ()
 
             testCase "under the verified profile, an unregistered record REFUSES the boot"
             <| fun () ->
                 PlatformDecoders.registerAll ()
 
                 let facet =
-                    ToolUp.Platform.RemotingDecoderFacet.inspect
-                        ToolUp.Platform.CompositionProfile.Verified
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspect
+                        ToolUp.Platform.Compose.CompositionProfile.Verified
                         unregisteredRecord
 
                 Expect.isTrue facet.FacetRequired "the verified profile must make algebra decoders mandatory"
 
-                match ToolUp.Platform.RemotingDecoderFacet.verify facet with
+                match ToolUp.Platform.Compose.RemotingDecoderFacet.verify facet with
                 | Ok() -> failtest "the verified profile admitted a record with no algebra decoder"
                 | Error refusal ->
                     Expect.stringContains
-                        (ToolUp.Platform.CompositionProfileRefusal.describe refusal)
+                        (ToolUp.Platform.Compose.CompositionProfileRefusal.describe refusal)
                         "IMadeUpApi"
                         "the refusal does not NAME the record, which is the whole of what an operator can act on"
 
@@ -1301,19 +1307,19 @@ let tests =
                 PlatformDecoders.registerAll ()
 
                 let facet =
-                    ToolUp.Platform.RemotingDecoderFacet.inspect
-                        ToolUp.Platform.CompositionProfile.Standard
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspect
+                        ToolUp.Platform.Compose.CompositionProfile.Standard
                         unregisteredRecord
 
                 Expect.isFalse facet.FacetRequired "the standard profile must not make algebra decoders mandatory"
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.verify facet)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.verify facet)
                     (Ok())
                     "the standard profile refused a boot over a facet that is advisory there"
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.reflectionRecords facet)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.reflectionRecords facet)
                     [ "IMadeUpApi" ]
                     "the facet stopped reporting the record it does not refuse over — informational is not silent"
 
@@ -1323,10 +1329,12 @@ let tests =
                 // deployment that upgrades to this SDK version declares
                 // nothing to the facet and must boot exactly as it did.
                 let facet =
-                    ToolUp.Platform.RemotingDecoderFacet.inspect ToolUp.Platform.CompositionProfile.Verified []
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspect
+                        ToolUp.Platform.Compose.CompositionProfile.Verified
+                        []
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.verify facet)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.verify facet)
                     (Ok())
                     "a facet with nothing declared refused a boot, which turns the facet into the build gate GP 13 keeps it from being"
 
@@ -1336,7 +1344,7 @@ let tests =
 
                 Expect.equal
                     (VerificationSectionVerdict.label
-                        (sectionFor ToolUp.Platform.CompositionProfile.Verified registeredRecord).Verdict)
+                        (sectionFor ToolUp.Platform.Compose.CompositionProfile.Verified registeredRecord).Verdict)
                     "verified"
                     "a record that decodes through the algebra over corpus-covered shapes did not read Verified"
 
@@ -1349,10 +1357,10 @@ let tests =
                 ]
 
                 let integrity =
-                    ToolUp.Platform.RemotingDecoderFacet.inspect
-                        ToolUp.Platform.CompositionProfile.Verified
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspect
+                        ToolUp.Platform.Compose.CompositionProfile.Verified
                         declaredUncovered
-                    |> ToolUp.Platform.RemotingDecoderFacet.toIntegrity
+                    |> ToolUp.Platform.Compose.RemotingDecoderFacet.toIntegrity
 
                 // The algebra half holds — this is a registered decoder —
                 // so the downgrade can only be the corpus half doing its
@@ -1364,7 +1372,7 @@ let tests =
 
                 Expect.equal
                     (VerificationSectionVerdict.label
-                        (sectionFor ToolUp.Platform.CompositionProfile.Verified declaredUncovered).Verdict)
+                        (sectionFor ToolUp.Platform.Compose.CompositionProfile.Verified declaredUncovered).Verdict)
                     "observed"
                     "a record whose shapes the corpus does not cover read as a verification — a deployment's own assertion about itself must never read as a pass"
 
@@ -1372,15 +1380,15 @@ let tests =
             <| fun () ->
                 Expect.equal
                     (VerificationSectionVerdict.label
-                        (sectionFor ToolUp.Platform.CompositionProfile.Verified unregisteredRecord).Verdict)
+                        (sectionFor ToolUp.Platform.Compose.CompositionProfile.Verified unregisteredRecord).Verdict)
                     "observed"
                     "the reflection path — the SDK's shipped default and every deployment's baseline before this phase — reddened the report, which is a gate that gets turned off"
 
             testCase "an evidence value that never heard of the facet reads NotComposed"
             <| fun () ->
                 let section =
-                    ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders
-                        ToolUp.Platform.DeploymentVerificationEvidence.none
+                    ToolUp.Platform.Compose.DeploymentVerificationReport.gatherRemotingDecoders
+                        ToolUp.Platform.Compose.DeploymentVerificationEvidence.none
 
                 Expect.equal
                     (VerificationSectionVerdict.label section.Verdict)
@@ -1392,15 +1400,16 @@ let tests =
                 PlatformDecoders.registerAll ()
 
                 let facet =
-                    ToolUp.Platform.RemotingDecoderFacet.inspectPlatform ToolUp.Platform.CompositionProfile.Verified
+                    ToolUp.Platform.Compose.RemotingDecoderFacet.inspectPlatform
+                        ToolUp.Platform.Compose.CompositionProfile.Verified
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.reflectionRecords facet)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.reflectionRecords facet)
                     []
                     "a platform API record this phase claims to cover is still on the reflection path"
 
                 Expect.equal
-                    (ToolUp.Platform.RemotingDecoderFacet.verify facet)
+                    (ToolUp.Platform.Compose.RemotingDecoderFacet.verify facet)
                     (Ok())
                     "the platform's own records refuse the verified profile"
         ]

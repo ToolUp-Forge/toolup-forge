@@ -1,4 +1,4 @@
-module EnvironmentSecretStore
+module ToolUp.Platform.Infra.EnvironmentSecretStore
 
 open System
 open ToolUp.Platform

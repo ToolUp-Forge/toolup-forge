@@ -1,8 +1,9 @@
-module ToolUp.Platform.BootstrapTeamValidator
+module ToolUp.Platform.Scope.BootstrapTeamValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 5f — BootstrapTeam env-pair coherence ─────────────────────
 //

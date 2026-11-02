@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.Contracts.ComponentRegistryContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 285 — IComponentRegistryContract conformance pack ──────────
 //

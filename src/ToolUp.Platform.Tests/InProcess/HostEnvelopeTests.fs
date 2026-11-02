@@ -6,6 +6,9 @@ open FSharp.Reflection
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 588 — host-envelope descriptor ─────────────────────────────
 //

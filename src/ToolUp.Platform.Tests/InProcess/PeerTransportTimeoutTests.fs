@@ -9,6 +9,8 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 312 — peer transport timeout + cancellation propagation ───
 //

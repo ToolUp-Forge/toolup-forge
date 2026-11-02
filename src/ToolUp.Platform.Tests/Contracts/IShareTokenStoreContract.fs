@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.Contracts.IShareTokenStoreContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── IShareTokenStore contract pack ──────────────────────────────────
 //

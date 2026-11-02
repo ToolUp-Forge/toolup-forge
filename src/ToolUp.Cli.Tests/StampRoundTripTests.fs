@@ -11,6 +11,8 @@ open ToolUp.Platform
 open ToolUp.ArtefactSigning
 open ToolUp.Cli
 open ToolUp.Cli.Dispatch
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 166 — stamp ↔ verify round-trip ──────────────────────────────
 //

@@ -18,7 +18,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
@@ -36,6 +36,10 @@ open ToolUp.Calendar.MicrosoftGraphHealth
 open ToolUp.Scheduling.Tests.Contracts
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEventStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 831 — binding 3 of the ICalendarBridge contract pack ─────
 //

@@ -4,6 +4,8 @@
 namespace ToolUp.InterPlatform
 
 open System
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Layer 2 — identity, versioning, cascade context ─────────────────
 //

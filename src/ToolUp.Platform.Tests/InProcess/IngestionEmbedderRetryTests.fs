@@ -21,10 +21,14 @@ open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.RAG.IngestionTypes
 open ToolUp.RAG.IngestionService
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private httpEx (status: int) : exn =
     HttpRequestException("http", null, Nullable<HttpStatusCode>(enum<HttpStatusCode> status)) :> exn
@@ -207,7 +211,7 @@ let private credentialRejection =
 
             let deps: IngestionRetryDeps = {
                 Pipeline = pipeline
-                EventStore = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore()
+                EventStore = ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore()
                 Observers = []
                 NotificationChannel = Some(channel :> INotificationChannel)
                 Telemetry = ToolUp.RAG.RagTelemetry.NoOpRagTelemetry()

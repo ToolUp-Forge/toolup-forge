@@ -4,6 +4,10 @@ open System
 open ToolUp.Platform
 open ToolUp.Reporting
 open ToolUp.Reporting.RendererRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // NOTE: `MarkdownRenderer` / `HtmlRenderer` are deliberately NOT opened.
 // Both modules expose a `create ()`, so opening both put two identically-

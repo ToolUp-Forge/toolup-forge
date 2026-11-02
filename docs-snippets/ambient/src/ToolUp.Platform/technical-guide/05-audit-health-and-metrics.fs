@@ -6,6 +6,7 @@
 // Redis connection string, and the logger the channel is handed. A block
 // that declares any of these for itself shadows this one.
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =

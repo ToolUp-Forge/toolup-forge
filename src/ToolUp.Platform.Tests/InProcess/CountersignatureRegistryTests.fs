@@ -8,6 +8,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Compose
 
 // ─── Phase 676 — the N-party countersignature registry ───────────────
 //

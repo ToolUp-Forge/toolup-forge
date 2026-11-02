@@ -18,6 +18,7 @@
 
 open ToolUp.Platform.Narrative
 open ToolUp.Reporting
+open ToolUp.Platform.Infra
 
 [<AutoOpen>]
 module PageAmbient =

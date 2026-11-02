@@ -8,6 +8,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 6o — Multimodal IAIProvider content blocks ────────────────
 //

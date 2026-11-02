@@ -8,6 +8,8 @@ open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerJsonHelpers
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 867 — ingestion attempts ───────────────────────────────
 //

@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.AuditSinks.SplunkHec
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
 
 /// `HttpMessageHandler` that always returns 200 OK and records every
 /// outgoing request body for verification. Used by the contract pack

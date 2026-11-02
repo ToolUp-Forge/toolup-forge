@@ -6,6 +6,7 @@ namespace ToolUp.InterPlatform
 open System
 open System.Runtime.ExceptionServices
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 311 — the structurally-enforced clean-room gate ───────────
 //

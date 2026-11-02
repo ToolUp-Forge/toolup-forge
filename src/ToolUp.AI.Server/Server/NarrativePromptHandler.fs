@@ -42,11 +42,15 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
 open ToolUp.AI.NarrativeOffenceHistory
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Audit rows ──────────────────────────────────────────────────
 //

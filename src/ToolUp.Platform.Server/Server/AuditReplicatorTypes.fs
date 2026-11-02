@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Audit
+
+open ToolUp.Platform
 
 open ToolUp.Platform.Transport
 open System

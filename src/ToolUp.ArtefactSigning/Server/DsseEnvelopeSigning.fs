@@ -10,6 +10,7 @@ open Org.BouncyCastle.Crypto.Parameters
 open Org.BouncyCastle.Crypto.Signers
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Audit
 
 // ─── Signed-statement envelope — the crypto half (composition glue) ─────
 //

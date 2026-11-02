@@ -5,7 +5,10 @@ module ProviderProfileBYOK.Server
 
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 44 — the non-AI BYOK composition root.
 //

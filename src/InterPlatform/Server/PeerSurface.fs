@@ -9,6 +9,11 @@ open System.Text
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 590 — PeerSurface: a deployment's cross-instance face ─────
 //

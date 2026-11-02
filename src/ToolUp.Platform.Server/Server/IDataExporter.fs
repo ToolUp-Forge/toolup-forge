@@ -1,4 +1,4 @@
-module ToolUp.Platform.IDataExporter
+module ToolUp.Platform.Audit.IDataExporter
 
 open ToolUp.Platform
 

@@ -1,4 +1,4 @@
-module FileSecretStore
+module ToolUp.Platform.Config.FileSecretStore
 
 open System
 open System.IO
@@ -137,7 +137,9 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                     // `TOOLUP_{SCOPE}_{KEY}` reads below stay direct, being an
                     // open-ended family the registry does not enumerate and a
                     // manifest therefore cannot name.
-                    match ToolUp.Platform.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath with
+                    match
+                        ToolUp.Platform.Config.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath
+                    with
                     | None -> async {
                         let dir = resolvedBaseDir ()
 
@@ -195,7 +197,7 @@ type FileSecretStore(?baseDir: string, ?path: string) =
     let writePathFor scopeId =
         let dir = resolvedBaseDir ()
 
-        match path, ToolUp.Platform.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath with
+        match path, ToolUp.Platform.Config.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath with
         | Some p, _ when scopeId = ScopeKey.PlatformContainer -> Some p
         | _, Some p when scopeId = ScopeKey.PlatformContainer && not (String.IsNullOrEmpty p) -> Some p
         | _ when scopeId = ScopeKey.PlatformContainer -> Some(Path.Combine(dir, "secrets.json"))

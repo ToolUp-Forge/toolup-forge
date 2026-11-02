@@ -6,7 +6,8 @@ namespace ToolUp.Companions.Isolation
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Compose
 
 // ─── Phase 687 — selecting a mode, and what a profile demands ─────────
 //

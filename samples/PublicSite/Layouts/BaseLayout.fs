@@ -2,6 +2,7 @@ module PublicSite.Layouts.BaseLayout
 
 open Giraffe.ViewEngine
 open ToolUp.PublicRendering
+open ToolUp.Platform.Compose
 
 /// Common shell — `<html>` / `<head>` / `<body>` skeleton + nav +
 /// footer. Page / Article layouts compose this with their body

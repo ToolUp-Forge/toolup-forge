@@ -19,14 +19,16 @@ open ToolUp.Elmish
 open ToolUp.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.ITableExtractor
 open ToolUp.Platform.Providers
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.RAG
 open ToolUp.RAG.IngestionTypes
 open ToolUp.RAG.RAGCompose
 open ProcessedDataTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

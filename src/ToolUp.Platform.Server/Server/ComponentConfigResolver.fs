@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ComponentConfigResolver
+module ToolUp.Platform.Compose.ComponentConfigResolver
 
 open System
 open ToolUp.Platform

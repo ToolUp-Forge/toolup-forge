@@ -2,12 +2,14 @@ module ToolUp.RAG.RAGPromptBuilder
 
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
+open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.AI.SystemPromptBuilder
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Threshold below which `RAGPromptBuilder.withRetrieval` emits a
 /// `KnowledgeRetrievalMiss` diagnostic via `IRetrievalTracer.Miss`.

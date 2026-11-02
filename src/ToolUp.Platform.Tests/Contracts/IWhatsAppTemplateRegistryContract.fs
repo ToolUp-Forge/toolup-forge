@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IWhatsAppTemplateRegistryContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 /// Contract assertions every `IWhatsAppTemplateRegistry` must satisfy
 /// (Phase 827). A binding supplies a factory that returns a registry

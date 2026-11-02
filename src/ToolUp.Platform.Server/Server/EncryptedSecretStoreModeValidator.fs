@@ -1,4 +1,4 @@
-module ToolUp.Platform.EncryptedSecretStoreModeValidator
+module ToolUp.Platform.Config.EncryptedSecretStoreModeValidator
 
 open System
 open ToolUp.Platform

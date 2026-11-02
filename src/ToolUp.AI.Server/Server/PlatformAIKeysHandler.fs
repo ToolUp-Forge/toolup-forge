@@ -7,8 +7,9 @@ open ToolUp.Platform.Transport
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.AI
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 // ─── Phase 70 — Platform Admin AI keys handler ──────────────────
 //

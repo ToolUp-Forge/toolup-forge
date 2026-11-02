@@ -8,6 +8,8 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 828 — ILogStore conformance + the SQLite default's own laws ──
 //

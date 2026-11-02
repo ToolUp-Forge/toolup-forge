@@ -7,6 +7,7 @@ open System
 open System.Globalization
 open System.Text.Json
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 322 — the generic HTTP/REST compute backend, as config ─────
 //

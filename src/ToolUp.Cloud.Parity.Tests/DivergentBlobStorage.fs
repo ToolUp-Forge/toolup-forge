@@ -2,6 +2,7 @@ module ToolUp.Cloud.Parity.Tests.DivergentBlobStorage
 
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 193 — the divergence fixture's subject ─────────────────────
 //

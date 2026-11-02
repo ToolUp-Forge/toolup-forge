@@ -7,6 +7,7 @@ open Expecto
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Jobs
 
 // ─── The supervised agent-loop worker (Phase 6k) ─────────────────────
 //

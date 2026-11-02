@@ -7,6 +7,7 @@ open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes
+open ToolUp.Platform.Compose
 
 // ─── Phase 1050 — a module builder says whether it sets or adds ───────
 //

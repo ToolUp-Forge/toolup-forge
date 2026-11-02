@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AuthProvider
+module ToolUp.Platform.Scope.AuthProvider
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
 
 /// Builder function for OIDC `IAuthProvider`. The consumer passes
 /// `ToolUp.AuthProviders.OidcAuthProvider.fromConfig` (or any

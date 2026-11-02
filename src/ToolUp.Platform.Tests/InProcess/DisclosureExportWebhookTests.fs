@@ -14,6 +14,8 @@ open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 564 — disclosure egress: export door + webhook contract ───
 //

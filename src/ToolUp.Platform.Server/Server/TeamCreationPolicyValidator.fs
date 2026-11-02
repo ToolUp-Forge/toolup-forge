@@ -1,8 +1,10 @@
-module ToolUp.Platform.TeamCreationPolicyValidator
+module ToolUp.Platform.Scope.TeamCreationPolicyValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 5f — TeamCreationPolicy wedge detector ────────────────────
 //

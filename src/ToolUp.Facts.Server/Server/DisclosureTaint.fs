@@ -5,6 +5,7 @@ namespace ToolUp.Facts
 
 open System.Collections.Generic
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── DisclosureTaint (Phase 562) ─────────────────────────────────────
 //

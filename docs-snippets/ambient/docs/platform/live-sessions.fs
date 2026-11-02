@@ -1,3 +1,5 @@
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 // Ambient context for `docs/platform/live-sessions.md`.
 //
 // The compose block is an excerpt from a composition root, so it reads the

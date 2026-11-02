@@ -5,7 +5,7 @@ open System.IO
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.RetrievalPipeline
@@ -15,6 +15,8 @@ open ToolUp.SparseIndices.Snowball
 open ToolUp.SparseIndices.Cjk
 open ToolUp.SparseIndices.Postgres
 open ToolUp.RAG.Evaluation.EvalTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Wiring helpers ───────────────────────────────────────────────
 

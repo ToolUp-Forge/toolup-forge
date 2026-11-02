@@ -16,14 +16,18 @@ open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.Narrative
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 109 — IndexNow push-indexing tests ───────────────────────
 //

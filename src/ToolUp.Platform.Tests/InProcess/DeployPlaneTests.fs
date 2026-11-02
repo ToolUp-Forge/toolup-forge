@@ -8,13 +8,16 @@ open System.Threading
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.TenantEntity
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra.TenantEntity
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.ContainerSchedulers.DockerLocal.Scheduler
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 26 substrate — in-process bindings for the contract packs ─
 //
@@ -416,9 +419,9 @@ let tenantFleetTests =
 let buildOrchestratorTests =
     let factory () : IBuildOrchestrator =
         let eventStore =
-            ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-        ToolUp.Platform.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler false) eventStore nullLogger
+        ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler false) eventStore nullLogger
         :> IBuildOrchestrator
 
     IBuildOrchestratorContract.tests "JobSchedulerBuildOrchestrator" factory
@@ -433,12 +436,19 @@ let buildOrchestratorTests =
 let deployPipelineTests =
     let factory () : IDeployPipeline =
         let eventStore =
-            ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
         let orchestrator =
-            ToolUp.Platform.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler true) eventStore nullLogger
+            ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator.create
+                (DeployPlaneJobScheduler true)
+                eventStore
+                nullLogger
 
-        ToolUp.Platform.DefaultDeployPipeline.create orchestrator (InMemoryContainerScheduler()) eventStore nullLogger
+        ToolUp.Platform.Infra.DefaultDeployPipeline.create
+            orchestrator
+            (InMemoryContainerScheduler())
+            eventStore
+            nullLogger
         :> IDeployPipeline
 
     IDeployPipelineContract.tests "DefaultDeployPipeline" factory
@@ -649,9 +659,9 @@ let deployPlanDefaultPipelineTests =
         Pipeline =
             fun scheduler ->
                 let eventStore =
-                    ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                    ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-                ToolUp.Platform.DefaultDeployPipeline.create
+                ToolUp.Platform.Infra.DefaultDeployPipeline.create
                     (InMemoryBuildOrchestrator())
                     scheduler
                     eventStore
@@ -998,14 +1008,17 @@ let defaultPipelineRollbackTests =
 
     let composed (containerScheduler: IContainerScheduler) =
         let eventStore =
-            ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
         let orchestrator =
-            ToolUp.Platform.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler true) eventStore nullLogger
+            ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator.create
+                (DeployPlaneJobScheduler true)
+                eventStore
+                nullLogger
             :> IBuildOrchestrator
 
         let pipeline =
-            ToolUp.Platform.DefaultDeployPipeline.create orchestrator containerScheduler eventStore nullLogger
+            ToolUp.Platform.Infra.DefaultDeployPipeline.create orchestrator containerScheduler eventStore nullLogger
             :> IDeployPipeline
 
         orchestrator, pipeline

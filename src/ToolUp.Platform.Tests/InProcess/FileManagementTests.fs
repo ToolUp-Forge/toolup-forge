@@ -5,12 +5,15 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
 open DataManagementTypes
 open ProcessedDataTypes
 open ToolUp.Platform.Tests.Remoting
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
+open ToolUp.Platform.Files
 
 // Persisted-ProcessedFileEntry coverage: round-trip across a simulated
 // server restart, stale-DataType branch, loader prefix-filter, delete

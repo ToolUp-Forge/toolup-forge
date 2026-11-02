@@ -12,6 +12,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.DataSources.Common
 open DataManagementTypes
+open ToolUp.Platform.Infra
 
 // ─── ToolUp.DataSources.Athena ────────────────────────────────────
 //

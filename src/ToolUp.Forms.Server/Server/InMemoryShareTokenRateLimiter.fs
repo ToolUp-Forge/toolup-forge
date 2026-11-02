@@ -6,6 +6,7 @@ module ToolUp.Forms.InMemoryShareTokenRateLimiter
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 21e — in-memory IShareTokenRateLimiter default ────────────
 //

@@ -1,8 +1,9 @@
-module ToolUp.Platform.RateLimiterInstanceValidator
+module ToolUp.Platform.Config.RateLimiterInstanceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── Multi-instance + in-process / in-memory rate limiters ──────────
 //

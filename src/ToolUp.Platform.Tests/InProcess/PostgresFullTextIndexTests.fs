@@ -5,14 +5,16 @@ open Expecto
 open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.RAG.SparseAnalysis
 open ToolUp.SparseIndices.Postgres.PostgresFullTextIndex
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 893 — PostgreSQL full-text ISparseIndex companion ─────────
 //

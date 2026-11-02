@@ -6,8 +6,11 @@ module ToolUp.ContentAuthoring.ContentAdminCompose
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.Server
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 89 — content admin compose seam ────────────────────────────
 //

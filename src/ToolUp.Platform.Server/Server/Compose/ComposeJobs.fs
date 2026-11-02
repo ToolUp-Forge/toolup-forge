@@ -1,11 +1,15 @@
-module ToolUp.Platform.ComposeJobs
+module ToolUp.Platform.Compose.ComposeJobs
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.Tracing
-open ToolUp.Platform.WebhookDispatcher
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Jobs.WebhookDispatcher
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── compose phase: jobs, webhooks, data ingestion, OAuth refresher ──
 //

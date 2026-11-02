@@ -12,6 +12,8 @@ open ToolUp.Platform.Secrets
 open ToolUp.DataSources.Common
 open DataManagementTypes
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.DataSources.Snowflake ─────────────────────────────────
 //

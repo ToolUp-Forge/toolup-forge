@@ -1,8 +1,8 @@
-module ToolUp.Platform.InternetReadinessScorecard
+module ToolUp.Platform.Compose.InternetReadinessScorecard
 
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
 
 // ─── Internet-readiness secure-default scorecard ─────────────────────
 //

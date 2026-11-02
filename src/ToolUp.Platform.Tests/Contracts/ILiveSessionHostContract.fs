@@ -5,6 +5,8 @@ module ToolUp.Platform.Tests.Contracts.ILiveSessionHostContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 112 — ILiveSessionHost contract pack ───────────────────────
 //

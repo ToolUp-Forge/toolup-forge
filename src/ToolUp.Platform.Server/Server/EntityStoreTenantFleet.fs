@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open System
 open System.Collections.Concurrent
 open System.Threading
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.TenantEntity
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra.TenantEntity
 
 // ─── EntityStoreTenantFleet (Phase 26 substrate default) ─────────────
 //

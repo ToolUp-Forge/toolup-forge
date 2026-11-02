@@ -1,4 +1,4 @@
-module ToolUp.Platform.EncryptedBlobStorage
+module ToolUp.Platform.Infra.EncryptedBlobStorage
 
 open System
 open System.Security.Cryptography
@@ -6,7 +6,7 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 
 // ─── Phase 22 — EncryptedBlobStorage decorator ──────────────────────
 //

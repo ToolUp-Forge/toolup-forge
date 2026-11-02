@@ -27,13 +27,14 @@
 ///
 /// A deployment that registers no hook composes byte-for-byte as before: the
 /// ingestor is not decorated and no middleware is mounted (GP 11 / GP 13).
-module ToolUp.Platform.DeliveryCompleted
+module ToolUp.Platform.Jobs.DeliveryCompleted
 
 open System
 open System.Text.Json
 open System.Threading
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── The delivery a hook receives ──────────────────────────────────────
 

@@ -1,4 +1,4 @@
-module ToolUp.Platform.CorsConfigValidator
+module ToolUp.Platform.Config.CorsConfigValidator
 
 open System
 open ToolUp.Platform

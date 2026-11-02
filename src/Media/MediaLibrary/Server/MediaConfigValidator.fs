@@ -8,6 +8,7 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── Phase 88 — media library options preflight ───────────────────────
 //

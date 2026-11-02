@@ -22,6 +22,7 @@ module ToolUp.Platform.Tests.InProcess.ClientToolDispatchContractBindings
 
 open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
 
 type private DenyOnlyAuthorizer(denyTool: string) =
     interface IClientToolAuthorizer with
@@ -29,7 +30,7 @@ type private DenyOnlyAuthorizer(denyTool: string) =
             if toolName = denyTool then
                 Deny $"binding stub denied tool '{toolName}'"
             else
-                Allow
+                ClientToolAuthDecision.Allow
 
 let private constantSimulator (_evt: AIStreamEvent) : string option = Some """{"result": 42}"""
 

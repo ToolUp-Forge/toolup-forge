@@ -11,6 +11,12 @@ open ToolUp.Platform.Metrics
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Test-fixture wiring ────────────────────────────────────────────
 //
@@ -1959,7 +1965,7 @@ let private ragStubProfile =
     }
 
 let private ragStubEmbedder =
-    { new ToolUp.Platform.IEmbeddingProvider.IEmbeddingProvider with
+    { new ToolUp.Platform.Infra.IEmbeddingProvider.IEmbeddingProvider with
         member _.GenerateEmbedding _ = async { return Array.zeroCreate 8 }
 
         member _.GenerateEmbeddings texts = async {
@@ -2743,14 +2749,14 @@ let private layoutResolution1039Tests =
                 :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             let dos =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(blob) :> ToolUp.Platform.IDataObjectStore
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(blob) :> ToolUp.Platform.Infra.IDataObjectStore
 
-            let registry = ToolUp.Platform.EntityStore.EntityRegistry()
+            let registry = ToolUp.Platform.Infra.EntityStore.EntityRegistry()
             registry.Register<PublicPageEntity>(PublicPageEntity.registration)
 
             let store =
-                ToolUp.Platform.EntityStore.BlobEntityStore(dos, blob, registry, None)
-                :> ToolUp.Platform.IEntityStore.IEntityStore
+                ToolUp.Platform.Infra.EntityStore.BlobEntityStore(dos, blob, registry, None)
+                :> ToolUp.Platform.Infra.IEntityStore.IEntityStore
 
             let publisher =
                 PublicRenderingNarrativePagePublisher.create

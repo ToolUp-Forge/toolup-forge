@@ -6,8 +6,9 @@ open Giraffe
 open Giraffe.ViewEngine
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.BrandKit
+open ToolUp.Platform.Compose
 
 /// Phase 82 — the demo domain module. Picks a thin but realistic
 /// shape (notes with a slug, title, summary, body, timestamp) that

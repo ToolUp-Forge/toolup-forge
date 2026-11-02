@@ -21,10 +21,12 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Narrative
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Rig ──────────────────────────────────────────────────────────────
 

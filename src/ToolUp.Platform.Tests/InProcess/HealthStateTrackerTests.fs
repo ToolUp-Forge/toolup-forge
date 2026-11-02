@@ -6,7 +6,8 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
-open ToolUp.Platform.HealthStateTracker
+open ToolUp.Platform.Infra.HealthStateTracker
+open ToolUp.Platform.Infra
 
 // ─── Phase 9p HealthStateTracker tests ───────────────────────────────
 //

@@ -16,6 +16,9 @@ open ToolUp.Platform
 open ToolUp.Platform.Consent
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.TelemetrySinks.Ga4
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 163 — ITelemetrySink conformance + behaviour ─────────────────
 //

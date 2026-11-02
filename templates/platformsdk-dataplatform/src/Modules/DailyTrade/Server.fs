@@ -12,6 +12,11 @@ open ToolUp.Platform.Grounding
 open ToolUp.Facts
 open ProcessedDataTypes
 open DailyTrade.SharedTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
+open ToolUp.Platform.Files
 
 // ─── What the module computes ─────────────────────────────────────
 //

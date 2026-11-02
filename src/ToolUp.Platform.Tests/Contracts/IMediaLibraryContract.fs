@@ -8,6 +8,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.MediaLibrary
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 88 — IMediaLibrary contract pack ───────────────────────────
 //

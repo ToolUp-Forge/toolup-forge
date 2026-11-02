@@ -4,11 +4,13 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Tests.Support.PrincipalRecordingEntityStore
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.SchedulingEvents
 open ToolUp.Scheduling.IBookingScheduler
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── IBookingScheduler contract pack ─────────────────────────────
 //

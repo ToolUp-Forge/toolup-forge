@@ -1,4 +1,14 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Scope.Teams
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Audit.Consent
 
 open System
 open Giraffe
@@ -7,17 +17,17 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
 open ToolUp.Platform.Providers
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.TransientFault
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Infra.TransientFault
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Usage
 open ToolUp.Platform.VectorisationTypes
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 
 // ─── ServerModule — per-module contribution bundle ───────────────────
 //
@@ -2420,7 +2430,7 @@ module ServerApp =
             let config = services.GetRequiredService<ServerConfig>()
 
             let registry =
-                services.GetRequiredService<ToolUp.Platform.SurfaceEnforcement.SurfaceRequirementRegistry>()
+                services.GetRequiredService<ToolUp.Platform.Scope.SurfaceEnforcement.SurfaceRequirementRegistry>()
 
             let csrfPerElement (next: RequestDelegate) : RequestDelegate =
                 let csrf = CsrfMiddleware(next, config, registry)

@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.InProcess.TimeSeriesStoreTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── Phase 161 — ITimeSeriesStore conformance ──────────────────────────
 //

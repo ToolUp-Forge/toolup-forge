@@ -9,6 +9,7 @@ open Azure
 open Azure.Data.Tables
 open ToolUp.Platform
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
 
 // ─── ToolUp.RateLimit.AzureTableStorage — Phase 56 reference impl ────
 //

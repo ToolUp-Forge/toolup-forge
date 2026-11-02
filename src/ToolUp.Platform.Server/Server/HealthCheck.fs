@@ -1,4 +1,4 @@
-module ToolUp.Platform.HealthCheck
+module ToolUp.Platform.Infra.HealthCheck
 
 open System
 open ToolUp.Platform

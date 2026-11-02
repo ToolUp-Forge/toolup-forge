@@ -41,6 +41,7 @@ open System.Text
 open Expecto
 open ToolUp.Companions.Isolation
 open ToolUp.Companions.Fuzz.Tests.Entries
+open ToolUp.Platform.Jobs
 
 /// The bounds every child runs under. The cap is the seam's default (512
 /// MiB), well under anything a machine cannot spare; the timeout is the

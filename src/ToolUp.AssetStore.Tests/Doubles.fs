@@ -12,6 +12,9 @@ open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.AssetStore
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let nullLogger =
     { new ILogger with

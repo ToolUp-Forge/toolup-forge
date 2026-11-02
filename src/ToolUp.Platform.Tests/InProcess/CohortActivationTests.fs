@@ -8,6 +8,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 490 — the governed cohort-activation seam ─────────────────
 //

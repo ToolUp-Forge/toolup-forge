@@ -6,6 +6,8 @@ open System.Collections.Concurrent
 open System.Threading
 open Markdig
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 /// Walks a `ContentRoot` for `**/*.md`, parses YAML frontmatter +
 /// markdown body, and exposes the resulting `PublicPage` set. In dev

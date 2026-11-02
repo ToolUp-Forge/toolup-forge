@@ -48,11 +48,16 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ── Harness ───────────────────────────────────────────────────────
 
@@ -181,7 +186,8 @@ let private publicSurfaceTests =
 
         test "the server-side mint and memo are internal too" {
             let scopeResolution =
-                typeof<IStorageScopeResolver>.Assembly.GetType("ToolUp.Platform.StorageScopeResolver+ScopeResolution")
+                typeof<IStorageScopeResolver>.Assembly
+                    .GetType("ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution")
 
             Expect.isNotNull
                 scopeResolution
@@ -1090,7 +1096,8 @@ let private carrierTests =
                 (carrierType.GetConstructors(BindingFlags.Public ||| BindingFlags.Instance))
                 "no public constructor — a caller choosing the protector would choose the keys"
 
-            let moduleType = carrierType.Assembly.GetType("ToolUp.Platform.ScopeCarrierModule")
+            let moduleType =
+                carrierType.Assembly.GetType("ToolUp.Platform.Jobs.ScopeCarrierModule")
 
             Expect.isNotNull moduleType "the companion module compiles under the ModuleSuffix name"
 

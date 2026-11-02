@@ -2,6 +2,10 @@ module ToolUp.Platform.Tests.InProcess.MinimumViableShapeTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── Phase 1g — minimum-viable composition profile guards ────────────
 //

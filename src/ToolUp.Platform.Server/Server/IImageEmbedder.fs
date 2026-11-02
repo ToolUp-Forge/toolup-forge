@@ -1,4 +1,6 @@
-module ToolUp.Platform.IImageEmbedder
+module ToolUp.Platform.Infra.IImageEmbedder
+
+open ToolUp.Platform
 
 /// Optional companion for multimodal embedding. Encodes images and
 /// free-text queries into a shared vector space so a user can ask

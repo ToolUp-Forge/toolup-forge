@@ -9,6 +9,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
 open SharedTypes
 open KnowledgeBase.ServerApiDeps
+open ToolUp.Platform.Infra
 
 // ─── The programmatic narrative-commit door (Phase 707) ──────────────
 //

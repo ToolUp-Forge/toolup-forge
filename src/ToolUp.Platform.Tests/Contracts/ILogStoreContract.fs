@@ -6,6 +6,8 @@ module ToolUp.Platform.Tests.Contracts.ILogStoreContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 828 — ILogStore conformance pack ─────────────────────────────
 //

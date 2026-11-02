@@ -2,6 +2,9 @@ module ToolUp.Platform.Tests.InProcess.CompositionDiffTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 286 — composition structural diff (CompositionDiff.diff) ────
 //

@@ -6,6 +6,8 @@ open ToolUp.Platform
 open DataManagementTypes
 open ToolUp.Platform.FileProcessor
 open ProcessedDataTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Minimal in-memory `IDataObjectStore` for catalog tests. Only the
 /// methods the catalog actually exercises (`Save`, `Get`,

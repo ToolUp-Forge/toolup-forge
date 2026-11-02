@@ -4,6 +4,8 @@ open Expecto
 open System
 open FSharp.Reflection
 open ToolUp.Platform
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 293 — composable-surface descriptor ────────────────────────
 //

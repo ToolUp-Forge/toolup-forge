@@ -29,6 +29,7 @@ open System.Text.RegularExpressions
 open DocumentFormat.OpenXml
 open DocumentFormat.OpenXml.Packaging
 open ToolUp.OpenXml
+open ToolUp.Platform.Audit
 
 // ─── Grounding ───────────────────────────────────────────────────
 

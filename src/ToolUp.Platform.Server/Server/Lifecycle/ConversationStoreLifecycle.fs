@@ -1,7 +1,8 @@
-module ToolUp.Platform.ConversationStoreLifecycle
+module ToolUp.Platform.Compose.ConversationStoreLifecycle
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 54d — first-party conversation-store lifecycle hook ───────
 //

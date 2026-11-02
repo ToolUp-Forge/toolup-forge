@@ -5,6 +5,10 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 438 — authorization-surface manifest ───────────────────────
 //
@@ -965,7 +969,7 @@ let private grantAuthorityDerivation =
 /// assembly rather than named as strings, so a rename is a compile error
 /// or a loud failure rather than a silently-empty check.
 let private permissionStoreType =
-    typeof<ToolUp.Platform.PermissionStore.IPermissionStore>
+    typeof<ToolUp.Platform.Scope.PermissionStore.IPermissionStore>
 
 let private moduleTypeNamed (name: string) =
     permissionStoreType.Assembly.GetTypes()

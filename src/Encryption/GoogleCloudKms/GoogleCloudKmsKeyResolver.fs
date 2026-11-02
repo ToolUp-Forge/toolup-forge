@@ -10,8 +10,10 @@ open Google.Protobuf
 open Grpc.Core
 open ToolUp.Platform
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 22a — GCP Cloud KMS-backed IBlobEncryptionKeyResolver ───────
 //

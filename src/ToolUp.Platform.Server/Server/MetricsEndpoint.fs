@@ -1,4 +1,7 @@
-module ToolUp.Platform.MetricsEndpoint
+module ToolUp.Platform.Infra.MetricsEndpoint
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra.Metrics
 
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection

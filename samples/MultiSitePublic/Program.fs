@@ -2,8 +2,10 @@ module MultiSitePublic.Program
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 115 worked sample. One process serves three independent
 // markdown-file-backed websites, matched on the request's Host

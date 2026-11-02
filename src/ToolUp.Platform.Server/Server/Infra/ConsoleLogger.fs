@@ -1,4 +1,6 @@
-module ToolUp.Platform.ConsoleLogger
+module ToolUp.Platform.Config.ConsoleLogger
+
+open ToolUp.Platform
 
 open System
 

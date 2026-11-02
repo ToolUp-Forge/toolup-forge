@@ -9,6 +9,11 @@ open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── FactsCompose (Phase 520 wiring) ─────────────────────────────────
 //
@@ -1826,7 +1831,7 @@ module FactsCompose =
         (sp: IServiceProvider)
         : ViewerAwareDisclosure =
         let source = tryService<ITeamOutputVisibilitySource> sp
-        let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
+        let teams = tryService<ToolUp.Platform.Config.TeamManagement.ITeamStore> sp
 
         {
             Resolver = None
@@ -2007,7 +2012,7 @@ module FactsCompose =
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactPublication>(
                     Func<IServiceProvider, IFactPublication>(fun sp ->
-                        let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
+                        let teams = tryService<ToolUp.Platform.Config.TeamManagement.ITeamStore> sp
 
                         // Phase 935 — grants persist when the platform's
                         // scope carrier is composed (it is, beside the

@@ -1,4 +1,4 @@
-module ToolUp.Platform.RateLimiting
+module ToolUp.Platform.Infra.RateLimiting
 
 open System
 open System.Threading.RateLimiting

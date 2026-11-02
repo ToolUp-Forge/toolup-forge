@@ -1,13 +1,19 @@
-module ToolUp.Platform.ComposeStores
+module ToolUp.Platform.Compose.ComposeStores
 
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── compose phase: state stores ─────────────────────────────────────
 //
@@ -202,13 +208,14 @@ let registerEntityStore
             // registered (RAG composes it as a singleton). Resolved
             // optionally so a deployment without RAG / full-text pays no
             // extra DI cost (GP 13); absent ⇒ `None` ⇒ pre-19b behaviour.
-            let sparseObj = sp.GetService(typeof<ToolUp.Platform.ISparseIndex.ISparseIndex>)
+            let sparseObj =
+                sp.GetService(typeof<ToolUp.Platform.Infra.ISparseIndex.ISparseIndex>)
 
             let sparseIndex =
                 if isNull sparseObj then
                     None
                 else
-                    Some(sparseObj :?> ToolUp.Platform.ISparseIndex.ISparseIndex)
+                    Some(sparseObj :?> ToolUp.Platform.Infra.ISparseIndex.ISparseIndex)
 
             EntityStore.BlobEntityStore(dos, bs, entityRegistry, auditLog, sparseIndex) :> IEntityStore.IEntityStore)
         |> ignore

@@ -2,8 +2,10 @@ module ToolUp.RAG.RagVectorStoreLifecycle
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 54d — first-party RAG vector-store lifecycle hook ─────────
 //

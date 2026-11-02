@@ -5,9 +5,11 @@ module ToolUp.AuthProviders.ScimHandler
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.AuthProviders.ScimTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── SCIM lifecycle mapping ──────────────────────────────────────────
 //

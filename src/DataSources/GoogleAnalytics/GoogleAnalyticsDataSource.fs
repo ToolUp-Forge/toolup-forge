@@ -8,6 +8,7 @@ open System.Text
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 // ─── Google Analytics 4 connector ────────────────────────────────────
 //

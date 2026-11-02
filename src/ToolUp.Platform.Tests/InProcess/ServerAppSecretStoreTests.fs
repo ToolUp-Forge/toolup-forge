@@ -12,8 +12,11 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.ResilientSecretStore
-open ToolUp.Platform.TransientFault
+open ToolUp.Platform.Infra.ResilientSecretStore
+open ToolUp.Platform.Infra.TransientFault
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 1001 — an app supplies ServerApp its secret store ─────────
 //
@@ -213,8 +216,8 @@ let private composeWithPreflightTimeout
     }
 
     try
-        ToolUp.Platform.Server.compose {
-            ToolUp.Platform.Server.CompositionPlan.ofConfig (authConfig ()) with
+        ToolUp.Platform.Compose.Server.compose {
+            ToolUp.Platform.Compose.Server.CompositionPlan.ofConfig (authConfig ()) with
                 Extensions = extensions
                 Logger = Some(logger :> ILogger)
                 BlobStorage =
@@ -295,25 +298,28 @@ let tests =
         // ── composeSecretStore: one store, resilience applied ─────────
 
         test "nothing supplied → a raw FileSecretStore, exactly as before" {
-            let store = ToolUp.Platform.Server.composeSecretStore None NoResilience
+            let store = ToolUp.Platform.Compose.Server.composeSecretStore None NoResilience
             Expect.equal (store.GetType()) typeof<FileSecretStore.FileSecretStore> "the unchanged default"
         }
 
         test "a supplied store with no resilience is composed as-is (the same instance)" {
             let vault = FakeVault() |> vaultStore
-            let store = ToolUp.Platform.Server.composeSecretStore (Some vault) NoResilience
+
+            let store =
+                ToolUp.Platform.Compose.Server.composeSecretStore (Some vault) NoResilience
+
             Expect.isTrue (obj.ReferenceEquals(store, vault)) "no wrapper, no copy"
         }
 
         test "through the resilience wrapper a vault reads EncryptsAtRest and a FileSecretStore reads plaintext" {
             withCleanSecretEnv (fun () ->
                 let wrappedVault =
-                    ToolUp.Platform.Server.composeSecretStore
+                    ToolUp.Platform.Compose.Server.composeSecretStore
                         (Some(FakeVault() |> vaultStore))
                         (WithResiliencePolicy policy)
 
                 let wrappedFile =
-                    ToolUp.Platform.Server.composeSecretStore None (WithResiliencePolicy policy)
+                    ToolUp.Platform.Compose.Server.composeSecretStore None (WithResiliencePolicy policy)
 
                 Expect.isTrue (wrappedVault :? ResilientSecretStore) "the vault is wrapped"
                 Expect.isTrue (wrappedFile :? ResilientSecretStore) "the default is wrapped"
@@ -359,7 +365,7 @@ let tests =
             test $"a vault-selecting app ({label}) passes all three secret-store checks with no acknowledgement" {
                 withCleanSecretEnv (fun () ->
                     let store =
-                        ToolUp.Platform.Server.composeSecretStore (Some(FakeVault() |> vaultStore)) resilience
+                        ToolUp.Platform.Compose.Server.composeSecretStore (Some(FakeVault() |> vaultStore)) resilience
 
                     validatorsOver (authConfig ()) store |> List.map run |> expectAllOk)
             }
@@ -430,7 +436,9 @@ let tests =
         test "nothing supplied, nothing set → refused exactly as before (all three checks)" {
             withCleanSecretEnv (fun () ->
                 let results =
-                    validatorsOver (authConfig ()) (ToolUp.Platform.Server.composeSecretStore None NoResilience)
+                    validatorsOver
+                        (authConfig ())
+                        (ToolUp.Platform.Compose.Server.composeSecretStore None NoResilience)
                     |> List.map run
 
                 for name in threeChecks do
@@ -457,7 +465,9 @@ let tests =
 
                 withEnv "TOOLUP_SECRETS_MASTER_KEY" (Some key) (fun () ->
                     let results =
-                        validatorsOver (authConfig ()) (ToolUp.Platform.Server.composeSecretStore None NoResilience)
+                        validatorsOver
+                            (authConfig ())
+                            (ToolUp.Platform.Compose.Server.composeSecretStore None NoResilience)
                         |> List.map run
 
                     Expect.equal (resultOf "encrypted-secret-store-mode" results) Ok "the key satisfies the gate"
@@ -471,7 +481,9 @@ let tests =
             withCleanSecretEnv (fun () ->
                 withEnv ConfigKeys.Names.secretStore (Some "azure-key-vault") (fun () ->
                     let results =
-                        validatorsOver (authConfig ()) (ToolUp.Platform.Server.composeSecretStore None NoResilience)
+                        validatorsOver
+                            (authConfig ())
+                            (ToolUp.Platform.Compose.Server.composeSecretStore None NoResilience)
                         |> List.map run
 
                     Expect.equal (resultOf "encrypted-secret-store-mode" results) Ok "the spelling carve-out"
@@ -486,7 +498,7 @@ let tests =
         test "a supplied plaintext store is not lifted by the seam (the declaration decides)" {
             withCleanSecretEnv (fun () ->
                 let supplied =
-                    ToolUp.Platform.Server.composeSecretStore
+                    ToolUp.Platform.Compose.Server.composeSecretStore
                         (Some(FileSecretStore.FileSecretStore(baseDir = Path.GetTempPath()) :> ISecretStore))
                         (WithResiliencePolicy policy)
 

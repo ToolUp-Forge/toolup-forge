@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ProviderOAuthConnect
+module ToolUp.Platform.Config.ProviderOAuthConnect
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 // ─── Phase 43.B — bind + refresh an OAuthConnected ProviderEntry ──
 //

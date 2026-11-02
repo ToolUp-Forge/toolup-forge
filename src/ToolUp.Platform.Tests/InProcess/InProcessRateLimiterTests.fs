@@ -4,6 +4,9 @@ open System
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
 
 // ─── In-process binding — IRateLimiterContract ───────────────────────
 //

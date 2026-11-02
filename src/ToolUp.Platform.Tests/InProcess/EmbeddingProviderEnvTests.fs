@@ -4,7 +4,9 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 671 — `EmbeddingProviderEnv.fromEnv` ──────────────────────
 //

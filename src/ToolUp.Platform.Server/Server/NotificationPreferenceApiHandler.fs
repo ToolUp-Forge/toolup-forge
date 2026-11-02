@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.NotificationPreferenceApiHandler
+module ToolUp.Platform.Jobs.NotificationPreferenceApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── INotificationPreferenceApi handler (Phase 441) ──────────────────
 //

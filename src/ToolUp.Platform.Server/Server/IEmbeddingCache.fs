@@ -1,6 +1,8 @@
-module ToolUp.Platform.IEmbeddingCache
+module ToolUp.Platform.Infra.IEmbeddingCache
 
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform
+
+open ToolUp.Platform.Infra.IEmbeddingProvider
 
 /// Cache key for an embedding lookup. Combines the provider identity with
 /// a content hash so two providers (or two models from the same provider)

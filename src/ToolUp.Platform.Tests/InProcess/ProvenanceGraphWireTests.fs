@@ -5,6 +5,7 @@ open Microsoft.FSharp.Reflection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── Phase 648 — the provenance walk as a read-only wire contract ────
 //

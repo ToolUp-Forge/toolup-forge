@@ -4,15 +4,15 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.EntityStores.Postgres.PostgresEntityStore (class)
-ToolUp.EntityStores.Postgres.PostgresEntityStore..ctor(Npgsql.NpgsqlDataSource, ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.EntityStores.Postgres.PostgresEntityStore..ctor(Npgsql.NpgsqlDataSource, ToolUp.Platform.Infra.EntityStore+EntityRegistry, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.EntityStores.Postgres.PostgresEntityStoreHealthCheck (class)
 ToolUp.EntityStores.Postgres.PostgresEntityStoreHealthCheck..ctor(Npgsql.NpgsqlDataSource)
 ToolUp.EntityStores.Postgres.PostgresEntityStoreModule (class)
 ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.DefaultTable : System.String (literal)
 ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.capability : ToolUp.Platform.CompanionCapability { get }
-ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.create(Npgsql.NpgsqlDataSource, ToolUp.Platform.EntityStore+EntityRegistry) : ToolUp.Platform.IEntityStore+IEntityStore
-ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.createWithAudit(Npgsql.NpgsqlDataSource, ToolUp.Platform.EntityStore+EntityRegistry, ToolUp.Platform.IAuditLog) : ToolUp.Platform.IEntityStore+IEntityStore
-ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.createWithTable(Npgsql.NpgsqlDataSource, ToolUp.Platform.EntityStore+EntityRegistry, System.String) : ToolUp.Platform.IEntityStore+IEntityStore
+ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.create(Npgsql.NpgsqlDataSource, ToolUp.Platform.Infra.EntityStore+EntityRegistry) : ToolUp.Platform.Infra.IEntityStore+IEntityStore
+ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.createWithAudit(Npgsql.NpgsqlDataSource, ToolUp.Platform.Infra.EntityStore+EntityRegistry, ToolUp.Platform.IAuditLog) : ToolUp.Platform.Infra.IEntityStore+IEntityStore
+ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.createWithTable(Npgsql.NpgsqlDataSource, ToolUp.Platform.Infra.EntityStore+EntityRegistry, System.String) : ToolUp.Platform.Infra.IEntityStore+IEntityStore
 ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.ensureSchema(Npgsql.NpgsqlDataSource, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.EntityStores.Postgres.PostgresEntityStoreModule.schemaDdl(System.String) : System.String
 ToolUp.EntityStores.Postgres.PostgresEntityStoreOps (class)

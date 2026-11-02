@@ -7,6 +7,7 @@ open System
 open ToolUp.Platform
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.AggregationTypes
+open ToolUp.Platform.Infra
 
 // ─── Phase 21c — Analyser-output cache ───────────────────────────────
 //

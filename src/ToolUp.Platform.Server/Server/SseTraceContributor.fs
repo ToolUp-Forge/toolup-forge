@@ -1,4 +1,6 @@
-module ToolUp.Platform.SseTraceContributor
+module ToolUp.Platform.Jobs.SseTraceContributor
+
+open ToolUp.Platform
 
 open System
 

@@ -26,6 +26,7 @@ open Expecto
 open ToolUp.Stripe.Webhook
 open ToolUp.Stripe.Server
 open ToolUp.Stripe.Server.Tests.WebhookTestHarness
+open ToolUp.Platform.Compose
 
 // ─── Corpus ───────────────────────────────────────────────────────────
 

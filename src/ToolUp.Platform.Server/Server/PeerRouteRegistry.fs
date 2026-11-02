@@ -1,4 +1,4 @@
-module ToolUp.Platform.PeerRouteRegistry
+module ToolUp.Platform.Scope.PeerRouteRegistry
 
 open System
 open Microsoft.AspNetCore.Http

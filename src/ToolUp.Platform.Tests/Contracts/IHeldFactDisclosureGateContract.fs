@@ -8,6 +8,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── IHeldFactDisclosureGate contract pack (Phase 1125) ──────────────
 //

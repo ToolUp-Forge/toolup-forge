@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.Auth
 
 open System
 open System.IO
@@ -12,9 +16,9 @@ open Fuaran.Core
 open Fuaran.UI.Types
 open Fuaran.UI.Ops.Types
 open ToolUp.Platform.Auth
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.TeamProviderResolver
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.TeamProviderResolver
 
 // ─── The page store ─────────────────────────────────────────────────────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataSourceConfigStore
+module ToolUp.Platform.Infra.DataSourceConfigStore
 
 open System
 open System.Security.Cryptography

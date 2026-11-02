@@ -33,14 +33,16 @@
 ///
 /// Scheduling is the composition's opt-in (`BackupSettings.DrillCron`
 /// over `IJobScheduler`); `RunDrill` is the on-demand entry point.
-module ToolUp.Platform.RestoreDrill
+module ToolUp.Platform.Compose.RestoreDrill
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.Backup
-open ToolUp.Platform.BackupCoordinator
+open ToolUp.Platform.Compose.Backup
+open ToolUp.Platform.Compose.BackupCoordinator
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 /// One store-level invariant checked over the restored copy.
 type DrillInvariant = {

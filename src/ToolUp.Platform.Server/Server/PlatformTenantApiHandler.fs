@@ -1,9 +1,12 @@
-module ToolUp.Platform.PlatformTenantApiHandler
+module ToolUp.Platform.Compose.PlatformTenantApiHandler
 
 open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54 — IPlatformTenantApi server handler ────────────────────
 //

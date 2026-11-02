@@ -13,6 +13,8 @@ open ToolUp.Platform.ConfigValidation
 open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig
 open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityClient
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── Google Identity Services companion ──────────────────────────────
 //

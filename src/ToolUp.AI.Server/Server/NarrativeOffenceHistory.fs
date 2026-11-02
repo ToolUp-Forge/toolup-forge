@@ -45,6 +45,8 @@ open ToolUp.Platform.Narrative
 open ToolUp.Platform.Transport
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// The learning loop's knobs.
 type NarrativeLearningPolicy = {

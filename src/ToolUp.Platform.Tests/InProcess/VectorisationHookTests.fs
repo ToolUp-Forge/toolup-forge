@@ -10,13 +10,18 @@ module ToolUp.Platform.Tests.InProcess.VectorisationHookTests
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.VectorisationTypes
 open ProcessedDataTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
+open ToolUp.Platform.Files
 
 type private SilentLogger() =
     interface ILogger with

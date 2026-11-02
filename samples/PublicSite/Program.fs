@@ -2,8 +2,10 @@ module PublicSite.Program
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 38 canonical reference composition root. Website-class
 // deployment: SSR-only, no modules, no AI. Sample binds to ports

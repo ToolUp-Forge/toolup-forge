@@ -22,8 +22,8 @@ ToolUp.DataSources.Snowflake.SnowflakeCatalogue.toColumnType(System.String) : Da
 ToolUp.DataSources.Snowflake.SnowflakeDataSource (class)
 ToolUp.DataSources.Snowflake.SnowflakeDataSource.Kind : System.String (literal)
 ToolUp.DataSources.Snowflake.SnowflakeDataSource.composeConnectionString(ToolUp.DataSources.Snowflake.SnowflakeSourceSettings, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
-ToolUp.DataSources.Snowflake.SnowflakeDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IDataSource
-ToolUp.DataSources.Snowflake.SnowflakeDataSource.createWithKeyFile() : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Snowflake.SnowflakeDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Snowflake.SnowflakeDataSource.createWithKeyFile() : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Snowflake.SnowflakeDataSource.parseAuth(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Snowflake.SnowflakeAuth, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Snowflake.SnowflakeDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Snowflake.SnowflakeSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Snowflake.SnowflakeDataSource.resolveStatement(ToolUp.DataSources.Snowflake.SnowflakeSourceSettings, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]

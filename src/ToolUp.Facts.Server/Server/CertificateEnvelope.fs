@@ -9,6 +9,7 @@ open System.Text.Json.Nodes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Audit
 
 // ─── Grounding certificate as a standard signed statement ───────────────
 //

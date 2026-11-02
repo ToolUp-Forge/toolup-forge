@@ -16,6 +16,10 @@ open ToolUp.AI
 open ToolUp.AI.AnswerVerifier
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 680 — the grounded-answer chain join ──────────────────────
 //

@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.AnonymousSessionMigratorTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Scope
 
 // ─── Phase 66 Stream C.1 — IAnonymousSessionMigrator substrate tests ─
 //

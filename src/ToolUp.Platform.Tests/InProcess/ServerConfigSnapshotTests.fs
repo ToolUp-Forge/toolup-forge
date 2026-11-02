@@ -24,6 +24,13 @@ open System.Reflection
 open Expecto
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Audit.Consent
+open ToolUp.Platform.Compose
 
 let private silentLogger =
     { new ILogger with

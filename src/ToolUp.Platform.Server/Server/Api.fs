@@ -1,4 +1,8 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Config
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // Server-side `Api.make` helper — replicates the surface of
 // `SAFE.Api.make` from SAFE.Server.Utils (MIT, Copyright 2024

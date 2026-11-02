@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IRenderCacheContract
 open System
 open Expecto
 open ToolUp.PublicRendering
+open ToolUp.Platform.Compose
 
 // ─── IRenderCache contract pack (Phase 84) ──────────────────────────
 //

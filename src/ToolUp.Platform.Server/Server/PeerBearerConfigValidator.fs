@@ -1,9 +1,10 @@
-module ToolUp.Platform.PeerBearerConfigValidator
+module ToolUp.Platform.Scope.PeerBearerConfigValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
 
 // ─── Phase 37 — peer-bearer config preflight ─────────────────────────
 //

@@ -5,7 +5,7 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Giraffe
 open ToolUp.Platform
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.AI
 
 // ─── JSON serialization ──────────────────────────────────────────
@@ -18,6 +18,7 @@ open ToolUp.AI
 
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Jobs
 
 let private jsonOptions = FableConverters.create ()
 

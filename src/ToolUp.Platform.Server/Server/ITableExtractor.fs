@@ -1,4 +1,6 @@
-module ToolUp.Platform.ITableExtractor
+module ToolUp.Platform.Infra.ITableExtractor
+
+open ToolUp.Platform
 
 /// One table recovered from a document. Shape-compatible with
 /// `ToolUp.RAG.Chunking.SheetData` — the RAG layer adapts records of this

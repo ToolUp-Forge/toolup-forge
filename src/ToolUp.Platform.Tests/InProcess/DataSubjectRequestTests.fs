@@ -4,6 +4,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.DataSubjectRequestApi
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 [<Tests>]
 let tests = IDataSubjectRequestContract.tests

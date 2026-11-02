@@ -9,6 +9,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 36.E — `/dev/ai-cross-module` rolling-window rollup ───────
 //

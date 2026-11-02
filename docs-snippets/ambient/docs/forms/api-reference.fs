@@ -14,6 +14,7 @@
 // module a name lives in — `ToolUp.Forms.WorkflowEngine` and
 // `ToolUp.Elmish` are both part of what those two blocks say.
 open System
+open ToolUp.Platform.Infra
 
 [<AutoOpen>]
 module PageAmbient =

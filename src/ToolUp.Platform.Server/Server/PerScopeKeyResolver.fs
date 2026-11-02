@@ -1,4 +1,4 @@
-module ToolUp.Platform.PerScopeKeyResolver
+module ToolUp.Platform.Config.PerScopeKeyResolver
 
 open System
 open System.Security.Cryptography
@@ -9,7 +9,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra
 
 // ─── Phase 22 — PerScopeKeyResolver ─────────────────────────────────
 //

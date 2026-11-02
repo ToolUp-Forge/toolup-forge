@@ -47,12 +47,20 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.Consent.ConsentStateStore
+open ToolUp.Platform.Audit.Consent.ConsentStateStore
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Usage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.Support
 open ToolUp.Platform.Tests.Support.FireAndForgetHarness
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
+open ToolUp.Platform.Files
 
 type CallSiteSinkDownException(marker: string) =
     inherit Exception(marker)

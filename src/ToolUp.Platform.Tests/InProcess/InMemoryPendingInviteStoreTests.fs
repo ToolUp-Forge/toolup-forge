@@ -3,7 +3,7 @@ module ToolUp.Platform.Tests.InProcess.InMemoryPendingInviteStoreTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Teams
+open ToolUp.Platform.Scope.Teams
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.Support

@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.TenantCompositionPresetTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 302 — per-tenant composition presets ──────────────────────
 //

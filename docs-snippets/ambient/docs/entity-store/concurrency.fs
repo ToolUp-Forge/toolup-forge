@@ -7,7 +7,8 @@
 // here so the blocks compile exactly as a reader would copy them.
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
 
 [<AutoOpen>]
 module PageAmbient =

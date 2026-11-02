@@ -5,6 +5,7 @@ namespace ToolUp.PublicRendering
 
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // ─── Phase 91 — KB-as-docs SSR surface ───────────────────────────────
 //

@@ -12,8 +12,10 @@ open Microsoft.Extensions.DependencyInjection
 open Fuaran.Core
 open ToolUp.Platform
 open ToolUp.Platform.AI
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Facts
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── The page request resolver ──────────────────────────────────────
 //

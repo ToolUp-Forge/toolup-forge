@@ -1,8 +1,9 @@
-module ToolUp.Platform.PlatformAdminApiHandler
+module ToolUp.Platform.Compose.PlatformAdminApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.RemotingHelpers
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Infra
 
 // ─── Phase 4b — PlatformAdminApi handler ─────────────────────────────
 //

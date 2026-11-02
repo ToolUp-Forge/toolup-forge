@@ -12,6 +12,10 @@ open ToolUp.MediaLibrary
 open ToolUp.MediaLibrary.DeliveredEgress
 open ToolUp.Hosts.DeliveredEgress
 open ToolUp.Hosts.DeliveredEgress.FieldMappedParser
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 742 — delivered-egress reconciliation ──────────────────────
 //

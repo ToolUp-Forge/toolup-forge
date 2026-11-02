@@ -6,6 +6,7 @@ module ClaudeOAuth
 open System.Net.Http
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 // ─── Phase 43.B — Claude one-click connect ────────────────────────
 //

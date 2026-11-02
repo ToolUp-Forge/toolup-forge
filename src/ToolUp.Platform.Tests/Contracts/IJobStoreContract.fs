@@ -10,6 +10,9 @@ open Expecto
 open ToolUp.Remoting
 open ToolUp.Remoting.MsgPack
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── IJobStore contract pack ─────────────────────────────────────
 //

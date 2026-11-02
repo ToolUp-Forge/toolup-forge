@@ -1,4 +1,6 @@
-module ToolUp.Platform.HealthCheckResponseWriter
+module ToolUp.Platform.Infra.HealthCheckResponseWriter
+
+open ToolUp.Platform
 
 open System
 open System.Threading.Tasks

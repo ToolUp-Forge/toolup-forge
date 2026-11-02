@@ -1,4 +1,4 @@
-module ToolUp.Platform.AuditReplicator
+module ToolUp.Platform.Audit.AuditReplicator
 
 open ToolUp.Platform.Transport
 open System

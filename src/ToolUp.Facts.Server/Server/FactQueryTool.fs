@@ -7,6 +7,8 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs.SmokeTests
 
 // ─── FactQueryTool (Phase 559) ───────────────────────────────────────
 //

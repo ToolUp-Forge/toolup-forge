@@ -1,9 +1,10 @@
-module ToolUp.Platform.HeaderAuthProviderModeValidator
+module ToolUp.Platform.Scope.HeaderAuthProviderModeValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.A / Wave 19 — unverified auth provider in auth modes ───
 //

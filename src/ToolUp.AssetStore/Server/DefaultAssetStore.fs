@@ -9,6 +9,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Compose
 
 /// Wire shape persisted under `assets/records/{assetId}.json`.
 /// `AssetRecord` itself uses an `AssetId` (single-case DU) and

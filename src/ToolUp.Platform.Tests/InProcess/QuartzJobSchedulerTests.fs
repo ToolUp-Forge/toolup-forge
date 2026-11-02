@@ -12,6 +12,10 @@ open ToolUp.Platform.JobSchedulers
 open ToolUp.Platform.JobSchedulers.QuartzStore
 open ToolUp.Platform.JobSchedulers.QuartzScheduler
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 9c.E — the Quartz companion binds BOTH contract packs ─────
 //

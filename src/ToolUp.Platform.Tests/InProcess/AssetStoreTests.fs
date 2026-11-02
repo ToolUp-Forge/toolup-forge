@@ -4,11 +4,12 @@ open System.IO
 open Expecto
 open SkiaSharp
 open ToolUp.Platform
-open ToolUp.Platform.AuditLog
+open ToolUp.Platform.Audit.AuditLog
 open ToolUp.Platform.BlobStorage
 open ToolUp.AssetStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.IAssetStoreContract
+open ToolUp.Platform.Config
 
 /// Produce a deterministic small PNG via SkiaSharp so the
 /// contract pack has a real image to decode + resize without

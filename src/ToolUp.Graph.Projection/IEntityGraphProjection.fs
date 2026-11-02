@@ -7,7 +7,8 @@ open System
 open Microsoft.FSharp.Reflection
 open ToolUp.Graph
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
 
 // ─── Entity→Graph projection: the pure core + the seam (68d.A) ──────
 //

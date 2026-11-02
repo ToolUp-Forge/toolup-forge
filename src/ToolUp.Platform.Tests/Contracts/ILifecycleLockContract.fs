@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.Threading
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 54h — ILifecycleLock contract pack ────────────────────────
 //

@@ -4,12 +4,13 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Scheduling.IBookingScheduler
 open ToolUp.Scheduling.BookingScheduler
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEventStore
 open ToolUp.Scheduling.Tests.Contracts
+open ToolUp.Platform.Infra
 
 /// Bind the IBookingScheduler contract pack to the default
 /// BookingScheduler default impl over the in-memory IEntityStore +

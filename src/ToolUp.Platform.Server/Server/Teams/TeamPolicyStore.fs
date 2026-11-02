@@ -15,7 +15,7 @@
 /// deployment default for every team and no way for an owner to change it.
 /// The companion is now a consumer of this record for the conversation
 /// level; the conversation rule and its API stay there.
-module ToolUp.Platform.TeamPolicyStore
+module ToolUp.Platform.Scope.TeamPolicyStore
 
 open System
 open System.Collections.Concurrent
@@ -27,7 +27,7 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── The deployment declarations, as DI holds them ───────────────
 

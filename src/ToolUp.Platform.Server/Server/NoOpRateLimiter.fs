@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 // ─── Phase 9v — no-op outbound rate limiter ──────────────────────────
 //

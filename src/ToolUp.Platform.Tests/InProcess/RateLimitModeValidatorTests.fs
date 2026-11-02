@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.RateLimitModeValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 let private cfg
     (surfaces: SurfaceProfile list)

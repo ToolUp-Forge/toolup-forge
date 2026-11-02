@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.BookingConflictDetector
+open ToolUp.Platform.Jobs
 
 // ─── BookingConflictDetector — pure unit tests ────────────────────
 //

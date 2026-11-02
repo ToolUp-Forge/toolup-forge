@@ -6,6 +6,9 @@ module ToolUp.Platform.Tests.Contracts.IJobScopeReissueContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── IJobScopeReissue contract pack (Phase 991) ──────────────────────
 //

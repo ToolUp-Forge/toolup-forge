@@ -7,6 +7,10 @@ open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 561 — reactive fact recomputation ─────────────────────────
 //

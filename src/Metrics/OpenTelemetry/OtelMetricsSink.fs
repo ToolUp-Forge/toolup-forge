@@ -4,6 +4,7 @@ open System.Collections.Concurrent
 open System.Diagnostics.Metrics
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
 
 // ─── OtelMetricsSink — Phase 9e OpenTelemetry companion ─────────────
 //

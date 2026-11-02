@@ -8,11 +8,12 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyConfigValidator
 open ToolUp.AuthProviders.Passkey.PasskeyHost
 open ToolUp.AuthProviders.PasskeyAuthProvider
+open ToolUp.Platform.Compose
 
 // ─── The passkey companion: `withPasskey` ─────────────────────────────
 //

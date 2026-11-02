@@ -17,6 +17,10 @@ open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerApiDeps
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 504 — conversation retention / TTL policy ─────────────
 //

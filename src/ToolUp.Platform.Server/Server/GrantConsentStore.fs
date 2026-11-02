@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.GrantConsentStore
+module ToolUp.Platform.Scope.GrantConsentStore
 
 open System
 open System.Security.Cryptography
@@ -10,7 +10,8 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Infra
 
 // ─── The consented-grant registry (Phase 552) ────────────────────────
 //

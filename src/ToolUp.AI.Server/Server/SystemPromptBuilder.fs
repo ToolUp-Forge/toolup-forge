@@ -5,6 +5,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
+open ToolUp.Platform.Infra
 
 /// Everything the prompt builder needs, resolved per request. A richer shape
 /// than a raw `AccessContext` so module-awareness and compose-time metadata

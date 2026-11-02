@@ -8,6 +8,8 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 595 — aggregate peer surface + gateway composition ────────
 //

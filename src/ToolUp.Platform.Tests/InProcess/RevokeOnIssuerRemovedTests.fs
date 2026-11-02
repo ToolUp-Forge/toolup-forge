@@ -8,9 +8,12 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved
 open ToolUp.Platform.Tests.InProcess.ShareTokenStoreTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── RevokeOnIssuerRemoved — Phase 66 C.5 integration tests (D.8) ────
 //

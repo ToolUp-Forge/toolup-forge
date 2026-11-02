@@ -4,13 +4,14 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.IBookingScheduler
 open ToolUp.Scheduling.BookingScheduler
 open ToolUp.Scheduling.iCalendar
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEventStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 20 acceptance — worked example ────────────────────────
 //

@@ -32,6 +32,13 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // NB: `ToolUp.Platform.ConfigValidation` is deliberately NOT opened — its
 // `ValidationResult` DU has `Ok` / `Error` cases that would shadow FSharp.Core's
@@ -49,7 +56,7 @@ let private withHeader (name: string) (value: string) (ctx: HttpContext) =
     ctx
 
 let private toReq (ctx: HttpContext) =
-    ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx
+    ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext ctx
 
 let private bearerCtx (token: string) =
     mkContext () |> withHeader "Authorization" ("Bearer " + token) |> toReq
@@ -714,7 +721,7 @@ let private runBackstop (httpMethod: string) (path: string) (stampAdmin: bool) :
             Task.CompletedTask)
 
     let mw =
-        ToolUp.Platform.PlatformAdminAuthorization.PlatformAdminAuthorizationMiddleware(next)
+        ToolUp.Platform.Scope.PlatformAdminAuthorization.PlatformAdminAuthorizationMiddleware(next)
 
     mw.InvokeAsync(ctx).GetAwaiter().GetResult()
     ctx.Response.StatusCode, reached
@@ -727,7 +734,7 @@ let private lens4Authz =
 
             match decision with
             | Deny _ -> ()
-            | Allow -> failtest "an unclassified method must fail closed, not default to allow"
+            | AuthDecision.Allow -> failtest "an unclassified method must fail closed, not default to allow"
         }
 
         test "backstop secure: a stamped PlatformAdmin reaches the guarded handler" {

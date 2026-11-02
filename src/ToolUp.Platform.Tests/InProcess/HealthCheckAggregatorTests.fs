@@ -7,6 +7,7 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Diagnostics.HealthChecks
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Infra
 
 // ─── Phase 9k aggregator + adapter tests ─────────────────────────────
 //
@@ -46,7 +47,7 @@ type TypedProbe() =
 let private runThroughAdapter (probe: IHealthCheck) : Async<HealthCheckResult> = async {
     let services = ServiceCollection()
     services.AddSingleton<IHealthCheck>(probe) |> ignore
-    ToolUp.Platform.HealthCheckAggregator.register services
+    ToolUp.Platform.Infra.HealthCheckAggregator.register services
 
     let sp = services.BuildServiceProvider()
 
@@ -174,7 +175,7 @@ let tests =
             let services = ServiceCollection()
             services.AddSingleton<IHealthCheck>(livenessProbe) |> ignore
             services.AddSingleton<IHealthCheck>(readinessProbe) |> ignore
-            ToolUp.Platform.HealthCheckAggregator.register services
+            ToolUp.Platform.Infra.HealthCheckAggregator.register services
 
             let sp = services.BuildServiceProvider()
 
@@ -202,7 +203,7 @@ let tests =
             // so it takes the same deferred path as a factory registration.
             let services = ServiceCollection()
             services.AddSingleton<IHealthCheck, TypedProbe>() |> ignore
-            ToolUp.Platform.HealthCheckAggregator.register services
+            ToolUp.Platform.Infra.HealthCheckAggregator.register services
 
             let sp = services.BuildServiceProvider()
 
@@ -224,7 +225,7 @@ let tests =
             // vacuously through the BCL pipeline (a higher-level
             // integration test, not exercised here).
             let services = ServiceCollection()
-            ToolUp.Platform.HealthCheckAggregator.register services
+            ToolUp.Platform.Infra.HealthCheckAggregator.register services
             // No assertion — reaching this line means the call did not throw.
             ()
 
@@ -240,7 +241,7 @@ let tests =
             services.AddSingleton<IHealthCheck>(probeA) |> ignore
             services.AddSingleton<IHealthCheck>(probeB) |> ignore
 
-            let snapshot = ToolUp.Platform.HealthCheckAggregator.snapshot services
+            let snapshot = ToolUp.Platform.Infra.HealthCheckAggregator.snapshot services
 
             Expect.equal snapshot.Length 2 "both probes captured in snapshot"
             Expect.contains snapshot ("a", Readiness, TimeSpan.FromSeconds 5.0) "probe a captured"
@@ -272,7 +273,7 @@ let tests =
             )
             |> ignore
 
-            ToolUp.Platform.HealthCheckAggregator.register services
+            ToolUp.Platform.Infra.HealthCheckAggregator.register services
 
             let sp = services.BuildServiceProvider()
 
@@ -317,7 +318,7 @@ let tests =
                 services.AddSingleton<IHealthCheck>(Func<IServiceProvider, IHealthCheck>(factory))
                 |> ignore
 
-                ToolUp.Platform.HealthCheckAggregator.register services
+                ToolUp.Platform.Infra.HealthCheckAggregator.register services
                 let sp = services.BuildServiceProvider()
 
                 sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
@@ -342,6 +343,6 @@ let tests =
             |> ignore
 
             Expect.throws
-                (fun () -> ToolUp.Platform.HealthCheckAggregator.snapshot services |> ignore)
+                (fun () -> ToolUp.Platform.Infra.HealthCheckAggregator.snapshot services |> ignore)
                 "a compose-time snapshot cannot name a factory probe, and says so instead of omitting it"
     ]

@@ -9,7 +9,7 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
@@ -18,6 +18,9 @@ open KnowledgeBase.ServerOriginalSourceResolver
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // Abbreviated rather than `open`ed: the preview-seam module exports a
 // `createDefault` that would shadow the Phase 104 resolver's.

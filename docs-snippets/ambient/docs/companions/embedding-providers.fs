@@ -23,12 +23,13 @@
 // there by definition.
 open ToolUp.AI
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.EmbeddingProviderEnv
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Config.EmbeddingProviderEnv
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
+open ToolUp.Platform.Infra
 
 [<AutoOpen>]
 module PageAmbient =

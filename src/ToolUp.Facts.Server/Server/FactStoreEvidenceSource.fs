@@ -4,6 +4,7 @@
 namespace ToolUp.Facts
 
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── FactStoreEvidenceSource (Phase 520 / 524 wiring) ─────────────────
 //

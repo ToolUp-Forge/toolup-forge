@@ -2,8 +2,9 @@ module ToolUp.Platform.Tests.InProcess.DefaultSubjectResolverTests
 
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Scope
 
 // ─── DefaultSubjectResolver — Phase 66 Stream D.1 ────────────────────
 //

@@ -4,14 +4,17 @@
 module FormsAndAI.Server
 
 open ToolUp.Platform
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.Server
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Compose.Server
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.IWorkflowEngine
 open ToolUp.AI
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.AI.DefaultAIProviderFactory
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 1h reference composition root — Forms AND AI on the same
 // `ServerApp` pipeline via the `withForms` / `withAI`

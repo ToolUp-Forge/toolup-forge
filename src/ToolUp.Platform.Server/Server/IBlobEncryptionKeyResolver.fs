@@ -1,4 +1,4 @@
-module ToolUp.Platform.BlobEncryption
+module ToolUp.Platform.Infra.BlobEncryption
 
 open System
 open ToolUp.Platform

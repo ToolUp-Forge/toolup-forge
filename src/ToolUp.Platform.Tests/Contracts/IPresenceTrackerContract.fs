@@ -6,6 +6,7 @@ open System.Text.Json
 open Expecto
 open ToolUp.Platform
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Jobs
 
 // ─── Phase 442 — IPresenceTracker conformance ────────────────────────
 //

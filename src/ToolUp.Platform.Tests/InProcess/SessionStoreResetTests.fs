@@ -4,9 +4,13 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Files.FileManagement
 open DataManagementTypes
 open ProcessedDataTypes
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 6p — session-store reset transition ──────────────────
 //

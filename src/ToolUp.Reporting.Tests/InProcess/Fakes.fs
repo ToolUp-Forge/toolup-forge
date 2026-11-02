@@ -8,6 +8,8 @@ open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── In-memory doubles for the seams Phase 534 composes ──────────────
 //

@@ -66,6 +66,9 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
 open ToolUp.AI.AIToolRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 /// How a grounded run is composed.
 type GroundedNarrativeRunOptions = {

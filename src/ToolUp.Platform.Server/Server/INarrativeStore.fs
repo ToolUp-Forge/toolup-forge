@@ -1,4 +1,8 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Files
 
 open System
 open ToolUp.Platform.EntityTypes

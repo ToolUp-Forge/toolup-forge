@@ -1,8 +1,9 @@
-module ToolUp.Platform.SurfaceEnforcement
+module ToolUp.Platform.Scope.SurfaceEnforcement
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── SurfaceEnforcementMiddleware — Phase 66 Stream A.5 + A.6 ────────
 //

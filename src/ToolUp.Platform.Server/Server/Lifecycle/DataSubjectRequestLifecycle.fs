@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataSubjectRequestLifecycle
+module ToolUp.Platform.Compose.DataSubjectRequestLifecycle
 
 open System
 open System.Security.Cryptography
@@ -6,8 +6,9 @@ open System.Text
 open System.Text.Json.Nodes
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Audit
 
 // ─── Phase 54 — first-party data-erasure lifecycle hook ──────────────
 //

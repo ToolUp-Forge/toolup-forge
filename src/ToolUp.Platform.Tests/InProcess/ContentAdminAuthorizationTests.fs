@@ -4,10 +4,13 @@ open System
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
 open ToolUp.ContentAuthoring
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 627 — `IContentAdminApi` authentication + a live classifier ─
 //
@@ -187,11 +190,11 @@ let private classificationOf (apiType: Type) (methodName: string) =
 let private expectDeny (decision: AuthDecision) (label: string) =
     match decision with
     | Deny _ -> ()
-    | Allow -> failtestf "%s: expected Deny, got Allow" label
+    | AuthDecision.Allow -> failtestf "%s: expected Deny, got Allow" label
 
 let private expectAllow (decision: AuthDecision) (label: string) =
     match decision with
-    | Allow -> ()
+    | AuthDecision.Allow -> ()
     | Deny reason -> failtestf "%s: expected Allow, got Deny (%s)" label reason
 
 let private componentId = ComponentId.create "toolup.contentauthoring"

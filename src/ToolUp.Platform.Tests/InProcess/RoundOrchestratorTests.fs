@@ -8,6 +8,7 @@ open ToolUp.InterPlatform
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 483 — multi-round protocol orchestrator ───────────────────
 //

@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.Platform.AuditSinks.LedgerChain
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Audit
 
 // ─── The destruction certificate ────────────────────────────────────────
 //

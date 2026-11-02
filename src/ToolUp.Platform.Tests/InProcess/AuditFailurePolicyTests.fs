@@ -5,6 +5,9 @@ open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 // ─── Phase 9t — audit-write failure policy ───────────────────────────
 //

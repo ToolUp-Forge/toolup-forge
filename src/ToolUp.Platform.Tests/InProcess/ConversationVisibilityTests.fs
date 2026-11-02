@@ -12,15 +12,20 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.TeamPolicyStore
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.TeamPolicyStore
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
 open ToolUp.AI.TeamConversationPolicyStore
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 859 — team conversation visibility ────────────────────
 //
