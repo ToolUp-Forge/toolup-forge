@@ -134,7 +134,7 @@ phase records them and resolves none.
 ## What a part is
 
 Each part's `.fsproj` compiles its run from the sources' existing place under `src/ToolUp.Platform.Server/`. Nothing
-moved on disk, so no source citation, test path or open phase's key-files list changed. A file's part is read from
+moved on disk, so no source citation or test path changed. A file's part is read from
 the project files, not its folder. It references only the parts before it, and grants `InternalsVisibleTo` to the
 parts after it, the umbrella, and the four test packs that already read the tier's internals. Of 81 file pairs
 joined by an internal symbol, 38 cross a part. `ToolUp.Platform.Core` grants the parts the friendship it granted the
@@ -180,7 +180,7 @@ were building). Counts are the evidence; seconds are one busy machine's.
 
 So the cut does not shrink the public-edit closure, which is the umbrella's dependants either way. What it buys is
 smaller units: an implementation edit recompiles one part, not 195k lines. And the project graph now says which
-subsystem an edit touched, which is what 1194's test selection and the dispatch leases read.
+subsystem an edit touched, which is what Phase 1194's test selection reads.
 
 ## Rollback
 
