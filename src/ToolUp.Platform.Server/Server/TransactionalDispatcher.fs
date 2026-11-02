@@ -1,4 +1,4 @@
-module ToolUp.Platform.TransactionalDispatcher
+module ToolUp.Platform.Jobs.TransactionalDispatcher
 
 open System
 open System.Security.Cryptography
@@ -8,7 +8,8 @@ open System.Threading.Channels
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.C — recipient hashing for audit emission ──────────────
 

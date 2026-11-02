@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open System.Collections.Generic
 
@@ -246,7 +248,10 @@ type DefaultProvenanceGraph
             return {
                 Root = rootId
                 Nodes = nodes.Values |> List.ofSeq
-                Edges = edges |> Seq.map (fun (f, t, k) -> { From = f; To = t; Kind = k }) |> List.ofSeq
+                Edges =
+                    edges
+                    |> Seq.map (fun (f, t, k) -> ({ From = f; To = t; Kind = k }: ProvenanceEdge))
+                    |> List.ofSeq
             }
         }
 
@@ -268,11 +273,13 @@ type DefaultProvenanceGraph
 
             let citeEdges =
                 citedFactIds
-                |> List.map (fun fid -> {
-                    From = messageId
-                    To = fid
-                    Kind = CitesFact
-                })
+                |> List.map (fun fid ->
+                    ({
+                        From = messageId
+                        To = fid
+                        Kind = CitesFact
+                    }
+                    : ProvenanceEdge))
 
             return {
                 chain with

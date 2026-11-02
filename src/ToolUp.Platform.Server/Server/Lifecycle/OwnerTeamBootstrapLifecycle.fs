@@ -1,8 +1,8 @@
-module ToolUp.Platform.OwnerTeamBootstrapLifecycle
+module ToolUp.Platform.Compose.OwnerTeamBootstrapLifecycle
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── Phase 54g — first-party owner-team bootstrap lifecycle hook ─────
 //

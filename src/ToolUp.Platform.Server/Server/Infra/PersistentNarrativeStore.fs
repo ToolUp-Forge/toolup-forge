@@ -1,4 +1,4 @@
-module ToolUp.Platform.PersistentNarrativeStore
+module ToolUp.Platform.Compose.PersistentNarrativeStore
 
 open System
 open System.Text
@@ -7,6 +7,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // ─── Storage layout ──────────────────────────────────────────────
 //

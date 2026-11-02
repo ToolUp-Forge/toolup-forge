@@ -1,9 +1,10 @@
-module ToolUp.Platform.WebhookSecretValidator
+module ToolUp.Platform.Jobs.WebhookSecretValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6d.A — webhook plaintext-secret-at-rest preflight ─────────
 //

@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Config
+
+open ToolUp.Platform
 
 /// Scope-indexed persistent store for team (and user) configuration.
 ///

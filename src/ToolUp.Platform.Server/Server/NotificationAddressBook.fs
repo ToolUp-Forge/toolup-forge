@@ -1,4 +1,4 @@
-module ToolUp.Platform.NotificationAddressBook
+module ToolUp.Platform.Jobs.NotificationAddressBook
 
 open System
 open System.Text

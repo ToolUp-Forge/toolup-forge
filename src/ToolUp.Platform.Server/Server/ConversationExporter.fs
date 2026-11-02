@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ConversationExporter
+module ToolUp.Platform.Audit.ConversationExporter
 
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Infra
 
 // ─── Phase 53 — IConversationStore DSAR exporter ─────────────────
 //

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.UserSchemaApiHandler
+module ToolUp.Platform.Config.UserSchemaApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
 
 // ─── Phase 7b — IUserSchemaApi ToolUp.Remoting handler ─────────────────
 //

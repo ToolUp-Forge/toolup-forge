@@ -1,10 +1,12 @@
-module ToolUp.Platform.ComposeTenantLifecycle
+module ToolUp.Platform.Compose.ComposeTenantLifecycle
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54 — tenant-lifecycle compose step ────────────────────────
 //

@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
+
+open ToolUp.Platform
 
 // ─── IShareTokenStore ────────────────────────────────────────────────
 //

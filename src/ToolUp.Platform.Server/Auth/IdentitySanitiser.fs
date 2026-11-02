@@ -1,4 +1,7 @@
-module ToolUp.Platform.Auth.IdentitySanitiser
+module ToolUp.Platform.Config.Auth.IdentitySanitiser
+
+open ToolUp.Platform
+open ToolUp.Platform.Auth
 
 open System
 

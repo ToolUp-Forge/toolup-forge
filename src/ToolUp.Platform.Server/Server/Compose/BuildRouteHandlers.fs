@@ -1,20 +1,26 @@
-module ToolUp.Platform.BuildRouteHandlers
+module ToolUp.Platform.Compose.BuildRouteHandlers
 
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.DataSubjectRequestApi
-open ToolUp.Platform.DataSubjectRequestApiHandler
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.PlatformApiHandler
-open ToolUp.Platform.PlatformSchema
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.Teams
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Compose.PlatformApiHandler
+open ToolUp.Platform.Compose.PlatformSchema
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.Teams
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Files
 
 // ─── compose phase: route handlers ───────────────────────────────────
 //

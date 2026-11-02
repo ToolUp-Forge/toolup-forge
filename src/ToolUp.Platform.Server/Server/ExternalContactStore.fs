@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ExternalContactStore
+module ToolUp.Platform.Jobs.ExternalContactStore
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
+open ToolUp.Platform.Infra
 
 // ─── SDK-default IExternalContactStore (Phase 6f.A) ──────────────────
 //

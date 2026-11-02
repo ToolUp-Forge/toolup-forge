@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ServiceAccountApiHandler
+module ToolUp.Platform.Scope.ServiceAccountApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── IServiceAccountApi handler (Phase 527) ──────────────────────────
 //

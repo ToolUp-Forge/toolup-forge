@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ModelExecutionDepsValidator
+module ToolUp.Platform.Compose.ModelExecutionDepsValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 728 — fail at composition, not at dispatch ────────────────────
 //

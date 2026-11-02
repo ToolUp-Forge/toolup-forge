@@ -1,8 +1,9 @@
-module ToolUp.Platform.CsrfDefaultModeValidator
+module ToolUp.Platform.Scope.CsrfDefaultModeValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 129 — CSRF off-by-default under cookie auth ──────────────
 //

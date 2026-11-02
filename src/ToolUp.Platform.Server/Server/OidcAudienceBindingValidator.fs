@@ -1,8 +1,9 @@
-module ToolUp.Platform.OidcAudienceBindingValidator
+module ToolUp.Platform.Scope.OidcAudienceBindingValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── OIDC audience binding in authenticated modes ───────────────────
 //

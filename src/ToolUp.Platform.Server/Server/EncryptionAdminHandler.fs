@@ -1,11 +1,13 @@
-module ToolUp.Platform.EncryptionAdminHandler
+module ToolUp.Platform.Scope.EncryptionAdminHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 22 — encryption admin endpoint ───────────────────────────
 //

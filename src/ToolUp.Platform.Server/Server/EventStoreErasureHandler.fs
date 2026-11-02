@@ -1,9 +1,9 @@
-module ToolUp.Platform.EventStoreErasureHandler
+module ToolUp.Platform.Audit.EventStoreErasureHandler
 
 open System.Text
 open System.Text.Json
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
 
 // ─── Phase 9h — event-store DSR adapter ──────────────────────────────
 //

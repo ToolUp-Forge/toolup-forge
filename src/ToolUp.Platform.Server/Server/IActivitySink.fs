@@ -1,4 +1,6 @@
-namespace ToolUp.Platform.Tracing
+namespace ToolUp.Platform.Infra.Tracing
+
+open ToolUp.Platform
 
 open System.Diagnostics
 

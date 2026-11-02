@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ShareTokenSigningKeyProvenanceValidator
+module ToolUp.Platform.Scope.ShareTokenSigningKeyProvenanceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Wave 19 — share-token signing-key provenance preflight ──────────
 //

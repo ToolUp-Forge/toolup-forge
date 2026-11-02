@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
+
+open ToolUp.Platform
 
 // ─── NoOpAnonymousSessionMigrator — Phase 66 Stream C.1 (substrate) ──
 //

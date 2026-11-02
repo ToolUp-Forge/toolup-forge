@@ -1,4 +1,4 @@
-module ToolUp.Platform.OAuthFlowHandler
+module ToolUp.Platform.Jobs.OAuthFlowHandler
 
 open System
 open System.Text
@@ -11,7 +11,9 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 10b — OAuth Authorization Code endpoints ─────────────────
 //

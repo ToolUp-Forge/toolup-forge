@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ServiceAccountTokenHandler
+module ToolUp.Platform.Scope.ServiceAccountTokenHandler
 
 open System
 open System.Text
@@ -9,6 +9,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
 
 // ─── ServiceAccountTokenMiddleware (Phase 527) ───────────────────────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.HomeOverviewApiHandler
+module ToolUp.Platform.Compose.HomeOverviewApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
@@ -6,6 +6,8 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 171 — Home / Overview API handler ─────────────────────
 //

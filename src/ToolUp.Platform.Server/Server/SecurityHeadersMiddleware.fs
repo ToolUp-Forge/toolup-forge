@@ -1,7 +1,8 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Security headers middleware (Phase 1f / 129d) ───────────────────
 //

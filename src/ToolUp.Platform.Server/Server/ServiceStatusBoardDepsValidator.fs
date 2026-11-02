@@ -1,4 +1,4 @@
-module ToolUp.Platform.ServiceStatusBoardDepsValidator
+module ToolUp.Platform.Config.ServiceStatusBoardDepsValidator
 
 open System
 open ToolUp.Platform

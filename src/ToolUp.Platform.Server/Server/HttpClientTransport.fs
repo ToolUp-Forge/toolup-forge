@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform.Transport
+namespace ToolUp.Platform.Infra.Transport
+
+open ToolUp.Platform
+open ToolUp.Platform.Transport
 
 open System
 open System.Net.Http

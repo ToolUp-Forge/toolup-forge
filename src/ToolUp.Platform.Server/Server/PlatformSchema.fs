@@ -1,7 +1,11 @@
-module ToolUp.Platform.PlatformSchema
+module ToolUp.Platform.Compose.PlatformSchema
 
 open ToolUp.Platform
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs.SmokeTests
 
 /// SDK-shipped default `_platform` schema. Currently declares one
 /// field (`currencySymbol`) consumed by every module that renders

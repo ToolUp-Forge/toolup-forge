@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
 
 open System
 open System.IO
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
 
 // ─── The prover's own lifecycle (Phase 597) ──────────────────────────
 //

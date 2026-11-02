@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.OAuth1aFlowHandler
+module ToolUp.Platform.Config.OAuth1aFlowHandler
 
 open System
 open System.Threading.Tasks
@@ -10,7 +10,8 @@ open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
 
 // ─── Phase 10g — OAuth 1.0a three-legged flow endpoints ─────────────────
 //

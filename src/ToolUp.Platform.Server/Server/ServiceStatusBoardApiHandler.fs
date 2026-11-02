@@ -1,13 +1,16 @@
-module ToolUp.Platform.ServiceStatusBoardApiHandler
+module ToolUp.Platform.Compose.ServiceStatusBoardApiHandler
 
 open System
 open System.Threading
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.SmokeTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 9p.A — IServiceStatusBoardApi handler ─────────────────────
 //

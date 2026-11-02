@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.DataObjectOrphanSweep
+module ToolUp.Platform.Audit.DataObjectOrphanSweep
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // `ToolUp.Platform.ConfigValidation` is deliberately NOT opened: its
 // `ValidationResult` DU has `Ok` / `Error` cases that shadow the F# core

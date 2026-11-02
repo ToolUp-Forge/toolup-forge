@@ -1,4 +1,4 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
 
 open System
 open System.Diagnostics

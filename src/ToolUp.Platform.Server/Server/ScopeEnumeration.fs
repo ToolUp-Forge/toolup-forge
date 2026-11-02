@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
 
 open System
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 723 — scope enumeration seam ───────────────────────────
 //

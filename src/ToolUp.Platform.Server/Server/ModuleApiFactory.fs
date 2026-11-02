@@ -1,8 +1,10 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Files
 
 // ─── Phase 495 — Module API-factory helper ───────────────────────────
 //

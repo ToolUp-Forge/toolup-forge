@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.SchemaMigrationJobHandler
+module ToolUp.Platform.Jobs.SchemaMigrationJobHandler
 
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 7b — SchemaMigrationJobHandler ─────────────────────────────
 //

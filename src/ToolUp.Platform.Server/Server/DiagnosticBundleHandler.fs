@@ -1,4 +1,4 @@
-module ToolUp.Platform.DiagnosticBundleHandler
+module ToolUp.Platform.Compose.DiagnosticBundleHandler
 
 open System
 open System.Formats.Tar
@@ -12,9 +12,11 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.HealthChecks
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 9n — /dev/bundle diagnostic-support archive ──────────────
 //

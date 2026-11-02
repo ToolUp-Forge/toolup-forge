@@ -1,9 +1,9 @@
-module ToolUp.Platform.MembershipCacheLifecycle
+module ToolUp.Platform.Compose.MembershipCacheLifecycle
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── Phase 54 — first-party membership-cache lifecycle hook ──────────
 //

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AdUnitConfigApi
+module ToolUp.Platform.Audit.AdUnitConfigApi
 
 open System
 open Giraffe
@@ -10,8 +10,11 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Remoting.Server.Http
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 61 — AdUnit CRUD admin endpoint ────────────────────────
 //

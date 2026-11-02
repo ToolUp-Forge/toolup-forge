@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ConsentApiHandler
+module ToolUp.Platform.Audit.ConsentApiHandler
 
 open System
 open Giraffe
@@ -9,6 +9,8 @@ open Microsoft.AspNetCore.Http
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Remoting.Server.Http
+open ToolUp.Platform.Config
 
 // ─── Phase 59 — server-side consent-audit endpoint ────────────────
 //

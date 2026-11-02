@@ -1,4 +1,4 @@
-module ToolUp.Platform.MaxRequestBodyBytesValidator
+module ToolUp.Platform.Config.MaxRequestBodyBytesValidator
 
 open System
 open ToolUp.Platform

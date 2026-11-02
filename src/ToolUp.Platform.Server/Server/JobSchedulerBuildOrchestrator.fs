@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.JobSchedulerBuildOrchestrator
+module ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator
 
 open System
 open System.Collections.Concurrent
@@ -9,6 +9,7 @@ open System.Threading
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── JobSchedulerBuildOrchestrator (Phase 26 substrate default) ──────
 //

@@ -3,7 +3,7 @@
 
 /// Preflight guard over the *names* of the `TOOLUP_*` environment
 /// variables a deployment has set.
-module ToolUp.Platform.UnknownConfigKeyValidator
+module ToolUp.Platform.Config.UnknownConfigKeyValidator
 
 open System
 open ToolUp.Platform

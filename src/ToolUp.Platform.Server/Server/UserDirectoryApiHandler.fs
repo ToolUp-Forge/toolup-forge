@@ -1,4 +1,4 @@
-module ToolUp.Platform.UserDirectoryApiHandler
+module ToolUp.Platform.Scope.UserDirectoryApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform

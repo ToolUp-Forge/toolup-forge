@@ -1,4 +1,4 @@
-module ToolUp.Platform.IRetrievalTracer
+module ToolUp.Platform.Infra.IRetrievalTracer
 
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes

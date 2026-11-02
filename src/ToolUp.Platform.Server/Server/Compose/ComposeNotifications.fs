@@ -1,9 +1,14 @@
-module ToolUp.Platform.ComposeNotifications
+module ToolUp.Platform.Compose.ComposeNotifications
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── compose phase: notification stack + audit log + share tokens ────
 //

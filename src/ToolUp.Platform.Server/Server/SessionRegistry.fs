@@ -16,7 +16,7 @@
 /// calls (GP 12 rule 4), so any instance answers identically. The
 /// caller-side cache in `SessionRevocationMiddleware` is what is
 /// per-instance; see the multi-instance caveat on `ISessionRegistry`.
-module ToolUp.Platform.SessionRegistry
+module ToolUp.Platform.Scope.SessionRegistry
 
 open System
 open System.Security.Cryptography
@@ -25,6 +25,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config
 
 /// The reserved platform container every `_platform/...` artefact lives
 /// in. Matches `AuditReplicator` / `ConfigValidator`.

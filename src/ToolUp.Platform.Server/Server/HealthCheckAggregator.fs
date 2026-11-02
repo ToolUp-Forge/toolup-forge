@@ -1,4 +1,6 @@
-module ToolUp.Platform.HealthCheckAggregator
+module ToolUp.Platform.Infra.HealthCheckAggregator
+
+open ToolUp.Platform
 
 open System
 open System.Threading

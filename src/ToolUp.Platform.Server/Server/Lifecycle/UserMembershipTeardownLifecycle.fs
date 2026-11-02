@@ -1,8 +1,8 @@
-module ToolUp.Platform.UserMembershipTeardownLifecycle
+module ToolUp.Platform.Compose.UserMembershipTeardownLifecycle
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── Phase 545 — first-party user-membership-teardown lifecycle hook ─
 //

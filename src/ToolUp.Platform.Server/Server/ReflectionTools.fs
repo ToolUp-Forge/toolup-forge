@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ReflectionTools
+module ToolUp.Platform.Compose.ReflectionTools
 
 open System
 open System.Text
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs.SmokeTests
 
 // ─── Phase 782 — the reflection door ─────────────────────────────────
 //

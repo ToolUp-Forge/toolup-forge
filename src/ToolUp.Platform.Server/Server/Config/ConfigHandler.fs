@@ -1,8 +1,8 @@
-module ToolUp.Platform.ConfigHandler
+module ToolUp.Platform.Config.ConfigHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 /// Build the `IConfigApi` ToolUp.Remoting handler. Resolves
 /// `IConfigStore`, `AccessContext`, and `ITeamStore` lazily from DI per

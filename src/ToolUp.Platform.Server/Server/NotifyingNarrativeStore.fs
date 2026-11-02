@@ -1,4 +1,4 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
 
 open System
 open System.Text.Json

@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module internal ToolUp.Platform.RemotingAuditDrainService
+module internal ToolUp.Platform.Audit.RemotingAuditDrainService
 
 open System
 open System.Threading
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── RemotingAuditDrainService (Phase 856.C) ─────────────────────
 //

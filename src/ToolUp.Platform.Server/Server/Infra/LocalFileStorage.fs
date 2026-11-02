@@ -1,4 +1,6 @@
-module LocalFileStorage
+module ToolUp.Platform.Infra.LocalFileStorage
+
+open ToolUp.Platform
 
 open System
 open System.Collections.Concurrent

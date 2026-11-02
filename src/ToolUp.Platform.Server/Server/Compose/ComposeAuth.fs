@@ -1,9 +1,12 @@
-module ToolUp.Platform.ComposeAuth
+module ToolUp.Platform.Compose.ComposeAuth
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── compose phase: auth provider + Platform Admin store ─────────────
 //

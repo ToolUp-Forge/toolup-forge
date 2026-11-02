@@ -1,4 +1,4 @@
-module ToolUp.Platform.PlatformAdminDevDiagnostics
+module ToolUp.Platform.Infra.PlatformAdminDevDiagnostics
 
 open ToolUp.Platform
 

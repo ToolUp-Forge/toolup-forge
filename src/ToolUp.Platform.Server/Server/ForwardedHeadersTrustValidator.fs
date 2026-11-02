@@ -1,7 +1,8 @@
-module ToolUp.Platform.ForwardedHeadersTrustValidator
+module ToolUp.Platform.Scope.ForwardedHeadersTrustValidator
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.K / Phase 325 — forwarded-headers trust posture ───────
 //

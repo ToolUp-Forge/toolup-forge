@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ModelExecutionApiHandler
+module ToolUp.Platform.Jobs.ModelExecutionApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
 
 // ─── Phase 600 — model-execution submitter API handler ──────────────────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataIngestionApiHandler
+module ToolUp.Platform.Jobs.DataIngestionApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
@@ -8,7 +8,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 10h — OAuth refresh audit payload decoding ──────────────
 //

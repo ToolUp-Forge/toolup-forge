@@ -1,12 +1,15 @@
-module ToolUp.Platform.ComposeScopeResolver
+module ToolUp.Platform.Compose.ComposeScopeResolver
 
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
 
 // ─── compose phase: scope + access-context wiring ────────────────────
 //

@@ -1,4 +1,6 @@
-module ToolUp.Platform.IEntityStore
+module ToolUp.Platform.Infra.IEntityStore
+
+open ToolUp.Platform
 
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes

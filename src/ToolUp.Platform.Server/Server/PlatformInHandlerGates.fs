@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.PlatformInHandlerGates
+module ToolUp.Platform.Compose.PlatformInHandlerGates
+
+open ToolUp.Platform
 
 // ─── Phase 627.E declarations for the platform-tier API records ──────
 //

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ConfigMigrationDevDiagnostics
+module ToolUp.Platform.Config.ConfigMigrationDevDiagnostics
 
 open ToolUp.Platform
-open ToolUp.Platform.ConfigMigrationRegistry
+open ToolUp.Platform.Config.ConfigMigrationRegistry
 
 /// Wire-shape rendered into the `Contributors["Pending Config
 /// Migrations"]` panel of the `DevDiagnosticsReport`

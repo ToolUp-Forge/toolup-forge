@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AnonymousSessionMigration
+module ToolUp.Platform.Scope.AnonymousSessionMigration
 
 open System
 open System.Collections.Concurrent
@@ -9,6 +9,7 @@ open System.Threading
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── AnonymousSessionMigrationMiddleware — Phase 66 Stream C.1 ───────
 //                                          (continuation)

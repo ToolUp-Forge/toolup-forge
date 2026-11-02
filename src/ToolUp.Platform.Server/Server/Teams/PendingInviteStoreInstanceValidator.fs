@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator
+module ToolUp.Platform.Scope.Teams.PendingInviteStoreInstanceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── PendingInviteStore single-instance enforcement ──────────────────
 //

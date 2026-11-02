@@ -1,7 +1,8 @@
-module ToolUp.Platform.FeatureFlagStoreErasureHandler
+module ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler
 
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Config
 
 // ─── Phase 9h — feature-flag-store DSR adapter ───────────────────────
 //

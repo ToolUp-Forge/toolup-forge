@@ -1,10 +1,11 @@
-module ToolUp.Platform.VectorStoreErasureHandler
+module ToolUp.Platform.Audit.VectorStoreErasureHandler
 
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingCache
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingCache
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Infra
 
 // ─── Phase 9h — vector-store DSR adapter ─────────────────────────────
 //
@@ -45,8 +46,11 @@ let scopeOf (scopeId: string) : VectorScope =
         | _ -> Team scopeId
 
 type VectorStoreErasureHandler
-    (vectorStore: IVectorStore, embeddingCache: IEmbeddingCache, ?sparseIndex: ToolUp.Platform.ISparseIndex.ISparseIndex)
-    =
+    (
+        vectorStore: IVectorStore,
+        embeddingCache: IEmbeddingCache,
+        ?sparseIndex: ToolUp.Platform.Infra.ISparseIndex.ISparseIndex
+    ) =
 
     // Phase 115 — erase across BOTH retrieval legs. Pre-115 this
     // handler reached the vector store only, so a hybrid deployment's
@@ -122,6 +126,6 @@ let erasureHandler (vectorStore: IVectorStore) (embeddingCache: IEmbeddingCache)
 let erasureHandlerHybrid
     (vectorStore: IVectorStore)
     (embeddingCache: IEmbeddingCache)
-    (sparseIndex: ToolUp.Platform.ISparseIndex.ISparseIndex)
+    (sparseIndex: ToolUp.Platform.Infra.ISparseIndex.ISparseIndex)
     : IErasureHandler =
     VectorStoreErasureHandler(vectorStore, embeddingCache, sparseIndex) :> IErasureHandler

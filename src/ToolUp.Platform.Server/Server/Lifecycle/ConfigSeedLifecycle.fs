@@ -1,8 +1,9 @@
-module ToolUp.Platform.ConfigSeedLifecycle
+module ToolUp.Platform.Compose.ConfigSeedLifecycle
 
 open System
 open System.Text.Json
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 54g — first-party config-seed lifecycle hook ──────────────
 //

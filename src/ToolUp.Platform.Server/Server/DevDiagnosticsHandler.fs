@@ -1,4 +1,4 @@
-module ToolUp.Platform.DevDiagnosticsHandler
+module ToolUp.Platform.Compose.DevDiagnosticsHandler
 
 open System
 open System.Text
@@ -10,10 +10,12 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Auth
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.DataCatalog
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Infra.DataCatalog
 open ToolUp.Platform.HealthChecks
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Dev diagnostics endpoint (Phase 9a) ─────────────────────────────
 //

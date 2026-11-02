@@ -1,4 +1,7 @@
-module ToolUp.Platform.WebhookUrlValidator
+module ToolUp.Platform.Jobs.WebhookUrlValidator
+
+open ToolUp.Platform
+open ToolUp.Platform.Config
 
 open System
 open System.Net

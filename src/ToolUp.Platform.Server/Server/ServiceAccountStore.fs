@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ServiceAccountStore
+module ToolUp.Platform.Scope.ServiceAccountStore
 
 open System
 open System.Security.Cryptography
@@ -10,6 +10,8 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Storage layout ──────────────────────────────────────────────────
 //

@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.StartupModes
+module ToolUp.Platform.Compose.StartupModes
 
 open System
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Config
 
 // ─── Phase 214 — opt-in config-introspection startup modes ───────────
 //

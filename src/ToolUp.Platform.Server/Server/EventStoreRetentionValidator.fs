@@ -1,4 +1,4 @@
-module ToolUp.Platform.EventStoreRetentionValidator
+module ToolUp.Platform.Config.EventStoreRetentionValidator
 
 open System
 open ToolUp.Platform

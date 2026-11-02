@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Jobs
+
+open ToolUp.Platform
 
 /// Lookup surface for resolving a `RecipientId` into the
 /// vendor-neutral address types (`EmailAddress`, `PhoneNumber`,

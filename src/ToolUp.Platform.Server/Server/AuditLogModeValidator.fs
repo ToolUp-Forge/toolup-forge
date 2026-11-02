@@ -1,8 +1,9 @@
-module ToolUp.Platform.AuditLogModeValidator
+module ToolUp.Platform.Audit.AuditLogModeValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.B — AuditLog off in authenticated modes ────────────────
 //

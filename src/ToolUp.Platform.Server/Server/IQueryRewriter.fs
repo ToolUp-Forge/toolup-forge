@@ -1,4 +1,6 @@
-module ToolUp.Platform.IQueryRewriter
+module ToolUp.Platform.Infra.IQueryRewriter
+
+open ToolUp.Platform
 
 /// Outcome of a single conversation-aware rewrite attempt (Phase 506).
 ///

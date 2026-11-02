@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ExternalContactApiHandler
+module ToolUp.Platform.Jobs.ExternalContactApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── IExternalContactApi handler (Phase 6f.A) ────────────────────────
 //

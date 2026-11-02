@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ResilientSecretStore
+module ToolUp.Platform.Infra.ResilientSecretStore
+
+open ToolUp.Platform
 
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TransientFault
+open ToolUp.Platform.Infra.TransientFault
 
 // ─── Phase 176 — ISecretStore transient-fault decorator ──────────────
 //

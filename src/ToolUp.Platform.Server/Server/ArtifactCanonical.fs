@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ArtifactCanonical
+module ToolUp.Platform.Audit.ArtifactCanonical
+
+open ToolUp.Platform
 
 open System
 open System.IO

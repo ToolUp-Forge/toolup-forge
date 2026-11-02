@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open DataManagementTypes
 

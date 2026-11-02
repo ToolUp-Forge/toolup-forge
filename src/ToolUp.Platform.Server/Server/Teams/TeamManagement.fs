@@ -1,4 +1,4 @@
-module ToolUp.Platform.TeamManagement
+module ToolUp.Platform.Config.TeamManagement
 
 open System
 open System.Collections.Concurrent
@@ -7,6 +7,7 @@ open System.Text.Json
 open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Storage constants ───────────────────────────────────────────
 // `internal`, not `private` — `MembershipDoctor` (Phase 546) walks the

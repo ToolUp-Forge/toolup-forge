@@ -1,8 +1,9 @@
-module ToolUp.Platform.OAuthStateStoreInstanceValidator
+module ToolUp.Platform.Config.OAuthStateStoreInstanceValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── multi-instance + InMemoryOAuthStateStore ──────────────────────
 //

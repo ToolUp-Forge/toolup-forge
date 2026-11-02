@@ -1,8 +1,9 @@
-module ToolUp.Platform.CsrfHardeningValidator
+module ToolUp.Platform.Scope.CsrfHardeningValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 9j — hardening + split-origin preflight ───────────────────
 //

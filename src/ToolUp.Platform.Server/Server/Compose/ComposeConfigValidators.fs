@@ -1,10 +1,15 @@
-module ToolUp.Platform.ComposeConfigValidators
+module ToolUp.Platform.Compose.ComposeConfigValidators
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Files
 
 // ─── compose phase: first-party config + health validators ───────────
 //

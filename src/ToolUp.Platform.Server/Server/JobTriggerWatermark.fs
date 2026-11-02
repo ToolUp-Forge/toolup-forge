@@ -1,4 +1,4 @@
-module ToolUp.Platform.JobTriggerWatermark
+module ToolUp.Platform.Jobs.JobTriggerWatermark
 
 open System
 open System.Collections.Concurrent

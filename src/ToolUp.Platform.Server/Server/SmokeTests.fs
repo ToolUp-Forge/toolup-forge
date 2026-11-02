@@ -1,10 +1,12 @@
-module ToolUp.Platform.SmokeTests.Defaults
+module ToolUp.Platform.Jobs.SmokeTests.Defaults
 
 open System
 open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.SmokeTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── First-party smoke tests (Phase 9o) ──────────────────────────────
 //

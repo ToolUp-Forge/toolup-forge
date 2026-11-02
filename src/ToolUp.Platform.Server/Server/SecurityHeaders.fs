@@ -1,4 +1,6 @@
-module ToolUp.Platform.SecurityHeaders
+module ToolUp.Platform.Scope.SecurityHeaders
+
+open ToolUp.Platform
 
 // ─── SDK production defaults for ServerConfig.SecurityPosture.SecurityHeaders ───────
 //

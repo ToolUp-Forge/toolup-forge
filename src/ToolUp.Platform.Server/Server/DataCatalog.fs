@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataCatalog
+module ToolUp.Platform.Infra.DataCatalog
 
 open ToolUp.Platform
 open DataManagementTypes

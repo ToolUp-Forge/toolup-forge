@@ -1,10 +1,11 @@
-module ToolUp.Platform.PermissionStore
+module ToolUp.Platform.Scope.PermissionStore
 
 open System
 open System.Text
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 /// Raised when a team's permission document is present but cannot be
 /// read or parsed. Resolving permissions to `TeamPermissions.empty`

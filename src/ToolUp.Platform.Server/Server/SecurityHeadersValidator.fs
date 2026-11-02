@@ -1,9 +1,10 @@
-module ToolUp.Platform.SecurityHeadersValidator
+module ToolUp.Platform.Scope.SecurityHeadersValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.K / 129d — thin SecurityHeaders on internet-facing auth ─
 //

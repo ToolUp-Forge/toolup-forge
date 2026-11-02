@@ -1,4 +1,4 @@
-module ToolUp.Platform.ResultStore
+module ToolUp.Platform.Config.ResultStore
 
 open System
 open System.Collections.Concurrent
@@ -8,6 +8,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Transport
+open ToolUp.Platform.Infra
 
 // ─── ResultStore implementations ────────────────────────────────
 //

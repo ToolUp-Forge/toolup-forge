@@ -14,12 +14,13 @@
 /// (`TransitionOrigin`): the in-process dispatch loop retries inside its own
 /// loop, a backend such as Quartz re-fires the job itself, and an external
 /// outcome or a reconciliation abandonment ends a run the loop already left.
-module ToolUp.Platform.JobLifecycle
+module ToolUp.Platform.Jobs.JobLifecycle
 
 open System
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Lifecycle event payloads ────────────────────────────────────
 //

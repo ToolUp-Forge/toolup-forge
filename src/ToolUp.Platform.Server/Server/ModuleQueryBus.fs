@@ -1,9 +1,9 @@
-module ToolUp.Platform.ModuleQueryBus
+module ToolUp.Platform.Compose.ModuleQueryBus
 
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 
 // The `ModuleQueryHandler` record itself now lives in
 // `Shared/IModuleQueryBus.fs` so server and client share a single

@@ -1,8 +1,10 @@
-module ToolUp.Platform.ComposeAudit
+module ToolUp.Platform.Compose.ComposeAudit
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
 
 // ─── compose phase: audit-replicator substrate + DI ──────────────────
 //

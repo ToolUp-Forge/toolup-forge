@@ -1,4 +1,6 @@
-module ToolUp.Platform.IRagTelemetry
+module ToolUp.Platform.Infra.IRagTelemetry
+
+open ToolUp.Platform
 
 /// Rolling-window aggregate exposed by `IRagTelemetry.Snapshot`. Powers the
 /// `/health/rag` endpoint and any admin dashboard that wants a quick read on

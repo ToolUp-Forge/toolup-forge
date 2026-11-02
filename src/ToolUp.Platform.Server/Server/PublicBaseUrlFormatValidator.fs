@@ -1,4 +1,4 @@
-module ToolUp.Platform.PublicBaseUrlFormatValidator
+module ToolUp.Platform.Config.PublicBaseUrlFormatValidator
 
 open System
 open ToolUp.Platform

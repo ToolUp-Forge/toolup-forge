@@ -1,9 +1,10 @@
-module ToolUp.Platform.LocalSecretFilePermissionsValidator
+module ToolUp.Platform.Config.LocalSecretFilePermissionsValidator
 
 open System
 open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── Phase 6l.J — local secret-file permissions ─────────────────────
 //

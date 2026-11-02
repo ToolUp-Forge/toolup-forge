@@ -1,4 +1,4 @@
-module ToolUp.Platform.JobStore
+module ToolUp.Platform.Jobs.JobStore
 
 open System
 open System.Security.Cryptography
@@ -7,7 +7,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.SecondaryIndex
+open ToolUp.Platform.Infra.SecondaryIndex
 
 // ─── Storage layout ──────────────────────────────────────────────
 //

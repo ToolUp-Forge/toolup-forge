@@ -1,4 +1,4 @@
-module ToolUp.Platform.IdempotencyStoreInstanceValidator
+module ToolUp.Platform.Config.IdempotencyStoreInstanceValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection

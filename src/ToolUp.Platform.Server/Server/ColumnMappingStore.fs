@@ -12,7 +12,7 @@
 /// records are keyed by produced file name. Keys are hashed (SHA-256 hex)
 /// into the object id so arbitrary CSV headers / file names never produce a
 /// path-hostile blob key; the raw fields live inside the persisted record.
-module ToolUp.Platform.ColumnMappingStore
+module ToolUp.Platform.Infra.ColumnMappingStore
 
 open System.Text
 open System.Security.Cryptography

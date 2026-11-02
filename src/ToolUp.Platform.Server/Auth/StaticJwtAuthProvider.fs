@@ -1,4 +1,4 @@
-module StaticJwtAuthProvider
+module ToolUp.Platform.Scope.StaticJwtAuthProvider
 
 open System
 open System.Text
@@ -6,6 +6,8 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Auth
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.Auth
 
 // ─── HS256 JWT helpers (BCL only, no package dependencies) ───────
 //

@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Audit
 
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.ErasurePipeline
-open ToolUp.Platform.DataSubjectRequestApiHandler
+open ToolUp.Platform
+open ToolUp.Platform.Jobs
+
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Audit.ErasurePipeline
+open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
 
 // ─── Phase 9h.A — DSR background erasure handler ────────────────────────
 //

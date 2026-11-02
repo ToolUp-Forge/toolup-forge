@@ -1,10 +1,11 @@
-module ToolUp.Platform.ModuleVisibilityApiHandler
+module ToolUp.Platform.Scope.ModuleVisibilityApiHandler
 
 open Microsoft.AspNetCore.Http
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
 
 /// `FableConverters` is required on `ModuleVisibilityChangedPayload`
 /// because it carries `FlagScope` / `ModuleVisibilityChangeAction` /

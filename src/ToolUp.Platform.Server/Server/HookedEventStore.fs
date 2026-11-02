@@ -1,7 +1,7 @@
-module ToolUp.Platform.HookedEventStore
+module ToolUp.Platform.Jobs.HookedEventStore
 
 open ToolUp.Platform
-open ToolUp.Platform.WebhookDispatcher
+open ToolUp.Platform.Jobs.WebhookDispatcher
 
 /// `IEventStore` decorator that fires `IWebhookDispatcher.Dispatch`
 /// after every successful `Write` to the inner store. This is the

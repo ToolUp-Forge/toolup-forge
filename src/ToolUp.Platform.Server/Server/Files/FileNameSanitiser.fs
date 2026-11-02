@@ -1,4 +1,6 @@
-module ToolUp.Platform.FileNameSanitiser
+module ToolUp.Platform.Files.FileNameSanitiser
+
+open ToolUp.Platform
 
 open System
 

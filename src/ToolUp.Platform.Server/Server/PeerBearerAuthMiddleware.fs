@@ -1,4 +1,4 @@
-module ToolUp.Platform.PeerBearerAuthMiddleware
+module ToolUp.Platform.Scope.PeerBearerAuthMiddleware
 
 open System
 open System.Security.Cryptography
@@ -9,6 +9,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Auth
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Config.Auth
 
 // ─── Phase 37 — peer-bearer-auth middleware ──────────────────────────
 //

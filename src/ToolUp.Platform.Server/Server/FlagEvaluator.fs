@@ -1,4 +1,4 @@
-module ToolUp.Platform.FlagEvaluator
+module ToolUp.Platform.Config.FlagEvaluator
 
 open ToolUp.Platform
 

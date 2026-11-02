@@ -1,4 +1,6 @@
-module ToolUp.Platform.JsonConsoleLogger
+module ToolUp.Platform.Infra.JsonConsoleLogger
+
+open ToolUp.Platform
 
 open System
 open System.Text.Json.Nodes

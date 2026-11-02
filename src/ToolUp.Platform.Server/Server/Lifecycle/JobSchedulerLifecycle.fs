@@ -1,7 +1,8 @@
-module ToolUp.Platform.JobSchedulerLifecycle
+module ToolUp.Platform.Compose.JobSchedulerLifecycle
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54 — first-party job-scheduler lifecycle hook ─────────────
 //

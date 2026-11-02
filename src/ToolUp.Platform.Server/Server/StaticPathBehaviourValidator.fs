@@ -1,4 +1,4 @@
-module ToolUp.Platform.StaticPathBehaviourValidator
+module ToolUp.Platform.Config.StaticPathBehaviourValidator
 
 open System
 open System.IO

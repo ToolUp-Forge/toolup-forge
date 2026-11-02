@@ -1,11 +1,14 @@
-module ToolUp.Platform.PlatformApiHandler
+module ToolUp.Platform.Compose.PlatformApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.RemotingHelpers
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── Platform-level handlers (split from a single 14-method PlatformApi) ──
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.FileManagement
+module ToolUp.Platform.Files.FileManagement
 
 open System
 open System.Collections.Concurrent
@@ -10,8 +10,14 @@ open ProcessedDataTypes
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── File Type Detection ──────────────────────────────────────────
 

@@ -1,10 +1,10 @@
-module ToolUp.Platform.FeatureFlagHandler
+module ToolUp.Platform.Config.FeatureFlagHandler
 
 open Microsoft.AspNetCore.Http
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 /// `FableConverters` is required on `FlagChangedPayload` because it
 /// carries a `FlagScope` / `FlagChangeAction` / `FlagValue` DU — the

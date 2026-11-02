@@ -1,8 +1,9 @@
-module ToolUp.Platform.RateLimitConfigValidator
+module ToolUp.Platform.Config.RateLimitConfigValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── RateLimitConfig range preflight ────────────────────────────────
 //

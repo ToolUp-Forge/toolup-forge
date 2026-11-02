@@ -9,7 +9,7 @@
 /// details and triggers for the Quartz companion. This module is the policy
 /// half, written once over `IJobStore`, so two schedulers cannot disagree
 /// about it; each implementation keeps only its projection.
-module ToolUp.Platform.SchedulerPolicy
+module ToolUp.Platform.Jobs.SchedulerPolicy
 
 open System
 open ToolUp.Platform

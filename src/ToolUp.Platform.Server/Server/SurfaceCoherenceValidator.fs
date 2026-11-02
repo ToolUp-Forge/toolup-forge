@@ -1,4 +1,4 @@
-module ToolUp.Platform.SurfaceCoherenceValidator
+module ToolUp.Platform.Config.SurfaceCoherenceValidator
 
 open System
 open ToolUp.Platform

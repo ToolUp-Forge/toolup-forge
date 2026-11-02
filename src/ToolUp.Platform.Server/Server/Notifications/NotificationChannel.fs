@@ -1,9 +1,9 @@
-module ToolUp.Platform.NotificationChannel
+module ToolUp.Platform.Config.NotificationChannel
 
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 
 /// In-memory `INotificationChannel`. Keeps subscriptions in a
 /// concurrent dictionary keyed by subscription id; every `Publish`

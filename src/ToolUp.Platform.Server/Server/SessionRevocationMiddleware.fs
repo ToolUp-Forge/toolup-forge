@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.SessionRevocation
+module ToolUp.Platform.Scope.SessionRevocation
 
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.Auth
+open ToolUp.Platform.Config
 
 // ─── Phase 528 — SessionRevocationMiddleware ─────────────────────────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.PlatformRuntimeConfigStore
+module ToolUp.Platform.Infra.PlatformRuntimeConfigStore
 
 open System
 open System.Text

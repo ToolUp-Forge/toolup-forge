@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ConfigMigrationRegistry
+module ToolUp.Platform.Config.ConfigMigrationRegistry
 
 open System
 open System.Collections.Concurrent
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Config schema evolution — server half (Phase 10b) ───────────
 //

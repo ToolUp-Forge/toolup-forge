@@ -1,4 +1,4 @@
-module ToolUp.Platform.JobNotifyEventStore
+module ToolUp.Platform.Jobs.JobNotifyEventStore
 
 open ToolUp.Platform
 

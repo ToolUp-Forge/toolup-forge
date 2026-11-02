@@ -1,4 +1,4 @@
-module ToolUp.Platform.Middleware
+module ToolUp.Platform.Compose.Middleware
 
 open System
 open Microsoft.AspNetCore.Http
@@ -6,11 +6,14 @@ open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.ShareTokenAuth
-open ToolUp.Platform.SurfaceEnforcement
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.ShareTokenAuth
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── Phase 66 Stream A.6 — pipeline cut-over ─────────────────────────
 //
@@ -71,7 +74,7 @@ module SubjectRequestExtractor =
         // `RequestContext` newtype at the single call site that crosses
         // the IAuthProvider boundary. Server-tier `ofHttpContext` is
         // the only sanctioned construction path.
-        let! user = authProvider.GetUser(ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx)
+        let! user = authProvider.GetUser(ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext ctx)
 
         // Phase 337 — the sealed binding cookie is the ONLY source of a
         // verified anonymous session id. When it is present the id it
@@ -718,7 +721,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                         with
                                         | Some _, (:? IPendingInviteStore as pendingStore), (:? ITeamStore as teamStore) ->
                                             try
-                                                ToolUp.Platform.Teams.TeamInvitationHandler.tryConsumePendingForUser
+                                                ToolUp.Platform.Scope.Teams.TeamInvitationHandler.tryConsumePendingForUser
                                                     pendingStore
                                                     teamStore
                                                     auditLog

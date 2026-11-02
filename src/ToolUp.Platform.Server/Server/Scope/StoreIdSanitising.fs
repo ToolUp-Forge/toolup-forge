@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.StoreIdSanitising
+module ToolUp.Platform.Scope.StoreIdSanitising
+
+open ToolUp.Platform
+open ToolUp.Platform.Config.Auth
 
 open ToolUp.Platform.Auth
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
 
 // ─── Phase 131 — identity sanitisation at the store seam ────────────
 //

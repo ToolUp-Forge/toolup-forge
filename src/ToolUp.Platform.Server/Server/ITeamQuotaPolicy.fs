@@ -1,4 +1,7 @@
-namespace ToolUp.Platform.Usage
+namespace ToolUp.Platform.Infra.Usage
+
+open ToolUp.Platform
+open ToolUp.Platform.Usage
 
 open System
 

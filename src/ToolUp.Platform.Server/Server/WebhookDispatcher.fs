@@ -1,4 +1,4 @@
-module ToolUp.Platform.WebhookDispatcher
+module ToolUp.Platform.Jobs.WebhookDispatcher
 
 open System
 open System.Net.Http
@@ -11,7 +11,9 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Public surface ──────────────────────────────────────────────
 

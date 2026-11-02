@@ -1,7 +1,8 @@
-module ToolUp.Platform.ConfigStoreErasureHandler
+module ToolUp.Platform.Audit.ConfigStoreErasureHandler
 
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Config
 
 // ─── Phase 9h — config-store DSR adapter ─────────────────────────────
 //

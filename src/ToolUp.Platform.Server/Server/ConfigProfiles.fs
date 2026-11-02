@@ -3,7 +3,7 @@
 
 /// The configuration-profile registry and selector: which named bundles
 /// exist, and which one (if any) this deployment imported.
-module ToolUp.Platform.ConfigProfiles
+module ToolUp.Platform.Config.ConfigProfiles
 
 open ToolUp.Platform
 open ToolUp.Platform.ConfigKeys

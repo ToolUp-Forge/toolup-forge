@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ComposeModelExecution
+module ToolUp.Platform.Compose.ComposeModelExecution
 
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 728 — the model-execution compose leg ─────────────────────────
 //

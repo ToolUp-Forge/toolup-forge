@@ -1,11 +1,11 @@
-module ToolUp.Platform.EntityQueryExecutor
+module ToolUp.Platform.Infra.EntityQueryExecutor
 
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.SecondaryIndex
+open ToolUp.Platform.Infra.SecondaryIndex
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 

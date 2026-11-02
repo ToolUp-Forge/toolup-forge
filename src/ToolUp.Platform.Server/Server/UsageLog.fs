@@ -1,4 +1,4 @@
-module ToolUp.Platform.UsageLog
+module ToolUp.Platform.Infra.UsageLog
 
 open System
 open System.Collections.Concurrent
@@ -13,6 +13,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Usage
 
 // ─── Storage layout ──────────────────────────────────────────────
 //
