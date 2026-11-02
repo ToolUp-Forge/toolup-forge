@@ -11,6 +11,7 @@ let private registeredTests =
     testList "ToolUp.Platform.Build.Tests" [
         SbomTests.tests
         PackagedModuleConformanceTests.tests
+        GateReconcileTests.vendoredContractTests
         // Phase 213 — the Lighthouse / Core-Web-Vitals budget gate: the
         // budget parser's refusals and the check over committed report
         // fixtures. No browser, no server, no network.
