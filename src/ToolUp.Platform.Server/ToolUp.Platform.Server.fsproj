@@ -47,31 +47,7 @@
         <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
     </ItemGroup>
     <ItemGroup>
-        <!-- What only a server can run, moved out of
-             ToolUp.Platform.Core, where each file shipped to every Fable
-             consumer behind a `#if !FABLE_COMPILER` guard. Namespaces and
-             module paths are preserved: JwtCrypto and ConfigResolution moved
-             whole; ServerConfig, DataVocabulary and BlobStorage are split, the
-             Fable-safe half staying in Core and this tier declaring a module
-             of the same name beside it, which F# resolves as one. First in
-             the compile order, so every server file sees them. -->
-        <!-- The one BCL HttpClient adapter for the portable
-             ToolUp.Platform.Transport seam (moved here from ToolUp.AI.Server):
-             this is the lowest .NET-only assembly that both the AI providers
-             and the data-source connectors reference. No deps on other
-             Server files. -->
-        <Compile Include="Server\HttpClientTransport.fs" />
-        <Compile Include="Server\JwtCrypto.fs" />
-        <Compile Include="Server\Config\ConfigResolution.fs" />
-        <!-- The listen-address resolution and its preflight.
-             Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
-             validates through it; ComposeBootstrap.fs applies the plan. -->
-        <Compile Include="Server\ServerBinding.fs" />
-        <Compile Include="Server\Config\ServerConfigFromEnv.fs" />
-        <Compile Include="Server\DataVocabularyPins.fs" />
-        <Compile Include="Server\BlobStorageSignedUrl.fs" />
-    </ItemGroup>
-    <ItemGroup>
+        <!-- 1193 part: Remoting: the transport, its codecs and the Giraffe / ASP.NET Core adapters -->
         <!-- The MessagePack reflection engine and the decoder
              gates, moved out of ToolUp.Platform.Core with the same rule as
              Fable never compiled them. TypeShape.fs and
@@ -88,8 +64,6 @@
         <Compile Include="Server\Remoting\MsgPack\Write.fs" />
         <Compile Include="Server\Remoting\DecoderVerification.fs" />
         <Compile Include="Server\Remoting\Json\JsonDecoderVerification.fs" />
-    </ItemGroup>
-    <ItemGroup>
         <!-- 0.4.4 — ToolUp.Remoting.{Json,Server,Giraffe,AspNetCore}
              folded in from a formerly-separate repository. The
              transport is a forge implementation detail; one package
@@ -137,6 +111,38 @@
         <Compile Include="Server\Remoting\Remoting.fs" />
         <Compile Include="Server\Remoting\Giraffe\GiraffeAdapter.fs" />
         <Compile Include="Server\Remoting\AspNetCore\Middleware.fs" />
+        <!-- The shared request-body binding seam. Depends on
+             nothing but HttpContext + System.Text.Json (it takes the
+             caller's JsonSerializerOptions rather than owning one), and
+             must precede every handler swept onto it: ConsentApiHandler,
+             PlatformAdmin/AdUnitConfigApi and AdAnalyticsApiHandler below,
+             plus AuthProviders/Passkey in its own project. -->
+        <Compile Include="Server\HttpBodyBinding.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- What only a server can run, moved out of
+             ToolUp.Platform.Core, where each file shipped to every Fable
+             consumer behind a `#if !FABLE_COMPILER` guard. Namespaces and
+             module paths are preserved: JwtCrypto and ConfigResolution moved
+             whole; ServerConfig, DataVocabulary and BlobStorage are split, the
+             Fable-safe half staying in Core and this tier declaring a module
+             of the same name beside it, which F# resolves as one. First in
+             the compile order, so every server file sees them. -->
+        <!-- The one BCL HttpClient adapter for the portable
+             ToolUp.Platform.Transport seam (moved here from ToolUp.AI.Server):
+             this is the lowest .NET-only assembly that both the AI providers
+             and the data-source connectors reference. No deps on other
+             Server files. -->
+        <Compile Include="Server\HttpClientTransport.fs" />
+        <Compile Include="Server\JwtCrypto.fs" />
+        <Compile Include="Server\Config\ConfigResolution.fs" />
+        <!-- The listen-address resolution and its preflight.
+             Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
+             validates through it; ComposeBootstrap.fs applies the plan. -->
+        <Compile Include="Server\ServerBinding.fs" />
+        <Compile Include="Server\Config\ServerConfigFromEnv.fs" />
+        <Compile Include="Server\DataVocabularyPins.fs" />
+        <Compile Include="Server\BlobStorageSignedUrl.fs" />
         <Compile Include="Server\Rag\IEmbeddingProvider.fs" />
         <Compile Include="Server\IEmbeddingCache.fs" />
         <Compile Include="Server\Rag\IVectorStore.fs" />
@@ -903,13 +909,6 @@
         <Compile Include="Server\IUserClaims.fs" />
         <Compile Include="Server\Premium\PremiumGate.fs" />
         <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
-        <!-- The shared request-body binding seam. Depends on
-             nothing but HttpContext + System.Text.Json (it takes the
-             caller's JsonSerializerOptions rather than owning one), and
-             must precede every handler swept onto it: ConsentApiHandler,
-             PlatformAdmin/AdUnitConfigApi and AdAnalyticsApiHandler below,
-             plus AuthProviders/Passkey in its own project. -->
-        <Compile Include="Server\HttpBodyBinding.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
         <!-- Durable per-subject consent persistence over
              IEntityStore (in-memory dev impl + entity-backed production
