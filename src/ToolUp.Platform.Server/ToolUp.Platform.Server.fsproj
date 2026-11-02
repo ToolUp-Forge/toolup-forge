@@ -1171,18 +1171,7 @@
         <Compile Include="Server\PresenceApiHandler.fs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The opt-in model-execution compose leg (registers
-             IModelRegistry, and optionally the scorer / executor policy /
-             observers) plus the startup validator that names a
-             mounted ModelExecutionApi with no registry composed. Placed
-             here: it needs only the model seams above (BlobModelRegistry,
-             ModelRegistrationObservers, IModelScorer) and must compile
-             before Compose/ComposeConfigValidators.fs, which registers the
-             validator, and before ServerApp.fs, whose withModelExecution
-             builder folds `register` into the DI graph. -->
-        <Compile Include="Server\Compose\ServiceComposition.fs" />
-        <Compile Include="Server\ComposeModelExecution.fs" />
-        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
+        <!-- 1193 part: Audit: the audit log, classification, consent, erasure, data-subject requests and evidence -->
         <!-- Bounded local spill for DegradeToFile audit-write
              failure policy; before AuditLog.fs (the log spills into it) and
              the replay service (which drains it back into IEventStore). -->
@@ -1307,13 +1296,6 @@
              reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
         <Compile Include="Server\AdAnalyticsApiHandler.fs" />
         <Compile Include="Server\SignedExportDepsValidator.fs" />
-        <Compile Include="Server\Files\SessionFileStoreInstanceValidator.fs" />
-        <Compile Include="Server\ConfigValidatorAggregator.fs" />
-        <!-- Internet-readiness secure-default scorecard: a
-             read-side projection over the aggregated preflight outcomes
-             (must compile after ConfigValidatorAggregator, which defines
-             ValidatorOutcome). Introduces no new validation. -->
-        <Compile Include="Server\InternetReadinessScorecard.fs" />
         <Compile Include="Server\MetricsMiddleware.fs" />
         <!-- Hosted-tree action audit emission (GP 6): the
              IHostActionAuditHook + default IAuditLog-backed impl +
@@ -1325,6 +1307,36 @@
         <Compile Include="Server\FeatureFlagStoreErasureHandler.fs" />
         <Compile Include="Server\BlobStorageErasureHandler.fs" />
         <Compile Include="Server\VectorStoreErasureHandler.fs" />
+        <!-- Audit-trail viewer handler. After AuditLog.fs
+             (the substrate it pairs with) and Api.fs (makeApi). -->
+        <Compile Include="Server\AuditViewApiHandler.fs" />
+        <!-- /dev/auth-denials rollup (reads AuthorizationDenied
+             via IAuditLog, caller-scope only; flushes the AuthAuditHook
+             flood-guard tail). After AuthAuditHook.fs + DevDiagnosticsHandler;
+             before BuildRouteHandlers (which mounts the route). -->
+        <Compile Include="Server\AuthDenialsDiagnosticsHandler.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- 1193 part: Compose and Lifecycle (the umbrella): file management, the composition root, the plan, boot and preflight -->
+        <!-- The opt-in model-execution compose leg (registers
+             IModelRegistry, and optionally the scorer / executor policy /
+             observers) plus the startup validator that names a
+             mounted ModelExecutionApi with no registry composed. Placed
+             here: it needs only the model seams above (BlobModelRegistry,
+             ModelRegistrationObservers, IModelScorer) and must compile
+             before Compose/ComposeConfigValidators.fs, which registers the
+             validator, and before ServerApp.fs, whose withModelExecution
+             builder folds `register` into the DI graph. -->
+        <Compile Include="Server\Compose\ServiceComposition.fs" />
+        <Compile Include="Server\ComposeModelExecution.fs" />
+        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
+        <Compile Include="Server\Files\SessionFileStoreInstanceValidator.fs" />
+        <Compile Include="Server\ConfigValidatorAggregator.fs" />
+        <!-- Internet-readiness secure-default scorecard: a
+             read-side projection over the aggregated preflight outcomes
+             (must compile after ConfigValidatorAggregator, which defines
+             ValidatorOutcome). Introduces no new validation. -->
+        <Compile Include="Server\InternetReadinessScorecard.fs" />
         <Compile Include="Server\Files\FileNameSanitiser.fs" />
         <!-- The server half of the ProcessedData summary envelope's codec. -->
         <Compile Include="Server\Files\ProcessedDataCodec.fs" />
@@ -1351,9 +1363,6 @@
         <Compile Include="Server\Compose\Hosting.fs" />
         <Compile Include="Server\DevDiagnosticsHandler.fs" />
         <Compile Include="Server\HealthMonitorApiHandler.fs" />
-        <!-- Audit-trail viewer handler. After AuditLog.fs
-             (the substrate it pairs with) and Api.fs (makeApi). -->
-        <Compile Include="Server\AuditViewApiHandler.fs" />
         <!-- Home / Overview landing aggregation handler. -->
         <Compile Include="Server\HomeOverviewApiHandler.fs" />
         <Compile Include="Server\ServiceStatusBoardApiHandler.fs" />
@@ -1375,11 +1384,6 @@
              Compose/ComposeRuntimeServices.fs (which registers the named client). -->
         <Compile Include="Server\EgressPolicyHandler.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
-        <!-- /dev/auth-denials rollup (reads AuthorizationDenied
-             via IAuditLog, caller-scope only; flushes the AuthAuditHook
-             flood-guard tail). After AuthAuditHook.fs + DevDiagnosticsHandler;
-             before BuildRouteHandlers (which mounts the route). -->
-        <Compile Include="Server\AuthDenialsDiagnosticsHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
         <Compile Include="Server\RemotingHelpers.fs" />
         <!-- The IProviderProfileApi handler, delegating to the
