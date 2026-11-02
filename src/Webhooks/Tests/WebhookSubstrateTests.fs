@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.WebhookSubstrateTests
+module ToolUp.Webhooks.Tests.WebhookSubstrateTests
 
 open System
 open System.Security.Cryptography

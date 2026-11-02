@@ -166,7 +166,6 @@ let private registeredTests =
         FileSecretStoreAtomicityTests.tests
         FileSecretStoreCancellationTests.tests
         TransientFaultPolicyTests.tests
-        WebhookSubstrateTests.tests
         WebhookSecretRotationTests.tests
         WebhookSecretMigrationTests.tests
         WebhookFailureStateLeaseTests.tests

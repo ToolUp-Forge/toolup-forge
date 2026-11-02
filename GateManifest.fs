@@ -358,6 +358,9 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "ReportingHtmlPdf"
         "src/Reporting/HtmlPdf.Tests/ToolUp.Reporting.HtmlPdf.Tests.fsproj"
         ([ Input.Tree; Input.Browser ] @ env [ "PLAYWRIGHT_BROWSERS_PATH" ])
+    // Phase 1197 — a companion family's tests beside the family, building
+    // against its closure and hosting the contract packs it conforms to.
+    pack "Webhooks" "src/Webhooks/Tests/ToolUp.Webhooks.Tests.fsproj" []
 
     // ── The legs `VerifyAll` runs after the packs ──────────────────────
     // Every `*.Tests.fsproj` is a pack row or a named exclusion. Pure file

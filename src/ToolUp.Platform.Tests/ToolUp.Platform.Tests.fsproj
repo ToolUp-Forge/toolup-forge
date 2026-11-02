@@ -232,7 +232,6 @@
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
         <Compile Include="InProcess\FileSecretStoreAtomicityTests.fs" />
         <Compile Include="InProcess\FileSecretStoreCancellationTests.fs" />
-        <Compile Include="InProcess\WebhookSubstrateTests.fs" />
         <Compile Include="InProcess\WebhookSecretRotationTests.fs" />
         <Compile Include="InProcess\WebhookSecretRotationBroadcastTests.fs" />
         <Compile Include="InProcess\WebhookSecretMigrationTests.fs" />

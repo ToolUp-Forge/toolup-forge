@@ -89,6 +89,7 @@ let characterisedPureBlock = [
     "  PASS — AlgorithmProviders"
     "  PASS — AssetStore"
     "  PASS — Reporting"
+    "  PASS — Webhooks"
     "  PASS — GateReconcile"
 ]
 
@@ -115,7 +116,7 @@ let tests =
 
         test "the pack view is the Local pack rows, and a row that reads nothing is in the pure lane" {
             let packs = Gate.packs rows
-            Expect.equal packs.Length 30 "thirty packs run locally"
+            Expect.equal packs.Length 31 "thirty-one packs run locally"
 
             for row in rows do
                 match row.Kind with
