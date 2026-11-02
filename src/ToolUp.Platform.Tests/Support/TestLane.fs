@@ -9,7 +9,8 @@
 /// worker has to spend before it can know whether its own change compiles
 /// green. A lane lets it spend minutes on its own work first and the full
 /// gate ONCE, on the folded tree — the citable run. No figure is restated
-/// here.
+/// here: `VerifyAll` prints the measured one at the end of every run, and
+/// `dotnet run -- GateTimings` folds the recorded runs.
 ///
 /// **The lane is an environment variable, not a `verify.ps1` switch, and
 /// that is deliberate.** `verify.ps1` is a hard-denied path on the forge

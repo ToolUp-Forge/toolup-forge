@@ -29,6 +29,81 @@ type TestPack = {
 module TestPack =
     let create name project = { Name = name; Project = project }
 
+/// Where a gate leg runs.
+[<RequireQualifiedAccess>]
+type Site =
+    /// `VerifyAll` runs it, on a developer's machine or wherever `verify.ps1` does.
+    | Local
+    /// The named workflow job runs it.
+    | Ci of job: string
+    /// The release workflow runs it, at a tag.
+    | Release
+
+/// An input a gate leg's verdict depends on. `Env` names a variable that
+/// gates an arm or a regeneration — never ambient toolchain state such as
+/// `PATH`. A leg with no inputs is the `pure` lane's.
+[<RequireQualifiedAccess>]
+type Input =
+    | Tree
+    | Git
+    | Node
+    | Browser
+    | Docker
+    | Network
+    | Env of name: string
+
+/// The floor a leg's `Pass` count is held to, applied by the fold.
+[<RequireQualifiedAccess>]
+type Floor =
+    /// At least this many cases: a lower bound that fires only when the
+    /// harness has collapsed rather than shrunk.
+    | AtLeast of cases: int
+    /// Exactly this many: each case is expensive and losing one silently
+    /// is what the floor must catch.
+    | Exactly of cases: int
+    /// At least the mark in this repo-relative file, which may only rise.
+    | HighWater of file: string
+    /// The case floors are read from this registry by the leg's own
+    /// script, which fails by name on a case that stops running.
+    | FromRegistry of file: string
+
+/// What one leg concluded. `Pending` is how an arm says its named input
+/// was absent; it is counted in neither `PASS` nor `FAIL`, never as a pass.
+[<RequireQualifiedAccess>]
+type Verdict =
+    /// Passed; the case count when the runner reported one.
+    | Pass of cases: int option
+    | Fail of reason: string
+    | Pending of reason: string
+
+/// How a leg runs.
+[<RequireQualifiedAccess>]
+type LegKind =
+    /// An Expecto runner project, built once with the solution and launched
+    /// as its dll.
+    | ExpectoPack of project: string
+    /// A body of the driver's own, returning its verdict.
+    | Body of run: (unit -> Verdict)
+    /// A script at this repo-relative path, run by `pwsh -NoProfile -File`.
+    | Script of path: string
+
+/// One row of a gate manifest: what runs, in which lanes, where, reading
+/// what, within what budget and above what floor. `'Lane` is the
+/// repository's own lane vocabulary (forge: `TestLane.Lane`); the SDK
+/// does not define lanes.
+type GateLeg<'Lane when 'Lane: comparison> = {
+    /// The token in the `<label> summary:` block.
+    Name: string
+    Kind: LegKind
+    Lanes: Set<'Lane>
+    Where: Set<Site>
+    Reads: Input list
+    /// The measured wall clock, seeded from `ProcResult.Elapsed` and
+    /// re-derived from recorded runs; `None` until measured.
+    Budget: System.TimeSpan option
+    Floor: Floor option
+}
+
 /// Phase 1096 — the directories under `src/` that the `Pack` and `Publish`
 /// targets never pack, declared once. They were spelled three times (the
 /// two globs and the SDK manifest reconciler), and a copy that drifts packs

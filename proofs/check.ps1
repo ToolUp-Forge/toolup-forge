@@ -137,45 +137,45 @@ $pin = Get-Content (Join-Path $PSScriptRoot "fstar-pin.json") -Raw | ConvertFrom
 # One entry per proved model, in the order they landed. `HostList` is
 # the Expecto list's FULL path (the pack's root list name, a dot, the
 # list name — Expecto joins with `.`, and a slash-shaped filter matches
-# nothing and reports success). `HostMinCases` is the number of cases
-# that list declares, asserted after the run for the reason step 7
-# gives. A later proof phase APPENDS its entry here — AFTER any module
-# it opens, for the two reasons the header gives.
+# nothing and reports success). The host's case floor and case NAMES
+# are read from the claims registry, proofs.json (the gate manifest's
+# `Proofs` row carries `Floor = FromRegistry "proofs.json"`): every
+# `tested` claim whose `family` names the list contributes its cases,
+# and step 7 fails BY NAME on a registry case that no longer runs — a
+# case that stops running is a claim that failed, not a smaller count.
+# A later proof phase APPENDS its entry here — AFTER any module it
+# opens, for the two reasons the header gives — and its cases to the
+# registry.
 
 $modules = @(
     @{
         Name         = "RemotingDecode"
         Source       = "RemotingDecode.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 787 - the proved model as oracle"
-        HostMinCases = 9 # Phase 800 added the refusal-shape and widened-vocabulary cases
         HostSubject  = "the Phase 784 corpus"
     }
     @{
         Name         = "DisclosureFold"
         Source       = "DisclosureFold.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 790 - the proved fold as oracle"
-        HostMinCases = 7
         HostSubject  = "the door packs' rankings and a generated set"
     }
     @{
         Name         = "ToolGate"
         Source       = "ToolGate.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 793 - the proved gate as oracle"
-        HostMinCases = 7
         HostSubject  = "every in-tree tool under generated policies"
     }
     @{
         Name         = "ModelInput"
         Source       = "ModelInput.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 792 - the proved model input as oracle"
-        HostMinCases = 9
         HostSubject  = "a 250-subject seeded population and a leaky store"
     }
     @{
         Name         = "TaintFlow"
         Source       = "TaintFlow.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 795 - the proved taint flow as oracle"
-        HostMinCases = 11
         HostSubject  = "the two-party fixtures and the generated pipelines"
     }
     # Phase 788 — two models, ONE differential host: the ring and the
@@ -191,14 +191,12 @@ $modules = @(
         Name         = "ElmishRing"
         Source       = "ElmishRing.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle"
-        HostMinCases = 8
         HostSubject  = "generated push/pop sequences, past several doublings"
     }
     @{
         Name         = "ElmishSub"
         Source       = "ElmishSub.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle"
-        HostMinCases = 8
         HostSubject  = "generated subscription sets, with duplicates and the shortcut's exact-key-set case"
     }
     # Phase 789 — the dispatch loop AROUND the ring. The first module that
@@ -209,7 +207,6 @@ $modules = @(
         Name         = "ElmishLoop"
         Source       = "ElmishLoop.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 789 - the proved dispatch loop as oracle"
-        HostMinCases = 8
         HostSubject  = "generated reentrancy scripts against the real Program.runWithDispatch"
     }
     # Phase 955 — the ring over a mutable ARRAY, written in Pulse and
@@ -221,7 +218,6 @@ $modules = @(
         Name         = "ElmishRingArray"
         Source       = "ElmishRingArray.fst"
         HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle.Phase 955 - the extracted array ring as implementation"
-        HostMinCases = 8
         HostSubject  = "the shipped ring and the list model, over the campaign and a live one"
     }
 )
@@ -241,6 +237,26 @@ function Write-Step {
     param([string] $Text)
     Write-Host ""
     Write-Host "=== $Text" -ForegroundColor Cyan
+}
+
+# The case names proofs.json records under an Expecto list: every `tested`
+# claim whose `evidence.family` names the list — a family is one list name,
+# or several joined by " / " when one claim's evidence spans lists — minus
+# the `(Fable)` families, whose host is the client-tier pack `VerifyFable`
+# drives. A nested list (`<parent>.<child>`) is named by its child.
+function Get-RegistryCases {
+    param($Registry, [string] $HostList)
+    $prefix = "ToolUp.Platform.Tests."
+    $tail = if ($HostList.StartsWith($prefix)) { $HostList.Substring($prefix.Length) } else { $HostList }
+    $names = New-Object System.Collections.Generic.List[string]
+    foreach ($claim in $Registry.claims) {
+        if ($claim.level -ne 'tested' -or -not $claim.evidence.cases -or -not $claim.evidence.family) { continue }
+        $parts = @($claim.evidence.family -split ' / ') | Where-Object { $_ -notlike '*(Fable)' }
+        $matches = $parts | Where-Object { $tail -eq $_ -or $tail.EndsWith("." + $_) }
+        if (-not $matches) { continue }
+        foreach ($case in $claim.evidence.cases) { if (-not $names.Contains($case)) { $names.Add($case) } }
+    }
+    return ,@($names)
 }
 
 function Fail {
@@ -615,8 +631,26 @@ else {
     $dll = Join-Path $repoRoot "src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll"
     if (-not (Test-Path $dll)) { Fail "no test assembly at $dll." }
 
+    # The floor comes from the registry, by name. `--list-tests` lists the
+    # whole pack (it ignores `--filter`), once, stripped of colour; each
+    # host's declared cases are then looked up under its list.
+    $registry = Get-Content (Join-Path $repoRoot "proofs.json") -Raw | ConvertFrom-Json
+    $listed = (& dotnet $dll --list-tests 2>&1 | ForEach-Object { [regex]::Replace("$_", "\x1b\[[0-9;]*[A-Za-z]", "") }) |
+        Where-Object { $_ -match '^N ' } | ForEach-Object { $_.Substring(2) }
+    if (-not $listed) { Fail "could not list the Platform pack's tests; the registry floor has nothing to check against." }
+
     foreach ($module in $modules) {
         Write-Host "    --- $($module.Name) over $($module.HostSubject)"
+
+        $cases = Get-RegistryCases $registry $module.HostList
+        if ($cases.Count -eq 0) { Fail "proofs.json names no tested case under the list `"$($module.HostList)`"; a host with no registered cases has no floor and cannot be trusted green." }
+
+        $underList = $listed | Where-Object { $_.StartsWith($module.HostList + ".") }
+        foreach ($case in $cases) {
+            if (-not ($underList | Where-Object { $_.EndsWith("." + $case) })) {
+                Fail "the $($module.Name) differential host no longer runs `"$case`", which proofs.json records as evidence under `"$($module.HostList)`". A case that stops running is a claim that failed: restore it, or retire the claim in the registry in the same commit."
+            }
+        }
 
         $output = & dotnet $dll --filter $module.HostList 2>&1
         $exit = $LASTEXITCODE
@@ -625,8 +659,8 @@ else {
         # A filter that matches nothing prints `0 tests run ... Success!`
         # and exits 0. So the COUNT is asserted, never the exit code alone
         # — the one shape in which this whole leg could report a green
-        # over a suite that did not run. (Step 7's case floors are the
-        # ones `HostMinCases` carries above.)
+        # over a suite that did not run. (The floor is the registry's case
+        # count for the list, resolved above; the names were checked first.)
         #
         # **Strip ANSI first, and the reason is the same trap one level
         # down.** Expecto colourises the count, so the bytes are
@@ -643,7 +677,7 @@ else {
         if ($ran -lt 0) { Fail "could not read a case count out of the $($module.Name) host's output." }
 
         if ($exit -ne 0) { Fail "the $($module.Name) differential host reported failures (exit $exit)." }
-        if ($ran -lt $module.HostMinCases) { Fail "the $($module.Name) differential host ran $ran case(s); its list declares at least $($module.HostMinCases). A filter that matches nothing reports success, so this is checked rather than trusted." }
+        if ($ran -lt $cases.Count) { Fail "the $($module.Name) differential host ran $ran case(s); proofs.json records $($cases.Count) under its list. A filter that matches nothing reports success, so this is checked rather than trusted." }
 
         Write-Host "    $ran case(s) ran, all green" -ForegroundColor Green
     }

@@ -86,6 +86,7 @@ let private registeredTests =
         // project's own node_modules; a decoy elsewhere survives. Real processes.
         StaleEsbuildTests.tests
         FuaranCoResolutionTests.tests
+        GateManifestTests.tests
         // Phase 1096 - every test project in the solution or on disk is a
         // VerifyAll pack or a named exclusion (the GateReconcile leg's go-red proof).
         GateReconcileTests.tests

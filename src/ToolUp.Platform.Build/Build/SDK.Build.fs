@@ -515,6 +515,192 @@ module Gate =
         | [] -> Ok()
         | found -> Error found
 
+    // ─── The manifest ───────────────────────────────────────────────
+
+    /// A row as the fold sees it: the lane decision already taken by the
+    /// driver that knows its lanes. `Selected` is whether this process's
+    /// lane runs it; a row that runs only elsewhere (`Where` without
+    /// `Local`) is registered too, so the fold can say what it did not run.
+    type Registered = {
+        Name: string
+        Kind: LegKind
+        Where: Set<Site>
+        Reads: Input list
+        Budget: TimeSpan option
+        Floor: Floor option
+        Selected: bool
+    }
+
+    let private registry = ResizeArray<Registered>()
+
+    /// Register one row of the repository's gate manifest. `current` is the
+    /// lane this process runs; the row is selected when its `Lanes` carry
+    /// it. Registering a name twice is refused rather than run twice — a
+    /// repeated registration is a build script that composed itself twice,
+    /// and two `PASS` lines for one leg would double-count against a CI floor.
+    let register (current: 'Lane) (leg: GateLeg<'Lane>) : unit =
+        if registry |> Seq.exists (fun r -> r.Name = leg.Name) then
+            failwithf "Gate.register: a leg named `%s` is already registered." leg.Name
+
+        registry.Add {
+            Name = leg.Name
+            Kind = leg.Kind
+            Where = leg.Where
+            Reads = leg.Reads
+            Budget = leg.Budget
+            Floor = leg.Floor
+            Selected = Set.contains current leg.Lanes
+        }
+
+    /// Every registered row, in registration order.
+    let registered () : Registered list = List.ofSeq registry
+
+    /// The `ExpectoPack` rows `VerifyAll` runs locally, as the `TestPack`
+    /// view a consumer's `BuildConfig` carries.
+    let packs (manifest: GateLeg<'Lane> list) : TestPack list = [
+        for row in manifest do
+            match row.Kind with
+            | LegKind.ExpectoPack project when Set.contains Site.Local row.Where -> TestPack.create row.Name project
+            | LegKind.ExpectoPack _
+            | LegKind.Body _
+            | LegKind.Script _ -> ()
+    ]
+
+    /// How many rows the named CI job runs — CI's floor on the count of
+    /// `PASS` lines that job's summary block must carry.
+    let ciFloor (job: string) (manifest: GateLeg<'Lane> list) : int =
+        manifest
+        |> List.filter (fun r -> Set.contains (Site.Ci job) r.Where)
+        |> List.length
+
+    /// The pack rows whose test sources read nothing: the `pure` lane.
+    let pureRows (manifest: GateLeg<'Lane> list) : GateLeg<'Lane> list =
+        manifest
+        |> List.filter (fun r ->
+            List.isEmpty r.Reads
+            && (match r.Kind with
+                | LegKind.ExpectoPack _ -> Set.contains Site.Local r.Where
+                | LegKind.Body _
+                | LegKind.Script _ -> false))
+
+    /// The environment variables among `reads`.
+    let envInputs (reads: Input list) : string list =
+        reads
+        |> List.choose (function
+            | Input.Env name -> Some name
+            | Input.Tree
+            | Input.Git
+            | Input.Node
+            | Input.Browser
+            | Input.Docker
+            | Input.Network -> None)
+
+    /// The variables cleared from `row`'s environment when it runs: every
+    /// `Env` input some other row declares and this row does not, so a pack
+    /// cannot read a credential it did not name. A row's own allowlist is
+    /// `envInputs row.Reads`.
+    let scrubbedFor (rows: Registered list) (row: Registered) : string list =
+        let mine = envInputs row.Reads |> Set.ofList
+
+        rows
+        |> List.collect (fun r -> envInputs r.Reads)
+        |> List.distinct
+        |> List.filter (fun name -> not (mine.Contains name))
+
+    let siteName (site: Site) =
+        match site with
+        | Site.Local -> "local"
+        | Site.Ci job -> "ci:" + job
+        | Site.Release -> "release"
+
+    let inputName (input: Input) =
+        match input with
+        | Input.Tree -> "Tree"
+        | Input.Git -> "Git"
+        | Input.Node -> "Node"
+        | Input.Browser -> "Browser"
+        | Input.Docker -> "Docker"
+        | Input.Network -> "Network"
+        | Input.Env name -> "Env " + name
+
+    /// A process exit code as a verdict: 0 passes, anything else fails
+    /// naming the code — the shape every runner that reports only an exit
+    /// status gets.
+    let verdictOfExit (code: int) : Verdict =
+        if code = 0 then
+            Verdict.Pass None
+        else
+            Verdict.Fail(sprintf "exit %d" code)
+
+    /// A body whose only verdict is to raise, as a verdict: a `Failure`
+    /// (`failwith`) is the body's own red, named; any other exception is a
+    /// harness fault and propagates.
+    let verdictOf (body: unit -> unit) : Verdict =
+        try
+            body ()
+            Verdict.Pass None
+        with Failure reason ->
+            Verdict.Fail reason
+
+    /// Apply a row's floor to its verdict. `readHighWater` reads the mark a
+    /// `HighWater` file holds. A `FromRegistry` floor is the leg's own
+    /// script's to apply and passes through; a floor over a `Pass` that
+    /// reported no count is a fault in the row, not a pass.
+    let judge (name: string) (floor: Floor option) (readHighWater: string -> int) (verdict: Verdict) : Verdict =
+        match floor, verdict with
+        | None, v
+        | Some(Floor.FromRegistry _), v
+        | _, (Verdict.Fail _ as v)
+        | _, (Verdict.Pending _ as v) -> v
+        | Some _, Verdict.Pass None ->
+            Verdict.Fail(
+                sprintf
+                    "%s carries a floor but reported no case count; a floor over an unknown count holds nothing."
+                    name
+            )
+        | Some(Floor.AtLeast least), Verdict.Pass(Some cases) when cases < least ->
+            Verdict.Fail(
+                sprintf
+                    "only %d case(s) ran, below the floor of %d. A run this small means the harness matched almost nothing — check its output path and entry point before lowering the floor."
+                    cases
+                    least
+            )
+        | Some(Floor.Exactly exact), Verdict.Pass(Some cases) when cases <> exact ->
+            Verdict.Fail(
+                sprintf
+                    "%d case(s) ran; the floor is exactly %d. Adding or removing a case edits the row's floor in the same commit; fewer than declared almost always means a case was skipped. Do not lower the floor to make this green."
+                    cases
+                    exact
+            )
+        | Some(Floor.HighWater file), Verdict.Pass(Some cases) when cases < readHighWater file ->
+            Verdict.Fail(
+                sprintf
+                    "only %d case(s) ran, below the recorded high-water mark of %d (%s). The mark may only fall by hand, in the same commit as the argued loss."
+                    cases
+                    (readHighWater file)
+                    file
+            )
+        | Some _, (Verdict.Pass _ as v) -> v
+
+    /// The leg token on a summary line, byte-for-byte what CI counts:
+    /// `PASS` and `FAIL (…)` as they have always been, `PENDING (…)` for
+    /// an arm whose named input was absent.
+    let statusToken (verdict: Verdict) =
+        let firstLine (s: string) = s.Replace("\r", "").Split('\n').[0]
+
+        match verdict with
+        | Verdict.Pass _ -> "PASS"
+        | Verdict.Fail reason -> sprintf "FAIL (%s)" (firstLine reason)
+        | Verdict.Pending reason -> sprintf "PENDING (%s)" (firstLine reason)
+
+    let mutable private lastRunResults: (string * Verdict * TimeSpan) list = []
+
+    /// What the last aggregate in this process ran: each leg's name, verdict
+    /// and wall clock, for the admission record a driver writes.
+    let lastRun () = lastRunResults
+
+    let internal recordRun (results: (string * Verdict * TimeSpan) list) = lastRunResults <- results
+
 // ─── Build census ────────────────────────────────────────────────────
 
 /// The per-project build census: what each solution project
@@ -794,12 +980,20 @@ module Census =
 /// reach it regardless.
 module internal Aggregate =
 
-    /// One leg of an aggregating gate. `Run` returns the leg's exit code
-    /// (0 = pass) and does its own tracing, so each caller keeps the
-    /// per-leg log lines it already emitted.
-    type Leg = { Name: string; Run: unit -> int }
+    /// One leg of an aggregating gate. `Run` returns the leg's `Verdict`
+    /// and does its own tracing, so each caller keeps the per-leg log
+    /// lines it already emitted.
+    type Leg = { Name: string; Run: unit -> Verdict }
 
-    let leg name run = { Name = name; Run = run }
+    /// A leg whose body answers with an exit code (0 = pass): the shape
+    /// every child process gives.
+    let leg name (run: unit -> int) = {
+        Name = name
+        Run = fun () -> Gate.verdictOfExit (run ())
+    }
+
+    /// A leg whose body answers with its verdict.
+    let legOf name (run: unit -> Verdict) = { Name = name; Run = run }
 
     /// Run every leg in order, summarise all of them, then raise if any
     /// failed.
@@ -816,44 +1010,49 @@ module internal Aggregate =
     /// exits 0 having run nothing when its pack list is empty), counting
     /// lines that match `PASS` / `FAIL` under the `<label> summary:`
     /// header. Those tokens must stay unique to the per-leg lines, which
-    /// is why the headline below says "failed" and not "FAILED".
+    /// is why the headline below says "failed" and not "FAILED" — and why
+    /// a `Pending` leg prints `PENDING`, which matches neither.
     let runAll (label: string) (noun: string) (legs: Leg list) : unit =
-        let results = ResizeArray<string * int>()
+        let results = ResizeArray<string * Verdict * TimeSpan>()
 
         try
             for leg in legs do
-                let exitCode =
+                let clock = Diagnostics.Stopwatch.StartNew()
+
+                let verdict =
                     try
                         leg.Run()
                     with ex ->
                         Trace.traceError (sprintf "%s: %s raised — %s" label leg.Name ex.Message)
-                        1
+                        Verdict.Fail("raised: " + ex.Message)
 
-                results.Add(leg.Name, exitCode)
+                results.Add(leg.Name, verdict, clock.Elapsed)
         finally
             // `finally` so a genuinely fatal abort still reports what had
             // run by then; the catch above is what keeps the ordinary
             // failing case complete.
+            Gate.recordRun (List.ofSeq results)
             Trace.tracefn ""
             Trace.tracefn "%s summary:" label
 
-            for name, exitCode in results do
-                let status =
-                    if exitCode = 0 then
-                        "PASS"
-                    else
-                        sprintf "FAIL (exit %d)" exitCode
+            for name, verdict, _ in results do
+                Trace.tracefn "  %s — %s" (Gate.statusToken verdict) name
 
-                Trace.tracefn "  %s — %s" status name
-
-        let failures = results |> Seq.filter (fun (_, c) -> c <> 0) |> Seq.toList
+        let failures =
+            results
+            |> Seq.choose (fun (n, v, _) ->
+                match v with
+                | Verdict.Fail reason -> Some(n, reason)
+                | Verdict.Pass _
+                | Verdict.Pending _ -> None)
+            |> Seq.toList
 
         if List.isEmpty failures then
             Trace.tracefn "%s: all %d %s(s) passed." label results.Count noun
         else
             let named =
                 failures
-                |> List.map (fun (n, c) -> sprintf "%s (exit %d)" n c)
+                |> List.map (fun (n, reason) -> sprintf "%s (%s)" n (reason.Replace("\r", "").Split('\n').[0]))
                 |> String.concat "; "
 
             let headline =
@@ -1420,8 +1619,8 @@ module TemplateGate =
 /// aggregate, never fail-fast. The leg appears in the `VerifyAll
 /// summary:` block as one more `PASS` / `FAIL` line, which is a CI
 /// contract: a repository whose CI counts those lines against a floor
-/// bumps the floor in the same commit it registers a leg (forge's
-/// `EXPECTED_PACKS` did, 24 → 25).
+/// renders the floor from its gate manifest (forge's `EXPECTED_PACKS`),
+/// and `Gate.register` is where the leg becomes a row of it.
 ///
 /// **What it is NOT.** A pack: `TestPacks` are Expecto runners built
 /// once and launched as dlls, and the build-once step, the
@@ -1431,20 +1630,36 @@ module TemplateGate =
 [<RequireQualifiedAccess>]
 module VerifyLeg =
 
-    let private registered = ResizeArray<string * (unit -> int)>()
-
-    /// Register a leg by name. Registering the same name twice is refused
-    /// rather than run twice: a repeated registration is a build script
-    /// that composed itself twice, and two `PASS` lines for one leg would
-    /// double-count against a CI floor.
+    /// Register a leg by name: a `Body` row of the gate manifest that runs
+    /// locally in every lane and reads the tree, through `Gate.register`,
+    /// which keeps the refusal of a repeated name.
     let register (name: string) (run: unit -> int) : unit =
-        if registered |> Seq.exists (fun (n, _) -> n = name) then
-            failwithf "VerifyLeg.register: a leg named `%s` is already registered." name
+        Gate.register () {
+            Name = name
+            Kind = LegKind.Body(fun () -> Gate.verdictOfExit (run ()))
+            Lanes = set [ () ]
+            Where = set [ Site.Local ]
+            Reads = [ Input.Tree ]
+            Budget = None
+            Floor = None
+        }
 
-        registered.Add(name, run)
-
-    /// The legs registered so far, in registration order.
-    let registeredLegs () : (string * (unit -> int)) list = List.ofSeq registered
+    /// The `Body` rows registered so far, in registration order, as the
+    /// exit-code legs they were registered as (a non-zero code for a
+    /// failed or pending verdict).
+    let registeredLegs () : (string * (unit -> int)) list = [
+        for row in Gate.registered () do
+            match row.Kind with
+            | LegKind.Body run ->
+                row.Name,
+                fun () ->
+                    match run () with
+                    | Verdict.Pass _ -> 0
+                    | Verdict.Fail _
+                    | Verdict.Pending _ -> 1
+            | LegKind.ExpectoPack _
+            | LegKind.Script _ -> ()
+    ]
 
 // ─── Build configuration ───────────────────────────────────────────
 
@@ -1532,25 +1747,55 @@ module internal TestPackHost =
             else
                 Ok path
 
-    /// Run one pack and return its exit code. The signature is the shape
-    /// `Aggregate.leg` wants: trace what is happening, never throw for an
-    /// ordinary failure, and hand back the code so the summary can name it.
-    let runPack (extraArgs: string list) (pack: TestPack) : int =
+    /// Expecto's JUnit summary carries no `tests` attribute; the cases are
+    /// its `<testcase` elements.
+    let private junitCase = Text.RegularExpressions.Regex(@"<testcase\b")
+
+    /// Run one pack and return its verdict. Trace what is happening, never
+    /// throw for an ordinary failure, and hand back the verdict so the
+    /// summary can name it. The case count is read from the JUnit summary
+    /// Expecto writes (`--junit-summary`), a structured record, never from
+    /// its coloured console line; a pack that wrote none passes with no
+    /// count. `scrub` names the variables cleared from the child's
+    /// environment (`Gate.scrubbedFor`), so the pack reads only the inputs
+    /// its row declares.
+    let runPack (extraArgs: string list) (scrub: string list) (pack: TestPack) : Verdict =
         Trace.tracefn "▶ VerifyAll: %s (%s)" pack.Name pack.Project
 
         match resolveTargetPath pack.Project with
         | Error message ->
             Trace.traceError (sprintf "VerifyAll: %s — %s" pack.Name message)
-            1
+            Verdict.Fail message
         | Ok dll ->
+            let summaryDir = Scratch.root "toolup-verifyall"
+            IO.Directory.CreateDirectory summaryDir |> ignore
+            let summary = IO.Path.Combine(summaryDir, pack.Name + ".junit.xml")
+            IO.File.Delete summary
+
             // The working directory is the caller's, which is what
             // `dotnet run --project` also handed the child (measured, not
             // assumed — `dotnet run` does NOT move the child into the
             // project directory). Any pack resolving a path relative to
             // cwd therefore sees exactly what it saw before.
-            let result = Proc.exec "dotnet" (dll :: extraArgs) "."
+            let result =
+                Proc.execWith
+                    {
+                        Proc.options with
+                            Environment = scrub |> List.map (fun name -> name, "")
+                    }
+                    "dotnet"
+                    (dll :: extraArgs @ [ "--junit-summary"; summary ])
+                    "."
 
-            result.ExitCode
+            let cases =
+                if IO.File.Exists summary then
+                    Some(junitCase.Matches(IO.File.ReadAllText summary).Count)
+                else
+                    None
+
+            match Gate.verdictOfExit result.ExitCode with
+            | Verdict.Pass _ -> Verdict.Pass cases
+            | other -> other
 
 // ─── Resilient package push (Phase 1016) ─────────────────────────────
 
@@ -1960,18 +2205,61 @@ let registerTargets (config: BuildConfig) =
             | "" -> []
             | v -> v.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray
 
-        // Phase 803 — the legs the repository registered through
-        // `VerifyLeg.register`, run after every pack in registration
-        // order. Each is one more line in the summary block.
-        let extraLegs =
-            VerifyLeg.registeredLegs ()
-            |> List.map (fun (name, run) -> Aggregate.leg name run)
+        // The gate manifest's rows, in registration order: a repository
+        // that registers rows (`Gate.register`) runs its selected `Local`
+        // ones; a `TestPacks` entry no row names is a pack row with the
+        // default reads, so a consumer's `BuildConfig` alone is a manifest.
+        // Each row is one line in the summary block.
+        let rows = Gate.registered ()
 
-        match config.TestPacks, extraLegs with
-        | [], [] ->
+        let packRows =
+            rows
+            |> List.choose (fun r ->
+                match r.Kind with
+                | LegKind.ExpectoPack project -> Some(project, r)
+                | LegKind.Body _
+                | LegKind.Script _ -> None)
+            |> Map.ofList
+
+        let unregisteredPacks: Gate.Registered list = [
+            for pack in config.TestPacks do
+                if not (packRows.ContainsKey pack.Project) then
+                    {
+                        Name = pack.Name
+                        Kind = LegKind.ExpectoPack pack.Project
+                        Where = set [ Site.Local ]
+                        Reads = [ Input.Tree ]
+                        Budget = None
+                        Floor = None
+                        Selected = true
+                    }
+        ]
+
+        let allRows = unregisteredPacks @ rows
+
+        let toRun =
+            allRows |> List.filter (fun r -> r.Selected && Set.contains Site.Local r.Where)
+
+        let elsewhere =
+            allRows |> List.filter (fun r -> not (Set.contains Site.Local r.Where))
+
+        let packs = [
+            for r in toRun do
+                match r.Kind with
+                | LegKind.ExpectoPack project -> TestPack.create r.Name project
+                | LegKind.Body _
+                | LegKind.Script _ -> ()
+        ]
+
+        let readHighWater (file: string) = int ((IO.File.ReadAllText file).Trim())
+
+        let clock = Diagnostics.Stopwatch.StartNew()
+
+        match toRun with
+        | [] ->
             Trace.tracefn
                 "VerifyAll: BuildConfig.TestPacks is empty — nothing to run. Populate `TestPacks` in your `BuildConfig` to opt in."
-        | packs, _ ->
+        | _ ->
             // Outside the aggregate on purpose. The aggregate's whole
             // value is "every leg ran, here is what each did"; a failed
             // build means no leg CAN run, so folding it in as a leg would
@@ -1982,11 +2270,51 @@ let registerTargets (config: BuildConfig) =
             if not (List.isEmpty packs) then
                 TestPackHost.buildOnce packs
 
-            let packLegs =
-                packs
-                |> List.map (fun pack -> Aggregate.leg pack.Name (fun () -> TestPackHost.runPack extraTestArgs pack))
+            let legs =
+                toRun
+                |> List.map (fun row ->
+                    Aggregate.legOf row.Name (fun () ->
+                        let verdict =
+                            match row.Kind with
+                            | LegKind.ExpectoPack project ->
+                                TestPackHost.runPack
+                                    extraTestArgs
+                                    (Gate.scrubbedFor allRows row)
+                                    (TestPack.create row.Name project)
+                            | LegKind.Body run -> run ()
+                            | LegKind.Script path ->
+                                Gate.verdictOfExit (Proc.exec "pwsh" [ "-NoProfile"; "-File"; path ] ".").ExitCode
 
-            Aggregate.runAll "VerifyAll" "pack" (packLegs @ extraLegs))
+                        Gate.judge row.Name row.Floor readHighWater verdict))
+
+            try
+                Aggregate.runAll "VerifyAll" "pack" legs
+            finally
+                // The trailer: the rows this run did not run because they
+                // run elsewhere, each with the inputs that put it there —
+                // what a green here does not cover — and the one measured
+                // duration, printed once, where `GateTimings` folds it from.
+                if not (List.isEmpty elsewhere) then
+                    Trace.tracefn "VerifyAll did not run %d row(s) that run elsewhere:" elsewhere.Length
+
+                    for row in elsewhere do
+                        Trace.tracefn
+                            "  %s — %s; reads %s"
+                            row.Name
+                            (match row.Where |> Set.toList |> List.map Gate.siteName with
+                             | [] -> "operator-run"
+                             | sites -> String.concat ", " sites)
+                            (match row.Reads with
+                             | [] -> "nothing"
+                             | reads -> reads |> List.map Gate.inputName |> String.concat ", ")
+
+                let elapsed = clock.Elapsed
+
+                Trace.tracefn
+                    "VerifyAll: %d row(s) in %d:%02d wall clock on this run."
+                    toRun.Length
+                    (int elapsed.TotalMinutes)
+                    elapsed.Seconds)
 
     Target.create "Pack" (fun _ ->
         // Pack each public-surface SDK fsproj into the local NuGet feed

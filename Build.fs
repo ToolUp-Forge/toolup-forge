@@ -13,202 +13,22 @@ open ToolUp.Forge
 /// Wait for `task`. A build driver may block; this is the one place it does.
 let private block (task: System.Threading.Tasks.Task<'T>) : 'T = task.GetAwaiter().GetResult()
 
+/// The gate manifest's rows with their bodies unbound: the DATA the
+/// driver's configuration, its lane announcement and the standalone
+/// targets' floors are read from. `main` binds the bodies and registers
+/// the rows (`GateManifest.rows bodies`) once every body is defined.
+let private manifestData = GateManifest.rows GateManifest.unbound
+
 let config = {
     BuildConfig.defaults with
         Port = 5000
-        // The in-tree Expecto runners — `dotnet run -- VerifyAll` builds
-        // the solution once, then launches each pack's built dll in turn.
-        // Every `*.Tests.fsproj` in the solution or on disk is a row here
-        // or a named exclusion in `gateExclusions` below; the
-        // `GateReconcile` leg holds the two together (Phase 1096).
-        // AIProviders.Tests is env-gated; arms with no API-key env var
-        // report Pending (not Failed), so a fresh checkout is green
-        // without per-provider credentials.
-        TestPacks = [
-            TestPack.create "Platform" "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
-            TestPack.create "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj"
-            TestPack.create "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj"
-            TestPack.create "AIProviders" "src/ToolUp.AIProviders.Tests/ToolUp.AIProviders.Tests.fsproj"
-            TestPack.create "Stripe" "src/ToolUp.Stripe.Tests/ToolUp.Stripe.Tests.fsproj"
-            // Phase 182 — release SBOM gate + CycloneDX emission contract.
-            TestPack.create "Build" "src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj"
-            // Phase 195 — compile-time auth/audit analyzer AST-path coverage
-            // (offline FCS parse fixtures → Analyzer.analyzeParseTree). The
-            // recognition-vs-runtime parity lives in the Platform pack.
-            TestPack.create
-                "RemotingAnalyzers"
-                "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj"
-            // Phase 167 — `toolup` CLI substrate (dispatch + docker-emit
-            // token substitution). Pure-BCL host; no env gating.
-            TestPack.create "Cli" "src/ToolUp.Cli.Tests/ToolUp.Cli.Tests.fsproj"
-            // Phase 518 — ToolUp.Voice: Transcript model + error taxonomy
-            // + the Whisper / AzureSpeech pure Wire surfaces. No env gating.
-            TestPack.create "Voice" "src/ToolUp.Voice.Tests/ToolUp.Voice.Tests.fsproj"
-            // Phase 12e — AICookbooks licensing-boundary: the Community AG
-            // Chart prompt builder leaks zero Enterprise feature names + the
-            // ~600-token bound + graceful no-op on a missing cookbook.
-            TestPack.create "AICookbooks" "src/ToolUp.AICookbooks.Tests/ToolUp.AICookbooks.Tests.fsproj"
-            // Phase 11.E.2 — ToolUp.Algorithms: the six-portability-rule
-            // contract pack, the registry's duplicate-registration
-            // failure path, the dispatcher's typed error surface, and
-            // the AI tool edge. No env gating; no vendor dependency.
-            TestPack.create "Algorithms" "src/ToolUp.Algorithms.Tests/ToolUp.Algorithms.Tests.fsproj"
-            // Phase 11.E.3 — the Math.NET algorithm provider: the shared
-            // contract packs bound against a real vendor implementation,
-            // plus known-answer numerical fixtures for the hand-written
-            // estimators (R-7 quantiles, OLS + categorical encoding,
-            // each distribution's parameterisation, centred-vs-trailing
-            // alignment). No env gating — the numerics run in-process.
-            TestPack.create
-                "AlgorithmProviders"
-                "src/ToolUp.AlgorithmProviders.Tests/ToolUp.AlgorithmProviders.Tests.fsproj"
-            // Phase 193 — emulator-backed multi-cloud parity matrix. Every
-            // emulator leg is env-gated (clean skip on a fresh checkout); the
-            // divergence fixture + seam ratchets always run.
-            TestPack.create "CloudParity" "src/ToolUp.Cloud.Parity.Tests/ToolUp.Cloud.Parity.Tests.fsproj"
-            // The artefact-signing pack: the byte-level signer/verifier
-            // contract, the module-binding surfaces, and the application
-            // signing seam's provider-conformance matrix + its probe
-            // (deliberately broken providers the pack must reject). No env
-            // gating; the crypto runs in-process.
-            TestPack.create "ArtefactSigning" "src/ToolUp.ArtefactSigning.Tests/ToolUp.ArtefactSigning.Tests.fsproj"
-            // Phase 23 — the Reporting DOCX / XLSX renderer sub-companions:
-            // the shared IReportRendererContract pack bound through each
-            // container format, plus format-specific fixtures (run
-            // coalescing, native-table promotion, cell-address writes,
-            // style preservation, formula recalculation). No env gating.
-            TestPack.create "ReportingDocx" "src/Reporting/Docx.Tests/ToolUp.Reporting.Docx.Tests.fsproj"
-            TestPack.create "ReportingXlsx" "src/Reporting/Xlsx.Tests/ToolUp.Reporting.Xlsx.Tests.fsproj"
-            // Phase 10c — the IDataSource connector family under
-            // src/DataSources/. The pure surfaces (ConnectionScope
-            // parsing, the ISecretStore credential thunk, RFC 4180 CSV
-            // emission, per-backend catalogue SQL, identifier refusal,
-            // native-type classification) always run; each connector's
-            // remote arm is env-gated and reports Pending on a
-            // credential-free checkout.
-            TestPack.create "DataSources" "src/ToolUp.DataSources.Tests/ToolUp.DataSources.Tests.fsproj"
-            // Phase 206 — the ToolUp.OpenXml structural / revision
-            // layer: the import + emit + tracked-changes surfaces, and
-            // the round-trip fidelity corpus that pins six `.docx`
-            // fixtures against committed DocModel / OpenXml-element /
-            // residue goldens. The pack existed before this phase but
-            // was never reached by `VerifyAll`, so a fidelity
-            // regression could land green. No env gating; the fixtures
-            // are built in-process.
-            TestPack.create "OpenXml" "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj"
-            // Phase 574 — the SpreadsheetML write side: the workbook
-            // model's sheet-name / range validation, the emitted parts
-            // (shared strings, styles carrying the number formats,
-            // cols, mergeCells), the byte-identical-emit property, and
-            // the reopen proof run through the ToolUp.Tabular reader.
-            // No env gating; every fixture is built in-process.
-            TestPack.create
-                "OpenXmlSpreadsheet"
-                "src/ToolUp.OpenXml.Spreadsheet.Tests/ToolUp.OpenXml.Spreadsheet.Tests.fsproj"
-            // Phase 127 / 207 — the AssetStore derivative pipeline: the
-            // sync + async job-backed paths, and the opt-in dead-letter
-            // / retry-observability surface with its default-off twin.
-            // Hermetic (in-memory blob storage, manual-pump scheduler);
-            // no env gating, no SkiaSharp native needed — the pack's
-            // renderers are doubles.
-            TestPack.create "AssetStore" "src/ToolUp.AssetStore.Tests/ToolUp.AssetStore.Tests.fsproj"
-            // Phase 576.C — the Skia ISvgRasterizer companion: real
-            // rasterisation (requested width honoured, height from the
-            // document's own aspect), the failure surface as values
-            // rather than exceptions, and the end-to-end proof that a
-            // figure composed with it carries both parts. Its own pack
-            // rather than a leg of the OpenXml one, deliberately: that
-            // pack's strip-imports evidence is that no rendering engine
-            // is in its process at all, which a shared pack would
-            // destroy. Needs a SkiaSharp native for the running RID —
-            // the fsproj carries the Linux one, as ToolUp.Platform.Tests
-            // does; no env gating.
-            TestPack.create
-                "SvgRasterizerSkia"
-                "src/SvgRasterizers/Skia.Tests/ToolUp.OpenXml.SvgRasterizer.Skia.Tests.fsproj"
-            // Phase 534 — scheduled report subscriptions, plus the
-            // narrative egress path Phase 575 could not reach. Its own
-            // pack because the cases that matter need BOTH
-            // ToolUp.Reporting.Server (the API handler) and
-            // ToolUp.Reporting.Docx (the renderer) in one process, and
-            // neither project references the other — nor should it, so
-            // neither of the existing packs could host them.
-            TestPack.create "Reporting" "src/ToolUp.Reporting.Tests/ToolUp.Reporting.Tests.fsproj"
-            // Phase 24 — ToolUp.Offline: the Core retry / status /
-            // drain-selection model and the sync handler's three guards
-            // (server-resolved scope, last-writer-wins conflict
-            // detection, audit stamped with the mutation's ORIGINAL
-            // enqueue time). Pure — no browser, no network, no
-            // credentials. The IndexedDB and Feliz surfaces are
-            // browser-only and ride the Fable compile gate instead.
-            TestPack.create "Offline" "src/ToolUp.Offline.Tests/ToolUp.Offline.Tests.fsproj"
-            // Phase 687 — ToolUp.Companions.Isolation: the native-boundary
-            // isolation seam. Its own pack because every out-of-process
-            // case starts a REAL child through `dotnet exec` and kills it
-            // on a fault / a hang / a memory burst — process-heavy by
-            // design, and never `pure`.
-            TestPack.create
-                "CompanionsIsolation"
-                "src/ToolUp.Companions.Isolation.Tests/ToolUp.Companions.Isolation.Tests.fsproj"
-            // Phase 514 — the conversation / prompt eval harness, opted in
-            // here deliberately and documented in docs/ai/conversation-eval.md.
-            // What runs is its OFFLINE self-test pack only: the committed
-            // fixtures replayed from their recordings (tool dispatch against
-            // recorded results, the rubric) and gated against their
-            // committed baselines — deterministic, no network, no key. The
-            // live replay and LLM-judge arms report Pending unless
-            // TOOLUP_AI_EVAL_PROVIDER / TOOLUP_AI_EVAL_JUDGE name a provider,
-            // so a fresh checkout stays green. Reads its fixtures from disk,
-            // so it is not a `pure` pack.
-            TestPack.create "AIEvaluation" "src/ToolUp.AI.Evaluation/ToolUp.AI.Evaluation.fsproj"
-            // Phase 663 — the triage calibration tool's plumbing, driven by a
-            // fake provider: the eligibility short-circuit, one call re-scored
-            // at four floors, the failure strata, the result-file round-trip.
-            // Offline and deterministic; reads its example case file from disk,
-            // so it is not a `pure` pack.
-            TestPack.create
-                "TriageCalibration"
-                "tools/ToolUp.TriageCalibration.Tests/ToolUp.TriageCalibration.Tests.fsproj"
-            // Phase 1096 — four packs that were in the solution, built on
-            // every push and run by nothing, so ~84 cases could not go red.
-            // Each was green on its first run. `Classification` holds the
-            // only `IFieldClassifier` contract law and `DataSubject` the only
-            // `IBackgroundExportStore` one (the Platform pack's
-            // `IDataSubjectRequestContract` is the orchestrator's, a
-            // different seam), so neither duplicates a Contracts law.
-            TestPack.create "Tabular" "src/ToolUp.Tabular.Tests/ToolUp.Tabular.Tests.fsproj"
-            TestPack.create
-                "Classification"
-                "src/ToolUp.Platform.Classification.Tests/ToolUp.Platform.Classification.Tests.fsproj"
-            TestPack.create
-                "DataSubject"
-                "src/ToolUp.Platform.DataSubject.Tests/ToolUp.Platform.DataSubject.Tests.fsproj"
-            TestPack.create "ReportingHtmlPdf" "src/Reporting/HtmlPdf.Tests/ToolUp.Reporting.HtmlPdf.Tests.fsproj"
-        ]
+        // Derived: the `Local` pack rows of the gate manifest, in row order.
+        // A new pack is a row in GateManifest.fs, never an entry here.
+        // `GateManifest.exclusions` names the test projects that are
+        // deliberately not rows, and the `GateReconcile` row holds the two
+        // together.
+        TestPacks = Gate.packs manifestData
 }
-
-/// Phase 1096 — the test projects `VerifyAll` deliberately does not run as
-/// packs, each with the runner that does run it or the input it needs. The
-/// `GateReconcile` leg is red for any `*.Tests.fsproj` (in the solution, or
-/// on disk under `src/`, `tests/`, `tools/`) that is neither a row above nor
-/// named here, and for an entry here that names nothing.
-let private gateExclusions = [
-    Gate.exclude
-        "src/ToolUp.AI.Client.Tests/ToolUp.AI.Client.Tests.fsproj"
-        "Fable-tier node:test harness, not an Expecto pack: run by the Fable leg of VerifyAll (VerifyFable) and the fable-tier CI job."
-    Gate.exclude
-        "src/ToolUp.AI.Wire.Fable.Tests/ToolUp.AI.Wire.Fable.Tests.fsproj"
-        "Fable-host twin of the wire pack, run under node:test after a Fable compile: the checks.yml fable-wire-smoke job runs it."
-    Gate.exclude
-        "src/ToolUp.AI.Wire.Tests/ToolUp.AI.Wire.Tests.fsproj"
-        "the .NET host half of the wire-layer smoke, run beside its Fable twin by the checks.yml fable-wire-smoke job."
-    Gate.exclude
-        "tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/ToolUp.BrowserSmoke.Tests.fsproj"
-        "launches real browsers (Phase 761): run by the opt-in VerifyBrowserSmoke target and its own CI job, outside the solution."
-    Gate.exclude
-        "tests/CompanionFuzz/ToolUp.Companions.Fuzz.Tests.fsproj"
-        "needs Verovio.NET's native libverovio off the local feed (not on nuget.org, so it cannot join the solution CI restores) and a host that enforces a per-child kernel memory cap; run by an operator per tests/CompanionFuzz/README.md."
-]
 
 // ─── Phase 762 — gate lanes (`TOOLUP_TEST_LANE`) ────────────────────
 //
@@ -217,7 +37,8 @@ let private gateExclusions = [
 // and the Fable ones transpiled — is part of every full lane. No figure
 // is restated here: one stated six ways went stale six ways, and none
 // counted the samples leg. `VerifyAll` prints the measured figure itself
-// once Phase 1098 lands. A dispatched worker has to spend all of it before
+// at the end of every run (`dotnet run -- GateTimings` folds the recorded
+// runs). A dispatched worker has to spend all of it before
 // it learns whether its own change is green, and then spend it AGAIN on
 // the folded tree, which is the only run a ship may cite.
 //
@@ -231,29 +52,13 @@ let private gateExclusions = [
 // INSIDE one pack, so `fast` is a LIST-level decision made in that
 // pack's own entry point (`src/ToolUp.Platform.Tests/Program.fs`) and
 // changes nothing here — every pack still runs. `pure` is a PACK-level
-// decision, made here.
+// decision, and it is DERIVED: the pack rows of the gate manifest whose
+// `Reads` is empty (their test sources touch no filesystem, process,
+// socket or environment variable — the grep `PureLaneTests` re-runs over
+// every such row). Each row's `Lanes` carries the result, and the lane
+// this process runs selects the rows at registration (end of `main`).
 //
-// Unset ⇒ `full` ⇒ this list, unfiltered: the pre-phase gate, unchanged.
-
-/// Packs whose own test sources touch no filesystem, process, socket or
-/// environment variable — the `pure` lane, seconds rather than minutes.
-///
-/// Membership is opt-IN and mechanically re-derivable, so it can
-/// under-claim but never over-claim. The audit, over each pack's `*.fs`
-/// outside `bin`/`obj`:
-///
-///     grep -rlE 'System\.IO|File\.|Directory\.|Path\.GetTempPath|Process|HttpClient|Socket|Environment\.GetEnvironmentVariable|__SOURCE_DIRECTORY__'
-///
-/// Each member matches in ZERO files. The claim is about each pack's TEST
-/// sources — what the pack itself does — not a transitive claim about the
-/// SDK assemblies it binds. The audit seeded six members on 2026-09-12;
-/// since Phase 1096 it is a TEST, not a one-off (`PureLaneTests` in the
-/// Build pack re-runs it over every member and is red when one reads the
-/// tree), which is how `RemotingAnalyzers` (Phase 776's tree scan) and
-/// `Offline` (its sync-handler tests) were found to have stopped
-/// qualifying and left.
-let private pureLanePacks =
-    set [ "Voice"; "AlgorithmProviders"; "AssetStore"; "Reporting" ]
+// Unset ⇒ `full` ⇒ every `Local` row: the pre-phase gate, unchanged.
 
 /// The `affected` lane's lists file and the selection manifest it names,
 /// read once — `None` in every other lane. An `Error` (no lists file, a
@@ -288,25 +93,20 @@ let private affectedClientTierMoved =
     | Some m -> m.ClientTierMoved
     | None -> true
 
-/// `config` for the lane this process runs. Kept as a projection OF
-/// `config` rather than folded into it so the authoritative pack list
-/// above stays one unbroken literal — it is the list `CLAUDE.md` calls
-/// authoritative, and a filter threaded through it would put a lane
-/// decision inside the thing the lane selects FROM.
-let private lanedConfig =
-    match verifyLane with
-    | TestLane.Lane.Pure -> {
-        config with
-            TestPacks =
-                config.TestPacks
-                |> List.filter (fun pack -> Set.contains pack.Name pureLanePacks)
-      }
-    // `fast` runs every pack; the slow set it drops is inside the
-    // Platform pack and is that pack's own declaration. `affected` runs
-    // every pack too: its selection is of the Platform pack's lists.
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full -> config
+/// How many pack rows this lane runs, for the announcement. `fast` runs
+/// every pack (the slow set it drops is inside the Platform pack and is
+/// that pack's own declaration), `affected` too; `pure` runs the rows
+/// that read nothing.
+let private selectedPackCount =
+    manifestData
+    |> List.filter (fun r ->
+        Set.contains Site.Local r.Where
+        && Set.contains verifyLane r.Lanes
+        && (match r.Kind with
+            | LegKind.ExpectoPack _ -> true
+            | LegKind.Body _
+            | LegKind.Script _ -> false))
+    |> List.length
 
 /// Phase 1096 — what a type declaration in a documentation `fsharp` block
 /// is, which decides which of its members the doc-parity arm reads and which
@@ -336,9 +136,7 @@ let main args =
     // Phase 762 — name the lane once, so a log cannot be mistaken for a
     // full run. Silent under `full`, so the shipping gate's output is
     // byte-for-byte what it was.
-    TestLane.announce (
-        sprintf "VerifyAll will run %d of %d pack(s)" (List.length lanedConfig.TestPacks) (List.length config.TestPacks)
-    )
+    TestLane.announce (sprintf "VerifyAll will run %d of %d pack(s)" selectedPackCount (List.length config.TestPacks))
 
     // The `affected` lane says what it did not run, in the gate output,
     // before anything runs — so a log cannot be mistaken for a full run.
@@ -356,23 +154,112 @@ let main args =
         | Some(Error why) -> printfn "  no readable selection manifest (%s); every leg runs" why
         | None -> printfn "  no selection manifest (the lists file was written by hand); every leg runs"
 
-    registerTargets lanedConfig
+    registerTargets config
 
-    // Phase 1096 — every test project runs or is excluded by name. Pure
-    // file reading (the solution and three directory scans), so it is
-    // registered in every lane, `pure` included. Reconciles the FULL pack
-    // list, not the lane's projection of it: a lane narrows what runs, it
-    // does not make an undeclared project declared.
-    VerifyLeg.register "GateReconcile" (fun () ->
+    /// The mark a `HighWater` floor file holds, read from the repository.
+    let readHighWater (file: string) =
+        int ((File.ReadAllText(Path.Combine(__SOURCE_DIRECTORY__, file))).Trim())
+
+    /// A row's verdict with the row's floor applied — the same judgement
+    /// `VerifyAll` makes, for the row's standalone target.
+    let judged (name: string) (verdict: Verdict) =
+        let floor =
+            manifestData |> List.tryFind (fun r -> r.Name = name) |> Option.bind _.Floor
+
+        Gate.judge name floor readHighWater verdict
+
+    /// A standalone target's exit: its row's verdict, judged; anything but a
+    /// pass is the target's failure, named.
+    let ensure (name: string) (verdict: Verdict) =
+        match judged name verdict with
+        | Verdict.Pass _ -> ()
+        | Verdict.Fail reason -> failwithf "Verify%s: %s" name reason
+        | Verdict.Pending reason -> failwithf "Verify%s: pending — %s" name reason
+
+    /// A body whose verdict is a count, or a `failwith` of its own.
+    let verdictOfCount (body: unit -> int) : Verdict =
+        try
+            Verdict.Pass(Some(body ()))
+        with Failure reason ->
+            Verdict.Fail reason
+
+    /// The verdict of a `node --test --test-reporter=tap` run, from its TAP
+    /// counts rather than its exit status: `node --test` exits 0 when it
+    /// matched no test file at all, so a harness that silently stopped
+    /// emitting cases — a moved output path, a Fable compile that wrote
+    /// elsewhere, an entry point that registered nothing — is
+    /// indistinguishable from a green run by exit status alone. The row's
+    /// floor (a lower bound, so adding a case never needs an edit) is
+    /// applied by the fold.
+    let nodeTestVerdict (label: string) (result: ProcResult) : Verdict =
+        let output = result.StdOut + result.StdErr
+        printfn "%s" output
+
+        let tapCount (name: string) =
+            let prefix = sprintf "# %s " name
+
+            output.Split('\n')
+            |> Array.map _.Trim()
+            |> Array.tryPick (fun line ->
+                if line.StartsWith prefix then
+                    match System.Int32.TryParse(line.Substring prefix.Length) with
+                    | true, n -> Some n
+                    | _ -> None
+                else
+                    None)
+
+        match tapCount "pass", tapCount "fail" with
+        | Some passed, Some failed ->
+            Trace.tracefn ""
+            Trace.tracefn "%s summary: %d passed, %d failed." label passed failed
+
+            if failed > 0 then
+                Verdict.Fail(sprintf "%d node:test case(s) failed." failed)
+            elif result.ExitCode <> 0 then
+                Verdict.Fail(sprintf "node exited %d." result.ExitCode)
+            else
+                Verdict.Pass(Some passed)
+        | _ ->
+            Verdict.Fail
+                "node:test printed no TAP `# pass` / `# fail` summary — the harness did not run. `node --test` exits 0 in that case, which is why the counts are checked and not just the exit status."
+
+    /// `node --test` over a Fable-compiled harness in `dir`, TAP-reported.
+    let nodeTest (dir: string) (args: string list) =
+        let node =
+            Proc.onPath (sprintf "`%s` was not found on PATH. The Fable-tier harnesses need Node.js (>= 20).") "node"
+
+        Proc.redirected node ([ "--test"; "--test-reporter=tap" ] @ args) dir
+
+    /// The case counts an Expecto `--junit-summary` file reports — its
+    /// `<testcase`, `<failure` / `<error` and `<skipped` elements (the
+    /// summary carries no count attributes). A structured read, never a
+    /// scrape of the coloured console line.
+    let junitCounts (path: string) : (int * int * int) option =
+        if File.Exists path then
+            let text = File.ReadAllText path
+
+            let count (element: string) =
+                System.Text.RegularExpressions.Regex.Matches(text, sprintf @"<%s\b" element).Count
+
+            Some(count "testcase", count "failure" + count "error", count "skipped")
+        else
+            None
+
+    /// Every test project runs or is excluded by name. Pure file reading
+    /// (the solution and three directory scans), so its row runs in every
+    /// lane, `pure` included. Reconciles the FULL pack list, not the lane's
+    /// projection of it: a lane narrows what runs, it does not make an
+    /// undeclared project declared.
+    let runGateReconcile () : Verdict =
         Trace.tracefn "▶ VerifyAll: GateReconcile (every *.Tests.fsproj is a pack or a named exclusion)"
 
-        match Gate.reconcile (Path.getFullName ".") config.TestPacks gateExclusions with
-        | Ok() -> 0
+        match Gate.reconcile (Path.getFullName ".") config.TestPacks GateManifest.exclusions with
+        | Ok() -> Verdict.Pass None
         | Error findings ->
             for f in findings do
                 Trace.traceError (sprintf "GateReconcile: %s" f)
 
-            1)
+            Verdict.Fail(sprintf "%d finding(s), named above." findings.Length)
 
     // The `affected` lane's selection, written as a manifest and the lists
     // file the Platform pack reads.
@@ -478,31 +365,23 @@ let main args =
     // Usage: `dotnet run --project Build.fsproj -- VerifyFable`
     //
     // The last step deliberately reads the TAP COUNTS, not just the exit
-    // code. `node --test` exits 0 when it matched no test file at all,
-    // so a harness that silently stopped emitting cases — a moved output
-    // path, a Fable compile that wrote elsewhere, an entry point that
-    // registered nothing — is indistinguishable from a green run by exit
-    // status alone. That is the exact shape of the local `--filter`
-    // incident that silently matched 0 Expecto tests. `fableCaseFloor` is
-    // a LOWER BOUND, not the exact count: adding a case never needs a
-    // companion edit here, and it fires only when the harness has
-    // collapsed rather than shrunk.
-    let fableCaseFloor = 100
-
-    // Phase 803 — the body is a function rather than the target's lambda
-    // so it can be BOTH the standalone `VerifyFable` target and the leg
-    // `VerifyAll` composes below: one recipe, two entry points, no drift.
-    let runVerifyFable () =
+    // code (`nodeTestVerdict` above), and the `Fable` row's floor is a
+    // LOWER BOUND the fold applies: adding a case never needs a companion
+    // edit, and it fires only when the harness has collapsed rather than
+    // shrunk — the exact shape of the local `--filter` incident that
+    // silently matched 0 Expecto tests.
+    //
+    // The body is a function rather than the target's lambda so it can be
+    // BOTH the standalone `VerifyFable` target and the `Fable` row
+    // `VerifyAll` folds: one recipe, two entry points, no drift.
+    let runVerifyFable () : Verdict =
         let testDir = Path.getFullName "src/ToolUp.AI.Client.Tests"
 
-        let onPath =
-            Proc.onPath (
-                sprintf
-                    "VerifyFable: `%s` was not found on PATH. The Fable-tier harness needs the .NET SDK and Node.js (>= 20)."
-            )
-
-        let npm = onPath "npm"
-        let node = onPath "node"
+        let npm =
+            Proc.onPath
+                (sprintf
+                    "VerifyFable: `%s` was not found on PATH. The Fable-tier harness needs the .NET SDK and Node.js (>= 20).")
+                "npm"
 
         Trace.tracefn "▶ VerifyFable (1/4): dotnet tool restore"
         Proc.exec "dotnet" [ "tool"; "restore" ] testDir |> Proc.ensure |> ignore
@@ -525,91 +404,32 @@ let main args =
 
         // `--test-reporter=tap` is pinned rather than inherited: node
         // picks `spec` on a TTY and `tap` otherwise, and the summary
-        // counts parsed below only exist in the TAP form.
-        let result =
-            Proc.redirected
-                node
-                [
-                    "--import"
-                    "./register-loader.mjs"
-                    "--test"
-                    "--test-reporter=tap"
-                    "output/Program.js"
-                ]
-                testDir
+        // counts `nodeTestVerdict` reads only exist in the TAP form.
+        nodeTest testDir [ "--import"; "./register-loader.mjs"; "output/Program.js" ]
+        |> nodeTestVerdict "VerifyFable"
 
-        let output = result.StdOut + result.StdErr
-        printfn "%s" output
+    Target.create "VerifyFable" (fun _ -> ensure "Fable" (runVerifyFable ()))
 
-        let tapCount (label: string) =
-            let prefix = sprintf "# %s " label
+    /// The wire layer's Fable twin under node:test, after a Fable compile
+    /// in the harness directory (the `fable-wire-smoke` job's second row).
+    let runWireFable (dir: string) (entry: string) (label: string) : Verdict =
+        let harness = Path.getFullName dir
+        Trace.tracefn "▶ %s (1/3): dotnet tool restore" label
+        Proc.exec "dotnet" [ "tool"; "restore" ] harness |> Proc.ensure |> ignore
+        Trace.tracefn "▶ %s (2/3): dotnet fable -o output --noCache" label
 
-            output.Split('\n')
-            |> Array.map _.Trim()
-            |> Array.tryPick (fun line ->
-                if line.StartsWith prefix then
-                    match System.Int32.TryParse(line.Substring prefix.Length) with
-                    | true, n -> Some n
-                    | _ -> None
-                else
-                    None)
+        Proc.exec "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] harness
+        |> Proc.ensure
+        |> ignore
 
-        match tapCount "pass", tapCount "fail" with
-        | Some passed, Some failed ->
-            Trace.tracefn ""
-            Trace.tracefn "VerifyFable summary: %d passed, %d failed (floor %d)." passed failed fableCaseFloor
+        Trace.tracefn "▶ %s (3/3): node --test %s" label entry
+        nodeTest harness [ entry ] |> nodeTestVerdict label
 
-            if failed > 0 then
-                failwithf "VerifyFable: %d node:test case(s) failed." failed
-
-            if passed < fableCaseFloor then
-                failwithf
-                    "VerifyFable: only %d case(s) ran, below the floor of %d. A run this small means the harness matched almost nothing — check the Fable output path and the entry point before lowering the floor."
-                    passed
-                    fableCaseFloor
-        | _ ->
-            failwith
-                "VerifyFable: node:test printed no TAP `# pass` / `# fail` summary — the harness did not run. `node --test` exits 0 in that case, which is why the counts are checked and not just the exit status."
-
-        if result.ExitCode <> 0 then
-            failwithf "VerifyFable: node exited %d." result.ExitCode
-
-    Target.create "VerifyFable" (fun _ -> runVerifyFable ())
-
-    // Phase 803 — the Fable leg IN the canonical gate.
-    //
-    // Until this phase `VerifyAll` — and so `verify.ps1` — ran twenty-four
-    // .NET packs and never transpiled the client tier. A `sizeof<'a>` in
-    // a Core file the browser compiles (Phase 786's first draft; Fable
-    // refuses the construct) went green through the whole gate and was
-    // caught only because a worker ran `dotnet fable` by hand, and three
-    // remoting-campaign workers each did that hand run because nothing
-    // else would. The reader those workers were changing has ONE
-    // production caller, and it runs under Fable.
-    //
-    // So the same recipe `VerifyFable` runs is registered as a leg of
-    // `VerifyAll`, after the packs, through the SDK's `VerifyLeg` seam:
-    // it lands in the summary block as `PASS — Fable` (CI's
-    // `EXPECTED_PACKS` floor moved 24 → 25 in the same commit), a failure
-    // is one more named line rather than a fail-fast, and `verify.ps1`
-    // — a hard-denied path on the roadmap side, so untouched here — can
-    // no longer go green on a tree whose Fable tier does not compile.
-    //
-    // Not under `pure`. That lane is the ten-second declared-no-
-    // filesystem set, and a Node toolchain plus a transpile is the
-    // opposite of that claim; `fast` keeps it, because `fast` runs every
-    // pack and drops only the measured slow set INSIDE one of them. Cost
-    // in `full`: the ~1.5-minute `fable-tier` recipe, once, at the end.
-    match verifyLane with
-    | TestLane.Lane.Pure -> ()
-    | TestLane.Lane.Affected when not affectedClientTierMoved -> ()
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "Fable" (fun () ->
-            Trace.tracefn "▶ VerifyAll: Fable (src/ToolUp.AI.Client.Tests, via the VerifyFable recipe)"
-            runVerifyFable ()
-            0)
+    // The same recipe is the `Fable` row of the gate manifest, folded by
+    // `VerifyAll` after the packs (outside the `pure` lane, and skipped
+    // under `affected` when nothing in the client tier moved), so
+    // `verify.ps1` cannot go green on a tree whose Fable tier does not
+    // compile.
 
     // Phase 904 — every sample builds under a gate.
     //
@@ -774,17 +594,6 @@ let main args =
 
     Target.create "VerifySamples" (fun _ -> runVerifySamples ())
 
-    // Phase 904 — the samples gate IN the canonical gate.
-    match verifyLane with
-    | TestLane.Lane.Pure -> ()
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "Samples" (fun () ->
-            Trace.tracefn "▶ VerifyAll: Samples (samples/, via the VerifySamples recipe)"
-            runVerifySamples ()
-            0)
-
     // Phase 776 — the analyser rule set runs over the SDK's own tree.
     //
     // `ToolUp.Remoting.Analyzers` carries the TUA containment rules
@@ -801,8 +610,8 @@ let main args =
     // It runs the RemotingAnalyzers pack's built dll in its `--scan-tree`
     // mode: that exe already loads the analyser and the compiler service,
     // so this file takes no compiler dependency, and the build the packs
-    // ran has produced it. One more `PASS` line in the summary (CI's
-    // `EXPECTED_PACKS` floor moved 28 → 29 in the same commit).
+    // ran has produced it. One more `PASS` line in the summary, which the
+    // `Analyzers` row of the gate manifest counts into CI's floor.
     //
     // `fast` and `full`, not `pure`: it reads the tree and asks git for the
     // tracked set, which is the opposite of the pure lane's claim. About
@@ -824,15 +633,6 @@ let main args =
         match runVerifyAnalyzers () with
         | 0 -> ()
         | code -> failwithf "VerifyAnalyzers: the analyser run exited %d; its findings are printed above." code)
-
-    match verifyLane with
-    | TestLane.Lane.Pure -> ()
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "Analyzers" (fun () ->
-            Trace.tracefn "▶ VerifyAll: Analyzers (TUA rules over src/, via the RemotingAnalyzers pack)"
-            runVerifyAnalyzers ())
 
     // Phase 761 — the browser-level smoke gate.
     //
@@ -859,17 +659,15 @@ let main args =
     // report Pending, not Failed, without one (the `BrowserGate`
     // convention from Phase 126). That is right for a developer's
     // checkout and catastrophic for CI: a runner with no browser would
-    // report every scenario skipped and the job green. So this target
-    // reads the PASSED count out of Expecto's summary and fails below
-    // `browserScenarioFloor` — the same guard `VerifyFable` puts on its
-    // TAP counts, and for the same reason. Unlike that one the floor is
-    // the EXACT current count rather than a slack lower bound: there are
-    // eight scenarios and each is expensive, so losing one silently is
-    // exactly what this must catch. Adding or removing a scenario bumps
-    // this number in the same commit.
-    let browserScenarioFloor = 8
-
-    Target.create "VerifyBrowserSmoke" (fun _ ->
+    // report every scenario skipped and the job green. So this body
+    // reads the PASSED count out of the harness's JUnit summary and the
+    // `BrowserSmoke` row's floor holds it — the same guard the `Fable`
+    // row puts on its TAP counts, and for the same reason. Unlike that
+    // one the floor is the EXACT current count rather than a slack lower
+    // bound: there are eight scenarios and each is expensive, so losing
+    // one silently is exactly what this must catch. Adding or removing a
+    // scenario edits the row's floor in the same commit.
+    let runVerifyBrowserSmoke () : Verdict =
         let fixtureDir = Path.getFullName "tests/BrowserSmoke/fixture"
 
         let harnessProject =
@@ -998,56 +796,38 @@ let main args =
 
         Trace.tracefn "▶ VerifyBrowserSmoke (6/6): run the scenarios"
 
-        let result = Proc.redirected "dotnet" [ targetPath ] "."
+        // The counts come from the JUnit summary the harness writes, a
+        // structured record: Expecto colours every count on its console
+        // line, and a regex over that text once reported "the harness did
+        // not run" on a run that passed every scenario.
+        let summary =
+            Path.Combine(Scratch.root "toolup-verifyall", "BrowserSmoke.junit.xml")
 
-        let output = result.StdOut + result.StdErr
-        printfn "%s" output
+        Directory.CreateDirectory(Path.GetDirectoryName summary) |> ignore
+        File.Delete summary
+        let result = Proc.exec "dotnet" [ targetPath; "--junit-summary"; summary ] "."
 
-        // Expecto's summary line, e.g.
-        //   "8 tests run in 00:00:23 for ToolUp.BrowserSmoke.Tests - 8 passed, 0 ignored, 0 failed, 0 errored."
-        // Stripped of ANSI colour first. Expecto colours every count, so
-        // the raw text reads "…[36m8[37m passed" and a naive
-        // `(\d+) passed` matches nothing — which this target then reports
-        // as "the harness did not run" on a run that passed every
-        // scenario. It did exactly that once, before this line existed.
-        let plain = System.Text.RegularExpressions.Regex.Replace(output, "\\[[0-9;]*m", "")
-
-        // The colour-code strip above removes the bracket sequences but
-        // leaves the escape characters themselves, so the separator
-        // between the count and its label is matched loosely rather
-        // than as whitespace.
-        let countBefore (label: string) =
-            let pattern = sprintf @"(\d+)[^0-9]{0,8}%s" label
-            let matched = System.Text.RegularExpressions.Regex.Match(plain, pattern)
-
-            if matched.Success then
-                Some(int matched.Groups[1].Value)
-            else
-                None
-
-        match countBefore "passed", countBefore "ignored" with
-        | Some passed, Some ignored ->
+        match junitCounts summary with
+        | Some(tests, failed, skipped) ->
+            let passed = tests - failed - skipped
             Trace.tracefn ""
+            Trace.tracefn "VerifyBrowserSmoke summary: %d passed, %d ignored." passed skipped
 
-            Trace.tracefn
-                "VerifyBrowserSmoke summary: %d passed, %d ignored (floor %d)."
-                passed
-                ignored
-                browserScenarioFloor
+            if skipped > 0 then
+                Trace.traceImportantfn
+                    "VerifyBrowserSmoke: %d scenario(s) were skipped. A skipped scenario almost always means Chromium is not installed on this machine — run `pwsh %s install chromium`. Do not lower the row's floor to make this green."
+                    skipped
+                    installer
 
             if result.ExitCode <> 0 then
-                failwithf "VerifyBrowserSmoke: the harness exited %d." result.ExitCode
+                Verdict.Fail(sprintf "the harness exited %d." result.ExitCode)
+            else
+                Verdict.Pass(Some passed)
+        | None ->
+            Verdict.Fail
+                "the harness wrote no JUnit summary — it did not run. The counts are checked rather than the exit status alone precisely because a harness that never started can still exit 0."
 
-            if passed < browserScenarioFloor then
-                failwithf
-                    "VerifyBrowserSmoke: only %d scenario(s) passed, below the floor of %d (%d were skipped). A skipped scenario almost always means Chromium is not installed on this machine — run `pwsh %s install chromium`. Do not lower the floor to make this green."
-                    passed
-                    browserScenarioFloor
-                    ignored
-                    installer
-        | _ ->
-            failwith
-                "VerifyBrowserSmoke: the harness printed no Expecto summary — it did not run. The counts are checked rather than the exit status alone precisely because a harness that never started can still exit 0.")
+    Target.create "VerifyBrowserSmoke" (fun _ -> ensure "BrowserSmoke" (runVerifyBrowserSmoke ()))
 
     // The template-content compile gate. Its rationale and its spec are
     // `TemplateGatePackages.verifyTemplates`; the mechanism is `TemplateGate.run`.
@@ -1922,7 +1702,7 @@ let main args =
         |> List.truncate 10
         |> String.concat ", "
 
-    Target.create "VerifyDocSnippets" (fun _ ->
+    let runVerifyDocSnippets () : int =
         let updateBaseline = Flags.has "--update-baseline" flags
         let repoRoot = __SOURCE_DIRECTORY__
         let projDir = Path.Combine(repoRoot, "docs-snippets")
@@ -2219,9 +1999,7 @@ let main args =
                     match kind with
                     | DocDeclKind.Interface ->
                         seg
-                        |> Array.choose (
-                            rxGroups @"^\s+abstract\s+(?:member\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$"
-                        )
+                        |> Array.choose (rxGroups @"^\s+abstract\s+(?:member\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$")
                         |> Array.map (fun g -> g[1], g[2])
                     | DocDeclKind.Record ->
                         seg
@@ -2409,8 +2187,7 @@ let main args =
 
         let fragmentBlocks =
             fsharpBlocks
-            |> List.filter (fun (_, _, _, _, info, _) ->
-                info.Split(' ') |> Array.exists (fun a -> a = "skip=fragment"))
+            |> List.filter (fun (_, _, _, _, info, _) -> info.Split(' ') |> Array.exists (fun a -> a = "skip=fragment"))
 
         // A declaration line carries a NAMESPACE path, not a member access.
         let isDeclarationLine (t: string) =
@@ -3247,7 +3024,11 @@ let main args =
                 passing
                 baselineKeys.Count
 
-        if updateBaseline then writeBaseline () else runChecks ())
+        if updateBaseline then writeBaseline () else runChecks ()
+
+        checkedCount
+
+    Target.create "VerifyDocSnippets" (fun _ -> runVerifyDocSnippets () |> ignore)
 
     // ---- Phase 670: comment-cited API resolution ----
     //
@@ -3308,7 +3089,7 @@ let main args =
     // Usage: `dotnet run --project Build.fsproj -- VerifySourceCitations`
     let sourceCitationWindow = 15
 
-    Target.create "VerifySourceCitations" (fun _ ->
+    let runVerifySourceCitations () =
         let repoRoot = __SOURCE_DIRECTORY__
 
         let rec walkSources (dir: string) = seq {
@@ -3833,7 +3614,9 @@ let main args =
         Trace.tracefn
             "VerifySourceCitations: OK — %d pointer(s) and %d API citation(s) resolve."
             pointersChecked
-            citationsResolved)
+            citationsResolved
+
+    Target.create "VerifySourceCitations" (fun _ -> runVerifySourceCitations ())
 
     // Phase 863 — a discarded upload result is a build failure.
     //
@@ -3939,7 +3722,7 @@ let main args =
     //        `… -- VerifyUploadResults --root <dir>` scans `<dir>/src` instead
     //        of this repository's (how the check is shown red on a planted
     //        discard without touching the tree).
-    Target.create "VerifyUploadResults" (fun _ ->
+    let runVerifyUploadResults () =
         let root =
             match Flags.value "--root" flags with
             | Some r -> Path.GetFullPath r
@@ -4237,7 +4020,9 @@ let main args =
 
         Trace.tracefn
             "VerifyUploadResults: OK — no unmarked discarded write or delete result (%d marked best-effort)."
-            marked.Length)
+            marked.Length
+
+    Target.create "VerifyUploadResults" (fun _ -> runVerifyUploadResults ())
 
     // The scope grammar has ONE home.
     //
@@ -4420,15 +4205,6 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyScopeLiterals: exited %d; the sites are printed above." code)
 
-    match verifyLane with
-    | TestLane.Lane.Pure -> ()
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "ScopeLiterals" (fun () ->
-            Trace.tracefn "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals)"
-            runVerifyScopeLiterals __SOURCE_DIRECTORY__)
-
     // Phase 1052 — the closure-fold is written once.
     //
     // `ComposeExtensions.ServiceConfig` is an option of a function, so every
@@ -4528,15 +4304,6 @@ let main args =
         match runVerifyServiceConfigFold root with
         | 0 -> ()
         | code -> failwithf "VerifyServiceConfigFold: exited %d; the sites are printed above." code)
-
-    match verifyLane with
-    | TestLane.Lane.Pure -> ()
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "ServiceConfigFold" (fun () ->
-            Trace.tracefn "▶ VerifyAll: ServiceConfigFold (the closure-fold's one home, via VerifyServiceConfigFold)"
-            runVerifyServiceConfigFold __SOURCE_DIRECTORY__)
 
     // GenerateConfigReference — regenerate every projection of the config-key
     // registry (`ConfigKeys.keys`): `docs/reference/config-reference.md`,
@@ -4663,19 +4430,6 @@ let main args =
         with
         | 0 -> ()
         | code -> failwithf "VerifyFuaranCoResolution: exited %d; the verdicts are printed above." code)
-
-    match verifyLane with
-    | TestLane.Lane.Pure -> ()
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "FuaranCoResolution" (fun () ->
-            Trace.tracefn "▶ VerifyAll: FuaranCoResolution (Fuaran floors beside the published Fuaran.UI)"
-
-            runVerifyFuaranCoResolution
-                (Path.Combine(__SOURCE_DIRECTORY__, "Directory.Packages.props"))
-                fuaranFloorsFile
-                (Path.Combine(__SOURCE_DIRECTORY__, "docs", "platform", "open-core-boundary.md")))
 
     // The snapshot's ONE writer. Reads nuget.org's flat container: the newest
     // released Fuaran.UI, or `--release <v>`, refused when nuget.org does not
@@ -4973,18 +4727,6 @@ let main args =
     Target.create "VerifyFuaranCoBuild" (fun _ ->
         runVerifyFuaranCoBuild (Flags.value "--ui-version" flags) (Flags.value "--toolup-version" flags))
 
-    match verifyLane with
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "FuaranCoBuild" (fun () ->
-            Trace.tracefn
-                "▶ VerifyAll: FuaranCoBuild (the fact tier beside the published Fuaran.UI, via VerifyFuaranCoBuild)"
-
-            runVerifyFuaranCoBuild None None
-            0)
-    | TestLane.Lane.Pure
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected -> ()
-
     // Phase 326 — the ToolUp.Sdk meta-manifest, emitted from the tree.
     //
     // `src/ToolUp.Sdk/build/ToolUp.Sdk.props` is the one-line
@@ -5252,7 +4994,7 @@ let main args =
     // this repository — which workflow shell steps in the checkout would
     // silently lose. `PublishedSmoke.smokeJobFindings` lints the workflow
     // for exactly that bypass.
-    Target.create "VerifyPublishedPackages" (fun _ ->
+    let runVerifyPublishedPackages () =
         let repoRoot = Path.getFullName "."
 
         // `diagnose` reads a failed step's captured output and returns an
@@ -5507,7 +5249,9 @@ let main args =
         Trace.tracefn
             "▶ VerifyPublishedPackages: %s installs and compiles from nuget.org on a clean resolve path (%d .js emitted from the packed client tier)"
             version
-            emitted)
+            emitted
+
+    Target.create "VerifyPublishedPackages" (fun _ -> runVerifyPublishedPackages ())
 
     // ── Phase 260 — the release bump, derived from the api-baselines diff ──
     //
@@ -5636,7 +5380,7 @@ let main args =
         else
             None
 
-    Target.create "VerifySemVerBump" (fun _ ->
+    let runVerifySemVerBump () =
         let root = Path.getFullName "."
         let proposeOnly = Flags.has "--propose" flags
 
@@ -5774,7 +5518,9 @@ let main args =
                 reports.Length
                 (String.concat "\n\n" reports)
         | reports, false ->
-            failwithf "VerifySemVerBump: %d group(s) under-bumped:\n\n%s" reports.Length (String.concat "\n\n" reports))
+            failwithf "VerifySemVerBump: %d group(s) under-bumped:\n\n%s" reports.Length (String.concat "\n\n" reports)
+
+    Target.create "VerifySemVerBump" (fun _ -> runVerifySemVerBump ())
 
 
     // Phase 805 — register the generated files' three-way merge drivers in
@@ -5933,27 +5679,22 @@ let main args =
     // Warn-only: an unregistered driver is a clone's choice (git falls back
     // to its text merge), but one registered to a missing path turns every
     // merge of its files into a conflict, in every worktree of the clone.
-    match verifyLane with
-    | TestLane.Lane.Pure -> ()
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Affected
-    | TestLane.Lane.Full ->
-        VerifyLeg.register "MergeDrivers" (fun () ->
-            let dead =
-                mergeDriverProblems (Path.getFullName ".")
-                |> List.choose (fun (name, problem) ->
-                    match problem with
-                    | Some p when p <> unregistered -> Some(sprintf "merge.%s.driver: %s" name p)
-                    | _ -> None)
+    let runMergeDrivers () : Verdict =
+        let dead =
+            mergeDriverProblems (Path.getFullName ".")
+            |> List.choose (fun (name, problem) ->
+                match problem with
+                | Some p when p <> unregistered -> Some(sprintf "merge.%s.driver: %s" name p)
+                | _ -> None)
 
-            if not (List.isEmpty dead) then
-                Trace.traceImportant (
-                    sprintf
-                        "▶ VerifyAll: WARNING — a merge driver is registered to a missing path, so git reports every merge of its files as a conflict (%s). Re-run `dotnet run --project Build.fsproj -- Setup`; `Setup --check` names each one."
-                        (String.concat "; " dead)
-                )
+        if not (List.isEmpty dead) then
+            Trace.traceImportant (
+                sprintf
+                    "▶ VerifyAll: WARNING — a merge driver is registered to a missing path, so git reports every merge of its files as a conflict (%s). Re-run `dotnet run --project Build.fsproj -- Setup`; `Setup --check` names each one."
+                    (String.concat "; " dead)
+            )
 
-            0)
+        Verdict.Pass None
 
     // Phase 805 — the regenerate-from-the-merged-tree fallback.
     //
@@ -6719,7 +6460,7 @@ let main args =
 
         ReleaseChannel.promotionFindings window.Window tags evidence
 
-    Target.create "VerifyReleaseChannel" (fun _ ->
+    let runVerifyReleaseChannel () =
         let root = Path.getFullName "."
 
         let tagRef =
@@ -6806,7 +6547,9 @@ let main args =
                     ReleaseChannel.coreEnvVar
                     core
                     ReleaseChannel.prereleaseEnvVar
-                    label)
+                    label
+
+    Target.create "VerifyReleaseChannel" (fun _ -> runVerifyReleaseChannel ())
 
     Target.create "VerifyRcPromotion" (fun _ ->
         let root = Path.getFullName "."
@@ -6905,6 +6648,208 @@ let main args =
                 census.Projects.Length
                 census.WallSeconds
                 Census.fileName)
+
+    // ─── The gate manifest: bodies bound, rows registered ──────────────
+    //
+    // Every leg body above is bound to its row here, once all of them are
+    // defined, and every row is registered with the lane this process runs:
+    // `VerifyAll` folds the selected `Local` rows and names the rest in its
+    // trailer. A new gate is a row in GateManifest.fs and one binding here.
+    let bodies: GateManifest.Bodies = {
+        GateReconcile = runGateReconcile
+        Fable =
+            fun () ->
+                Trace.tracefn "▶ VerifyAll: Fable (src/ToolUp.AI.Client.Tests, via the VerifyFable recipe)"
+                runVerifyFable ()
+        Samples =
+            fun () ->
+                Trace.tracefn "▶ VerifyAll: Samples (samples/, via the VerifySamples recipe)"
+                Gate.verdictOf runVerifySamples
+        Analyzers =
+            fun () ->
+                Trace.tracefn "▶ VerifyAll: Analyzers (TUA rules over src/, via the RemotingAnalyzers pack)"
+                Gate.verdictOfExit (runVerifyAnalyzers ())
+        ScopeLiterals =
+            fun () ->
+                Trace.tracefn "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals)"
+                Gate.verdictOfExit (runVerifyScopeLiterals __SOURCE_DIRECTORY__)
+        ServiceConfigFold =
+            fun () ->
+                Trace.tracefn
+                    "▶ VerifyAll: ServiceConfigFold (the closure-fold's one home, via VerifyServiceConfigFold)"
+
+                Gate.verdictOfExit (runVerifyServiceConfigFold __SOURCE_DIRECTORY__)
+        FuaranCoResolution =
+            fun () ->
+                Trace.tracefn "▶ VerifyAll: FuaranCoResolution (Fuaran floors beside the published Fuaran.UI)"
+
+                Gate.verdictOfExit (
+                    runVerifyFuaranCoResolution
+                        (Path.Combine(__SOURCE_DIRECTORY__, "Directory.Packages.props"))
+                        fuaranFloorsFile
+                        (Path.Combine(__SOURCE_DIRECTORY__, "docs", "platform", "open-core-boundary.md"))
+                )
+        FuaranCoBuild =
+            fun () ->
+                Trace.tracefn
+                    "▶ VerifyAll: FuaranCoBuild (the fact tier beside the published Fuaran.UI, via VerifyFuaranCoBuild)"
+
+                Gate.verdictOf (fun () -> runVerifyFuaranCoBuild None None)
+        MergeDrivers = runMergeDrivers
+        WireFable = fun () -> runWireFable "src/ToolUp.AI.Wire.Fable.Tests" "output/Program.js" "WireFable"
+        WireConformanceFable =
+            fun () ->
+                runWireFable "src/ToolUp.AI.Wire.Conformance/Fable" "output/ProgramFable.js" "WireConformanceFable"
+        DocSnippets = fun () -> verdictOfCount runVerifyDocSnippets
+        SourceCitations = fun () -> Gate.verdictOf runVerifySourceCitations
+        UploadResults = fun () -> Gate.verdictOf runVerifyUploadResults
+        Templates = fun () -> Gate.verdictOf (fun () -> TemplateGate.run TemplateGatePackages.verifyTemplates)
+        PackagedModuleTemplate =
+            fun () -> Gate.verdictOf (fun () -> TemplateGate.run TemplateGatePackages.verifyPackagedModuleTemplate)
+        DataPlatformTemplate =
+            fun () -> Gate.verdictOf (fun () -> TemplateGate.run TemplateGatePackages.verifyDataPlatformTemplate)
+        BrowserSmoke = runVerifyBrowserSmoke
+        SemVerBump = fun () -> Gate.verdictOf runVerifySemVerBump
+        ReleaseChannel = fun () -> Gate.verdictOf runVerifyReleaseChannel
+        PublishedPackages = fun () -> Gate.verdictOf runVerifyPublishedPackages
+    }
+
+    let manifest = GateManifest.rows bodies
+
+    for row in manifest do
+        // The `affected` lane transpiles the client tier only when the diff
+        // reached it: a leg skipped on a guess is the direction that ships
+        // a broken client tier, so with no manifest to say, it runs.
+        let row =
+            if row.Name = "Fable" && not affectedClientTierMoved then
+                {
+                    row with
+                        Lanes = Set.remove TestLane.Lane.Affected row.Lanes
+                }
+            else
+                row
+
+        Gate.register verifyLane row
+
+    // The manifest's renders, checked or written, and one row run alone.
+    //
+    //   dotnet run -- Gate                refuse a render that drifted
+    //   dotnet run -- Gate --render       write EXPECTED_PACKS into checks.yml
+    //                                     and the CI table into CLAUDE.md
+    //   dotnet run -- Gate --run <row>    run one row (build what it names,
+    //                                     apply its floor), which is how the
+    //                                     CI-only jobs invoke theirs
+    Target.create "Gate" (fun _ ->
+        let root = __SOURCE_DIRECTORY__
+        let checksPath = Path.Combine(root, ".github", "workflows", "checks.yml")
+        let claudePath = Path.Combine(root, "CLAUDE.md")
+
+        match Flags.value "--run" flags with
+        | Some name ->
+            let row =
+                match manifest |> List.tryFind (fun r -> r.Name = name) with
+                | Some r -> r
+                | None ->
+                    failwithf
+                        "Gate --run: no row named `%s`. The rows: %s."
+                        name
+                        (manifest |> List.map _.Name |> String.concat ", ")
+
+            Trace.tracefn
+                "▶ Gate --run %s (%s; reads %s)"
+                row.Name
+                (match row.Where |> Set.toList |> List.map Gate.siteName with
+                 | [] -> "operator-run"
+                 | sites -> String.concat ", " sites)
+                (match row.Reads with
+                 | [] -> "nothing"
+                 | reads -> reads |> List.map Gate.inputName |> String.concat ", ")
+
+            let verdict =
+                match row.Kind with
+                | LegKind.ExpectoPack project ->
+                    // Alone, the row builds what it names and reads the
+                    // environment it was given; the scrub is `VerifyAll`'s.
+                    Proc.exec "dotnet" [ "build"; project; "--nologo" ] root
+                    |> Proc.ensure
+                    |> ignore
+
+                    TestPackHost.runPack [] [] (TestPack.create row.Name project)
+                | LegKind.Body run -> run ()
+                | LegKind.Script path ->
+                    Gate.verdictOfExit (Proc.exec "pwsh" [ "-NoProfile"; "-File"; path ] root).ExitCode
+
+            Trace.tracefn "Gate --run %s: %s" row.Name (Gate.statusToken (judged row.Name verdict))
+            ensure row.Name verdict
+        | None ->
+            let floor = Gate.ciFloor GateManifest.VerifyAllJob manifest
+            let checksText = File.ReadAllText checksPath
+            let claudeText = File.ReadAllText claudePath
+            let table = GateManifest.ciTable (GateManifest.jobIds checksText) manifest
+
+            if Flags.has "--render" flags then
+                File.WriteAllText(checksPath, GateManifest.renderExpectedPacks floor checksText)
+
+                match GateManifest.spliceRegion GateManifest.CiTableBegin GateManifest.CiTableEnd table claudeText with
+                | Some text -> File.WriteAllText(claudePath, text)
+                | None ->
+                    failwith "Gate --render: CLAUDE.md carries no gate-manifest:ci-table markers to render between."
+
+                Trace.tracefn
+                    "▶ Gate --render: EXPECTED_PACKS: %d written to checks.yml; the CI table (%d job(s)) written to CLAUDE.md."
+                    floor
+                    (table.Length - 2)
+            else
+                let findings = [
+                    match GateManifest.readExpectedPacks checksText with
+                    | Some n when n = floor -> ()
+                    | Some n ->
+                        sprintf
+                            "checks.yml declares EXPECTED_PACKS: %d; the manifest's `verify-all` rows count %d"
+                            n
+                            floor
+                    | None -> "checks.yml declares no EXPECTED_PACKS"
+
+                    match GateManifest.regionLines GateManifest.CiTableBegin GateManifest.CiTableEnd claudeText with
+                    | Some lines when lines = table -> ()
+                    | Some _ -> "CLAUDE.md's generated CI table is not the render of the manifest's `Where`"
+                    | None -> "CLAUDE.md carries no gate-manifest:ci-table markers"
+                ]
+
+                match findings with
+                | [] ->
+                    Trace.tracefn
+                        "▶ Gate: OK — EXPECTED_PACKS: %d and the CI table are the manifest's renders (%d row(s))."
+                        floor
+                        manifest.Length
+                | drifted ->
+                    failwithf
+                        "Gate: %d render(s) drifted — %s. Run `dotnet run --project Build.fsproj -- Gate --render` and commit the result; the rows in GateManifest.fs are the source."
+                        drifted.Length
+                        (String.concat "; " drifted))
+
+    // The recorded gate runs, folded: each run's admission line, then the
+    // per-lane and per-row medians a row's `Budget` is re-derived from.
+    //
+    //   dotnet run -- GateTimings [--since <days>]
+    Target.create "GateTimings" (fun _ ->
+        let since =
+            Flags.value "--since" flags
+            |> Option.map (fun d -> System.TimeSpan.FromDays(float d))
+
+        match VerifyGate.commonGitDir (Path.getFullName ".") with
+        | Error why -> failwithf "GateTimings: %s" why
+        | Ok dir ->
+            let file = VerifyGate.Runs.path dir
+            let text = if File.Exists file then File.ReadAllText file else ""
+            let runs, skipped = VerifyGate.Runs.parse text
+
+            if skipped > 0 then
+                Trace.traceImportantfn "GateTimings: %d line(s) of %s were not records and were skipped." skipped file
+
+            for line in VerifyGate.Runs.report System.DateTimeOffset.UtcNow since runs do
+                Trace.tracefn "%s" line)
+
 
     // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:
     // a named OS mutex keyed on `git rev-parse --git-common-dir`, so every

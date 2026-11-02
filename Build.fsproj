@@ -72,6 +72,11 @@
          and two independent parsers of one variable drift. The file
          takes no dependency beyond System for exactly this reason. -->
     <Compile Include="src\ToolUp.Platform.Tests\Support\TestLane.fs" Link="TestLane.fs" />
+    <!-- The gate manifest: the one list of what the gate runs, FAKE-free and
+         source-linked into ToolUp.Platform.Build.Tests, so the driver and
+         GateManifestTests read one list. After TestLane.fs (its lanes) and
+         ahead of VerifyGate.fs (whose gated set and bound derive from it). -->
+    <Compile Include="GateManifest.fs" />
     <!-- Phase 735 — the VerifyAll gate: a named OS mutex keyed on the
          repository's common git directory, so concurrent runs from the
          worktrees of one clone serialise instead of thrashing. Repo-root,

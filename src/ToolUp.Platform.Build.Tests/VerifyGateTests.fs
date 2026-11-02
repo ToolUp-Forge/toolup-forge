@@ -6,6 +6,7 @@ module ToolUp.Platform.Build.Tests.VerifyGateTests
 open System
 open System.Threading
 open Expecto
+open ToolUp.Platform
 open ToolUp.Forge
 open ToolUp.Forge.VerifyGate
 
@@ -290,6 +291,84 @@ let tests =
                 withOptOut "true" (fun () -> Expect.isTrue (optedOut ()) "any other value opts out")
         ]
 
+        testList "the admission record and GateTimings" [
+            testCase "a run round-trips through one JSON line, and the fold reproduces its admission line"
+            <| fun () ->
+                let run: Runs.Run = {
+                    At = DateTimeOffset.Parse("2026-11-02T01:02:03Z", Globalization.CultureInfo.InvariantCulture)
+                    Target = "VerifyAll"
+                    Lane = "full"
+                    Admission = "acquired"
+                    WaitedSeconds = 192.
+                    ElapsedSeconds = 1571.5
+                    Exit = 0
+                    Legs = [
+                        {
+                            Name = "Platform"
+                            Verdict = "pass"
+                            Cases = Some 10325
+                            Seconds = 884.8
+                        }
+                        {
+                            Name = "FuaranCoBuild"
+                            Verdict = "pending"
+                            Cases = None
+                            Seconds = 0.2
+                        }
+                    ]
+                }
+
+                let line = Runs.render run
+                Expect.isFalse (line.Contains "\n") "one line per record"
+                let parsed, skipped = Runs.parse (line + "\nnot a record\n" + line)
+                Expect.equal skipped 1 "a line that is not a record is counted, never fatal"
+                Expect.equal parsed [ run; run ] "the record reads back as written"
+
+                let report =
+                    Runs.report
+                        (DateTimeOffset.Parse("2026-11-03T00:00:00Z", Globalization.CultureInfo.InvariantCulture))
+                        None
+                        parsed
+
+                Expect.contains
+                    report
+                    "  2026-11-02 01:02 VerifyAll gate: acquired after waiting 3:12 — full lane, 26:11, exit 0"
+                    "the admission line is reproduced from the record"
+
+                Expect.exists report (fun l -> l.Contains "full" && l.Contains "median 26:11") "the lane's median"
+                Expect.exists report (fun l -> l.Contains "Platform" && l.Contains "median 14:44") "the row's median"
+
+            testCase "the fold's window excludes an older run and says so when nothing is left"
+            <| fun () ->
+                let at (iso: string) =
+                    DateTimeOffset.Parse(iso, Globalization.CultureInfo.InvariantCulture)
+
+                let run t : Runs.Run = {
+                    At = at t
+                    Target = "VerifyAll"
+                    Lane = "pure"
+                    Admission = "acquired"
+                    WaitedSeconds = 0.
+                    ElapsedSeconds = 40.
+                    Exit = 0
+                    Legs = []
+                }
+
+                let runs = [ run "2026-10-01T00:00:00Z"; run "2026-11-01T00:00:00Z" ]
+                let now = at "2026-11-02T00:00:00Z"
+                let week = Some(TimeSpan.FromDays 7.)
+
+                Expect.equal
+                    (Runs.report now week runs).Head
+                    "GateTimings: 1 recorded run(s)."
+                    "the older run is outside the window"
+
+                Expect.equal
+                    (Runs.report now (Some(TimeSpan.FromHours 1.)) runs)
+                    [ "GateTimings: no recorded runs in the window." ]
+                    "an empty window says so"
+        ]
+
         testList "configuration" [
             testCase "the wait bound is read in whole minutes and a bad value falls back to the default, never to zero"
             <| fun () ->
@@ -303,9 +382,26 @@ let tests =
                             DefaultWaitBound
                             (sprintf "%A is not a bound; the default stands" bad))
 
-            testCase "VerifyAll is gated; every other target is not"
+            testCase "the gated set is derived: VerifyAll, and the manifest's tree-reading rows over a minute"
             <| fun () ->
                 Expect.isTrue (Set.contains "VerifyAll" gatedTargets) "VerifyAll takes the gate"
+
+                let rows = GateManifest.rows GateManifest.unbound
+
+                for row in rows do
+                    let budgeted =
+                        match row.Kind, row.Budget with
+                        | LegKind.Body _, Some b -> b > TimeSpan.FromMinutes 1.
+                        | _ -> false
+
+                    let expected = budgeted && List.contains Input.Tree row.Reads
+
+                    Expect.equal
+                        (Set.contains (GateManifest.target row) gatedTargets)
+                        expected
+                        (sprintf "%s is gated exactly when it is a Body reading the tree for over a minute" row.Name)
+
+                Expect.isTrue (Set.contains "VerifyFable" gatedTargets) "the Fable row's budget admits it"
 
                 Expect.equal
                     (requestedTarget [| "VerifyAll" |])
@@ -314,8 +410,14 @@ let tests =
 
                 Expect.equal (requestedTarget [| "--module"; "x" |]) "Run" "no target ⇒ Run, as the SDK runner reads it"
 
-                for target in [ "Run"; "Pack"; "Format"; "VerifyFable"; "VerifyTemplates" ] do
+                for target in [ "Run"; "Pack"; "Format"; "VerifyTemplates"; "GateTimings" ] do
                     Expect.isFalse (Set.contains target gatedTargets) (sprintf "%s stays ungated" target)
+
+            testCase "the default bound is twice the full lane's summed budget, never a literal"
+            <| fun () ->
+                let full = GateManifest.fullBudget (GateManifest.rows GateManifest.unbound)
+                Expect.isGreaterThan full TimeSpan.Zero "the full lane carries measured budgets"
+                Expect.equal DefaultWaitBound (full + full) "two lanes: the holder's and one queued ahead"
 
             testCase "the key folds path spelling the way the host does, and differs across repositories"
             <| fun () ->
@@ -377,7 +479,7 @@ let tests =
                 let seenDuring = ref ""
 
                 let result =
-                    aroundWith name (Some note) (quick lines) Environment.CurrentDirectory (fun () ->
+                    aroundWith name (Some note) (quick lines) Environment.CurrentDirectory ignore (fun () ->
                         seenDuring.Value <- readHolderNote note
                         42)
 
@@ -411,8 +513,13 @@ let tests =
 
                 Expect.throws
                     (fun () ->
-                        aroundWith name (Some note) (quick (ResizeArray())) Environment.CurrentDirectory (fun () ->
-                            failwith "red")
+                        aroundWith
+                            name
+                            (Some note)
+                            (quick (ResizeArray()))
+                            Environment.CurrentDirectory
+                            ignore
+                            (fun () -> failwith "red")
                         |> ignore)
                     "the body's failure propagates"
 

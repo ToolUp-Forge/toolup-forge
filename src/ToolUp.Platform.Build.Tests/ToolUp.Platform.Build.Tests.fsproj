@@ -74,6 +74,14 @@
              source-linked from the Platform pack so its O(1)-spawns
              property is pinned here, in a pack that runs in every lane,
              rather than only inside the pack whose cost it bounds. -->
+        <!-- The lane vocabulary and the gate manifest come first: VerifyGate.fs
+             derives its gated set and stale-holder bound from the manifest,
+             and the manifest's rows carry TestLane.Lane. The lane files are
+             source-linked so these go-red proofs run the lane's own
+             implementation. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLane.fs" Link="Support\TestLane.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLaneFilter.fs" Link="Support\TestLaneFilter.fs" />
+        <Compile Include="..\..\GateManifest.fs" Link="GateManifest.fs" />
         <Compile Include="..\..\VerifyGate.fs" Link="VerifyGate.fs" />
         <Compile Include="VerifyGateTests.fs" />
         <Compile Include="FlagsTests.fs" />
@@ -114,16 +122,12 @@
         <Compile Include="StaleEsbuildTests.fs" />
         <Compile Include="..\..\FuaranCoResolution.fs" Link="FuaranCoResolution.fs" />
         <Compile Include="FuaranCoResolutionTests.fs" />
-        <!-- Phase 1096 - the GateReconcile leg's go-red proof: every
-             *.Tests.fsproj is a VerifyAll pack or a named exclusion. -->
+        <!-- The gate manifest's renders and parity, the GateReconcile row's
+             go-red proof and the pure lane's membership audit, each reading
+             the manifest's rows. -->
         <Compile Include="GateReconcileTests.fs" />
-        <!-- Phase 1096 - the pure lane's membership audit, as a test. -->
         <Compile Include="PureLaneTests.fs" />
-        <!-- The affected lane: the selection Build.fs's `Select` computes and
-             the keep the Platform pack applies, source-linked so these
-             go-red proofs run the lane's own implementation. -->
-        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLane.fs" Link="Support\TestLane.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLaneFilter.fs" Link="Support\TestLaneFilter.fs" />
+        <Compile Include="GateManifestTests.fs" />
         <Compile Include="AffectedLaneTests.fs" />
         <Compile Include="CompilerLeversTests.fs" />
         <Compile Include="BuildCensusTests.fs" />

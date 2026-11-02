@@ -5,20 +5,20 @@ module ToolUp.Platform.Build.Tests.GateReconcileTests
 
 open System
 open System.IO
-open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Build
+open ToolUp.Forge
 
-// ─── Phase 1096 — every test project runs or is excluded by name ─────
+// ─── Every test project runs or is excluded by name ───────────────────
 //
-// The go-red proof for the `GateReconcile` leg `Build.fs` registers. The
-// leg reconciles the real `config.TestPacks` and `gateExclusions`; this
-// pack cannot reference the FAKE driver, so it reads the same two
-// declarations out of `Build.fs` and hands them to the SAME function
-// (`Gate.reconcile`). On the tree as found it was red, naming the four
-// dormant packs; removing a row with the project still in the solution
-// makes it red again (the last case below), so the green is not vacuous.
+// The go-red proof for the `GateReconcile` row of the gate manifest. The
+// row reconciles the manifest's pack rows and `GateManifest.exclusions`
+// against the solution and the disk; this reads the same two lists and
+// hands them to the SAME function (`Gate.reconcile`). On the tree as
+// found in Phase 1096 it was red, naming four dormant packs; removing a
+// row with the project still in the solution makes it red again (the
+// last case below), so the green is not vacuous.
 
 let repoRoot =
     let rec walkUp (dir: DirectoryInfo) =
@@ -33,22 +33,9 @@ let repoRoot =
     | Some root -> root
     | None -> failwith "could not locate the repo root (ToolUp.Forge.sln) — this pack would be vacuously green"
 
-/// The `TestPack.create "<name>" "<project>"` rows and the
-/// `Gate.exclude "<project>"` declarations in `Build.fs`, in source order.
+/// The manifest's pack rows as `TestPack`s, and its named exclusions.
 let declared () =
-    let text = File.ReadAllText(Path.Combine(repoRoot, "Build.fs"))
-
-    let packs =
-        Regex.Matches(text, "TestPack\\.create\\s+\"([^\"]+)\"\\s+\"([^\"]+)\"")
-        |> Seq.map (fun m -> TestPack.create m.Groups[1].Value m.Groups[2].Value)
-        |> List.ofSeq
-
-    let excluded =
-        Regex.Matches(text, "Gate\\.exclude\\s+\"([^\"]+)\"\\s+\"([^\"]+)\"")
-        |> Seq.map (fun m -> Gate.exclude m.Groups[1].Value m.Groups[2].Value)
-        |> List.ofSeq
-
-    packs, excluded
+    Gate.packs (GateManifest.rows GateManifest.unbound), GateManifest.exclusions
 
 let private expectFinding (result: Result<unit, string list>) (fragment: string) =
     match result with
@@ -61,11 +48,12 @@ let private expectFinding (result: Result<unit, string list>) (fragment: string)
 
 [<Tests>]
 let tests =
-    testList "Phase 1096 — Gate.reconcile" [
-        test "the declarations parse (a parser that read nothing would make every case below vacuous)" {
+    testList "Gate.reconcile" [
+        test
+            "the manifest declares the packs and the exclusions (a list that read nothing would make every case below vacuous)" {
             let packs, excluded = declared ()
-            Expect.isGreaterThanOrEqual packs.Length 30 "Build.fs declares at least thirty TestPacks rows"
-            Expect.isNonEmpty excluded "Build.fs declares its named exclusions"
+            Expect.isGreaterThanOrEqual packs.Length 30 "the manifest declares at least thirty pack rows"
+            Expect.isNonEmpty excluded "the manifest declares its named exclusions"
         }
 
         test "every test project in the solution and on disk is a pack or a named exclusion" {
