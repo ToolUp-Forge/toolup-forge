@@ -2331,6 +2331,18 @@ let main args =
                     |> List.collect (fun (ln, labels) ->
                         if labels.Count < docFragmentMinRecordLabels then
                             []
+                        elif surfaceContainers |> Map.exists (fun _ (_, ms) -> Set.isSubset labels ms) then
+                            // Every label the literal writes is a member of
+                            // SOME surface type, so the literal is a full
+                            // construction of a real record and there is
+                            // nothing to report. The anchor candidates below
+                            // exclude a name declared by more than one
+                            // container (the forms workflow's `Transition`
+                            // shares its name with another), and without
+                            // this check a unique near-miss (`WorkflowEdge`,
+                            // three of the same five labels) would be scored
+                            // best and the three real fields called missing.
+                            []
                         else
                             let scored =
                                 recordAnchorCandidates

@@ -25,7 +25,7 @@ serverApp
     |> AIOptions.withAIConfig {
         Branding = branding
         SystemPrompt = Some enterpriseGuidance
-        MaxHistoryMessages = None
+        Limits = AgentLoopLimits.defaults
         AISurfaceDerivation = TrustClient
     }
 )

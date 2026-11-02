@@ -27,7 +27,7 @@ serverApp
     |> AIOptions.withAIConfig {
         Branding = branding
         SystemPrompt = Some chartGuidance
-        MaxHistoryMessages = None
+        Limits = AgentLoopLimits.defaults
         AISurfaceDerivation = TrustClient
     }
 )
