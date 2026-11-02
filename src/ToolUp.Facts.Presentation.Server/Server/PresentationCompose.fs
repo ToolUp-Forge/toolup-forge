@@ -95,7 +95,11 @@ module PresentationCompose =
     /// fact-table change signal the cache is invalidated by. Only under
     /// `FeatureMode.Enabled`; under `FeatureMode.Disabled` the app is returned unchanged
     /// and nothing is registered. Call it after `FactsCompose.withFactStore`,
-    /// which composes the signal. Idempotent. **Adds** its registrations.
+    /// which composes the signal. Idempotent. **Adds** its registrations and
+    /// one handler: the resolution route
+    /// (`PageRequestRoute.Path`, `POST`), answering a request set through the
+    /// same resolver, under the surface requirement the composition declares
+    /// for the path (the strict `userOrTeam` fallback when it declares none).
     ///
     /// ```fsharp skip=fragment
     /// ServerApp.empty
@@ -108,7 +112,11 @@ module PresentationCompose =
         | FeatureMode.Disabled -> app
         | FeatureMode.Enabled when app.Contributions |> List.exists (fun c -> c.Owner = owner) -> app
         | FeatureMode.Enabled ->
-            ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register) app
+            {
+                app with
+                    Extensions.Handlers = app.Extensions.Handlers @ [ PageRequestRoute.handler ]
+            }
+            |> ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register)
 
     /// The layout tools' runtime is contributed under its own slot, so that
     /// composing it never reads as composing the page requests.

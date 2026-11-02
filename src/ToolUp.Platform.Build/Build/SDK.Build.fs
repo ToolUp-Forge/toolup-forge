@@ -2225,7 +2225,7 @@ let registerTargets (config: BuildConfig) =
         let unregisteredPacks: Gate.Registered list = [
             for pack in config.TestPacks do
                 if not (packRows.ContainsKey pack.Project) then
-                    {
+                    ({
                         Name = pack.Name
                         Kind = LegKind.ExpectoPack pack.Project
                         Where = set [ Site.Local ]
@@ -2234,6 +2234,7 @@ let registerTargets (config: BuildConfig) =
                         Floor = None
                         Selected = true
                     }
+                    : Gate.Registered)
         ]
 
         let allRows = unregisteredPacks @ rows

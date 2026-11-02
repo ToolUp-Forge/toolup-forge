@@ -591,3 +591,115 @@ module PageRequestResolvers =
         |> ignore
 
         FactTableChangeSignal.demand services
+
+/// The resolution route: a request set posted for
+/// re-resolution, answered through the caller's `PageRequestResolvers`
+/// resolver — the one the in-process path uses, under the disclosure gate at
+/// the browse door — so a resolution over the route is the same bytes the
+/// in-process resolver answers. Mounted by `PresentationCompose.withPageRequests`.
+[<RequireQualifiedAccess>]
+module PageRequestRoute =
+
+    open Giraffe
+
+    /// The route's path. `POST` only.
+    [<Literal>]
+    let Path = "/api/_facts/page-requests"
+
+    /// The most requests one set may carry; a set over it is refused whole,
+    /// as `budget`.
+    [<Literal>]
+    let MaxRequests = 100
+
+    let private refusalJVal (refusal: PageRefusal) : JVal =
+        JObj [
+            "cause", JStr(PageRefusal.cause refusal)
+            "reason", JStr(PageRefusal.describe refusal)
+        ]
+
+    /// One key's answer: `{"resolved":<resolution>}`, the resolution's
+    /// canonical JSON value, or `{"refused":{"cause":…,"reason":…}}`.
+    let answerJVal (answer: Result<PageResolution, PageRefusal>) : JVal =
+        match answer with
+        | Ok resolution -> JObj [ "resolved", PageResolution.toJVal resolution ]
+        | Error refusal -> JObj [ "refused", refusalJVal refusal ]
+
+    /// The answer to a set: `{"resolutions":{"<key>":<answer>,…}}`, one
+    /// answer per key posted, in canonical JSON.
+    let answersJson (answers: Map<string, Result<PageResolution, PageRefusal>>) : string =
+        JObj [
+            "resolutions", JObj(answers |> Map.toList |> List.map (fun (key, answer) -> key, answerJVal answer))
+        ]
+        |> Canonical.write Rendering.CrossHost
+
+    /// A set refused whole: `{"refused":{"cause":…,"reason":…}}`.
+    let refusedJson (refusal: PageRefusal) : string =
+        JObj [ "refused", refusalJVal refusal ] |> Canonical.write Rendering.CrossHost
+
+    /// Resolve every request of a decoded set through `resolver`, one after
+    /// another, each under its key; a request that did not decode is refused
+    /// under its key and the others still resolve.
+    let resolveSet
+        (resolver: PageRequestResolver)
+        (requests: Map<string, Result<PageRequest, PageRequestError>>)
+        : Async<Map<string, Result<PageResolution, PageRefusal>>> =
+        async {
+            let! answers =
+                requests
+                |> Map.toList
+                |> List.map (fun (key, request) -> async {
+                    match request with
+                    | Error e -> return key, Error(PageRefusal.ofRequestError e)
+                    | Ok request ->
+                        let! answer = resolver.Resolve request
+                        return key, answer
+                })
+                |> Async.Sequential
+
+            return Map.ofArray answers
+        }
+
+    let private respond (status: int) (body: string) : HttpHandler =
+        setStatusCode status
+        >=> setHttpHeader "Content-Type" "application/json; charset=utf-8"
+        >=> setBodyFromString body
+
+    /// The status a set refused whole answers with.
+    let private statusOf (refusal: PageRefusal) : int =
+        match refusal with
+        | PageRefusal.NoFactStore -> 503
+        | _ -> 400
+
+    /// The mounted handler: `POST` a request set at `Path`. The set's shape
+    /// refused (not JSON, a member the set does not carry, over
+    /// `MaxRequests`) is a 400 naming the cause; a deployment with no fact
+    /// store a 503 `no-fact-store`; otherwise a 200 carrying one answer per
+    /// key, each resolved or refused by cause.
+    let handler: HttpHandler =
+        POST
+        >=> route Path
+        >=> fun next ctx -> task {
+            let! body = ctx.ReadBodyFromRequestAsync()
+
+            match PageRequestSet.ofJson body with
+            | Error e -> return! respond 400 (refusedJson (PageRefusal.ofRequestError e)) next ctx
+            | Ok requests when Map.count requests > MaxRequests ->
+                let refusal =
+                    PageRefusal.Budget(
+                        sprintf
+                            "the set carries %d requests, over the %d one set may carry"
+                            (Map.count requests)
+                            MaxRequests
+                    )
+
+                return! respond 400 (refusedJson refusal) next ctx
+            | Ok requests ->
+                match ctx.RequestServices.GetService(typeof<PageRequestResolvers>) with
+                | :? PageRequestResolvers as resolvers ->
+                    match! resolvers.ForRequest ctx |> Async.StartAsTask with
+                    | Error refusal -> return! respond (statusOf refusal) (refusedJson refusal) next ctx
+                    | Ok resolver ->
+                        let! answers = resolveSet resolver requests |> Async.StartAsTask
+                        return! respond 200 (answersJson answers) next ctx
+                | _ -> return! respond 503 (refusedJson PageRefusal.NoFactStore) next ctx
+        }

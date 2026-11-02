@@ -107,6 +107,7 @@
         "src/ToolUp.Platform.Server/Server/OAuth1aFlowHandler.fs": 3,
         "src/ToolUp.Platform.Server/Server/OAuthFlowHandler.fs": 4,
         "src/ToolUp.Platform.Server/Server/ObservabilityHandlers.fs": 2,
+        "src/ToolUp.Platform.Server/Server/PageDocumentStore.fs": 2,
         "src/ToolUp.Platform.Server/Server/PeerBearerAuthMiddleware.fs": 3,
         "src/ToolUp.Platform.Server/Server/PlatformAdmin/AdUnitConfigApi.fs": 4,
         "src/ToolUp.Platform.Server/Server/PlatformAdmin/PremiumUserApi.fs": 2,
