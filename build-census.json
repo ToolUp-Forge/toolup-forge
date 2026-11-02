@@ -1,1898 +1,1986 @@
 {
-  "treeSha": "1ad90d66da3574adfefb1a94b343d31673908063",
+  "treeSha": "843a49e0a97bbaf341b1ccb1d2fa7fd81f20f187",
   "machine": "Microsoft Windows 10.0.26300 Arm64, 12 logical processors",
-  "measuredAt": "2026-11-02T04:14:21Z",
-  "wallSeconds": 336.5,
-  "totalCompileSeconds": 2573.7,
+  "measuredAt": "2026-11-02T11:47:59Z",
+  "wallSeconds": 301.3,
+  "totalCompileSeconds": 2499.2,
   "command": "dotnet build ToolUp.Forge.sln -graph --no-incremental -nologo -v:q -flp:PerformanceSummary;Verbosity=quiet;LogFile=<log>",
   "projects": [
     {
       "project": "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj",
-      "compileSeconds": 72.2,
-      "evaluationSeconds": 1,
-      "lines": 419231,
+      "compileSeconds": 70.6,
+      "evaluationSeconds": 0.7,
+      "lines": 408492,
       "fanIn": 0,
-      "fanOut": 99
+      "fanOut": 82
     },
     {
-      "project": "src/ToolUp.RAG.Evaluation/ToolUp.RAG.Evaluation.fsproj",
-      "compileSeconds": 45.6,
-      "evaluationSeconds": 0.7,
-      "lines": 1461,
+      "project": "src/TimeSeriesStores/Tests/ToolUp.TimeSeriesStores.Tests.fsproj",
+      "compileSeconds": 62,
+      "evaluationSeconds": 0.1,
+      "lines": 589,
+      "fanIn": 0,
+      "fanOut": 3
+    },
+    {
+      "project": "samples/PublicSiteWithModules/PublicSiteWithModules.fsproj",
+      "compileSeconds": 57.3,
+      "evaluationSeconds": 1,
+      "lines": 332,
+      "fanIn": 0,
+      "fanOut": 4
+    },
+    {
+      "project": "src/NotificationChannels/Tests/ToolUp.NotificationChannels.Tests.fsproj",
+      "compileSeconds": 50.9,
+      "evaluationSeconds": 0.2,
+      "lines": 3402,
       "fanIn": 0,
       "fanOut": 11
     },
     {
       "project": "src/ToolUp.Facts.Server/ToolUp.Facts.Server.fsproj",
-      "compileSeconds": 38.1,
-      "evaluationSeconds": 0.2,
-      "lines": 31643,
-      "fanIn": 4,
+      "compileSeconds": 35.9,
+      "evaluationSeconds": 0.4,
+      "lines": 31726,
+      "fanIn": 6,
       "fanOut": 6
     },
     {
-      "project": "src/Cloud/Azure/ToolUp.Cloud.Azure.fsproj",
-      "compileSeconds": 37,
-      "evaluationSeconds": 0.1,
-      "lines": 0,
+      "project": "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj",
+      "compileSeconds": 34.9,
+      "evaluationSeconds": 0.5,
+      "lines": 7227,
       "fanIn": 0,
-      "fanOut": 4
+      "fanOut": 7
+    },
+    {
+      "project": "src/FeatureFlagProviders/Tests/ToolUp.FeatureFlagProviders.Tests.fsproj",
+      "compileSeconds": 34.3,
+      "evaluationSeconds": 0.2,
+      "lines": 540,
+      "fanIn": 0,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.AIProviders.Tests/ToolUp.AIProviders.Tests.fsproj",
+      "compileSeconds": 31.6,
+      "evaluationSeconds": 0.1,
+      "lines": 1535,
+      "fanIn": 0,
+      "fanOut": 8
+    },
+    {
+      "project": "src/ToolUp.AI.Server/ToolUp.AI.Server.fsproj",
+      "compileSeconds": 31.5,
+      "evaluationSeconds": 0.2,
+      "lines": 27465,
+      "fanIn": 16,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.DataSources.Tests/ToolUp.DataSources.Tests.fsproj",
+      "compileSeconds": 31,
+      "evaluationSeconds": 0.3,
+      "lines": 7740,
+      "fanIn": 0,
+      "fanOut": 13
+    },
+    {
+      "project": "src/InterPlatform/InterPlatform.fsproj",
+      "compileSeconds": 27,
+      "evaluationSeconds": 0.1,
+      "lines": 23964,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.RAG.Evaluation/ToolUp.RAG.Evaluation.fsproj",
+      "compileSeconds": 26.7,
+      "evaluationSeconds": 1.6,
+      "lines": 1467,
+      "fanIn": 0,
+      "fanOut": 11
+    },
+    {
+      "project": "src/ToolUp.Offline.Tests/ToolUp.Offline.Tests.fsproj",
+      "compileSeconds": 26.6,
+      "evaluationSeconds": 0.1,
+      "lines": 1369,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Companions.Isolation.Tests/ToolUp.Companions.Isolation.Tests.fsproj",
+      "compileSeconds": 26,
+      "evaluationSeconds": 0.2,
+      "lines": 1389,
+      "fanIn": 0,
+      "fanOut": 3
     },
     {
       "project": "samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj",
-      "compileSeconds": 34.1,
+      "compileSeconds": 23.9,
       "evaluationSeconds": 0.2,
       "lines": 1435,
       "fanIn": 0,
       "fanOut": 3
     },
     {
-      "project": "src/Cloud/Gcp/ToolUp.Cloud.Gcp.fsproj",
-      "compileSeconds": 31.3,
+      "project": "src/Secrets/Tests/ToolUp.Secrets.Tests.fsproj",
+      "compileSeconds": 23.6,
       "evaluationSeconds": 0.3,
-      "lines": 0,
+      "lines": 1380,
       "fanIn": 0,
-      "fanOut": 4
-    },
-    {
-      "project": "src/ToolUp.Reporting.Server/ToolUp.Reporting.Server.fsproj",
-      "compileSeconds": 30.5,
-      "evaluationSeconds": 0.1,
-      "lines": 4504,
-      "fanIn": 2,
-      "fanOut": 3
-    },
-    {
-      "project": "src/AuthProviders/Oidc/OidcAuthProvider.fsproj",
-      "compileSeconds": 30.2,
-      "evaluationSeconds": 0.1,
-      "lines": 3031,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.AlgorithmProviders.Tests/ToolUp.AlgorithmProviders.Tests.fsproj",
-      "compileSeconds": 29.2,
-      "evaluationSeconds": 0.2,
-      "lines": 1440,
-      "fanIn": 0,
-      "fanOut": 4
+      "fanOut": 6
     },
     {
       "project": "src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj",
-      "compileSeconds": 28.9,
+      "compileSeconds": 20.3,
       "evaluationSeconds": 0.2,
       "lines": 72612,
-      "fanIn": 145,
+      "fanIn": 156,
       "fanOut": 2
     },
     {
-      "project": "src/ToolUp.Offline.Tests/ToolUp.Offline.Tests.fsproj",
-      "compileSeconds": 28.3,
-      "evaluationSeconds": 0.1,
-      "lines": 1362,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj",
-      "compileSeconds": 28.2,
-      "evaluationSeconds": 0.4,
-      "lines": 7198,
-      "fanIn": 0,
-      "fanOut": 7
-    },
-    {
-      "project": "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj",
-      "compileSeconds": 27.4,
-      "evaluationSeconds": 0.5,
-      "lines": 4159,
+      "project": "src/JobSchedulers/Tests/ToolUp.JobSchedulers.Tests.fsproj",
+      "compileSeconds": 20.3,
+      "evaluationSeconds": 0.2,
+      "lines": 3120,
       "fanIn": 0,
       "fanOut": 4
     },
     {
-      "project": "src/AuditSinks/Cef/ToolUp.AuditSinks.Cef.fsproj",
-      "compileSeconds": 25.9,
+      "project": "src/ToolUp.PublicRendering/ToolUp.PublicRendering.fsproj",
+      "compileSeconds": 19.6,
       "evaluationSeconds": 0.2,
-      "lines": 1198,
-      "fanIn": 1,
+      "lines": 13793,
+      "fanIn": 3,
       "fanOut": 2
     },
     {
-      "project": "src/ToolUp.ArtefactSigning.Tests/ToolUp.ArtefactSigning.Tests.fsproj",
-      "compileSeconds": 25.5,
-      "evaluationSeconds": 0.2,
-      "lines": 4121,
+      "project": "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj",
+      "compileSeconds": 19.3,
+      "evaluationSeconds": 0.3,
+      "lines": 3888,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/Media/Tests/ToolUp.Media.Tests.fsproj",
+      "compileSeconds": 19.2,
+      "evaluationSeconds": 0.3,
+      "lines": 5755,
+      "fanIn": 0,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ToolUp.Platform.Server.Infra/ToolUp.Platform.Server.Infra.fsproj",
+      "compileSeconds": 18.9,
+      "evaluationSeconds": 0.1,
+      "lines": 41165,
+      "fanIn": 5,
+      "fanOut": 1
+    },
+    {
+      "project": "src/DataSources/GoogleAnalytics/ToolUp.DataSources.GoogleAnalytics.fsproj",
+      "compileSeconds": 18.6,
+      "evaluationSeconds": 0.1,
+      "lines": 1605,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.AI.Evaluation/ToolUp.AI.Evaluation.fsproj",
+      "compileSeconds": 18.4,
+      "evaluationSeconds": 0.4,
+      "lines": 2256,
       "fanIn": 0,
       "fanOut": 5
     },
     {
-      "project": "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj",
-      "compileSeconds": 24.9,
-      "evaluationSeconds": 0.2,
-      "lines": 3879,
+      "project": "src/ToolUp.Stripe.Tests/ToolUp.Stripe.Tests.fsproj",
+      "compileSeconds": 18.3,
+      "evaluationSeconds": 0.4,
+      "lines": 2818,
       "fanIn": 0,
+      "fanOut": 5
+    },
+    {
+      "project": "src/ToolUp.ArtefactSigning.Tests/ToolUp.ArtefactSigning.Tests.fsproj",
+      "compileSeconds": 17.9,
+      "evaluationSeconds": 0.1,
+      "lines": 4134,
+      "fanIn": 0,
+      "fanOut": 5
+    },
+    {
+      "project": "src/JobSchedulers/Quartz/ToolUp.JobSchedulers.Quartz.fsproj",
+      "compileSeconds": 17.8,
+      "evaluationSeconds": 0.1,
+      "lines": 1089,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.AlgorithmProviders.Tests/ToolUp.AlgorithmProviders.Tests.fsproj",
+      "compileSeconds": 17.5,
+      "evaluationSeconds": 0.1,
+      "lines": 1444,
+      "fanIn": 0,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ToolUp.AssetStore.Tests/ToolUp.AssetStore.Tests.fsproj",
+      "compileSeconds": 16.6,
+      "evaluationSeconds": 0.3,
+      "lines": 1681,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj",
+      "compileSeconds": 16.5,
+      "evaluationSeconds": 0.5,
+      "lines": 9949,
+      "fanIn": 3,
+      "fanOut": 9
+    },
+    {
+      "project": "src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj",
+      "compileSeconds": 16.3,
+      "evaluationSeconds": 0.1,
+      "lines": 63564,
+      "fanIn": 113,
+      "fanOut": 8
+    },
+    {
+      "project": "src/DataSources/Common/ToolUp.DataSources.Common.fsproj",
+      "compileSeconds": 16.1,
+      "evaluationSeconds": 0.2,
+      "lines": 3350,
+      "fanIn": 11,
       "fanOut": 2
     },
     {
       "project": "src/ToolUp.Platform.Client/ToolUp.Platform.Client.fsproj",
-      "compileSeconds": 24.6,
-      "evaluationSeconds": 0.3,
+      "compileSeconds": 16.1,
+      "evaluationSeconds": 0.2,
       "lines": 66504,
       "fanIn": 17,
       "fanOut": 4
     },
     {
-      "project": "src/NotificationChannels/Sms/Twilio/ToolUp.NotificationChannels.Sms.Twilio.fsproj",
-      "compileSeconds": 23.3,
-      "evaluationSeconds": 0.2,
-      "lines": 290,
+      "project": "src/ToolUp.Algorithms.Tests/ToolUp.Algorithms.Tests.fsproj",
+      "compileSeconds": 16,
+      "evaluationSeconds": 0.1,
+      "lines": 1768,
       "fanIn": 1,
-      "fanOut": 2
+      "fanOut": 4
     },
     {
-      "project": "tools/ToolUp.TriageCalibration.Tests/ToolUp.TriageCalibration.Tests.fsproj",
-      "compileSeconds": 22.9,
+      "project": "src/Hosts/AwsLambda/ToolUp.Hosts.AwsLambda.fsproj",
+      "compileSeconds": 15.3,
       "evaluationSeconds": 0.1,
-      "lines": 731,
+      "lines": 465,
       "fanIn": 0,
       "fanOut": 1
     },
     {
-      "project": "src/ToolUp.Stripe.Tests/ToolUp.Stripe.Tests.fsproj",
-      "compileSeconds": 22.1,
+      "project": "src/NotificationChannels/WhatsApp/MetaCloud/ToolUp.NotificationChannels.WhatsApp.MetaCloud.fsproj",
+      "compileSeconds": 15.2,
       "evaluationSeconds": 0.2,
-      "lines": 2811,
-      "fanIn": 0,
-      "fanOut": 5
+      "lines": 1207,
+      "fanIn": 2,
+      "fanOut": 4
     },
     {
-      "project": "src/ToolUp.Platform.Server.Infra/ToolUp.Platform.Server.Infra.fsproj",
-      "compileSeconds": 21.4,
+      "project": "src/ToolUp.RAG.StaticCorpus.Server/ToolUp.RAG.StaticCorpus.Server.fsproj",
+      "compileSeconds": 15.1,
       "evaluationSeconds": 0.1,
-      "lines": 40920,
-      "fanIn": 5,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.AI.Server/ToolUp.AI.Server.fsproj",
-      "compileSeconds": 21.1,
-      "evaluationSeconds": 0.1,
-      "lines": 27375,
-      "fanIn": 16,
-      "fanOut": 3
-    },
-    {
-      "project": "src/InterPlatform/InterPlatform.fsproj",
-      "compileSeconds": 21.1,
-      "evaluationSeconds": 0.2,
-      "lines": 23892,
+      "lines": 287,
       "fanIn": 2,
       "fanOut": 2
     },
     {
-      "project": "src/Hosts/DeliveredEgress/ToolUp.Hosts.DeliveredEgress.fsproj",
-      "compileSeconds": 20.9,
-      "evaluationSeconds": 0.1,
-      "lines": 560,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.AIProviders.Tests/ToolUp.AIProviders.Tests.fsproj",
-      "compileSeconds": 20.8,
-      "evaluationSeconds": 0.1,
-      "lines": 1533,
-      "fanIn": 0,
-      "fanOut": 8
-    },
-    {
-      "project": "src/FeatureFlagProviders/OpenFeature/ToolUp.FeatureFlagProviders.OpenFeature.fsproj",
-      "compileSeconds": 20.1,
-      "evaluationSeconds": 0.1,
-      "lines": 183,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj",
-      "compileSeconds": 19.4,
-      "evaluationSeconds": 0.2,
-      "lines": 63235,
-      "fanIn": 102,
-      "fanOut": 8
-    },
-    {
-      "project": "src/AICookbooks/AgGridEnterprise/AgGridEnterpriseAICookbook.fsproj",
-      "compileSeconds": 18.8,
-      "evaluationSeconds": 0.1,
-      "lines": 73,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Reporting.Tests/ToolUp.Reporting.Tests.fsproj",
-      "compileSeconds": 18.6,
-      "evaluationSeconds": 0.1,
-      "lines": 2044,
-      "fanIn": 0,
-      "fanOut": 3
-    },
-    {
       "project": "tools/ToolUp.TriageCalibration/ToolUp.TriageCalibration.fsproj",
-      "compileSeconds": 18.2,
-      "evaluationSeconds": 0.1,
+      "compileSeconds": 15.1,
+      "evaluationSeconds": 0.2,
       "lines": 1315,
       "fanIn": 1,
       "fanOut": 4
     },
     {
-      "project": "src/Encryption/AzureKeyVault/AzureKeyVaultEncryption.fsproj",
-      "compileSeconds": 18.1,
-      "evaluationSeconds": 0.1,
-      "lines": 185,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.PublicRendering/ToolUp.PublicRendering.fsproj",
-      "compileSeconds": 17.8,
+      "project": "src/Storage/Tests/ToolUp.Storage.Tests.fsproj",
+      "compileSeconds": 15,
       "evaluationSeconds": 0.2,
-      "lines": 13751,
-      "fanIn": 3,
+      "lines": 2481,
+      "fanIn": 0,
+      "fanOut": 9
+    },
+    {
+      "project": "src/AuthProviders/Scim/Scim.fsproj",
+      "compileSeconds": 15,
+      "evaluationSeconds": 0.2,
+      "lines": 2023,
+      "fanIn": 1,
       "fanOut": 2
     },
     {
-      "project": "src/EmbeddingCaches/Redis/ToolUp.EmbeddingCaches.Redis.fsproj",
-      "compileSeconds": 16.7,
+      "project": "src/EntityStores/Tests/ToolUp.EntityStores.Tests.fsproj",
+      "compileSeconds": 14.9,
       "evaluationSeconds": 0.1,
-      "lines": 675,
-      "fanIn": 1,
+      "lines": 1360,
+      "fanIn": 0,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj",
+      "compileSeconds": 14.7,
+      "evaluationSeconds": 0.6,
+      "lines": 4194,
+      "fanIn": 0,
+      "fanOut": 4
+    },
+    {
+      "project": "src/AuditSinks/ChainedLedger/ToolUp.AuditSinks.ChainedLedger.fsproj",
+      "compileSeconds": 14.6,
+      "evaluationSeconds": 0.2,
+      "lines": 2855,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.ArtefactSigning/ArtefactSigning.fsproj",
+      "compileSeconds": 14,
+      "evaluationSeconds": 0.1,
+      "lines": 3283,
+      "fanIn": 6,
       "fanOut": 2
     },
     {
       "project": "src/ToolUp.Cloud.Parity.Tests/ToolUp.Cloud.Parity.Tests.fsproj",
-      "compileSeconds": 16.2,
-      "evaluationSeconds": 0.1,
-      "lines": 1690,
+      "compileSeconds": 13.9,
+      "evaluationSeconds": 0.2,
+      "lines": 1698,
       "fanIn": 0,
       "fanOut": 10
     },
     {
-      "project": "src/ToolUp.RAG.StaticCorpus.Server/ToolUp.RAG.StaticCorpus.Server.fsproj",
-      "compileSeconds": 15.7,
+      "project": "src/FactStores/Postgres/PostgresFactStore.fsproj",
+      "compileSeconds": 13.5,
       "evaluationSeconds": 0.2,
-      "lines": 285,
-      "fanIn": 2,
-      "fanOut": 2
+      "lines": 3627,
+      "fanIn": 3,
+      "fanOut": 4
     },
     {
       "project": "src/ToolUp.RAG.Server/ToolUp.RAG.Server.fsproj",
-      "compileSeconds": 15.5,
-      "evaluationSeconds": 0.3,
-      "lines": 12052,
-      "fanIn": 4,
+      "compileSeconds": 13.5,
+      "evaluationSeconds": 0.2,
+      "lines": 12099,
+      "fanIn": 5,
       "fanOut": 5
     },
     {
-      "project": "samples/PublicSiteWithModules/PublicSiteWithModules.fsproj",
-      "compileSeconds": 15.2,
+      "project": "src/AIProviders/OpenAI/OpenAIProvider.fsproj",
+      "compileSeconds": 13.5,
       "evaluationSeconds": 0.4,
-      "lines": 328,
-      "fanIn": 0,
-      "fanOut": 4
-    },
-    {
-      "project": "src/Cloud/Aws/ToolUp.Cloud.Aws.fsproj",
-      "compileSeconds": 14.9,
-      "evaluationSeconds": 0.2,
-      "lines": 0,
-      "fanIn": 0,
-      "fanOut": 4
-    },
-    {
-      "project": "src/AuditSinks/GcsArchive/ToolUp.AuditSinks.GcsArchive.fsproj",
-      "compileSeconds": 14.8,
-      "evaluationSeconds": 0.2,
-      "lines": 170,
-      "fanIn": 2,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Platform.Server.Config/ToolUp.Platform.Server.Config.fsproj",
-      "compileSeconds": 14.8,
-      "evaluationSeconds": 0.1,
-      "lines": 17443,
+      "lines": 901,
       "fanIn": 4,
-      "fanOut": 2
+      "fanOut": 3
     },
     {
-      "project": "src/ExternalCompute/ToolUp.ExternalCompute.Http/ToolUp.ExternalCompute.Http.fsproj",
-      "compileSeconds": 14.6,
+      "project": "src/DataSources/Csv/ToolUp.DataSources.Csv.fsproj",
+      "compileSeconds": 13.4,
       "evaluationSeconds": 0.1,
-      "lines": 1748,
+      "lines": 434,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.Reporting.Server/ToolUp.Reporting.Server.fsproj",
+      "compileSeconds": 13.2,
+      "evaluationSeconds": 0,
+      "lines": 4525,
+      "fanIn": 2,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ArtefactSigning/AwsKms/AwsKmsArtefactSigning.fsproj",
+      "compileSeconds": 12.9,
+      "evaluationSeconds": 0.1,
+      "lines": 123,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/NotificationChannels/Push/WebPush/ToolUp.NotificationChannels.Push.WebPush.fsproj",
+      "compileSeconds": 12.9,
+      "evaluationSeconds": 0.2,
+      "lines": 323,
       "fanIn": 1,
       "fanOut": 2
     },
     {
-      "project": "src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj",
-      "compileSeconds": 14.5,
-      "evaluationSeconds": 0.2,
-      "lines": 9910,
-      "fanIn": 2,
-      "fanOut": 9
+      "project": "src/Media/MediaLibrary/ToolUp.MediaLibrary.fsproj",
+      "compileSeconds": 12.8,
+      "evaluationSeconds": 0.3,
+      "lines": 6737,
+      "fanIn": 6,
+      "fanOut": 2
     },
     {
-      "project": "src/ToolUp.AssetStore.Tests/ToolUp.AssetStore.Tests.fsproj",
-      "compileSeconds": 14.5,
+      "project": "src/Encryption/AwsKms/AwsKmsEncryption.fsproj",
+      "compileSeconds": 12.5,
+      "evaluationSeconds": 0.1,
+      "lines": 125,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.AssetStore/ToolUp.AssetStore.fsproj",
+      "compileSeconds": 12.5,
       "evaluationSeconds": 0.2,
-      "lines": 1672,
+      "lines": 3471,
+      "fanIn": 3,
+      "fanOut": 3
+    },
+    {
+      "project": "src/Media/CloudTranscode/ToolUp.Media.CloudTranscode.fsproj",
+      "compileSeconds": 12.4,
+      "evaluationSeconds": 0.3,
+      "lines": 52,
       "fanIn": 0,
       "fanOut": 1
     },
     {
-      "project": "src/ToolUp.Remoting.Benchmarks/ToolUp.Remoting.Benchmarks.fsproj",
-      "compileSeconds": 14.5,
+      "project": "tools/ToolUp.TriageCalibration.Tests/ToolUp.TriageCalibration.Tests.fsproj",
+      "compileSeconds": 12.4,
       "evaluationSeconds": 0.2,
+      "lines": 732,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/AlgorithmProviders/MathNet/MathNetAlgorithmProvider.fsproj",
+      "compileSeconds": 12.3,
+      "evaluationSeconds": 0.2,
+      "lines": 973,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/AI.Samples/ToolUp.AI.SampleClientTool.Server/ToolUp.AI.SampleClientTool.Server.fsproj",
+      "compileSeconds": 12.1,
+      "evaluationSeconds": 0.2,
+      "lines": 110,
+      "fanIn": 1,
+      "fanOut": 5
+    },
+    {
+      "project": "src/ToolUp.Facts.Presentation.Server/ToolUp.Facts.Presentation.Server.fsproj",
+      "compileSeconds": 12.1,
+      "evaluationSeconds": 0.1,
+      "lines": 4082,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.Companions.Isolation/ToolUp.Companions.Isolation.fsproj",
+      "compileSeconds": 12,
+      "evaluationSeconds": 0.2,
+      "lines": 1377,
+      "fanIn": 3,
+      "fanOut": 2
+    },
+    {
+      "project": "src/EmbeddingProviders/Tests/ToolUp.EmbeddingProviders.Tests.fsproj",
+      "compileSeconds": 11.8,
+      "evaluationSeconds": 0.2,
+      "lines": 2204,
+      "fanIn": 0,
+      "fanOut": 4
+    },
+    {
+      "project": "src/AuditSinks/Cef/ToolUp.AuditSinks.Cef.fsproj",
+      "compileSeconds": 11.8,
+      "evaluationSeconds": 0.1,
+      "lines": 1200,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/RateLimit/Redis/ToolUp.RateLimit.Redis.fsproj",
+      "compileSeconds": 11.8,
+      "evaluationSeconds": 0.1,
+      "lines": 276,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Forms.Server/ToolUp.Forms.Server.fsproj",
+      "compileSeconds": 11.7,
+      "evaluationSeconds": 0.3,
+      "lines": 4057,
+      "fanIn": 3,
+      "fanOut": 3
+    },
+    {
+      "project": "src/Calendar/Google/ToolUp.Calendar.Google.fsproj",
+      "compileSeconds": 11.7,
+      "evaluationSeconds": 0.1,
+      "lines": 2094,
+      "fanIn": 1,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ToolUp.Platform.Server.Jobs/ToolUp.Platform.Server.Jobs.fsproj",
+      "compileSeconds": 11.6,
+      "evaluationSeconds": 0.1,
+      "lines": 27695,
+      "fanIn": 2,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ContainerSchedulers/DockerLocal/ToolUp.ContainerSchedulers.DockerLocal.fsproj",
+      "compileSeconds": 11.6,
+      "evaluationSeconds": 0.1,
+      "lines": 636,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/VectorStores/Hnsw/HnswVectorStore.fsproj",
+      "compileSeconds": 11.6,
+      "evaluationSeconds": 0.3,
+      "lines": 1151,
+      "fanIn": 3,
+      "fanOut": 2
+    },
+    {
+      "project": "src/AICookbooks/AgChart/AgChartAICookbook.fsproj",
+      "compileSeconds": 11.5,
+      "evaluationSeconds": 0.3,
+      "lines": 156,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/DataSources/BigQuery/ToolUp.DataSources.BigQuery.fsproj",
+      "compileSeconds": 11.3,
+      "evaluationSeconds": 0.4,
+      "lines": 284,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ArtefactSigning/AzureKeyVault/AzureKeyVaultArtefactSigning.fsproj",
+      "compileSeconds": 11.3,
+      "evaluationSeconds": 0.4,
+      "lines": 143,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Reporting.Tests/ToolUp.Reporting.Tests.fsproj",
+      "compileSeconds": 11.3,
+      "evaluationSeconds": 0.3,
+      "lines": 2053,
+      "fanIn": 0,
+      "fanOut": 3
+    },
+    {
+      "project": "src/Calendar/Microsoft/ToolUp.Calendar.Microsoft.fsproj",
+      "compileSeconds": 11.2,
+      "evaluationSeconds": 0.2,
+      "lines": 2493,
+      "fanIn": 1,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ContentAuthoring/ToolUp.ContentAuthoring.fsproj",
+      "compileSeconds": 11.1,
+      "evaluationSeconds": 0.3,
+      "lines": 746,
+      "fanIn": 1,
+      "fanOut": 5
+    },
+    {
+      "project": "src/ToolUp.AICookbooks.Tests/ToolUp.AICookbooks.Tests.fsproj",
+      "compileSeconds": 11,
+      "evaluationSeconds": 0.2,
+      "lines": 760,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Remoting.Benchmarks/ToolUp.Remoting.Benchmarks.fsproj",
+      "compileSeconds": 11,
+      "evaluationSeconds": 0.4,
       "lines": 1894,
       "fanIn": 0,
       "fanOut": 3
     },
     {
+      "project": "src/DataSources/Synapse/ToolUp.DataSources.Synapse.fsproj",
+      "compileSeconds": 10.8,
+      "evaluationSeconds": 0.1,
+      "lines": 466,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/DataSources/Parquet/ToolUp.DataSources.Parquet.fsproj",
+      "compileSeconds": 10.7,
+      "evaluationSeconds": 0.1,
+      "lines": 1091,
+      "fanIn": 2,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.Platform.Server.Config/ToolUp.Platform.Server.Config.fsproj",
+      "compileSeconds": 10.7,
+      "evaluationSeconds": 0.1,
+      "lines": 17519,
+      "fanIn": 4,
+      "fanOut": 2
+    },
+    {
+      "project": "src/DataSources/Redshift/ToolUp.DataSources.Redshift.fsproj",
+      "compileSeconds": 10.7,
+      "evaluationSeconds": 0.2,
+      "lines": 514,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/DataSources/Sql/ToolUp.DataSources.Sql.fsproj",
+      "compileSeconds": 10.7,
+      "evaluationSeconds": 0.3,
+      "lines": 772,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/OcrProviders/Tesseract/ToolUp.OcrProviders.Tesseract.fsproj",
+      "compileSeconds": 10.6,
+      "evaluationSeconds": 0.3,
+      "lines": 751,
+      "fanIn": 2,
+      "fanOut": 3
+    },
+    {
+      "project": "src/VectorStores/Pgvector/PgvectorVectorStore.fsproj",
+      "compileSeconds": 10.5,
+      "evaluationSeconds": 0.3,
+      "lines": 1858,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
       "project": "src/ToolUp.Platform.Server.Remoting/ToolUp.Platform.Server.Remoting.fsproj",
-      "compileSeconds": 14.5,
+      "compileSeconds": 10.5,
       "evaluationSeconds": 0.1,
       "lines": 15655,
       "fanIn": 6,
       "fanOut": 1
     },
     {
-      "project": "src/ToolUp.Companions.Isolation.Tests/ToolUp.Companions.Isolation.Tests.fsproj",
-      "compileSeconds": 14.2,
-      "evaluationSeconds": 0.1,
-      "lines": 1387,
+      "project": "samples/ProviderProfileBYOK/src/ProviderProfileBYOK.Server/ProviderProfileBYOK.Server.fsproj",
+      "compileSeconds": 10.2,
+      "evaluationSeconds": 0.2,
+      "lines": 44,
       "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/NotificationChannels/Email/SendGrid/ToolUp.NotificationChannels.Email.SendGrid.fsproj",
+      "compileSeconds": 10,
+      "evaluationSeconds": 0.2,
+      "lines": 370,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/DataSources/Athena/ToolUp.DataSources.Athena.fsproj",
+      "compileSeconds": 10,
+      "evaluationSeconds": 0.2,
+      "lines": 438,
+      "fanIn": 1,
       "fanOut": 3
     },
     {
-      "project": "src/AuthProviders/GoogleDirectory/GoogleDirectory.fsproj",
-      "compileSeconds": 13.6,
+      "project": "src/AuthProviders/GitHub/GitHubAuth.fsproj",
+      "compileSeconds": 9.9,
       "evaluationSeconds": 0.1,
-      "lines": 1171,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Calendar/Google/ToolUp.Calendar.Google.fsproj",
-      "compileSeconds": 13.5,
-      "evaluationSeconds": 0.1,
-      "lines": 2087,
-      "fanIn": 1,
-      "fanOut": 4
-    },
-    {
-      "project": "src/ToolUp.Scheduling.Core/ToolUp.Scheduling.Core.fsproj",
-      "compileSeconds": 13.2,
-      "evaluationSeconds": 0.1,
-      "lines": 1599,
-      "fanIn": 5,
-      "fanOut": 1
-    },
-    {
-      "project": "src/AuditSinks/DatadogLogs/ToolUp.AuditSinks.DatadogLogs.fsproj",
-      "compileSeconds": 13.1,
-      "evaluationSeconds": 0.2,
-      "lines": 216,
+      "lines": 1133,
       "fanIn": 1,
       "fanOut": 2
     },
     {
-      "project": "src/Encryption/AwsKms/AwsKmsEncryption.fsproj",
-      "compileSeconds": 13.1,
-      "evaluationSeconds": 0.1,
-      "lines": 123,
+      "project": "src/ToolUp.RAG.Benchmarks/ToolUp.RAG.Benchmarks.fsproj",
+      "compileSeconds": 9.9,
+      "evaluationSeconds": 0.5,
+      "lines": 4072,
       "fanIn": 0,
-      "fanOut": 2
+      "fanOut": 14
     },
     {
-      "project": "src/ToolUp.Forms.Core/ToolUp.Forms.Core.fsproj",
-      "compileSeconds": 13.1,
+      "project": "src/AuthProviders/Passkey/PasskeyAuthProvider.fsproj",
+      "compileSeconds": 9.8,
       "evaluationSeconds": 0.1,
-      "lines": 1393,
-      "fanIn": 4,
-      "fanOut": 1
+      "lines": 1425,
+      "fanIn": 1,
+      "fanOut": 2
     },
     {
       "project": "src/ToolUp.AI.Client/ToolUp.AI.Client.fsproj",
-      "compileSeconds": 12.9,
-      "evaluationSeconds": 0.2,
+      "compileSeconds": 9.7,
+      "evaluationSeconds": 0.1,
       "lines": 8266,
       "fanIn": 4,
       "fanOut": 4
     },
     {
-      "project": "src/Calendar/Microsoft/ToolUp.Calendar.Microsoft.fsproj",
-      "compileSeconds": 12.9,
-      "evaluationSeconds": 0.1,
-      "lines": 2483,
+      "project": "src/ExternalCompute/ToolUp.ExternalCompute.Http/ToolUp.ExternalCompute.Http.fsproj",
+      "compileSeconds": 9.6,
+      "evaluationSeconds": 0.2,
+      "lines": 1753,
       "fanIn": 1,
-      "fanOut": 4
-    },
-    {
-      "project": "src/ToolUp.AssetStore/ToolUp.AssetStore.fsproj",
-      "compileSeconds": 12.9,
-      "evaluationSeconds": 0.1,
-      "lines": 3461,
-      "fanIn": 3,
-      "fanOut": 3
-    },
-    {
-      "project": "src/Media/MediaLibrary/ToolUp.MediaLibrary.fsproj",
-      "compileSeconds": 12.8,
-      "evaluationSeconds": 0.1,
-      "lines": 6716,
-      "fanIn": 5,
       "fanOut": 2
     },
     {
-      "project": "src/ToolUp.Stripe.Webhook/ToolUp.Stripe.Webhook.fsproj",
-      "compileSeconds": 12.8,
-      "evaluationSeconds": 0.1,
-      "lines": 471,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "src/Rerankers/Local/ToolUp.Rerankers.Local.fsproj",
-      "compileSeconds": 12.8,
-      "evaluationSeconds": 0.1,
-      "lines": 209,
+      "project": "src/AuditSinks/Tests/ToolUp.AuditSinks.Tests.fsproj",
+      "compileSeconds": 9.6,
+      "evaluationSeconds": 0.3,
+      "lines": 3190,
       "fanIn": 0,
-      "fanOut": 2
+      "fanOut": 7
     },
     {
-      "project": "src/ToolUp.Platform.Server.Jobs/ToolUp.Platform.Server.Jobs.fsproj",
-      "compileSeconds": 12.6,
+      "project": "src/EntityStores/Postgres/PostgresEntityStore.fsproj",
+      "compileSeconds": 9.6,
       "evaluationSeconds": 0.1,
-      "lines": 27559,
+      "lines": 896,
       "fanIn": 2,
-      "fanOut": 4
-    },
-    {
-      "project": "src/Hosts/GoogleCloudFunctions/ToolUp.Hosts.GoogleCloudFunctions.fsproj",
-      "compileSeconds": 12.4,
-      "evaluationSeconds": 0.2,
-      "lines": 144,
-      "fanIn": 0,
       "fanOut": 1
     },
     {
-      "project": "src/Secrets/AzureKeyVault/AzureKeyVault.fsproj",
-      "compileSeconds": 12.3,
-      "evaluationSeconds": 0.2,
-      "lines": 290,
-      "fanIn": 3,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Forms.Server/ToolUp.Forms.Server.fsproj",
-      "compileSeconds": 12.2,
+      "project": "src/ToolUp.Platform.Testing/ToolUp.Platform.Testing.fsproj",
+      "compileSeconds": 9.5,
       "evaluationSeconds": 0.1,
-      "lines": 4035,
-      "fanIn": 3,
+      "lines": 2871,
+      "fanIn": 4,
       "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.AI.Evaluation/ToolUp.AI.Evaluation.fsproj",
-      "compileSeconds": 12.2,
-      "evaluationSeconds": 0.1,
-      "lines": 2253,
-      "fanIn": 0,
-      "fanOut": 5
     },
     {
       "project": "src/ToolUp.RAG.StaticCorpus.Build/ToolUp.RAG.StaticCorpus.Build.fsproj",
-      "compileSeconds": 12,
-      "evaluationSeconds": 0.4,
-      "lines": 678,
+      "compileSeconds": 9.5,
+      "evaluationSeconds": 0.2,
+      "lines": 683,
       "fanIn": 1,
       "fanOut": 3
     },
     {
-      "project": "src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj",
-      "compileSeconds": 11.9,
-      "evaluationSeconds": 0.1,
-      "lines": 20787,
-      "fanIn": 0,
-      "fanOut": 1
+      "project": "src/EmbeddingProviders/OpenAI/OpenAIEmbeddingProvider.fsproj",
+      "compileSeconds": 9.5,
+      "evaluationSeconds": 0.3,
+      "lines": 1007,
+      "fanIn": 4,
+      "fanOut": 2
     },
     {
-      "project": "src/VectorStores/Pgvector/PgvectorVectorStore.fsproj",
-      "compileSeconds": 11.8,
-      "evaluationSeconds": 0.1,
-      "lines": 1854,
+      "project": "src/AuditSinks/SplunkHec/ToolUp.AuditSinks.SplunkHec.fsproj",
+      "compileSeconds": 9.5,
+      "evaluationSeconds": 0.2,
+      "lines": 193,
       "fanIn": 2,
       "fanOut": 2
     },
     {
-      "project": "src/AuthProviders/Passkey/PasskeyAuthProvider.fsproj",
-      "compileSeconds": 11.6,
-      "evaluationSeconds": 0.2,
-      "lines": 1413,
-      "fanIn": 1,
+      "project": "src/Encryption/AzureKeyVault/AzureKeyVaultEncryption.fsproj",
+      "compileSeconds": 9.4,
+      "evaluationSeconds": 0.1,
+      "lines": 187,
+      "fanIn": 0,
       "fanOut": 2
     },
     {
       "project": "src/AuthProviders/LdapActiveDirectory/LdapActiveDirectory.fsproj",
-      "compileSeconds": 11.5,
+      "compileSeconds": 9.3,
       "evaluationSeconds": 0.1,
-      "lines": 1586,
+      "lines": 1591,
       "fanIn": 1,
       "fanOut": 2
     },
     {
-      "project": "src/ToolUp.ArtefactSigning/ArtefactSigning.fsproj",
-      "compileSeconds": 11.5,
-      "evaluationSeconds": 0.2,
-      "lines": 3276,
-      "fanIn": 6,
+      "project": "src/AuditSinks/AzureBlobArchive/ToolUp.AuditSinks.AzureBlobArchive.fsproj",
+      "compileSeconds": 9.3,
+      "evaluationSeconds": 0.1,
+      "lines": 173,
+      "fanIn": 2,
       "fanOut": 2
     },
     {
-      "project": "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj",
-      "compileSeconds": 11.4,
+      "project": "src/ToolUp.Platform.DataSubject.Tests/ToolUp.Platform.DataSubject.Tests.fsproj",
+      "compileSeconds": 9.2,
       "evaluationSeconds": 0.1,
-      "lines": 799,
+      "lines": 978,
       "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/DataSources/Excel/ToolUp.DataSources.Excel.fsproj",
+      "compileSeconds": 9.2,
+      "evaluationSeconds": 0.3,
+      "lines": 643,
+      "fanIn": 1,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ToolUp.Algorithms.Server/ToolUp.Algorithms.Server.fsproj",
+      "compileSeconds": 9.2,
+      "evaluationSeconds": 0.1,
+      "lines": 1315,
+      "fanIn": 3,
+      "fanOut": 3
+    },
+    {
+      "project": "src/Webhooks/Tests/ToolUp.Webhooks.Tests.fsproj",
+      "compileSeconds": 9.1,
+      "evaluationSeconds": 0.1,
+      "lines": 438,
+      "fanIn": 0,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ModelProviders/Reference/ToolUp.ModelProviders.Reference.fsproj",
+      "compileSeconds": 9.1,
+      "evaluationSeconds": 0.3,
+      "lines": 368,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/EmbeddingCaches/Redis/ToolUp.EmbeddingCaches.Redis.fsproj",
+      "compileSeconds": 9.1,
+      "evaluationSeconds": 0.1,
+      "lines": 677,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/AuthProviders/Oidc/OidcAuthProvider.fsproj",
+      "compileSeconds": 9,
+      "evaluationSeconds": 0.1,
+      "lines": 3039,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/NotificationChannels/Sms/Twilio/ToolUp.NotificationChannels.Sms.Twilio.fsproj",
+      "compileSeconds": 9,
+      "evaluationSeconds": 0.1,
+      "lines": 292,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/FeatureFlagProviders/OpenFeature/ToolUp.FeatureFlagProviders.OpenFeature.fsproj",
+      "compileSeconds": 9,
+      "evaluationSeconds": 0.1,
+      "lines": 186,
+      "fanIn": 1,
       "fanOut": 1
     },
     {
-      "project": "src/Calendar/CalDAV/ToolUp.Calendar.CalDAV.fsproj",
-      "compileSeconds": 11.2,
+      "project": "src/ToolUp.Offline.Server/ToolUp.Offline.Server.fsproj",
+      "compileSeconds": 8.9,
       "evaluationSeconds": 0.1,
-      "lines": 547,
+      "lines": 400,
       "fanIn": 1,
       "fanOut": 3
     },
     {
       "project": "src/ToolUp.AI.McpHost/ToolUp.AI.McpHost.fsproj",
-      "compileSeconds": 11.1,
+      "compileSeconds": 8.8,
       "evaluationSeconds": 0.2,
-      "lines": 2465,
+      "lines": 2478,
       "fanIn": 1,
       "fanOut": 4
     },
     {
-      "project": "src/NotificationChannels/WhatsApp/Twilio/ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj",
-      "compileSeconds": 11,
+      "project": "src/AuditSinks/S3Archive/ToolUp.AuditSinks.S3Archive.fsproj",
+      "compileSeconds": 8.8,
       "evaluationSeconds": 0.1,
-      "lines": 606,
-      "fanIn": 1,
+      "lines": 182,
+      "fanIn": 4,
       "fanOut": 2
     },
     {
-      "project": "src/ToolUp.Scheduling.Server/ToolUp.Scheduling.Server.fsproj",
-      "compileSeconds": 10.9,
-      "evaluationSeconds": 0.1,
-      "lines": 2000,
-      "fanIn": 3,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Algorithms.Tests/ToolUp.Algorithms.Tests.fsproj",
-      "compileSeconds": 10.9,
-      "evaluationSeconds": 0.1,
-      "lines": 1765,
-      "fanIn": 1,
-      "fanOut": 4
-    },
-    {
-      "project": "src/AlgorithmProviders/MathNet/MathNetAlgorithmProvider.fsproj",
-      "compileSeconds": 10.8,
+      "project": "src/AuditSinks/DatadogLogs/ToolUp.AuditSinks.DatadogLogs.fsproj",
+      "compileSeconds": 8.8,
       "evaluationSeconds": 0.2,
-      "lines": 971,
+      "lines": 218,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/Encryption/GoogleCloudKms/GoogleCloudKmsEncryption.fsproj",
+      "compileSeconds": 8.7,
+      "evaluationSeconds": 0.1,
+      "lines": 154,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ShareTokenStoreDecorators/RevokeOnIssuerRemoved/ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved.fsproj",
+      "compileSeconds": 8.7,
+      "evaluationSeconds": 0.1,
+      "lines": 153,
       "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/EmbeddingProviders/OpenAI/OpenAIEmbeddingProvider.fsproj",
-      "compileSeconds": 10.8,
-      "evaluationSeconds": 0.3,
-      "lines": 1004,
-      "fanIn": 3,
-      "fanOut": 2
-    },
-    {
-      "project": "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj",
-      "compileSeconds": 10.7,
-      "evaluationSeconds": 0.3,
-      "lines": 959,
-      "fanIn": 3,
       "fanOut": 2
     },
     {
       "project": "src/ToolUp.AI.Client.Tests/ToolUp.AI.Client.Tests.fsproj",
-      "compileSeconds": 10.6,
-      "evaluationSeconds": 0.4,
+      "compileSeconds": 8.6,
+      "evaluationSeconds": 0.3,
       "lines": 24701,
       "fanIn": 0,
       "fanOut": 4
     },
     {
-      "project": "src/ToolUp.Workflow.Server/ToolUp.Workflow.Server.fsproj",
-      "compileSeconds": 10.5,
-      "evaluationSeconds": 0.2,
-      "lines": 192,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Algorithms.Server/ToolUp.Algorithms.Server.fsproj",
-      "compileSeconds": 10.5,
+      "project": "src/DataSources/Snowflake/ToolUp.DataSources.Snowflake.fsproj",
+      "compileSeconds": 8.5,
       "evaluationSeconds": 0.1,
-      "lines": 1313,
-      "fanIn": 3,
+      "lines": 445,
+      "fanIn": 1,
       "fanOut": 3
     },
     {
-      "project": "src/DataSources/GitHub/GitHubApp.fsproj",
-      "compileSeconds": 10.4,
+      "project": "src/NotificationChannels/Email/Smtp/ToolUp.NotificationChannels.Email.Smtp.fsproj",
+      "compileSeconds": 8.5,
       "evaluationSeconds": 0.2,
-      "lines": 395,
+      "lines": 411,
       "fanIn": 1,
       "fanOut": 2
     },
     {
-      "project": "src/Hosts/AzureFunctions/ToolUp.Hosts.AzureFunctions.fsproj",
-      "compileSeconds": 10.3,
+      "project": "src/SparseIndices/Postgres/PostgresFullTextIndex.fsproj",
+      "compileSeconds": 8.3,
+      "evaluationSeconds": 0.1,
+      "lines": 789,
+      "fanIn": 2,
+      "fanOut": 3
+    },
+    {
+      "project": "src/AICookbooks/AgGridEnterprise/AgGridEnterpriseAICookbook.fsproj",
+      "compileSeconds": 8.3,
+      "evaluationSeconds": 0.3,
+      "lines": 73,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/AuditSinks/GcsArchive/ToolUp.AuditSinks.GcsArchive.fsproj",
+      "compileSeconds": 8.2,
       "evaluationSeconds": 0.2,
-      "lines": 191,
-      "fanIn": 0,
+      "lines": 172,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Scheduling.Server/ToolUp.Scheduling.Server.fsproj",
+      "compileSeconds": 8.2,
+      "evaluationSeconds": 0.2,
+      "lines": 2010,
+      "fanIn": 3,
+      "fanOut": 3
+    },
+    {
+      "project": "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj",
+      "compileSeconds": 8.1,
+      "evaluationSeconds": 0.5,
+      "lines": 961,
+      "fanIn": 4,
+      "fanOut": 2
+    },
+    {
+      "project": "src/NotificationChannels/WhatsApp/Twilio/ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj",
+      "compileSeconds": 8,
+      "evaluationSeconds": 0.1,
+      "lines": 609,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/Media/FFmpeg/ToolUp.Media.FFmpeg.fsproj",
+      "compileSeconds": 7.9,
+      "evaluationSeconds": 0.1,
+      "lines": 371,
+      "fanIn": 2,
       "fanOut": 1
     },
     {
-      "project": "src/ToolUp.DataSources.Tests/ToolUp.DataSources.Tests.fsproj",
-      "compileSeconds": 10.3,
+      "project": "src/AIProviders/Gemini/Gemini.fsproj",
+      "compileSeconds": 7.8,
+      "evaluationSeconds": 0.4,
+      "lines": 854,
+      "fanIn": 3,
+      "fanOut": 3
+    },
+    {
+      "project": "src/AIExtensions/UiAwareness/ToolUp.AI.UiAwareness.Server/ToolUp.AI.UiAwareness.Server.fsproj",
+      "compileSeconds": 7.6,
+      "evaluationSeconds": 0.1,
+      "lines": 191,
+      "fanIn": 1,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ArtefactSigning/GoogleCloudKms/GoogleCloudKmsArtefactSigning.fsproj",
+      "compileSeconds": 7.6,
+      "evaluationSeconds": 0.1,
+      "lines": 121,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Platform.Build/ToolUp.Platform.Build.fsproj",
+      "compileSeconds": 7.6,
+      "evaluationSeconds": 0.1,
+      "lines": 10570,
+      "fanIn": 2,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Hosts/EdgeCache/ToolUp.Hosts.EdgeCache.fsproj",
+      "compileSeconds": 7.6,
+      "evaluationSeconds": 0.1,
+      "lines": 413,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/RateLimit/AzureTableStorage/ToolUp.RateLimit.AzureTableStorage.fsproj",
+      "compileSeconds": 7.5,
       "evaluationSeconds": 0.3,
-      "lines": 7708,
-      "fanIn": 0,
-      "fanOut": 13
+      "lines": 290,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.KnowledgeBase.Client/ToolUp.KnowledgeBase.Client.fsproj",
+      "compileSeconds": 7.5,
+      "evaluationSeconds": 0.1,
+      "lines": 3693,
+      "fanIn": 1,
+      "fanOut": 3
     },
     {
       "project": "src/ToolUp.Forms.Client/ToolUp.Forms.Client.fsproj",
-      "compileSeconds": 10.2,
+      "compileSeconds": 7.5,
       "evaluationSeconds": 0.1,
       "lines": 1371,
       "fanIn": 0,
       "fanOut": 3
     },
     {
-      "project": "src/ToolUp.Companions.Isolation/ToolUp.Companions.Isolation.fsproj",
-      "compileSeconds": 10.2,
-      "evaluationSeconds": 0.1,
-      "lines": 1376,
-      "fanIn": 3,
-      "fanOut": 2
-    },
-    {
-      "project": "src/AuthProviders/PasskeyClient/PasskeyClient.fsproj",
-      "compileSeconds": 10.2,
-      "evaluationSeconds": 0.1,
-      "lines": 395,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/DataSources/Common/ToolUp.DataSources.Common.fsproj",
-      "compileSeconds": 10.1,
-      "evaluationSeconds": 0.1,
-      "lines": 3335,
-      "fanIn": 11,
-      "fanOut": 2
-    },
-    {
-      "project": "src/Encryption/GoogleCloudKms/GoogleCloudKmsEncryption.fsproj",
-      "compileSeconds": 10.1,
-      "evaluationSeconds": 0.1,
-      "lines": 152,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/NotificationChannels/Redis/ToolUp.NotificationChannels.Redis.fsproj",
-      "compileSeconds": 10.1,
-      "evaluationSeconds": 0.2,
-      "lines": 639,
+      "project": "src/AIProviders/Copilot/CopilotAIProvider.fsproj",
+      "compileSeconds": 7.5,
+      "evaluationSeconds": 0.3,
+      "lines": 929,
       "fanIn": 1,
-      "fanOut": 2
+      "fanOut": 3
     },
     {
-      "project": "src/Hosts/AwsLambda/ToolUp.Hosts.AwsLambda.fsproj",
-      "compileSeconds": 10.1,
+      "project": "src/IngestionQueues/Redis/ToolUp.IngestionQueues.Redis.fsproj",
+      "compileSeconds": 7.4,
       "evaluationSeconds": 0.1,
-      "lines": 464,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/DataSources/GoogleAnalytics/ToolUp.DataSources.GoogleAnalytics.fsproj",
-      "compileSeconds": 10.1,
-      "evaluationSeconds": 0.1,
-      "lines": 1601,
-      "fanIn": 2,
-      "fanOut": 2
-    },
-    {
-      "project": "src/AuthProviders/Scim/Scim.fsproj",
-      "compileSeconds": 10,
-      "evaluationSeconds": 0.2,
-      "lines": 2018,
+      "lines": 552,
       "fanIn": 1,
-      "fanOut": 2
+      "fanOut": 3
     },
     {
-      "project": "src/NotificationChannels/WhatsApp/MetaCloud/ToolUp.NotificationChannels.WhatsApp.MetaCloud.fsproj",
-      "compileSeconds": 9.9,
-      "evaluationSeconds": 0.1,
-      "lines": 1201,
-      "fanIn": 1,
+      "project": "src/AIProviders/Claude/ClaudeAIProvider.fsproj",
+      "compileSeconds": 7.4,
+      "evaluationSeconds": 0.3,
+      "lines": 1276,
+      "fanIn": 4,
       "fanOut": 4
     },
     {
-      "project": "src/ToolUp.Platform.UI/ToolUp.Platform.UI.fsproj",
-      "compileSeconds": 9.9,
-      "evaluationSeconds": 0.3,
-      "lines": 1680,
-      "fanIn": 1,
+      "project": "src/ToolUp.Cli.Tests/ToolUp.Cli.Tests.fsproj",
+      "compileSeconds": 7.3,
+      "evaluationSeconds": 0.1,
+      "lines": 3772,
+      "fanIn": 0,
+      "fanOut": 4
+    },
+    {
+      "project": "src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj",
+      "compileSeconds": 7.3,
+      "evaluationSeconds": 0.1,
+      "lines": 21377,
+      "fanIn": 0,
       "fanOut": 1
     },
     {
-      "project": "src/AIProviders/Gemini/Gemini.fsproj",
-      "compileSeconds": 9.9,
+      "project": "src/ToolUp.Platform.Server.Scope/ToolUp.Platform.Server.Scope.fsproj",
+      "compileSeconds": 7.3,
+      "evaluationSeconds": 0.1,
+      "lines": 18204,
+      "fanIn": 3,
+      "fanOut": 3
+    },
+    {
+      "project": "src/Cloud/Azure/ToolUp.Cloud.Azure.fsproj",
+      "compileSeconds": 7.2,
       "evaluationSeconds": 0.4,
-      "lines": 853,
-      "fanIn": 3,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.KnowledgeBase.Client/ToolUp.KnowledgeBase.Client.fsproj",
-      "compileSeconds": 9.9,
-      "evaluationSeconds": 0.2,
-      "lines": 3693,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Offline.Server/ToolUp.Offline.Server.fsproj",
-      "compileSeconds": 9.8,
-      "evaluationSeconds": 0.1,
-      "lines": 398,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/DataSources/Snowflake/ToolUp.DataSources.Snowflake.fsproj",
-      "compileSeconds": 9.7,
-      "evaluationSeconds": 0.2,
-      "lines": 443,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/AuditSinks/S3Archive/ToolUp.AuditSinks.S3Archive.fsproj",
-      "compileSeconds": 9.7,
-      "evaluationSeconds": 0.1,
-      "lines": 180,
-      "fanIn": 3,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Platform.DataSubject.Tests/ToolUp.Platform.DataSubject.Tests.fsproj",
-      "compileSeconds": 9.7,
-      "evaluationSeconds": 0.2,
-      "lines": 968,
+      "lines": 0,
       "fanIn": 0,
-      "fanOut": 2
+      "fanOut": 4
     },
     {
-      "project": "src/RateLimit/Redis/ToolUp.RateLimit.Redis.fsproj",
-      "compileSeconds": 9.5,
-      "evaluationSeconds": 0.2,
-      "lines": 275,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/DataSources/Parquet/ToolUp.DataSources.Parquet.fsproj",
-      "compileSeconds": 9.5,
+      "project": "src/ToolUp.Facts.Client/ToolUp.Facts.Client.fsproj",
+      "compileSeconds": 7.2,
       "evaluationSeconds": 0.1,
-      "lines": 1089,
-      "fanIn": 2,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.AICookbooks.Tests/ToolUp.AICookbooks.Tests.fsproj",
-      "compileSeconds": 9.4,
-      "evaluationSeconds": 0.1,
-      "lines": 759,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Graph.Projection/ToolUp.Graph.Projection.fsproj",
-      "compileSeconds": 9.4,
-      "evaluationSeconds": 0.1,
-      "lines": 738,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Platform.Build/ToolUp.Platform.Build.fsproj",
-      "compileSeconds": 9.4,
-      "evaluationSeconds": 0.1,
-      "lines": 9028,
-      "fanIn": 2,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Platform.Classification.Tests/ToolUp.Platform.Classification.Tests.fsproj",
-      "compileSeconds": 9.4,
-      "evaluationSeconds": 0.1,
-      "lines": 1178,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Platform.Testing/ToolUp.Platform.Testing.fsproj",
-      "compileSeconds": 9.4,
-      "evaluationSeconds": 0.2,
-      "lines": 2865,
-      "fanIn": 3,
-      "fanOut": 3
-    },
-    {
-      "project": "src/DataSources/Redshift/ToolUp.DataSources.Redshift.fsproj",
-      "compileSeconds": 9.4,
-      "evaluationSeconds": 0.3,
-      "lines": 513,
+      "lines": 1328,
       "fanIn": 1,
       "fanOut": 3
-    },
-    {
-      "project": "src/NotificationChannels/Email/Smtp/ToolUp.NotificationChannels.Email.Smtp.fsproj",
-      "compileSeconds": 9.3,
-      "evaluationSeconds": 0.1,
-      "lines": 410,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/DataSources/GoogleAnalytics/Client/ToolUp.DataSources.GoogleAnalytics.Client.fsproj",
-      "compileSeconds": 9.3,
-      "evaluationSeconds": 0.1,
-      "lines": 431,
-      "fanIn": 0,
-      "fanOut": 2
     },
     {
       "project": "src/Metrics/OpenTelemetry/ToolUp.Metrics.OpenTelemetry.fsproj",
-      "compileSeconds": 9.3,
-      "evaluationSeconds": 0.1,
-      "lines": 377,
+      "compileSeconds": 6.8,
+      "evaluationSeconds": 0.3,
+      "lines": 378,
       "fanIn": 4,
       "fanOut": 2
     },
     {
-      "project": "src/SparseIndices/Postgres/PostgresFullTextIndex.fsproj",
-      "compileSeconds": 9.3,
-      "evaluationSeconds": 0.1,
-      "lines": 785,
-      "fanIn": 2,
-      "fanOut": 3
+      "project": "src/Hosts/AzureFunctions/ToolUp.Hosts.AzureFunctions.fsproj",
+      "compileSeconds": 6.7,
+      "evaluationSeconds": 0.4,
+      "lines": 192,
+      "fanIn": 0,
+      "fanOut": 1
     },
     {
-      "project": "src/DataSources/Csv/ToolUp.DataSources.Csv.fsproj",
-      "compileSeconds": 9.2,
+      "project": "src/DataSources/GitHub/GitHubApp.fsproj",
+      "compileSeconds": 6.7,
       "evaluationSeconds": 0.2,
-      "lines": 433,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/JobSchedulers/Quartz/ToolUp.JobSchedulers.Quartz.fsproj",
-      "compileSeconds": 9.2,
-      "evaluationSeconds": 0.2,
-      "lines": 1080,
+      "lines": 398,
       "fanIn": 1,
       "fanOut": 2
-    },
-    {
-      "project": "src/AuthProviders/GitHub/GitHubAuth.fsproj",
-      "compileSeconds": 9.1,
-      "evaluationSeconds": 0.2,
-      "lines": 1122,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/FactStores/Postgres/PostgresFactStore.fsproj",
-      "compileSeconds": 9.1,
-      "evaluationSeconds": 0.2,
-      "lines": 3620,
-      "fanIn": 3,
-      "fanOut": 4
     },
     {
       "project": "src/ToolUp.Facts.Core/ToolUp.Facts.Core.fsproj",
-      "compileSeconds": 9,
+      "compileSeconds": 6.7,
       "evaluationSeconds": 0.1,
       "lines": 4880,
       "fanIn": 3,
       "fanOut": 1
     },
     {
-      "project": "src/SvgRasterizers/Skia.Tests/ToolUp.OpenXml.SvgRasterizer.Skia.Tests.fsproj",
-      "compileSeconds": 8.9,
-      "evaluationSeconds": 0.1,
-      "lines": 458,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Feliz.AgGrid.Enterprise/Feliz.AgGrid.Enterprise.fsproj",
-      "compileSeconds": 8.9,
-      "evaluationSeconds": 0.1,
-      "lines": 1165,
-      "fanIn": 0,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ModelProviders/Reference/ToolUp.ModelProviders.Reference.fsproj",
-      "compileSeconds": 8.9,
-      "evaluationSeconds": 0.1,
-      "lines": 365,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/DataSources/Sql/ToolUp.DataSources.Sql.fsproj",
-      "compileSeconds": 8.8,
-      "evaluationSeconds": 0.1,
-      "lines": 771,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Facts.Presentation.Server/ToolUp.Facts.Presentation.Server.fsproj",
-      "compileSeconds": 8.8,
-      "evaluationSeconds": 0.2,
-      "lines": 4069,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ShareTokenStoreDecorators/RevokeOnIssuerRemoved/ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved.fsproj",
-      "compileSeconds": 8.8,
-      "evaluationSeconds": 0.1,
-      "lines": 152,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/DataSources/BigQuery/ToolUp.DataSources.BigQuery.fsproj",
-      "compileSeconds": 8.7,
-      "evaluationSeconds": 0.1,
-      "lines": 283,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Facts.Presentation/ToolUp.Facts.Presentation.fsproj",
-      "compileSeconds": 8.7,
-      "evaluationSeconds": 0.1,
-      "lines": 2327,
-      "fanIn": 3,
-      "fanOut": 2
-    },
-    {
-      "project": "src/VoiceProviders/Whisper/WhisperTranscriptionProvider.fsproj",
-      "compileSeconds": 8.7,
-      "evaluationSeconds": 0.1,
-      "lines": 331,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/VectorStores/Hnsw/HnswVectorStore.fsproj",
-      "compileSeconds": 8.7,
-      "evaluationSeconds": 0.2,
-      "lines": 1146,
-      "fanIn": 3,
-      "fanOut": 2
-    },
-    {
-      "project": "src/AIProviders/OpenAI/OpenAIProvider.fsproj",
-      "compileSeconds": 8.7,
-      "evaluationSeconds": 0.4,
-      "lines": 899,
-      "fanIn": 4,
-      "fanOut": 3
-    },
-    {
-      "project": "src/AIProviders/Claude/ClaudeAIProvider.fsproj",
-      "compileSeconds": 8.7,
-      "evaluationSeconds": 0.4,
-      "lines": 1274,
-      "fanIn": 4,
-      "fanOut": 4
-    },
-    {
-      "project": "src/IngestionQueues/Redis/ToolUp.IngestionQueues.Redis.fsproj",
-      "compileSeconds": 8.5,
-      "evaluationSeconds": 0.2,
-      "lines": 552,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/AuditSinks/AzureBlobArchive/ToolUp.AuditSinks.AzureBlobArchive.fsproj",
-      "compileSeconds": 8.4,
-      "evaluationSeconds": 0.1,
-      "lines": 171,
-      "fanIn": 2,
-      "fanOut": 2
-    },
-    {
-      "project": "src/DataSources/Synapse/ToolUp.DataSources.Synapse.fsproj",
-      "compileSeconds": 8.4,
-      "evaluationSeconds": 0.1,
-      "lines": 464,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Platform.Server.Scope/ToolUp.Platform.Server.Scope.fsproj",
-      "compileSeconds": 8.4,
-      "evaluationSeconds": 0.2,
-      "lines": 18110,
-      "fanIn": 3,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Facts.Client/ToolUp.Facts.Client.fsproj",
-      "compileSeconds": 8.3,
-      "evaluationSeconds": 0.2,
-      "lines": 1328,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/AuditSinks/ChainedLedger/ToolUp.AuditSinks.ChainedLedger.fsproj",
-      "compileSeconds": 8.2,
-      "evaluationSeconds": 0.2,
-      "lines": 2849,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Offline.Client/ToolUp.Offline.Client.fsproj",
-      "compileSeconds": 8.1,
-      "evaluationSeconds": 0.2,
-      "lines": 1473,
-      "fanIn": 0,
-      "fanOut": 3
-    },
-    {
       "project": "src/ToolUp.Cli/ToolUp.Cli.fsproj",
-      "compileSeconds": 8.1,
+      "compileSeconds": 6.7,
       "evaluationSeconds": 0.1,
       "lines": 4459,
       "fanIn": 1,
       "fanOut": 0
     },
     {
-      "project": "src/ToolUp.AI.Wire.Tests/ToolUp.AI.Wire.Tests.fsproj",
-      "compileSeconds": 8,
-      "evaluationSeconds": 0.2,
-      "lines": 2741,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/DataSources/Athena/ToolUp.DataSources.Athena.fsproj",
-      "compileSeconds": 7.9,
-      "evaluationSeconds": 0.1,
-      "lines": 437,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/EntityStores/Postgres/PostgresEntityStore.fsproj",
-      "compileSeconds": 7.9,
-      "evaluationSeconds": 0.1,
-      "lines": 894,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Feliz.AgCharts/Feliz.AgCharts.fsproj",
-      "compileSeconds": 7.9,
-      "evaluationSeconds": 0.2,
-      "lines": 868,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "src/NotificationChannels/Email/SendGrid/ToolUp.NotificationChannels.Email.SendGrid.fsproj",
-      "compileSeconds": 7.9,
-      "evaluationSeconds": 0.1,
-      "lines": 368,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj",
-      "compileSeconds": 7.8,
-      "evaluationSeconds": 0.2,
-      "lines": 3662,
-      "fanIn": 13,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ContentAuthoring/ToolUp.ContentAuthoring.fsproj",
-      "compileSeconds": 7.6,
-      "evaluationSeconds": 0.1,
-      "lines": 736,
-      "fanIn": 1,
-      "fanOut": 5
-    },
-    {
-      "project": "src/OcrProviders/Tesseract/ToolUp.OcrProviders.Tesseract.fsproj",
-      "compileSeconds": 7.4,
-      "evaluationSeconds": 0.2,
-      "lines": 749,
-      "fanIn": 2,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.RAG.Benchmarks/ToolUp.RAG.Benchmarks.fsproj",
-      "compileSeconds": 7.3,
-      "evaluationSeconds": 0.5,
-      "lines": 4057,
-      "fanIn": 0,
-      "fanOut": 14
-    },
-    {
-      "project": "src/ToolUp.Platform.Server.Audit/ToolUp.Platform.Server.Audit.fsproj",
-      "compileSeconds": 7.3,
-      "evaluationSeconds": 0.1,
-      "lines": 12573,
-      "fanIn": 1,
-      "fanOut": 5
-    },
-    {
-      "project": "src/ToolUp.AI.Wire.Fable.Tests/ToolUp.AI.Wire.Fable.Tests.fsproj",
-      "compileSeconds": 7.3,
-      "evaluationSeconds": 0.1,
-      "lines": 2309,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Hosts/EdgeCache/ToolUp.Hosts.EdgeCache.fsproj",
-      "compileSeconds": 7.2,
-      "evaluationSeconds": 0.1,
-      "lines": 411,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/AIProviders/Copilot/CopilotAIProvider.fsproj",
-      "compileSeconds": 7.2,
-      "evaluationSeconds": 0.1,
-      "lines": 928,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.AI.Wire.Conformance/ToolUp.AI.Wire.Conformance.fsproj",
-      "compileSeconds": 7.2,
-      "evaluationSeconds": 0.2,
-      "lines": 2417,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ContainerSchedulers/DockerLocal/ToolUp.ContainerSchedulers.DockerLocal.fsproj",
-      "compileSeconds": 7.2,
-      "evaluationSeconds": 0.1,
-      "lines": 634,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/AuditSinks/SplunkHec/ToolUp.AuditSinks.SplunkHec.fsproj",
-      "compileSeconds": 7.2,
-      "evaluationSeconds": 0.1,
-      "lines": 192,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/AIExtensions/UiAwareness/ToolUp.AI.UiAwareness.Server/ToolUp.AI.UiAwareness.Server.fsproj",
-      "compileSeconds": 7.1,
-      "evaluationSeconds": 0.1,
-      "lines": 190,
-      "fanIn": 1,
-      "fanOut": 4
-    },
-    {
-      "project": "src/ArtefactSigning/AzureKeyVault/AzureKeyVaultArtefactSigning.fsproj",
-      "compileSeconds": 7.1,
-      "evaluationSeconds": 0.1,
-      "lines": 143,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.OpenXml.Spreadsheet.Tests/ToolUp.OpenXml.Spreadsheet.Tests.fsproj",
-      "compileSeconds": 7.1,
-      "evaluationSeconds": 0.1,
-      "lines": 1238,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.OpenXml/ToolUp.OpenXml.fsproj",
-      "compileSeconds": 7,
-      "evaluationSeconds": 0.1,
-      "lines": 2659,
-      "fanIn": 4,
-      "fanOut": 0
-    },
-    {
-      "project": "src/DataSources/Excel/ToolUp.DataSources.Excel.fsproj",
-      "compileSeconds": 7,
-      "evaluationSeconds": 0.1,
-      "lines": 642,
-      "fanIn": 1,
-      "fanOut": 4
-    },
-    {
-      "project": "src/ToolUp.AI.Wire.Conformance/Fable/ToolUp.AI.Wire.Conformance.Fable.fsproj",
-      "compileSeconds": 6.8,
-      "evaluationSeconds": 0.1,
-      "lines": 2475,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Tabular.Tests/ToolUp.Tabular.Tests.fsproj",
-      "compileSeconds": 6.7,
-      "evaluationSeconds": 0.1,
-      "lines": 1570,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Stripe.TierToken/ToolUp.Stripe.TierToken.fsproj",
+      "project": "src/NotificationChannels/Redis/ToolUp.NotificationChannels.Redis.fsproj",
       "compileSeconds": 6.6,
       "evaluationSeconds": 0.1,
-      "lines": 642,
+      "lines": 641,
       "fanIn": 1,
-      "fanOut": 0
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Graph.Projection/ToolUp.Graph.Projection.fsproj",
+      "compileSeconds": 6.6,
+      "evaluationSeconds": 0.2,
+      "lines": 741,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/Calendar/CalDAV/ToolUp.Calendar.CalDAV.fsproj",
+      "compileSeconds": 6.5,
+      "evaluationSeconds": 0.2,
+      "lines": 550,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/DataSources/GoogleAnalytics/Client/ToolUp.DataSources.GoogleAnalytics.Client.fsproj",
+      "compileSeconds": 6.5,
+      "evaluationSeconds": 0.1,
+      "lines": 431,
+      "fanIn": 0,
+      "fanOut": 2
     },
     {
       "project": "src/ToolUp.Algorithms.Client/ToolUp.Algorithms.Client.fsproj",
-      "compileSeconds": 6.6,
-      "evaluationSeconds": 0.2,
+      "compileSeconds": 6.5,
+      "evaluationSeconds": 0.1,
       "lines": 37,
       "fanIn": 0,
       "fanOut": 3
     },
     {
-      "project": "src/ToolUp.Remoting.Analyzers/ToolUp.Remoting.Analyzers.fsproj",
+      "project": "src/Cloud/Gcp/ToolUp.Cloud.Gcp.fsproj",
       "compileSeconds": 6.5,
-      "evaluationSeconds": 0.1,
-      "lines": 1223,
-      "fanIn": 1,
-      "fanOut": 0
-    },
-    {
-      "project": "src/ToolUp.Voice.Tests/ToolUp.Voice.Tests.fsproj",
-      "compileSeconds": 6.5,
-      "evaluationSeconds": 0.1,
-      "lines": 366,
-      "fanIn": 0,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ArtefactSigning/GoogleCloudKms/GoogleCloudKmsArtefactSigning.fsproj",
-      "compileSeconds": 6.5,
-      "evaluationSeconds": 0.2,
-      "lines": 121,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj",
-      "compileSeconds": 6.5,
-      "evaluationSeconds": 0.2,
-      "lines": 1708,
-      "fanIn": 2,
-      "fanOut": 1
-    },
-    {
-      "project": "src/VoiceProviders/AzureSpeech/AzureSpeechTranscriptionProvider.fsproj",
-      "compileSeconds": 6.5,
-      "evaluationSeconds": 0.2,
-      "lines": 365,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/Secrets/GcpSecretManager/ToolUp.Secrets.GcpSecretManager.fsproj",
-      "compileSeconds": 6.4,
-      "evaluationSeconds": 0.2,
-      "lines": 704,
-      "fanIn": 3,
-      "fanOut": 1
-    },
-    {
-      "project": "src/NotificationChannels/Push/WebPush/ToolUp.NotificationChannels.Push.WebPush.fsproj",
-      "compileSeconds": 6.3,
-      "evaluationSeconds": 0.1,
-      "lines": 322,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/AuthProviders/OidcClient/OidcClient.fsproj",
-      "compileSeconds": 6.3,
-      "evaluationSeconds": 0.1,
-      "lines": 3904,
-      "fanIn": 2,
-      "fanOut": 3
-    },
-    {
-      "project": "src/ToolUp.Client.ModelViewer/ToolUp.Client.ModelViewer.fsproj",
-      "compileSeconds": 6.3,
-      "evaluationSeconds": 0.1,
-      "lines": 230,
-      "fanIn": 0,
-      "fanOut": 0
-    },
-    {
-      "project": "src/RateLimit/AzureTableStorage/ToolUp.RateLimit.AzureTableStorage.fsproj",
-      "compileSeconds": 6.3,
-      "evaluationSeconds": 0.1,
-      "lines": 289,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Reporting.Core/ToolUp.Reporting.Core.fsproj",
-      "compileSeconds": 6.2,
-      "evaluationSeconds": 0.2,
-      "lines": 1593,
-      "fanIn": 5,
-      "fanOut": 1
-    },
-    {
-      "project": "samples/ProviderProfileBYOK/src/ProviderProfileBYOK.Server/ProviderProfileBYOK.Server.fsproj",
-      "compileSeconds": 6.2,
-      "evaluationSeconds": 0.1,
-      "lines": 41,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/AI.Samples/ToolUp.AI.SampleClientTool.Server/ToolUp.AI.SampleClientTool.Server.fsproj",
-      "compileSeconds": 6.2,
-      "evaluationSeconds": 0.1,
-      "lines": 108,
-      "fanIn": 1,
-      "fanOut": 5
-    },
-    {
-      "project": "src/Storage/GoogleCloudStorage/GoogleCloudStorage.fsproj",
-      "compileSeconds": 6.1,
-      "evaluationSeconds": 0.3,
-      "lines": 877,
-      "fanIn": 3,
-      "fanOut": 1
-    },
-    {
-      "project": "src/AICookbooks/AgChart/AgChartAICookbook.fsproj",
-      "compileSeconds": 6.1,
-      "evaluationSeconds": 0.1,
-      "lines": 156,
-      "fanIn": 2,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Remoting.Generator/ToolUp.Remoting.Generator.fsproj",
-      "compileSeconds": 6.1,
-      "evaluationSeconds": 0.2,
-      "lines": 3257,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "src/Feliz.AgGrid/Feliz.AgGrid.fsproj",
-      "compileSeconds": 6,
-      "evaluationSeconds": 0.2,
-      "lines": 1884,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "src/ToolUp.Facts.Shared/ToolUp.Facts.Shared.fsproj",
-      "compileSeconds": 5.9,
-      "evaluationSeconds": 0.1,
-      "lines": 1468,
-      "fanIn": 3,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Reporting/Docx.Tests/ToolUp.Reporting.Docx.Tests.fsproj",
-      "compileSeconds": 5.9,
-      "evaluationSeconds": 0.2,
-      "lines": 1338,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Reporting/Xlsx.Tests/ToolUp.Reporting.Xlsx.Tests.fsproj",
-      "compileSeconds": 5.8,
-      "evaluationSeconds": 0.1,
-      "lines": 949,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/SparseIndices/Snowball/ToolUp.SparseIndices.Snowball.fsproj",
-      "compileSeconds": 5.8,
-      "evaluationSeconds": 0.1,
-      "lines": 1315,
-      "fanIn": 2,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj",
-      "compileSeconds": 5.8,
-      "evaluationSeconds": 0.1,
-      "lines": 1307,
-      "fanIn": 2,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Tabular/ToolUp.Tabular.fsproj",
-      "compileSeconds": 5.8,
-      "evaluationSeconds": 0.1,
-      "lines": 1794,
-      "fanIn": 4,
-      "fanOut": 0
-    },
-    {
-      "project": "src/ContentScanners/ClamAv/ToolUp.ContentScanners.ClamAv.fsproj",
-      "compileSeconds": 5.7,
-      "evaluationSeconds": 0.1,
-      "lines": 322,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj",
-      "compileSeconds": 5.7,
-      "evaluationSeconds": 0.2,
-      "lines": 449,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "src/Reporting/HtmlPdf.Tests/ToolUp.Reporting.HtmlPdf.Tests.fsproj",
-      "compileSeconds": 5.6,
-      "evaluationSeconds": 0.1,
-      "lines": 814,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/AuthProviders/ClerkUI/ClerkUI.fsproj",
-      "compileSeconds": 5.6,
-      "evaluationSeconds": 0.1,
-      "lines": 143,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.AuthProviders.Oidc.Shared/ToolUp.AuthProviders.Oidc.Shared.fsproj",
-      "compileSeconds": 5.5,
-      "evaluationSeconds": 0.1,
-      "lines": 439,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.OpenXml.Spreadsheet/ToolUp.OpenXml.Spreadsheet.fsproj",
-      "compileSeconds": 5.4,
-      "evaluationSeconds": 0.1,
-      "lines": 914,
-      "fanIn": 1,
-      "fanOut": 0
-    },
-    {
-      "project": "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj",
-      "compileSeconds": 5.4,
-      "evaluationSeconds": 0.1,
-      "lines": 1281,
-      "fanIn": 7,
-      "fanOut": 1
-    },
-    {
-      "project": "src/AIProviders/Claude.Client/ClaudeAIProvider.Client.fsproj",
-      "compileSeconds": 5.3,
-      "evaluationSeconds": 0.1,
-      "lines": 18,
-      "fanIn": 0,
-      "fanOut": 2
-    },
-    {
-      "project": "src/ToolUp.Voice.Core/ToolUp.Voice.Core.fsproj",
-      "compileSeconds": 5.3,
-      "evaluationSeconds": 0.1,
-      "lines": 246,
-      "fanIn": 4,
-      "fanOut": 0
-    },
-    {
-      "project": "src/ToolUp.Experiments.Core/ToolUp.Experiments.Core.fsproj",
-      "compileSeconds": 5.3,
-      "evaluationSeconds": 0.2,
-      "lines": 112,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "samples/HelloWorld-AOT/HelloWorld.AOT.Contract/HelloWorld.AOT.Contract.fsproj",
-      "compileSeconds": 5.3,
-      "evaluationSeconds": 0.1,
-      "lines": 1851,
-      "fanIn": 2,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Cli.Tests/ToolUp.Cli.Tests.fsproj",
-      "compileSeconds": 5.2,
-      "evaluationSeconds": 0.2,
-      "lines": 3755,
+      "evaluationSeconds": 0.5,
+      "lines": 0,
       "fanIn": 0,
       "fanOut": 4
     },
     {
-      "project": "src/Storage/AzureBlobStorage/AzureBlobStorage.fsproj",
-      "compileSeconds": 5.2,
-      "evaluationSeconds": 0.3,
-      "lines": 660,
-      "fanIn": 4,
-      "fanOut": 1
+      "project": "src/Feliz.AgGrid.Enterprise/Feliz.AgGrid.Enterprise.fsproj",
+      "compileSeconds": 6.4,
+      "evaluationSeconds": 0.1,
+      "lines": 1165,
+      "fanIn": 0,
+      "fanOut": 3
     },
     {
-      "project": "src/Media/FFmpeg/ToolUp.Media.FFmpeg.fsproj",
-      "compileSeconds": 5.1,
+      "project": "src/SvgRasterizers/Skia.Tests/ToolUp.OpenXml.SvgRasterizer.Skia.Tests.fsproj",
+      "compileSeconds": 6.3,
       "evaluationSeconds": 0.1,
-      "lines": 371,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Stripe.Server/ToolUp.Stripe.Server.fsproj",
-      "compileSeconds": 5.1,
-      "evaluationSeconds": 0.1,
-      "lines": 1192,
-      "fanIn": 1,
-      "fanOut": 2
-    },
-    {
-      "project": "src/Media/CloudTranscode/ToolUp.Media.CloudTranscode.fsproj",
-      "compileSeconds": 5.1,
-      "evaluationSeconds": 0.1,
-      "lines": 52,
+      "lines": 458,
       "fanIn": 0,
       "fanOut": 1
     },
     {
-      "project": "src/ArtefactSigning/AwsKms/AwsKmsArtefactSigning.fsproj",
-      "compileSeconds": 5.1,
-      "evaluationSeconds": 0.2,
-      "lines": 123,
-      "fanIn": 1,
-      "fanOut": 1
+      "project": "src/ToolUp.Offline.Client/ToolUp.Offline.Client.fsproj",
+      "compileSeconds": 6.3,
+      "evaluationSeconds": 0.1,
+      "lines": 1473,
+      "fanIn": 0,
+      "fanOut": 3
     },
     {
-      "project": "src/ToolUp.Graph.AGE/ToolUp.Graph.AGE.fsproj",
-      "compileSeconds": 4.9,
-      "evaluationSeconds": 0.1,
-      "lines": 1251,
-      "fanIn": 1,
+      "project": "src/Hosts/GoogleCloudFunctions/ToolUp.Hosts.GoogleCloudFunctions.fsproj",
+      "compileSeconds": 6.3,
+      "evaluationSeconds": 0.4,
+      "lines": 145,
+      "fanIn": 0,
       "fanOut": 1
     },
     {
       "project": "src/ToolUp.RAG.Core/ToolUp.RAG.Core.fsproj",
-      "compileSeconds": 4.8,
+      "compileSeconds": 6.2,
       "evaluationSeconds": 0.1,
       "lines": 950,
       "fanIn": 8,
       "fanOut": 1
     },
     {
-      "project": "samples/NativeClient/NativeClient.fsproj",
-      "compileSeconds": 4.8,
-      "evaluationSeconds": 0.2,
-      "lines": 117,
+      "project": "src/Hosts/DeliveredEgress/ToolUp.Hosts.DeliveredEgress.fsproj",
+      "compileSeconds": 6.2,
+      "evaluationSeconds": 0.1,
+      "lines": 560,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj",
+      "compileSeconds": 6.2,
+      "evaluationSeconds": 0.1,
+      "lines": 3662,
+      "fanIn": 13,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Platform.Server.Audit/ToolUp.Platform.Server.Audit.fsproj",
+      "compileSeconds": 6.1,
+      "evaluationSeconds": 0.1,
+      "lines": 12659,
+      "fanIn": 1,
+      "fanOut": 5
+    },
+    {
+      "project": "src/AuthProviders/ClerkUI/ClerkUI.fsproj",
+      "compileSeconds": 6.1,
+      "evaluationSeconds": 0.1,
+      "lines": 143,
       "fanIn": 0,
-      "fanOut": 1
+      "fanOut": 2
     },
     {
-      "project": "src/Webhooks/ToolUp.Webhooks.Server/ToolUp.Webhooks.Server.fsproj",
-      "compileSeconds": 4.8,
-      "evaluationSeconds": 0.1,
-      "lines": 192,
-      "fanIn": 2,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Algorithms.Core/ToolUp.Algorithms.Core.fsproj",
-      "compileSeconds": 4.8,
-      "evaluationSeconds": 0.1,
-      "lines": 1080,
-      "fanIn": 5,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Reporting/HtmlPdf/ToolUp.Reporting.HtmlPdf.fsproj",
-      "compileSeconds": 4.7,
-      "evaluationSeconds": 0.2,
-      "lines": 339,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/TimeSeriesStores/Timescale/TimescaleTimeSeriesStore.fsproj",
-      "compileSeconds": 4.7,
-      "evaluationSeconds": 0.2,
-      "lines": 199,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Sdk/ToolUp.Sdk.fsproj",
-      "compileSeconds": 4.7,
-      "evaluationSeconds": 0.1,
+      "project": "src/Cloud/Aws/ToolUp.Cloud.Aws.fsproj",
+      "compileSeconds": 5.9,
+      "evaluationSeconds": 0.4,
       "lines": 0,
       "fanIn": 0,
-      "fanOut": 0
+      "fanOut": 4
+    },
+    {
+      "project": "src/AIProviders/Claude.Client/ClaudeAIProvider.Client.fsproj",
+      "compileSeconds": 5.8,
+      "evaluationSeconds": 0.1,
+      "lines": 18,
+      "fanIn": 0,
+      "fanOut": 2
     },
     {
       "project": "src/Storage/AwsS3Storage/AwsS3Storage.fsproj",
-      "compileSeconds": 4.6,
-      "evaluationSeconds": 0.3,
+      "compileSeconds": 5.7,
+      "evaluationSeconds": 0.5,
       "lines": 785,
       "fanIn": 3,
       "fanOut": 1
     },
     {
-      "project": "src/AuthProviders/EntraDirectory/EntraDirectory.fsproj",
-      "compileSeconds": 4.6,
+      "project": "src/ToolUp.Forms.Core/ToolUp.Forms.Core.fsproj",
+      "compileSeconds": 5.7,
       "evaluationSeconds": 0.2,
-      "lines": 564,
-      "fanIn": 0,
-      "fanOut": 1
-    },
-    {
-      "project": "src/AIExtensions/UiAwareness/ToolUp.AI.UiAwareness.Core/ToolUp.AI.UiAwareness.Core.fsproj",
-      "compileSeconds": 4.6,
-      "evaluationSeconds": 0.1,
-      "lines": 49,
-      "fanIn": 3,
-      "fanOut": 0
-    },
-    {
-      "project": "src/Secrets/AwsSecretsManager/AwsSecretsManager.fsproj",
-      "compileSeconds": 4.3,
-      "evaluationSeconds": 0.1,
-      "lines": 318,
-      "fanIn": 3,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Offline.Core/ToolUp.Offline.Core.fsproj",
-      "compileSeconds": 4.1,
-      "evaluationSeconds": 0.1,
-      "lines": 554,
-      "fanIn": 3,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Workflow.Core/ToolUp.Workflow.Core.fsproj",
-      "compileSeconds": 4.1,
-      "evaluationSeconds": 0.1,
-      "lines": 78,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "src/ToolUp.Experiments.Server/ToolUp.Experiments.Server.fsproj",
-      "compileSeconds": 4,
-      "evaluationSeconds": 0.1,
-      "lines": 106,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/SvgRasterizers/Skia/ToolUp.OpenXml.SvgRasterizer.Skia.fsproj",
-      "compileSeconds": 4,
-      "evaluationSeconds": 0.1,
-      "lines": 139,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.RAG.StaticCorpus.Core/ToolUp.RAG.StaticCorpus.Core.fsproj",
-      "compileSeconds": 4,
-      "evaluationSeconds": 0.2,
-      "lines": 215,
-      "fanIn": 3,
-      "fanOut": 0
-    },
-    {
-      "project": "src/TelemetrySinks/Ga4/Ga4TelemetrySink.fsproj",
-      "compileSeconds": 4,
-      "evaluationSeconds": 0.1,
-      "lines": 66,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/SparseIndices/Cjk/ToolUp.SparseIndices.Cjk.fsproj",
-      "compileSeconds": 4,
-      "evaluationSeconds": 0.2,
-      "lines": 156,
-      "fanIn": 2,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.Graph.Neo4j/ToolUp.Graph.Neo4j.fsproj",
-      "compileSeconds": 3.8,
-      "evaluationSeconds": 0.1,
-      "lines": 806,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/Reporting/Docx/ToolUp.Reporting.Docx.fsproj",
-      "compileSeconds": 3.7,
-      "evaluationSeconds": 0.1,
-      "lines": 840,
-      "fanIn": 2,
-      "fanOut": 2
-    },
-    {
-      "project": "src/AuthProviders/GoogleIdentityClient/GoogleIdentityClient.fsproj",
-      "compileSeconds": 3.7,
-      "evaluationSeconds": 0.1,
-      "lines": 945,
-      "fanIn": 1,
-      "fanOut": 3
-    },
-    {
-      "project": "src/Reporting/Xlsx/ToolUp.Reporting.Xlsx.fsproj",
-      "compileSeconds": 3.7,
-      "evaluationSeconds": 0.1,
-      "lines": 395,
-      "fanIn": 1,
-      "fanOut": 1
-    },
-    {
-      "project": "src/ToolUp.BrandKit/ToolUp.BrandKit.fsproj",
-      "compileSeconds": 3.5,
-      "evaluationSeconds": 0.1,
-      "lines": 1014,
-      "fanIn": 2,
-      "fanOut": 0
-    },
-    {
-      "project": "src/AI.Samples/ToolUp.AI.SampleClientTool.Core/ToolUp.AI.SampleClientTool.Core.fsproj",
-      "compileSeconds": 3.5,
-      "evaluationSeconds": 0.2,
-      "lines": 56,
-      "fanIn": 3,
+      "lines": 1393,
+      "fanIn": 4,
       "fanOut": 1
     },
     {
       "project": "src/Observability/Datadog/ToolUp.Observability.Datadog.fsproj",
-      "compileSeconds": 3.3,
+      "compileSeconds": 5.6,
       "evaluationSeconds": 0.1,
       "lines": 383,
       "fanIn": 1,
       "fanOut": 1
     },
     {
-      "project": "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj",
-      "compileSeconds": 3.3,
-      "evaluationSeconds": 0.2,
-      "lines": 296,
-      "fanIn": 5,
+      "project": "src/ToolUp.Remoting.Generator/ToolUp.Remoting.Generator.fsproj",
+      "compileSeconds": 5.5,
+      "evaluationSeconds": 0.1,
+      "lines": 3257,
+      "fanIn": 2,
       "fanOut": 0
     },
     {
-      "project": "src/Secrets/HashiCorpVault/HashiCorpVault.fsproj",
-      "compileSeconds": 3.3,
+      "project": "src/ToolUp.Remoting.Analyzers/ToolUp.Remoting.Analyzers.fsproj",
+      "compileSeconds": 5.5,
       "evaluationSeconds": 0.1,
-      "lines": 402,
+      "lines": 1223,
       "fanIn": 1,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.Offline.Core/ToolUp.Offline.Core.fsproj",
+      "compileSeconds": 5.4,
+      "evaluationSeconds": 0.1,
+      "lines": 554,
+      "fanIn": 3,
       "fanOut": 1
     },
     {
-      "project": "src/ToolUp.Voice.Client/ToolUp.Voice.Client.fsproj",
-      "compileSeconds": 3.2,
-      "evaluationSeconds": 0.2,
-      "lines": 264,
+      "project": "src/ToolUp.Facts.Presentation/ToolUp.Facts.Presentation.fsproj",
+      "compileSeconds": 5.3,
+      "evaluationSeconds": 0.1,
+      "lines": 2327,
+      "fanIn": 3,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Platform.Classification.Tests/ToolUp.Platform.Classification.Tests.fsproj",
+      "compileSeconds": 5.2,
+      "evaluationSeconds": 0.1,
+      "lines": 1187,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/AuthProviders/PasskeyClient/PasskeyClient.fsproj",
+      "compileSeconds": 5.1,
+      "evaluationSeconds": 0.1,
+      "lines": 395,
       "fanIn": 0,
       "fanOut": 2
     },
     {
-      "project": "src/AIExtensions/UiAwareness/ToolUp.AI.UiAwareness.Client/ToolUp.AI.UiAwareness.Client.fsproj",
-      "compileSeconds": 3.1,
+      "project": "src/ToolUp.OpenXml.Spreadsheet.Tests/ToolUp.OpenXml.Spreadsheet.Tests.fsproj",
+      "compileSeconds": 5.1,
+      "evaluationSeconds": 0.1,
+      "lines": 1238,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.AuthProviders.Oidc.Shared/ToolUp.AuthProviders.Oidc.Shared.fsproj",
+      "compileSeconds": 5,
+      "evaluationSeconds": 0.1,
+      "lines": 439,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Scheduling.Core/ToolUp.Scheduling.Core.fsproj",
+      "compileSeconds": 5,
+      "evaluationSeconds": 0.1,
+      "lines": 1599,
+      "fanIn": 5,
+      "fanOut": 1
+    },
+    {
+      "project": "src/AuthProviders/OidcClient/OidcClient.fsproj",
+      "compileSeconds": 5,
       "evaluationSeconds": 0.2,
+      "lines": 3904,
+      "fanIn": 2,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.Reporting.Core/ToolUp.Reporting.Core.fsproj",
+      "compileSeconds": 4.8,
+      "evaluationSeconds": 0.1,
+      "lines": 1593,
+      "fanIn": 5,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Stripe.Server/ToolUp.Stripe.Server.fsproj",
+      "compileSeconds": 4.7,
+      "evaluationSeconds": 0.1,
+      "lines": 1192,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Facts.Shared/ToolUp.Facts.Shared.fsproj",
+      "compileSeconds": 4.7,
+      "evaluationSeconds": 0.1,
+      "lines": 1468,
+      "fanIn": 3,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Feliz.AgCharts/Feliz.AgCharts.fsproj",
+      "compileSeconds": 4.7,
+      "evaluationSeconds": 0.1,
+      "lines": 868,
+      "fanIn": 2,
+      "fanOut": 0
+    },
+    {
+      "project": "src/Rerankers/Local/ToolUp.Rerankers.Local.fsproj",
+      "compileSeconds": 4.6,
+      "evaluationSeconds": 0.5,
+      "lines": 210,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Stripe.TierToken/ToolUp.Stripe.TierToken.fsproj",
+      "compileSeconds": 4.5,
+      "evaluationSeconds": 0.1,
+      "lines": 642,
+      "fanIn": 1,
+      "fanOut": 0
+    },
+    {
+      "project": "src/AuthProviders/EntraDirectory/EntraDirectory.fsproj",
+      "compileSeconds": 4.5,
+      "evaluationSeconds": 0.2,
+      "lines": 564,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Voice.Tests/ToolUp.Voice.Tests.fsproj",
+      "compileSeconds": 4.4,
+      "evaluationSeconds": 0.1,
+      "lines": 366,
+      "fanIn": 0,
+      "fanOut": 3
+    },
+    {
+      "project": "src/Reporting/HtmlPdf/ToolUp.Reporting.HtmlPdf.fsproj",
+      "compileSeconds": 4.4,
+      "evaluationSeconds": 0.2,
+      "lines": 339,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Tabular/ToolUp.Tabular.fsproj",
+      "compileSeconds": 4.4,
+      "evaluationSeconds": 0.1,
+      "lines": 1794,
+      "fanIn": 4,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj",
+      "compileSeconds": 4.4,
+      "evaluationSeconds": 0.1,
+      "lines": 1708,
+      "fanIn": 2,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Secrets/GcpSecretManager/ToolUp.Secrets.GcpSecretManager.fsproj",
+      "compileSeconds": 4.1,
+      "evaluationSeconds": 0.1,
+      "lines": 704,
+      "fanIn": 3,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj",
+      "compileSeconds": 4.1,
+      "evaluationSeconds": 0.1,
+      "lines": 799,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "samples/HelloWorld-AOT/HelloWorld.AOT.Contract/HelloWorld.AOT.Contract.fsproj",
+      "compileSeconds": 4,
+      "evaluationSeconds": 0.1,
+      "lines": 1851,
+      "fanIn": 2,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Platform.UI/ToolUp.Platform.UI.fsproj",
+      "compileSeconds": 4,
+      "evaluationSeconds": 0.1,
+      "lines": 1680,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Feliz.AgGrid/Feliz.AgGrid.fsproj",
+      "compileSeconds": 3.9,
+      "evaluationSeconds": 0.1,
+      "lines": 1884,
+      "fanIn": 2,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.BrandKit/ToolUp.BrandKit.fsproj",
+      "compileSeconds": 3.8,
+      "evaluationSeconds": 0.1,
+      "lines": 1014,
+      "fanIn": 2,
+      "fanOut": 0
+    },
+    {
+      "project": "src/AIExtensions/UiAwareness/ToolUp.AI.UiAwareness.Client/ToolUp.AI.UiAwareness.Client.fsproj",
+      "compileSeconds": 3.7,
+      "evaluationSeconds": 0.1,
       "lines": 164,
       "fanIn": 1,
       "fanOut": 5
     },
     {
-      "project": "src/AI.Samples/ToolUp.AI.SampleClientTool.Client/ToolUp.AI.SampleClientTool.Client.fsproj",
-      "compileSeconds": 3,
+      "project": "src/Secrets/AzureKeyVault/AzureKeyVault.fsproj",
+      "compileSeconds": 3.7,
       "evaluationSeconds": 0.2,
+      "lines": 290,
+      "fanIn": 3,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.OpenXml/ToolUp.OpenXml.fsproj",
+      "compileSeconds": 3.7,
+      "evaluationSeconds": 0.1,
+      "lines": 2659,
+      "fanIn": 4,
+      "fanOut": 0
+    },
+    {
+      "project": "src/AuthProviders/GoogleDirectory/GoogleDirectory.fsproj",
+      "compileSeconds": 3.7,
+      "evaluationSeconds": 0.1,
+      "lines": 1171,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/AuthProviders/GoogleIdentityClient/GoogleIdentityClient.fsproj",
+      "compileSeconds": 3.6,
+      "evaluationSeconds": 0.1,
+      "lines": 945,
+      "fanIn": 1,
+      "fanOut": 3
+    },
+    {
+      "project": "src/ToolUp.Tabular.Tests/ToolUp.Tabular.Tests.fsproj",
+      "compileSeconds": 3.6,
+      "evaluationSeconds": 0.1,
+      "lines": 1570,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "samples/NativeClient/NativeClient.fsproj",
+      "compileSeconds": 3.6,
+      "evaluationSeconds": 0.1,
+      "lines": 117,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/VoiceProviders/Whisper/WhisperTranscriptionProvider.fsproj",
+      "compileSeconds": 3.6,
+      "evaluationSeconds": 0.1,
+      "lines": 331,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.Algorithms.Core/ToolUp.Algorithms.Core.fsproj",
+      "compileSeconds": 3.6,
+      "evaluationSeconds": 0.1,
+      "lines": 1080,
+      "fanIn": 5,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj",
+      "compileSeconds": 3.6,
+      "evaluationSeconds": 0.1,
+      "lines": 296,
+      "fanIn": 5,
+      "fanOut": 0
+    },
+    {
+      "project": "src/TelemetrySinks/Ga4/Ga4TelemetrySink.fsproj",
+      "compileSeconds": 3.6,
+      "evaluationSeconds": 0.1,
+      "lines": 66,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Reporting/HtmlPdf.Tests/ToolUp.Reporting.HtmlPdf.Tests.fsproj",
+      "compileSeconds": 3.5,
+      "evaluationSeconds": 0.3,
+      "lines": 814,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Storage/GoogleCloudStorage/GoogleCloudStorage.fsproj",
+      "compileSeconds": 3.5,
+      "evaluationSeconds": 0.3,
+      "lines": 877,
+      "fanIn": 3,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Voice.Client/ToolUp.Voice.Client.fsproj",
+      "compileSeconds": 3.4,
+      "evaluationSeconds": 0.1,
+      "lines": 264,
+      "fanIn": 0,
+      "fanOut": 2
+    },
+    {
+      "project": "src/Secrets/AwsSecretsManager/AwsSecretsManager.fsproj",
+      "compileSeconds": 3.4,
+      "evaluationSeconds": 0.1,
+      "lines": 318,
+      "fanIn": 3,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Reporting/Docx.Tests/ToolUp.Reporting.Docx.Tests.fsproj",
+      "compileSeconds": 3.4,
+      "evaluationSeconds": 0.1,
+      "lines": 1338,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Storage/AzureBlobStorage/AzureBlobStorage.fsproj",
+      "compileSeconds": 3.4,
+      "evaluationSeconds": 0.4,
+      "lines": 660,
+      "fanIn": 4,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Reporting/Docx/ToolUp.Reporting.Docx.fsproj",
+      "compileSeconds": 3.4,
+      "evaluationSeconds": 0.1,
+      "lines": 840,
+      "fanIn": 2,
+      "fanOut": 2
+    },
+    {
+      "project": "src/ToolUp.OpenXml.Spreadsheet/ToolUp.OpenXml.Spreadsheet.fsproj",
+      "compileSeconds": 3.4,
+      "evaluationSeconds": 0.1,
+      "lines": 914,
+      "fanIn": 1,
+      "fanOut": 0
+    },
+    {
+      "project": "src/AI.Samples/ToolUp.AI.SampleClientTool.Client/ToolUp.AI.SampleClientTool.Client.fsproj",
+      "compileSeconds": 3.4,
+      "evaluationSeconds": 0.1,
       "lines": 55,
       "fanIn": 0,
       "fanOut": 4
     },
     {
-      "project": "src/Webhooks/ToolUp.Webhooks.Core/ToolUp.Webhooks.Core.fsproj",
-      "compileSeconds": 3,
+      "project": "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj",
+      "compileSeconds": 3.3,
       "evaluationSeconds": 0.1,
-      "lines": 294,
+      "lines": 1281,
+      "fanIn": 7,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Reporting/Xlsx.Tests/ToolUp.Reporting.Xlsx.Tests.fsproj",
+      "compileSeconds": 3.3,
+      "evaluationSeconds": 0.1,
+      "lines": 949,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Webhooks/ToolUp.Webhooks.Server/ToolUp.Webhooks.Server.fsproj",
+      "compileSeconds": 3.3,
+      "evaluationSeconds": 0.1,
+      "lines": 192,
       "fanIn": 3,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Client.ModelViewer/ToolUp.Client.ModelViewer.fsproj",
+      "compileSeconds": 3.2,
+      "evaluationSeconds": 0.1,
+      "lines": 230,
+      "fanIn": 0,
       "fanOut": 0
     },
     {
-      "project": "src/Hosts/Docker/ToolUp.Hosts.Docker.fsproj",
-      "compileSeconds": 2.8,
+      "project": "src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj",
+      "compileSeconds": 3.1,
+      "evaluationSeconds": 0.1,
+      "lines": 449,
+      "fanIn": 2,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.Graph.AGE/ToolUp.Graph.AGE.fsproj",
+      "compileSeconds": 3.1,
+      "evaluationSeconds": 0.1,
+      "lines": 1251,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Sdk/ToolUp.Sdk.fsproj",
+      "compileSeconds": 3.1,
       "evaluationSeconds": 0.1,
       "lines": 0,
       "fanIn": 0,
       "fanOut": 0
+    },
+    {
+      "project": "src/Webhooks/ToolUp.Webhooks.Core/ToolUp.Webhooks.Core.fsproj",
+      "compileSeconds": 3.1,
+      "evaluationSeconds": 0.1,
+      "lines": 294,
+      "fanIn": 4,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj",
+      "compileSeconds": 3.1,
+      "evaluationSeconds": 0.1,
+      "lines": 1307,
+      "fanIn": 2,
+      "fanOut": 1
+    },
+    {
+      "project": "src/AIExtensions/UiAwareness/ToolUp.AI.UiAwareness.Core/ToolUp.AI.UiAwareness.Core.fsproj",
+      "compileSeconds": 3.1,
+      "evaluationSeconds": 0.1,
+      "lines": 49,
+      "fanIn": 3,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.Experiments.Server/ToolUp.Experiments.Server.fsproj",
+      "compileSeconds": 3.1,
+      "evaluationSeconds": 0.1,
+      "lines": 106,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Reporting/Xlsx/ToolUp.Reporting.Xlsx.fsproj",
+      "compileSeconds": 3.1,
+      "evaluationSeconds": 0.1,
+      "lines": 395,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/SparseIndices/Snowball/ToolUp.SparseIndices.Snowball.fsproj",
+      "compileSeconds": 3,
+      "evaluationSeconds": 0.1,
+      "lines": 1315,
+      "fanIn": 2,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ContentScanners/ClamAv/ToolUp.ContentScanners.ClamAv.fsproj",
+      "compileSeconds": 3,
+      "evaluationSeconds": 0.1,
+      "lines": 322,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Experiments.Core/ToolUp.Experiments.Core.fsproj",
+      "compileSeconds": 3,
+      "evaluationSeconds": 0.1,
+      "lines": 112,
+      "fanIn": 2,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.Voice.Core/ToolUp.Voice.Core.fsproj",
+      "compileSeconds": 3,
+      "evaluationSeconds": 0.1,
+      "lines": 246,
+      "fanIn": 4,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.Graph.Neo4j/ToolUp.Graph.Neo4j.fsproj",
+      "compileSeconds": 3,
+      "evaluationSeconds": 0.1,
+      "lines": 806,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/TimeSeriesStores/Timescale/TimescaleTimeSeriesStore.fsproj",
+      "compileSeconds": 2.9,
+      "evaluationSeconds": 0.1,
+      "lines": 199,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Secrets/HashiCorpVault/HashiCorpVault.fsproj",
+      "compileSeconds": 2.9,
+      "evaluationSeconds": 0.2,
+      "lines": 402,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/VoiceProviders/AzureSpeech/AzureSpeechTranscriptionProvider.fsproj",
+      "compileSeconds": 2.9,
+      "evaluationSeconds": 0.1,
+      "lines": 365,
+      "fanIn": 1,
+      "fanOut": 2
+    },
+    {
+      "project": "src/SparseIndices/Cjk/ToolUp.SparseIndices.Cjk.fsproj",
+      "compileSeconds": 2.8,
+      "evaluationSeconds": 0.1,
+      "lines": 156,
+      "fanIn": 2,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Workflow.Core/ToolUp.Workflow.Core.fsproj",
+      "compileSeconds": 2.8,
+      "evaluationSeconds": 0.1,
+      "lines": 78,
+      "fanIn": 2,
+      "fanOut": 0
+    },
+    {
+      "project": "src/AI.Samples/ToolUp.AI.SampleClientTool.Core/ToolUp.AI.SampleClientTool.Core.fsproj",
+      "compileSeconds": 2.7,
+      "evaluationSeconds": 0.1,
+      "lines": 56,
+      "fanIn": 3,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.AI.Wire.Conformance/Fable/ToolUp.AI.Wire.Conformance.Fable.fsproj",
+      "compileSeconds": 2.6,
+      "evaluationSeconds": 0.1,
+      "lines": 2475,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.AI.Wire.Conformance/ToolUp.AI.Wire.Conformance.fsproj",
+      "compileSeconds": 2.6,
+      "evaluationSeconds": 0.1,
+      "lines": 2417,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.AI.Wire.Tests/ToolUp.AI.Wire.Tests.fsproj",
+      "compileSeconds": 2.6,
+      "evaluationSeconds": 0.1,
+      "lines": 2741,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.Stripe.Webhook/ToolUp.Stripe.Webhook.fsproj",
+      "compileSeconds": 2.5,
+      "evaluationSeconds": 0.1,
+      "lines": 471,
+      "fanIn": 2,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.AI.Wire.Fable.Tests/ToolUp.AI.Wire.Fable.Tests.fsproj",
+      "compileSeconds": 2.5,
+      "evaluationSeconds": 0.1,
+      "lines": 2309,
+      "fanIn": 0,
+      "fanOut": 1
+    },
+    {
+      "project": "src/Hosts/Docker/ToolUp.Hosts.Docker.fsproj",
+      "compileSeconds": 2.2,
+      "evaluationSeconds": 0.1,
+      "lines": 0,
+      "fanIn": 0,
+      "fanOut": 0
+    },
+    {
+      "project": "src/ToolUp.Workflow.Server/ToolUp.Workflow.Server.fsproj",
+      "compileSeconds": 2.2,
+      "evaluationSeconds": 0.1,
+      "lines": 192,
+      "fanIn": 1,
+      "fanOut": 1
+    },
+    {
+      "project": "src/ToolUp.RAG.StaticCorpus.Core/ToolUp.RAG.StaticCorpus.Core.fsproj",
+      "compileSeconds": 2.2,
+      "evaluationSeconds": 0.1,
+      "lines": 215,
+      "fanIn": 3,
+      "fanOut": 0
+    },
+    {
+      "project": "src/SvgRasterizers/Skia/ToolUp.OpenXml.SvgRasterizer.Skia.fsproj",
+      "compileSeconds": 2.1,
+      "evaluationSeconds": 0.1,
+      "lines": 139,
+      "fanIn": 1,
+      "fanOut": 1
     }
   ]
 }
