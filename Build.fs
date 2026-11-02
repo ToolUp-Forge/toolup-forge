@@ -4639,7 +4639,7 @@ let main args =
                                         // the tree; MSBuild reads it on every OS, and so
                                         // must this walk (the gate ran only on Windows
                                         // before this line).
-                                        let rel = inc.Value.Replace('\', Path.DirectorySeparatorChar)
+                                        let rel = inc.Value.Replace('\\', Path.DirectorySeparatorChar)
                                         walk (Path.GetFullPath(Path.Combine(Path.GetDirectoryName proj, rel)))
 
                     for r in fuaranCoBuildRoots do
