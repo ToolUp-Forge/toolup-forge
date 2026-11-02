@@ -20,7 +20,7 @@ let tests =
     testList "ComponentProvenance" [
 
         // ── a companion entry carries package + version + assembly ────
-        testCase "a first-party companion reports the platform assembly + a real version"
+        testCase "a first-party companion reports the server-tier part that holds it + a real version"
         <| fun _ ->
             let provenance = ComponentProvenance.forApp (appWithAuditSink ())
             let auditId = ComponentId.forCompanionImpl "IAuditSink" "splunk-archive"
@@ -28,9 +28,13 @@ let tests =
             match provenance |> Map.tryFind auditId with
             | None -> failtest "expected a provenance entry for the composed audit sink, keyed by its manifest id"
             | Some p ->
-                Expect.equal p.Package "ToolUp.Platform.Server" "the in-tree sink reports the platform server assembly"
+                Expect.equal
+                    p.Package
+                    "ToolUp.Platform.Server.Audit"
+                    "the in-tree sink reports the server-tier part it is compiled into"
+
                 Expect.notEqual p.Version ComponentProvenance.unknown.Version "a loaded assembly reports a real version"
-                Expect.stringContains p.Assembly "ToolUp.Platform.Server" "the full assembly name is reported"
+                Expect.stringContains p.Assembly "ToolUp.Platform.Server.Audit" "the full assembly name is reported"
 
         // ── the provenance id-joins the manifest companion slot ───────
         testCase "the provenance key matches the manifest companion-slot id (id-join, no shape change)"

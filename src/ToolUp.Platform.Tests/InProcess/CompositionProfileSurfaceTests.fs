@@ -829,7 +829,15 @@ let private resolveTarget (what: string) (e: JsonElement) = [
 
 let private companionInterfaces =
     lazy
-        ([ typeof<ServerConfig>.Assembly; typeof<ServerApp>.Assembly ]
+        // The server tier is the umbrella and the parts it references.
+        let serverTier =
+            typeof<ServerApp>.Assembly
+            :: (typeof<ServerApp>.Assembly.GetReferencedAssemblies()
+                |> Array.filter (fun n -> n.Name.StartsWith "ToolUp.Platform.Server.")
+                |> Array.map Assembly.Load
+                |> List.ofArray)
+
+        (typeof<ServerConfig>.Assembly :: serverTier
          |> List.collect (fun a -> a.GetTypes() |> List.ofArray)
          |> List.filter (fun t -> t.IsInterface && t.IsPublic || t.IsInterface && t.IsNestedPublic)
          |> List.map _.Name
