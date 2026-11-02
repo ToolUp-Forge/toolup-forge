@@ -4027,6 +4027,16 @@ ToolUp.Platform.OwnerTeamBootstrapLifecycle.hook : ToolUp.Platform.TenantHook`1[
 ToolUp.Platform.PageAuthority (class)
 ToolUp.Platform.PageAuthority.needed(ToolUp.Platform.PageLayer) : ToolUp.Platform.PageGrant
 ToolUp.Platform.PageAuthority.permits(ToolUp.Platform.PageStoreOptions, ToolUp.Platform.PageLayer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PageStoreError]
+ToolUp.Platform.PageDocumentRoute (class)
+ToolUp.Platform.PageDocumentRoute.Kind : System.String (literal)
+ToolUp.Platform.PageDocumentRoute.Prefix : System.String (literal)
+ToolUp.Platform.PageDocumentRoute.Version : System.Int32 (literal)
+ToolUp.Platform.PageDocumentRoute.describingLayer(ToolUp.Platform.FoldedPage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StoredLayer]
+ToolUp.Platform.PageDocumentRoute.encode(ToolUp.Platform.FoldedPage) : System.String
+ToolUp.Platform.PageDocumentRoute.handler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.Platform.PageDocumentRoute.path(ToolUp.Platform.PageRef) : System.String
+ToolUp.Platform.PageDocumentRoute.refusalJson(ToolUp.Platform.PageStoreError) : System.String
+ToolUp.Platform.PageDocumentRoute.status(ToolUp.Platform.PageStoreError) : System.Int32
 ToolUp.Platform.PageDocumentStoreCompose (class)
 ToolUp.Platform.PageDocumentStoreCompose.componentId : ToolUp.Platform.ComponentId { get }
 ToolUp.Platform.PageDocumentStoreCompose.withPageDocumentStore(ToolUp.Platform.PageStoreOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

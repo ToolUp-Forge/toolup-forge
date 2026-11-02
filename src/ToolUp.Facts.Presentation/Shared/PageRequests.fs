@@ -384,3 +384,86 @@ module PageResolution =
         | Ok(Embedded table) -> Ok table
         | Ok(Ref name) -> Error(sprintf "the resolution names a source '%s' rather than carrying its rows" name)
         | Error e -> Error("the resolution's table could not be decoded: " + ColumnCodec.errorString e)
+
+/// The canonical JSON of a request set, what the resolution route is posted:
+/// `{"requests":{"<key>":<request>,…}}`, each request in the
+/// canonical form `PageRequest.toJVal` writes, keyed by its key in the page.
+/// The set names nothing else: a request resolves in the caller's own scope,
+/// for the caller's own principal, and the set has no member that could name
+/// another.
+[<RequireQualifiedAccess>]
+module PageRequestSet =
+
+    /// The one member a request set carries.
+    [<Literal>]
+    let RequestsMember = "requests"
+
+    /// The set as its canonical JSON value.
+    let toJVal (requests: Map<string, PageRequest>) : Result<JVal, PageRequestError> =
+        let encoded =
+            requests
+            |> Map.toList
+            |> List.map (fun (key, request) -> PageRequest.toJVal request |> Result.map (fun v -> key, v))
+
+        match
+            encoded
+            |> List.tryPick (function
+                | Error e -> Some e
+                | Ok _ -> None)
+        with
+        | Some e -> Error e
+        | None ->
+            Ok(
+                JObj [
+                    RequestsMember,
+                    JObj(
+                        encoded
+                        |> List.choose (function
+                            | Ok kv -> Some kv
+                            | Error _ -> None)
+                    )
+                ]
+            )
+
+    /// The set's canonical text.
+    let toJson (requests: Map<string, PageRequest>) : Result<string, PageRequestError> =
+        toJVal requests
+        |> Result.bind (fun v ->
+            Canonical.tryWrite Rendering.CrossHost v
+            |> Result.mapError (fun reason -> PageRequestError.InvalidField(RequestsMember, reason)))
+
+    /// The set a JSON text says. The outer refusal is the set's own shape —
+    /// not JSON, no `requests`, a member the set does not carry (named), a
+    /// blank key; each request is then read on its own, so one malformed
+    /// request is refused under its key and the others still resolve.
+    let ofJson (json: string) : Result<Map<string, Result<PageRequest, PageRequestError>>, PageRequestError> =
+        if String.IsNullOrWhiteSpace json then
+            Error(PageRequestError.NotJson "the text is empty")
+        else
+            match Canonical.read json with
+            | Error e -> Error(PageRequestError.NotJson e.Message)
+            | Ok(JObj members) ->
+                match members |> List.tryFind (fun (name, _) -> name <> RequestsMember) with
+                | Some(name, _) ->
+                    Error(
+                        PageRequestError.InvalidField(
+                            name,
+                            "a request set carries only 'requests'; a request resolves in the caller's own scope, which the set never names"
+                        )
+                    )
+                | None ->
+                    match members |> List.tryFind (fun (name, _) -> name = RequestsMember) with
+                    | None -> Error(PageRequestError.MissingField RequestsMember)
+                    | Some(_, JObj requests) ->
+                        match requests |> List.tryFind (fun (key, _) -> String.IsNullOrWhiteSpace key) with
+                        | Some _ -> Error(PageRequestError.InvalidField(RequestsMember, "a request's key is blank"))
+                        | None ->
+                            if
+                                (requests |> List.map fst |> List.distinct |> List.length)
+                                <> List.length requests
+                            then
+                                Error(PageRequestError.InvalidField(RequestsMember, "a key is named twice"))
+                            else
+                                Ok(requests |> List.map (fun (key, v) -> key, PageRequest.ofJVal v) |> Map.ofList)
+                    | Some _ -> Error(PageRequestError.InvalidField(RequestsMember, "it is not a JSON object"))
+            | Ok _ -> Error(PageRequestError.NotJson "the request set is not a JSON object")

@@ -263,6 +263,14 @@ ToolUp.Facts.Presentation.PageRequestResolvers.ForRequest : Microsoft.FSharp.Cor
 ToolUp.Facts.Presentation.PageRequestResolversModule (class)
 ToolUp.Facts.Presentation.PageRequestResolversModule.create(ToolUp.Facts.Presentation.PageResolutionCache, ToolUp.Facts.Presentation.PageGateSources) : ToolUp.Facts.Presentation.PageRequestResolvers
 ToolUp.Facts.Presentation.PageRequestResolversModule.register(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Facts.Presentation.PageRequestRoute (class)
+ToolUp.Facts.Presentation.PageRequestRoute.MaxRequests : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRequestRoute.Path : System.String (literal)
+ToolUp.Facts.Presentation.PageRequestRoute.answerJVal(Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]) : Fuaran.Core.JVal
+ToolUp.Facts.Presentation.PageRequestRoute.answersJson(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]) : System.String
+ToolUp.Facts.Presentation.PageRequestRoute.handler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.Facts.Presentation.PageRequestRoute.refusedJson(ToolUp.Facts.Presentation.PageRefusal) : System.String
+ToolUp.Facts.Presentation.PageRequestRoute.resolveSet(ToolUp.Facts.Presentation.PageRequestResolver, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageRequest, ToolUp.Facts.Presentation.PageRequestError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]]
 ToolUp.Facts.Presentation.PageRequestSidecar (class)
 ToolUp.Facts.Presentation.PageRequestSidecar..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest], ToolUp.Facts.Presentation.PageDefaults)
 ToolUp.Facts.Presentation.PageRequestSidecar.Defaults : ToolUp.Facts.Presentation.PageDefaults { get }

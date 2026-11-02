@@ -1127,6 +1127,154 @@ type BlobPageDocumentStore
                             }
                   })
 
+/// The page route: a reader's folded page by id, over HTTP.
+///
+/// `GET {Prefix}/{module}/{page}` folds the page for the caller — the
+/// platform layer, then the caller's team's, then the caller's own — through
+/// `IPageDocumentStore.ReadFolded`, under the caller's resolved scope and
+/// access context, and answers the folded tree with the sidecar saved with
+/// the layer that last moved it: the signed read-set a deployment stores
+/// there. The store never reads the sidecar and this route never re-signs;
+/// a reader's host verifies the page against it.
+[<RequireQualifiedAccess>]
+module PageDocumentRoute =
+
+    open Microsoft.AspNetCore.Http
+    open Giraffe
+
+    /// The route's prefix: a page is served at `{Prefix}/{module}/{page}`.
+    [<Literal>]
+    let Prefix = "/api/_pages"
+
+    /// The served envelope's kind.
+    [<Literal>]
+    let Kind = "toolup.storedPage"
+
+    /// The served envelope's version.
+    [<Literal>]
+    let Version = 1
+
+    /// The path `page` is served at.
+    let path (page: PageRef) : string =
+        sprintf "%s/%s/%s" Prefix page.Module page.Page
+
+    /// The layer whose sidecar describes the folded page: the uppermost
+    /// folded layer that holds ops, else the platform layer. A layer with no
+    /// ops moves nothing, so the document is the one the layer below it
+    /// saved, and so is the read-set.
+    let describingLayer (folded: FoldedPage) : StoredLayer option =
+        match folded.Layers |> List.filter (fun l -> not l.Records.IsEmpty) |> List.tryLast with
+        | Some layer -> Some layer
+        | None -> folded.Layers |> List.tryHead
+
+    /// The served envelope as canonical JSON: `document` is the folded tree's
+    /// canonical wire JSON verbatim (its SHA-256 is `contentHash`), `sidecar`
+    /// the describing layer's sidecar in base64 with `sidecarLayer` naming
+    /// that layer (both absent when it holds none), `heads` each folded
+    /// layer's op-stream head by layer name.
+    let encode (folded: FoldedPage) : string =
+        let describing = describingLayer folded
+
+        JObj [
+            "conflicts", JInt folded.Conflicts.Length
+            "contentHash", JStr folded.ContentHash
+            "detached", JBool folded.Detached
+            "document", JStr(Encoding.UTF8.GetString folded.Document)
+            "heads",
+            JObj(
+                folded.Layers
+                |> List.map (fun l -> PageLayer.toToken l.Key.Layer, JStr l.ChainHead)
+            )
+            "kind", JStr Kind
+            "module", JStr folded.Page.Module
+            "page", JStr folded.Page.Page
+            match
+                describing
+                |> Option.bind (fun l -> l.Sidecar |> Option.map (fun bytes -> l, bytes))
+            with
+            | Some(layer, bytes) ->
+                "sidecar", JStr(Convert.ToBase64String bytes)
+                "sidecarLayer", JStr(PageLayer.toToken layer.Key.Layer)
+            | None -> ()
+            "version", JInt Version
+        ]
+        |> Canonical.write Rendering.CrossHost
+
+    /// The HTTP status a refusal answers with.
+    let status (error: PageStoreError) : int =
+        match error with
+        | PageStoreError.NotSeeded -> 404
+        | PageStoreError.InvalidPageRef _ -> 400
+        | PageStoreError.GrantMissing _
+        | PageStoreError.LayerDisabled _
+        | PageStoreError.ScopeRefused _ -> 403
+        | PageStoreError.PermissionsUnavailable _
+        | PageStoreError.Storage _ -> 503
+        | _ -> 500
+
+    let private reason (error: PageStoreError) : string =
+        match error with
+        | PageStoreError.NotSeeded -> "no page of that id is stored"
+        | PageStoreError.InvalidPageRef why
+        | PageStoreError.ScopeRefused why
+        | PageStoreError.DocumentUndecodable why
+        | PageStoreError.PermissionsUnavailable why -> why
+        | PageStoreError.StoredLayerUnreadable(_, why) -> sprintf "a stored layer could not be read: %s" why
+        | PageStoreError.Storage _ -> "the object store refused the read"
+        | other -> PageStoreError.code other
+
+    /// A refusal as canonical JSON: `{"refused":{"code":…,"reason":…}}`,
+    /// the code `PageStoreError.code` names.
+    let refusalJson (error: PageStoreError) : string =
+        JObj [
+            "refused", JObj [ "code", JStr(PageStoreError.code error); "reason", JStr(reason error) ]
+        ]
+        |> Canonical.write Rendering.CrossHost
+
+    let private respond (code: int) (body: string) : HttpHandler =
+        setStatusCode code
+        >=> setHttpHeader "Content-Type" "application/json; charset=utf-8"
+        >=> setBodyFromString body
+
+    /// The caller's access context: the request's own, or an anonymous
+    /// context when the platform resolved none, which the store refuses
+    /// since an anonymous scope holds no page layers.
+    let private accessOf (ctx: HttpContext) : AccessContext =
+        match ctx.RequestServices.GetService(typeof<AccessContext>) with
+        | :? AccessContext as access -> access
+        | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+
+    /// The mounted handler: `GET {Prefix}/{module}/{page}`. A 200 carries
+    /// the envelope `encode` writes; a refusal carries `refusalJson` under
+    /// `status`'s code: an unknown page 404 `not-seeded`, a reader outside
+    /// the page's gate 403 `scope-refused`.
+    let handler: HttpHandler =
+        GET
+        >=> routef "/api/_pages/%s/%s" (fun (moduleName: string, pageName: string) ->
+            fun next ctx -> task {
+                match ctx.RequestServices.GetService(typeof<IPageDocumentStore>) with
+                | :? IPageDocumentStore as store ->
+                    let page = {
+                        PageRef.Module = moduleName
+                        Page = pageName
+                    }
+
+                    let scope = StorageScopeResolver.ScopeResolution.forRequest ctx
+
+                    match! store.ReadFolded(scope, accessOf ctx, page) |> Async.StartAsTask with
+                    | Ok folded -> return! respond 200 (encode folded) next ctx
+                    | Error error -> return! respond (status error) (refusalJson error) next ctx
+                | _ ->
+                    return!
+                        respond
+                            503
+                            (refusalJson (
+                                PageStoreError.ScopeRefused "the page store is not composed in this deployment"
+                            ))
+                            next
+                            ctx
+            })
+
 /// Composition for the page store.
 [<RequireQualifiedAccess>]
 module PageDocumentStoreCompose =
@@ -1142,6 +1290,10 @@ module PageDocumentStoreCompose =
     /// and `IAuditLog`, and the team roles of the registered `ITeamStore`
     /// when there is one (none: no team role satisfies a save). Every
     /// dependency is read when the store is first resolved, never per call.
+    /// **Mounts** the page route (`PageDocumentRoute`): a reader's
+    /// folded page by id, under the surface requirement the composition
+    /// declares for the path (the strict `userOrTeam` fallback when it
+    /// declares none).
     let withPageDocumentStore (options: PageStoreOptions) (app: ServerApp) : ServerApp =
         let register (services: IServiceCollection) =
             services.AddSingleton<IPageDocumentStore>(fun (sp: IServiceProvider) ->
@@ -1162,4 +1314,15 @@ module PageDocumentStoreCompose =
                 )
                 :> IPageDocumentStore)
 
-        app |> ServerApp.addContribution (Contribution.service componentId register)
+        // The page route is mounted once, by the first call;
+        // a later call adds its registration as before.
+        let mounted =
+            if app.Contributions |> List.exists (fun c -> c.Owner = componentId) then
+                app
+            else
+                {
+                    app with
+                        Extensions.Handlers = app.Extensions.Handlers @ [ PageDocumentRoute.handler ]
+                }
+
+        mounted |> ServerApp.addContribution (Contribution.service componentId register)
