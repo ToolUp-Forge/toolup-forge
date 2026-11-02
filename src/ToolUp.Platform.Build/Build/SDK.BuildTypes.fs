@@ -113,3 +113,52 @@ type Flags = {
     /// The valued options given; the last occurrence wins.
     Values: Map<string, string>
 }
+
+/// One project's cost in a solution build, read off MSBuild's
+/// `-clp:PerformanceSummary` text. The census build runs with `-graph`, so a
+/// project starts only after every project it references has finished: its
+/// time is its own work (dominated by `Fsc`), never time spent blocked on a
+/// reference. See `docs/migrations/1199-build-census.md`.
+type ProjectCost = {
+    /// The project file as MSBuild printed it (a full path).
+    Project: string
+    /// The project's own build time, in seconds, summed over its calls.
+    CompileSeconds: float
+    /// Seconds MSBuild spent evaluating the project file, summed over its
+    /// evaluations; 0 when the summary has no evaluation row for it.
+    EvaluationSeconds: float
+}
+
+/// One row of `build-census.json`: a solution project's measured cost,
+/// its size and its place in the reference graph.
+type CensusEntry = {
+    /// Repo-relative path of the `.fsproj`, forward-slashed.
+    Project: string
+    /// The project's own build seconds, as in `ProjectCost`.
+    CompileSeconds: float
+    /// The project file's evaluation seconds, as in `ProjectCost`.
+    EvaluationSeconds: float
+    /// Lines in the project's `Compile` items.
+    Lines: int
+    /// Solution projects that reference this one.
+    FanIn: int
+    /// Solution projects this one references.
+    FanOut: int
+}
+
+/// The whole census: one machine's measurement of one tree, dated.
+type BuildCensus = {
+    /// `git rev-parse HEAD` when the census was measured.
+    TreeSha: string
+    /// The machine that measured it, as its OS, architecture and processor
+    /// count — never its host name, which names a private machine.
+    Machine: string
+    /// When it was measured, UTC, ISO 8601.
+    MeasuredAt: string
+    /// Wall-clock seconds of the census build.
+    WallSeconds: float
+    /// The build command, as run.
+    Command: string
+    /// Every solution project, most expensive first.
+    Projects: CensusEntry list
+}

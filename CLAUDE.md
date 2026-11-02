@@ -511,7 +511,7 @@ New code cites no phase in a source comment: the phase's recorded outcome is the
 
 ### Fast iteration
 
-`dotnet build ToolUp.Forge.sln` compiles 234 F# projects (a clean build is 4m18s on a quiet machine and 5½–6½ minutes on a busy one); a one-shot Fable compile is similarly expensive. Use:
+`dotnet build ToolUp.Forge.sln` compiles every project in the solution. This file states no count and no duration, having gone stale doing so: [`build-census.json`](build-census.json) records each project's build seconds, lines, fan-in and fan-out, and the clean build's wall clock, for the machine and tree that measured it (regenerate with `dotnet run --project Build.fsproj -- Census`; see [`docs/platform/testing-conventions.md`](docs/platform/testing-conventions.md#the-build-census-what-each-project-costs-to-build)). A one-shot Fable compile is similarly expensive. Use:
 
 ```bash
 # Targeted fsproj build

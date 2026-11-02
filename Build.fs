@@ -6849,6 +6849,63 @@ let main args =
                     ReleaseChannel.findingsReport (sprintf "VerifyRcPromotion: %s is NOT eligible" rendered) findings
                 ))
 
+    // The per-project build census: rebuild the solution once as a graph
+    // build, read each project's own build time off the performance summary,
+    // join it with line counts and the reference graph, and write
+    // `build-census.json`, most expensive first. `--check` builds nothing: it
+    // is red when the file's project set differs from the solution's, so a
+    // project added or removed without a regeneration cannot leave the file
+    // silently stale. Timings are one machine's and dated; see
+    // docs/platform/testing-conventions.md.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- Census [--check]`
+    Target.create "Census" (fun _ ->
+        let root = Path.getFullName "."
+        let solution = "ToolUp.Forge.sln"
+        let solutionText = File.ReadAllText(Path.Combine(root, solution))
+        let censusPath = Path.Combine(root, Census.fileName)
+
+        if Flags.has "--check" flags then
+            let findings =
+                if File.Exists censusPath then
+                    Census.check (File.ReadAllText censusPath) solutionText
+                else
+                    [ sprintf "%s does not exist." Census.fileName ]
+
+            match findings with
+            | [] -> Trace.tracefn "▶ Census --check: %s names every project in %s." Census.fileName solution
+            | found ->
+                for f in found do
+                    Trace.traceError (sprintf "Census --check: %s" f)
+
+                failwithf
+                    "Census --check: %d finding(s), named above. Regenerate with `dotnet run --project Build.fsproj -- Census`."
+                    found.Length
+        else
+            let scratch = Scratch.root "toolup-census"
+            Directory.create scratch
+            let log = Path.Combine(scratch, "performance-summary.log")
+            let result = Proc.exec "dotnet" (Census.buildArgs solution log) root |> Proc.ensure
+
+            let costs = Census.readSummary (File.ReadAllText log)
+
+            let census = {
+                TreeSha = (Git.read root [ "rev-parse"; "HEAD" ]).Trim()
+                Machine = Census.machine ()
+                MeasuredAt = System.DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                WallSeconds = result.Elapsed.TotalSeconds
+                Command = "dotnet " + String.concat " " (Census.buildArgs solution "<log>")
+                Projects = Census.assemble root costs (Census.projectGraph root (Gate.solutionProjects solutionText))
+            }
+
+            File.WriteAllText(censusPath, Census.render census)
+
+            Trace.tracefn
+                "▶ Census: %d projects, %.0f s wall, written to %s."
+                census.Projects.Length
+                census.WallSeconds
+                Census.fileName)
+
     // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:
     // a named OS mutex keyed on `git rev-parse --git-common-dir`, so every
     // worktree of this clone contends for ONE gate and a second run waits

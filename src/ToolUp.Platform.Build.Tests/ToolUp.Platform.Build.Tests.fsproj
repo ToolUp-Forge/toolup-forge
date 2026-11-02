@@ -126,6 +126,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestLaneFilter.fs" Link="Support\TestLaneFilter.fs" />
         <Compile Include="AffectedLaneTests.fs" />
         <Compile Include="CompilerLeversTests.fs" />
+        <Compile Include="BuildCensusTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

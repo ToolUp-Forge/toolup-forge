@@ -127,7 +127,8 @@ What this means for you:
 
 The selected-lane arithmetic in `docs/migrations/1121-affected-lane-v0.md` uses **4m18s**. That figure is the
 solution build inside a full `verify.ps1` run on a quiet machine on 2026-10-25. Neither setting changed it. The tree
-already had reference assemblies on, and parallel compilation stays off. The figures to use are:
+already had reference assemblies on, and parallel compilation stays off. The clean build's current wall clock and each
+project's share of it are in `build-census.json`, which names the machine and tree that measured them. The figures to use are:
 
 - **Fresh checkout or clean build.** 4m18s on a quiet machine is still the floor. On a busy machine, plan for 5½–6½
   minutes (medians from 330 to 390 s here).
