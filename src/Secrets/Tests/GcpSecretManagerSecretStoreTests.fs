@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.GcpSecretManagerSecretStoreTests
+module ToolUp.Secrets.Tests.GcpSecretManagerSecretStoreTests
 
 open System
 open System.IO

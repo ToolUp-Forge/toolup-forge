@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.AzureKeyVaultSecretStoreTests
+module ToolUp.Secrets.Tests.AzureKeyVaultSecretStoreTests
 
 open System
 open Expecto

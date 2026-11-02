@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.ServerAppSecretStoreTests
+module ToolUp.Secrets.Tests.ServerAppSecretStoreTests
 
 open System
 open System.Collections.Concurrent

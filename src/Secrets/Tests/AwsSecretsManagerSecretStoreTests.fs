@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.AwsSecretsManagerSecretStoreTests
+module ToolUp.Secrets.Tests.AwsSecretsManagerSecretStoreTests
 
 open System
 open Expecto

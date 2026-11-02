@@ -162,11 +162,8 @@ let private platformEnv =
         "TOOLUP_APPROVE_BRANDKIT"
         "TOOLUP_APPROVE_COMPOSITION"
         "TOOLUP_AUTH_MODE"
-        "TOOLUP_AWS_SECRETS_REGION"
-        "TOOLUP_AZURE_KEY_VAULT_URL"
         "TOOLUP_BUNDLE_FIXTURE_DIR"
         "TOOLUP_EMIT_WIRE_FIXTURES"
-        "TOOLUP_GCP_PROJECT_ID"
         "TOOLUP_HNSW_SCALE_CORPUS"
         "TOOLUP_OAUTH_REDIRECT_BASE"
         "TOOLUP_OIDC_AUDIENCE"
@@ -184,10 +181,6 @@ let private platformEnv =
         "TOOLUP_TEST_POSTGRES"
         "TOOLUP_TIMESCALE_CONN"
         "TOOLUP_TRANSITION_PIN_OUT"
-        "GOOGLE_APPLICATION_CREDENTIALS"
-        "VAULT_ADDR"
-        "VAULT_NAMESPACE"
-        "VAULT_TOKEN"
     ]
 
 let private cloudParityEnv =
@@ -374,6 +367,19 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "TOOLUP_AZURE_STORAGE_CONNECTION_STRING"
              "TOOLUP_GCS_BUCKET"
              "GOOGLE_APPLICATION_CREDENTIALS"
+         ])
+    pack
+        "Secrets"
+        "src/Secrets/Tests/ToolUp.Secrets.Tests.fsproj"
+        ([ Input.Tree; Input.Network ]
+         @ env [
+             "TOOLUP_AWS_SECRETS_REGION"
+             "TOOLUP_AZURE_KEY_VAULT_URL"
+             "TOOLUP_GCP_PROJECT_ID"
+             "GOOGLE_APPLICATION_CREDENTIALS"
+             "VAULT_ADDR"
+             "VAULT_NAMESPACE"
+             "VAULT_TOKEN"
          ])
 
     // ── The legs `VerifyAll` runs after the packs ──────────────────────

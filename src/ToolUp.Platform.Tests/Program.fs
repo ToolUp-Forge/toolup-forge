@@ -189,11 +189,6 @@ let private registeredTests =
         AgChartExportTests.tests
         AuthProviderTests.tests
         OidcJwksTtlTests.tests
-        AzureKeyVaultSecretStoreTests.tests
-        AwsSecretsManagerSecretStoreTests.tests
-        HashiCorpVaultSecretStoreTests.tests
-        GcpSecretManagerSecretStoreTests.tests
-        GcpSecretManagerSecretStoreTests.serviceAccountParseTests
         AuthorizationTests.tests
         AuthClassifierAttributeIdentityTests.tests
         AuditTests.tests
@@ -1027,7 +1022,6 @@ let private registeredTests =
         Phase971PlatformTenantTests.tests
         ProviderExceptionTests.tests
         OidcSignInSpaPrecedenceTests.tests
-        ServerAppSecretStoreTests.tests
         ServerAppOrderTests.tests
         ServerBindAddressTests.tests
         PageDocumentStoreTests.tests

@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.HashiCorpVaultSecretStoreTests
+module ToolUp.Secrets.Tests.HashiCorpVaultSecretStoreTests
 
 open System
 open Expecto
