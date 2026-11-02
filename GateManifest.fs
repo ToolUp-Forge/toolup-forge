@@ -380,13 +380,22 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "VAULT_NAMESPACE"
              "VAULT_TOKEN"
          ])
-    pack "EmbeddingProviders" "src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/ToolUp.EmbeddingProviders.Tests.fsproj" [ Input.Tree ]
-    pack "EntityStores" "src/EntityStores/ToolUp.EntityStores.Tests/ToolUp.EntityStores.Tests.fsproj" (env [ "TOOLUP_TEST_POSTGRES" ])
+    pack
+        "EmbeddingProviders"
+        "src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/ToolUp.EmbeddingProviders.Tests.fsproj"
+        [ Input.Tree ]
+    pack
+        "EntityStores"
+        "src/EntityStores/ToolUp.EntityStores.Tests/ToolUp.EntityStores.Tests.fsproj"
+        (env [ "TOOLUP_TEST_POSTGRES" ])
     pack
         "TimeSeriesStores"
         "src/TimeSeriesStores/ToolUp.TimeSeriesStores.Tests/ToolUp.TimeSeriesStores.Tests.fsproj"
         (env [ "TOOLUP_TIMESCALE_CONN" ])
-    pack "FeatureFlagProviders" "src/FeatureFlagProviders/ToolUp.FeatureFlagProviders.Tests/ToolUp.FeatureFlagProviders.Tests.fsproj" [ Input.Tree ]
+    pack
+        "FeatureFlagProviders"
+        "src/FeatureFlagProviders/ToolUp.FeatureFlagProviders.Tests/ToolUp.FeatureFlagProviders.Tests.fsproj"
+        [ Input.Tree ]
     pack "Media" "src/Media/ToolUp.Media.Tests/ToolUp.Media.Tests.fsproj" [ Input.Tree ]
 
     // ── The legs `VerifyAll` runs after the packs ──────────────────────
