@@ -311,6 +311,12 @@
     <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server.Audit" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server.Config" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server.Infra" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server.Jobs" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server.Remoting" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server.Scope" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Testing" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Transport" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.UI" Version="$(ToolUpSdkVersion)" />
