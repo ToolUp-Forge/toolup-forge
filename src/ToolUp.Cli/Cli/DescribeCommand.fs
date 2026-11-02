@@ -208,7 +208,7 @@ let runRoot (runner: ProcessRunner) (out: TextWriter) (opts: Options) : int =
 
 /// The fully-qualified name of the SDK's server-tier module registration.
 [<Literal>]
-let ServerModuleTypeName = "ToolUp.Platform.ServerModule"
+let ServerModuleTypeName = "ToolUp.Platform.Compose.ServerModule"
 
 /// The note every module description carries: what it is the surface OF.
 [<Literal>]
@@ -586,8 +586,8 @@ let describeModule (assemblyPath: string) (memberName: string option) (packagesR
                     serverModuleType.Assembly.GetTypes()
                     |> Array.tryPick (fun t ->
                         if
-                            t.FullName = "ToolUp.Platform.ModuleSurfaceModule"
-                            || t.FullName = "ToolUp.Platform.ModuleSurface"
+                            t.FullName = "ToolUp.Platform.Compose.ModuleSurfaceModule"
+                            || t.FullName = "ToolUp.Platform.Compose.ModuleSurface"
                         then
                             match t.GetMethod("describeJson", [| serverModuleType |]) with
                             | null -> None
