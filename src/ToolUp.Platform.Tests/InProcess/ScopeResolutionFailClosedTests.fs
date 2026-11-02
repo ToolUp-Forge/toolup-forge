@@ -23,7 +23,10 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 let private teamId = "team-1059"
 let private moduleName = "M"

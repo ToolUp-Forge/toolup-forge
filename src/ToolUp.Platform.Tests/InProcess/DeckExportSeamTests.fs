@@ -19,6 +19,7 @@ open ToolUp.Reporting.RendererRegistry
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── Phase 647 — the deck-export seam ────────────────────────────────
 //

@@ -50,7 +50,7 @@ ToolUp.Algorithms.AlgorithmProviderRegistry.Providers : Microsoft.FSharp.Collect
 ToolUp.Algorithms.AlgorithmProviderRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Algorithms.AlgorithmTypes+AlgorithmInfo, ToolUp.Algorithms.IAlgorithmProvider]]
 ToolUp.Algorithms.AlgorithmsCompose (class)
 ToolUp.Algorithms.AlgorithmsCompose.algorithmsCompanion : ToolUp.Platform.ComponentId { get }
-ToolUp.Algorithms.AlgorithmsCompose.withAlgorithms(ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Algorithms.AlgorithmsCompose.withAlgorithms(ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsOptions (class)
 ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Algorithms.IAlgorithmProvider], System.Boolean, System.Boolean)
 ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsOptions.ExposeAITools : System.Boolean { get }

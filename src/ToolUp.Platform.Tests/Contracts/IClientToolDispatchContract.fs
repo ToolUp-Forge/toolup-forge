@@ -59,6 +59,9 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// A simulated client. Given a `ClientToolInvoke` event, returns the
 /// JSON result the browser would POST back to `/api/ai/tool-result`.

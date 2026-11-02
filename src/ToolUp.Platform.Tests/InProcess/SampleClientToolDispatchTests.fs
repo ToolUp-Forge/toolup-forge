@@ -35,12 +35,15 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.AI.SampleClientTool
 open ToolUp.AI.SampleClientTool.Server
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Stub provider factory + profile (compose-only; never invoked) ───
 
@@ -81,7 +84,7 @@ type private SampleTestAuthorizer(denyTool: string) =
             if toolName = denyTool then
                 Deny $"sample-test policy denied '{toolName}'"
             else
-                Allow
+                ClientToolAuthDecision.Allow
 
 // ─── Calculator simulator (mimics the Fable SampleHandler) ───────────
 
@@ -152,7 +155,7 @@ let private composeShapeTests =
             let decision = resolved.Authorize("denied.tool", "{}", Some "AnyModule", None)
 
             match decision with
-            | Allow -> failtest "resolved authorizer must enforce its policy"
+            | ClientToolAuthDecision.Allow -> failtest "resolved authorizer must enforce its policy"
             | Deny _ -> ()
         }
     ]

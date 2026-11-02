@@ -5,7 +5,10 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.ConfigMigrationRegistry
+open ToolUp.Platform.Config.ConfigMigrationRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 10b — configuration schema evolution ──────────────────
 //

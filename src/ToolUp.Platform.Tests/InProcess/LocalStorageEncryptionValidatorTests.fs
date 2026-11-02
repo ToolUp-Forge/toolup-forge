@@ -6,6 +6,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 let private newTempDir () =
     let dir =

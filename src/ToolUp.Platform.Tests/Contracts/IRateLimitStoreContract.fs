@@ -5,6 +5,8 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Phase 56 — contract assertions every `IRateLimitStore`
 /// implementation must satisfy. Bound by `InProcess` test files that

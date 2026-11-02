@@ -22,6 +22,7 @@ module ToolUp.Platform.Tests.InProcess.SyntheticClientToolAuthorizerTests
 open Expecto
 open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
 
 type private SyntheticAuthorizer(denyTool: string) =
     interface IClientToolAuthorizer with
@@ -29,7 +30,7 @@ type private SyntheticAuthorizer(denyTool: string) =
             if toolName = denyTool then
                 Deny $"synthetic stub denied tool '{toolName}'"
             else
-                Allow
+                ClientToolAuthDecision.Allow
 
 let tests =
     IClientToolAuthorizerContract.tests {

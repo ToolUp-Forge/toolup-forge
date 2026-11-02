@@ -5,6 +5,7 @@ open Expecto
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Scheduling.Tests.Contracts
 open ToolUp.Scheduling.Tests.InProcess.InMemoryCalendarBridge
+open ToolUp.Platform.Compose
 
 // ─── Binding 1 of the ICalendarBridge contract pack ─────────────────
 //

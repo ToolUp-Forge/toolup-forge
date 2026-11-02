@@ -28,8 +28,12 @@ module ToolUp.Platform.Tests.InProcess.RagConfigValidatorExtensionTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.RAG.RagConfigValidator
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ───────────────────────────────────────────────────────
 
@@ -513,11 +517,11 @@ let private clampTests =
 // ─── The embedding cache's locality is declared ─────────────────────
 
 /// A decorator over a cache that forwards its inner cache's locality.
-type private ForwardingCache(inner: ToolUp.Platform.IEmbeddingCache.IEmbeddingCache) =
+type private ForwardingCache(inner: ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache) =
     interface IEmbeddingCacheLocality with
         member _.CacheLocality = EmbeddingCacheLocality.declared (box inner)
 
-    interface ToolUp.Platform.IEmbeddingCache.IEmbeddingCache with
+    interface ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache with
         member _.TryGet key = inner.TryGet key
         member _.Set key value = inner.Set key value
         member _.HitRate() = inner.HitRate()
@@ -528,7 +532,7 @@ let private localityTests =
         test "a decorator over the in-memory cache keeps the cross-replica warning" {
             let inner =
                 ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache()
-                :> ToolUp.Platform.IEmbeddingCache.IEmbeddingCache
+                :> ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache
 
             let app =
                 newApp ()

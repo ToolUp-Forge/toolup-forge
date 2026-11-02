@@ -4,6 +4,7 @@
 namespace ToolUp.ArtefactSigning
 
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 /// Phase 40 — default `IArtefactVerifier`. Resolves the public
 /// verification key for the signature's `KeyId` from `ISecretStore`

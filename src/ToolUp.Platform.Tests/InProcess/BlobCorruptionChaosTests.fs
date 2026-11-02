@@ -5,12 +5,14 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Teams
+open ToolUp.Platform.Scope.Teams
 open ToolUp.Platform.Testing
 open ToolUp.Platform.Testing.FaultInjectingBlobStorage
 open ToolUp.Platform.Tests.Support
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 205 — blob-corruption chaos / fault-injection pack ────────
 //

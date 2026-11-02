@@ -6,6 +6,10 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
 
 // ─── Phase 129 — secure-by-default refusals / warnings ──────────────
 

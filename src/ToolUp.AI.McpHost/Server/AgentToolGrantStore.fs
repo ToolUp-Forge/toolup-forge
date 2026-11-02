@@ -10,6 +10,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Compose
 
 // ─── Phase 489 — the two shipped `IAgentToolGrantStore` implementations ──
 //

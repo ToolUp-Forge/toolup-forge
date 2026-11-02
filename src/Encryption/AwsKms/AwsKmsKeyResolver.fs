@@ -14,8 +14,10 @@ open Amazon.KeyManagementService
 open Amazon.KeyManagementService.Model
 open ToolUp.Platform
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 22a — AWS KMS-backed IBlobEncryptionKeyResolver ─────────────
 //

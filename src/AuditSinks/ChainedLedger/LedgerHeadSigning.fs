@@ -5,6 +5,7 @@ module ToolUp.Platform.AuditSinks.LedgerHeadSigning
 
 open ToolUp.Platform
 open ToolUp.Platform.AuditSinks.ChainedLedger
+open ToolUp.Platform.Audit
 
 // ─── Bridging the ledger's local seam onto a composed key story ─────────
 //

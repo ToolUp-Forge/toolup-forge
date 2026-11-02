@@ -30,9 +30,9 @@ module ToolUp.Platform.Tests.Support.CacheReset
 let invalidateAll () : Async<unit> = async {
     // (b) — PendingInviteStore.cache: 30s TTL cache of the pending-
     // invite blob; read on every middleware sign-in resolve.
-    ToolUp.Platform.Teams.PendingInviteStore.__internal_resetForTests ()
+    ToolUp.Platform.Scope.Teams.PendingInviteStore.__internal_resetForTests ()
 
     // (b) — AdAnalyticsApiHandler.slotSnapshot: 60s TTL snapshot of the
     // configured ad-slot ids used by the slot sanity check.
-    ToolUp.Platform.AdAnalyticsApiHandler.__internal_resetForTests ()
+    ToolUp.Platform.Audit.AdAnalyticsApiHandler.__internal_resetForTests ()
 }

@@ -1,6 +1,7 @@
 namespace ToolUp.Reporting
 
 open System.Collections.Concurrent
+open ToolUp.Platform.Compose
 
 // ─── Phase 534.A — the report-producer registry ──────────────────────
 //

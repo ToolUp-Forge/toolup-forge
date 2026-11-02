@@ -4,6 +4,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ColumnMappingTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Minimal in-memory `IDataObjectStore` for store-wrapper tests.
 /// `Save` / `Get` / `ListObjects` / `Delete` are faithful (keyed by

@@ -5,6 +5,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Forms
 open ToolUp.Forms.FormApi
+open ToolUp.Platform.Compose
 
 // ─── Phase 627.E — `IFormApi`'s in-handler gate declarations ─────────
 //

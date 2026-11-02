@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
+open ToolUp.Platform.Compose
 
 // ─── Phase 170 — trust-anchor config → verifier (resolver + validator) ──
 //

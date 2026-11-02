@@ -21,13 +21,17 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyStores
 open ToolUp.AuthProviders.Passkey.PasskeyHost
+open ToolUp.Remoting.Server.Http
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 763 — the null-literal request body ───────────────────────
 //

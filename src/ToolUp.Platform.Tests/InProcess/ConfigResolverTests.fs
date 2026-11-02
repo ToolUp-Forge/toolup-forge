@@ -6,7 +6,9 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigKeys
-open ToolUp.Platform.ConfigResolver
+open ToolUp.Platform.Config.ConfigResolver
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 696 — the deployment configuration manifest ────────────────
 //
@@ -157,7 +159,7 @@ let tests =
         testCase "ServerConfig.fromEnv reads the manifest — the Phase 71.A cluster is migrated"
         <| fun _ ->
             let logger =
-                ToolUp.Platform.ConsoleLogger.ConsoleLogger(LogLevel.Error, Set.empty) :> ILogger
+                ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger(LogLevel.Error, Set.empty) :> ILogger
 
             withEnv Names.replicaCount None (fun () ->
                 withEnv Names.requireHttps None (fun () ->

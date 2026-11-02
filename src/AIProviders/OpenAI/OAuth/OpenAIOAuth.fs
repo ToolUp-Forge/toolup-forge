@@ -6,6 +6,7 @@ module OpenAIOAuth
 open System.Net.Http
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 // ─── Phase 43.B — OpenAI one-click connect ────────────────────────
 //

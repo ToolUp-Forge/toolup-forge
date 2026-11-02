@@ -42,11 +42,15 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DeliveryCompleted
+open ToolUp.Platform.Jobs.DeliveryCompleted
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 

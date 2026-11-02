@@ -10,6 +10,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.AssetStore
 open ToolUp.AssetStore.Tests.Doubles
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Jobs
 
 let private container = "user-test"
 

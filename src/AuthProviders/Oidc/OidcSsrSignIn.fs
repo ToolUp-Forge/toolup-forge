@@ -66,6 +66,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 /// Which token from the code exchange becomes the session credential. It
 /// must be one the registered `IAuthProvider` validates: an `IdToken` is

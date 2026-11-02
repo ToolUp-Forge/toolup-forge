@@ -8,6 +8,9 @@ open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 534.B — subscription execution ────────────────────────────
 //

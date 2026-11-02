@@ -11,9 +11,11 @@ open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 531 — PostgreSQL / JSONB IEntityStore ────────────────────────
 //

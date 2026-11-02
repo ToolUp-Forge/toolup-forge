@@ -22,6 +22,9 @@ open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.MicrosoftGraphOAuth
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 831 — the Microsoft Graph calendar bridge ────────────────
 //

@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IEgressEvidenceContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── IEgressEvidence contract pack (Phase 944) ────────────────────────
 //

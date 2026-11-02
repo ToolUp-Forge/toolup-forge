@@ -6,18 +6,18 @@
 LocalEmbeddingProvider (class)
 LocalEmbeddingProvider.GlobalModelId : System.String (literal)
 LocalEmbeddingProvider.ScopedModelId : System.String (literal)
-LocalEmbeddingProvider.create() : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
-LocalEmbeddingProvider.createPersistent(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
+LocalEmbeddingProvider.create() : ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider
+LocalEmbeddingProvider.createPersistent(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider
 LocalEmbeddingProvider.createScoped() : LocalEmbeddingProvider+ScopedLocalEmbeddingProviders
 LocalEmbeddingProvider.createScopedPersistent(ToolUp.Platform.BlobStorage+IBlobStorage) : LocalEmbeddingProvider+ScopedLocalEmbeddingProviders
-LocalEmbeddingProvider.fromEnv(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider]
+LocalEmbeddingProvider.fromEnv(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider]
 LocalEmbeddingProvider.scopedModelIdFor(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String
 LocalEmbeddingProvider+ScopeKey (class)
 LocalEmbeddingProvider+ScopeKey.escapeSegment(System.String) : System.String
 LocalEmbeddingProvider+ScopeKey.ofScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String
 LocalEmbeddingProvider+ScopedLocalEmbeddingProviders (class)
 LocalEmbeddingProvider+ScopedLocalEmbeddingProviders..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage])
-LocalEmbeddingProvider+ScopedLocalEmbeddingProviders.For(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
+LocalEmbeddingProvider+ScopedLocalEmbeddingProviders.For(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider
 LocalEmbeddingProvider+ScopedLocalEmbeddingProviders.KnownScopes() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 LocalEmbeddingProvider+ScopedLocalEmbeddingProviders.ResetScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 LocalEmbeddingProviderHealth (class)

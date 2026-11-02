@@ -6,6 +6,7 @@ module ToolUp.InterPlatform.PeerRemoteProfile
 open System.Net.Http
 open System.Net.Http.Headers
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 343 — the outbound capability-profile fetch, fail-closed ──
 //

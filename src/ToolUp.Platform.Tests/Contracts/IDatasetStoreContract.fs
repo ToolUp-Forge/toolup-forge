@@ -6,6 +6,8 @@ module ToolUp.Platform.Tests.Contracts.IDatasetStoreContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 448 — IDatasetStore conformance pack ─────────────────────────
 //

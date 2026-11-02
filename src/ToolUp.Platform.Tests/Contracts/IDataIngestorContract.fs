@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.Contracts.IDataIngestorContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── IDataIngestor contract pack — Phase 1042 ─────────────────────
 //

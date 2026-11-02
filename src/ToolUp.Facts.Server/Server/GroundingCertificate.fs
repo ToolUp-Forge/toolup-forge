@@ -10,6 +10,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Grounding certificates (Phase 565) ──────────────────────────────
 //

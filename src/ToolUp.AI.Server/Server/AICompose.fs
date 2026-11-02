@@ -11,17 +11,21 @@ open ToolUp.Platform.Providers
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.Usage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.AIAssistantHandler
 open ToolUp.AI.AISettingsHandler
 open ToolUp.AI.SSEHandler
 open ToolUp.AI.SystemPromptBuilder
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── The AI companion: `AIOptions` + `withAI` ───────────────────────
 //

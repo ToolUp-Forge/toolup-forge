@@ -6,13 +6,15 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Metrics
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.IFormStore
 open ToolUp.Forms.FormStore
 open ToolUp.Forms.FormsCompose
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Forms server-side defensive hygiene tidy-up ────────────────────
 //

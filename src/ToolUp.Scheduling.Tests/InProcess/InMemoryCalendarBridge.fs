@@ -5,6 +5,7 @@ open System.Collections.Generic
 open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
+open ToolUp.Platform.Jobs
 
 // ─── Test-only in-memory ICalendarBridge ────────────────────────────
 //

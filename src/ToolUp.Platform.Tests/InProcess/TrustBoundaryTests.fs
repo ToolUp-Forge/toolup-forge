@@ -28,6 +28,7 @@ open Microsoft.FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.DeploymentVerification
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Compose
 
 let private repoRoot = NeutralityTokens.repoRootPath
 

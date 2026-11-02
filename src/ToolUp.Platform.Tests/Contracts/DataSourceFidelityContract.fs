@@ -10,6 +10,8 @@ open System.Text.Json
 open Expecto
 open ToolUp.Platform
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── IDataSource null-and-type fidelity contract pack (Phase 836) ───
 //

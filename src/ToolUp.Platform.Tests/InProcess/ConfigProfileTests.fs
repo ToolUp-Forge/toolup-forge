@@ -6,6 +6,8 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigKeys
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 700 — deployment configuration profiles ────────────────────
 //

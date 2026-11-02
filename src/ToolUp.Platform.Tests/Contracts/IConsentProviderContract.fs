@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Consent
+open ToolUp.Platform.Compose
 
 // ─── IConsentProvider contract pack ──────────────────────────────────
 //

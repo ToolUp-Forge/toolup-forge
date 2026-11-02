@@ -16,6 +16,8 @@ open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 6f.C — WhatsApp over the Meta WhatsApp Business Cloud API ─
 //

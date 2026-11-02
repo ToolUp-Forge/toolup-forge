@@ -65,6 +65,9 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.AI
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

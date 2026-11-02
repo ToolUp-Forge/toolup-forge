@@ -11,9 +11,14 @@ open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── The peer companion: `PeerOptions` + `withPeer` ────────────────────
 //

@@ -44,6 +44,8 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 

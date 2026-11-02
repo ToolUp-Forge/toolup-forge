@@ -9,6 +9,9 @@ open ToolUp.Platform.Secrets
 open ToolUp.Facts
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
 
 // ─── Phase 565 — grounding certificates ──────────────────────────────
 //

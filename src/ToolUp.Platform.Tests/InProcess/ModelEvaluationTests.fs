@@ -12,9 +12,12 @@ open System.Text.Json.Nodes
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.ModelProviders.Reference
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 456 — model evaluation & champion-challenger harness ─────────
 //

@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.ProvenanceGraphTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 524 — provenance chain traversal ──────────────────────────
 //

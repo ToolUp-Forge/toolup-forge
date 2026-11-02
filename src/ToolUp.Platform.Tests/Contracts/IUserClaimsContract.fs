@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.Contracts.IUserClaimsContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── IUserClaims contract pack — Phase 62 ─────────────────────────
 //

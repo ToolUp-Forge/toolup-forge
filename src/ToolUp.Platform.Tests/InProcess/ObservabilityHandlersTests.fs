@@ -17,8 +17,11 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
-open ToolUp.Platform.AlertRuleEngine
+open ToolUp.Platform.Infra.AlertRuleEngine
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 9x — the self-hosted observability endpoints ──────────────
 //

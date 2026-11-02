@@ -7,7 +7,7 @@ open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
 open ToolUp.Remoting.Json.SystemTextJson
@@ -17,6 +17,9 @@ open KnowledgeBase.ServerOriginalSourceResolver
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // Phase 200 — abbreviated rather than `open`ed on purpose: the preview
 // seam module also exports a `createDefault`, and opening it would

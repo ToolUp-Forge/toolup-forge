@@ -9,6 +9,7 @@ open Giraffe.ViewEngine
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
 
 // ─── Phase 94 — Narrative chart projector + inline-SVG renderer ──────
 //

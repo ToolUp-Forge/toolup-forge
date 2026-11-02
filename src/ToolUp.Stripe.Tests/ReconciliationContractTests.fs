@@ -13,6 +13,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Payments
 open ToolUp.Stripe.Server
+open ToolUp.Platform.Infra
 
 // ─── Phase 210 — billing reconciliation contract pack ────────────────
 //

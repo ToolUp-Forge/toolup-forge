@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.MultiInstanceAdminCoherenceValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 236 — multi-instance admin-store coherence validator ─────
 

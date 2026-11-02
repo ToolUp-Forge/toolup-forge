@@ -3,8 +3,10 @@ module ToolUp.Platform.Tests.Contracts.StoreIdSanitisingContract
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 131 — store-seam id-sanitisation contract pack ────────────
 //

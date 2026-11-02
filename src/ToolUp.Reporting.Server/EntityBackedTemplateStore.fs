@@ -1,9 +1,10 @@
 module ToolUp.Reporting.EntityBackedTemplateStore
 
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.EntityTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
+open ToolUp.Platform.Infra
 
 // ─── Default IReportTemplateStore impl ───────────────────────────────
 //

@@ -15,6 +15,10 @@ open ToolUp.RAG.IngestionTypes
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 707 — coverage narrative auto-commit ──────────────────────
 //

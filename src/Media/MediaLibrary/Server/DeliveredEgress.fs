@@ -9,6 +9,10 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 742 — delivered-egress reconciliation ──────────────────────
 //

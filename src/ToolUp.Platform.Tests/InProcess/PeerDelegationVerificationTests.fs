@@ -14,6 +14,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 330 — delegation assertions are verified before dispatch ──
 //

@@ -6,7 +6,10 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.FeatureFlagStore
+open ToolUp.Platform.Config.FeatureFlagStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Test doubles ────────────────────────────────────────────────
 

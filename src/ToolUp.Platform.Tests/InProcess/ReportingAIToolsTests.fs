@@ -13,13 +13,17 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.InMemoryEventStore
+open ToolUp.Platform.Infra.InMemoryEventStore
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
 open ToolUp.Reporting.ReportingAITools
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 577 — the `_platform.reporting` AI tool family ────────────
 //

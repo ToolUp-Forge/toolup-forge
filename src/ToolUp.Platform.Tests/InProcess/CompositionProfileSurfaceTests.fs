@@ -10,6 +10,9 @@ open System.Text.RegularExpressions
 open Expecto
 open FSharp.Reflection
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── forge's composition profile, held to its renderings and to forge ─
 //

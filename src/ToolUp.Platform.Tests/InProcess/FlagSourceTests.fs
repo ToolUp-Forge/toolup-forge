@@ -7,10 +7,13 @@ open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.FeatureFlagStore
+open ToolUp.Platform.Config.FeatureFlagStore
 open OpenFeature
 open OpenFeature.Providers.Memory
 open ToolUp.FeatureFlagProviders.OpenFeature
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 239 — IFlagSource seam + OpenFeature companion ────────────
 //

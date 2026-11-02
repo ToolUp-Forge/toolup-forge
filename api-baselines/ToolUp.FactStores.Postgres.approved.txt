@@ -27,7 +27,7 @@ ToolUp.FactStores.Postgres.FactStoreMigration.scopeBound(ToolUp.FactStores.Postg
 ToolUp.FactStores.Postgres.FactStoreMigration.validateSource(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference]
 ToolUp.FactStores.Postgres.FactStoreMigration.verify(ToolUp.Facts.BlobFactStore, ToolUp.FactStores.Postgres.PostgresFactStore, ToolUp.FactStores.Postgres.FactStoreMigrationOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.FactStores.Postgres.FactStoreMigrationReport]
 ToolUp.FactStores.Postgres.FactStoreMigrationCompose (class)
-ToolUp.FactStores.Postgres.FactStoreMigrationCompose.withFactsMigrateTask(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.FactStores.Postgres.FactStoreMigrationCompose.withFactsMigrateTask(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.FactStores.Postgres.FactStoreMigrationOptions (class)
 ToolUp.FactStores.Postgres.FactStoreMigrationOptions..ctor(System.Int32, System.Int32, System.Boolean, System.String, System.Int32)
 ToolUp.FactStores.Postgres.FactStoreMigrationOptions.AllowUnreadableSource : System.Boolean { get }
@@ -79,7 +79,7 @@ ToolUp.FactStores.Postgres.FactsMigrateTask.listScopes(System.IServiceProvider) 
 ToolUp.FactStores.Postgres.FactsMigrateTask.parse(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.FactStores.Postgres.FactsMigrateRequest, System.String]
 ToolUp.FactStores.Postgres.FactsMigrateTask.run(ToolUp.Facts.BlobFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.FactStores.Postgres.PostgresFactStore], ToolUp.Platform.IEventStore, ToolUp.FactStores.Postgres.FactsMigrateRequest, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, System.Int32]]
 ToolUp.FactStores.Postgres.FactsMigrateTask.runComposed(System.IServiceProvider, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, System.Int32]]
-ToolUp.FactStores.Postgres.FactsMigrateTask.task : ToolUp.Platform.StartupModes+OperatorTask { get }
+ToolUp.FactStores.Postgres.FactsMigrateTask.task : ToolUp.Platform.Compose.StartupModes+OperatorTask { get }
 ToolUp.FactStores.Postgres.FactsMigrateTask.usage : System.String { get }
 ToolUp.FactStores.Postgres.MigrationDifference (class)
 ToolUp.FactStores.Postgres.MigrationDifference.IsAsOfReadDiffers : System.Boolean { get }
@@ -159,7 +159,7 @@ ToolUp.FactStores.Postgres.PostgresFactStore (class)
 ToolUp.FactStores.Postgres.PostgresFactStore.ExplainPopulation(System.String, ToolUp.Facts.PopulationQuery) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.FactStores.Postgres.PostgresFactStore.ExplainQuery(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.FactStores.Postgres.PostgresFactStoreCompose (class)
-ToolUp.FactStores.Postgres.PostgresFactStoreCompose.withPostgresFactStore(System.String, ToolUp.FactStores.Postgres.PostgresFactStoreOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.FactStores.Postgres.PostgresFactStoreCompose.withPostgresFactStore(System.String, ToolUp.FactStores.Postgres.PostgresFactStoreOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.FactStores.Postgres.PostgresFactStoreException (class)
 ToolUp.FactStores.Postgres.PostgresFactStoreException..ctor()
 ToolUp.FactStores.Postgres.PostgresFactStoreException..ctor(System.String)

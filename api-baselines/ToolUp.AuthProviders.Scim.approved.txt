@@ -30,18 +30,18 @@ ToolUp.AuthProviders.ScimHandler+ScimConfigModule.withBaseUrl(System.String, Too
 ToolUp.AuthProviders.ScimHandler+ScimConfigModule.withMapping(ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping, ToolUp.AuthProviders.ScimHandler+ScimConfig) : ToolUp.AuthProviders.ScimHandler+ScimConfig
 ToolUp.AuthProviders.ScimHandler+ScimConfigModule.withSecret(System.String, System.String, ToolUp.AuthProviders.ScimHandler+ScimConfig) : ToolUp.AuthProviders.ScimHandler+ScimConfig
 ToolUp.AuthProviders.ScimHandler+ScimDeps (class)
-ToolUp.AuthProviders.ScimHandler+ScimDeps..ctor(ToolUp.Platform.TeamManagement+ITeamStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionStore+IPermissionStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.AuthProviders.ScimHandler+ScimConfig)
+ToolUp.AuthProviders.ScimHandler+ScimDeps..ctor(ToolUp.Platform.Config.TeamManagement+ITeamStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.PermissionStore+IPermissionStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.AuthProviders.ScimHandler+ScimConfig)
 ToolUp.AuthProviders.ScimHandler+ScimDeps.Audit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
 ToolUp.AuthProviders.ScimHandler+ScimDeps.Config : ToolUp.AuthProviders.ScimHandler+ScimConfig { get }
-ToolUp.AuthProviders.ScimHandler+ScimDeps.Permissions : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionStore+IPermissionStore] { get }
-ToolUp.AuthProviders.ScimHandler+ScimDeps.Teams : ToolUp.Platform.TeamManagement+ITeamStore { get }
+ToolUp.AuthProviders.ScimHandler+ScimDeps.Permissions : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.PermissionStore+IPermissionStore] { get }
+ToolUp.AuthProviders.ScimHandler+ScimDeps.Teams : ToolUp.Platform.Config.TeamManagement+ITeamStore { get }
 ToolUp.AuthProviders.ScimRoutes (class)
 ToolUp.AuthProviders.ScimRoutes.ScimContentType : System.String (literal)
 ToolUp.AuthProviders.ScimRoutes.bearerToken(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AuthProviders.ScimRoutes.routes(ToolUp.AuthProviders.ScimHandler+ScimConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.AuthProviders.ScimRoutes.scimCompanion : ToolUp.Platform.ComponentId { get }
 ToolUp.AuthProviders.ScimRoutes.tokensMatch(System.String, System.String) : System.Boolean
-ToolUp.AuthProviders.ScimRoutes.withScim(ToolUp.AuthProviders.ScimHandler+ScimConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AuthProviders.ScimRoutes.withScim(ToolUp.AuthProviders.ScimHandler+ScimConfig, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.AuthProviders.ScimTypes (class)
 ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping (class)
 ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping..ctor(ToolUp.AuthProviders.ScimTypes+ScimIdentitySource, ToolUp.AuthProviders.ScimTypes+ScimRoleMapping)

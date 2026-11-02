@@ -1,7 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.InMemoryNotificationChannelTests
 
 open ToolUp.Platform
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Tests.Contracts
 
 /// Binds the shared `INotificationChannelContract` pack to the default

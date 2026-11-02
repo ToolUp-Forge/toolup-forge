@@ -4,6 +4,7 @@
 module ToolUp.DataSources.GoogleAnalyticsSchema
 
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── GA4 dimension + metric catalogue ────────────────────────────────
 //

@@ -5,6 +5,8 @@ open System.Threading.Tasks
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
 
 // ─── Phase 69d.tail — per-method authorization metadata, classifier
 // default-on ─────────────────────────────────────────────────────────
@@ -94,11 +96,11 @@ let private authContext
 let private expectDeny (decision: AuthDecision) (label: string) =
     match decision with
     | Deny _ -> ()
-    | Allow -> failtestf "%s: expected Deny, got Allow" label
+    | AuthDecision.Allow -> failtestf "%s: expected Deny, got Allow" label
 
 let private expectAllow (decision: AuthDecision) (label: string) =
     match decision with
-    | Allow -> ()
+    | AuthDecision.Allow -> ()
     | Deny reason -> failtestf "%s: expected Allow, got Deny %s" label reason
 
 let private classificationOf (apiType: Type) (methodName: string) =
@@ -145,7 +147,7 @@ let tests =
         <| async {
             let ctx = DefaultHttpContext() :> HttpContext
             ctx.Items["ToolUp.PlatformRole"] <- box ToolUp.Platform.PlatformRole.PlatformAdmin
-            let! authCtx = ToolUp.Platform.ApiSeams.defaultForgeAuthContextResolver ctx
+            let! authCtx = ToolUp.Platform.Config.ApiSeams.defaultForgeAuthContextResolver ctx
             Expect.isTrue (authCtx.HasRole "PlatformAdmin") "a real admin (PlatformRole stamped) is allowed"
         }
 
@@ -155,7 +157,7 @@ let tests =
             // is always empty) — including genuine admins. Now: false only
             // when the server did not resolve PlatformAdmin.
             let ctx = DefaultHttpContext() :> HttpContext
-            let! authCtx = ToolUp.Platform.ApiSeams.defaultForgeAuthContextResolver ctx
+            let! authCtx = ToolUp.Platform.Config.ApiSeams.defaultForgeAuthContextResolver ctx
             Expect.isFalse (authCtx.HasRole "PlatformAdmin") "no PlatformRole stamped → denied"
         }
 
@@ -237,7 +239,7 @@ let tests =
         testList "Phase 132 — admin path-prefix backstop" [
             // Path-matching predicate: which surfaces the backstop guards.
             test "requiresPlatformAdmin gates the admin / tenant / grant prefixes" {
-                let gate = ToolUp.Platform.PlatformAdminAuthorization.requiresPlatformAdmin
+                let gate = ToolUp.Platform.Scope.PlatformAdminAuthorization.requiresPlatformAdmin
                 Expect.isTrue (gate "GET" (PathString "/api/_platform/admin/ad-units")) "admin prefix gated"
                 Expect.isTrue (gate "POST" (PathString "/api/_platform/admin/ad-units")) "admin write gated"
                 Expect.isTrue (gate "GET" (PathString "/api/_platform/tenants/GetLifecycleSummary")) "tenant gated"
@@ -246,7 +248,7 @@ let tests =
             }
 
             test "requiresPlatformAdmin leaves open surfaces untouched" {
-                let gate = ToolUp.Platform.PlatformAdminAuthorization.requiresPlatformAdmin
+                let gate = ToolUp.Platform.Scope.PlatformAdminAuthorization.requiresPlatformAdmin
                 // Public premium-status read — GET, ends `/premium-status`.
                 Expect.isFalse
                     (gate "GET" (PathString "/api/_platform/users/me/premium-status"))
@@ -278,7 +280,7 @@ let tests =
                         Task.CompletedTask)
 
                 let mw =
-                    ToolUp.Platform.PlatformAdminAuthorization.PlatformAdminAuthorizationMiddleware(next)
+                    ToolUp.Platform.Scope.PlatformAdminAuthorization.PlatformAdminAuthorizationMiddleware(next)
 
                 mw.InvokeAsync(ctx).GetAwaiter().GetResult()
                 ctx.Response.StatusCode, reached
@@ -414,7 +416,7 @@ let tests =
             let builder (_: HttpContext) : UnannotatedApi = { Naked = fun () -> async { return 1 } }
 
             Expect.throwsT<InvalidOperationException>
-                (fun () -> ToolUp.Platform.Api.make builder |> ignore)
+                (fun () -> ToolUp.Platform.Config.Api.make builder |> ignore)
                 "Phase 69d.tail: the classifier validator is default-on — an \
                  unannotated record must refuse at composition, naming the record"
         }
@@ -429,7 +431,7 @@ let tests =
             // exception manually to assert on the diagnostic text.
             let ex =
                 try
-                    ToolUp.Platform.Api.make builder |> ignore
+                    ToolUp.Platform.Config.Api.make builder |> ignore
                     failtest "expected the classifier to refuse composition with InvalidOperationException"
                 with :? InvalidOperationException as ex ->
                     ex
@@ -457,8 +459,8 @@ let tests =
                 AdminAndTenant = fun () -> async { return 6 }
             }
 
-            ToolUp.Platform.Api.make serverBuilder |> ignore
-            ToolUp.Platform.Api.make mirrorBuilder |> ignore
+            ToolUp.Platform.Config.Api.make serverBuilder |> ignore
+            ToolUp.Platform.Config.Api.make mirrorBuilder |> ignore
         }
 
         // ── Sweep enforcement over the shipped forge SDK records ──

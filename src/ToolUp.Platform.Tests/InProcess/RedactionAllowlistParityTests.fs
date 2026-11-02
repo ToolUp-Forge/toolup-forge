@@ -4,6 +4,8 @@ open System.IO
 open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 9n follow-up — redaction-allowlist parity guard ──────────
 //

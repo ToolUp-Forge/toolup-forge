@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.InProcess.PeerTestComposition
 
 open ToolUp.Platform
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Compose
 
 // ─── A peer composition under test ───────────────────────────────────
 //

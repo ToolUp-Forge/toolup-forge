@@ -5,7 +5,7 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IIndexLifecycle
+open ToolUp.Platform.Infra.IIndexLifecycle
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
@@ -13,6 +13,9 @@ open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 105 — KB original retention on IDataObjectStore ───────────
 //
@@ -210,7 +213,7 @@ let private contentBlobs (storage: IBlobStorage) (container: string) = async {
 }
 
 let private newStore (storage: IBlobStorage) : IDataObjectStore =
-    ToolUp.Platform.DataObjectStore.DataObjectStore(storage) :> IDataObjectStore
+    ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(storage) :> IDataObjectStore
 
 let tests =
     testList "Phase 105 — KB original retention on IDataObjectStore" [

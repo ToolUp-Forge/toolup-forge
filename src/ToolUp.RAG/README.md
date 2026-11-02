@@ -83,7 +83,7 @@ In the server entry point:
 
 ```fsharp
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.RAG.RAGCompose

@@ -7,6 +7,7 @@ open System
 open System.Security.Cryptography
 open System.Text
 open ToolUp.Platform
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 490 — the governed cohort-activation seam (vocabulary) ─────
 //

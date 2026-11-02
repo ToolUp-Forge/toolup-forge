@@ -6,6 +6,7 @@ open System.Net.Http
 open System.Text.Json
 open ToolUp.AI
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Compose
 
 // ─── Phase 9m.A optional API-access startup probe ────────────────────
 //
@@ -242,7 +243,7 @@ let private httpFetcher
 // default permit-all policy.
 let private probeClient (baseAddress: string) : HttpClient =
     let c =
-        ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+        ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
 
     c.BaseAddress <- Uri baseAddress
     c

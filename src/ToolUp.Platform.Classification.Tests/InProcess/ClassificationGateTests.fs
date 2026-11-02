@@ -8,6 +8,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Classification.Tests.Support
 open ToolUp.Platform.Classification.Tests.Support.Doubles
 open ToolUp.Platform.Classification.Tests.Contracts
+open ToolUp.Platform.Audit
 
 let private classifier () : IFieldClassifier =
     DefaultFieldClassifier.create SampleRegistry.customer

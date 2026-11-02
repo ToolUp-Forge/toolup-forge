@@ -32,13 +32,17 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 /// The render tools' fixture with its tables, metrics and hierarchy
 /// described.

@@ -5,6 +5,9 @@ module ToolUp.InterPlatform.PythonClientGen
 
 open System
 open System.Text
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 18e (Stage 3) — Python client generator ───────────────────
 //

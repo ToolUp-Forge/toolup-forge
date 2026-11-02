@@ -10,6 +10,9 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Metrics
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 6j.B — Tier 3: small-model triage ─────────────────────
 //

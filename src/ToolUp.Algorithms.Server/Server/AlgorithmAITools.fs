@@ -10,6 +10,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Algorithms.AlgorithmTypes
 open ToolUp.Algorithms.AlgorithmOperations
+open ToolUp.Platform.Infra
 
 // ─── Phase 11.E.2 — the AI tool surface ─────────────────────────────
 //

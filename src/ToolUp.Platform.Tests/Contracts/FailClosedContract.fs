@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.Contracts.FailClosedContract
 
 open Expecto
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Audit
 
 // ─── Phase 196 — adversarial fail-closed contract for the auth
 // classifier ───────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ let private ctx
 let private mustDeny (label: string) (decision: AuthDecision) =
     match decision with
     | Deny _ -> ()
-    | Allow -> failtestf "%s: FAIL-OPEN — expected Deny, got Allow" label
+    | AuthDecision.Allow -> failtestf "%s: FAIL-OPEN — expected Deny, got Allow" label
 
 // ── the contract ────────────────────────────────────────────────────────
 

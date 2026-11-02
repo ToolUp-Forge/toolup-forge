@@ -15,6 +15,7 @@ open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Cli
 open ToolUp.Cli.Dispatch
+open ToolUp.Platform.Compose
 
 // ─── Phase 194 — `k8s emit` ──────────────────────────────────────────
 //

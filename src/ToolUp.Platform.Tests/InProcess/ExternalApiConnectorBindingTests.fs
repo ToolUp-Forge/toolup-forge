@@ -8,6 +8,11 @@ open ToolUp.Platform.Transport
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.IExternalApiConnectorContract
 open ToolUp.DataSources.Common
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 128 — IExternalApiConnector contract bindings ─────────────
 //

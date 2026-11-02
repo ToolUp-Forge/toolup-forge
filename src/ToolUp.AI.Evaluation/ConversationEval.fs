@@ -38,6 +38,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
+open ToolUp.Platform.Infra
 
 // ─── Fixture model ────────────────────────────────────────────────
 

@@ -20,6 +20,7 @@ open ToolUp.AuthProviders.Oidc.OidcIdTokenValidator
 open ToolUp.AuthProviders.Oidc.OidcDiscovery
 open ToolUp.AuthProviders.Oidc.OidcClient
 open ToolUp.Platform.Tests.InProcess.MockOidcServer
+open ToolUp.Platform.Scope
 
 // ─── OIDC sign-in flow contract test (Phase 3b deferred follow-up) ──
 //
@@ -63,7 +64,7 @@ let private withHeader (name: string) (value: string) (ctx: HttpContext) =
 let private bearerCtx (token: string) =
     mkContext ()
     |> withHeader "Authorization" ("Bearer " + token)
-    |> ToolUp.Platform.RequestContextBuilder.ofHttpContext
+    |> ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext
 
 /// Minimal `application/json` parser — the mock issuer's `/token`
 /// response is a flat object with five well-known keys. Using

@@ -9,10 +9,12 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Tests.Support
 open ToolUp.RAG.VectorStores.Hnsw
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 14k WS5 — HNSW recall-fidelity + latency smoke ───────
 //

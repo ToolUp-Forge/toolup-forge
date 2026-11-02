@@ -4,7 +4,9 @@ open System
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 9m aggregator tests ────────────────────────────────────────
 //
@@ -57,7 +59,7 @@ let private runSecretStorePreflight (store: ToolUp.Platform.Secrets.ISecretStore
     let services = ServiceCollection()
 
     services.AddSingleton<IConfigValidator>(
-        ToolUp.Platform.ConfigValidator.SecretStoreValidator(store, timeout) :> IConfigValidator
+        ToolUp.Platform.Config.ConfigValidator.SecretStoreValidator(store, timeout) :> IConfigValidator
     )
     |> ignore
 
@@ -320,7 +322,7 @@ let tests =
             // would create divergent singleton instances.
             let services = ServiceCollection()
 
-            services.AddSingleton<IConfigValidator, ToolUp.Platform.ConfigValidator.SecretStoreValidator>()
+            services.AddSingleton<IConfigValidator, ToolUp.Platform.Config.ConfigValidator.SecretStoreValidator>()
             |> ignore
 
             Expect.throws
@@ -434,7 +436,7 @@ let tests =
         testCase "secret-store preflight — the SDK's own file store keeps the 5 s default"
         <| fun _ ->
             Expect.equal
-                (ToolUp.Platform.ConfigValidator.secretStorePreflightTimeout false None)
+                (ToolUp.Platform.Config.ConfigValidator.secretStorePreflightTimeout false None)
                 IConfigValidator.defaultTimeout
                 "no supplied store: the in-process FileSecretStore default keeps defaultTimeout"
 
@@ -443,7 +445,7 @@ let tests =
         testCase "secret-store preflight — a supplied (network-backed) store gets the cold-read budget"
         <| fun _ ->
             Expect.equal
-                (ToolUp.Platform.ConfigValidator.secretStorePreflightTimeout true None)
+                (ToolUp.Platform.Config.ConfigValidator.secretStorePreflightTimeout true None)
                 IConfigValidator.remoteSecretStoreTimeout
                 "a store supplied through withSecretStore is budgeted for a cold managed-identity read"
 
@@ -465,33 +467,33 @@ let tests =
             let chosen = TimeSpan.FromSeconds 3.0
 
             Expect.equal
-                (ToolUp.Platform.ConfigValidator.secretStorePreflightTimeout true (Some chosen))
+                (ToolUp.Platform.Config.ConfigValidator.secretStorePreflightTimeout true (Some chosen))
                 chosen
                 "override beats the remote default"
 
             Expect.equal
-                (ToolUp.Platform.ConfigValidator.secretStorePreflightTimeout false (Some chosen))
+                (ToolUp.Platform.Config.ConfigValidator.secretStorePreflightTimeout false (Some chosen))
                 chosen
                 "override beats the local default"
 
         testCase
             "secret-store preflight — withSecretStorePreflightTimeout records the override; a non-positive one is refused"
         <| fun _ ->
-            let bare = ToolUp.Platform.ServerApp.empty
+            let bare = ToolUp.Platform.Compose.ServerApp.empty
 
             Expect.isNone bare.SecretStorePreflightTimeout "the default composition carries no override"
 
             let app =
                 bare
-                |> ToolUp.Platform.ServerApp.withSecretStorePreflightTimeout (TimeSpan.FromSeconds 2.0)
-                |> ToolUp.Platform.ServerApp.withSecretStorePreflightTimeout (TimeSpan.FromSeconds 8.0)
+                |> ToolUp.Platform.Compose.ServerApp.withSecretStorePreflightTimeout (TimeSpan.FromSeconds 2.0)
+                |> ToolUp.Platform.Compose.ServerApp.withSecretStorePreflightTimeout (TimeSpan.FromSeconds 8.0)
 
             Expect.equal app.SecretStorePreflightTimeout (Some(TimeSpan.FromSeconds 8.0)) "the last value is kept"
 
             Expect.throwsT<ArgumentException>
                 (fun () ->
                     bare
-                    |> ToolUp.Platform.ServerApp.withSecretStorePreflightTimeout TimeSpan.Zero
+                    |> ToolUp.Platform.Compose.ServerApp.withSecretStorePreflightTimeout TimeSpan.Zero
                     |> ignore)
                 "a zero timeout would refuse every boot"
 
@@ -502,7 +504,7 @@ let tests =
             let outcomes =
                 runSecretStorePreflight
                     (slowSecretStore (TimeSpan.FromMilliseconds 5500.0))
-                    (ToolUp.Platform.ConfigValidator.secretStorePreflightTimeout true None)
+                    (ToolUp.Platform.Config.ConfigValidator.secretStorePreflightTimeout true None)
 
             Expect.equal outcomes.Length 1 "the secret-store probe ran"
             Expect.equal (ValidationResult.status outcomes.Head.Result) "Ok" "the cold read passed preflight")
@@ -515,7 +517,9 @@ let tests =
                 // budget is refused exactly as before — the budget moved, the
                 // refusal did not.
                 let budget =
-                    ToolUp.Platform.ConfigValidator.secretStorePreflightTimeout true (Some(TimeSpan.FromSeconds 1.0))
+                    ToolUp.Platform.Config.ConfigValidator.secretStorePreflightTimeout
+                        true
+                        (Some(TimeSpan.FromSeconds 1.0))
 
                 try
                     runSecretStorePreflight (slowSecretStore (TimeSpan.FromSeconds 3.0)) budget

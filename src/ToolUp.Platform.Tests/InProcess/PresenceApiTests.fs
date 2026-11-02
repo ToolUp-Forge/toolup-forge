@@ -11,6 +11,8 @@ open Microsoft.Extensions.DependencyInjection
 open FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 622 — presence + lock platform API ────────────────────────
 //

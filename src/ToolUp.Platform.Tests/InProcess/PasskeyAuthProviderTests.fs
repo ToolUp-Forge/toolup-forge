@@ -31,6 +31,11 @@ open ToolUp.AuthProviders.Passkey.PasskeyRegistrationPolicy
 open ToolUp.AuthProviders.Passkey.PasskeyCeremony
 open ToolUp.AuthProviders.Passkey.PasskeySessionToken
 open ToolUp.AuthProviders.Passkey.PasskeyConfigValidator
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

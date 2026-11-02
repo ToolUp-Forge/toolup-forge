@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.PrometheusMetricsSinkTests
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra.Metrics
 
 // ─── In-process binding — IMetricsSinkContract ──────────────────────
 //

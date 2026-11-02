@@ -49,6 +49,8 @@ open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

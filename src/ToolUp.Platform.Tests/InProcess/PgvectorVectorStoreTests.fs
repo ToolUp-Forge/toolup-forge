@@ -4,10 +4,13 @@ open System
 open Expecto
 open Npgsql
 open ToolUp.Platform
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.VectorStores.Pgvector
 open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 507 — Pgvector IVectorStore test pack ─────────────────────
 //

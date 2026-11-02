@@ -8,6 +8,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 632 — the public-content enumeration gate, made structural ─
 //
@@ -406,8 +409,8 @@ let private mixedPages = [
     mkPage "live" "Live Page" "launch" Published
     mkPage "secret-launch" "Project Nightingale" "launch,nightingale" PublishStatus.Draft
     mkPage "retired" "Retired Page" "launch" Archived
-    mkPage "embargoed" "Embargoed Announcement" "launch,embargo" (Scheduled(now.AddDays 7.0))
-    mkPage "released" "Released Page" "launch" (Scheduled(now.AddDays -7.0))
+    mkPage "embargoed" "Embargoed Announcement" "launch,embargo" (PublishStatus.Scheduled(now.AddDays 7.0))
+    mkPage "released" "Released Page" "launch" (PublishStatus.Scheduled(now.AddDays -7.0))
 ]
 
 let private seamTests =
@@ -460,7 +463,7 @@ let private seamTests =
 
         test "a scheduled page crosses the gate exactly at its publish instant" {
             let at = DateTimeOffset.Parse "2026-06-01T12:00:00Z"
-            let api = fakeApi [ mkPage "embargoed" "Embargoed" "" (Scheduled at) ]
+            let api = fakeApi [ mkPage "embargoed" "Embargoed" "" (PublishStatus.Scheduled at) ]
 
             let visibleAt (t: DateTimeOffset) =
                 api.ListPagesPublic(t, "") |> Async.RunSynchronously |> List.isEmpty |> not

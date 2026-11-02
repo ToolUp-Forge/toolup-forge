@@ -5,15 +5,18 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.RAGCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 893 — the keyword index is a composition choice ───────────
 //
@@ -309,10 +312,10 @@ let private weakText = "the office kitchen rota for next week"
 let private otherText = "parking permits renew every january"
 
 type private CapturingTracer() =
-    let traces = ResizeArray<ToolUp.Platform.IRetrievalTracer.RetrievalTrace>()
+    let traces = ResizeArray<ToolUp.Platform.Infra.IRetrievalTracer.RetrievalTrace>()
     member _.Last = traces |> Seq.tryLast
 
-    interface ToolUp.Platform.IRetrievalTracer.IRetrievalTracer with
+    interface ToolUp.Platform.Infra.IRetrievalTracer.IRetrievalTracer with
         member _.Trace trace _ = async { traces.Add trace }
         member _.Miss _ _ = async { return () }
 
@@ -399,7 +402,7 @@ let private scoreSpaceVerdict (app: RagOptions) : ConfigValidation.ValidationRes
     v.Validate() |> Async.RunSynchronously
 
 let private stubReranker =
-    { new ToolUp.Platform.IReranker.IReranker with
+    { new ToolUp.Platform.Infra.IReranker.IReranker with
         member _.Name = "stub-reranker"
         member _.MaxBatchSize = 32
         member _.Rerank _ candidates = async { return candidates }
@@ -428,7 +431,7 @@ type private TableReranker(maxBatch: int, scores: Map<string, float>) =
     let seen = ResizeArray<string>()
     member _.Seen = List.ofSeq seen
 
-    interface ToolUp.Platform.IReranker.IReranker with
+    interface ToolUp.Platform.Infra.IReranker.IReranker with
         member _.Name = "table-reranker"
         member _.MaxBatchSize = maxBatch
 
@@ -966,7 +969,7 @@ let tests =
 
                 let options = {
                     noBoosts with
-                        Reranker = Some(reranker :> ToolUp.Platform.IReranker.IReranker)
+                        Reranker = Some(reranker :> ToolUp.Platform.Infra.IReranker.IReranker)
                 }
 
                 let! matches = retrieveIds (fixedRankPipeline ranked (Some ranked) options tracer)
@@ -990,7 +993,7 @@ let tests =
                 let rerankedWith (options: ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions) =
                     let options = {
                         options with
-                            Reranker = Some(TableReranker(32, scores) :> ToolUp.Platform.IReranker.IReranker)
+                            Reranker = Some(TableReranker(32, scores) :> ToolUp.Platform.Infra.IReranker.IReranker)
                     }
 
                     retrieveIds (fixedRankPipeline ranked (Some ranked) options (CapturingTracer()))
@@ -1020,7 +1023,7 @@ let tests =
 
                 let options = {
                     ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults with
-                        Reranker = Some(TableReranker(32, scores) :> ToolUp.Platform.IReranker.IReranker)
+                        Reranker = Some(TableReranker(32, scores) :> ToolUp.Platform.Infra.IReranker.IReranker)
                 }
 
                 let! matches = retrieveIds (fixedRankPipeline ranked (Some ranked) options (CapturingTracer()))

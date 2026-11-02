@@ -4,7 +4,8 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Compose
 
 // ─── Phase 585 — security-classified preflight rule classes ───────────
 //

@@ -4,8 +4,9 @@ open System
 open System.Collections.Concurrent
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.EntityQueryTypes
+open ToolUp.Platform.Infra
 
 // ─── Test-only in-memory IEntityStore stub ────────────────────────
 //
@@ -91,7 +92,7 @@ type InMemoryEntityStore() =
                     | _ -> 0
 
                 if head <> expectedVersion then
-                    return Error(VersionConflict(core.Type, core.Id, expectedVersion, head))
+                    return Error(EntityError.VersionConflict(core.Type, core.Id, expectedVersion, head))
                 else
                     let newVersion = expectedVersion + 1
                     let stored = setVersion entity newVersion
@@ -154,7 +155,7 @@ type InMemoryEntityStore() =
                 | _ -> 0
 
             if head <> expectedVersion then
-                return Error(VersionConflict(entityType, entityId, expectedVersion, head))
+                return Error(EntityError.VersionConflict(entityType, entityId, expectedVersion, head))
             else
                 b.TryRemove(entityId) |> ignore
                 writes.Add(entityType, actor.Principal)

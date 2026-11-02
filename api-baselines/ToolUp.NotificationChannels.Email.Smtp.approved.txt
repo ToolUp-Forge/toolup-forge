@@ -5,10 +5,10 @@
 # still be folded into this file in the same PR.
 ToolUp.Platform.NotificationChannels.Email.Smtp (class)
 ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSink (class)
-ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSink..ctor(ToolUp.Platform.INotificationAddressBook, ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSink..ctor(ToolUp.Platform.Jobs.INotificationAddressBook, ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSinkModule (class)
-ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSinkModule.create(ToolUp.Platform.INotificationAddressBook, ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationSink
-ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSinkModule.fromEnv(ToolUp.Platform.INotificationAddressBook, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationSink
+ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSinkModule.create(ToolUp.Platform.Jobs.INotificationAddressBook, ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpSettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Jobs.INotificationSink
+ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpNotificationSinkModule.fromEnv(ToolUp.Platform.Jobs.INotificationAddressBook, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Jobs.INotificationSink
 ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpSettings (class)
 ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpSettings..ctor(System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.NotificationChannels.Email.Smtp+SmtpSettings.DefaultFromAddress : System.String { get }

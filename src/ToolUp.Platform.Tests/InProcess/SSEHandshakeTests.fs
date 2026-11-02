@@ -6,6 +6,7 @@ open System.Text
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 /// Run `SSE.writeReadyResponse` once into a throwaway context to
 /// warm up JIT + assembly-load overhead (DefaultHttpContext drags

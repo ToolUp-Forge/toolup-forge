@@ -4,6 +4,7 @@ open System
 open ToolUp.AI
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6m — Anonymous surface + AI + no anonymous rate limit ─────
 //

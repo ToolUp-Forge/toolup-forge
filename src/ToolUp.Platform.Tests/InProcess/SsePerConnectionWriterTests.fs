@@ -10,6 +10,8 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Http.Features
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── SSEConnectionManager - per-connection writers (Phase 6k) ────────
 //

@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.iCalendar
+open ToolUp.Platform.Compose
 
 // ─── iCalendar — parse + emit + round-trip tests ─────────────────
 //

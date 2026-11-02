@@ -7,6 +7,10 @@ open ToolUp.Platform
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 590 — PeerSurface derivation guard ────────────────────────
 //

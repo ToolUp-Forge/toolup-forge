@@ -30,6 +30,9 @@ open Expecto
 open Microsoft.AspNetCore.Builder
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 type private MarkerA() = class end
 type private MarkerB() = class end

@@ -15,6 +15,9 @@ open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders.LdapConfig
 open ToolUp.AuthProviders.LdapDirectory
 open ToolUp.AuthProviders.LdapGroupMapper
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config.Auth
 
 // ─── LDAP / Active Directory auth-provider companion ─────────────────
 //

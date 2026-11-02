@@ -8,7 +8,11 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
-open ToolUp.Platform.MetricsHistoryFlusher
+open ToolUp.Platform.Infra.MetricsHistoryFlusher
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 829 — metrics history ────────────────────────────────────
 //

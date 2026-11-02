@@ -20,11 +20,17 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 86 — gated / tenant-scoped / audience-targeted SSR ────────
 //
@@ -2372,7 +2378,7 @@ let private readerRefusalAuditTests =
             let now = ref (DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero))
 
             let hook =
-                ToolUp.Platform.AuthAuditHook.AuthAuditHook(
+                ToolUp.Platform.Audit.AuthAuditHook.AuthAuditHook(
                     auditLog,
                     silentLogger,
                     TimeSpan.FromSeconds 60.0,

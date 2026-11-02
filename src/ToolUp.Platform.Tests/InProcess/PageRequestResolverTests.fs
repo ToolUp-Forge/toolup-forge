@@ -18,11 +18,14 @@ open Fuaran.Compute
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 let private run (a: Async<'T>) : 'T = Async.RunSynchronously a
 

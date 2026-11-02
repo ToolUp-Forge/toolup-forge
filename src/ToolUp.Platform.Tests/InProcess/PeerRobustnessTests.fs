@@ -20,6 +20,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
 
 // ─── Phase 343 — peer robustness roundup ─────────────────────────────
 //

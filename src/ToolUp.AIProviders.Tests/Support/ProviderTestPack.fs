@@ -13,6 +13,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.AI
 open ToolUp.AI.DefaultAIProviderFactory
 open ToolUp.AIProviders.Tests.Support.InMemoryStores
+open ToolUp.Platform.Compose
 
 // ─── Live-API behavioural-conformance pack ──────────────────────────
 //

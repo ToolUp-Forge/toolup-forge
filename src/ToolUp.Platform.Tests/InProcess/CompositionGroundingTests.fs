@@ -4,6 +4,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 526 — composition introspection covers grounding ──────────
 //

@@ -5,9 +5,11 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.VectorStores.Hnsw
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Silence the per-flush directory-name warnings: `LocalFileStorage` on
 /// Windows can't materialise the `team:<id>` segment of the persisted

@@ -3,6 +3,8 @@ module ToolUp.Reporting.ReportSubscriptionApiHandler
 open System
 open ToolUp.Platform
 open ToolUp.Reporting
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 534.C — the management handler ────────────────────────────
 //

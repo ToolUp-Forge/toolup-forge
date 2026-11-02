@@ -2,6 +2,7 @@ module ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Scope
 
 // ─── RevokeOnIssuerRemoved — Phase 66 Stream C.5 ─────────────────────
 //

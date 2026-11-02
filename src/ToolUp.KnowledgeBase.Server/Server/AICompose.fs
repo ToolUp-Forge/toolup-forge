@@ -10,6 +10,9 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.AI.AICompose
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Built-in AI tools that surface the KnowledgeBase to the assistant
 // directly — separate from the `list_narratives` / `get_narrative`

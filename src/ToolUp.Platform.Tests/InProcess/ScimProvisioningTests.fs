@@ -20,13 +20,15 @@ open Giraffe
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders.ScimTypes
 open ToolUp.AuthProviders.ScimHandler
 open ToolUp.AuthProviders.ScimRoutes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── SCIM 2.0 provisioning conformance pack ──────────────────────────
 //

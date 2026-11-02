@@ -4,6 +4,7 @@ open System
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 /// Bind the `IDataCatalog` contract test pack to the in-process
 /// `DataCatalog` implementation. Each factory call constructs a

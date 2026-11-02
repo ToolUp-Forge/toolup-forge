@@ -10,6 +10,8 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.DataSources.Common
 open ToolUp.DataSources.Tests.Support
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 1015 — the IWatchableFileSource contract pack ─────────────
 //

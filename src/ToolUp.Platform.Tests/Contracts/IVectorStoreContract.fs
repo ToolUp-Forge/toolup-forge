@@ -6,9 +6,11 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Phase 861 — the restart laws every `IVectorStore` persisted over an
 /// `IBlobStorage` must satisfy, plus the same laws for an `ISparseIndex`

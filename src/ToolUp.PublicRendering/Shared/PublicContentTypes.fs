@@ -2,6 +2,7 @@ namespace ToolUp.PublicRendering
 
 open System
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // `ContentRoot` and `PublicRenderingMode` live in
 // `ToolUp.Platform.Core.Shared.SDK.Shared.fs` so `ServerConfig` can

@@ -38,12 +38,16 @@ open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open DataManagementTypes
 open SharedTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private run = Async.RunSynchronously
 let private logger = ConsoleLogger.ConsoleLogger() :> ILogger

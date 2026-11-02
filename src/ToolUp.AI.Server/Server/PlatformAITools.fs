@@ -5,13 +5,15 @@ open System.Text
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.ToolHelpers
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 /// Built-in cross-module AI tool family (`_platform.ai.*`).
 ///

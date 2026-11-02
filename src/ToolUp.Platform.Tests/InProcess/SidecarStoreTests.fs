@@ -11,9 +11,10 @@ module ToolUp.Platform.Tests.InProcess.SidecarStoreTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.Contracts.IModelRegistryContract
+open ToolUp.Platform.Infra
 
 type Note = {
     Id: string

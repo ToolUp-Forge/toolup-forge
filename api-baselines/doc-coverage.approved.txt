@@ -77,7 +77,7 @@ ToolUp.DataSources.GoogleAnalytics 61/98
 ToolUp.DataSources.GoogleAnalytics.Client 6/11
 ToolUp.DataSources.Parquet 15/19
 ToolUp.DataSources.Redshift 17/19
-ToolUp.DataSources.Snowflake 26/36
+ToolUp.DataSources.Snowflake 28/36
 ToolUp.DataSources.Sql 25/48
 ToolUp.DataSources.Synapse 27/37
 ToolUp.EmbeddingCaches.Redis 33/63
@@ -136,7 +136,7 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 492/910
+ToolUp.Platform.Build 564/1006
 ToolUp.Platform.Client 2947/7264
 ToolUp.Platform.Core 7353/15371
 ToolUp.Platform.Server 3015/5420
@@ -184,7 +184,7 @@ ToolUp.Stripe.Webhook 30/88
 ToolUp.Tabular 103/273
 ToolUp.TelemetrySinks.Ga4 2/4
 ToolUp.TimeSeriesStores.Timescale 3/5
-ToolUp.VectorStores.Hnsw 9/31
+ToolUp.VectorStores.Hnsw 12/34
 ToolUp.VectorStores.Pgvector 102/142
 ToolUp.Voice.Client 6/18
 ToolUp.Voice.Core 31/77

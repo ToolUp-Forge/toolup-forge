@@ -6,6 +6,7 @@ module ToolUp.AI.McpHost.McpGovernance
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 489 — per-agent budgets + rate limits ─────────────────────
 //

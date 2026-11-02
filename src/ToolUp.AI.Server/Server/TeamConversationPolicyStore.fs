@@ -18,9 +18,10 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.TeamPolicyStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.TeamPolicyStore
 open ToolUp.AI
+open ToolUp.Platform.Scope
 
 // ─── The per-request gate ────────────────────────────────────────
 

@@ -11,6 +11,10 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Team-to-team fact publication (Phase 897) ───────────────────────
 //

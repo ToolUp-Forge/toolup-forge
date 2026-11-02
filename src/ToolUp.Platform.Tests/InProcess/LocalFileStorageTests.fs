@@ -4,6 +4,7 @@ open System
 open System.IO
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 /// Bind the `IBlobStorage` contract test pack to `LocalFileStorage`.
 /// Each factory call creates a fresh temp directory so tests don't

@@ -10,12 +10,17 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.Platform.Usage
 open ToolUp.RAG.IngestionTypes
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Retry / dead-letter substrate (Phase 14t) ────────────────────
 

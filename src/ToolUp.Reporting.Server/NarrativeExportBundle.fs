@@ -34,6 +34,7 @@ module ToolUp.Reporting.NarrativeExportBundle
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
+open ToolUp.Platform.Infra
 
 /// Pair a document with its rendered chart artifacts, with no disclosure
 /// gate — for a deployment that composes no fact tier. Byte-for-byte

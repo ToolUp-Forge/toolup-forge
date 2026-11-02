@@ -6,6 +6,10 @@ namespace ToolUp.Facts
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── ReactiveDataChange (Phase 623.C — react to data arrival) ─────────
 //

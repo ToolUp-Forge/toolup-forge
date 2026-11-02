@@ -7,6 +7,7 @@ open Giraffe.ViewEngine
 open ToolUp.BrandKit
 open ToolUp.Elmish
 open ToolUp.Platform.Testing
+open ToolUp.Platform.Jobs
 
 module A11y = ToolUp.Platform.Testing.Accessibility
 

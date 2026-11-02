@@ -6,7 +6,8 @@ namespace ToolUp.PublicRendering
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra
 
 // ─── Phase 91 — RAG-backed answer pages ──────────────────────────────
 //

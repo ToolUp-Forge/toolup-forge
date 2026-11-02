@@ -11,6 +11,8 @@ open ToolUp.Platform
 open ToolUp.Platform.AuditSinks.DatadogLogs
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// `HttpMessageHandler` that always returns 202 Accepted (Datadog's
 /// success status for the Logs intake endpoint) and records every

@@ -5,6 +5,7 @@ namespace ToolUp.InterPlatform
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 644 — registry lifecycle transitions over the peer seam ───
 //

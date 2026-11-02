@@ -15,6 +15,8 @@ open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 20a — the generic CalDAV calendar bridge ─────────────────
 //

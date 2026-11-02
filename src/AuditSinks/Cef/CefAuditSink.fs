@@ -8,6 +8,7 @@ open ToolUp.Platform.AuditSinks.CefFormat
 open ToolUp.Platform.AuditSinks.CefSyslog
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Audit
 
 // ─── Public surface ──────────────────────────────────────────────
 //

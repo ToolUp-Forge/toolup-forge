@@ -10,12 +10,17 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Usage
 open ToolUp.InterPlatform
 open ToolUp.ModelProviders.Reference
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 451 — compute-budget governance ───────────────────────────────
 //

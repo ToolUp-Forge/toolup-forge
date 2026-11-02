@@ -5,6 +5,8 @@ open System.IO
 open System.Threading
 open Expecto
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 69g.tail — per-method `[<RateLimit>]` attribution, telemetry
 // + audit denial integration, operator status-board surface ───────────
@@ -133,7 +135,7 @@ let tests =
 
         // ── Enforcement semantics ──
         test "budget allows under the cap and denies over it" {
-            let store = InMemoryRateLimitStore() :> IRateLimitStore
+            let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
             let budgets = [ RateLimitAttribute(2, RateLimitWindow.perMinute) ]
 
             let d1 = run (RateLimit.evaluate store "subject:a" "Capped" budgets)
@@ -150,7 +152,7 @@ let tests =
         }
 
         test "multi-budget AND: the tightest budget denies even when a wider one has room" {
-            let store = InMemoryRateLimitStore() :> IRateLimitStore
+            let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
             // 1 call/second AND 100 calls/hour. The per-second cap bites
             // on the second call within the same second; the hourly cap
             // (99 remaining) is irrelevant — AND semantics.
@@ -170,7 +172,7 @@ let tests =
         }
 
         test "per-subject isolation: one subject's exhaustion does not affect another" {
-            let store = InMemoryRateLimitStore() :> IRateLimitStore
+            let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
             let budgets = [ RateLimitAttribute(1, RateLimitWindow.perMinute) ]
 
             run (RateLimit.evaluate store "subject:a" "Capped" budgets) |> ignore
@@ -307,7 +309,7 @@ let tests =
 
             let stores =
                 Array.init rounds (fun _ ->
-                    let store = InMemoryRateLimitStore() :> IRateLimitStore
+                    let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
 
                     for _ in 1 .. budget - 1 do
                         run (store.TryAcquire(key, budget, window)) |> ignore

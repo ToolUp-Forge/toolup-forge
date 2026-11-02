@@ -8,8 +8,9 @@ open System.IO
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra
 
 // ─── Static-corpus retrieval pipeline ────────────────────────────
 //

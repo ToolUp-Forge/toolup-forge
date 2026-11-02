@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.CompanionCapabilityTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 282 — typed companion capability descriptors ───────────────
 //

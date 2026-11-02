@@ -16,6 +16,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 577 — the `_platform.reporting` AI tool family ────────────
 //

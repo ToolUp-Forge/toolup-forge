@@ -9,6 +9,7 @@ open System.Text.Json
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── The fact-table change signal ───────────────────────────────────
 //

@@ -19,6 +19,10 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Facts
 open ToolUp.FactStores.Postgres
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ── The verb ──────────────────────────────────────────────────────────
 

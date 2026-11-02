@@ -3,7 +3,11 @@ module ToolUp.RAG.RagConfigValidator
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── RAG-specific config validators (Phase 4b commit 3) ─────────────
 //

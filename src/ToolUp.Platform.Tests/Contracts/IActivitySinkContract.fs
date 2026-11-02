@@ -2,7 +2,7 @@ module ToolUp.Platform.Tests.Contracts.IActivitySinkContract
 
 open System.Diagnostics
 open Expecto
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 
 // ─── IActivitySink contract pack — Phase 9l ─────────────────────────
 //

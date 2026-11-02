@@ -8,10 +8,10 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.Server
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
@@ -23,6 +23,10 @@ open ToolUp.Forms.IActionLedger
 open ToolUp.Forms.FormApiHandler
 open ToolUp.Forms.PublicFormApi
 open ToolUp.Forms.PublicFormApiHandler
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 66 Stream B.6 — Forms public-submit surface declaration ──
 //
@@ -470,8 +474,8 @@ let composeForms (options: FormsOptions) (app: ServerApp) : ServerApp =
                     let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
 
                     let metricsSink =
-                        sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>)
-                        :?> ToolUp.Platform.Metrics.IMetricsSink
+                        sp.GetService(typeof<ToolUp.Platform.Infra.Metrics.IMetricsSink>)
+                        :?> ToolUp.Platform.Infra.Metrics.IMetricsSink
 
                     let logger =
                         (sp.GetService(typeof<ILoggerFactory>) :?> ILoggerFactory)
@@ -497,8 +501,8 @@ let composeForms (options: FormsOptions) (app: ServerApp) : ServerApp =
                     // unconditional. Tests inject a counter-recording
                     // double via the constructor instead of through DI.
                     let metricsSink =
-                        sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>)
-                        :?> ToolUp.Platform.Metrics.IMetricsSink
+                        sp.GetService(typeof<ToolUp.Platform.Infra.Metrics.IMetricsSink>)
+                        :?> ToolUp.Platform.Infra.Metrics.IMetricsSink
 
                     let logger =
                         (sp.GetService(typeof<ILoggerFactory>) :?> ILoggerFactory)

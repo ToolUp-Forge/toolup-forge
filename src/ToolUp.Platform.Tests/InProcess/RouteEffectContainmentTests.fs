@@ -27,6 +27,8 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ── fixtures ──────────────────────────────────────────────────────────
 

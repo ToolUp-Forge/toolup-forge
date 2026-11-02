@@ -9,6 +9,9 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── evaluate_pipeline in the answering form ────────────────────────
 //

@@ -15,6 +15,9 @@ open ToolUp.AuthProviders.Passkey.PasskeyStores
 open ToolUp.AuthProviders.Passkey.PasskeyRegistrationPolicy
 open ToolUp.AuthProviders.Passkey.PasskeyCeremony
 open ToolUp.AuthProviders.Passkey.PasskeySessionToken
+open ToolUp.Remoting.Server.Http
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
 
 // ─── Ceremony endpoints ──────────────────────────────────────────────
 //

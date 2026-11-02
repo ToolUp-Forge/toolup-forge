@@ -9,6 +9,8 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 165 — module-binding gate contract tests ─────────────────────
 //

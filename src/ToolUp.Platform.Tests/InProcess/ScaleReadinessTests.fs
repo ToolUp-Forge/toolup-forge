@@ -4,6 +4,10 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 434 — composition scale-readiness planner ──────────────────
 //

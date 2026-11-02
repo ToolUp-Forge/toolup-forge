@@ -6,6 +6,7 @@ namespace ToolUp.MediaLibrary
 open System
 open System.IO
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 88 — IMediaLibrary ─────────────────────────────────────────
 //

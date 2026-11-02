@@ -7,6 +7,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── The conversation record, read and written in one place ──────────
 //

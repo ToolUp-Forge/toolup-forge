@@ -21,14 +21,18 @@ open ToolUp.RAG.IngestionTypes
 open System
 open System.Threading
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 let private run = Async.RunSynchronously
 
@@ -591,7 +595,7 @@ type private BatchingVectorStore(blob: IBlobStorage) =
         }
 
 let private noopEventStore () =
-    ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
 let private startService
     (q: IngestionQueue)
@@ -608,8 +612,8 @@ let private startService
         1
         noopLogger
         (ToolUp.RAG.RagTelemetry.createNoOp ())
-        (ToolUp.Platform.Usage.NoOpUsageLog())
-        (ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+        (ToolUp.Platform.Infra.Usage.NoOpUsageLog())
+        (ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
         retry
         None
         (ToolUp.RAG.IngestionService.IngestionAlertState())
@@ -1187,8 +1191,8 @@ let private startOnQueue (q: IIngestionQueue) (logger: ILogger) =
         1
         logger
         (ToolUp.RAG.RagTelemetry.createNoOp ())
-        (ToolUp.Platform.Usage.NoOpUsageLog())
-        (ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+        (ToolUp.Platform.Infra.Usage.NoOpUsageLog())
+        (ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
         IngestionRetryPolicy.defaults
         None
         (ToolUp.RAG.IngestionService.IngestionAlertState())

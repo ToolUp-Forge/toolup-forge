@@ -6,6 +6,8 @@ namespace ToolUp.Facts
 open System
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
 
 // ─── Certificate-verified fact import (Phase 683) ────────────────────────
 //

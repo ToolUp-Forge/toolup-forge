@@ -3,6 +3,7 @@ module ToolUp.Platform.NotificationChannels.RedisDistributedLock
 open System
 open StackExchange.Redis
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Phase 9i — cross-instance IDistributedLock over Redis ───────────
 //

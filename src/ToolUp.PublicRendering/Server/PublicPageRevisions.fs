@@ -4,7 +4,8 @@
 module ToolUp.PublicRendering.PublicPageRevisions
 
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 89 — page version history ──────────────────────────────────
 //

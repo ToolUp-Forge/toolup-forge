@@ -9,6 +9,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Audit
 
 // Phase 30a — in-process binding for the default Ed25519 artefact
 // substrate. Binds `IArtifactSignerContract` + `IArtifactVerifierContract`

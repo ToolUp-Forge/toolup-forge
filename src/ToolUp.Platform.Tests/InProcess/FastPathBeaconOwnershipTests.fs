@@ -8,6 +8,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.FastPathBeaconHandler
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 6j.D — conversation-ownership gate ────────────────────
 //

@@ -20,12 +20,15 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private noopLogger =
     { new ILogger with
@@ -140,7 +143,7 @@ let private auditScopeTests =
         testCaseAsync "trace, miss, query refusal and vacuum land under the team's bare id"
         <| async {
             let eventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let tracer =
                 ToolUp.RAG.RetrievalTracers.EventStoreRetrievalTracer(eventStore, noopLogger) :> IRetrievalTracer

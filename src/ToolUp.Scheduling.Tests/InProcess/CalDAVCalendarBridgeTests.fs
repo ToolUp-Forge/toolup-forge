@@ -16,6 +16,7 @@ open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.CalDAV
 open ToolUp.Scheduling.Tests.Contracts
+open ToolUp.Platform.Compose
 
 // ─── Binding 2 of the ICalendarBridge contract pack ─────────────────
 //

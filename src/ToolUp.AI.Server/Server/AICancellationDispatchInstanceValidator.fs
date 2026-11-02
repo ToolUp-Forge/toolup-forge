@@ -3,6 +3,7 @@ module ToolUp.AI.AICancellationDispatchInstanceValidator
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Multi-instance + in-process cancel / client-tool dispatch ──────
 //

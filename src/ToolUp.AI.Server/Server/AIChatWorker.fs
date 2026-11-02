@@ -9,6 +9,8 @@ open System.Threading.Channels
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Supervised agent-loop worker ─────────────────────────────────
 //

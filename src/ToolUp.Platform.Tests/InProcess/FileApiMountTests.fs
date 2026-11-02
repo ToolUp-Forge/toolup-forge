@@ -40,6 +40,8 @@ open Giraffe
 open ProcessedDataTypes
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 

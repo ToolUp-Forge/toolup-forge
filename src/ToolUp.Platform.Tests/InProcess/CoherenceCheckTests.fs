@@ -8,6 +8,10 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.HealthChecks
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 563 — fact-base coherence checking ────────────────────────
 //

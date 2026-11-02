@@ -5,6 +5,7 @@ namespace ToolUp.PublicRendering
 
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // ─── Phase 80 — Narrative ↔ Phase-57 prerender bridge ────────────
 //

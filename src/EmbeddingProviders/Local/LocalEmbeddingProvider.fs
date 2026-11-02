@@ -5,8 +5,9 @@ open System.Collections.Concurrent
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── TF-IDF embedding provider ────────────────────────────────────
 //

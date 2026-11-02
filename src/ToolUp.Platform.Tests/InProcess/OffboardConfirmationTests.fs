@@ -6,6 +6,10 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 54i — confirmation-gated offboard tests ───────────────────
 //

@@ -12,6 +12,9 @@ open System.Net
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 let private cfg (surfaces: SurfaceProfile list) (cidrs: string list) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with

@@ -8,11 +8,13 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.Providers
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.AI
 open ToolUp.RAG.RAGCompose
 open ToolUp.RAG.StaticCorpus
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 63 — StaticCorpus contract + determinism ──────────────────
 //

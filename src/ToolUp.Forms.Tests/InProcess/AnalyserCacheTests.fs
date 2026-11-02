@@ -434,7 +434,7 @@ let private wiringTests =
 let private resultStoreEvictionTests =
     let newCache () =
         let store =
-            ToolUp.Platform.ResultStore.InMemoryResultStore() :> ToolUp.Platform.IResultStore
+            ToolUp.Platform.Config.ResultStore.InMemoryResultStore() :> ToolUp.Platform.Infra.IResultStore
 
         let scopeId = "team-" + System.Guid.NewGuid().ToString("N").Substring(0, 8)
         ResultStoreAnalyserCache(store, (fun () -> scopeId)) :> IAnalyserCache, store, scopeId

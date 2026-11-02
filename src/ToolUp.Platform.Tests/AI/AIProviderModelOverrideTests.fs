@@ -33,6 +33,10 @@ open ToolUp.Platform.Providers
 open ToolUp.Platform.Usage
 open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fakes ───────────────────────────────────────────────────────
 
@@ -733,7 +737,8 @@ let private generousSpendCap =
 
 /// The four decorators, keyed by the name a failure reports.
 let private decoratorLayers () : (string * (IAIProviderFactory -> IAIProviderFactory)) list =
-    let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let store =
+        ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     let metering (f: IAIProviderFactory) =
         AIProviderUsageMiddleware.MeteringProviderFactory(f, CollectingUsageLog(), emptyProviderProfile, Some rateCard)
@@ -841,7 +846,9 @@ let private budgetForwardingTests =
 
         testCaseAsync "the token budget still refuses an over-budget call on the override path"
         <| async {
-            let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store =
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
             writeTurn store alice "acme-mini" 900 200
             let native = NativeProvider("acme", "acme-1", isAcme)
 
@@ -874,7 +881,8 @@ let private budgetForwardingTests =
 
         testCaseAsync "the spend gate still refuses an over-budget call on the override path"
         <| async {
-            let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store =
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
             // 1M in @ 3.00 + 1M out @ 15.00 = 18.00 spent against a 5.00 ceiling.
             writeTurn store alice "acme-1" 1_000_000 1_000_000
             let native = NativeProvider("acme", "acme-1", isAcme)
@@ -917,7 +925,9 @@ let private budgetForwardingTests =
             // `AssumedOutputTokens` of output: ~0.015 on the frontier
             // rate card entry, ~0.0005 on the cheap one. A 0.01 ceiling
             // sits between them, so the verdict names the model priced.
-            let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store =
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
             let native = NativeProvider("acme", "acme-1", isAcme)
 
             let provider =
@@ -1036,7 +1046,7 @@ let private contractBindings =
                     factoryOver inner,
                     tokenBudget
                         generousTokenCap
-                        (ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+                        (ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
                 )
                 :> IAIProviderFactory
                 |> resolveThrough))
@@ -1048,7 +1058,7 @@ let private contractBindings =
                     factoryOver inner,
                     spendBudget
                         generousSpendCap
-                        (ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+                        (ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
                 )
                 :> IAIProviderFactory
                 |> resolveThrough))

@@ -5,6 +5,8 @@ namespace ToolUp.InterPlatform
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 478 — the gated-output pipeline ────────────────────────────
 //

@@ -10,6 +10,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.DataSources.Common
 open DataManagementTypes
+open ToolUp.Platform.Infra
 
 module CsvWire = ToolUp.DataSources.Common.Csv
 

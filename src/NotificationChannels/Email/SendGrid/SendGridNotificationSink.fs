@@ -9,6 +9,8 @@ open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Public surface ──────────────────────────────────────────────
 //

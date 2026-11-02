@@ -11,8 +11,10 @@ open Azure.Core
 open Azure.Security.KeyVault.Keys.Cryptography
 open ToolUp.Platform
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 22a — Azure Key Vault-backed IBlobEncryptionKeyResolver ─────
 //

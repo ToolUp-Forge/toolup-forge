@@ -12,6 +12,8 @@ module ToolUp.Platform.TestScope
 
 open ToolUp.Platform
 open ToolUp.Facts
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 /// The resolved scope of the shard `scopeId`, as the resolver would mint it
 /// for a principal that resolved to it (its container is the shard id, the

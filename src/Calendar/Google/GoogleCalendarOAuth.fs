@@ -11,8 +11,9 @@ open System.Globalization
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.ProviderOAuthFlow
+open ToolUp.Platform.Infra.ProviderOAuthFlow
 open ToolUp.Scheduling.ICalendarBridge
+open ToolUp.Platform.Infra
 
 // ─── Phase 830 — Google Calendar credentials ────────────────────────
 //

@@ -4,6 +4,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
 
 // ─── FileSecretStore — atomic read-modify-write ──────────────────────
 //

@@ -9,6 +9,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
+open ToolUp.Platform.Audit
 
 // ─── Keyed byte signing over the application signing seam ───────────────
 //

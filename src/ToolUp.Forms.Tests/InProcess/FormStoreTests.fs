@@ -3,11 +3,12 @@ module ToolUp.Forms.Tests.InProcess.FormStoreTests
 open System
 open Expecto
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.IFormStore
 open ToolUp.Forms.FormStore
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Forms.Tests.Contracts
+open ToolUp.Platform.Infra
 
 /// Bind the IFormStore contract pack to the default FormStore impl
 /// over the in-memory IEntityStore stub. Future distributed

@@ -4,14 +4,17 @@ open System.Collections.Generic
 open System.Text.RegularExpressions
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IReranker
-open ToolUp.Platform.IQueryRewriter
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IReranker
+open ToolUp.Platform.Infra.IQueryRewriter
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
+open ToolUp.Platform.Infra.IRagTelemetry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Query-size guard (Phase 14y) ─────────────────────────────────
 

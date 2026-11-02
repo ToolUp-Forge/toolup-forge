@@ -9,7 +9,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IIndexLifecycle
+open ToolUp.Platform.Infra.IIndexLifecycle
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
@@ -18,6 +18,10 @@ open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerOriginalSourceResolver
 open KnowledgeBase.ServerIngestionObserver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 510 — KB document versioning + incremental re-index ───────
 //

@@ -9,6 +9,7 @@ open ToolUp.Algorithms.AlgorithmTypes
 open ToolUp.Algorithms.AlgorithmsCompose
 open ToolUp.AlgorithmProviders
 open ToolUp.AlgorithmProviders.MathNetAlgorithmSupport
+open ToolUp.Platform.Compose
 
 // ─── Phase 11.E.3 — the assembled Math.NET provider ─────────────────
 //

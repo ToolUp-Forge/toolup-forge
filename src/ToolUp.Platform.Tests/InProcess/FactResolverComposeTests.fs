@@ -11,16 +11,20 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 558 — fact-resolver compose wiring ────────────────────────
 //

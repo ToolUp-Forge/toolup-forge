@@ -3,6 +3,10 @@ module ToolUp.Platform.Tests.InProcess.SeamAuthorityTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 688 — seam-granularity module authority grants ─────────────
 //

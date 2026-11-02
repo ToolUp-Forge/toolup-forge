@@ -2,7 +2,7 @@ module ToolUp.Platform.Tracing.OpenTelemetry
 
 open System.Diagnostics
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 
 // ─── OtelActivitySink — Phase 9l OpenTelemetry tracing companion ────
 //

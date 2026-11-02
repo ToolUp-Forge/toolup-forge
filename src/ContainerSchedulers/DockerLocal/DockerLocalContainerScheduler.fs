@@ -16,6 +16,8 @@ open System.Text.Json
 open System.Threading
 open System.Threading.Tasks
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── DockerLocalContainerScheduler (Phase 26 reference companion) ────
 //

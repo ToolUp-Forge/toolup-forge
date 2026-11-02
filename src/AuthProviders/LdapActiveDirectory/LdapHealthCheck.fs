@@ -8,6 +8,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.HealthChecks
 open ToolUp.AuthProviders.LdapConfig
 open ToolUp.AuthProviders.LdapDirectory
+open ToolUp.Platform.Infra
 
 // ─── LDAP connectivity health probe (Phase 9k IHealthCheck) ─────────
 //

@@ -8,8 +8,11 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 629 — compose-level registration for the deferred knobs ───
 //

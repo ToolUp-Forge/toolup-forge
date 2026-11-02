@@ -7,6 +7,10 @@ open System.Text.Json
 open Expecto
 open ToolUp.Platform
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 435 — cross-version composition upgrade planner ────────────
 //

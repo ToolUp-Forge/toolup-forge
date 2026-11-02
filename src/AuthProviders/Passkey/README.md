@@ -17,7 +17,7 @@ Substrate dependencies arrive through composition, never read directly (companio
 Compose the passkey companion onto your `ServerApp` with `PasskeyCompose.withPasskey config`. It is applied once, when the deployment resolves, so every `ServerApp` builder works on either side of it: it sets the app `IAuthProvider`, registers the preflight validator, mounts the ceremony routes, and registers the `PasskeyRuntime` DI singleton (the Fido2 verifier plus the credential / challenge stores) over the resolved `IBlobStorage`.
 
 ```fsharp skip=fragment
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyCompose
 

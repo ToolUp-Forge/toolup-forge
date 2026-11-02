@@ -1,7 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.OtelActivitySinkTests
 
 open System.Diagnostics
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tracing.OpenTelemetry
 open ToolUp.Platform.Tests.Contracts
 

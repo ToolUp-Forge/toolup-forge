@@ -8,12 +8,12 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.ShareTokenStore
+open ToolUp.Platform.Scope.ShareTokenStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Narrative
 open ToolUp.Forms.FormSchema
@@ -21,6 +21,10 @@ open ToolUp.Forms.FormSubmission
 open ToolUp.PublicRendering
 open ToolUp.ContentAuthoring
 open ToolUp.ContentAuthoring.ContentTypeBridge
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 89 — content-type bridge (FormSchema/Submission → PublicPage)
 //
@@ -354,26 +358,26 @@ let tests =
             Expect.isFalse (PublicPage.isPubliclyVisible now (pageWith Archived "p")) "archived is hidden"
 
             Expect.isFalse
-                (PublicPage.isPubliclyVisible now (pageWith (Scheduled(now.AddHours 1.0)) "p"))
+                (PublicPage.isPubliclyVisible now (pageWith (PublishStatus.Scheduled(now.AddHours 1.0)) "p"))
                 "future-scheduled is hidden"
 
             Expect.isTrue
-                (PublicPage.isPubliclyVisible now (pageWith (Scheduled(now.AddHours(-1.0))) "p"))
+                (PublicPage.isPubliclyVisible now (pageWith (PublishStatus.Scheduled(now.AddHours(-1.0))) "p"))
                 "past-scheduled is visible"
         }
 
         test "promoteIfDue publishes a due scheduled page and stamps PublishedAt" {
             let promoted =
-                ContentLifecycle.promoteIfDue now (pageWith (Scheduled(now.AddMinutes(-1.0))) "p")
+                ContentLifecycle.promoteIfDue now (pageWith (PublishStatus.Scheduled(now.AddMinutes(-1.0))) "p")
 
             Expect.equal promoted.Status Published "due page promoted to Published"
             Expect.equal promoted.PublishedAt (Some now) "PublishedAt stamped to now"
 
-            let future = pageWith (Scheduled(now.AddHours 1.0)) "f"
+            let future = pageWith (PublishStatus.Scheduled(now.AddHours 1.0)) "f"
 
             Expect.equal
                 (ContentLifecycle.promoteIfDue now future).Status
-                (Scheduled(now.AddHours 1.0))
+                (PublishStatus.Scheduled(now.AddHours 1.0))
                 "future page unchanged"
         }
 
@@ -410,14 +414,14 @@ let tests =
                 store.Save(
                     scope,
                     EntityPrincipal.ofPrincipal "tester",
-                    PublicPageEntity.fromPage (pageWith (Scheduled(now.AddMinutes(-5.0))) "due")
+                    PublicPageEntity.fromPage (pageWith (PublishStatus.Scheduled(now.AddMinutes(-5.0))) "due")
                 )
 
             let! _ =
                 store.Save(
                     scope,
                     EntityPrincipal.ofPrincipal "tester",
-                    PublicPageEntity.fromPage (pageWith (Scheduled(now.AddHours 5.0)) "future")
+                    PublicPageEntity.fromPage (pageWith (PublishStatus.Scheduled(now.AddHours 5.0)) "future")
                 )
 
             let! _ =

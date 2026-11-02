@@ -4,13 +4,13 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Facts.Presentation.LayoutCaller (class)
-ToolUp.Facts.Presentation.LayoutCaller..ctor(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Facts.Presentation.PageRequestResolver, ToolUp.Platform.IPageDocumentStore, ToolUp.Facts.Presentation.LayoutProposalStore)
+ToolUp.Facts.Presentation.LayoutCaller..ctor(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Facts.Presentation.PageRequestResolver, ToolUp.Platform.Compose.IPageDocumentStore, ToolUp.Facts.Presentation.LayoutProposalStore)
 ToolUp.Facts.Presentation.LayoutCaller.Access : ToolUp.Platform.AccessContext { get }
 ToolUp.Facts.Presentation.LayoutCaller.Deps : ToolUp.Facts.FactBrowseHandler+FactBrowseDeps { get }
 ToolUp.Facts.Presentation.LayoutCaller.Proposals : ToolUp.Facts.Presentation.LayoutProposalStore { get }
 ToolUp.Facts.Presentation.LayoutCaller.Resolver : ToolUp.Facts.Presentation.PageRequestResolver { get }
 ToolUp.Facts.Presentation.LayoutCaller.Scope : ToolUp.Platform.ResolvedScope { get }
-ToolUp.Facts.Presentation.LayoutCaller.Store : ToolUp.Platform.IPageDocumentStore { get }
+ToolUp.Facts.Presentation.LayoutCaller.Store : ToolUp.Platform.Compose.IPageDocumentStore { get }
 ToolUp.Facts.Presentation.LayoutChange (class)
 ToolUp.Facts.Presentation.LayoutChange.IsAppend : System.Boolean { get }
 ToolUp.Facts.Presentation.LayoutChange.IsReset : System.Boolean { get }
@@ -19,17 +19,17 @@ ToolUp.Facts.Presentation.LayoutChange+Append (class)
 ToolUp.Facts.Presentation.LayoutChange+Append.ops : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Facts.Presentation.LayoutChange+Append.sidecar : System.Byte[] { get }
 ToolUp.Facts.Presentation.LayoutChange+Reset (class)
-ToolUp.Facts.Presentation.LayoutChange+Reset.layer : ToolUp.Platform.PageLayer { get }
+ToolUp.Facts.Presentation.LayoutChange+Reset.layer : ToolUp.Platform.Compose.PageLayer { get }
 ToolUp.Facts.Presentation.LayoutChange+Tags (class)
 ToolUp.Facts.Presentation.LayoutChange+Tags.Append : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutChange+Tags.Reset : System.Int32 (literal)
 ToolUp.Facts.Presentation.LayoutProposal (class)
-ToolUp.Facts.Presentation.LayoutProposal..ctor(System.String, ToolUp.Platform.PageRef, System.String, ToolUp.Facts.Presentation.LayoutChange, System.String, System.DateTime)
+ToolUp.Facts.Presentation.LayoutProposal..ctor(System.String, ToolUp.Platform.Compose.PageRef, System.String, ToolUp.Facts.Presentation.LayoutChange, System.String, System.DateTime)
 ToolUp.Facts.Presentation.LayoutProposal.At : System.DateTime { get }
 ToolUp.Facts.Presentation.LayoutProposal.BaseHash : System.String { get }
 ToolUp.Facts.Presentation.LayoutProposal.Change : ToolUp.Facts.Presentation.LayoutChange { get }
 ToolUp.Facts.Presentation.LayoutProposal.Id : System.String { get }
-ToolUp.Facts.Presentation.LayoutProposal.Page : ToolUp.Platform.PageRef { get }
+ToolUp.Facts.Presentation.LayoutProposal.Page : ToolUp.Platform.Compose.PageRef { get }
 ToolUp.Facts.Presentation.LayoutProposal.Tool : System.String { get }
 ToolUp.Facts.Presentation.LayoutProposalStore (class)
 ToolUp.Facts.Presentation.LayoutProposalStore..ctor()
@@ -67,8 +67,8 @@ ToolUp.Facts.Presentation.LayoutRefusal+Grammar.findings : Microsoft.FSharp.Coll
 ToolUp.Facts.Presentation.LayoutRefusal+InlineRows (class)
 ToolUp.Facts.Presentation.LayoutRefusal+InlineRows.where : System.String { get }
 ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch (class)
-ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch.named : ToolUp.Platform.PageLayer { get }
-ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch.proposed : ToolUp.Platform.PageLayer { get }
+ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch.named : ToolUp.Platform.Compose.PageLayer { get }
+ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch.proposed : ToolUp.Platform.Compose.PageLayer { get }
 ToolUp.Facts.Presentation.LayoutRefusal+NoChange (class)
 ToolUp.Facts.Presentation.LayoutRefusal+NoChange.reason : System.String { get }
 ToolUp.Facts.Presentation.LayoutRefusal+NotEditable (class)
@@ -81,7 +81,7 @@ ToolUp.Facts.Presentation.LayoutRefusal+Sidecar.reason : System.String { get }
 ToolUp.Facts.Presentation.LayoutRefusal+StaleProposal (class)
 ToolUp.Facts.Presentation.LayoutRefusal+StaleProposal.proposalId : System.String { get }
 ToolUp.Facts.Presentation.LayoutRefusal+Store (class)
-ToolUp.Facts.Presentation.LayoutRefusal+Store.Item : ToolUp.Platform.PageStoreError { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Store.Item : ToolUp.Platform.Compose.PageStoreError { get }
 ToolUp.Facts.Presentation.LayoutRefusal+Tabs (class)
 ToolUp.Facts.Presentation.LayoutRefusal+Tabs.problem : ToolUp.Facts.Presentation.TabRefusal { get }
 ToolUp.Facts.Presentation.LayoutRefusal+Tabs.sectionId : System.String { get }
@@ -121,7 +121,7 @@ ToolUp.Facts.Presentation.LayoutRefusal+Unresolved.refusal : ToolUp.Facts.Presen
 ToolUp.Facts.Presentation.LayoutRefusalModule (class)
 ToolUp.Facts.Presentation.LayoutRefusalModule.cause(ToolUp.Facts.Presentation.LayoutRefusal) : System.String
 ToolUp.Facts.Presentation.LayoutRefusalModule.describe(ToolUp.Facts.Presentation.LayoutRefusal) : System.String
-ToolUp.Facts.Presentation.LayoutRefusalModule.describeStore(ToolUp.Platform.PageStoreError) : System.String
+ToolUp.Facts.Presentation.LayoutRefusalModule.describeStore(ToolUp.Platform.Compose.PageStoreError) : System.String
 ToolUp.Facts.Presentation.LayoutTool (class)
 ToolUp.Facts.Presentation.LayoutTool.AddBlock : ToolUp.Facts.Presentation.LayoutTool { get }
 ToolUp.Facts.Presentation.LayoutTool.IsAddBlock : System.Boolean { get }
@@ -164,18 +164,18 @@ ToolUp.Facts.Presentation.LayoutTools.name(ToolUp.Facts.Presentation.LayoutTool)
 ToolUp.Facts.Presentation.LayoutTools.register(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Facts.Presentation.LayoutTools.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]] { get }
 ToolUp.Facts.Presentation.LayoutToolsRuntime (class)
-ToolUp.Facts.Presentation.LayoutToolsRuntime..ctor(ToolUp.Platform.IPageDocumentStore, ToolUp.Facts.Presentation.PageRequestResolvers, ToolUp.Facts.Presentation.LayoutProposalStore)
+ToolUp.Facts.Presentation.LayoutToolsRuntime..ctor(ToolUp.Platform.Compose.IPageDocumentStore, ToolUp.Facts.Presentation.PageRequestResolvers, ToolUp.Facts.Presentation.LayoutProposalStore)
 ToolUp.Facts.Presentation.LayoutToolsRuntime.Proposals : ToolUp.Facts.Presentation.LayoutProposalStore { get }
 ToolUp.Facts.Presentation.LayoutToolsRuntime.Resolvers : ToolUp.Facts.Presentation.PageRequestResolvers { get }
-ToolUp.Facts.Presentation.LayoutToolsRuntime.Store : ToolUp.Platform.IPageDocumentStore { get }
+ToolUp.Facts.Presentation.LayoutToolsRuntime.Store : ToolUp.Platform.Compose.IPageDocumentStore { get }
 ToolUp.Facts.Presentation.PageDefaults (class)
 ToolUp.Facts.Presentation.PageDefaults..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.PresentationPeriod])
 ToolUp.Facts.Presentation.PageDefaults.Period : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.PresentationPeriod] { get }
 ToolUp.Facts.Presentation.PageDefaults.Site : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Facts.Presentation.PageGateSources (class)
-ToolUp.Facts.Presentation.PageGateSources..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+ITeamStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITeamOutputVisibilitySource])
+ToolUp.Facts.Presentation.PageGateSources..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Config.TeamManagement+ITeamStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITeamOutputVisibilitySource])
 ToolUp.Facts.Presentation.PageGateSources.OutputVisibility : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITeamOutputVisibilitySource] { get }
-ToolUp.Facts.Presentation.PageGateSources.Teams : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+ITeamStore] { get }
+ToolUp.Facts.Presentation.PageGateSources.Teams : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Config.TeamManagement+ITeamStore] { get }
 ToolUp.Facts.Presentation.PageGateViewer (class)
 ToolUp.Facts.Presentation.PageGateViewer..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Presentation.PageGateViewer.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -296,11 +296,11 @@ ToolUp.Facts.Presentation.PipelineAnsweringTool.rerunWith(ToolUp.Facts.FactBrows
 ToolUp.Facts.Presentation.PipelineAnsweringTool.resultOf(ToolUp.Facts.PipelineToolResult) : ToolUp.Facts.Presentation.PipelineBlockResult
 ToolUp.Facts.Presentation.PipelineAnsweringTool.tool : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.Facts.Presentation.PresentationCompose (class)
-ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
-ToolUp.Facts.Presentation.PresentationCompose.withLayoutTools(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
-ToolUp.Facts.Presentation.PresentationCompose.withPageRequests(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
-ToolUp.Facts.Presentation.PresentationCompose.withPipelineTool(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
-ToolUp.Facts.Presentation.PresentationCompose.withRenderTools(ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withLayoutTools(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withPageRequests(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.Presentation.PresentationCompose.withPipelineTool(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withRenderTools(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
 ToolUp.Facts.Presentation.RenderTool (class)
 ToolUp.Facts.Presentation.RenderTool.Chart : ToolUp.Facts.Presentation.RenderTool { get }
 ToolUp.Facts.Presentation.RenderTool.IsChart : System.Boolean { get }

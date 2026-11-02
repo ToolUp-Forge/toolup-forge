@@ -6,10 +6,14 @@ open Expecto
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.EncryptionTypes
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 54 — ITenantLifecycle contract pack ───────────────────────
 //

@@ -22,6 +22,10 @@ open ToolUp.Platform
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 856 — the server remoting tail ────────────────────────────
 //

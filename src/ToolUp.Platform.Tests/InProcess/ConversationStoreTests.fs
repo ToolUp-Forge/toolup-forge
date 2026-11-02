@@ -6,6 +6,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 /// Bind the `IConversationStore` contract test pack to both shipped
 /// implementations: `InMemoryConversationStore` (dictionary-backed,

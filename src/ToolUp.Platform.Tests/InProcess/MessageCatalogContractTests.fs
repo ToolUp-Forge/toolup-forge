@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.InProcess.MessageCatalogContractTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 444.E — client-shell localization substrate ────────────────
 //

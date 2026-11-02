@@ -43,13 +43,17 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Fixtures (shared with the disclosure egress pack) ──────────────
 

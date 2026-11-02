@@ -3,12 +3,16 @@ module ToolUp.Platform.Tests.Contracts.IDataSubjectRequestContract
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.ErasurePipeline
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Audit.ErasurePipeline
 open ToolUp.Platform.DataSubjectRequestApi
-open ToolUp.Platform.DataSubjectRequestApiHandler
+open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 9h MVP — IDataSubjectRequestApi orchestrator contract ────
 //
@@ -284,13 +288,13 @@ let tests =
         testCaseAsync "EventStore exporter is scope-isolated to the subject's team"
         <| async {
             let store: IEventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1","tag":"T1ONLY"}""")
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u2","tag":"OTHERUSER"}""")
             do! store.Write(Events.create "team-2" "m" "E" """{"userId":"u1","tag":"T2ONLY"}""")
 
-            let exp = ToolUp.Platform.EventStoreErasureHandler.exporter store
+            let exp = ToolUp.Platform.Audit.EventStoreErasureHandler.exporter store
             let! segments = exp.Export("team-1", "u1")
 
             Expect.equal segments.Length 1 "one segment for the matched scope"
@@ -303,13 +307,13 @@ let tests =
         testCaseAsync "EventStore Tombstone erase redacts in-scope payloads only"
         <| async {
             let store: IEventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1","tag":"T1ONLY"}""")
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u2","tag":"KEEPME"}""")
             do! store.Write(Events.create "team-2" "m" "E" """{"userId":"u1","tag":"T2ONLY"}""")
 
-            let h = ToolUp.Platform.EventStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
 
             let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "preview counts the one in-scope match"
@@ -347,12 +351,12 @@ let tests =
         testCaseAsync "EventStore HardDelete erase removes only matching in-scope events"
         <| async {
             let store: IEventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u2"}""")
 
-            let h = ToolUp.Platform.EventStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
 
             match result with
@@ -367,11 +371,11 @@ let tests =
         testCaseAsync "EventStore RetainPerCompliance refuses erasure"
         <| async {
             let store: IEventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
 
-            let h = ToolUp.Platform.EventStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "u1", ErasurePolicy.RetainPerCompliance)
 
             match result with
@@ -385,11 +389,11 @@ let tests =
         testCaseAsync "EventStore erase on a blank subject is a no-op"
         <| async {
             let store: IEventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
 
-            let h = ToolUp.Platform.EventStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "  ", ErasurePolicy.HardDelete)
 
             match result with
@@ -409,7 +413,7 @@ let tests =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             let store: IDataObjectStore =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(blob) :> _
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(blob) :> _
 
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
 
@@ -417,7 +421,7 @@ let tests =
             let! _ = store.Save("team-1", "o2", bytes "b", "dt", "u2", Map.empty, Versioned)
             let! _ = store.Save("team-2", "o3", bytes "c", "dt", "u1", Map.empty, Versioned)
 
-            let exp = ToolUp.Platform.DataObjectStoreErasureHandler.exporter store
+            let exp = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.exporter store
             let! segments = exp.Export("team-1", "u1")
 
             Expect.equal segments.Length 1 "one segment for the scope"
@@ -433,7 +437,7 @@ let tests =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             let store: IDataObjectStore =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(blob) :> _
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(blob) :> _
 
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
 
@@ -441,7 +445,7 @@ let tests =
             let! _ = store.Save("team-1", "o2", bytes "keep", "dt", "u2", Map.empty, Versioned)
             let! _ = store.Save("team-2", "o3", bytes "other", "dt", "u1", Map.empty, Versioned)
 
-            let h = ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler store
 
             let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "one in-scope object matched"
@@ -482,14 +486,14 @@ let tests =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             let store: IDataObjectStore =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(blob) :> _
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(blob) :> _
 
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
 
             let! _ = store.Save("team-1", "o1", bytes "a", "dt", "u1", Map.empty, Versioned)
             let! _ = store.Save("team-1", "o2", bytes "b", "dt", "u2", Map.empty, Versioned)
 
-            let h = ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
 
             match result with
@@ -512,13 +516,13 @@ let tests =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             let store: IDataObjectStore =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(blob) :> _
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(blob) :> _
 
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
 
             let! _ = store.Save("team-1", "o1", bytes "keepcontent", "dt", "u1", Map.empty, Versioned)
 
-            let h = ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "u1", ErasurePolicy.RetainPerCompliance)
 
             match result with
@@ -539,8 +543,11 @@ let tests =
 
         testCaseAsync "LineageStore erase reports matched links, scope-isolated"
         <| async {
-            let es: IEventStore = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
-            let ls: ILineageStore = ToolUp.Platform.LineageStore.EventStoreLineageStore(es) :> _
+            let es: IEventStore =
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
+
+            let ls: ILineageStore =
+                ToolUp.Platform.Infra.LineageStore.EventStoreLineageStore(es) :> _
 
             let mkLink from' to' = {
                 LinkId = System.Guid.NewGuid()
@@ -555,7 +562,7 @@ let tests =
             let! _ = ls.Record("team-1", mkLink "other" "d2")
             let! _ = ls.Record("team-2", mkLink "u1-src" "d3")
 
-            let h = ToolUp.Platform.LineageStoreErasureHandler.erasureHandler ls
+            let h = ToolUp.Platform.Audit.LineageStoreErasureHandler.erasureHandler ls
             let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
 
             match result with
@@ -566,9 +573,13 @@ let tests =
 
         testCaseAsync "LineageStore RetainPerCompliance refuses"
         <| async {
-            let es: IEventStore = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
-            let ls: ILineageStore = ToolUp.Platform.LineageStore.EventStoreLineageStore(es) :> _
-            let h = ToolUp.Platform.LineageStoreErasureHandler.erasureHandler ls
+            let es: IEventStore =
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
+
+            let ls: ILineageStore =
+                ToolUp.Platform.Infra.LineageStore.EventStoreLineageStore(es) :> _
+
+            let h = ToolUp.Platform.Audit.LineageStoreErasureHandler.erasureHandler ls
             let! result = h.Erase("team-1", "u1", ErasurePolicy.RetainPerCompliance)
 
             match result with
@@ -578,9 +589,13 @@ let tests =
 
         testCaseAsync "LineageStore blank subject is a no-op"
         <| async {
-            let es: IEventStore = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> _
-            let ls: ILineageStore = ToolUp.Platform.LineageStore.EventStoreLineageStore(es) :> _
-            let h = ToolUp.Platform.LineageStoreErasureHandler.erasureHandler ls
+            let es: IEventStore =
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
+
+            let ls: ILineageStore =
+                ToolUp.Platform.Infra.LineageStore.EventStoreLineageStore(es) :> _
+
+            let h = ToolUp.Platform.Audit.LineageStoreErasureHandler.erasureHandler ls
             let! result = h.Erase("team-1", "   ", ErasurePolicy.HardDelete)
 
             match result with
@@ -596,7 +611,7 @@ let tests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store: IConfigStore = ToolUp.Platform.ConfigStore.create blob
+            let store: IConfigStore = ToolUp.Platform.Config.ConfigStore.create blob
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
 
             // Pre-seed the persisted map shape directly (field values
@@ -606,7 +621,7 @@ let tests =
 
             let! _ = blob.Upload("_platform", "config/team-2/modB.json", bytes """{"owner":"\"u1@x\""}""")
 
-            let h = ToolUp.Platform.ConfigStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler store
 
             let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "one in-scope document matched"
@@ -643,13 +658,13 @@ let tests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store: IConfigStore = ToolUp.Platform.ConfigStore.create blob
+            let store: IConfigStore = ToolUp.Platform.Config.ConfigStore.create blob
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
 
             let! _ = blob.Upload("_platform", "config/team-1/modA.json", bytes """{"owner":"\"u1@x\""}""")
             let! _ = blob.Upload("_platform", "config/team-1/modB.json", bytes """{"owner":"\"u2@x\""}""")
 
-            let h = ToolUp.Platform.ConfigStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
 
             match result with
@@ -667,11 +682,11 @@ let tests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store: IConfigStore = ToolUp.Platform.ConfigStore.create blob
+            let store: IConfigStore = ToolUp.Platform.Config.ConfigStore.create blob
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
             let! _ = blob.Upload("_platform", "config/team-1/modA.json", bytes """{"owner":"\"u1@x\""}""")
 
-            let h = ToolUp.Platform.ConfigStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "  ", ErasurePolicy.HardDelete)
 
             match result with
@@ -690,14 +705,14 @@ let tests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store: IFeatureFlagStore = ToolUp.Platform.FeatureFlagStore.create blob
+            let store: IFeatureFlagStore = ToolUp.Platform.Config.FeatureFlagStore.create blob
 
             let! _ = store.SetFlag(FlagScope.Team "1", "targeting", FlagValue.Variant([ "a" ], "for:u1"))
             let! _ = store.SetFlag(FlagScope.Team "1", "plain", FlagValue.Bool true)
             let! _ = store.SetFlag(FlagScope.Team "1", "other", FlagValue.Variant([ "x" ], "nobody"))
             let! _ = store.SetFlag(FlagScope.Team "2", "targeting", FlagValue.Variant([ "a" ], "for:u1"))
 
-            let h = ToolUp.Platform.FeatureFlagStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler.erasureHandler store
 
             let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "only the targeting flag names the subject"
@@ -732,12 +747,12 @@ let tests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store: IFeatureFlagStore = ToolUp.Platform.FeatureFlagStore.create blob
+            let store: IFeatureFlagStore = ToolUp.Platform.Config.FeatureFlagStore.create blob
 
             let! _ = store.SetFlag(FlagScope.Team "1", "targeting", FlagValue.Variant([], "for:u1"))
             let! _ = store.SetFlag(FlagScope.Team "1", "keep", FlagValue.Bool false)
 
-            let h = ToolUp.Platform.FeatureFlagStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
 
             match result with
@@ -754,10 +769,10 @@ let tests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store: IFeatureFlagStore = ToolUp.Platform.FeatureFlagStore.create blob
+            let store: IFeatureFlagStore = ToolUp.Platform.Config.FeatureFlagStore.create blob
             let! _ = store.SetFlag(FlagScope.Team "1", "targeting", FlagValue.Variant([], "for:u1"))
 
-            let h = ToolUp.Platform.FeatureFlagStoreErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "  ", ErasurePolicy.HardDelete)
 
             match result with
@@ -783,7 +798,7 @@ let tests =
             let! _ = store.Upload("team-1", "u2/c.txt", bytes "keepC")
             let! _ = store.Upload("team-2", "u1/d.txt", bytes "otherteam")
 
-            let h = ToolUp.Platform.BlobStorageErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.BlobStorageErasureHandler.erasureHandler store
 
             let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 2 "two subject-prefixed blobs in scope"
@@ -823,7 +838,7 @@ let tests =
             let! _ = store.Upload("team-1", "u1/a.txt", bytes "x")
             let! _ = store.Upload("team-1", "u2/c.txt", bytes "y")
 
-            let h = ToolUp.Platform.BlobStorageErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.BlobStorageErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
 
             match result with
@@ -844,7 +859,7 @@ let tests =
             let bytes (s: string) = System.Text.Encoding.UTF8.GetBytes s
             let! _ = store.Upload("team-1", "u1/a.txt", bytes "x")
 
-            let h = ToolUp.Platform.BlobStorageErasureHandler.erasureHandler store
+            let h = ToolUp.Platform.Audit.BlobStorageErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", "   ", ErasurePolicy.HardDelete)
 
             match result with
@@ -937,14 +952,14 @@ let tests =
             let cleared = ref false
 
             let cache =
-                { new ToolUp.Platform.IEmbeddingCache.IEmbeddingCache with
+                { new ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache with
                     member _.TryGet _ = async { return None }
                     member _.Set _ _ = async { return () }
                     member _.HitRate() = async { return 0.0 }
                     member _.Clear() = async { cleared.Value <- true }
                 }
 
-            let h = ToolUp.Platform.VectorStoreErasureHandler.erasureHandler store cache
+            let h = ToolUp.Platform.Audit.VectorStoreErasureHandler.erasureHandler store cache
             let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
 
             match result with

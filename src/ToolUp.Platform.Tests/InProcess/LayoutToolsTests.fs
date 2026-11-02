@@ -25,13 +25,18 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 let private run (a: Async<'T>) : 'T = Async.RunSynchronously a
 

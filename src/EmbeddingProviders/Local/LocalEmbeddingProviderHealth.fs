@@ -2,6 +2,7 @@ module LocalEmbeddingProviderHealth
 
 open System
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Config
 
 // ─── Phase 9k Local embedding provider health probe ──────────────────
 //

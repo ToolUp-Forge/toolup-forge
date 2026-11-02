@@ -11,10 +11,10 @@ open System.Text.Json.Nodes
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.ProviderOAuthFlow
+open ToolUp.Platform.Infra.ProviderOAuthFlow
 open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
@@ -28,6 +28,9 @@ open ToolUp.Calendar.GoogleCalendarChannels
 open ToolUp.Scheduling.Tests.Contracts
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEventStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Binding 3 of the ICalendarBridge contract pack (Phase 830) ─────
 //

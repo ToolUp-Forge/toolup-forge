@@ -4,6 +4,7 @@
 namespace ToolUp.InterPlatform
 
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 675 — the ledger moved; this is what stayed ───────────────
 //
@@ -49,20 +50,20 @@ open ToolUp.Platform
 // refusal into `FactDisclosureVerdict` instead, which is exactly why the
 // ledger's own refusal type is neither.
 
-type BudgetEpoch = ToolUp.Platform.BudgetEpoch
-type BudgetScope = ToolUp.Platform.BudgetScope
-type WithholdCharge = ToolUp.Platform.WithholdCharge
-type PrivacyBudgetPolicy = ToolUp.Platform.PrivacyBudgetPolicy
-type BudgetSpend = ToolUp.Platform.BudgetSpend
-type PrivacyBudget = ToolUp.Platform.PrivacyBudget
-type BudgetRefusal = ToolUp.Platform.BudgetRefusal
-type BudgetDecision = ToolUp.Platform.BudgetDecision
-type SpendOutcome = ToolUp.Platform.SpendOutcome
-type IPrivacyBudgetLedger = ToolUp.Platform.IPrivacyBudgetLedger
-type NoPrivacyBudgetLedger = ToolUp.Platform.NoPrivacyBudgetLedger
-type InMemoryPrivacyBudgetLedger = ToolUp.Platform.InMemoryPrivacyBudgetLedger
-type BlobPrivacyBudgetLedger = ToolUp.Platform.BlobPrivacyBudgetLedger
-type PrivacyBudgetMeter = ToolUp.Platform.PrivacyBudgetMeter
+type BudgetEpoch = ToolUp.Platform.Compose.BudgetEpoch
+type BudgetScope = ToolUp.Platform.Compose.BudgetScope
+type WithholdCharge = ToolUp.Platform.Compose.WithholdCharge
+type PrivacyBudgetPolicy = ToolUp.Platform.Compose.PrivacyBudgetPolicy
+type BudgetSpend = ToolUp.Platform.Compose.BudgetSpend
+type PrivacyBudget = ToolUp.Platform.Compose.PrivacyBudget
+type BudgetRefusal = ToolUp.Platform.Compose.BudgetRefusal
+type BudgetDecision = ToolUp.Platform.Compose.BudgetDecision
+type SpendOutcome = ToolUp.Platform.Compose.SpendOutcome
+type IPrivacyBudgetLedger = ToolUp.Platform.Compose.IPrivacyBudgetLedger
+type NoPrivacyBudgetLedger = ToolUp.Platform.Compose.NoPrivacyBudgetLedger
+type InMemoryPrivacyBudgetLedger = ToolUp.Platform.Compose.InMemoryPrivacyBudgetLedger
+type BlobPrivacyBudgetLedger = ToolUp.Platform.Compose.BlobPrivacyBudgetLedger
+type PrivacyBudgetMeter = ToolUp.Platform.Compose.PrivacyBudgetMeter
 
 /// The federation tier's projection of a budget refusal into the
 /// clean-room gate's decision vocabulary.

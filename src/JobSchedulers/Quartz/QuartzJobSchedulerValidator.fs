@@ -8,6 +8,7 @@ open Quartz
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.JobSchedulers.QuartzStore
+open ToolUp.Platform.Config
 
 // ─── Phase 9c.E Quartz config preflight ──────────────────────────────
 //

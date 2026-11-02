@@ -5,6 +5,7 @@ namespace ToolUp.Facts
 
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── The fact-clause feeder (Phase 708) ──────────────────────────────
 //

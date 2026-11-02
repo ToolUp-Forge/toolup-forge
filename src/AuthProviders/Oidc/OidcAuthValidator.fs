@@ -47,7 +47,7 @@ open ToolUp.Platform.ConfigValidation
 // handler in front of the same primary handler); byte-identical under
 // the default permit-all policy.
 let private httpClient =
-    lazy (ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AuthProvider)
+    lazy (ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AuthProvider)
 
 let private discoveryPath = "/.well-known/openid-configuration"
 

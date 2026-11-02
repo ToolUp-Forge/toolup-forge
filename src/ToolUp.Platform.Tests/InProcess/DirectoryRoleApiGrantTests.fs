@@ -13,10 +13,14 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.Server
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Compose.Server
 open ToolUp.PublicRendering
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 993 — directory roles gate pages; API roles need an allow-list ─
 //

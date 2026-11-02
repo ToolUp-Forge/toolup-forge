@@ -38,9 +38,11 @@ open System.Reflection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.AI
-open ToolUp.Platform.ConversationStore
+open ToolUp.Platform.Config.ConversationStore
 open ToolUp.Platform.Tests.Support
 open ToolUp.AI.Evaluation.ConversationEval
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Live providers (env-gated) ───────────────────────────────────
 

@@ -12,6 +12,9 @@ open Microsoft.FSharp.Reflection
 open Giraffe
 open ToolUp.Platform
 open PeerReflection
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Layer 4 — typed receiver host ───────────────────────────────────
 //

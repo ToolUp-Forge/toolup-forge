@@ -11,6 +11,8 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.Auth
 
 // ─── Phase 334 — federated-identity sanitisation PARITY ──────────────
 //

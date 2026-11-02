@@ -16,6 +16,8 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 69j — schema-versioned wire envelopes ─────────────────────
 //

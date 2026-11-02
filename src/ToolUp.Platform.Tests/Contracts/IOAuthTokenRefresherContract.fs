@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IOAuthTokenRefresherContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── IOAuthTokenRefresher contract pack ───────────────────────────
 //

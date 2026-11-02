@@ -9,7 +9,10 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 646 — promotion-time provenance transfer ─────────────────────
 //

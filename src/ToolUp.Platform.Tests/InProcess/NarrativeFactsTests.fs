@@ -9,6 +9,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 521 — fact-referencing narrative `Metric` spans ───────────
 //

@@ -9,7 +9,8 @@ open Microsoft.ML.OnnxRuntime
 open Microsoft.ML.OnnxRuntime.Tensors
 open Microsoft.ML.Tokenizers
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IReranker
+open ToolUp.Platform.Infra.IReranker
+open ToolUp.Platform.Infra
 
 // ─── Phase 14f — local ONNX cross-encoder reranker companion ────
 //

@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.JobSchedulerInstanceValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private cfg (scheduler: JobSchedulerMode) (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with

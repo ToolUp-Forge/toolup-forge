@@ -29,8 +29,11 @@ open Microsoft.AspNetCore.Hosting.Server.Features
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.ServerBinding
-open ToolUp.Platform.TransientFault
+open ToolUp.Platform.Config.ServerBinding
+open ToolUp.Platform.Infra.TransientFault
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -125,8 +128,8 @@ let private composedVerdict (config: ServerConfig) : string * string list =
         Directory.SetCurrentDirectory dir
 
         try
-            ToolUp.Platform.Server.compose {
-                ToolUp.Platform.Server.CompositionPlan.ofConfig config with
+            ToolUp.Platform.Compose.Server.compose {
+                ToolUp.Platform.Compose.Server.CompositionPlan.ofConfig config with
                     Logger = Some(logger :> ILogger)
                     BlobStorage =
                         Some(

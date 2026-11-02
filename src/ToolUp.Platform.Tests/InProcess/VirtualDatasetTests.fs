@@ -8,7 +8,8 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra
 
 // --- Phase 487 -- virtual (zero-copy) dataset bindings ------------------
 //

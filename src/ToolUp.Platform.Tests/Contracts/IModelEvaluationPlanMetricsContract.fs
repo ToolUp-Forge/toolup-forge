@@ -7,6 +7,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.ModelProviders.Reference
+open ToolUp.Platform.Infra
 
 // ─── Phase 652 — plan-aware evaluation-metrics seam conformance pack ────
 //

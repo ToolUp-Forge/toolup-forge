@@ -4,6 +4,10 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 280 — introspectable composition manifest ──────────────────
 //

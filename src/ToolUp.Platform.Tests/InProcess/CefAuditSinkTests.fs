@@ -15,6 +15,10 @@ open ToolUp.Platform.AuditSinks.CefSyslog
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 9g.A — ToolUp.AuditSinks.Cef ─────────────────────────────
 //

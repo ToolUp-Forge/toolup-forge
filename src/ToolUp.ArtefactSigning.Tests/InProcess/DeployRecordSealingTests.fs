@@ -8,6 +8,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
+open ToolUp.Platform.Infra
 
 // ─── Deploy-record sealing over the application signer ───────────────
 //

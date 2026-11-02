@@ -8,6 +8,8 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Document index persistence ───────────────────────────────────
 

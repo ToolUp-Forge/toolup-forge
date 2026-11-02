@@ -5,7 +5,7 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.IFormStore
@@ -18,6 +18,11 @@ open ToolUp.Forms.InMemoryActionLedger
 open ToolUp.Forms.Tests.Contracts
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Forms.Tests.InProcess.InMemoryAuditLog
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// Minimal `IServiceProvider` for engine construction (Phase 1h).
 /// These durability tests never exercise the guard/action DI path so a

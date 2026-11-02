@@ -7,6 +7,7 @@ open System
 open System.Collections.Concurrent
 open System.Globalization
 open System.Security.Cryptography
+open ToolUp.Platform.Infra
 
 // ─── Phase 643 — `ViewOnly`: server-rendered bounded data views ──────
 //

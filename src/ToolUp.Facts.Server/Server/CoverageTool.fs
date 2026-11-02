@@ -8,6 +8,7 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── CoverageTool (Phase 705) ────────────────────────────────────────
 //

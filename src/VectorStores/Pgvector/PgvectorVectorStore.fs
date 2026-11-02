@@ -10,7 +10,10 @@ open System.Text.Json
 open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 507 — PostgreSQL + pgvector IVectorStore ──────────────────
 //
@@ -1287,7 +1290,7 @@ type PgvectorVectorStore
         }
 
         member this.Erase(scope, subjectUserId, policy, dryRun) =
-            ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+            ToolUp.Platform.Infra.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
 
     // Phase 892 — one `INSERT … SELECT … FROM unnest(…)` per batch, the
     // vectors bound as one binary `real[]`. The statement count is one for

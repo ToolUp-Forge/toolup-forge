@@ -8,6 +8,7 @@ open System.Text.RegularExpressions
 open Expecto
 open DataManagementTypes
 open ColumnMappingTypes
+open ToolUp.Platform.Infra
 
 let private declared typ nullable =
     Some {

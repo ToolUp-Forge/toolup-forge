@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open DataManagementTypes
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
 
 // ─── Shared IDataSource connector support ─────────────────────────
 //

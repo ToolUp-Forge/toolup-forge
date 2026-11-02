@@ -32,15 +32,19 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.Facts
 open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ── Fixtures ──────────────────────────────────────────────────────
 

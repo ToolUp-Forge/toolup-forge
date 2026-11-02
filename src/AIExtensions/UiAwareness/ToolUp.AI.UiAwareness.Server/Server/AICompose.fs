@@ -19,6 +19,7 @@ module ToolUp.AI.UiAwareness.Server.AICompose
 // there and `register` picks them up with no change to its shape.
 
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 /// The companion's tools, as (definition, server executor) pairs in the
 /// shape `ServerApp.AITools` holds. Append new UI-awareness tools here.

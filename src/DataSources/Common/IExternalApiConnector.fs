@@ -7,6 +7,8 @@ open System
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Transport
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 128 — the outbound API connector authoring pattern ────
 //

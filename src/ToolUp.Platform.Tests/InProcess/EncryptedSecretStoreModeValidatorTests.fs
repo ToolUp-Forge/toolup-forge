@@ -4,6 +4,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 

@@ -11,6 +11,7 @@ module ToolUp.Platform.Tests.InProcess.ConfigKeyReadBoolTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 /// The keys whose readers outside the binder parsed their own tokens before
 /// they went through the registry, each with the default its entry declares.

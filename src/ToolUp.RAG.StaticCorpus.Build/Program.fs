@@ -5,8 +5,9 @@ module internal ToolUp.RAG.StaticCorpus.Program
 
 open System
 open System.IO
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.RAG.StaticCorpus
+open ToolUp.Platform.Infra
 
 // ─── `toolup-rag pack-docs` CLI ──────────────────────────────────
 //

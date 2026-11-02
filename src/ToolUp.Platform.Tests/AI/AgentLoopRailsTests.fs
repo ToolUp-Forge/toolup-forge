@@ -30,6 +30,8 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.AI
 open ToolUp.AI.Wire.Conformance
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── The scripted provider ───────────────────────────────────────────
 

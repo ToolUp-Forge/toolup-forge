@@ -5,6 +5,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.NotificationChannels.Sms.Twilio
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 /// Bind `INotificationSinkContract` to the Twilio SMS sink. Same
 /// no-live-backend pattern as the SendGrid binding — vendor failures

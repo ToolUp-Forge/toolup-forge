@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.ComponentLifecycleTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 291 — component lifecycle ordering by id ───────────────────
 //

@@ -15,6 +15,9 @@ open System.IO
 open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Facts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 let private q2: TemporalExtent = {
     From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)

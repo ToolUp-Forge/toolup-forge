@@ -7,6 +7,8 @@ open System
 open System.Text
 open System.Text.Json
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── SCIM 2.0 resource model (RFC 7643 / RFC 7644) ───────────────────
 //

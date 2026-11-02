@@ -25,9 +25,14 @@ open Fuaran.UI.Ops
 open Fuaran.UI.Ops.Types
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ── Trees ──────────────────────────────────────────────────────────────
 

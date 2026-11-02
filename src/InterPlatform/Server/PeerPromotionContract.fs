@@ -5,6 +5,8 @@ namespace ToolUp.InterPlatform
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 646 — promotion transfer over the peer seam ───────────────
 //

@@ -1,6 +1,7 @@
 module ToolUp.AI.AILatencyMetrics
 
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 9e wire-up for the Phase 6i.A latency telemetry ──────────
 //

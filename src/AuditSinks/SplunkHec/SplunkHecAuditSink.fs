@@ -8,6 +8,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Audit
 
 // ─── Public surface ──────────────────────────────────────────────
 //

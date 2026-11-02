@@ -12,7 +12,7 @@ ToolUp.AuthProviders.Passkey.PasskeyCeremony.completeRegistration(Fido2NetLib.IF
 ToolUp.AuthProviders.Passkey.PasskeyCeremony.isCounterRegression(System.UInt32, System.UInt32) : System.Boolean
 ToolUp.AuthProviders.Passkey.PasskeyCompose (class)
 ToolUp.AuthProviders.Passkey.PasskeyCompose.passkeyCompanion : ToolUp.Platform.ComponentId { get }
-ToolUp.AuthProviders.Passkey.PasskeyCompose.withPasskey(ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AuthProviders.Passkey.PasskeyCompose.withPasskey(ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.AuthProviders.Passkey.PasskeyConfigValidator (class)
 ToolUp.AuthProviders.Passkey.PasskeyConfigValidator.isRegistrableSuffix(System.String, System.String) : System.Boolean
 ToolUp.AuthProviders.Passkey.PasskeyConfigValidator.validateConfig(ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig) : ToolUp.Platform.ConfigValidation+ValidationResult

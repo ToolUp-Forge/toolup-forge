@@ -14,6 +14,7 @@ open Expecto
 open ToolUp.Remoting.Json.SystemTextJson
 open DataManagementTypes
 open ColumnMappingTypes
+open ToolUp.Platform.Infra
 
 let private col name typ required = {
     Name = name

@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.HostedTreeUsageExportTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 297 — ComponentId-keyed hosted-tree usage export tests ─────
 //

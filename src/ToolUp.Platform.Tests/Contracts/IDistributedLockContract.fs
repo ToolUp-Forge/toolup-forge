@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IDistributedLockContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Phase 9i — IDistributedLock contract pack ───────────────────────
 //

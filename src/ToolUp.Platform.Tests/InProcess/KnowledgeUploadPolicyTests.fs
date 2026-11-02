@@ -4,7 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
@@ -13,6 +13,10 @@ open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 119 — KnowledgeUploadPolicy enforcement ─────────────────
 //

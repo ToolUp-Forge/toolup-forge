@@ -8,6 +8,10 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fact-base coherence checking (Phase 563) ────────────────────────
 //

@@ -7,6 +7,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 /// The per-conversation cross-module read consent gate.
 ///

@@ -9,6 +9,8 @@ open Microsoft.Extensions.Primitives
 open Giraffe
 open Giraffe.ViewEngine
 open ToolUp.Platform
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 89 — shareable preview links ───────────────────────────────
 //

@@ -3,6 +3,8 @@
 
 namespace ToolUp.InterPlatform
 
+open ToolUp.Platform.Compose
+
 // ─── Layer 4 — peer authentication ───────────────────────────────────
 //
 // `IPeerAuthProvider` is the trust boundary between two deployments. The

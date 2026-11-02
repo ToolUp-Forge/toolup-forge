@@ -8,6 +8,9 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
 open ToolUp.Platform.Tests.Contracts.FailClosedContract
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 196 — adversarial fail-closed test pack ──────────────────────
 //
@@ -198,7 +201,7 @@ let tests =
             let builder (_: HttpContext) : FullyUnclassifiedApi = { Naked = fun () -> async { return 1 } }
 
             Expect.throwsT<InvalidOperationException>
-                (fun () -> ToolUp.Platform.Api.make builder |> ignore)
+                (fun () -> ToolUp.Platform.Config.Api.make builder |> ignore)
                 "Api.make composes a resolver by default, so an unannotated record must refuse at composition"
         }
 
@@ -302,7 +305,7 @@ let tests =
             let reasonOf name context =
                 match AuthClassifier.evaluate cls[name] context with
                 | Deny r -> r
-                | Allow -> failtestf "%s: expected Deny" name
+                | AuthDecision.Allow -> failtestf "%s: expected Deny" name
 
             let roleReason = reasonOf "NeedsRole" (Some(reasonProbeCtx [] false))
 

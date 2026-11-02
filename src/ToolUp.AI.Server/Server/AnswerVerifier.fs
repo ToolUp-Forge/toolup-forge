@@ -15,6 +15,10 @@ open ToolUp.Platform.Metrics
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Numeric-fidelity answer gate (Phase 523) ────────────────────────
 //

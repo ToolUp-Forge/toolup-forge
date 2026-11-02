@@ -9,6 +9,9 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Facts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 684 — the grounding envelope, sealed past boot ────────────
 //

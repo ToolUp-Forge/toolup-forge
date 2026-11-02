@@ -8,9 +8,12 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.WebhookDispatcher
+open ToolUp.Platform.Jobs.WebhookDispatcher
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 235 + 6d.A — webhook signing-secret rotation & at-rest ────
 //

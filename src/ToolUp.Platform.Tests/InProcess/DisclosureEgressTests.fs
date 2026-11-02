@@ -9,12 +9,12 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.RAG.IngestionTypes
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
@@ -23,6 +23,12 @@ open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiNarrative
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 525 — disclosure egress filtering, first choke points ─────
 //

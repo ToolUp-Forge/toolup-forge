@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IBuildOrchestratorContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 26 IBuildOrchestrator contract tests ─────────────────────
 //

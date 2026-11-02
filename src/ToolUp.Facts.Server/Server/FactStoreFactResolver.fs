@@ -6,6 +6,7 @@ namespace ToolUp.Facts
 open System
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── FactStoreFactResolver (Phase 558 — closes the Phase 522.B seam) ──
 //

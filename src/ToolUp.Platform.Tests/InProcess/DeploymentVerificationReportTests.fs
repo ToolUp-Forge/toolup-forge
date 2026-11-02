@@ -14,6 +14,11 @@ open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.DeploymentVerification
 open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 686 — the one-command deployment verification report ──────
 //

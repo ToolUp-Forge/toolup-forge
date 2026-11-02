@@ -9,6 +9,10 @@ open ToolUp.Forms.PublishableFormConfigValidator
 open ToolUp.Forms.InMemoryShareTokenRateLimiter
 open ToolUp.Forms.ShareTokenRateLimiterDistributionValidator
 open ToolUp.Forms.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 21e — publishable-forms hardening tests ──────────────────
 //

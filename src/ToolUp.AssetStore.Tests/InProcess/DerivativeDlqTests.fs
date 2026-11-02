@@ -20,6 +20,9 @@ open ToolUp.AssetStore
 open ToolUp.AssetStore.AssetCompose
 open ToolUp.AssetStore.Tests.Doubles
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private container = "user-dlq"
 
@@ -203,7 +206,7 @@ let tests =
                     poisonRenderer (),
                     Some {
                         opted with
-                            Metrics = Some(metrics :> ToolUp.Platform.Metrics.IMetricsSink)
+                            Metrics = Some(metrics :> ToolUp.Platform.Infra.Metrics.IMetricsSink)
                     }
                 )
 
@@ -284,7 +287,7 @@ let tests =
                     renderer,
                     Some {
                         opted with
-                            Metrics = Some(metrics :> ToolUp.Platform.Metrics.IMetricsSink)
+                            Metrics = Some(metrics :> ToolUp.Platform.Infra.Metrics.IMetricsSink)
                     }
                 )
 
@@ -311,7 +314,7 @@ let tests =
                     renderer,
                     Some {
                         opted with
-                            Metrics = Some(metrics :> ToolUp.Platform.Metrics.IMetricsSink)
+                            Metrics = Some(metrics :> ToolUp.Platform.Infra.Metrics.IMetricsSink)
                     }
                 )
 
@@ -395,7 +398,7 @@ let tests =
                     Some {
                         opted with
                             RecordDeadLetters = false
-                            Metrics = Some(metrics :> ToolUp.Platform.Metrics.IMetricsSink)
+                            Metrics = Some(metrics :> ToolUp.Platform.Infra.Metrics.IMetricsSink)
                     }
                 )
 

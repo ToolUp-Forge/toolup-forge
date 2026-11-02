@@ -13,6 +13,7 @@ open ToolUp.DataSources.Common
 open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
+open ToolUp.Platform.Infra
 
 // ─── ToolUp.DataSources.Common — always-on ────────────────────────
 //
@@ -267,7 +268,7 @@ module private NullFidelity =
             |> List.map (render >> escape)
             |> String.concat ","
 
-        match readLine (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat) line with
+        match readLine (Some ToolUp.Platform.Infra.IngestedPayload.CurrentPayloadFormat) line with
         | [| _; nullCell; emptyCell; dbNullCell; _ |] -> nullCell <> emptyCell && nullCell = dbNullCell
         | other -> failtestf "expected five fields, got %A" other
 
@@ -284,7 +285,7 @@ let private csvNullFidelityTests =
             Expect.equal (fields |> Array.map _.Text) [| "a"; ""; ""; "" |] "text alone cannot tell them apart"
 
             Expect.equal
-                (NullFidelity.readLine (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat) line)
+                (NullFidelity.readLine (Some ToolUp.Platform.Infra.IngestedPayload.CurrentPayloadFormat) line)
                 [|
                     Csv.PayloadField.Value "a"
                     Csv.PayloadField.Null
@@ -313,7 +314,7 @@ let private csvNullFidelityTests =
             Expect.isTrue (sameMeaning (Some "1")) "a Phase-832 payload keeps the old reading"
 
             Expect.isFalse
-                (sameMeaning (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat))
+                (sameMeaning (Some ToolUp.Platform.Infra.IngestedPayload.CurrentPayloadFormat))
                 "a current payload no longer collapses them"
         }
 
@@ -339,7 +340,7 @@ let private csvNullFidelityTests =
             Expect.isFalse (Csv.distinguishesNull (Some "2a")) "an unreadable token is not evidence"
 
             Expect.isTrue
-                (Csv.distinguishesNull (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat))
+                (Csv.distinguishesNull (Some ToolUp.Platform.Infra.IngestedPayload.CurrentPayloadFormat))
                 "the token the ingestor writes today declares the convention the writer uses"
         }
 
@@ -397,7 +398,7 @@ let private csvNullFidelityTests =
                     payload
 
             let convention =
-                if Csv.distinguishesNull (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat) then
+                if Csv.distinguishesNull (Some ToolUp.Platform.Infra.IngestedPayload.CurrentPayloadFormat) then
                     ToolUp.Tabular.Csv.EmptyFieldConvention.UnquotedEmptyIsNull
                 else
                     ToolUp.Tabular.Csv.EmptyFieldConvention.Undistinguished

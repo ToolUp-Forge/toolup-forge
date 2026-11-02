@@ -6,12 +6,12 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingCache
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IIndexLifecycle
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingCache
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IIndexLifecycle
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
@@ -19,6 +19,9 @@ open ToolUp.RAG.InMemoryEmbeddingCache
 open Npgsql
 open ToolUp.RAG.SparseAnalysis
 open ToolUp.SparseIndices.Postgres.PostgresFullTextIndex
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 204 — cross-index erasure conformance (property) ───────────
 //
@@ -538,7 +541,7 @@ let private utf8 (s: string) = Encoding.UTF8.GetBytes s
 /// the audit kinds the orchestrator emitted for the request.
 let private ledgerKindsWith
     (policy: ErasurePolicy)
-    (handler: ToolUp.Platform.IDataExporter.IErasureHandler)
+    (handler: ToolUp.Platform.Audit.IDataExporter.IErasureHandler)
     (scopeId: string)
     =
     async {
@@ -598,7 +601,7 @@ let private phase960Tests =
             let! _ = inner.Upload("_platform", modB, utf8 """{"owner":"\"u1@x\""}""")
 
             let refusing = UploadRefusingBlobStorage(inner, (=) modB) :> IBlobStorage
-            let store = ToolUp.Platform.ConfigStore.create refusing
+            let store = ToolUp.Platform.Config.ConfigStore.create refusing
             let! result = store.Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
 
             let partial, detail = expectPartialFailure "config" result
@@ -619,7 +622,7 @@ let private phase960Tests =
 
             // Idempotent and re-runnable: a healthy store finishes the job.
             let! rerun =
-                (ToolUp.Platform.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
+                (ToolUp.Platform.Config.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
 
             match rerun with
             | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run redacts exactly the one that was left"
@@ -639,7 +642,9 @@ let private phase960Tests =
                 UploadRefusingBlobStorage(inner, (=) (configDoc "team-l" "modB")) :> IBlobStorage
 
             let handler =
-                ToolUp.Platform.ConfigStoreErasureHandler.erasureHandler (ToolUp.Platform.ConfigStore.create refusing)
+                ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler (
+                    ToolUp.Platform.Config.ConfigStore.create refusing
+                )
 
             let! kinds = ledgerKinds handler "team-l"
             Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"
@@ -654,14 +659,16 @@ let private phase960Tests =
                 let inner = InMemoryBlobStorage() :> IBlobStorage
 
                 let healthy =
-                    ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+                    ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
 
                 let! _ = healthy.Save("team-1", "o1", utf8 "secret-1", "dt", "u1", Map [ "k", "u1-ref" ], Versioned)
                 let! _ = healthy.Save("team-1", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
                 let refusedName = "objects/o2/v1.json"
 
                 let failing =
-                    ToolUp.Platform.DataObjectStore.DataObjectStore(UploadRefusingBlobStorage(inner, (=) refusedName))
+                    ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(
+                        UploadRefusingBlobStorage(inner, (=) refusedName)
+                    )
                     :> IDataObjectStore
 
                 let! result = failing.Erase("team-1", "u1", policy, false)
@@ -704,12 +711,12 @@ let private phase960Tests =
             let inner = InMemoryBlobStorage() :> IBlobStorage
 
             let healthy =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
 
             let! _ = healthy.Save("team-1", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
 
             let failing =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(
                     UploadRefusingBlobStorage(inner, _.StartsWith("objects/_content/"))
                 )
                 :> IDataObjectStore
@@ -733,18 +740,20 @@ let private phase960Tests =
             let inner = InMemoryBlobStorage() :> IBlobStorage
 
             let healthy =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
 
             let! _ = healthy.Save("team-l", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
             let! _ = healthy.Save("team-l", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
 
             let failing =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(
                     UploadRefusingBlobStorage(inner, (=) "objects/o2/v1.json")
                 )
                 :> IDataObjectStore
 
-            let! kinds = ledgerKinds (ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler failing) "team-l"
+            let! kinds =
+                ledgerKinds (ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler failing) "team-l"
+
             Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"
 
             Expect.isFalse
@@ -810,7 +819,7 @@ let private phase965Tests =
             let! _ = inner.Upload("_platform", modB, utf8 """{"owner":"\"u1@x\""}""")
 
             let refusing = DeleteRefusingBlobStorage(inner, (=) modB) :> IBlobStorage
-            let store = ToolUp.Platform.ConfigStore.create refusing
+            let store = ToolUp.Platform.Config.ConfigStore.create refusing
             let! result = store.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
 
             let partial, detail = expectPartialFailure "config" result
@@ -825,7 +834,7 @@ let private phase965Tests =
 
             // Idempotent and re-runnable: a healthy store finishes the job.
             let! rerun =
-                (ToolUp.Platform.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+                (ToolUp.Platform.Config.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
 
             match rerun with
             | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run deletes exactly the one that was left"
@@ -845,7 +854,8 @@ let private phase965Tests =
             let refusing = DeleteRefusingBlobStorage(inner, (fun _ -> true)) :> IBlobStorage
 
             let! result =
-                (ToolUp.Platform.ConfigStore.create refusing).Erase("team-2", "u1", ErasurePolicy.HardDelete, false)
+                (ToolUp.Platform.Config.ConfigStore.create refusing)
+                    .Erase("team-2", "u1", ErasurePolicy.HardDelete, false)
 
             let partial, detail = expectPartialFailure "config" result
             Expect.stringContains detail modA "the first refused blob is named"
@@ -862,7 +872,9 @@ let private phase965Tests =
                 DeleteRefusingBlobStorage(inner, (=) (configDoc "team-l" "modB")) :> IBlobStorage
 
             let handler =
-                ToolUp.Platform.ConfigStoreErasureHandler.erasureHandler (ToolUp.Platform.ConfigStore.create refusing)
+                ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler (
+                    ToolUp.Platform.Config.ConfigStore.create refusing
+                )
 
             let! kinds = ledgerKindsWith ErasurePolicy.HardDelete handler "team-l"
             Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"
@@ -876,14 +888,14 @@ let private phase965Tests =
             let inner = InMemoryBlobStorage() :> IBlobStorage
 
             let healthy =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
 
             let! _ = healthy.Save("team-1", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
             let! _ = healthy.Save("team-1", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
             let refusedName = "objects/o2/v1.json"
 
             let failing =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(DeleteRefusingBlobStorage(inner, (=) refusedName))
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(DeleteRefusingBlobStorage(inner, (=) refusedName))
                 :> IDataObjectStore
 
             let! result = failing.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
@@ -920,7 +932,7 @@ let private phase965Tests =
             let inner = InMemoryBlobStorage() :> IBlobStorage
 
             let healthy =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
 
             let! _ = healthy.Save("team-c", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
             let! _ = healthy.Save("team-c", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
@@ -934,7 +946,7 @@ let private phase965Tests =
             Expect.equal before 2 "two content blobs before the erasure"
 
             let failing =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(
                     DeleteRefusingBlobStorage(inner, (=) "objects/o2/v1.json")
                 )
                 :> IDataObjectStore
@@ -957,13 +969,13 @@ let private phase965Tests =
             let inner = InMemoryBlobStorage() :> IBlobStorage
 
             let healthy =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
 
             let! _ = healthy.Save("team-l", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
             let! _ = healthy.Save("team-l", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
 
             let failing =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(
                     DeleteRefusingBlobStorage(inner, (=) "objects/o2/v1.json")
                 )
                 :> IDataObjectStore
@@ -971,7 +983,7 @@ let private phase965Tests =
             let! kinds =
                 ledgerKindsWith
                     ErasurePolicy.HardDelete
-                    (ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler failing)
+                    (ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler failing)
                     "team-l"
 
             Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"

@@ -1,6 +1,7 @@
 namespace Contoso.Consumer.Preflight
 
 open System
+open ToolUp.Platform.Config
 
 // ─── Phase 727 fixtures — a THIRD-PARTY attribute family ─────────────
 //
@@ -381,7 +382,7 @@ module AttributeRecognitionSweepTests =
                 let auditBuilder (_: HttpContext) : ForeignAuditApi = { Move = fun () -> async { return 1 } }
 
                 let ex =
-                    refusalOf (fun () -> ToolUp.Platform.Api.make auditBuilder |> ignore) "forged Audit"
+                    refusalOf (fun () -> ToolUp.Platform.Config.Api.make auditBuilder |> ignore) "forged Audit"
 
                 Expect.stringContains ex.Message "ForeignAuditApi" "the diagnostic names the record"
                 Expect.stringContains ex.Message "Move" "the diagnostic names the field"
@@ -395,7 +396,7 @@ module AttributeRecognitionSweepTests =
                 let rlBuilder (_: HttpContext) : ForeignRateLimitApi = { Burst = fun () -> async { return 1 } }
 
                 let rlEx =
-                    refusalOf (fun () -> ToolUp.Platform.Api.make rlBuilder |> ignore) "forged RateLimit"
+                    refusalOf (fun () -> ToolUp.Platform.Config.Api.make rlBuilder |> ignore) "forged RateLimit"
 
                 Expect.stringContains rlEx.Message "rate limiting" "the rate-limit surface is named"
 
@@ -409,7 +410,7 @@ module AttributeRecognitionSweepTests =
                 }
 
                 let idEx =
-                    refusalOf (fun () -> ToolUp.Platform.Api.make idBuilder |> ignore) "forged Idempotent"
+                    refusalOf (fun () -> ToolUp.Platform.Config.Api.make idBuilder |> ignore) "forged Idempotent"
 
                 Expect.stringContains idEx.Message "idempotency" "the idempotency surface is named"
 
@@ -435,9 +436,9 @@ module AttributeRecognitionSweepTests =
                     Mirror = fun () -> async { return 2 }
                 }
 
-                ToolUp.Platform.Api.make auditBuilder |> ignore
-                ToolUp.Platform.Api.make rlBuilder |> ignore
-                ToolUp.Platform.Api.make idBuilder |> ignore
+                ToolUp.Platform.Config.Api.make auditBuilder |> ignore
+                ToolUp.Platform.Config.Api.make rlBuilder |> ignore
+                ToolUp.Platform.Config.Api.make idBuilder |> ignore
             }
 
             // ══ The streaming diagnostic ══════════════════════════════
@@ -524,6 +525,6 @@ module AttributeRecognitionSweepTests =
                     fun (_: DataAnnotationsInput) -> async { return 1 }
                     |> fun submit -> { Submit = submit }
 
-                ToolUp.Platform.Api.make builder |> ignore
+                ToolUp.Platform.Config.Api.make builder |> ignore
             }
         ]

@@ -7,6 +7,7 @@ open OpenFeature
 open OpenFeature.Model
 open OpenFeature.Constant
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 /// `IFlagSource` (Phase 239) backed by the **OpenFeature** standard — the
 /// opt-in companion that lets a deployment back the flag-evaluation path

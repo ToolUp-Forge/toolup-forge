@@ -11,6 +11,9 @@ open System.Text
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Authorised narrative calculations ───────────────────────────────
 //

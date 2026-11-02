@@ -6,6 +6,7 @@ open System.Text
 open Expecto
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── Phase 600 — IConditionalBlobStorage contract ────────────────────
 //
@@ -36,9 +37,9 @@ let private resilientOverLocalFactory () =
     Directory.CreateDirectory root |> ignore
     let inner = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
 
-    ToolUp.Platform.ResilientBlobStorage.ResilientBlobStorage(
+    ToolUp.Platform.Infra.ResilientBlobStorage.ResilientBlobStorage(
         inner,
-        ToolUp.Platform.TransientFault.TransientFaultPolicy.identity
+        ToolUp.Platform.Infra.TransientFault.TransientFaultPolicy.identity
     )
     :> IBlobStorage
 
@@ -47,9 +48,9 @@ let private resilientOverLocalFactory () =
 // the pack proves CAS survives the decorator end to end.
 let private encryptedOverInMemoryFactory () =
     let keys =
-        ToolUp.Platform.SingleKeyResolver.create (ToolUp.Platform.Testing.Fakes.TestSecretStore())
+        ToolUp.Platform.Infra.SingleKeyResolver.create (ToolUp.Platform.Testing.Fakes.TestSecretStore())
 
-    ToolUp.Platform.EncryptedBlobStorage.EncryptedBlobStorage(
+    ToolUp.Platform.Infra.EncryptedBlobStorage.EncryptedBlobStorage(
         InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage,
         keys
     )

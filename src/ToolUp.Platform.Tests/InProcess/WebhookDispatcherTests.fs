@@ -15,8 +15,11 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 968 (a) — the dequeue loop backs off, and ends when closed ───
 //

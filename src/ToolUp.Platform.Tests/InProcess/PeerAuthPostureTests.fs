@@ -2,7 +2,11 @@ module ToolUp.Platform.Tests.InProcess.PeerAuthPostureTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.PeerBearerAuthMiddleware
+open ToolUp.Platform.Scope.PeerBearerAuthMiddleware
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 317 — peer-auth posture advisory ──────────────────────────
 //

@@ -9,10 +9,13 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
-module TeamSecretKey = ToolUp.Platform.TeamScopedSecretStore.TeamSecretKey
+module TeamSecretKey = ToolUp.Platform.Scope.TeamScopedSecretStore.TeamSecretKey
 
 // ─── Phase 44a — per-team BYOK provider configuration ────────────
 //

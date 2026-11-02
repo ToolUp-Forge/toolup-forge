@@ -11,6 +11,11 @@ module ToolUp.Platform.Tests.Support.TestSubstrate
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 let private lastInstance<'T when 'T: not struct> (services: IServiceCollection) : 'T option =
     services

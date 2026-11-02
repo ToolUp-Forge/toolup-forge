@@ -7,6 +7,8 @@ open ToolUp.Platform.Transport
 open System
 open Expecto
 open ToolUp.Offline
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 24 — Core model tests ─────────────────────────────────────
 //

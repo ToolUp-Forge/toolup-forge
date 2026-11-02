@@ -8,9 +8,9 @@ ToolUp.RAG.EmbeddingCaches.Redis.Health.create(StackExchange.Redis.IConnectionMu
 ToolUp.RAG.EmbeddingCaches.Redis.Health+RedisEmbeddingCacheHealthCheck (class)
 ToolUp.RAG.EmbeddingCaches.Redis.Health+RedisEmbeddingCacheHealthCheck..ctor(StackExchange.Redis.IConnectionMultiplexer)
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache (class)
-ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache.create(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IEmbeddingCache+IEmbeddingCache
-ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache.createWith(System.String, ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink]) : ToolUp.Platform.IEmbeddingCache+IEmbeddingCache
-ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink]) : ToolUp.Platform.IEmbeddingCache+IEmbeddingCache
+ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache.create(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.IEmbeddingCache+IEmbeddingCache
+ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache.createWith(System.String, ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink]) : ToolUp.Platform.Infra.IEmbeddingCache+IEmbeddingCache
+ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink]) : ToolUp.Platform.Infra.IEmbeddingCache+IEmbeddingCache
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache.hitRateOf(System.Int64, System.Int64) : System.Double
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+CacheMetrics (class)
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+CacheMetrics.HitRateGauge : System.String (literal)
@@ -44,11 +44,11 @@ ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.SchemaVersion : System.
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.StatsDiscriminator : System.String (literal)
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.clearPattern(ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions) : System.String
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.escapeSegment(System.String) : System.String
-ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.forKey(ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, ToolUp.Platform.IEmbeddingCache+EmbeddingCacheKey) : System.String
+ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.forKey(ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, ToolUp.Platform.Infra.IEmbeddingCache+EmbeddingCacheKey) : System.String
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.hitsKey(ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions) : System.String
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+Key.missesKey(ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions) : System.String
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCache (class)
-ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCache..ctor(StackExchange.Redis.IConnectionMultiplexer, ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink])
+ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCache..ctor(StackExchange.Redis.IConnectionMultiplexer, ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink])
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCache.Options : ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheOptions { get }
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCache.Stats() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+EmbeddingCacheStats]
 ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache+RedisEmbeddingCacheException (class)

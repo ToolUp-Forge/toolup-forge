@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── FactTablesTool ──────────────────────────────────────────────────
 //

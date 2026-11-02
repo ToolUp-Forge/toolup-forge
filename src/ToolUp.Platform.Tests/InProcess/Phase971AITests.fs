@@ -9,6 +9,8 @@ open ToolUp.Platform.Providers
 open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.DataObjectStoreTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 971 — AI: a refused legacy-config purge fails the Clear ────
 //

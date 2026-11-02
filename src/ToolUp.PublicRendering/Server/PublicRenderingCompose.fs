@@ -18,9 +18,13 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.Server
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── The public-rendering companion: `PublicRenderingOptions` + `withPublicRendering`
 //
@@ -1406,11 +1410,11 @@ let composePublicRendering (options: PublicRenderingOptions) (app: ServerApp) : 
                         s.AddSingleton<IIndexNowService>(
                             System.Func<System.IServiceProvider, IIndexNowService>(fun sp ->
                                 let metrics =
-                                    match sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>) with
-                                    | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
+                                    match sp.GetService(typeof<ToolUp.Platform.Infra.Metrics.IMetricsSink>) with
+                                    | :? ToolUp.Platform.Infra.Metrics.IMetricsSink as m -> m
                                     | _ ->
-                                        ToolUp.Platform.Metrics.NoOpMetricsSink()
-                                        :> ToolUp.Platform.Metrics.IMetricsSink
+                                        ToolUp.Platform.Infra.Metrics.NoOpMetricsSink()
+                                        :> ToolUp.Platform.Infra.Metrics.IMetricsSink
 
                                 let postFn body =
                                     IndexNow.postWith httpClient indexNowOptions.Endpoint body
@@ -1494,11 +1498,13 @@ let composePublicRendering (options: PublicRenderingOptions) (app: ServerApp) : 
                                     OnceAtStart
                                     (fun sp ->
                                         let metrics =
-                                            match sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>) with
-                                            | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
+                                            match
+                                                sp.GetService(typeof<ToolUp.Platform.Infra.Metrics.IMetricsSink>)
+                                            with
+                                            | :? ToolUp.Platform.Infra.Metrics.IMetricsSink as m -> m
                                             | _ ->
-                                                ToolUp.Platform.Metrics.NoOpMetricsSink()
-                                                :> ToolUp.Platform.Metrics.IMetricsSink
+                                                ToolUp.Platform.Infra.Metrics.NoOpMetricsSink()
+                                                :> ToolUp.Platform.Infra.Metrics.IMetricsSink
 
                                         let postFn body =
                                             IndexNow.postWith httpClient indexNowOptions.Endpoint body

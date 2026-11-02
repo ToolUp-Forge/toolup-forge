@@ -3,7 +3,8 @@ namespace ToolUp.PublicRendering
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
 
 /// Default `IPublicContentApi` impl composing a file-backed
 /// `MarkdownContentLoader` with an optional `IEntityStore` overlay for

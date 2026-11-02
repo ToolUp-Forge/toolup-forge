@@ -6,8 +6,10 @@ namespace ToolUp.PublicRendering
 open System
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 80a — Default INarrativePagePublisher implementation ────
 //

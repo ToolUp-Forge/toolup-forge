@@ -3,6 +3,10 @@ module ToolUp.Platform.Tests.Contracts.IJobSchedulerContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── IJobScheduler contract pack ──────────────────────────────────
 //

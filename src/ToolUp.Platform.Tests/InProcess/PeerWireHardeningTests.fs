@@ -26,6 +26,10 @@ open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 315 — peer host wire hardening ────────────────────────────
 //

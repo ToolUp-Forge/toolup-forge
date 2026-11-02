@@ -13,6 +13,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.PublicRendering
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 84 — render-cache tests ──────────────────────────────────
 //

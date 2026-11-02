@@ -11,6 +11,10 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Cli
 open ToolUp.Cli.Dispatch
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 546 — memberships-doctor ↔ MembershipDoctor parity ────────
 //

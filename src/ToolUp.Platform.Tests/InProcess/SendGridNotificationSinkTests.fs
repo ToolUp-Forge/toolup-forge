@@ -5,6 +5,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.NotificationChannels.Email.SendGrid
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 /// Bind `INotificationSinkContract` to the SendGrid sink. The factory
 /// configures the sink against a deliberately-unreachable endpoint; a

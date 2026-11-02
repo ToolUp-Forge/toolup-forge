@@ -5,6 +5,8 @@ open DataManagementTypes
 open ColumnMappingTypes
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // Phase 218 — dry-run validation for the CSV column-mapping flow. The
 // validator inspects the *mapped* (canonical-shape) CSV against the

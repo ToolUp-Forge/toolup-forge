@@ -9,6 +9,8 @@ open System.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── A pipeline result asserted as facts ─────────────────────────────
 //

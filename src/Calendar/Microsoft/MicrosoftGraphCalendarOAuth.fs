@@ -13,6 +13,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 831 — Microsoft Graph delegated OAuth ────────────────────
 //

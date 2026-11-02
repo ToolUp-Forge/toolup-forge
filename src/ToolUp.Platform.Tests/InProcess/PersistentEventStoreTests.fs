@@ -6,6 +6,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Per-test temp directory for the backing `LocalFileStorage`. Uses
 /// `Path.GetTempPath()` so each OS places it in the conventional

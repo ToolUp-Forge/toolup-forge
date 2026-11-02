@@ -29,9 +29,11 @@ module ToolUp.AI.SampleClientTool.Server.Compose
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
 open ToolUp.AI.SampleClientTool
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Tool definition the agent loop sees. `Location = ClientResident`
 /// means the executor below never runs — the loop emits a

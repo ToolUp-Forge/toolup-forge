@@ -12,6 +12,10 @@ open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.Platform.AuditSinks.LedgerChain
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// Tamper-evidence tests for the chained audit ledger sink.
 ///

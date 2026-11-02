@@ -7,6 +7,7 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open SharedTypes
+open ToolUp.Platform.Compose
 
 // ─── Phase 104 — source-kind-aware original resolution ───────────
 //

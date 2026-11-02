@@ -5,6 +5,10 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 657 — boot verification preflight + the verified profile ──
 //

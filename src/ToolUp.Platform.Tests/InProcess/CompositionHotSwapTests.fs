@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.CompositionHotSwapTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 301 — live composition hot-swap ────────────────────────────
 //

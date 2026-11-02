@@ -6,6 +6,7 @@ namespace ToolUp.PublicRendering
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // ─── Phase 80a — Content-negotiated export handler ──────────────
 //

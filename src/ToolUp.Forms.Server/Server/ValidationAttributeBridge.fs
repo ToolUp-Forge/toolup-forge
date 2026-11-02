@@ -4,6 +4,7 @@ open System
 open System.Reflection
 open Microsoft.FSharp.Reflection
 open ToolUp.Forms.FormSchema
+open ToolUp.Platform.Infra
 
 // =============================================================================
 // Phase 69e.F — Forms integration seam

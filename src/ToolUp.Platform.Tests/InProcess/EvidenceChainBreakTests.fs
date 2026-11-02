@@ -31,6 +31,9 @@ open ToolUp.Platform.DeploymentVerification
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── The break-injection corpus ──────────────────────────────────────
 //

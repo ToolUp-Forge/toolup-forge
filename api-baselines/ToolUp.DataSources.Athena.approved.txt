@@ -5,8 +5,8 @@
 # still be folded into this file in the same PR.
 ToolUp.DataSources.Athena.AthenaDataSource (class)
 ToolUp.DataSources.Athena.AthenaDataSource.Kind : System.String (literal)
-ToolUp.DataSources.Athena.AthenaDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IDataSource
-ToolUp.DataSources.Athena.AthenaDataSource.createWithDefaultCredentials() : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Athena.AthenaDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Athena.AthenaDataSource.createWithDefaultCredentials() : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Athena.AthenaDataSource.parseAwsCredentials(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Amazon.Runtime.AWSCredentials, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Athena.AthenaDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Athena.AthenaDataSource+AthenaSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Athena.AthenaDataSource.toColumnType(System.String) : DataManagementTypes+ColumnType

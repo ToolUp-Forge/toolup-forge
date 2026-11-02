@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
+open ToolUp.Platform.Infra
 
 // ─── Phase 712 — the upstream work record as a read-only wire contract ──
 //

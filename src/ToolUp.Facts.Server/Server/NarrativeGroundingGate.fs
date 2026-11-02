@@ -10,6 +10,9 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── The narrative grounding gate (Phase 985) ────────────────────────
 //

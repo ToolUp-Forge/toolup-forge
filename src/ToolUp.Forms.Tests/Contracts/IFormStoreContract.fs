@@ -4,12 +4,13 @@ open System
 open Expecto
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Tests.Support.PrincipalRecordingEntityStore
 open ToolUp.Platform.EntityQuery
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IFormStore
+open ToolUp.Platform.Infra
 
 // ─── IFormStore contract pack ─────────────────────────────────────
 //

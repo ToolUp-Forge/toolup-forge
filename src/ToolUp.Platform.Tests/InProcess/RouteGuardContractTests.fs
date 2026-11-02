@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.InProcess.RouteGuardContractTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 569 — deep-link route-guard contract pack ─────────────────
 //

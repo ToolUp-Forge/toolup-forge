@@ -9,6 +9,10 @@ open System.Threading
 open System.Threading.Tasks
 open Quartz
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── the Quartz side of a forge job ──────────────────────────────────
 //

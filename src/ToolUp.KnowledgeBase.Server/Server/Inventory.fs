@@ -9,6 +9,7 @@ open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerAIContext
+open ToolUp.Platform.Jobs
 
 // ─── Inventory partition helper ──────────────────────────────────
 

@@ -8,10 +8,13 @@ open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
-open ToolUp.Platform.EncryptedBlobStorage
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra.EncryptedBlobStorage
 open ToolUp.Platform.Secrets
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 22 EncryptedBlobStorage tests ────────────────────────────
 //

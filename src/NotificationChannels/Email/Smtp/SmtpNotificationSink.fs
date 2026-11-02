@@ -5,6 +5,7 @@ open MailKit.Net.Smtp
 open MimeKit
 open ToolUp.Platform
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Jobs
 
 // ─── Public surface ──────────────────────────────────────────────
 //

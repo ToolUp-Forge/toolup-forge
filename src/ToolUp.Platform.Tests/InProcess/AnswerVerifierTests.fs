@@ -9,6 +9,8 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AnswerVerifier
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 523 — numeric-fidelity answer gate ────────────────────────
 //

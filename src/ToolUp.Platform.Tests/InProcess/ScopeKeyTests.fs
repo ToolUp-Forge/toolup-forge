@@ -15,7 +15,11 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 /// One row per scope shape the five mint sites produced: the key, the
 /// container it was stored under, and the bare id it was keyed on.

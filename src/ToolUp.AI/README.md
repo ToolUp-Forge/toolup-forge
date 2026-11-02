@@ -114,7 +114,7 @@ Client project (`ToolupApp-Client.fsproj`) — add the companion's client props 
 In the server entry point:
 
 ```fsharp skip=fragment
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
 open ToolUp.AI.AICompose
 

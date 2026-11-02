@@ -9,6 +9,8 @@ open System.Security.Cryptography
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 491 — the governed outbound signal feed ───────────────────
 //

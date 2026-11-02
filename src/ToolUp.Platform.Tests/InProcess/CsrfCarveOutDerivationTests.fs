@@ -3,7 +3,8 @@ module ToolUp.Platform.Tests.InProcess.CsrfCarveOutDerivationTests
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Scope
 
 // ─── CSRF carve-out derivation — Phase 66 Stream D.4 ─────────────────
 //

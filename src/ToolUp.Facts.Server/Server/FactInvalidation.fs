@@ -4,6 +4,7 @@
 namespace ToolUp.Facts
 
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Fact invalidation (Phase 561 — reactive fact recomputation) ──────
 //

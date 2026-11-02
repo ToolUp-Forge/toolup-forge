@@ -9,7 +9,8 @@ open System.Diagnostics
 open System.IO
 open System.Threading
 open Tesseract
-open ToolUp.Platform.IOcrProvider
+open ToolUp.Platform.Infra.IOcrProvider
+open ToolUp.Platform.Infra
 
 // ─── Phase 500 — Tesseract IOcrProvider companion ────────────────────
 //

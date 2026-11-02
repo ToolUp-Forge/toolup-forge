@@ -10,10 +10,13 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 593 — composition inspector handler ───────────────────────
 //

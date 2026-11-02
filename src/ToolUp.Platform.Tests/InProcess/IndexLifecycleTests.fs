@@ -5,15 +5,16 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingCache
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IIndexLifecycle
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingCache
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IIndexLifecycle
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.InMemoryEmbeddingCache
+open ToolUp.Platform.Infra
 
 // ─── Phase 115 — IIndexLifecycle deletion / erasure contract pack ──────
 //

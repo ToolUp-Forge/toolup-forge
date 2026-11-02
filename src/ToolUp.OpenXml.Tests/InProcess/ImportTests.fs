@@ -7,6 +7,8 @@ open System
 open Expecto
 open ToolUp.OpenXml
 open ToolUp.OpenXml.Tests
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
 
 // ─── Deterministic model rendering (shared with round-trip tests) ─
 //

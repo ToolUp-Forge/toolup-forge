@@ -5,6 +5,8 @@ module ToolUp.AI.ToolEffectEnvelope
 
 open System.Threading
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 793 — the effect envelope a running tool body is held to ──
 //

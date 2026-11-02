@@ -8,6 +8,9 @@ open ToolUp.Platform.ConfigValidation
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 591 — federation-graph preflight ──────────────────────────
 //

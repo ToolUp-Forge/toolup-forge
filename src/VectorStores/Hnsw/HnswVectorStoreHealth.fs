@@ -3,7 +3,8 @@ module ToolUp.RAG.VectorStores.Hnsw.Health
 open System
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 9k HNSW vector store health probe ─────────────────────────
 //

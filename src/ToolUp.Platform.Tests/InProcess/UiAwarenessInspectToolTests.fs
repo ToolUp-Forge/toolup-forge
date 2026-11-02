@@ -34,6 +34,8 @@ open ToolUp.AI.UiAwareness
 open ToolUp.AI.UiAwareness.Server
 open ToolUp.RAG
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 type private StubProviderFactory() =
     interface IAIProviderFactory with
@@ -164,7 +166,7 @@ type private InspectAuthorizer() =
     interface IClientToolAuthorizer with
         member _.Authorize(toolName, _argsJson, _activeModule, _activePage) =
             if toolName = InspectActiveModuleToolName then
-                Allow
+                ClientToolAuthDecision.Allow
             else
                 Deny $"ui-awareness test policy denied '{toolName}'"
 

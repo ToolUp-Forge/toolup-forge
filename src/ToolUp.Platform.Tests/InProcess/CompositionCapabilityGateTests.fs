@@ -2,6 +2,9 @@ module ToolUp.Platform.Tests.InProcess.CompositionCapabilityGateTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 300 — composition capability sandbox (runtime default-deny) ──
 //

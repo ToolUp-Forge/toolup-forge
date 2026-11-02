@@ -7,9 +7,12 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Shared helpers ──────────────────────────────────────────────────
 

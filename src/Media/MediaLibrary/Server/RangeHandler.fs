@@ -11,6 +11,8 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open Giraffe
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 88 — HTTP range-serving endpoints ──────────────────────────
 //

@@ -10,6 +10,11 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── FactBrowseHandler (Phase 895) ───────────────────────────────────
 //

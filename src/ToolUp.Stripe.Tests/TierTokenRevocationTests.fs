@@ -5,6 +5,7 @@ open System.Text
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Stripe.TierToken
+open ToolUp.Platform.Infra
 
 // ─── Phase 340 — tier-token revocation + cookie-edge hardening ───────
 //

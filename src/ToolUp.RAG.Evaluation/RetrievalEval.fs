@@ -3,8 +3,9 @@ module ToolUp.RAG.Evaluation.RetrievalEval
 open System.Diagnostics
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.RAG.Evaluation.EvalTypes
+open ToolUp.Platform.Infra
 
 /// Anonymous-user access context — eval queries against `Platform` and
 /// `Deployment` scopes pass; `Team` scopes are filtered out by the

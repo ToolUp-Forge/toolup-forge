@@ -7,6 +7,9 @@ open System.Text.RegularExpressions
 open Expecto
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 114 — audit-event registry exhaustiveness gate ────────────
 //

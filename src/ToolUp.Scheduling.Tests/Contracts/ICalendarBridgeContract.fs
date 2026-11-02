@@ -4,7 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
@@ -13,6 +13,9 @@ open ToolUp.Scheduling.BookingScheduler
 open ToolUp.Scheduling.CalendarSync
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEventStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── ICalendarBridge contract pack ──────────────────────────────────
 //

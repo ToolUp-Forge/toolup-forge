@@ -3,11 +3,13 @@ module ToolUp.Forms.FormStore
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Metrics
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IFormStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 21 — Default IFormStore implementation ───────────────────
 //

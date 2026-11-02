@@ -10,7 +10,9 @@ open System.Text.RegularExpressions
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Graph
 open ToolUp.Platform
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── EntityGraphProjector — sync + rebuild (68d.B / 68d.C) ──────────
 //

@@ -11,6 +11,7 @@ open Microsoft.FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Remoting
 open ToolUp.Remoting.Generator
+open ToolUp.Platform.Infra
 
 // =============================================================================
 // Phase 801 — the platform's own decoders are GENERATED, and held to it

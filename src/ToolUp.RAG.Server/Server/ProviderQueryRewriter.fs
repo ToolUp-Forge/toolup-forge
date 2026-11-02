@@ -3,8 +3,9 @@ module ToolUp.RAG.ProviderQueryRewriter
 open ToolUp.Platform.Transport
 open ToolUp.Platform
 open ToolUp.Platform.AI
-open ToolUp.Platform.IQueryRewriter
+open ToolUp.Platform.Infra.IQueryRewriter
 open ToolUp.AI
+open ToolUp.Platform.Infra
 
 // ─── Provider-backed conversation-aware query rewriter (Phase 506) ───
 //

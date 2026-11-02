@@ -13,6 +13,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Facts
 open ToolUp.FactStores.Postgres
 open ToolUp.RAG.Benchmarks.ConcurrentLoadBenchmark
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 886 — the concurrent load harness (fact half) ─────────────
 //

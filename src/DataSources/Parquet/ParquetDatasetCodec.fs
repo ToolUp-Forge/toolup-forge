@@ -10,6 +10,7 @@ open Parquet
 open Parquet.Schema
 open ToolUp.Platform
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
 
 // ─── Phase 598 — ParquetDatasetCodec ────────────────────────────────────
 //

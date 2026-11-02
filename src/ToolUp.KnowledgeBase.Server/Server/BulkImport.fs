@@ -12,6 +12,8 @@ open System.Threading
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open SharedTypes
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // NOTE: `ToolUp.Platform.ConfigValidation` is referenced QUALIFIED below
 // rather than opened. Its `ValidationResult` carries `Ok` / `Error`

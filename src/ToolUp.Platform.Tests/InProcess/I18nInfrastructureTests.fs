@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.I18nInfrastructureTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 12a — I18n Infrastructure ─────────────────────────────────
 //

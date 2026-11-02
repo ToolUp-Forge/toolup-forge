@@ -8,6 +8,7 @@ open System.Globalization
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── evaluate_pipeline ───────────────────────────────────────────────
 //

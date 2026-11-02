@@ -15,6 +15,9 @@ open ToolUp.Platform.Tests.Contracts
 open DataManagementTypes
 open ToolUp.Platform.FileProcessor
 open ProcessedDataTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 171 — Home / Overview landing-surface verification ────────
 //
@@ -445,7 +448,7 @@ let pinningTests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store = ToolUp.Platform.ConfigStore.create blob
+            let store = ToolUp.Platform.Config.ConfigStore.create blob
 
             let ctx =
                 ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-a")) store
@@ -494,7 +497,7 @@ let pinningTests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store = ToolUp.Platform.ConfigStore.create blob
+            let store = ToolUp.Platform.Config.ConfigStore.create blob
 
             // User A records a visit on the shared store.
             let apiA =
@@ -519,7 +522,7 @@ let pinningTests =
             let blob =
                 InMemoryBlobStorage.InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
 
-            let store = ToolUp.Platform.ConfigStore.create blob
+            let store = ToolUp.Platform.Config.ConfigStore.create blob
 
             // Two members of the SAME team must not share recents.
             let apiU1 =

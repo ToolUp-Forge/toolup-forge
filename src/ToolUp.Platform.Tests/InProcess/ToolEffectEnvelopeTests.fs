@@ -38,6 +38,8 @@ open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.McpHost
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 

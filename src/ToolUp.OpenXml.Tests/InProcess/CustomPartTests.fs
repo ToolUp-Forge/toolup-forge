@@ -9,6 +9,7 @@ open System.IO.Packaging
 open Expecto
 open ToolUp.OpenXml
 open ToolUp.OpenXml.Tests
+open ToolUp.Platform.Audit
 
 // A deliberately generic sidecar payload — no SDK-baked schema or
 // content type; the caller owns PartUri / ContentType /

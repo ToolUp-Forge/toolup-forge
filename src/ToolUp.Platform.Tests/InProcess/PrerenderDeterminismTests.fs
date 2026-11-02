@@ -4,6 +4,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Bootstrap.PrerenderExport
 open ToolUp.Platform.Prerender
+open ToolUp.Platform.Infra
 
 // ─── Phase 57 follow-up — determinism + hydration-mismatch contract ─
 //

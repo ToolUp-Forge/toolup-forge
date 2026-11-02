@@ -9,6 +9,12 @@ open ToolUp.Platform.Metrics
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Usage
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 9d — AI provider usage middleware ─────────────────────
 //

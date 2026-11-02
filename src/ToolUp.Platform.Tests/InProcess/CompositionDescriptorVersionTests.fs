@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.CompositionDescriptorVersionTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 292 — descriptor schema-version + migration ────────────────
 //

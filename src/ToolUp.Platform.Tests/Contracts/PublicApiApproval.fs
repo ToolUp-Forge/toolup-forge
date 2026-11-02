@@ -151,6 +151,7 @@ open System.Collections.Generic
 // bump check runs the SAME set difference this gate does. See that
 // file for why a second copy of it would be a correctness defect.
 open ToolUp.Platform.Tests.Contracts.SurfaceDiff
+open ToolUp.Platform.Compose
 
 // ─── Repo / config grounding ─────────────────────────────────────────
 

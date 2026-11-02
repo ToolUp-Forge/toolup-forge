@@ -7,6 +7,7 @@ open ToolUp.Platform.Transport
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
+open ToolUp.Platform.Infra
 
 // ─── Phase 43.C — the AI tier's IProviderEntryProbe ───────────────
 //

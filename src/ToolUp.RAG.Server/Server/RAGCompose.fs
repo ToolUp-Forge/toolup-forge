@@ -7,27 +7,27 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Providers
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.TransientFault
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Infra.TransientFault
+open ToolUp.Platform.Compose.Server
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.Usage
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IEmbeddingCache
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IReranker
-open ToolUp.Platform.IQueryRewriter
-open ToolUp.Platform.IOcrProvider
-open ToolUp.Platform.ITableExtractor
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingCache
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IReranker
+open ToolUp.Platform.Infra.IQueryRewriter
+open ToolUp.Platform.Infra.IOcrProvider
+open ToolUp.Platform.Infra.ITableExtractor
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
+open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.VectorisationTypes
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.AI
 open ProcessedDataTypes
@@ -45,6 +45,12 @@ open ToolUp.RAG.CachingEmbeddingProvider
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.RAG.IngestionService
 open ToolUp.RAG.RAGPromptBuilder
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── RAG-awareness preamble ──────────────────────────────────────
 
@@ -1667,8 +1673,8 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // The unified index-lifecycle seam over every index tier this
         // composition fuses, so KB deletion paths fan out across the vector
         // store AND the sparse index.
-        let indexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle =
-            ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(
+        let indexLifecycle: ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle =
+            ToolUp.Platform.Infra.IIndexLifecycle.DefaultIndexLifecycle(
                 vectorStore,
                 sparseIndex,
                 Some embeddingCache,
@@ -1729,7 +1735,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
 
         let s =
             s
-                .AddSingleton<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>(indexLifecycle)
+                .AddSingleton<ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle>(indexLifecycle)
                 .AddSingleton<IEmbeddingProvider>(cachedEmbedder)
                 .AddSingleton<IEmbeddingCache>(embeddingCache)
 

@@ -5,6 +5,8 @@ open System.Text.Json
 open Expecto
 open ToolUp.Platform
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── STJ migration backward-compat backstop ──────────────────────
 //

@@ -12,6 +12,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra.Metrics
 
 // ─── The metric surface (Phase 702) ──────────────────────────────────
 //

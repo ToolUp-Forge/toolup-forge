@@ -11,6 +11,9 @@ open ToolUp.AI.AICompose
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.ToolHelpers
 open ToolUp.Facts.Presentation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 508 — rich AI tool parameter schemas ──────────────────────
 //

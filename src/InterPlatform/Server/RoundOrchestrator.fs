@@ -8,6 +8,7 @@ open System.Text
 open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Compose
 
 // ─── Layer 5 — federation orchestration: multi-round runs ─────────────
 //

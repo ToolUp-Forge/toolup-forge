@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.InProcess.TreePatchChannelTests
 open System.IO
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 271 — neutral tree-patch transport envelope ─────────────────
 //

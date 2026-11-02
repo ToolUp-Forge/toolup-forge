@@ -21,7 +21,7 @@ default — so wiring it never changes a flag a deployment already manages in-pr
 ```fsharp skip=fragment
 open OpenFeature
 open ToolUp.FeatureFlagProviders.OpenFeature
-open ToolUp.Platform.FlagEvaluator
+open ToolUp.Platform.Config.FlagEvaluator
 
 // 1. Register your OpenFeature provider however your vendor documents it:
 //    (OpenFeature's own static Api registration — see your vendor's docs)

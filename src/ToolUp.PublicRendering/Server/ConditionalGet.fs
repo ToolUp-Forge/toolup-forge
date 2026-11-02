@@ -8,6 +8,8 @@ open Giraffe
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 155 — handler-agnostic HTTP conditional-GET primitive ─────
 //

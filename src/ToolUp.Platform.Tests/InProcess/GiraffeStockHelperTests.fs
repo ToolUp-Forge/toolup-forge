@@ -12,6 +12,8 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Giraffe stock-helper DI defaults — regression coverage ──────────
 //

@@ -13,7 +13,7 @@ ToolUp.Forms.ActionLedgerMetrics.registrations : Microsoft.FSharp.Collections.FS
 ToolUp.Forms.Aggregations (class)
 ToolUp.Forms.Aggregations.aggregateField(ToolUp.Forms.FormSchema+FieldSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.FormSubmission+Submission]) : ToolUp.Forms.AggregationTypes+FieldAggregation
 ToolUp.Forms.AnalyserCache (class)
-ToolUp.Forms.AnalyserCache.createResultStoreBacked(ToolUp.Platform.IResultStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]) : ToolUp.Forms.AnalyserCache+IAnalyserCache
+ToolUp.Forms.AnalyserCache.createResultStoreBacked(ToolUp.Platform.Infra.IResultStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]) : ToolUp.Forms.AnalyserCache+IAnalyserCache
 ToolUp.Forms.AnalyserCache.noOpCache : ToolUp.Forms.AnalyserCache+IAnalyserCache { get }
 ToolUp.Forms.AnalyserCache.readThrough(ToolUp.Forms.AnalyserCache+IAnalyserCache, ToolUp.Forms.AnalyserCache+AnalyserCacheKey, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.AggregationTypes+AnalyserOutput]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.AggregationTypes+AnalyserOutput]]
 ToolUp.Forms.AnalyserCache+AnalyserCacheKey (class)
@@ -28,24 +28,24 @@ ToolUp.Forms.AnalyserCache+IAnalyserCache.TryLookup(ToolUp.Forms.AnalyserCache+A
 ToolUp.Forms.AnalyserCache+NoOpAnalyserCache (class)
 ToolUp.Forms.AnalyserCache+NoOpAnalyserCache..ctor()
 ToolUp.Forms.AnalyserCache+ResultStoreAnalyserCache (class)
-ToolUp.Forms.AnalyserCache+ResultStoreAnalyserCache..ctor(ToolUp.Platform.IResultStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String])
+ToolUp.Forms.AnalyserCache+ResultStoreAnalyserCache..ctor(ToolUp.Platform.Infra.IResultStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String])
 ToolUp.Forms.EntityRegistrations (class)
 ToolUp.Forms.EntityRegistrations.formSchemaRegistration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Forms.FormSchema+FormSchema] { get }
 ToolUp.Forms.EntityRegistrations.submissionRegistration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Forms.FormSubmission+Submission] { get }
 ToolUp.Forms.FormApiHandler (class)
-ToolUp.Forms.FormApiHandler.formApi(ToolUp.Forms.IFormStore+IFormStore, ToolUp.Forms.IWorkflowEngine+IWorkflowEngine, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Platform.IAuditLog, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.Workflow+WorkflowDefinition], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], ToolUp.Forms.AnalyserCache+IAnalyserCache, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.IFormSubmissionAnalyser+IFormSubmissionAnalyser], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Forms.FormApi+IFormApi
+ToolUp.Forms.FormApiHandler.formApi(ToolUp.Forms.IFormStore+IFormStore, ToolUp.Forms.IWorkflowEngine+IWorkflowEngine, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Platform.IAuditLog, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.Workflow+WorkflowDefinition], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.IShareTokenStore], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], ToolUp.Forms.AnalyserCache+IAnalyserCache, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.IFormSubmissionAnalyser+IFormSubmissionAnalyser], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Forms.FormApi+IFormApi
 ToolUp.Forms.FormStore (class)
 ToolUp.Forms.FormStore.ListSchemasLoadFailedTotal : System.String (literal)
 ToolUp.Forms.FormStore.metricRegistrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }
 ToolUp.Forms.FormStore+FormStore (class)
-ToolUp.Forms.FormStore+FormStore..ctor(ToolUp.Platform.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink])
+ToolUp.Forms.FormStore+FormStore..ctor(ToolUp.Platform.Infra.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink])
 ToolUp.Forms.FormValidator (class)
 ToolUp.Forms.FormValidator.emptyRegistry : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Forms.FormValidator.validate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Forms.FormSchema+FormSchema, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSubmission+FieldValue]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.FormSubmission+FieldError]]
 ToolUp.Forms.FormsCompose (class)
-ToolUp.Forms.FormsCompose.composeForms(ToolUp.Forms.FormsCompose+FormsOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Forms.FormsCompose.composeForms(ToolUp.Forms.FormsCompose+FormsOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Forms.FormsCompose.formsCompanion : ToolUp.Platform.ComponentId { get }
-ToolUp.Forms.FormsCompose.withForms(ToolUp.Forms.FormsCompose+FormsOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Forms.FormsCompose.withForms(ToolUp.Forms.FormsCompose+FormsOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Forms.FormsCompose+DefaultedFormStore (class)
 ToolUp.Forms.FormsCompose+DefaultedFormStore..ctor(ToolUp.Forms.IFormStore+IFormStore, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSchema+FormSchema])
 ToolUp.Forms.FormsCompose+FormsOptions (class)
@@ -71,7 +71,7 @@ ToolUp.Forms.FormsCompose+FormsOptionsModule.withGuard(System.String, Microsoft.
 ToolUp.Forms.FormsCompose+FormsOptionsModule.withShareTokenRateLimiter(ToolUp.Platform.IShareTokenRateLimiter, ToolUp.Forms.FormsCompose+FormsOptions) : ToolUp.Forms.FormsCompose+FormsOptions
 ToolUp.Forms.FormsCompose+FormsOptionsModule.withWorkflow(ToolUp.Forms.Workflow+WorkflowDefinition, ToolUp.Forms.FormsCompose+FormsOptions) : ToolUp.Forms.FormsCompose+FormsOptions
 ToolUp.Forms.FormsInHandlerGates (class)
-ToolUp.Forms.FormsInHandlerGates.formApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
+ToolUp.Forms.FormsInHandlerGates.formApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.InHandlerGateDeclaration]
 ToolUp.Forms.IFormStore (class)
 ToolUp.Forms.IFormStore+IFormStore (interface)
 ToolUp.Forms.IFormStore+IFormStore.DeleteSchema(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]
@@ -104,7 +104,7 @@ ToolUp.Forms.InMemoryShareTokenRateLimiter.create() : ToolUp.Platform.IShareToke
 ToolUp.Forms.InMemoryShareTokenRateLimiter+InMemoryShareTokenRateLimiter (class)
 ToolUp.Forms.InMemoryShareTokenRateLimiter+InMemoryShareTokenRateLimiter..ctor()
 ToolUp.Forms.PublicFormApiHandler (class)
-ToolUp.Forms.PublicFormApiHandler.publicFormApi(ToolUp.Platform.IShareTokenStore, ToolUp.Forms.IFormStore+IFormStore, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Platform.IAuditLog, ToolUp.Platform.IShareTokenRateLimiter, ToolUp.Platform.ILogger, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Forms.PublicFormApi+IPublicFormApi
+ToolUp.Forms.PublicFormApiHandler.publicFormApi(ToolUp.Platform.Scope.IShareTokenStore, ToolUp.Forms.IFormStore+IFormStore, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Platform.IAuditLog, ToolUp.Platform.IShareTokenRateLimiter, ToolUp.Platform.ILogger, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Forms.PublicFormApi+IPublicFormApi
 ToolUp.Forms.PublishableFormConfigValidator (class)
 ToolUp.Forms.PublishableFormConfigValidator+PublishableFormConfigValidator (class)
 ToolUp.Forms.PublishableFormConfigValidator+PublishableFormConfigValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSchema+FormSchema], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -115,4 +115,4 @@ ToolUp.Forms.ShareTokenRateLimiterDistributionValidator+ShareTokenRateLimiterDis
 ToolUp.Forms.ShareTokenRateLimiterDistributionValidator+ShareTokenRateLimiterDistributionValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.IShareTokenRateLimiter, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Forms.WorkflowEngine (class)
 ToolUp.Forms.WorkflowEngine+WorkflowEngine (class)
-ToolUp.Forms.WorkflowEngine+WorkflowEngine..ctor(ToolUp.Forms.IFormStore+IFormStore, ToolUp.Platform.IAuditLog, ToolUp.Forms.IActionLedger+IActionLedger, ToolUp.Platform.Metrics.IMetricsSink, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.Workflow+WorkflowDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Forms.IWorkflowEngine+WorkflowContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Forms.IWorkflowEngine+WorkflowContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.Workflow+ActionFailurePolicy], System.IServiceProvider)
+ToolUp.Forms.WorkflowEngine+WorkflowEngine..ctor(ToolUp.Forms.IFormStore+IFormStore, ToolUp.Platform.IAuditLog, ToolUp.Forms.IActionLedger+IActionLedger, ToolUp.Platform.Infra.Metrics.IMetricsSink, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.Workflow+WorkflowDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Forms.IWorkflowEngine+WorkflowContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Forms.IWorkflowEngine+WorkflowContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.Workflow+ActionFailurePolicy], System.IServiceProvider)

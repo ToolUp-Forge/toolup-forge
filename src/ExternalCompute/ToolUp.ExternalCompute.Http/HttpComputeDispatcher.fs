@@ -13,6 +13,8 @@ open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 322 — the generic HTTP/REST IExternalComputeDispatcher ─────
 //

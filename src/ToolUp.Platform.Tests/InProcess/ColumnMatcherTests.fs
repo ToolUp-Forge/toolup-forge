@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.InProcess.ColumnMatcherTests
 open Expecto
 open DataManagementTypes
 open ColumnMappingTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 let private col name typ required = {
     Name = name

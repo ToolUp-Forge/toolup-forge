@@ -5,6 +5,7 @@ namespace ToolUp.InterPlatform
 
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
 
 // ─── Layer 3 — wire format ───────────────────────────────────────────
 //

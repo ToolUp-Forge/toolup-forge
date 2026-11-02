@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.IdentitySanitiserTests
 
 open Expecto
 open ToolUp.Platform.Auth
+open ToolUp.Platform.Config.Auth
 
 [<Tests>]
 let tests =

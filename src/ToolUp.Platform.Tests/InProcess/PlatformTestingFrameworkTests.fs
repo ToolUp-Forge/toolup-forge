@@ -11,6 +11,8 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Testing.Fakes
 open ToolUp.Platform.Testing
 open ToolUp.Platform.Testing.DataTypeTestKit
+open ToolUp.Platform.Compose
+open ToolUp.Platform.Files
 
 // ─── Phase 11a — Module Testing Framework smoke tests ────────────────
 //

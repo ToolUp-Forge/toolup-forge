@@ -11,6 +11,7 @@ open Microsoft.Extensions.Primitives
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Compose
 
 // ─── Phase 471 — gated HLS: key material + scope-gated key delivery ───
 //

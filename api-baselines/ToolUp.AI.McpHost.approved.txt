@@ -112,8 +112,8 @@ ToolUp.AI.McpHost.McpAuthorization.servicePrincipal(Microsoft.AspNetCore.Http.Ht
 ToolUp.AI.McpHost.McpAuthorization.toolView(ToolUp.AI.AIToolRegistry+RegisteredTool) : ToolUp.AI.McpHost.McpProtocol+McpToolView
 ToolUp.AI.McpHost.McpAuthorization.visibleTools(ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.AI.McpHost.AgentPrincipal) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.McpHost.McpCompose (class)
-ToolUp.AI.McpHost.McpCompose.composeMcp(ToolUp.AI.McpHost.McpCompose+McpOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
-ToolUp.AI.McpHost.McpCompose.withMcp(ToolUp.AI.McpHost.McpCompose+McpOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.McpHost.McpCompose.composeMcp(ToolUp.AI.McpHost.McpCompose+McpOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.AI.McpHost.McpCompose.withMcp(ToolUp.AI.McpHost.McpCompose+McpOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.AI.McpHost.McpCompose+McpHostMode (class)
 ToolUp.AI.McpHost.McpCompose+McpHostMode.EnabledMcpHost : ToolUp.AI.McpHost.McpCompose+McpHostMode { get }
 ToolUp.AI.McpHost.McpCompose+McpHostMode.IsEnabledMcpHost : System.Boolean { get }
@@ -124,15 +124,15 @@ ToolUp.AI.McpHost.McpCompose+McpHostMode+Tags (class)
 ToolUp.AI.McpHost.McpCompose+McpHostMode+Tags.EnabledMcpHost : System.Int32 (literal)
 ToolUp.AI.McpHost.McpCompose+McpHostMode+Tags.NoMcpHost : System.Int32 (literal)
 ToolUp.AI.McpHost.McpCompose+McpOptions (class)
-ToolUp.AI.McpHost.McpCompose+McpOptions..ctor(ToolUp.AI.McpHost.McpCompose+McpHostMode, ToolUp.AI.McpHost.McpHost+McpHostOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.IAgentToolGrantStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBudgetLedger])
-ToolUp.AI.McpHost.McpCompose+McpOptions.BudgetLedger : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBudgetLedger] { get }
+ToolUp.AI.McpHost.McpCompose+McpOptions..ctor(ToolUp.AI.McpHost.McpCompose+McpHostMode, ToolUp.AI.McpHost.McpHost+McpHostOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.IAgentToolGrantStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IBudgetLedger])
+ToolUp.AI.McpHost.McpCompose+McpOptions.BudgetLedger : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IBudgetLedger] { get }
 ToolUp.AI.McpHost.McpCompose+McpOptions.GrantStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.IAgentToolGrantStore] { get }
 ToolUp.AI.McpHost.McpCompose+McpOptions.Mode : ToolUp.AI.McpHost.McpCompose+McpHostMode { get }
 ToolUp.AI.McpHost.McpCompose+McpOptions.Options : ToolUp.AI.McpHost.McpHost+McpHostOptions { get }
 ToolUp.AI.McpHost.McpCompose+McpOptionsModule (class)
 ToolUp.AI.McpHost.McpCompose+McpOptionsModule.create() : ToolUp.AI.McpHost.McpCompose+McpOptions
 ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withAgentPolicy(System.String, ToolUp.AI.McpHost.AgentPolicy, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
-ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withBudgetLedger(ToolUp.Platform.IBudgetLedger, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
+ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withBudgetLedger(ToolUp.Platform.Infra.IBudgetLedger, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
 ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withDefaultPolicy(ToolUp.AI.McpHost.AgentPolicy, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
 ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withGrantStore(ToolUp.AI.McpHost.IAgentToolGrantStore, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
 ToolUp.AI.McpHost.McpCompose+McpOptionsModule.withMcpHost(ToolUp.AI.McpHost.McpCompose+McpHostMode, ToolUp.AI.McpHost.McpCompose+McpOptions) : ToolUp.AI.McpHost.McpCompose+McpOptions
@@ -178,14 +178,14 @@ ToolUp.AI.McpHost.McpGovernance (class)
 ToolUp.AI.McpHost.McpGovernance.admitBudget(Microsoft.AspNetCore.Http.HttpContext, ToolUp.AI.McpHost.AgentBudget, ToolUp.AI.McpHost.AgentPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.McpGovernance+BudgetReservation], ToolUp.AI.McpHost.McpError]]
 ToolUp.AI.McpHost.McpGovernance.admitRateLimit(Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.AgentRateLimit], ToolUp.Platform.Subject) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AI.McpHost.McpError]]
 ToolUp.AI.McpHost.McpGovernance.budgetClaims(ToolUp.AI.McpHost.AgentBudget, ToolUp.Platform.BudgetUsage) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetClaim]
-ToolUp.AI.McpHost.McpGovernance.budgetKey(ToolUp.AI.McpHost.AgentBudget, ToolUp.AI.McpHost.AgentPrincipal, System.DateTime) : ToolUp.Platform.BudgetLedgerKey
+ToolUp.AI.McpHost.McpGovernance.budgetKey(ToolUp.AI.McpHost.AgentBudget, ToolUp.AI.McpHost.AgentPrincipal, System.DateTime) : ToolUp.Platform.Infra.BudgetLedgerKey
 ToolUp.AI.McpHost.McpGovernance.budgetSubject(ToolUp.AI.McpHost.AgentPrincipal) : ToolUp.Platform.BudgetSubject
 ToolUp.AI.McpHost.McpGovernance.ratePartition(System.String, ToolUp.Platform.Subject) : ToolUp.Platform.InboundRateLimitKey
 ToolUp.AI.McpHost.McpGovernance.releaseBudget(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.McpHost.McpGovernance+BudgetReservation]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.AI.McpHost.McpGovernance+BudgetReservation (class)
-ToolUp.AI.McpHost.McpGovernance+BudgetReservation..ctor(ToolUp.Platform.IBudgetLedger, ToolUp.Platform.BudgetLedgerKey)
-ToolUp.AI.McpHost.McpGovernance+BudgetReservation.Key : ToolUp.Platform.BudgetLedgerKey { get }
-ToolUp.AI.McpHost.McpGovernance+BudgetReservation.Ledger : ToolUp.Platform.IBudgetLedger { get }
+ToolUp.AI.McpHost.McpGovernance+BudgetReservation..ctor(ToolUp.Platform.Infra.IBudgetLedger, ToolUp.Platform.Infra.BudgetLedgerKey)
+ToolUp.AI.McpHost.McpGovernance+BudgetReservation.Key : ToolUp.Platform.Infra.BudgetLedgerKey { get }
+ToolUp.AI.McpHost.McpGovernance+BudgetReservation.Ledger : ToolUp.Platform.Infra.IBudgetLedger { get }
 ToolUp.AI.McpHost.McpHost (class)
 ToolUp.AI.McpHost.McpHost.SessionHeader : System.String (literal)
 ToolUp.AI.McpHost.McpHost.handler(ToolUp.AI.McpHost.McpHost+McpHostOptions, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]

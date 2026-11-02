@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.DispatcherBodyAndArgFastpathTests
 
 open System.IO
 open Expecto
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 69m — Dispatcher body + argument-parse fastpath ──
 //

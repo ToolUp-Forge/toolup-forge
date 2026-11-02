@@ -3,7 +3,8 @@ module ToolUp.Platform.Tests.Contracts.IConsentStateStoreContract
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.Consent.ConsentStateStore
+open ToolUp.Platform.Audit.Consent.ConsentStateStore
+open ToolUp.Platform.Compose
 
 // ─── IConsentStateStore contract pack ────────────────────────────────
 //

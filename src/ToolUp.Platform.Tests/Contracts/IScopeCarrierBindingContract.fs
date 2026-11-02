@@ -7,6 +7,10 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts.IJobSchedulerContract
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── IScopeCarrierBinding contract pack (Phase 935) ─────────────────
 //

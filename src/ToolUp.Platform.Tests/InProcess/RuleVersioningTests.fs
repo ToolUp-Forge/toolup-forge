@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.RuleVersioningTests
 open System.Reflection
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 597 — rule-manifest versioning + the errata channel ────────
 //

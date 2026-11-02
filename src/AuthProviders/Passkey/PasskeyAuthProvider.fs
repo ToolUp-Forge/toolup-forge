@@ -9,6 +9,7 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyStores
+open ToolUp.Platform.Scope
 
 // ─── Request-time session validator ──────────────────────────────────
 //

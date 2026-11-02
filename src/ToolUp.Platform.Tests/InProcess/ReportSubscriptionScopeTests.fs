@@ -36,11 +36,11 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
@@ -54,6 +54,12 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.JobSchedulers
 open ToolUp.Platform.JobSchedulers.QuartzScheduler
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ── The subscription substrate, over the shipped scheduler ────────
 
@@ -1075,7 +1081,8 @@ let private quotaGatedSubject () : IJobScopeReissueContract.ReissueSubject =
 
     {
         Scheduler =
-            TeamQuotaPolicy.QuotaGatedJobScheduler(inner, ToolUp.Platform.Usage.NoOpTeamQuotaPolicy()) :> IJobScheduler
+            TeamQuotaPolicy.QuotaGatedJobScheduler(inner, ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
+            :> IJobScheduler
         Bind = bindInto inner
         Dispose = ignore
     }

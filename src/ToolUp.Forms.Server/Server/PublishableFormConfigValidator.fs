@@ -4,6 +4,7 @@ open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Forms.FormSchema
+open ToolUp.Platform.Config
 
 // ─── Phase 21b — Publishable-form preflight validator ────────────────
 // ─── Phase 21e — mode-aware severity ─────────────────────────────────

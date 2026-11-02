@@ -7,6 +7,7 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Google.Cloud.Functions.Framework
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.GoogleCloudFunctions — GCF adapter ─────────────────
 //

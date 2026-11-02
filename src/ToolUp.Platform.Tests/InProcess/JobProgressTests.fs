@@ -4,6 +4,9 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 321 — job progress checkpoints ─────────────────────────────
 //

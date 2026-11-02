@@ -4,7 +4,8 @@
 namespace ToolUp.RAG.StaticCorpus
 
 open System
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
 
 // ─── Deterministic offline hashing embedder ──────────────────────
 //

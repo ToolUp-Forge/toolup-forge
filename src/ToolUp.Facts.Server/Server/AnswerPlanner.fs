@@ -9,6 +9,8 @@ open System.Globalization
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -1151,27 +1153,32 @@ module AnswerPlanProvenance =
     let withPlans (messageId: string) (plans: AnswerPlan list) (chain: ProvenanceChain) : ProvenanceChain =
         let planNodes =
             plans
-            |> List.map (fun plan -> {
-                Id = plan.PlanId
-                Kind = AnswerPlanNode
-                Disclosure = None
-                Label = sprintf "answer plan: %s" plan.Question
-            })
+            |> List.map (fun plan ->
+                ({
+                    Id = plan.PlanId
+                    Kind = AnswerPlanNode
+                    Disclosure = None
+                    Label = sprintf "answer plan: %s" plan.Question
+                }
+                : ProvenanceNode))
 
         let planEdges =
             plans
             |> List.collect (fun plan ->
-                {
+                ({
                     From = messageId
                     To = plan.PlanId
                     Kind = PlannedBy
                 }
+                : ProvenanceEdge)
                 :: (AnswerPlan.citedFactIds plan
-                    |> List.map (fun factId -> {
-                        From = plan.PlanId
-                        To = factId
-                        Kind = CitesFact
-                    })))
+                    |> List.map (fun factId ->
+                        ({
+                            From = plan.PlanId
+                            To = factId
+                            Kind = CitesFact
+                        }
+                        : ProvenanceEdge))))
 
         {
             chain with

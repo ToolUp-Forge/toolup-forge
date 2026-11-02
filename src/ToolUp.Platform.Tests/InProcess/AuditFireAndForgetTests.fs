@@ -30,11 +30,14 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.Support
 open ToolUp.Platform.Tests.Support.FireAndForgetHarness
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 type AuditSinkDownException(marker: string) =
     inherit Exception(marker)

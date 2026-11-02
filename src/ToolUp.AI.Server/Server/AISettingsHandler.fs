@@ -7,8 +7,11 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Test-connection payload ─────────────────────────────────────
 

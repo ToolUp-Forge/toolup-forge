@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.INotificationSinkContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 /// Contract assertions every `INotificationSink` implementation must
 /// satisfy. Bound by an `InProcess` test that supplies a factory

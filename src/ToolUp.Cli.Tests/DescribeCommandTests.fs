@@ -11,6 +11,7 @@ open Expecto
 open ToolUp.Cli
 open ToolUp.Cli.DescribeCommand
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 782 — `toolup describe` ───────────────────────────────────
 //

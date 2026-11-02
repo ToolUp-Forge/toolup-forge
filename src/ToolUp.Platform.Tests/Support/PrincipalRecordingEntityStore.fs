@@ -4,7 +4,9 @@
 module ToolUp.Platform.Tests.Support.PrincipalRecordingEntityStore
 
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 814 — what a module seam hands the entity store ───────────
 //

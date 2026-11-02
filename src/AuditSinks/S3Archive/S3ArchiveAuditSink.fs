@@ -8,6 +8,8 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Public surface ──────────────────────────────────────────────
 //

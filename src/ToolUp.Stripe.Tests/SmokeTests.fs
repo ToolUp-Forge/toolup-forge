@@ -2,6 +2,7 @@ module ToolUp.Stripe.Server.Tests.SmokeTests
 
 open Expecto
 open ToolUp.Stripe.Server
+open ToolUp.Platform.Compose
 
 /// Smoke suite — references the real Server surface so the assembly
 /// loads at runtime. End-to-end TestHost-driven coverage of

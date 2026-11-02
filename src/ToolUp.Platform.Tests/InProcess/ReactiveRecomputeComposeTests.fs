@@ -16,6 +16,12 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 623 — reactive recomputation, ACTIVATED ───────────────────
 //

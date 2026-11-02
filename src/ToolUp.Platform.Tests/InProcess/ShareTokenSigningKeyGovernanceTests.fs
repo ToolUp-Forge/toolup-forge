@@ -8,6 +8,10 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 460 — share-token signing-key governance ──────────────────
 //

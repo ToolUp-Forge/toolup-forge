@@ -5,7 +5,8 @@ open System.Text.Json.Nodes
 open System.Text.RegularExpressions
 open Giraffe.ViewEngine
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Config
 
 // ─── Build-time static export ────────────────────────────────────────
 //

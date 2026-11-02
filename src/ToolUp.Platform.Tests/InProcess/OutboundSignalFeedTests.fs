@@ -8,6 +8,8 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 491 — the governed outbound signal feed ───────────────────
 //

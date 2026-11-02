@@ -9,6 +9,7 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 /// Phase 36.D — `POST /api/ai/consent`.
 ///

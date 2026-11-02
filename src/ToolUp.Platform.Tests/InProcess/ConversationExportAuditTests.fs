@@ -6,6 +6,8 @@ module ToolUp.Platform.Tests.InProcess.ConversationExportAuditTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
 
 // ─── Phase 6h.A — ConversationExported audit round-trip ─────────
 //

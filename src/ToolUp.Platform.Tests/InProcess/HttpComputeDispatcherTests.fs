@@ -27,8 +27,12 @@ open ToolUp.Platform
 open ToolUp.Platform.ExternalCompute.Http
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Platform.Tests.Contracts.IExternalComputeDispatcherContract
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 322 — the HTTP/REST external-compute companion ─────────────
 //

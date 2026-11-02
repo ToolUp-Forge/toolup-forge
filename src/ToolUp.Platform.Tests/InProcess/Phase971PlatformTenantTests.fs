@@ -9,6 +9,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.DataObjectStoreTests
+open ToolUp.Platform.Compose
 
 // ─── Phase 971 — PlatformTenant: provisioning clears the offboard ledger first ──
 //

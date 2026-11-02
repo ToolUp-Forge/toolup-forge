@@ -13,6 +13,9 @@ open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerRetentionSweep
 open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 512 — per-scope KB quota + retention ──────────────────────
 //

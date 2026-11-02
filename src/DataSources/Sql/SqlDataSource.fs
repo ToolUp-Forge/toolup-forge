@@ -10,6 +10,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.DataSources.Common
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
 
 // Driver exceptions can surface at the query `with` handler wrapped in
 // `AggregateException`, so a direct `:? DbException` type test never

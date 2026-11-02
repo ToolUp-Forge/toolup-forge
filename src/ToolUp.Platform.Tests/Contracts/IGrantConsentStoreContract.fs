@@ -36,7 +36,8 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.GrantConsentStore
+open ToolUp.Platform.Scope.GrantConsentStore
+open ToolUp.Platform.Infra
 
 let private subject = ConsentSubject.create "team-a" "alice" "SkuAnalysis"
 let private otherSubject = ConsentSubject.create "team-a" "bob" "SkuAnalysis"
