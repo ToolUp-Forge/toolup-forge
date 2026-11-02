@@ -7,6 +7,8 @@
 // Declared here so the excerpts compile as written, with every SDK
 // type in the signatures still checked by the gate.
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

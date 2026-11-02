@@ -159,7 +159,7 @@ let leadWorkflow : WorkflowDefinition = {
 In the server composition root:
 
 ```fsharp
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormsCompose
@@ -334,7 +334,7 @@ let npsSchema =
 Wire `IShareTokenStore`:
 
 ```fsharp
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Forms.FormsCompose
 
 let exitCode =

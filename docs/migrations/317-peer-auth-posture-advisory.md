@@ -97,7 +97,7 @@ The classification is a value, not a log line, so a deployment can pin its own
 posture without booting a server:
 
 ```fsharp
-open ToolUp.Platform.PeerBearerAuthMiddleware
+open ToolUp.Platform.Scope.PeerBearerAuthMiddleware
 
 match auditPeerAuthPosture config with
 | SignedPeerAuthOnly

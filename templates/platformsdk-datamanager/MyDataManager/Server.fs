@@ -4,6 +4,8 @@ open System
 open ToolUp.Platform
 open ProcessedDataTypes
 open MyDataManager.SharedTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Files
 
 // ─── IDataSource skeleton ─────────────────────────────────────────
 //

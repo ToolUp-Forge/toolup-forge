@@ -235,7 +235,7 @@ open ToolUp.RAG.OcrProviders.Tesseract
 
 let ocr = TesseractOcrProvider.createForTessData "/var/lib/tessdata"
 
-services.AddSingleton<ToolUp.Platform.IOcrProvider.IOcrProvider>(ocr)
+services.AddSingleton<ToolUp.Platform.Infra.IOcrProvider.IOcrProvider>(ocr)
 ```
 
 The extractor then routes through it on two paths:

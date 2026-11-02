@@ -29,6 +29,7 @@ open ToolUp.AuthProviders
 open ToolUp.AuthProviders.GoogleDirectory
 open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig
 open ToolUp.AuthProviders.Oidc.OidcAppConfig
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =

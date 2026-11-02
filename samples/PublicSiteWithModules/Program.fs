@@ -2,8 +2,10 @@ module PublicSiteWithModules.Program
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 /// Phase 82 — the canonical hybrid composition root. Combines:
 ///

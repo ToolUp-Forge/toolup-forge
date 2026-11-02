@@ -11,6 +11,7 @@ open System.IO
 open System.Runtime.ExceptionServices
 open Expecto
 open Microsoft.Playwright
+open ToolUp.Platform.Jobs
 
 // ─── Phase 761 — flake policy, stated once ───────────────────────────
 //

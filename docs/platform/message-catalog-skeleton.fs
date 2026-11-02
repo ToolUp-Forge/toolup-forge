@@ -18,6 +18,12 @@
 module ToolUp.Platform.Localization.Skeleton
 
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// The translation. `c` is the built-in catalog stamped with the resolved locale;
 /// return it unchanged for every locale you do not cover.

@@ -9,6 +9,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── The published report pages ───────────────────────────────────
 //

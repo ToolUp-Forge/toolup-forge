@@ -15,6 +15,8 @@
 // entitlement-shaped at all.
 open System.Security.Cryptography
 open Microsoft.Extensions.DependencyInjection
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

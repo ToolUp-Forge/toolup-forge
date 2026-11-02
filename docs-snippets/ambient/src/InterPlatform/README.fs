@@ -31,6 +31,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =

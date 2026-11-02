@@ -9,6 +9,7 @@
 // `open`-ceremony added to the markdown.
 open Giraffe.ViewEngine
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =

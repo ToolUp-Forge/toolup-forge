@@ -1,7 +1,9 @@
 module MyApp.Server
 
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 11.G — env-driven composition shape. `ConsoleLogger.fromEnv`
 // reads `TOOLUP_LOG_LEVEL` / `TOOLUP_TRACE_CATEGORIES`;

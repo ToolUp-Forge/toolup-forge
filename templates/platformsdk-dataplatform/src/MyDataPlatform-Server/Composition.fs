@@ -4,7 +4,7 @@ open System.Net.Http
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
@@ -12,6 +12,10 @@ open ToolUp.Facts
 open ToolUp.RAG.RAGCompose
 open ToolUp.PublicRendering
 open ToolUp.AuthProviders
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 /// Everything the composition is handed rather than choosing itself, so the
 /// end-to-end test composes exactly the same application around a scripted

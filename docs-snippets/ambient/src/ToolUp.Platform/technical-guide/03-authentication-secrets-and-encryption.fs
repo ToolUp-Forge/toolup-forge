@@ -1,3 +1,4 @@
+open ToolUp.Platform.Config
 // Ambient context for `src/ToolUp.Platform/technical-guide/03-authentication-secrets-and-encryption.md`.
 //
 // The page's composition-root locals. `config` is the deployment's

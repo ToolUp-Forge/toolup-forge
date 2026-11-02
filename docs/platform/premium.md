@@ -56,7 +56,7 @@ The default `ClientConfig.PremiumModel = AnonymousFirst` is already in effect, s
 
 ```fsharp
 open ToolUp.Platform
-open ToolUp.Platform.Premium
+open ToolUp.Platform.Scope.Premium
 open Giraffe
 
 let handler: HttpHandler =

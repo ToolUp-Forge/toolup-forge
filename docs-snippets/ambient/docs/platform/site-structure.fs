@@ -8,6 +8,7 @@
 // Declared here so the blocks compile as written.
 open Giraffe.ViewEngine
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =

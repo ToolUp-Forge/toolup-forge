@@ -6,6 +6,8 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── The companions the local run selects ─────────────────────────
 //

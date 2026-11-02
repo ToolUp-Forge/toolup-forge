@@ -3,6 +3,7 @@ module MODULE_NAMESPACE_ROOT.Tests.Conformance
 open Feliz
 open ToolUp.Platform.Tests.Contracts
 open MODULE_NAMESPACE_ROOT
+open ToolUp.Platform.Compose
 
 // ─── The module seam's conformance pack, bound ───────────────────
 //

@@ -6,6 +6,7 @@
 // analytics projection a gated source calls.
 open Giraffe.ViewEngine
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =
@@ -25,7 +26,7 @@ module PageAmbient =
 
     let providerProfile: ToolUp.Platform.Providers.IProviderProfile = failwith "ambient"
 
-    let embedder: ToolUp.Platform.IEmbeddingProvider.IEmbeddingProvider =
+    let embedder: ToolUp.Platform.Infra.IEmbeddingProvider.IEmbeddingProvider =
         failwith "ambient"
 
     /// The deployment's identity provider and its interactive SSR sign-in.

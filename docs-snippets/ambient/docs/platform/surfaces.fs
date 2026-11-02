@@ -5,6 +5,7 @@
 // they read the auth provider, the module list, and the optional
 // per-module subject migrator a composition root would already hold.
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

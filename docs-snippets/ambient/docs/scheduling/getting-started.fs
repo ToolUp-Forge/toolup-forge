@@ -20,6 +20,7 @@ open Giraffe
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Scheduling.SchedulingApi
 open ToolUp.Scheduling.IBookingScheduler
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

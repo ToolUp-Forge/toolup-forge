@@ -7,10 +7,13 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Remoting.Server
 open HelloWorld.Module.SharedTypes
 open HelloWorld.Module.Server
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // HelloWorld composition root.
 // Authenticated single-user deployment using the canonical
