@@ -1021,7 +1021,7 @@ module SubsystemNamespaces =
                     let name = m.Groups["name"].Value
                     let qualifier = m.Groups["qualifier"]
 
-                    // The qualifier is itself a bare mention (`TeamManagement.foo`).
+                    // The qualifier is itself a bare mention: in a dotted mention of the form Qualifier.member, the qualifier half.
                     if qualifier.Success && not (local.Contains qualifier.Value) then
                         match idx.Mentions.TryFind qualifier.Value with
                         | None -> ()

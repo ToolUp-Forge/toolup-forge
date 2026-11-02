@@ -11,7 +11,7 @@ open ToolUp.Platform.Config
 // ─── Build-time static export ────────────────────────────────────────
 //
 // `StaticExport.run` drives the same loader + `IPublicContentApi` the
-// runtime `PublicRenderingCompose.run` path drives, but writes the
+// runtime `PublicRenderingCompose.withPublicRendering` path drives, but writes the
 // rendered pages to disk instead of starting Kestrel. Output is a
 // directory tree hostable on any static-file host (Azure Static Web
 // Apps, Netlify, GitHub Pages, S3 + CloudFront) — no .NET runtime

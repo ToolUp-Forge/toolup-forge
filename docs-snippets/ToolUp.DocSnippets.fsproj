@@ -163,6 +163,7 @@
     <ProjectReference Include="../src/ToolUp.Algorithms.Core/ToolUp.Algorithms.Core.fsproj" />
     <ProjectReference Include="../src/ToolUp.Algorithms.Server/ToolUp.Algorithms.Server.fsproj" />
     <ProjectReference Include="../src/ToolUp.ArtefactSigning/ArtefactSigning.fsproj" />
+    <ProjectReference Include="../src/TimeSeriesStores/Timescale/TimescaleTimeSeriesStore.fsproj" />
     <ProjectReference Include="../src/ToolUp.AssetStore/ToolUp.AssetStore.fsproj" />
     <ProjectReference Include="../src/ToolUp.BrandKit/ToolUp.BrandKit.fsproj" />
     <ProjectReference Include="../src/ToolUp.Client.ModelViewer/ToolUp.Client.ModelViewer.fsproj" />

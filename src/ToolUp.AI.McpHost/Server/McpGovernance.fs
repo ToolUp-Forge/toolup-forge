@@ -132,7 +132,7 @@ let admitBudget
                 // A budget was declared and nothing can count it. Admitting
                 // is the only honest answer — refusing every call because a
                 // ledger is absent would turn a composition mistake into an
-                // outage — and `McpCompose.run` refuses this composition at
+                // outage — and `McpCompose.withMcp` refuses this composition at
                 // STARTUP precisely so the state is unreachable in a
                 // deployment that started.
                 return Ok None

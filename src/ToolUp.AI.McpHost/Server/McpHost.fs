@@ -169,7 +169,7 @@ let private handleToolCall
             | None ->
                 // No AI tool registry in DI means the companion was
                 // mounted on something other than a composed AI server.
-                // `McpCompose.run` refuses that composition at startup, so
+                // `McpCompose.withMcp` refuses that composition at startup, so
                 // this branch is unreachable in a deployment that started;
                 // it exists because a handler that assumed the service was
                 // there would fail with a null reference instead of a

@@ -2,7 +2,6 @@ module DailyTrade.SharedTypes
 
 open ToolUp.Platform
 open ProcessedDataTypes
-open ToolUp.Platform.Infra
 
 /// One delivery of the daily trading extract, as the browser uploads it:
 /// the file's name and its text (CSV, one row per site and channel per day).

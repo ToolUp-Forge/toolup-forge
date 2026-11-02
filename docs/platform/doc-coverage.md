@@ -107,7 +107,7 @@ compiler keys it `P:<Union>.<Case>.<field>`), so an undocumented field is an ord
 
 ```fsharp skip=fragment
 /// Where a run's facts come from.
-type Provenance =
+type RunOrigin =
     /// Computed by the producing operation.
     | Computed
     /// Imported from an origin.

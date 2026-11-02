@@ -16,7 +16,7 @@ open ToolUp.Platform.Compose
 // Bridges the AI tool `publish_narrative` (defined in
 // `ToolUp.AI.Server/Server/NarrativeTools.fs`) to PublicRendering's
 // `IEntityStore<PublicPageEntity>` backing store. Registered in DI by
-// `PublicRenderingCompose.run` when public rendering is enabled; AI
+// `PublicRenderingCompose.withPublicRendering` when public rendering is enabled; AI
 // tools resolve it from the request services at publish time.
 //
 // The implementation is deliberately thin — every interesting concern
@@ -305,7 +305,7 @@ type PublicRenderingNarrativePagePublisher
             }
 
 module PublicRenderingNarrativePagePublisher =
-    /// Factory invoked from `PublicRenderingCompose.run` once the
+    /// Factory invoked from `PublicRenderingCompose.withPublicRendering` once the
     /// registered layout map is known. Returns the interface-typed
     /// value so the DI registration carries the abstraction.
     /// `renderCacheInvalidator` (Phase 84) purges a slug's cached render
@@ -338,7 +338,7 @@ module PublicRenderingNarrativePagePublisher =
 /// `PublicRenderingOptions` at compose time. Read-only; the
 /// catalog snapshot is captured at construction and doesn't track
 /// later additions (compose-time registration is final after
-/// `PublicRenderingCompose.run` runs).
+/// `PublicRenderingCompose.withPublicRendering` runs).
 type PublicRenderingLayoutCatalog(layoutNames: string list) =
     interface ILayoutCatalog with
         member _.ListLayoutNames() = layoutNames

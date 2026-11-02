@@ -630,13 +630,43 @@ let private defaultDescriptorsGate = test "a default deployment's service descri
                 Seq.init (max baseline.Length lines.Length) id
                 |> Seq.find (fun i -> at baseline i <> at lines i)
 
+            // The first difference locates an ORDER change; the two
+            // multiset differences name a MEMBERSHIP change in full, so a
+            // reader of a CI log can see every descriptor the running
+            // machine registers that the baseline's did not, and the
+            // reverse, without reproducing the environment.
+            let onlyIn (xs: string list) (ys: string list) =
+                let have = ys |> List.countBy id |> Map.ofList
+
+                xs
+                |> List.countBy id
+                |> List.collect (fun (line, n) ->
+                    let m = have |> Map.tryFind line |> Option.defaultValue 0
+                    List.replicate (max 0 (n - m)) line)
+
+            let render (xs: string list) =
+                match xs with
+                | [] -> "  (none)"
+                | _ ->
+                    xs
+                    |> List.map (sprintf "  %s")
+                    |> String.concat
+                        "
+"
+
             failtestf
-                "A default deployment's DI descriptor list moved (baseline %d descriptors, now %d; first difference at position %d: baseline '%s', now '%s'). A composition refactor must not change membership or order (GP 11). If the change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the default-service-descriptors.txt edit in the same PR."
+                "A default deployment's DI descriptor list moved (baseline %d descriptors, now %d; first difference at position %d: baseline '%s', now '%s'). A composition refactor must not change membership or order (GP 11). If the change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the default-service-descriptors.txt edit in the same PR.
+Only in the baseline:
+%s
+Only in this run:
+%s"
                 baseline.Length
                 lines.Length
                 first
                 (at baseline first)
                 (at lines first)
+                (render (onlyIn baseline lines))
+                (render (onlyIn lines baseline))
 }
 
 // ── Gate-mechanism fixtures: the load-bearing logic is the diff-driven

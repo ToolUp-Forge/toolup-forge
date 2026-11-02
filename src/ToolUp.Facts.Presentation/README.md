@@ -39,6 +39,7 @@ match PresentationRequest.ofJson requestJson with
 | Ok request ->
     // run PresentationRequest.toQueries through IFactBrowseApi.QuerySeries, then:
     Presentation.build request [ SeriesAnswer.Answered series ]
+    |> Result.mapError PresentationDefect.describe
 ```
 
 ## Dependencies
