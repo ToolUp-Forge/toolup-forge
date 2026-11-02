@@ -10,7 +10,6 @@ open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
-open ToolUp.Platform.Compose
 
 // ─── Phase 162 — signed compliance export bundle (server-side wiring) ───
 //

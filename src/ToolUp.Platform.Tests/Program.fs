@@ -128,7 +128,6 @@ let private registeredTests =
         DeckExportSeamTests.bundleTests
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests
-        SignedExportTests.tests
         PostgresFactStoreTests.offlineTests
         PostgresFactStoreTests.tests
         TransactionalDispatcherTests.tests
@@ -218,7 +217,6 @@ let private registeredTests =
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
-        MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcSignInContractTests.tests
         OidcBearerStrategyTests.tests
@@ -245,15 +243,9 @@ let private registeredTests =
         EntityGraphProjectionTests.tests
         OtelActivitySinkTests.tests
         ServerModuleMetricsTests.tests
-        InMemoryAuditSinkTests.tests
         ObservabilityHandlersTests.tests
         ObservabilityHandlersTests.datadogReadbackTests
-        AuditReplicatorTests.tests
-        Ed25519ArtifactSubstrateTests.tests
         AnonymousSessionBindingTests.tests
-        InMemoryPendingInviteStoreTests.tests
-        BlobPendingInviteStoreTests.tests
-        BlobPendingInviteStoreTests.validatorGateTests
         BlobCorruptionChaosTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests
@@ -278,16 +270,7 @@ let private registeredTests =
         ProviderOAuthFlowTests.claudeProviderFlowContractTests
         ProviderOAuthFlowTests.openAiProviderFlowContractTests
         ProviderOAuthFlowTests.tests
-        AuditLogModeValidatorTests.tests
-        EventStoreChainValidatorTests.tests
-        AuditLogHealthCheckTests.tests
-        AuditWriteFailureMetricTests.tests
         AuditEventRegistryTests.tests
-        AuditFailurePolicyTests.tests
-        PermissionAuditChainTests.tests
-        AuthAuditHookTests.tests
-        HostActionAuditTests.tests
-        NotificationSilentlySkippedTests.tests
         AICancellationDispatchInstanceValidatorTests.tests
         AnonymousAIModeValidatorTests.tests
         SecurityHeadersValidatorTests.tests
@@ -297,8 +280,6 @@ let private registeredTests =
         ForwardedHeadersTrustTests.tests
         FileManagementTests.tests
         ModuleApiFactoryTests.tests
-        ConversationExportAuditTests.tests
-        ConversationExporterTests.tests
         FastPathBeaconOwnershipTests.tests
         FastPathBeaconIdempotencyTests.tests
         FastPathSequencerTelemetryTests.tests
@@ -306,9 +287,7 @@ let private registeredTests =
         HnswFidelityTests.tests
         ScopeResolutionFailClosedTests.tests
         AccessContextFactoryTests.tests
-        AuditStreamKeyTests.tests
         ScopeKeyTests.tests
-        InProcessRateLimiterTests.tests
         IExternalApiConnectorContract.kitTests
         ExternalApiConnectorBindingTests.tests
         HttpTransportBindingTests.tests
@@ -446,22 +425,12 @@ let private registeredTests =
         TeamInvitationTests.inviteExpiryNotificationTests
         TeamInvitationTests.activeTeamPolicyTests
         TeamInvitationTests.checkMyInvitesTests
-        ConsentStateStoreTests.tests
-        ConsentStateStoreTests.entityBackedTests
-        ConsentStateStoreTests.restartPersistenceTests
-        AdAnalyticsObservabilityTests.tests
         HttpBodyBindingTests.tests
         ModuleIdentityTests.tests
         AnonymousModeContractTests.tests
         AnonymousModeContractTests.exposureTests
         ModuleSurfaceRequirementTests.tests
         ModuleSurfaceRequirementTests.visibilityTests
-        AuditViewApiHandlerTests.roleGateTests
-        AuditViewApiHandlerTests.scopeIsolationTests
-        AuditViewApiHandlerTests.filterTests
-        AuditViewApiHandlerTests.pagingTests
-        AuditViewApiHandlerTests.exportTests
-        AuditViewApiHandlerTests.substratePairingTests
         CompositionInspectorHandlerTests.roleGateTests
         CompositionInspectorHandlerTests.panelTests
         CompositionInspectorHandlerTests.emptyStateTests
@@ -514,11 +483,6 @@ let private registeredTests =
         EvidenceChainBreakTests.absentVsBrokenTests
         EvidenceChainBreakTests.severedAncestorEdgeTests
         EvidenceChainBreakTests.severedAncestorReportTests
-        EvidenceEnumerationCompletenessTests.derivationTests
-        EvidenceEnumerationCompletenessTests.missingPositionTests
-        EvidenceEnumerationCompletenessTests.boundedTests
-        EvidenceEnumerationCompletenessTests.shorterRenderTests
-        EvidenceEnumerationCompletenessTests.bundleStatementTests
         BootVerificationPreflightTests.tests
         GroundedAnswerChainJoinTests.tests
         GroundingEnvelopeSealTests.tests
@@ -618,8 +582,6 @@ let private registeredTests =
         IPeerAuditTransparencyContract.tests
         IPeerCapabilityNegotiationContract.tests
         IPeerNonFSharpSdkContract.tests
-        IEgressGateContract.tests
-        IEvidencePackGeneratorContract.tests
         ArchitectureFitnessTests.tests
         PublicApiApprovalTests.tests
         BaselineMergeDriverTests.tests
@@ -786,7 +748,7 @@ let main argv =
         {
             Row = "Platform"
             Assembly = Assembly.GetExecutingAssembly()
-            GuardFloor = 113
+            GuardFloor = 105
             Exemptions = deliberatelyUnregistered
             Lanes = laneDeclaration
             Registered = registeredTests

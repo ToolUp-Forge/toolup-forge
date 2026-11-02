@@ -11,7 +11,7 @@
 #
 # Both are projections of the extracted models under proofs/oracle/ over the
 # seeded campaign in src/ToolUp.Platform.Tests/Client/ElmishProofDifferential.fs.
-# The .NET pack (ToolUp.Platform.Tests, "Phase 788 - the proved Elmish runtime as
+# The .NET pack (ToolUp.Platform.Tests.Remoting, "Phase 788 - the proved Elmish runtime as
 # oracle") runs the models LIVE beside production and holds these files to the
 # model on every run; the Fable pack (ToolUp.AI.Client.Tests) replays them
 # against the transpiled runtime and, since Phase 850, also runs the ring
@@ -26,7 +26,7 @@ Set-Location $PSScriptRoot/..
 
 $env:TOOLUP_REGEN_ELMISH_PROOF_CORPUS = "1"
 try {
-    dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj `
+    dotnet run --project src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj `
         -- --filter-test-list "Phase 788"
 }
 finally {

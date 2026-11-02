@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The Audit pack: the lists whose test files reach the Audit part and no later one.
+         The test sources stay under src/ToolUp.Platform.Tests/ and this project
+         compiles them from there, because other packs source-link them and
+         their citations and __SOURCE_DIRECTORY__ paths must not move. Which
+         file is in which pack, and why: docs/migrations/1194-platform-pack-partition.md. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEventStoreDecoratorContract.fs" Link="Contracts\IEventStoreDecoratorContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IAuditSinkContract.fs" Link="Contracts\IAuditSinkContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IArtifactSignerContract.fs" Link="Contracts\IArtifactSignerContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IArtifactVerifierContract.fs" Link="Contracts\IArtifactVerifierContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IPendingInviteStoreContract.fs" Link="Contracts\IPendingInviteStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IRateLimiterContract.fs" Link="Contracts\IRateLimiterContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IConsentStateStoreContract.fs" Link="Contracts\IConsentStateStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEgressGateContract.fs" Link="Contracts\IEgressGateContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEvidencePackGeneratorContract.fs" Link="Contracts\IEvidencePackGeneratorContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\CacheReset.fs" Link="Support\CacheReset.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SignedExportTests.fs" Link="InProcess\SignedExportTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MinimumViableShapeTests.fs" Link="InProcess\MinimumViableShapeTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryAuditSinkTests.fs" Link="InProcess\InMemoryAuditSinkTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\Ed25519ArtifactSubstrateTests.fs" Link="InProcess\Ed25519ArtifactSubstrateTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditReplicatorTests.fs" Link="InProcess\AuditReplicatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryPendingInviteStoreTests.fs" Link="InProcess\InMemoryPendingInviteStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BlobPendingInviteStoreTests.fs" Link="InProcess\BlobPendingInviteStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditLogModeValidatorTests.fs" Link="InProcess\AuditLogModeValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\EventStoreChainValidatorTests.fs" Link="InProcess\EventStoreChainValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditLogHealthCheckTests.fs" Link="InProcess\AuditLogHealthCheckTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditWriteFailureMetricTests.fs" Link="InProcess\AuditWriteFailureMetricTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditFailurePolicyTests.fs" Link="InProcess\AuditFailurePolicyTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PermissionAuditChainTests.fs" Link="InProcess\PermissionAuditChainTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuthAuditHookTests.fs" Link="InProcess\AuthAuditHookTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostActionAuditTests.fs" Link="InProcess\HostActionAuditTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\NotificationSilentlySkippedTests.fs" Link="InProcess\NotificationSilentlySkippedTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConversationExportAuditTests.fs" Link="InProcess\ConversationExportAuditTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConversationExporterTests.fs" Link="InProcess\ConversationExporterTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditStreamKeyTests.fs" Link="InProcess\AuditStreamKeyTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InProcessRateLimiterTests.fs" Link="InProcess\InProcessRateLimiterTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConsentStateStoreTests.fs" Link="InProcess\ConsentStateStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AdAnalyticsObservabilityTests.fs" Link="InProcess\AdAnalyticsObservabilityTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditViewApiHandlerTests.fs" Link="InProcess\AuditViewApiHandlerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BuildTranscriptTests.fs" Link="InProcess\BuildTranscriptTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\EvidenceEnumerationCompletenessTests.fs" Link="InProcess\EvidenceEnumerationCompletenessTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Audit\ToolUp.Platform.Server.Audit.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Jobs\ToolUp.Platform.Server.Jobs.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Scope\ToolUp.Platform.Server.Scope.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    </ItemGroup>
+</Project>

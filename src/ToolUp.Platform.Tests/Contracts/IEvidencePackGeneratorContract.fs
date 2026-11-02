@@ -6,7 +6,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Audit.IDataExporter
 open ToolUp.Platform.Audit
-open ToolUp.Platform.Compose
 
 // Phase 187 — contract for the compliance evidence-pack generator. Proves
 // the composition contract:

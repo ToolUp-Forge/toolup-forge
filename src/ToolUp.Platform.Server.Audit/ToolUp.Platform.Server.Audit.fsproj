@@ -25,6 +25,7 @@
              server tier's internals before the cut. -->
         <InternalsVisibleTo Include="ToolUp.Platform.Server" />
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests.Audit" />
         <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
         <InternalsVisibleTo Include="ToolUp.Storage.Tests" />
         <InternalsVisibleTo Include="ToolUp.NotificationChannels.Tests" />

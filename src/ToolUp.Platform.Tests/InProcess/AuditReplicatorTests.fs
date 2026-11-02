@@ -12,7 +12,6 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
-open ToolUp.Platform.Compose
 
 // ─── Phase 9g AuditReplicator tests ─────────────────────────────────
 //
