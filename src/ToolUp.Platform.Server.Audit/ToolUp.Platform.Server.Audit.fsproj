@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform server tier, Audit part: the audit log and its replication, artefact signing, field classification, consent, erasure, data-subject requests and evidence bundles. Referenced by ToolUp.Platform.Server, which most applications reference instead.</Description>
+        <PackageTags>fsharp;sdk;server;audit;compliance</PackageTags>
+    </PropertyGroup>
+    <!-- One part of the server tier, cut along a contiguous run of its compile
+         order (docs/migrations/1193-platform-server-subsystem-assemblies.md). It references only
+         the parts before it; ToolUp.Platform.Server references every part, so a consumer of that
+         package id resolves this one transitively. The sources stay under
+         ../ToolUp.Platform.Server/ with their namespaces unchanged. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Scope\ToolUp.Platform.Server.Scope.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Jobs\ToolUp.Platform.Server.Jobs.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The parts after this one, the umbrella and the test packs that already read the
+             server tier's internals before the cut. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Server" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Cli.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Bounded local spill for DegradeToFile audit-write
+             failure policy; before AuditLog.fs (the log spills into it) and
+             the replay service (which drains it back into IEventStore). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditFallbackStore.fs" />
+        <!-- The in-store permission-event hash chain: the
+             canonical form, the digest over it, the head reading and the
+             pure verifier. After DeployRecords.fs (whose
+             digestCanonicalForm it reuses rather than minting a second
+             SHA-256 helper); before AuditLog.fs, which chains the write
+             path through it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\PermissionAuditChain.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditLog.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditFallbackReplayService.fs" />
+        <!-- Drains the remoting audit queue (Api.fs) off the
+             response path. After AuditLog.fs (the failure counter it shares). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\RemotingAuditDrainService.fs" />
+        <!-- Default IAuthAuditHook (writes AuthorizationDenied
+             via IAuditLog + per-(route,subject) flood guard). After
+             AuditLog.fs (uses the audit registry); before the emission
+             middlewares + the /dev/auth-denials read handler. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuthAuditHook.fs" />
+        <!-- Signed module artefact substrate (canonical-bytes
+             encoder, signer/verifier interfaces + Ed25519 defaults,
+             blob-backed trusted-publisher key store). Crypto via
+             BouncyCastle.Cryptography (MIT) —.NET 10 BCL surfaces only
+             post-quantum primitives, not Ed25519. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ArtifactCanonical.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IArtifactSigner.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IArtifactVerifier.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IPublisherKeyStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Ed25519ArtifactSigner.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Ed25519ArtifactVerifier.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobBackedPublisherKeyStore.fs" />
+        <!-- Data-classification substrate (server tier). After
+             AuditLog (gate emits ClassifiedField* audit) + Core's
+             ClassificationTypes / AccessContext. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Classification\IFieldClassifier.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Classification\DefaultFieldClassifier.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Classification\ClassificationGate.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDataExporter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ErasurePipeline.fs" />
+        <!-- IBackgroundExportStore interface ahead of the
+             API handler: the async `RequestExportAsync` surface
+             (DsrAsyncDeps) names it. The interface depends only on Core
+             types (DataSubjectRequest + ExportTicket/ExportStatus). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IBackgroundExportStore.fs" />
+        <!-- Signed-statement envelope (in-toto Statement v1 + DSSE), format
+             half only: types, pre-authentication encoding, statement
+             assembly, structural checks, and the narrow raw-signing seam.
+             Crypto-free beyond SHA-256, so a substrate can emit an envelope
+             without taking a key-management dependency (GP 1); the signer
+             and the offline verifier live in ToolUp.ArtefactSigning, which
+             references this project. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DsseEnvelope.fs" />
+        <!-- Keyed byte signing, format half only: the narrow signer /
+             verifier seam a recording substrate bridges its own local
+             head-signing interface onto, plus the key-id binding both
+             halves frame with. No crypto (GP 1) and nothing composed
+             (GP 13); the implementation over the application signing seam
+             lives in ToolUp.ArtefactSigning, which references this
+             project. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\KeyedByteSigning.fs" />
+        <!-- Compliance evidence-pack generator.
+             Pure orchestration over IEventStore (audit) + IDataExporter
+             (DSR) + IFieldClassifier (classification) + IExportEnvelopeSigner
+             (manifest signing); needs all four declared first. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\EvidencePackGenerator.fs" />
+        <!-- The evidence chain walker: IEvidenceChainWalker,
+             the NoEvidenceChainWalker default that carries no
+             implementation, and the shipped walk over the substrates a
+             deployment already records. After DeployRecords.fs (whose
+             transcript / closure / seal joins answer three hops),
+             WorkProvenanceSource.fs (the upstream attestation answers the
+             first) and EvidencePackGenerator.fs (whose generator the pack
+             read is derived from). The ledger hop arrives as a thunk
+             because the chained ledger lives downstream of this assembly
+             (GP 1). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\EvidenceChainWalker.fs" />
+        <!-- The walked chain as a signed, offline-checkable
+             statement. After EvidenceChainWalker.fs (it packages that
+             walk) and after DsseEnvelope.fs (it signs through that
+             family). Carries no signing or verifying crypto of its own:
+             the signer arrives across IStatementEnvelopeSigner and the
+             signature check is a stock DSSE one. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\EvidenceBundleExport.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataSubjectRequestApiHandler.fs" />
+        <!-- IJobScheduler-backed DSR export/erasure substrate.
+             After DataSubjectRequestApiHandler (reuses serialiseSegments +
+             the AuditOnDsr seam) + ErasurePipeline + IDataExporter. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobBackedBackgroundExportStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DSRExportJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DSRErasureJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\EventStoreErasureHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataObjectStoreErasureHandler.fs" />
+        <!-- Scheduled reclaim of content blobs stranded by a
+             Save that died between its content write and its metadata
+             write. Sits here because it needs DataObjectStore (the shared
+             orphan listing), IJobScheduler + the deferred
+             declaration, IAuditLog, and IConfigValidator — and must be
+             before Compose/ComposeConfigValidators.fs, which registers its
+             preflight validator into the first-party set. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataObjectOrphanSweepJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\LineageStoreErasureHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConversationEraseHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConversationExporter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IAuditSink.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditReplicatorTypes.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InMemoryAuditSink.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditReplicator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditLogModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditLogHealthCheck.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConsentApiHandler.fs" />
+        <!-- Durable per-subject consent persistence over
+             IEntityStore (in-memory dev impl + entity-backed production
+             impl + Custom: audit emission). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Consent\ConsentStateStore.fs" />
+        <!-- PlatformAdmin public-utility admin endpoints
+             (ad-unit CRUD + rate-limit decisions + premium-user list).
+             Each handler gates server-side on Platform-Admin role. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\PlatformAdmin\AdUnitConfigApi.fs" />
+        <!-- After AdUnitConfigApi: the ad-analytics slot sanity check
+             reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AdAnalyticsApiHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SignedExportDepsValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MetricsMiddleware.fs" />
+        <!-- Hosted-tree action audit emission (GP 6): the
+             IHostActionAuditHook + default IAuditLog-backed impl +
+             authorize-then-audit helper. After PermissionStoreActionAuthorizer
+             (composes beside it) + AuditLog.fs (the HostActionDispatched
+             codec + IAuditLog it writes through). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\HostActionAuditHook.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConfigStoreErasureHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\FeatureFlagStoreErasureHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobStorageErasureHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\VectorStoreErasureHandler.fs" />
+        <!-- Audit-trail viewer handler. After AuditLog.fs
+             (the substrate it pairs with) and Api.fs (makeApi). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuditViewApiHandler.fs" />
+        <!-- /dev/auth-denials rollup (reads AuthorizationDenied
+             via IAuditLog, caller-scope only; flushes the AuthAuditHook
+             flood-guard tail). After AuthAuditHook.fs + DevDiagnosticsHandler;
+             before BuildRouteHandlers (which mounts the route). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuthDenialsDiagnosticsHandler.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="BouncyCastle.Cryptography" />
+    </ItemGroup>
+</Project>

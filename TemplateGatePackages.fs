@@ -65,6 +65,26 @@ let templates = [
     TemplateGate.package "ToolUp.AI.Wire" "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj"
     // Declared by AI.Wire and Platform.Core (Phase 128).
     TemplateGate.package "ToolUp.Platform.Transport" "src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj"
+    // Declared by Platform.Server: the parts of the server tier, which
+    // the package references and its consumers resolve through it.
+    TemplateGate.package
+        "ToolUp.Platform.Server.Remoting"
+        "src/ToolUp.Platform.Server.Remoting/ToolUp.Platform.Server.Remoting.fsproj"
+    TemplateGate.package
+        "ToolUp.Platform.Server.Infra"
+        "src/ToolUp.Platform.Server.Infra/ToolUp.Platform.Server.Infra.fsproj"
+    TemplateGate.package
+        "ToolUp.Platform.Server.Config"
+        "src/ToolUp.Platform.Server.Config/ToolUp.Platform.Server.Config.fsproj"
+    TemplateGate.package
+        "ToolUp.Platform.Server.Scope"
+        "src/ToolUp.Platform.Server.Scope/ToolUp.Platform.Server.Scope.fsproj"
+    TemplateGate.package
+        "ToolUp.Platform.Server.Jobs"
+        "src/ToolUp.Platform.Server.Jobs/ToolUp.Platform.Server.Jobs.fsproj"
+    TemplateGate.package
+        "ToolUp.Platform.Server.Audit"
+        "src/ToolUp.Platform.Server.Audit/ToolUp.Platform.Server.Audit.fsproj"
     // Declared by Platform.Server, and its own ProjectReference.
     TemplateGate.package "ToolUp.Graph.InMemory" "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj"
     TemplateGate.package "ToolUp.Graph.Core" "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj"
