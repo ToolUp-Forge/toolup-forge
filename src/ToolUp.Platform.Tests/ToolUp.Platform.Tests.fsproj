@@ -471,7 +471,6 @@
         <Compile Include="InProcess\ArchitectureFitnessTests.fs" />
         <Compile Include="Contracts\SurfaceDiff.fs" />
         <Compile Include="Contracts\PublicApiApproval.fs" />
-        <Compile Include="InProcess\PublicApiApprovalTests.fs" />
         <Compile Include="Contracts\FailClosedContract.fs" />
         <Compile Include="InProcess\AdversarialFailClosedTests.fs" />
         <Compile Include="InProcess\ConstantTimeCompareTests.fs" />

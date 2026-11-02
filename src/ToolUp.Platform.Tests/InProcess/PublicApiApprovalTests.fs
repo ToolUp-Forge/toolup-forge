@@ -21,7 +21,6 @@ open System.Reflection
 open Expecto
 open ToolUp.Platform.Tests.Contracts.SurfaceDiff
 open ToolUp.Platform.Tests.Contracts.PublicApiApproval
-open ToolUp.Platform.Compose
 
 let private root = repoRoot ()
 let private config = activeConfig ()

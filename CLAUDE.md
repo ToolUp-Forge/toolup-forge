@@ -490,7 +490,7 @@ Adding an SDK→SDK dependency reachable from the packaged-module template there
 | `dco` | — (CI-only: a commit-message lint; PR only, since direct-to-main is this repo's integration path) | — | PR only |
 | `fable-wire-smoke` | WireTests, WireFable | Tree, Node | yes |
 | `ai-wire-conformance` | WireConformance, WireConformanceFable | Tree, Node | yes |
-| `verify-all` | 56 rows, every `Local` row of the full lane: Platform, Platform.Remoting, Platform.Infra, Platform.Config, Platform.Scope, Platform.Jobs, Platform.Audit, Forms, Scheduling, AIProviders, Stripe, Build, RemotingAnalyzers, Cli, Voice, AICookbooks, Algorithms, AlgorithmProviders, CloudParity, ArtefactSigning, ReportingDocx, ReportingXlsx, DataSources, OpenXml, OpenXmlSpreadsheet, AssetStore, SvgRasterizerSkia, Reporting, Offline, CompanionsIsolation, AIEvaluation, TriageCalibration, Tabular, Classification, DataSubject, ReportingHtmlPdf, Webhooks, JobSchedulers, NotificationChannels, AuditSinks, Storage, Secrets, EmbeddingProviders, EntityStores, TimeSeriesStores, FeatureFlagProviders, Media, GateReconcile, Fable, Samples, Analyzers, ScopeLiterals, ServiceConfigFold, FuaranCoResolution, FuaranCoBuild, MergeDrivers | Tree, Git, Docker, Network, Browser, Node, 105 env var(s) | yes |
+| `verify-all` | 57 rows, every `Local` row of the full lane: Platform, Platform.Remoting, Platform.Infra, Platform.Config, Platform.Scope, Platform.Jobs, Platform.Audit, Platform.PublicApi, Forms, Scheduling, AIProviders, Stripe, Build, RemotingAnalyzers, Cli, Voice, AICookbooks, Algorithms, AlgorithmProviders, CloudParity, ArtefactSigning, ReportingDocx, ReportingXlsx, DataSources, OpenXml, OpenXmlSpreadsheet, AssetStore, SvgRasterizerSkia, Reporting, Offline, CompanionsIsolation, AIEvaluation, TriageCalibration, Tabular, Classification, DataSubject, ReportingHtmlPdf, Webhooks, JobSchedulers, NotificationChannels, AuditSinks, Storage, Secrets, EmbeddingProviders, EntityStores, TimeSeriesStores, FeatureFlagProviders, Media, GateReconcile, Fable, Samples, Analyzers, ScopeLiterals, ServiceConfigFold, FuaranCoResolution, FuaranCoBuild, MergeDrivers | Tree, Git, Docker, Network, Browser, Node, 105 env var(s) | yes |
 | `cloud-parity` | CloudParity | Tree, Docker, 8 env var(s) | yes |
 | `fable-tier` | Fable | Tree, Node | yes |
 | `doc-snippets` | DocSnippets | Tree | yes |
@@ -609,9 +609,12 @@ filtered run reports suspiciously few tests, `--list-tests` first, or make the f
 
 ## Public-API approval baselines (Phase 175)
 
-`ToolUp.Platform.Tests`' approval gate renders each packable `ToolUp.*` assembly's public surface
-and diffs it against `api-baselines/<assembly>.approved.txt`. The rules that matter when a phase
-touches public surface:
+The approval gate renders each packable `ToolUp.*` assembly's public surface and diffs it against
+`api-baselines/<assembly>.approved.txt`. It is its own pack, `ToolUp.Platform.Tests.PublicApi`
+(Phase 1194), whose project references are every packable project, built and not referenced: so
+`dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj`
+builds exactly the surface it renders and runs the approval lists alone, with no whole-solution build.
+The rules that matter when a phase touches public surface:
 
 - **It fails in BOTH directions (Phase 618): removed / renamed / retyped members, AND additive
   growth whose baseline was not regenerated** — the failure names the added members and the baseline
@@ -637,8 +640,8 @@ touches public surface:
   filter, applied before anything reaches disk.
   **`TOOLUP_APPROVE_API=1` still rewrites EVERY built baseline** (~95 files), folding in unrelated
   additive drift and EOL-only churn, which is what the named form exists to avoid: three agents in
-  one day had to hand-revert foreign hunks after an unscoped regen. If you do use `=1`, build the
-  whole solution first (the renderer reads DLLs), regen, then `git restore` every baseline except
+  one day had to hand-revert foreign hunks after an unscoped regen. If you do use `=1`, run the
+  approval pack with `dotnet run` (it builds every packable project first), then `git restore` every baseline except
   your surgical targets and stage those by name. Either way, verify the real diff WITHOUT the env
   var — approve mode passes trivially, so its green proves nothing. Never run an unscoped regen in a
   shared working tree (it rewrites files concurrent sessions have in flight), and never apply
@@ -647,12 +650,13 @@ touches public surface:
   pin and your apply, copying the regenerated file back silently deletes the landed lines — re-pin
   against the current HEAD copy, apply only your own hunks, and diff-verify zero foreign removals.
 - **An UNBUILT tree is one failure, not fifty-two (Phase 731).** The gate renders from built DLLs,
-  so running the Platform pack before `dotnet build ToolUp.Forge.sln` has populated the companion
-  bins used to fail every unbuilt assembly's case independently — a wall of red that reads like a
+  so running the approval pack's dll before its references were built used to fail every unbuilt
+  assembly's case independently — a wall of red that reads like a
   catastrophic surface break and has misdirected a session. It now reports one
   `the solution is built` failure naming the count, a sample and the remedy, and the per-assembly
   cases defer to it. If you see that message, nothing has drifted and nothing needs regenerating:
-  build, then re-run. `VerifyAll` builds first, so this only bites a pack run on its own.
+  build, then re-run. `VerifyAll` builds first, and `dotnet run` builds the pack's references, so
+  this only bites a dll launched on its own.
 - **An untracked sibling packable project reddens the gate** (`discoverPackable` walks disk, not the
   git index): a concurrent session's uncommitted `src/**/*.fsproj` with no committed baseline fails
   the new-package arm. It is not your break — confirm with `git status --short` and note it; do not

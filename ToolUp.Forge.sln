@@ -691,6 +691,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Jobs"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Audit", "src\ToolUp.Platform.Tests.Audit\ToolUp.Platform.Tests.Audit.fsproj", "{33D75003-34F6-4208-B29F-521237F4B321}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.PublicApi", "src\ToolUp.Platform.Tests.PublicApi\ToolUp.Platform.Tests.PublicApi.fsproj", "{27B739A1-5EA8-4C37-9F39-CECE1A952A32}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -3749,6 +3751,18 @@ Global
 		{33D75003-34F6-4208-B29F-521237F4B321}.Release|x64.Build.0 = Release|Any CPU
 		{33D75003-34F6-4208-B29F-521237F4B321}.Release|x86.ActiveCfg = Release|Any CPU
 		{33D75003-34F6-4208-B29F-521237F4B321}.Release|x86.Build.0 = Release|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Debug|x64.Build.0 = Debug|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Debug|x86.Build.0 = Debug|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Release|Any CPU.Build.0 = Release|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Release|x64.ActiveCfg = Release|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Release|x64.Build.0 = Release|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Release|x86.ActiveCfg = Release|Any CPU
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -4069,5 +4083,6 @@ Global
 		{7EC328D0-8E6F-443B-B97A-3F6BF0E5AD2E} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{AA466218-3660-4C57-BB33-AFCFD6082AD9} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{33D75003-34F6-4208-B29F-521237F4B321} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
+		{27B739A1-5EA8-4C37-9F39-CECE1A952A32} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 	EndGlobalSection
 EndGlobal

@@ -583,7 +583,6 @@ let private registeredTests =
         IPeerCapabilityNegotiationContract.tests
         IPeerNonFSharpSdkContract.tests
         ArchitectureFitnessTests.tests
-        PublicApiApprovalTests.tests
         BaselineMergeDriverTests.tests
         BackupCoordinatorTests.tests
         SeamPrincipalTests.tests
@@ -748,7 +747,7 @@ let main argv =
         {
             Row = "Platform"
             Assembly = Assembly.GetExecutingAssembly()
-            GuardFloor = 105
+            GuardFloor = 104
             Exemptions = deliberatelyUnregistered
             Lanes = laneDeclaration
             Registered = registeredTests

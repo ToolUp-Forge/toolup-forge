@@ -5740,17 +5740,12 @@ let main args =
                 "MergeBaselines: name the assemblies to regenerate — `dotnet run --project Build.fsproj -- MergeBaselines --assemblies ToolUp.AI.Core,ToolUp.AI.Server`. It deliberately has no all-of-them mode: an unscoped regen folds in every unrelated drift the merged tree happens to be carrying, which is the failure the scoping exists to prevent."
 
         // The renderer reads BUILT DLLs, so the merged tree has to compile
-        // before it can be measured. An unbuilt tree would otherwise report as
-        // the Phase 731 precondition failure, which reads like a surface break
-        // and is not one.
-        Trace.tracefn "MergeBaselines: building the merged tree…"
-
-        Proc.exec "dotnet" [ "build"; "ToolUp.Forge.sln"; "--nologo" ] root
-        |> Proc.ensure
-        |> ignore
-
+        // before it can be measured. The approval gate's own pack references
+        // every packable project, so building it builds exactly the surface it
+        // renders, and running it runs the approval lists alone: no
+        // whole-solution build, and no other pack's cases.
         let scope = String.concat "," assemblies
-        Trace.tracefn "MergeBaselines: regenerating %s" scope
+        Trace.tracefn "MergeBaselines: building the packable projects and regenerating %s" scope
 
         Proc.execWith
             {
@@ -5758,7 +5753,11 @@ let main args =
                     Environment = [ "TOOLUP_APPROVE_API", scope ]
             }
             "dotnet"
-            [ "run"; "--project"; "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj" ]
+            [
+                "run"
+                "--project"
+                "src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj"
+            ]
             root
         |> Proc.ensure
         |> ignore

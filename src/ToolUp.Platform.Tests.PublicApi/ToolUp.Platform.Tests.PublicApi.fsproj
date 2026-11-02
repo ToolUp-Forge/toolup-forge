@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The PublicApi pack: the public-API approval gate, over the built assemblies of every packable project.
+         The test sources stay under src/ToolUp.Platform.Tests/ and this project
+         compiles them from there, because other packs source-link them and
+         their citations and __SOURCE_DIRECTORY__ paths must not move. Which
+         file is in which pack, and why: docs/migrations/1194-platform-pack-partition.md.
+         Its project references are every packable project, one per baseline in
+         api-baselines/. They are built, not referenced: the gate renders each
+         assembly from that project's own bin/, so building this pack builds
+         exactly the surface it renders. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\SurfaceDiff.fs" Link="Contracts\SurfaceDiff.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\PublicApiApproval.fs" Link="Contracts\PublicApiApproval.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PublicApiApprovalTests.fs" Link="InProcess\PublicApiApprovalTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
+        <ProjectReference Include="..\Feliz.AgCharts\Feliz.AgCharts.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Feliz.AgGrid\Feliz.AgGrid.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Feliz.AgGrid.Enterprise\Feliz.AgGrid.Enterprise.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\InterPlatform\InterPlatform.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.AI.Client\ToolUp.AI.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.AI.McpHost\ToolUp.AI.McpHost.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AI.Samples\ToolUp.AI.SampleClientTool.Client\ToolUp.AI.SampleClientTool.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AI.Samples\ToolUp.AI.SampleClientTool.Core\ToolUp.AI.SampleClientTool.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AI.Samples\ToolUp.AI.SampleClientTool.Server\ToolUp.AI.SampleClientTool.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Core\ToolUp.AI.UiAwareness.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Server\ToolUp.AI.UiAwareness.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AICookbooks\AgChart\AgChartAICookbook.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AICookbooks\AgGridEnterprise\AgGridEnterpriseAICookbook.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIProviders\Claude\ClaudeAIProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIProviders\Claude.Client\ClaudeAIProvider.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIProviders\Copilot\CopilotAIProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIProviders\Gemini\Gemini.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AlgorithmProviders\MathNet\MathNetAlgorithmProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Client\ToolUp.Algorithms.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Core\ToolUp.Algorithms.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Algorithms.Server\ToolUp.Algorithms.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.ArtefactSigning\ArtefactSigning.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ArtefactSigning\AwsKms\AwsKmsArtefactSigning.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ArtefactSigning\AzureKeyVault\AzureKeyVaultArtefactSigning.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ArtefactSigning\GoogleCloudKms\GoogleCloudKmsArtefactSigning.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.AssetStore\ToolUp.AssetStore.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuditSinks\AzureBlobArchive\ToolUp.AuditSinks.AzureBlobArchive.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuditSinks\Cef\ToolUp.AuditSinks.Cef.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuditSinks\ChainedLedger\ToolUp.AuditSinks.ChainedLedger.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuditSinks\DatadogLogs\ToolUp.AuditSinks.DatadogLogs.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuditSinks\GcsArchive\ToolUp.AuditSinks.GcsArchive.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuditSinks\S3Archive\ToolUp.AuditSinks.S3Archive.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuditSinks\SplunkHec\ToolUp.AuditSinks.SplunkHec.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\ClerkUI\ClerkUI.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\EntraDirectory\EntraDirectory.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\GitHub\GitHubAuth.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\GoogleDirectory\GoogleDirectory.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\GoogleIdentityClient\GoogleIdentityClient.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\LdapActiveDirectory\LdapActiveDirectory.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\Oidc\OidcAuthProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\OidcClient\OidcClient.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.AuthProviders.Oidc.Shared\ToolUp.AuthProviders.Oidc.Shared.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\Passkey\PasskeyAuthProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\PasskeyClient\PasskeyClient.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\AuthProviders\Scim\Scim.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.BrandKit\ToolUp.BrandKit.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Calendar\CalDAV\ToolUp.Calendar.CalDAV.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Calendar\Google\ToolUp.Calendar.Google.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Calendar\Microsoft\ToolUp.Calendar.Microsoft.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Cli\ToolUp.Cli.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Client.ModelViewer\ToolUp.Client.ModelViewer.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Cloud\Aws\ToolUp.Cloud.Aws.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Cloud\Azure\ToolUp.Cloud.Azure.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Cloud\Gcp\ToolUp.Cloud.Gcp.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Companions.Isolation\ToolUp.Companions.Isolation.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ContainerSchedulers\DockerLocal\ToolUp.ContainerSchedulers.DockerLocal.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ContentAuthoring\ToolUp.ContentAuthoring.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ContentScanners\ClamAv\ToolUp.ContentScanners.ClamAv.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Athena\ToolUp.DataSources.Athena.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\BigQuery\ToolUp.DataSources.BigQuery.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Common\ToolUp.DataSources.Common.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Csv\ToolUp.DataSources.Csv.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Excel\ToolUp.DataSources.Excel.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\GitHub\GitHubApp.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\GoogleAnalytics\ToolUp.DataSources.GoogleAnalytics.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\GoogleAnalytics\Client\ToolUp.DataSources.GoogleAnalytics.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Parquet\ToolUp.DataSources.Parquet.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Redshift\ToolUp.DataSources.Redshift.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Snowflake\ToolUp.DataSources.Snowflake.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Sql\ToolUp.DataSources.Sql.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\DataSources\Synapse\ToolUp.DataSources.Synapse.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\EmbeddingProviders\OpenAI\OpenAIEmbeddingProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Encryption\AwsKms\AwsKmsEncryption.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Encryption\AzureKeyVault\AzureKeyVaultEncryption.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Encryption\GoogleCloudKms\GoogleCloudKmsEncryption.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\EntityStores\Postgres\PostgresEntityStore.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Experiments.Core\ToolUp.Experiments.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Experiments.Server\ToolUp.Experiments.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ExternalCompute\ToolUp.ExternalCompute.Http\ToolUp.ExternalCompute.Http.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Facts.Client\ToolUp.Facts.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Facts.Presentation.Server\ToolUp.Facts.Presentation.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Facts.Shared\ToolUp.Facts.Shared.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\FeatureFlagProviders\OpenFeature\ToolUp.FeatureFlagProviders.OpenFeature.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Forms.Client\ToolUp.Forms.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Forms.Core\ToolUp.Forms.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Forms.Server\ToolUp.Forms.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Graph.AGE\ToolUp.Graph.AGE.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Graph.Neo4j\ToolUp.Graph.Neo4j.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Graph.Projection\ToolUp.Graph.Projection.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Hosts\AwsLambda\ToolUp.Hosts.AwsLambda.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Hosts\AzureFunctions\ToolUp.Hosts.AzureFunctions.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Hosts\DeliveredEgress\ToolUp.Hosts.DeliveredEgress.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Hosts\Docker\ToolUp.Hosts.Docker.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Hosts\EdgeCache\ToolUp.Hosts.EdgeCache.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Hosts\GoogleCloudFunctions\ToolUp.Hosts.GoogleCloudFunctions.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\IngestionQueues\Redis\ToolUp.IngestionQueues.Redis.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\JobSchedulers\Quartz\ToolUp.JobSchedulers.Quartz.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.KnowledgeBase.Client\ToolUp.KnowledgeBase.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.KnowledgeBase.Core\ToolUp.KnowledgeBase.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.KnowledgeBase.Server\ToolUp.KnowledgeBase.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Media\CloudTranscode\ToolUp.Media.CloudTranscode.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Media\FFmpeg\ToolUp.Media.FFmpeg.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Media\MediaLibrary\ToolUp.MediaLibrary.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Metrics\OpenTelemetry\ToolUp.Metrics.OpenTelemetry.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\NotificationChannels\Email\SendGrid\ToolUp.NotificationChannels.Email.SendGrid.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\NotificationChannels\Email\Smtp\ToolUp.NotificationChannels.Email.Smtp.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\NotificationChannels\Push\WebPush\ToolUp.NotificationChannels.Push.WebPush.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\NotificationChannels\Redis\ToolUp.NotificationChannels.Redis.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\NotificationChannels\Sms\Twilio\ToolUp.NotificationChannels.Sms.Twilio.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\NotificationChannels\WhatsApp\MetaCloud\ToolUp.NotificationChannels.WhatsApp.MetaCloud.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\NotificationChannels\WhatsApp\Twilio\ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Observability\Datadog\ToolUp.Observability.Datadog.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\OcrProviders\Tesseract\ToolUp.OcrProviders.Tesseract.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Offline.Client\ToolUp.Offline.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Offline.Core\ToolUp.Offline.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Offline.Server\ToolUp.Offline.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.OpenXml\ToolUp.OpenXml.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.OpenXml.Spreadsheet\ToolUp.OpenXml.Spreadsheet.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\SvgRasterizers\Skia\ToolUp.OpenXml.SvgRasterizer.Skia.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Build\ToolUp.Platform.Build.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Audit\ToolUp.Platform.Server.Audit.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Jobs\ToolUp.Platform.Server.Jobs.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Scope\ToolUp.Platform.Server.Scope.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Testing\ToolUp.Platform.Testing.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.Transport\ToolUp.Platform.Transport.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Platform.UI\ToolUp.Platform.UI.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.RAG.Core\ToolUp.RAG.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.RAG.Server\ToolUp.RAG.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Build\ToolUp.RAG.StaticCorpus.Build.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Core\ToolUp.RAG.StaticCorpus.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Server\ToolUp.RAG.StaticCorpus.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\RateLimit\AzureTableStorage\ToolUp.RateLimit.AzureTableStorage.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\RateLimit\Redis\ToolUp.RateLimit.Redis.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Remoting.Generator\ToolUp.Remoting.Generator.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Reporting\Docx\ToolUp.Reporting.Docx.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Reporting\HtmlPdf\ToolUp.Reporting.HtmlPdf.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Reporting.Server\ToolUp.Reporting.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Reporting\Xlsx\ToolUp.Reporting.Xlsx.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Rerankers\Local\ToolUp.Rerankers.Local.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Scheduling.Core\ToolUp.Scheduling.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Scheduling.Server\ToolUp.Scheduling.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Sdk\ToolUp.Sdk.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Secrets\AwsSecretsManager\AwsSecretsManager.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Secrets\AzureKeyVault\AzureKeyVault.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Secrets\GcpSecretManager\ToolUp.Secrets.GcpSecretManager.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Secrets\HashiCorpVault\HashiCorpVault.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ShareTokenStoreDecorators\RevokeOnIssuerRemoved\ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\SparseIndices\Cjk\ToolUp.SparseIndices.Cjk.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\SparseIndices\Postgres\PostgresFullTextIndex.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Storage\AwsS3Storage\AwsS3Storage.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Storage\GoogleCloudStorage\GoogleCloudStorage.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Stripe.Server\ToolUp.Stripe.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Stripe.TierToken\ToolUp.Stripe.TierToken.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Stripe.Webhook\ToolUp.Stripe.Webhook.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Tabular\ToolUp.Tabular.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\TelemetrySinks\Ga4\Ga4TelemetrySink.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Voice.Client\ToolUp.Voice.Client.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Voice.Core\ToolUp.Voice.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\VoiceProviders\AzureSpeech\AzureSpeechTranscriptionProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\VoiceProviders\Whisper\WhisperTranscriptionProvider.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Webhooks\ToolUp.Webhooks.Core\ToolUp.Webhooks.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Webhooks\ToolUp.Webhooks.Server\ToolUp.Webhooks.Server.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Workflow.Core\ToolUp.Workflow.Core.fsproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ToolUp.Workflow.Server\ToolUp.Workflow.Server.fsproj" ReferenceOutputAssembly="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <PackageReference Include="System.Reflection.MetadataLoadContext" />
+    </ItemGroup>
+</Project>
