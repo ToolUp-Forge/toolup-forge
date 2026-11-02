@@ -95,6 +95,7 @@ let private registeredTests =
         AffectedLaneTests.tests
         CompilerLeversTests.tests
         BuildCensusTests.tests
+        ServerPartsBaselineTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
