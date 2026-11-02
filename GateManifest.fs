@@ -150,34 +150,26 @@ let private env (names: string list) = names |> List.map Input.Env
 let private apiKeys =
     env [ "ANTHROPIC_API_KEY"; "OPENAI_API_KEY"; "GEMINI_API_KEY" ]
 
-/// The variables the Platform pack's own sources read, each gating an arm
-/// or a regeneration. `PATH` is ambient toolchain, not an input, and is not
-/// here. Harness-wide variables (`TOOLUP_TEST_LANE`, `TOOLUP_TEST_LISTS`,
-/// `TOOLUP_TEST_ARGS`) belong to the driver, not to a row.
+/// The variables the residue pack's own sources read, each gating an arm or
+/// a regeneration; each part's pack declares its own beside its row. `PATH`
+/// is ambient toolchain, not an input, and is not here. Harness-wide
+/// variables (`TOOLUP_TEST_LANE`, `TOOLUP_TEST_LISTS`, `TOOLUP_TEST_ARGS`)
+/// belong to the driver, not to a row.
 let private platformEnv =
     env [
-        "TOOLUP_MODEL_EXECUTION_CORPUS"
         "TOOLUP_FEDERATION_SPEC_DIR"
         "TOOLUP_APPROVE_API"
-        "TOOLUP_APPROVE_BRANDKIT"
         "TOOLUP_APPROVE_COMPOSITION"
         "TOOLUP_AUTH_MODE"
         "TOOLUP_BUNDLE_FIXTURE_DIR"
         "TOOLUP_EMIT_WIRE_FIXTURES"
         "TOOLUP_HNSW_SCALE_CORPUS"
-        "TOOLUP_OAUTH_REDIRECT_BASE"
-        "TOOLUP_OIDC_AUDIENCE"
         "TOOLUP_REDIS_CONNECTION"
         "TOOLUP_REGEN_AUDIT_EVENT_REFERENCE"
         "TOOLUP_REGEN_CONFIG_REFERENCE"
-        "TOOLUP_REGEN_ELMISH_PROOF_CORPUS"
-        "TOOLUP_REGEN_LOCALIZATION_SKELETON"
-        "TOOLUP_REGEN_PLATFORM_DECODERS"
-        "TOOLUP_REGEN_PLATFORM_JSON_DECODERS"
         "TOOLUP_REPLICA_COUNT"
         "TOOLUP_SECRETS_MASTER_KEY"
         "TOOLUP_SECRET_STORE"
-        "TOOLUP_TEST_AGE_CONNSTRING"
         "TOOLUP_TEST_POSTGRES"
         "TOOLUP_TRANSITION_PIN_OUT"
     ]

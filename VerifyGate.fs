@@ -153,6 +153,7 @@ let driverFlags: FlagSpec =
             "--head"
             "--paths"
             "--declared"
+            "--source"
             "--out"
             "--release"
             "--ui-version"

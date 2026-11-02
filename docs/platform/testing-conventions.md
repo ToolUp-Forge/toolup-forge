@@ -156,7 +156,7 @@ The per-pack `PASS` / `FAIL` summary block is unchanged, and deliberately so: CI
 
 Everything that used to restate the list is a render of the rows, and each render is held by a test or a `--check`:
 
-- `BuildConfig.TestPacks` is `Gate.packs` over the `Local` pack rows; `GateReconcile` holds every `*.Tests.fsproj` to a pack row or a named exclusion (`GateReconcileTests`).
+- `BuildConfig.TestPacks` is `Gate.packs` over the `Local` pack rows; `GateReconcile` holds every test project (`*.Tests.fsproj`, or a `.Tests.` segment in the file name) to a pack row or a named exclusion (`GateReconcileTests`).
 - The `pure` lane is the pack rows with `Reads = []`; `PureLaneTests` re-runs the recorded grep over each such row's sources and is red when one reads the tree.
 - CI's `EXPECTED_PACKS` is `Gate.ciFloor`, the count of rows whose `Where` carries `Ci "verify-all"`; `dotnet run --project Build.fsproj -- Gate --check` refuses a drift and `Gate --render` writes it. The CI table in `CLAUDE.md` is rendered from `Where` the same way, and `GateManifestTests` holds every `checks.yml` job to a row or a named CI-only reason, and every row's job to a step that runs it.
 - Each pack is launched under a scrubbed environment: every `Env` variable some other row declares and this row does not is cleared, so a pack cannot read a credential it did not name (`Gate.scrubbedFor`).
@@ -165,6 +165,46 @@ Everything that used to restate the list is a render of the rows, and each rende
 - A `Floor` is applied by the fold, not the body: `AtLeast n` / `Exactly n` against the `Pass` count, `HighWater <file>` against the committed mark, `FromRegistry proofs.json` by `proofs/check.ps1`, which reads each differential host's case names from the claims registry and fails by name on a case that stops running.
 
 `dotnet run --project Build.fsproj -- Gate --run <row>` runs one row on its own (building what it names), which is how the CI-only jobs invoke theirs. A consumer's `Build.fs` that sets `TestPacks` and calls `VerifyLeg.register` is unchanged: both are derived views onto `Gate.register`.
+
+## The Platform family: one pack per server part
+
+The Platform test pack is partitioned the way the server tier is: one pack per part, each a row of the gate manifest,
+each referencing only its part's closure.
+
+| Row | Project | Holds |
+|---|---|---|
+| `Platform.Remoting` | `src/ToolUp.Platform.Tests.Remoting/` | the lists that reach the Remoting part and no later one, and the lists that reach no server part |
+| `Platform.Infra` | `src/ToolUp.Platform.Tests.Infra/` | the lists that reach the Infra part and no later one |
+| `Platform.Config` | `src/ToolUp.Platform.Tests.Config/` | the lists that reach the Config part and no later one |
+| `Platform.Scope` | `src/ToolUp.Platform.Tests.Scope/` | the lists that reach the Scope part and no later one |
+| `Platform.Jobs` | `src/ToolUp.Platform.Tests.Jobs/` | the lists that reach the Jobs part and no later one |
+| `Platform.Audit` | `src/ToolUp.Platform.Tests.Audit/` | the lists that reach the Audit part and no later one |
+| `Platform` | `src/ToolUp.Platform.Tests/` | the residue: the lists that reach the umbrella (Compose, Lifecycle, Files) or a companion built on it |
+| `Platform.PublicApi` | `src/ToolUp.Platform.Tests.PublicApi/` | the public-API approval gate, built over every packable project |
+
+`src/ToolUp.Platform.Tests.Support/` is the harness every member references (the lane filter, the registration guard,
+the corpus anchor, the shared entry point `PackEntry.run`). It holds no cases and is a named exclusion. The suite
+consuming `ToolUp.Platform.Testing` (Phase 1100) absorbs it.
+
+The rules for a new list or a new test file:
+
+- **The test sources stay under `src/ToolUp.Platform.Tests/`.** Each member compiles its files from there, as each
+  server part compiles its sources from the umbrella's folder. Which pack a file is in is read from the project files,
+  not its folder. Companion packs and `Build.fsproj` source-link files from there, so the paths do not move.
+- **A list goes to the latest part its test file reaches.** That is the latest part whose assembly it uses a symbol
+  of, or names in a string literal (a runtime load, or a scan of that part's sources). A file that uses another test
+  file's symbols reaches what that file reaches. A `[<Tests>]`-bearing file used by a file of a later pack moves to
+  that pack. A file without bindings that two packs use is compiled by both. A list that reaches the umbrella or a
+  companion built on it stays in the residue.
+- **Register it in its pack's `Program.fs`.** The registration guard sweeps that pack's assembly, so a list
+  registered in the wrong member is red in the right one.
+- **An `open` of a part the file does not use does not compile** in a pack that does not reference the part. Remove
+  it: the partition removed every such open it exposed.
+- **Internals.** A member that reads a part's internals needs that part to grant `InternalsVisibleTo` to the member's
+  assembly. Build the part clean once after adding the grant.
+
+The map of every list to its pack, with the reach that placed it:
+[`docs/migrations/1194-platform-pack-partition.md`](../migrations/1194-platform-pack-partition.md).
 
 ## `[<Tests>]` alone does not run a test list — register it (Phase 722)
 
@@ -211,7 +251,7 @@ Mechanics, all held by a gate:
 - **Live backends are env-gated**: Pending (a `skiptest` naming the variable) without the variable, never Failed. The pack's
   gate-manifest row declares the variable, because `VerifyAll` clears every other row's variables for each pack.
 - **One row per pack** in `GateManifest.fs`. `Gate --render` moves `EXPECTED_PACKS` and the CI table, and `GateReconcile`
-  is red for a `*.Tests.fsproj` with no row.
+  is red for a test project with no row.
 - **The pack's directory ends in `.Tests`** (`src/<Family>/ToolUp.<Family>.Tests/`). The tree scans that hold production
   code to a rule exclude test code by that path segment: the analyzer inventory's `segmentSuffix` and
   `VerifyScopeLiterals`. A pack under a directory named plain `Tests` reads to them as production code, and both legs
@@ -222,9 +262,11 @@ Which files have moved, and which are still in the Platform pack and why:
 
 ## The `affected` lane: run the lists a change can reach
 
-`TOOLUP_TEST_LANE=affected` with `TOOLUP_TEST_LISTS=<file>` runs the Platform pack's lists named in the file and
-every other pack whole. The file is written by `Select`. The measurement the lane was cut from is in
-[`docs/migrations/1121-affected-lane-v0.md`](../migrations/1121-affected-lane-v0.md).
+`TOOLUP_TEST_LANE=affected` with `TOOLUP_TEST_LISTS=<file>` runs the Platform family's lists named in the file and
+every other pack whole. The file is written by `Select`. A name in it is `<row>/<list>` for a member of the family, or
+an unqualified name for the residue (`Platform`), as before the partition; `<row>/*` keeps a member whole. Each member
+reads its own share, and a member the file names nothing of runs its registration guard alone. The measurement the
+lane was cut from is in [`docs/migrations/1121-affected-lane-v0.md`](../migrations/1121-affected-lane-v0.md).
 
 ```powershell
 dotnet run --project Build.fsproj -- Select --base origin/main --head HEAD --declared tests.txt --out .affected/selection.json
@@ -240,12 +282,13 @@ selection policy for this repository, and until then nothing reads its manifest 
 **What `Select` selects.** It unions three sources and records which source admitted each unit:
 
 - **declared** — the lists the change is known to reach, from `--declared` (one per line: `<pack>/<list>`, or a bare
-  Platform list by its label or by the binding `Program.fs` registers). A list in another pack runs anyway, because
-  that pack runs whole.
-- **diffed** — every Platform list whose defining test file is in the diff, read off `Program.fs`'s registration and
-  the module the file defines. A new test file's lists are in by construction. An edited test file re-runs whole.
-- **always** — the registration guard, `Phase 175 — Public-API approval baseline`, every other pack (the `pure` packs
-  among them) and the Analyzers leg.
+  Platform list by its label or by the binding a member's `Program.fs` registers; a bare binding is placed in the member
+  that registers it, a bare label in the residue). A list in another pack runs anyway, because that pack runs whole.
+- **diffed** — every Platform-family list whose defining test file is in the diff, read off the members'
+  registrations and the module the file defines. A new test file's lists are in by construction. An edited test file
+  re-runs whole.
+- **always** — each member's registration guard, `Phase 175 — Public-API approval baseline` (in `Platform.PublicApi`),
+  every other pack (the `pure` packs among them) and the Analyzers leg.
 
 There is no coverage map yet, so there is no derived source, and every manifest says `map: none`.
 
@@ -291,6 +334,31 @@ anything, and so does a missing or empty lists file. This is the `--filter` less
 a green run of nothing. The manifest's skipped list is exact when every declared Platform name is a binding. A declared
 label is resolved only by the pack, so the manifest marks its skipped list `skippedExact: false` and the pack's own
 print is the exact account.
+
+**The graph source: whole packs by the project graph.** `Select --source graph` selects packs instead of lists. A
+changed path belongs to the projects whose items name it; failing that, the projects whose wildcard items cover it;
+failing that, the project whose directory holds it most closely. So a server part's source, which sits in the umbrella's
+folder, is the part's, and a test file is the pack's that compiles it. A pack is selected when its closure (its project
+and every project it references) holds a changed path's owner, and runs whole. Every other pack runs nothing and is
+named as skipped, unless a declared or always-on unit names it. The manifest gains `"source": "graph"` and a `graph`
+block with the selected and skipped packs, each with the case count of its newest recorded run, and the changed paths
+no project owns (they select nothing). Only the graph-blind forcing rules apply (`msbuild-import`, `solution`,
+`build-script`, `toolchain`): the graph places a composition-root file, a test project or a support file itself.
+
+```powershell
+dotnet run --project Build.fsproj -- Select --base origin/main --head HEAD --source graph --out .affected/selection.json
+```
+
+A change to one server part selects that part's pack, the packs of the parts after it, the residue and every
+companion pack over the umbrella, because each of those compiles against the part. It skips the packs of the parts
+before it. A change confined to the Audit part, the last, selects the Audit pack and the residue among the family.
+
+**When the graph source may be cited: the same rule as the declared source.** It is a fail-fast lane and not
+citable. A ship cites the full lane, run on the folded tree, until the gate runner accepts a selected record under a
+declared selection policy. A release always runs `full`. The graph is the build's own and always current, so it is the
+structural fallback for the declared source and a cross-check on a coverage map. It cannot see what a test reads at
+run time outside its closure: a document, a baseline file, a fixture no project item names. A changed path no project
+owns is listed as unowned for that reason, and a list that reads one runs only when it is declared.
 
 **What it does not protect against.** A selected run is unsound by construction. A regression in a list nobody
 declared, no diff touched and no forcing rule covers will pass it. Two things keep that cost bounded. The full lane is

@@ -55,10 +55,11 @@ type Lane =
     | Pure
     /// Everything except the measured slow set. The pre-merge lane.
     | Fast
-    /// The Platform pack keeps only the lists named in the
-    /// file `TOOLUP_TEST_LISTS` points at (written by `Select`); every
-    /// other pack runs whole, and the Fable and Samples legs follow the
-    /// diff. A fail-fast lane, never a citable one: a ship cites `full`.
+    /// Each pack of the Platform family keeps only the lists named for it
+    /// in the file `TOOLUP_TEST_LISTS` points at (written by `Select`); every
+    /// other pack runs whole unless the graph source skipped it, and the
+    /// Fable and Samples legs follow the diff. A fail-fast lane, never a
+    /// citable one: a ship cites `full`.
     | Affected
     /// The whole suite. The default, and the only lane a ship may cite.
     | Full
@@ -128,9 +129,10 @@ let announce (whatWasExcluded: string) =
 [<Literal>]
 let ListsVariableName = "TOOLUP_TEST_LISTS"
 
-/// The lists file: one top-level Platform list per line, by
-/// its label or by the binding the pack's `Program.fs` registers. `Select`
-/// writes it and the Platform pack reads it, so the format has one parser.
+/// The lists file: one top-level list of the Platform family per line, by
+/// its label or by the binding a pack's `Program.fs` registers, qualified
+/// `<row>/` for every member but the residue. `Select` writes it and each
+/// member reads its share, so the format has one parser.
 ///
 /// Two lines are not names. `# manifest: <path>` points at the selection
 /// manifest the file was written beside, so `VerifyAll` can say what the
@@ -261,23 +263,45 @@ module Lists =
 /// and a file reader, so the Build pack decides every rule without git.
 ///
 /// There is no coverage map yet, so the derived source is
-/// always empty and every manifest says `map: none`.
+/// always empty and every manifest says `map: none`. The Platform pack is
+/// partitioned by server part, so the declared and diffed sources read every
+/// family member's registration, and the graph source (`--source graph`)
+/// selects whole packs by the project graph instead.
 module Selection =
 
     open System.Text.RegularExpressions
 
-    /// The VerifyAll pack whose lists the lane selects.
+    /// The residue pack of the Platform family: the umbrella's pack, which
+    /// held every list before the partition.
     [<Literal>]
     let PlatformPack = "Platform"
 
     [<Literal>]
     let PlatformTestRoot = "src/ToolUp.Platform.Tests/"
 
-    /// The pack's registration. Deliberately NOT a forcing path: every
-    /// phase that adds a list touches it, and the registration guard runs
-    /// in every lane.
+    /// The residue's registration. Deliberately NOT a forcing path, nor is
+    /// any family member's: every phase that adds a list touches one, and the
+    /// registration guard runs in every lane.
     [<Literal>]
     let PlatformProgram = "src/ToolUp.Platform.Tests/Program.fs"
+
+    /// The members of the Platform family among `packs` (row, project): the
+    /// projects named `ToolUp.Platform.Tests` or `ToolUp.Platform.Tests.<Part>`,
+    /// each with the `Program.fs` beside its project file that registers its
+    /// lists.
+    let familyOf (packs: (string * string) list) : (string * string) list =
+        packs
+        |> List.choose (fun (row, project) ->
+            let p = project.Replace('\\', '/')
+            let file = IO.Path.GetFileNameWithoutExtension p
+
+            if
+                file = "ToolUp.Platform.Tests"
+                || file.StartsWith("ToolUp.Platform.Tests.", StringComparison.Ordinal)
+            then
+                Some(row, p.Substring(0, p.LastIndexOf '/' + 1) + "Program.fs")
+            else
+                None)
 
     /// The registration guard's own list. It is appended beside the
     /// registered lists rather than registered, so it runs in every lane
@@ -294,18 +318,22 @@ module Selection =
         | Declared
         | Diffed
         | Always
+        /// A whole pack whose project closure meets the diff.
+        | Graph
 
     let sourceName (source: Source) =
         match source with
         | Source.Declared -> "declared"
         | Source.Diffed -> "diffed"
         | Source.Always -> "always"
+        | Source.Graph -> "graph"
 
     let private sourceOfName (raw: string) =
         match raw with
         | "declared" -> Some Source.Declared
         | "diffed" -> Some Source.Diffed
         | "always" -> Some Source.Always
+        | "graph" -> Some Source.Graph
         | _ -> None
 
     type SelectedUnit = { Unit: string; Source: Source }
@@ -331,6 +359,25 @@ module Selection =
         Applied: bool
     }
 
+    /// What the graph source is given: each pack row with its project file,
+    /// and the case count each pack's last recorded run reported.
+    type GraphInputs = {
+        PackProjects: (string * string) list
+        Cases: Map<string, int>
+    }
+
+    /// What the graph source selected.
+    type GraphSelection = {
+        /// The packs whose project closure meets a changed path, with their
+        /// last recorded case count.
+        Selected: (string * int option) list
+        /// The packs that run nothing: no changed path is in their closure and
+        /// no declared or always-on unit names them.
+        Skipped: (string * int option) list
+        /// Changed paths no project owns: they select no pack.
+        Unowned: string list
+    }
+
     /// What `Select` was asked.
     type Inputs = {
         Base: string option
@@ -342,6 +389,11 @@ module Selection =
         Declared: string list
         /// The VerifyAll pack names.
         Packs: string list
+        /// The Platform family's members (row, its `Program.fs`); empty means
+        /// the residue alone.
+        Family: (string * string) list
+        /// `Some` selects whole packs by the project graph (`--source graph`).
+        Graph: GraphInputs option
         /// A repository-relative path to its text, `None` when absent.
         Read: string -> string option
         ListsFile: string
@@ -364,6 +416,8 @@ module Selection =
         Checked: (string * string) list
         Fired: Firing list
         ClientTierMoved: bool
+        /// The graph source's selection, when it was the source asked for.
+        Graph: GraphSelection option
         /// What the lists file names (`*` aside).
         Lists: string list
         ListsFile: string
@@ -509,6 +563,9 @@ module Selection =
     let private entryHead =
         Regex(@"^\s*([A-Z][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_']*)+)\s*(.*)$")
 
+    let private inlineList =
+        Regex(@"\btestList\s+""[^""]*""\s*\[\s*([^\[\]]+?)\s*\]\s*\)?$")
+
     /// The entries of `let private registeredTests = testList … [ … ]` in
     /// the pack's `Program.fs`, at the item level of each list (an entry
     /// inside a nested `testList` counts; an argument line does not).
@@ -572,6 +629,24 @@ module Selection =
 
                     if t.EndsWith("[", StringComparison.Ordinal) then
                         pending <- true
+                    else
+                        // A list the formatter kept on one line: `testList "…" [ A.b; C.d ]`.
+                        let inline' = inlineList.Match t
+
+                        if inline'.Success then
+                            for item in inline'.Groups[1].Value.Split(';') do
+                                let m = entryHead.Match item
+
+                                if m.Success && m.Groups[2].Value = "" then
+                                    let text = m.Groups[1].Value
+                                    let dot = text.LastIndexOf '.'
+
+                                    found.Add {
+                                        Text = text
+                                        ModuleRef = text.Substring(0, dot)
+                                        Binding = text.Substring(dot + 1)
+                                        Applied = false
+                                    }
 
             List.ofSeq found
 
@@ -620,30 +695,193 @@ module Selection =
 
         List.ofSeq found
 
+    // ─── The graph source ───────────────────────────────────────────────
+
+    /// A project file as the graph source reads it: the files its items
+    /// name, the directories its wildcard items cover, and the project
+    /// files it references. Repository-relative, forward slashes.
+    type ProjectFile = {
+        Path: string
+        /// The project file's directory, with a trailing `/`.
+        Dir: string
+        Items: Set<string>
+        ItemDirs: string list
+        References: string list
+    }
+
+    let private itemPattern =
+        Regex(@"<(Compile|None|Content|EmbeddedResource|ProjectReference)\b[^>]*?\bInclude=""([^""]+)""")
+
+    /// `relative` resolved against the repository-relative directory `dir`
+    /// (`..` and `.` segments folded).
+    let resolvePath (dir: string) (relative: string) : string =
+        let stack = Collections.Generic.List<string>()
+
+        for part in (dir + relative.Replace('\\', '/')).Split('/') do
+            match part with
+            | ""
+            | "." -> ()
+            | ".." ->
+                if stack.Count > 0 then
+                    stack.RemoveAt(stack.Count - 1)
+            | s -> stack.Add s
+
+        String.Join("/", stack)
+
+    /// The project file at `path`, `None` when it cannot be read. An item
+    /// spelled with an MSBuild property is not followed: the forcing rules
+    /// cover the imports that define one.
+    let projectFile (read: string -> string option) (path: string) : ProjectFile option =
+        read path
+        |> Option.map (fun text ->
+            let dir =
+                match path.LastIndexOf '/' with
+                | -1 -> ""
+                | i -> path.Substring(0, i + 1)
+
+            let items = [
+                for m in itemPattern.Matches text do
+                    let value = m.Groups[2].Value
+
+                    if not (value.Contains "$(") then
+                        yield m.Groups[1].Value, value
+            ]
+
+            let isWild (s: string) = s.Contains "*" || s.Contains "%("
+            let files = items |> List.filter (fun (kind, _) -> kind <> "ProjectReference")
+
+            {
+                Path = path
+                Dir = dir
+                Items =
+                    files
+                    |> List.filter (snd >> isWild >> not)
+                    |> List.map (snd >> resolvePath dir)
+                    |> set
+                ItemDirs =
+                    files
+                    |> List.filter (snd >> isWild)
+                    |> List.map (fun (_, glob) ->
+                        let g = glob.Replace('\\', '/')
+                        let first = g.IndexOfAny [| '*'; '%' |]
+                        let cut = g.LastIndexOf('/', first)
+                        let baseDir = if cut < 0 then "" else g.Substring(0, cut + 1)
+                        (resolvePath dir baseDir).TrimEnd('/') + "/")
+                References =
+                    items
+                    |> List.filter (fun (kind, _) -> kind = "ProjectReference")
+                    |> List.map (snd >> resolvePath dir)
+            })
+
+    /// Every project reachable from `roots` through project references.
+    let projectGraph (read: string -> string option) (roots: string list) : Map<string, ProjectFile> =
+        let rec walk (seen: Map<string, ProjectFile>) (pending: string list) =
+            match pending with
+            | [] -> seen
+            | p :: rest when seen.ContainsKey p -> walk seen rest
+            | p :: rest ->
+                match projectFile read p with
+                | Some f -> walk (Map.add p f seen) (f.References @ rest)
+                | None -> walk seen rest
+
+        walk Map.empty roots
+
+    /// `project` and every project it reaches through references.
+    let closureOf (graph: Map<string, ProjectFile>) (project: string) : Set<string> =
+        let rec walk (seen: Set<string>) (pending: string list) =
+            match pending with
+            | [] -> seen
+            | p :: rest when seen.Contains p -> walk seen rest
+            | p :: rest ->
+                let refs =
+                    match graph.TryFind p with
+                    | Some f -> f.References
+                    | None -> []
+
+                walk (Set.add p seen) (refs @ rest)
+
+        walk Set.empty [ project ]
+
+    /// The projects a changed path belongs to: those whose items name it;
+    /// failing that, those whose wildcard items cover it; failing that, the
+    /// project whose directory holds it most closely. A source compiled from
+    /// another project's directory (a server part's file under the umbrella's
+    /// folder, a test file a part's pack compiles from the residue's) is the
+    /// compiling project's, not the folder's.
+    let ownersOf (graph: Map<string, ProjectFile>) (path: string) : Set<string> =
+        let files = graph |> Map.toList |> List.map snd
+
+        match files |> List.filter (fun f -> f.Items.Contains path) with
+        | _ :: _ as named -> named |> List.map _.Path |> set
+        | [] ->
+            match
+                files
+                |> List.filter (fun f -> f.ItemDirs |> List.exists (fun d -> under d path))
+            with
+            | _ :: _ as covered -> covered |> List.map _.Path |> set
+            | [] ->
+                files
+                |> List.filter (fun f -> f.Dir <> "" && under f.Dir path)
+                |> List.sortByDescending _.Dir.Length
+                |> List.tryHead
+                |> Option.map (fun f -> Set.singleton f.Path)
+                |> Option.defaultValue Set.empty
+
+    /// The forcing rules the project graph cannot see past: an import, a
+    /// solution, the build script, the toolchain. The graph source applies
+    /// only these; every other rule is a path the graph already places.
+    let graphBlindRules =
+        set [ "msbuild-import"; "solution"; "build-script"; "toolchain" ]
+
     /// The selection over `inputs`.
     let select (inputs: Inputs) : Manifest =
         let paths =
             inputs.Paths |> List.map normalise |> List.filter ((<>) "") |> List.distinct
 
-        let regs = registrations (inputs.Read PlatformProgram |> Option.defaultValue "")
+        let family =
+            if inputs.Family.IsEmpty then
+                [ PlatformPack, PlatformProgram ]
+            else
+                inputs.Family
+
+        let familyRows = family |> List.map fst |> set
+        let familyPrograms = family |> List.map snd |> set
+
+        // Every family member's registration, each entry with its row.
+        let regs =
+            family
+            |> List.collect (fun (row, program) ->
+                registrations (inputs.Read program |> Option.defaultValue "")
+                |> List.map (fun r -> row, r))
+
+        let unitOf (row: string) (name: string) = row + "/" + name
+
+        // The lists-file spelling: the residue's names unqualified, as before
+        // the partition; every other member's `<row>/<name>`.
+        let listOf (row: string) (name: string) =
+            if row = PlatformPack then name else row + "/" + name
 
         let definedBy (q: string) (r: Registration) =
             q = r.ModuleRef || q.EndsWith("." + r.ModuleRef, StringComparison.Ordinal)
 
         // A name given as a registered binding: the full name, or the
         // spelling `Program.fs` uses.
+        let matchesBinding (name: string) (r: Registration) =
+            not r.Applied
+            && (name = r.Text || name.EndsWith("." + r.Text, StringComparison.Ordinal))
+
         let byBinding (name: string) =
-            regs
-            |> List.filter (fun r ->
-                not r.Applied
-                && (name = r.Text || name.EndsWith("." + r.Text, StringComparison.Ordinal)))
+            regs |> List.filter (snd >> matchesBinding name)
+
+        let byBindingIn (row: string) (name: string) =
+            regs |> List.filter (fun (r, reg) -> r = row && matchesBinding name reg)
 
         let testSources =
             paths
             |> List.filter (fun p ->
                 under PlatformTestRoot p
                 && ext p = ".fs"
-                && p <> PlatformProgram
+                && not (familyPrograms.Contains p)
                 && not (under (PlatformTestRoot + "Support/") p))
 
         let diffed, unpinned =
@@ -658,22 +896,27 @@ module Selection =
 
                         let matched =
                             regs
-                            |> List.choose (fun r ->
-                                modules |> List.tryFind (fun q -> definedBy q r) |> Option.map (fun q -> r, q))
+                            |> List.choose (fun (row, r) ->
+                                modules
+                                |> List.tryFind (fun q -> definedBy q r)
+                                |> Option.map (fun q -> (row, r), q))
 
-                        if matched.IsEmpty || matched |> List.exists (fun (r, _) -> r.Applied) then
+                        if matched.IsEmpty || matched |> List.exists (fun ((_, r), _) -> r.Applied) then
                             hits, unpinned @ [ p ]
                         else
                             hits @ matched, unpinned)
                 ([], [])
 
+        let graphMode = inputs.Graph.IsSome
+
         let fired = [
             for p in paths do
                 for rule in forcingRules do
-                    if rule.Matches p then
+                    if rule.Matches p && (not graphMode || graphBlindRules.Contains rule.Name) then
                         yield { Rule = rule.Name; Path = p }
-            for p in unpinned do
-                yield { Rule = UnpinnedRule; Path = p }
+            if not graphMode then
+                for p in unpinned do
+                    yield { Rule = UnpinnedRule; Path = p }
         ]
 
         let packs = set inputs.Packs
@@ -684,26 +927,85 @@ module Selection =
             |> List.filter (fun d -> d <> "" && not (startsWith "#" d))
             |> List.distinct
 
+        // `<pack>/<name>` names its pack; an unqualified name is the family
+        // member that registers it, or the residue, which resolves a label.
         let split (d: string) =
             match d.IndexOf '/' with
-            | i when i > 0 && packs.Contains(d.Substring(0, i)) -> d.Substring(0, i), d.Substring(i + 1)
-            | _ -> PlatformPack, d
+            | i when
+                i > 0
+                && (packs.Contains(d.Substring(0, i)) || familyRows.Contains(d.Substring(0, i)))
+                ->
+                d.Substring(0, i), d.Substring(i + 1)
+            | _ ->
+                match byBinding d |> List.map fst |> List.distinct with
+                | [ row ] -> row, d
+                | _ -> PlatformPack, d
 
-        let platformDeclared =
+        let familyDeclared =
             declared
             |> List.choose (fun d ->
                 match split d with
-                | pack, name when pack = PlatformPack -> Some name
+                | row, name when familyRows.Contains row -> Some(row, name)
                 | _ -> None)
+
+        // The always-on lists, each in the member that registers it.
+        let alwaysOn =
+            alwaysOnLists
+            |> List.map (fun b ->
+                match byBinding b |> List.map fst |> List.distinct with
+                | [ row ] -> row, b
+                | _ -> PlatformPack, b)
 
         let covered =
             set [
-                yield! platformDeclared |> List.collect byBinding
+                yield! familyDeclared |> List.collect (fun (row, name) -> byBindingIn row name)
                 yield! diffed |> List.map fst
-                yield! alwaysOnLists |> List.collect byBinding
+                yield! alwaysOn |> List.collect (fun (row, b) -> byBindingIn row b)
             ]
 
-        let diffedNames = diffed |> List.map (fun (r, q) -> q + "." + r.Binding)
+        let diffedUnits = diffed |> List.map (fun ((row, r), q) -> row, q + "." + r.Binding)
+
+        // The graph source: the packs whose project closure meets a changed
+        // path run whole; a pack no source names runs nothing.
+        let graph =
+            inputs.Graph
+            |> Option.map (fun g ->
+                let projects = projectGraph inputs.Read (g.PackProjects |> List.map snd)
+
+                let owned =
+                    paths
+                    |> List.filter (fun p ->
+                        not (
+                            forcingRules
+                            |> List.exists (fun r -> graphBlindRules.Contains r.Name && r.Matches p)
+                        ))
+                    |> List.map (fun p -> p, ownersOf projects p)
+
+                let touched = owned |> List.collect (snd >> Set.toList) |> set
+
+                let named =
+                    set [ yield! declared |> List.map (split >> fst); yield! alwaysOn |> List.map fst ]
+
+                let cases (pack: string) = g.Cases.TryFind pack
+
+                let reaches (_, project) =
+                    not (Set.isEmpty (Set.intersect (closureOf projects project) touched))
+
+                let selected, rest = g.PackProjects |> List.partition reaches
+
+                {
+                    Selected = selected |> List.map (fun (pack, _) -> pack, cases pack)
+                    Skipped =
+                        rest
+                        |> List.filter (fun (pack, _) -> not (named.Contains pack))
+                        |> List.map (fun (pack, _) -> pack, cases pack)
+                    Unowned = owned |> List.filter (snd >> Set.isEmpty) |> List.map fst
+                })
+
+        let skippedPacks =
+            match graph with
+            | Some g -> g.Skipped |> List.map fst |> set
+            | None -> Set.empty
 
         let units =
             [
@@ -711,29 +1013,40 @@ module Selection =
                     let pack, name = split d
 
                     yield {
-                        Unit = pack + "/" + name
+                        Unit = unitOf pack name
                         Source = Source.Declared
                     }
-                for n in diffedNames do
+                for row, name in diffedUnits do
                     yield {
-                        Unit = PlatformPack + "/" + n
+                        Unit = unitOf row name
                         Source = Source.Diffed
                     }
-                for b in alwaysOnLists do
+                match graph with
+                | Some g ->
+                    for pack, _ in g.Selected do
+                        yield {
+                            Unit = pack + "/*"
+                            Source = Source.Graph
+                        }
+                | None -> ()
+                for row, b in alwaysOn do
                     yield {
-                        Unit = PlatformPack + "/" + b
+                        Unit = unitOf row b
                         Source = Source.Always
                     }
-                yield {
-                    Unit = PlatformPack + "/" + RegistrationGuard
-                    Source = Source.Always
-                }
-                for p in inputs.Packs do
-                    if p <> PlatformPack then
+                for row, _ in family do
+                    if not (skippedPacks.Contains row) then
                         yield {
-                            Unit = p + "/*"
+                            Unit = unitOf row RegistrationGuard
                             Source = Source.Always
                         }
+                if not graphMode then
+                    for p in inputs.Packs do
+                        if not (familyRows.Contains p) then
+                            yield {
+                                Unit = p + "/*"
+                                Source = Source.Always
+                            }
                 yield {
                     Unit = "leg/Analyzers"
                     Source = Source.Always
@@ -743,26 +1056,46 @@ module Selection =
 
         let forced = not fired.IsEmpty
 
+        let graphLists =
+            match graph with
+            | Some g ->
+                g.Selected
+                |> List.filter (fun (pack, _) -> familyRows.Contains pack)
+                |> List.map (fun (pack, _) -> pack + "/*")
+            | None -> []
+
         {
             Base = inputs.Base
             Head = inputs.Head
             Paths = paths
             Forced = forced
             Units = units
-            UnresolvedDeclared = platformDeclared |> List.filter (byBinding >> List.isEmpty)
+            UnresolvedDeclared =
+                familyDeclared
+                |> List.filter (fun (row, name) -> (byBindingIn row name).IsEmpty)
+                |> List.map (fun (row, name) -> listOf row name)
             Skipped =
                 if forced then
                     []
                 else
-                    regs
-                    |> List.filter (fun r -> not (covered.Contains r))
-                    |> List.map (fun r -> if r.Applied then r.Text + " …" else r.Text)
+                    match graph with
+                    | Some g -> g.Skipped |> List.map (fun (pack, _) -> pack + "/*")
+                    | None ->
+                        regs
+                        |> List.filter (fun r -> not (covered.Contains r))
+                        |> List.map (fun (row, r) -> listOf row (if r.Applied then r.Text + " …" else r.Text))
             Checked =
                 [ for r in forcingRules -> r.Name, r.Covers ]
                 @ [ (UnpinnedRule, unpinnedCovers) ]
             Fired = fired
             ClientTierMoved = forced || List.exists clientTier paths
-            Lists = platformDeclared @ diffedNames @ alwaysOnLists |> List.distinct
+            Graph = graph
+            Lists =
+                (familyDeclared |> List.map (fun (row, name) -> listOf row name))
+                @ (diffedUnits |> List.map (fun (row, name) -> listOf row name))
+                @ graphLists
+                @ (alwaysOn |> List.map (fun (row, b) -> listOf row b))
+                |> List.distinct
             ListsFile = inputs.ListsFile
             Command = inputs.Command
         }
@@ -822,6 +1155,32 @@ module Selection =
             w.WriteBoolean("analyzers", true)
             w.WriteEndObject()
             w.WriteString("map", "none")
+            w.WriteString("source", (if m.Graph.IsSome then "graph" else "declared"))
+
+            match m.Graph with
+            | None -> w.WriteNull "graph"
+            | Some g ->
+                let packs (name: string) (values: (string * int option) list) =
+                    w.WriteStartArray name
+
+                    for pack, cases in values do
+                        w.WriteStartObject()
+                        w.WriteString("pack", pack)
+
+                        match cases with
+                        | Some c -> w.WriteNumber("cases", c)
+                        | None -> w.WriteNull "cases"
+
+                        w.WriteEndObject()
+
+                    w.WriteEndArray()
+
+                w.WriteStartObject "graph"
+                packs "selected" g.Selected
+                packs "skipped" g.Skipped
+                strings "unowned" g.Unowned
+                w.WriteEndObject()
+
             strings "lists" m.Lists
             w.WriteString("listsFile", m.ListsFile)
             w.WriteString("command", m.Command)
@@ -873,6 +1232,26 @@ module Selection =
                             { Rule = rule; Path = path }
                     ]
                     ClientTierMoved = prop("legs").GetProperty("fable").GetBoolean()
+                    Graph =
+                        match root.TryGetProperty "graph" with
+                        | true, g when g.ValueKind = Text.Json.JsonValueKind.Object ->
+                            let packs (name: string) = [
+                                for x in g.GetProperty(name).EnumerateArray() ->
+                                    let cases = x.GetProperty "cases"
+
+                                    field x "pack",
+                                    (if cases.ValueKind = Text.Json.JsonValueKind.Null then
+                                         None
+                                     else
+                                         Some(cases.GetInt32()))
+                            ]
+
+                            Some {
+                                Selected = packs "selected"
+                                Skipped = packs "skipped"
+                                Unowned = strings (g.GetProperty "unowned")
+                            }
+                        | _ -> None
                     Lists = strings (prop "lists")
                     ListsFile = field root "listsFile"
                     Command = field root "command"
@@ -907,11 +1286,12 @@ module Selection =
                 yield sprintf "  lane: affected — %d forcing rule(s) checked, none fired" m.Checked.Length
             yield
                 sprintf
-                    "  units: %d declared, %d diffed, %d always"
+                    "  units: %d declared, %d diffed, %d graph, %d always"
                     (bySource Source.Declared).Length
                     (bySource Source.Diffed).Length
+                    (bySource Source.Graph).Length
                     (bySource Source.Always).Length
-            for source in [ Source.Declared; Source.Diffed; Source.Always ] do
+            for source in [ Source.Declared; Source.Diffed; Source.Graph; Source.Always ] do
                 for u in bySource source do
                     yield sprintf "    %-8s %s" (sourceName source) u.Unit
             for d in m.UnresolvedDeclared do
@@ -919,7 +1299,29 @@ module Selection =
                     sprintf
                         "    declared %s is not a registered binding: the pack resolves it by label, and is red if it names no list"
                         d
-            if not m.Forced then
+            match m.Graph with
+            | Some g ->
+                let count (cases: int option) =
+                    match cases with
+                    | Some c -> sprintf "%d case(s)" c
+                    | None -> "cases unknown"
+
+                yield
+                    sprintf
+                        "  source: graph — %d pack(s) whose project closure meets the diff run whole, %d run nothing"
+                        g.Selected.Length
+                        g.Skipped.Length
+
+                for pack, cases in g.Selected do
+                    yield sprintf "    selected %s (%s)" pack (count cases)
+
+                for pack, cases in g.Skipped do
+                    yield sprintf "    skipped  %s (%s)" pack (count cases)
+
+                for p in g.Unowned do
+                    yield sprintf "    unowned  %s (no project owns it, so it selects no pack)" p
+            | None -> ()
+            if not m.Forced && m.Graph.IsNone then
                 yield
                     sprintf
                         "  skipped: %d registered Platform list(s)%s"

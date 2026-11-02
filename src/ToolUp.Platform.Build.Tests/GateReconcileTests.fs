@@ -106,6 +106,23 @@ let tests =
             Expect.exists findings (fun f -> f.Contains "both a TestPacks row") "the contradiction"
         }
 
+        test "a project named with a .Tests. segment is a test project, so a partitioned pack cannot escape" {
+            let pack = "src/A.Tests.Part/A.Tests.Part.fsproj"
+
+            let findings =
+                Gate.findings (Some [ pack; "src/A.Testsuite/A.Testsuite.fsproj" ]) [ pack ] [] []
+
+            Expect.exists findings (fun f -> f.Contains pack) "an undeclared A.Tests.Part is not reported"
+
+            Expect.isFalse
+                (findings |> List.exists (fun f -> f.Contains "Testsuite"))
+                "a name that only starts with Tests is not a test project"
+
+            Expect.isEmpty
+                (Gate.findings (Some [ pack ]) [ pack ] [ TestPack.create "Part" pack ] [])
+                "the same project declared as a row is clean"
+        }
+
         test "the solution parser reads .sln and .slnx project paths, forward-slashed" {
             let sln =
                 "Project(\"{F2A71F9B-5D33-465A-A702-920D77279786}\") = \"A.Tests\", \"src\\A.Tests\\A.Tests.fsproj\", \"{0D1DC5CD-4588-4303-9932-B1EEB6ED64FA}\""

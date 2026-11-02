@@ -489,7 +489,7 @@ jobs:
 
       # ─── The model-execution conformance corpus ────────────────────
       #
-      # `ToolUp.Platform.Tests` carries a conformance family that
+      # The Platform family's Remoting pack carries a conformance family that
       # certifies the model-execution wire face against an EXTERNAL,
       # language-neutral corpus — a specification and fixture set that is
       # canonical over this implementation rather than emitted from it,
