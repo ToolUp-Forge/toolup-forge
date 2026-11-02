@@ -259,6 +259,27 @@ function Get-RegistryCases {
     return ,@($names)
 }
 
+# The source files proofs.json names as a family's host (`evidence.host`;
+# one claim's evidence spans two hosts joined by " and "), minus the
+# `(Fable)` families, as basenames: what step 7 resolves to a test pack.
+function Get-RegistryHosts {
+    param($Registry, [string] $HostList)
+    $prefix = "ToolUp.Platform.Tests."
+    $tail = if ($HostList.StartsWith($prefix)) { $HostList.Substring($prefix.Length) } else { $HostList }
+    $hosts = New-Object System.Collections.Generic.List[string]
+    foreach ($claim in $Registry.claims) {
+        if ($claim.level -ne 'tested' -or -not $claim.evidence.cases -or -not $claim.evidence.family -or -not $claim.evidence.host) { continue }
+        $parts = @($claim.evidence.family -split ' / ') | Where-Object { $_ -notlike '*(Fable)' }
+        $matches = $parts | Where-Object { $tail -eq $_ -or $tail.EndsWith("." + $_) }
+        if (-not $matches) { continue }
+        foreach ($h in @($claim.evidence.host -split ' and ')) {
+            $name = [IO.Path]::GetFileName($h.Trim())
+            if ($name -and -not $hosts.Contains($name)) { $hosts.Add($name) }
+        }
+    }
+    return ,@($hosts)
+}
+
 function Fail {
     param([string] $Text)
     Write-Host ""
@@ -623,36 +644,59 @@ if ($SkipHost) {
 }
 else {
     Write-Step "7/7  Running the differential hosts"
-
-    $testProject = Join-Path $repoRoot "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
-    & dotnet build $testProject --nologo -v q
-    if ($LASTEXITCODE -ne 0) { Fail "ToolUp.Platform.Tests did not build (exit $LASTEXITCODE)." }
-
-    $dll = Join-Path $repoRoot "src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll"
-    if (-not (Test-Path $dll)) { Fail "no test assembly at $dll." }
-
-    # The floor comes from the registry, by name. `--list-tests` lists the
-    # whole pack (it ignores `--filter`), once, stripped of colour; each
-    # host's declared cases are then looked up under its list.
     $registry = Get-Content (Join-Path $repoRoot "proofs.json") -Raw | ConvertFrom-Json
-    $listed = (& dotnet $dll --list-tests 2>&1 | ForEach-Object { [regex]::Replace("$_", "\x1b\[[0-9;]*[A-Za-z]", "") }) |
-        Where-Object { $_ -match '^N ' } | ForEach-Object { $_.Substring(2) }
-    if (-not $listed) { Fail "could not list the Platform pack's tests; the registry floor has nothing to check against." }
+
+    # Phase 1194 split the Platform family into packs, so a family's host
+    # file is compiled by whichever pack claims it: the Phase 787 oracle
+    # is in ToolUp.Platform.Tests.Remoting, the tool gate's stays in
+    # ToolUp.Platform.Tests. The pack is read from the project that
+    # compiles the host file proofs.json records (`evidence.host`), and
+    # its Expecto root is read from its own listing, so a later move
+    # needs no edit here. Each pack is built and listed once.
+    $packProjects = Get-ChildItem (Join-Path $repoRoot "src") -Directory -Filter "ToolUp.Platform.Tests*" |
+        ForEach-Object { Get-ChildItem $_.FullName -Filter "*.fsproj" }
+    $listings = @{}
+    function Get-PackListing {
+        param([IO.FileInfo] $Project)
+        if (-not $listings.ContainsKey($Project.FullName)) {
+            & dotnet build $Project.FullName --nologo -v q
+            if ($LASTEXITCODE -ne 0) { Fail "$($Project.BaseName) did not build (exit $LASTEXITCODE)." }
+            $dll = Join-Path $Project.DirectoryName "bin/Debug/net10.0/$($Project.BaseName).dll"
+            if (-not (Test-Path $dll)) { Fail "no test assembly at $dll." }
+            $names = (& dotnet $dll --list-tests 2>&1 | ForEach-Object { [regex]::Replace("$_", "\x1b\[[0-9;]*[A-Za-z]", "") }) |
+                Where-Object { $_ -match '^N ' } | ForEach-Object { $_.Substring(2) }
+            if (-not $names) { Fail "could not list $($Project.BaseName)'s tests; the registry floor has nothing to check against." }
+            $listings[$Project.FullName] = @{ Dll = $dll; Names = @($names) }
+        }
+        return $listings[$Project.FullName]
+    }
 
     foreach ($module in $modules) {
         Write-Host "    --- $($module.Name) over $($module.HostSubject)"
-
         $cases = Get-RegistryCases $registry $module.HostList
         if ($cases.Count -eq 0) { Fail "proofs.json names no tested case under the list `"$($module.HostList)`"; a host with no registered cases has no floor and cannot be trusted green." }
-
-        $underList = $listed | Where-Object { $_.StartsWith($module.HostList + ".") }
+        $hostFiles = Get-RegistryHosts $registry $module.HostList
+        if ($hostFiles.Count -eq 0) { Fail "proofs.json names no host file under the list `"$($module.HostList)`"; step 7 cannot tell which pack runs it." }
+        $project = $packProjects | Where-Object {
+            $text = Get-Content $_.FullName -Raw
+            @($hostFiles | Where-Object { $text -match ('<Compile Include="[^"]*[\\/]' + [regex]::Escape($_) + '"') }).Count -gt 0
+        } | Select-Object -First 1
+        if (-not $project) { Fail "no pack under src/ToolUp.Platform.Tests* compiles $($hostFiles -join ' or '), the host proofs.json records under `"$($module.HostList)`"." }
+        $listing = Get-PackListing $project
+        $dll = $listing.Dll
+        $tail = $module.HostList.Substring("ToolUp.Platform.Tests.".Length)
+        $underList = $listing.Names | Where-Object { $_.Contains("." + $tail + ".") }
+        if (-not $underList) { Fail "$($project.BaseName) lists no test under a list named `"$tail`", which proofs.json records as the $($module.Name) host." }
+        $first = $underList | Select-Object -First 1
+        $listPath = $first.Substring(0, $first.IndexOf("." + $tail + ".") + 1 + $tail.Length)
+        Write-Host "    host: $($project.BaseName) - $listPath"
         foreach ($case in $cases) {
             if (-not ($underList | Where-Object { $_.EndsWith("." + $case) })) {
                 Fail "the $($module.Name) differential host no longer runs `"$case`", which proofs.json records as evidence under `"$($module.HostList)`". A case that stops running is a claim that failed: restore it, or retire the claim in the registry in the same commit."
             }
         }
 
-        $output = & dotnet $dll --filter $module.HostList 2>&1
+        $output = & dotnet $dll --filter $listPath 2>&1
         $exit = $LASTEXITCODE
         $output | ForEach-Object { Write-Host "    $_" }
 
