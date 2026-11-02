@@ -576,6 +576,7 @@
         <Compile Include="Server\BlobXmlRepository.fs" />
     </ItemGroup>
     <ItemGroup>
+        <!-- 1193 part: Config: config resolution and the env binder, the config store, feature flags, migrations and the config validators -->
         <Compile Include="Server\Config\ConfigResolution.fs" />
         <!-- The listen-address resolution and its preflight.
              Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
@@ -598,9 +599,140 @@
         <Compile Include="Server\ConfigResolver.fs" />
         <Compile Include="Server\Infra\ConsoleLogger.fs" />
         <Compile Include="Server\Api.fs" />
+        <Compile Include="Server\Notifications\NotificationChannel.fs" />
+        <!-- Fire-and-forget starts that catch, log and are drained
+             at stop, and the observed start of a
+             fire-and-forget write with its warning. Depends only on Core
+             (ILogger, ProviderExceptions) and ASP.NET Core's HttpContext; before
+             its first user (the SSE mismatch audit below). -->
+        <Compile Include="Server\Background.fs" />
+        <Compile Include="Auth\IdentitySanitiser.fs" />
+        <Compile Include="Auth\HeaderAuthProvider.fs" />
+        <!-- `BlobStorage.fromEnv` (env-var-driven dispatch).
+             Module name is `BlobStorageEnv` because `BlobStorage` is
+             reserved in Core for the interface module. -->
+        <Compile Include="Server\Infra\BlobStorageFromEnv.fs" />
+        <!-- `EmbeddingProviderEnv.fromEnv` (env-var-driven
+             embedding-provider selection). Module name is
+             `EmbeddingProviderEnv` because `IEmbeddingProvider` is
+             reserved for the interface module compiled above. -->
+        <Compile Include="Server\Infra\EmbeddingProviderFromEnv.fs" />
+        <!-- Mapping dry-run validation seam + default BCL-only
+             validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
+        <Compile Include="Server\IMappingDryRunValidator.fs" />
+        <Compile Include="Server\MappingDryRunValidator.fs" />
+        <Compile Include="Server\ResultStore.fs" />
+        <Compile Include="Server\Infra\FileSecretStore.fs" />
+        <Compile Include="Server\Infra\EncryptedSecretStore.fs" />
+        <!-- `SecretStore.fromEnv` (env-var-driven dispatch
+             with cloud-companion resolver list). -->
+        <Compile Include="Server\Infra\SecretStoreFromEnv.fs" />
+        <Compile Include="Server\ConversationStore.fs" />
+        <Compile Include="Server\Providers\ProviderOAuthConnect.fs" />
+        <Compile Include="Server\PerScopeKeyResolver.fs" />
+        <Compile Include="Server\LocalStorageEncryptionValidator.fs" />
+        <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />
+        <Compile Include="Server\KeyDestroyAckCoverageValidator.fs" />
+        <Compile Include="Server\ConfigValidator.fs" />
+        <Compile Include="Server\BlobStorageSelectionValidator.fs" />
+        <Compile Include="Server\ServiceStatusBoardDepsValidator.fs" />
+        <Compile Include="Server\UnknownConfigKeyValidator.fs" />
+        <!-- The value-level companion to the name-level
+             guard above: TOOLUP_TRACE_CATEGORIES values that no composed
+             emission site declared. Anywhere after Server\Logger.fs
+             (the registry it reads) and before
+             Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="Server\TraceCategoriesValidator.fs" />
+        <!-- Preflight guard + /dev/inspect panel over the
+             composed IEventStore decorator chain. Reads only Platform.Core's
+             EventStoreChain (the position model) and ConfigValidation, never
+             the concrete decorators, so its position is set only by its
+             registrar: anywhere before Compose/ComposeConfigValidators.fs and
+             Compose/ComposeRuntimeServices.fs. -->
+        <Compile Include="Server\EventStoreChainValidator.fs" />
+        <Compile Include="Server\SurfaceCoherenceValidator.fs" />
+        <Compile Include="Server\SmokeTestHandler.fs" />
+        <Compile Include="Server\IUserClaims.fs" />
+        <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />
+        <Compile Include="Server\OAuthSecretEncryptionModeValidator.fs" />
+        <Compile Include="Server\SecretStoreAtRestPostureValidator.fs" />
+        <Compile Include="Server\PublicBaseUrlFormatValidator.fs" />
+        <Compile Include="Server\OAuthStateStoreInstanceValidator.fs" />
+        <Compile Include="Server\RateLimitModeValidator.fs" />
+        <Compile Include="Server\RateLimitConfigValidator.fs" />
+        <Compile Include="Server\RateLimiterInstanceValidator.fs" />
+        <Compile Include="Server\IdempotencyStoreInstanceValidator.fs" />
+        <Compile Include="Server\StaticPathBehaviourValidator.fs" />
+        <Compile Include="Server\MaxRequestBodyBytesValidator.fs" />
+        <!-- The format/range gate over every registered
+             IntKey, and the unbounded-event-retention warning. Both read
+             only the config registry and the resolution seam, so
+             anywhere before Compose/ComposeConfigValidators.fs, which
+             registers them. -->
+        <Compile Include="Server\IntConfigKeyValidator.fs" />
+        <Compile Include="Server\EventStoreRetentionValidator.fs" />
+        <Compile Include="Server\CorsConfigValidator.fs" />
+        <Compile Include="Server\LocalSecretFilePermissionsValidator.fs" />
+        <Compile Include="Server\OAuthFlowValidator.fs" />
+        <Compile Include="Server\Teams\TeamManagement.fs" />
+        <Compile Include="Server\MaintenanceApiHandler.fs" />
+        <!-- OAuth 1.0a three-legged flow routes. Placed here
+             (not with the other OAuth1a substrate files) because it depends
+             on the later Giraffe / TeamManagement / AccessContext surface. -->
+        <Compile Include="Server\OAuth1aFlowHandler.fs" />
+        <!-- Module data-migration substrate (server half):
+             chain resolution + registry, the blob-backed status store, the
+             runner + its startup sweep, and the IDataMigrationApi handler.
+             Placed after Teams\TeamManagement.fs because the sweep enumerates
+             scopes via ITeamStore and the handler reuses the Owner/Admin
+             role gate; before BuildRouteHandlers mounts the route and
+             ComposeStores registers the singletons. -->
+        <Compile Include="Server\MigrationRegistry.fs" />
+        <Compile Include="Server\MigrationStatusStore.fs" />
+        <Compile Include="Server\MigrationRunner.fs" />
+        <Compile Include="Server\MigrationApiHandler.fs" />
+        <Compile Include="Server\Config\IConfigStore.fs" />
+        <Compile Include="Server\Config\ConfigStore.fs" />
+        <!-- Config schema-evolution server half: pure chain
+             resolution, the declared registry, the per-process drift tracker,
+             and the IConfigStore decorator that applies all three on the read
+             path. After ConfigStore.fs (reuses its projectToRecord /
+             tryProjectExact / toRawMap so the decorator projects a migrated
+             map through exactly the same semantics). -->
+        <Compile Include="Server\Config\ConfigMigrationRegistry.fs" />
+        <!-- The "Pending Config Migrations" /dev/inspect panel
+             (gap audit Gap 7). After ConfigMigrationRegistry.fs, whose
+             support record it reads. -->
+        <Compile Include="Server\Config\ConfigMigrationDevDiagnostics.fs" />
+        <Compile Include="Server\Config\ConfigHandler.fs" />
+        <!-- IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
+             gated writes). After WebhookApiHandler (same handler shape) +
+             TeamManagement (the role gate); before BuildRouteHandlers mounts
+             it. -->
+        <Compile Include="Server\UserSchemaApiHandler.fs" />
+        <Compile Include="Server\IFeatureFlagStore.fs" />
+        <!-- Read-only external flag-resolution seam. -->
+        <Compile Include="Server\IFlagSource.fs" />
+        <Compile Include="Server\FeatureFlagStore.fs" />
+        <!-- Additive flag-source registry consumed by
+             FlagEvaluator.createWithSources. -->
+        <Compile Include="Server\FeatureFlagSources.fs" />
+        <Compile Include="Server\FlagEvaluator.fs" />
+        <Compile Include="Server\FeatureFlagHandler.fs" />
+        <!-- credential-suffix allowlist, extracted at the third
+             consumer (ConfigDriftDetector, DiagnosticBundleHandler,
+             ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
+             only — so it can sit ahead of every surface that redacts. -->
+        <Compile Include="Server\RedactionAllowlist.fs" />
+        <Compile Include="Server\ConfigDriftDetector.fs" />
+        <!-- DataProtection key-ring backend preflight. After
+             BlobXmlRepository.fs (shares its BlobDpKeyRing constants). -->
+        <Compile Include="Server\DataProtectionBackendValidator.fs" />
+        <Compile Include="Server\LocaleResolver.fs" />
+    </ItemGroup>
+    <ItemGroup>
         <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
         <Compile Include="Server\SseTraceContributor.fs" />
-        <Compile Include="Server\Notifications\NotificationChannel.fs" />
         <!-- In-memory presence channel (single-instance default). -->
         <Compile Include="Server\Notifications\PresenceChannel.fs" />
         <!-- Presence tracker + advisory soft-lock store
@@ -639,12 +771,6 @@
              before WhatsAppSendPolicyFilter.fs, which consults it. -->
         <Compile Include="Server\IWhatsAppTemplateRegistry.fs" />
         <Compile Include="Server\WhatsAppTemplateRegistry.fs" />
-        <!-- Fire-and-forget starts that catch, log and are drained
-             at stop, and the observed start of a
-             fire-and-forget write with its warning. Depends only on Core
-             (ILogger, ProviderExceptions) and ASP.NET Core's HttpContext; before
-             its first user (the SSE mismatch audit below). -->
-        <Compile Include="Server\Background.fs" />
         <!-- Shared SSE scope resolution. One resolution path
              (principal-wins + SseAuthMode-gated fallback + mismatch audit)
              consumed by both NotificationHandler below and
@@ -668,30 +794,14 @@
              precede every `IAuthProvider` impl so they can compile against
              the shared boxing path. -->
         <Compile Include="Server\Auth\RequestContext.fs" />
-        <Compile Include="Auth\IdentitySanitiser.fs" />
-        <Compile Include="Auth\HeaderAuthProvider.fs" />
         <Compile Include="Auth\StaticJwtAuthProvider.fs" />
         <!-- `AuthProvider.fromEnv` (env-var-driven dispatch). -->
         <Compile Include="Auth\AuthProviderFromEnv.fs" />
-        <!-- `BlobStorage.fromEnv` (env-var-driven dispatch).
-             Module name is `BlobStorageEnv` because `BlobStorage` is
-             reserved in Core for the interface module. -->
-        <Compile Include="Server\Infra\BlobStorageFromEnv.fs" />
-        <!-- `EmbeddingProviderEnv.fromEnv` (env-var-driven
-             embedding-provider selection). Module name is
-             `EmbeddingProviderEnv` because `IEmbeddingProvider` is
-             reserved for the interface module compiled above. -->
-        <Compile Include="Server\Infra\EmbeddingProviderFromEnv.fs" />
-        <!-- Mapping dry-run validation seam + default BCL-only
-             validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
-        <Compile Include="Server\IMappingDryRunValidator.fs" />
-        <Compile Include="Server\MappingDryRunValidator.fs" />
         <!-- The SDK-default IExternalContactStore, over
              IEntityStore for the versioning, the dedupe indexes and the
              per-scope container. After EntityStore.fs; before
              ComposeStores.fs registers it. -->
         <Compile Include="Server\ExternalContactStore.fs" />
-        <Compile Include="Server\ResultStore.fs" />
         <!-- SDK-wide cross-instance lease primitive
              (IDistributedLock + Lease + the in-process default). Sits
              before every consumer: the job scheduler's per-JobId dispatch
@@ -801,11 +911,6 @@
              infra files so all transitive dependencies have already loaded). -->
         <Compile Include="Server\InProcessOAuthTokenRefresher.fs" />
         <Compile Include="Server\OAuthRefreshJobHandler.fs" />
-        <Compile Include="Server\Infra\FileSecretStore.fs" />
-        <Compile Include="Server\Infra\EncryptedSecretStore.fs" />
-        <!-- `SecretStore.fromEnv` (env-var-driven dispatch
-             with cloud-companion resolver list). -->
-        <Compile Include="Server\Infra\SecretStoreFromEnv.fs" />
         <!-- Bounded local spill for DegradeToFile audit-write
              failure policy; before AuditLog.fs (the log spills into it) and
              the replay service (which drains it back into IEventStore). -->
@@ -909,7 +1014,6 @@
              preflight validator into the first-party set. -->
         <Compile Include="Server\DataObjectOrphanSweepJobHandler.fs" />
         <Compile Include="Server\LineageStoreErasureHandler.fs" />
-        <Compile Include="Server\ConversationStore.fs" />
         <Compile Include="Server\ConversationEraseHandler.fs" />
         <Compile Include="Server\ConversationExporter.fs" />
         <Compile Include="Server\Infra\PlatformAdminStore.fs" />
@@ -919,27 +1023,19 @@
              adjacent, mirroring the share-token pair above. -->
         <Compile Include="Server\IServiceAccountStore.fs" />
         <Compile Include="Server\ServiceAccountStore.fs" />
-        <Compile Include="Server\Providers\ProviderOAuthConnect.fs" />
         <Compile Include="Server\Providers\ProviderOAuthRefreshJobHandler.fs" />
         <Compile Include="Server\Providers\ProviderStatusProbeJobHandler.fs" />
         <Compile Include="Server\IAuditSink.fs" />
         <Compile Include="Server\AuditReplicatorTypes.fs" />
         <Compile Include="Server\InMemoryAuditSink.fs" />
         <Compile Include="Server\AuditReplicator.fs" />
-        <Compile Include="Server\PerScopeKeyResolver.fs" />
         <!-- The per-source-IP failed-token throttle, lifted out
              of EncryptionAdminHandler so the window transition is one
              atomic step against a single clock snapshot (and testable
              without a wall clock). Must precede its consumers. -->
         <Compile Include="Server\TokenAttemptThrottle.fs" />
         <Compile Include="Server\EncryptionAdminHandler.fs" />
-        <Compile Include="Server\LocalStorageEncryptionValidator.fs" />
         <Compile Include="Server\AdminTokenValidator.fs" />
-        <Compile Include="Server\PerScopeKeyResolverDistributedValidator.fs" />
-        <Compile Include="Server\KeyDestroyAckCoverageValidator.fs" />
-        <Compile Include="Server\ConfigValidator.fs" />
-        <Compile Include="Server\BlobStorageSelectionValidator.fs" />
-        <Compile Include="Server\ServiceStatusBoardDepsValidator.fs" />
         <Compile Include="Server\OidcConfigCompletenessValidator.fs" />
         <Compile Include="Server\OidcAudienceBindingValidator.fs" />
         <Compile Include="Server\OidcClaimMappingAdvisoryValidator.fs" />
@@ -949,27 +1045,10 @@
              before Compose/ComposeConfigValidators.fs, which registers it. -->
         <Compile Include="Server\DirectAddIdentityProofValidator.fs" />
         <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
-        <Compile Include="Server\UnknownConfigKeyValidator.fs" />
-        <!-- The value-level companion to the name-level
-             guard above: TOOLUP_TRACE_CATEGORIES values that no composed
-             emission site declared. Anywhere after Server\Logger.fs
-             (the registry it reads) and before
-             Compose/ComposeConfigValidators.fs, which registers it. -->
-        <Compile Include="Server\TraceCategoriesValidator.fs" />
-        <!-- Preflight guard + /dev/inspect panel over the
-             composed IEventStore decorator chain. Reads only Platform.Core's
-             EventStoreChain (the position model) and ConfigValidation, never
-             the concrete decorators, so its position is set only by its
-             registrar: anywhere before Compose/ComposeConfigValidators.fs and
-             Compose/ComposeRuntimeServices.fs. -->
-        <Compile Include="Server\EventStoreChainValidator.fs" />
         <Compile Include="Server\CsrfDefaultModeValidator.fs" />
         <Compile Include="Server\AuditLogModeValidator.fs" />
-        <Compile Include="Server\SurfaceCoherenceValidator.fs" />
         <Compile Include="Server\AuditLogHealthCheck.fs" />
         <Compile Include="Server\SmokeTests.fs" />
-        <Compile Include="Server\SmokeTestHandler.fs" />
-        <Compile Include="Server\IUserClaims.fs" />
         <Compile Include="Server\Premium\PremiumGate.fs" />
         <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
@@ -985,22 +1064,13 @@
              reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
         <Compile Include="Server\AdAnalyticsApiHandler.fs" />
         <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
-        <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />
-        <Compile Include="Server\OAuthSecretEncryptionModeValidator.fs" />
-        <Compile Include="Server\SecretStoreAtRestPostureValidator.fs" />
         <Compile Include="Server\ShareTokenSigningKeyProvenanceValidator.fs" />
         <Compile Include="Server\JobSchedulerInstanceValidator.fs" />
         <Compile Include="Server\DeployPlaneDepsValidator.fs" />
         <Compile Include="Server\SignedExportDepsValidator.fs" />
-        <Compile Include="Server\PublicBaseUrlFormatValidator.fs" />
-        <Compile Include="Server\OAuthStateStoreInstanceValidator.fs" />
-        <Compile Include="Server\RateLimitModeValidator.fs" />
-        <Compile Include="Server\RateLimitConfigValidator.fs" />
-        <Compile Include="Server\RateLimiterInstanceValidator.fs" />
         <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
         <Compile Include="Server\MultiInstanceAdminCoherenceValidator.fs" />
         <Compile Include="Server\Files\SessionFileStoreInstanceValidator.fs" />
-        <Compile Include="Server\IdempotencyStoreInstanceValidator.fs" />
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />
         <Compile Include="Server\ICspContributor.fs" />
@@ -1014,7 +1084,6 @@
         <Compile Include="Server\SecurityHeadersValidator.fs" />
         <Compile Include="Server\ForwardedHeadersTrustValidator.fs" />
         <Compile Include="Server\CsrfHardeningValidator.fs" />
-        <Compile Include="Server\StaticPathBehaviourValidator.fs" />
         <Compile Include="Server\PeerRouteRegistry.fs" />
         <Compile Include="Server\PeerBearerAuthMiddleware.fs" />
         <Compile Include="Server\ShareTokenAuthMiddleware.fs" />
@@ -1025,17 +1094,6 @@
         <Compile Include="Server\ServiceAccountTokenHandler.fs" />
         <Compile Include="Server\SurfaceEnforcementMiddleware.fs" />
         <Compile Include="Server\PeerBearerConfigValidator.fs" />
-        <Compile Include="Server\MaxRequestBodyBytesValidator.fs" />
-        <!-- The format/range gate over every registered
-             IntKey, and the unbounded-event-retention warning. Both read
-             only the config registry and the resolution seam, so
-             anywhere before Compose/ComposeConfigValidators.fs, which
-             registers them. -->
-        <Compile Include="Server\IntConfigKeyValidator.fs" />
-        <Compile Include="Server\EventStoreRetentionValidator.fs" />
-        <Compile Include="Server\CorsConfigValidator.fs" />
-        <Compile Include="Server\LocalSecretFilePermissionsValidator.fs" />
-        <Compile Include="Server\OAuthFlowValidator.fs" />
         <Compile Include="Server\ConfigValidatorAggregator.fs" />
         <!-- Internet-readiness secure-default scorecard: a
              read-side projection over the aggregated preflight outcomes
@@ -1053,7 +1111,6 @@
              JS-readable storage. Mounted by BuildRouteHandlers when
              ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance. -->
         <Compile Include="Server\AuthSessionHandler.fs" />
-        <Compile Include="Server\Teams\TeamManagement.fs" />
         <Compile Include="Server\Teams\MembershipDoctor.fs" />
         <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />
         <!-- The ETag-based multi-instance default over the
@@ -1079,24 +1136,8 @@
              ServerConfig.ModelExecution mode. Placed with the API handlers
              (needs TeamManagement's role gate). -->
         <Compile Include="Server\ModelExecutionApi.fs" />
-        <Compile Include="Server\MaintenanceApiHandler.fs" />
         <Compile Include="Server\OAuthFlowHandler.fs" />
-        <!-- OAuth 1.0a three-legged flow routes. Placed here
-             (not with the other OAuth1a substrate files) because it depends
-             on the later Giraffe / TeamManagement / AccessContext surface. -->
-        <Compile Include="Server\OAuth1aFlowHandler.fs" />
         <Compile Include="Server\DataIngestionApiHandler.fs" />
-        <!-- Module data-migration substrate (server half):
-             chain resolution + registry, the blob-backed status store, the
-             runner + its startup sweep, and the IDataMigrationApi handler.
-             Placed after Teams\TeamManagement.fs because the sweep enumerates
-             scopes via ITeamStore and the handler reuses the Owner/Admin
-             role gate; before BuildRouteHandlers mounts the route and
-             ComposeStores registers the singletons. -->
-        <Compile Include="Server\MigrationRegistry.fs" />
-        <Compile Include="Server\MigrationStatusStore.fs" />
-        <Compile Include="Server\MigrationRunner.fs" />
-        <Compile Include="Server\MigrationApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
         <!-- In-platform publication reader grants. -->
         <Compile Include="Server\Scope\PublicationReaderGrantStore.fs" />
@@ -1153,19 +1194,6 @@
              (composes beside it) + AuditLog.fs (the HostActionDispatched
              codec + IAuditLog it writes through). -->
         <Compile Include="Server\Scope\HostActionAuditHook.fs" />
-        <Compile Include="Server\Config\IConfigStore.fs" />
-        <Compile Include="Server\Config\ConfigStore.fs" />
-        <!-- Config schema-evolution server half: pure chain
-             resolution, the declared registry, the per-process drift tracker,
-             and the IConfigStore decorator that applies all three on the read
-             path. After ConfigStore.fs (reuses its projectToRecord /
-             tryProjectExact / toRawMap so the decorator projects a migrated
-             map through exactly the same semantics). -->
-        <Compile Include="Server\Config\ConfigMigrationRegistry.fs" />
-        <!-- The "Pending Config Migrations" /dev/inspect panel
-             (gap audit Gap 7). After ConfigMigrationRegistry.fs, whose
-             support record it reads. -->
-        <Compile Include="Server\Config\ConfigMigrationDevDiagnostics.fs" />
         <Compile Include="Server\ConfigStoreErasureHandler.fs" />
         <Compile Include="Server\TeamQuotaPolicy.fs" />
         <Compile Include="Server\UsageQueryApi.fs" />
@@ -1194,7 +1222,6 @@
              hashRecipient); before the Compose/ family that wires it. -->
         <Compile Include="Server\WhatsAppSendPolicyFilter.fs" />
         <Compile Include="Server\DigestJobHandler.fs" />
-        <Compile Include="Server\Config\ConfigHandler.fs" />
         <Compile Include="Server\IWebhookRegistry.fs" />
         <Compile Include="Server\WebhookRegistry.fs" />
         <Compile Include="Server\WebhookSecretMigration.fs" />
@@ -1227,27 +1254,13 @@
              Mounted by Compose/BuildRouteHandlers.fs only when the
              ExternalContactStore mode opts in. -->
         <Compile Include="Server\ExternalContactApiHandler.fs" />
-        <!-- IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
-             gated writes). After WebhookApiHandler (same handler shape) +
-             TeamManagement (the role gate); before BuildRouteHandlers mounts
-             it. -->
-        <Compile Include="Server\UserSchemaApiHandler.fs" />
         <!-- IPresenceApi Remoting handler over the
              substrate. After IPresenceTracker.fs / IEntityLockStore.fs (the
              services it resolves); before BuildRouteHandlers mounts it. -->
         <Compile Include="Server\PresenceApiHandler.fs" />
-        <Compile Include="Server\IFeatureFlagStore.fs" />
-        <!-- Read-only external flag-resolution seam. -->
-        <Compile Include="Server\IFlagSource.fs" />
-        <Compile Include="Server\FeatureFlagStore.fs" />
         <Compile Include="Server\FeatureFlagStoreErasureHandler.fs" />
         <Compile Include="Server\BlobStorageErasureHandler.fs" />
         <Compile Include="Server\VectorStoreErasureHandler.fs" />
-        <!-- Additive flag-source registry consumed by
-             FlagEvaluator.createWithSources. -->
-        <Compile Include="Server\FeatureFlagSources.fs" />
-        <Compile Include="Server\FlagEvaluator.fs" />
-        <Compile Include="Server\FeatureFlagHandler.fs" />
         <Compile Include="Server\ModuleVisibilityStore.fs" />
         <Compile Include="Server\ModuleVisibilityResolver.fs" />
         <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
@@ -1323,12 +1336,6 @@
              factory. After the report (it produces the report's EgressIntegrity) and before
              Compose/ComposeRuntimeServices.fs (which registers the named client). -->
         <Compile Include="Server\EgressPolicyHandler.fs" />
-        <!-- credential-suffix allowlist, extracted at the third
-             consumer (ConfigDriftDetector, DiagnosticBundleHandler,
-             ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
-             only — so it can sit ahead of every surface that redacts. -->
-        <Compile Include="Server\RedactionAllowlist.fs" />
-        <Compile Include="Server\ConfigDriftDetector.fs" />
         <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <!-- /dev/auth-denials rollup (reads AuthorizationDenied
              via IAuditLog, caller-scope only; flushes the AuthAuditHook
@@ -1380,10 +1387,6 @@
              to the registered IUserDirectory companion; short-circuits
              to Ok [] when no companion is wired. -->
         <Compile Include="Server\UserDirectoryApiHandler.fs" />
-        <!-- DataProtection key-ring backend preflight. After
-             BlobXmlRepository.fs (shares its BlobDpKeyRing constants). -->
-        <Compile Include="Server\DataProtectionBackendValidator.fs" />
-        <Compile Include="Server\LocaleResolver.fs" />
         <!-- Reference-app probe + validator list helpers. -->
         <Compile Include="Server\HealthChecksFromEnv.fs" />
         <Compile Include="Server\ConfigValidatorsFromEnv.fs" />
