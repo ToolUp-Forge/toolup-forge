@@ -223,7 +223,6 @@
         <Compile Include="InProcess\JobStoreTests.fs" />
         <Compile Include="InProcess\CronExpressionTests.fs" />
         <Compile Include="InProcess\JobSchedulerTests.fs" />
-        <Compile Include="InProcess\QuartzJobSchedulerTests.fs" />
         <Compile Include="InProcess\ModuleQueryBusTests.fs" />
         <Compile Include="InProcess\InMemoryDataSourceTests.fs" />
         <Compile Include="InProcess\DataIngestorTests.fs" />

@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.QuartzJobSchedulerTests
+module ToolUp.JobSchedulers.Tests.QuartzJobSchedulerTests
 
 open System
 open System.IO

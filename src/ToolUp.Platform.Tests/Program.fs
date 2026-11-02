@@ -143,7 +143,6 @@ let private registeredTests =
         JobStoreTests.tests
         CronExpressionTests.tests
         JobSchedulerTests.tests
-        QuartzJobSchedulerTests.tests
         ScheduledJobDeclarationTests.tests
         ModuleQueryBusTests.tests
         InMemoryDataSourceTests.tests

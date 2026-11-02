@@ -43,6 +43,7 @@
              DeclaredPrincipalResolver over a real team resolver, as the
              Platform pack does for; its constructor is internal. -->
         <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
+        <InternalsVisibleTo Include="ToolUp.JobSchedulers.Tests" />
         <!-- The fact-store migration and report egress packs stand in for the
              scope-resolution middleware through its internal mint, as the
              Platform pack does. -->
