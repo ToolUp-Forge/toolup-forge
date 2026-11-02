@@ -10,7 +10,6 @@ module ToolUp.Platform.Tests.Remoting.ReadPolicyAttributeTests
 open Expecto
 open ToolUp.Remoting.Client
 open ToolUp.Platform.Tests.Remoting.ReadPolicyFixture
-open ToolUp.Platform.Infra
 
 type private NothingDeclared = {
     Read: string -> Async<int>

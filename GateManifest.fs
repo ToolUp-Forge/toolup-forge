@@ -276,6 +276,23 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
         ([ Input.Tree; Input.Git; Input.Docker ] @ platformEnv)
     |> budget (minutes 15.)
+    // The Platform pack partitioned by server part: each part's pack holds the
+    // lists whose test files reach that part and no later one, and references
+    // only the part's closure (docs/migrations/1194-platform-pack-partition.md).
+    pack
+        "Platform.Remoting"
+        "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj"
+        ([ Input.Tree; Input.Git; Input.Docker ]
+         @ env [
+             "TOOLUP_MODEL_EXECUTION_CORPUS"
+             "TOOLUP_APPROVE_BRANDKIT"
+             "TOOLUP_REGEN_ELMISH_PROOF_CORPUS"
+             "TOOLUP_REGEN_LOCALIZATION_SKELETON"
+             "TOOLUP_REGEN_PLATFORM_DECODERS"
+             "TOOLUP_REGEN_PLATFORM_JSON_DECODERS"
+             "TOOLUP_TEST_AGE_CONNSTRING"
+         ])
+    |> budget (minutes 2.)
     pack "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj" [ Input.Tree ]
     pack "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj" [ Input.Tree ]
     // Each per-provider arm runs when its key is set and reports Pending

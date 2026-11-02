@@ -5,7 +5,6 @@ open Expecto
 open Feliz
 open ToolUp.Platform
 open Toolup.Samples.ToyTreeBinding
-open ToolUp.Platform.Compose
 
 // ─── Phase 267 — multi-region / PageContent hosted-tree composition ────
 //

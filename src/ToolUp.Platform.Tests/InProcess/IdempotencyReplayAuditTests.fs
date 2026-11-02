@@ -12,7 +12,6 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
-open ToolUp.Platform.Infra
 
 // ─── Phase 69f.E + 69h.tail Task C — idempotency-replay audit (real HTTP) ──
 //

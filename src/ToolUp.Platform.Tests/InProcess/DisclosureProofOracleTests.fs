@@ -8,8 +8,6 @@ open System.Numerics
 open Expecto
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 790 — the proved fold as oracle ───────────────────────────
 //

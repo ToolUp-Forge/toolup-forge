@@ -9,9 +9,6 @@ open Neo4j.Driver
 open ToolUp.Graph
 open ToolUp.Graph.Neo4j
 open ToolUp.Platform.Tests.Contracts
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 68b — ToolUp.Graph.Neo4j conformance + translation unit pack ───────
 //

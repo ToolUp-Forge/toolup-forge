@@ -22,7 +22,6 @@ module ToolUp.Platform.Tests.InProcess.SyntheticClientToolAuthorizerTests
 open Expecto
 open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts
-open ToolUp.Platform.Audit
 
 type private SyntheticAuthorizer(denyTool: string) =
     interface IClientToolAuthorizer with

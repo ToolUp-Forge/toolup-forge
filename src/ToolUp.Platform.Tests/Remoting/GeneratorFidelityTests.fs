@@ -9,9 +9,6 @@ open ToolUp.Platform
 open ToolUp.Remoting
 open ToolUp.Remoting.Generator
 open Microsoft.FSharp.Reflection
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // =============================================================================
 // Phase 69k.I — the generator's contract

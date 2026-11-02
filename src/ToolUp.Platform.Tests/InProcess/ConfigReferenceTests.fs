@@ -7,8 +7,6 @@ open System.Text.Json
 open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Platform.ConfigKeys
-open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Phase 214 — config-key registry coverage + reference-doc golden ──
 //

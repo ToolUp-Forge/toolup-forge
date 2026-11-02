@@ -16,7 +16,6 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
-open ToolUp.Platform.Infra
 
 // ─── Phase 855.B / 855.D — the remoting batch route ───────────────────
 //

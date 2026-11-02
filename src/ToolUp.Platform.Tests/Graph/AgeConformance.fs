@@ -9,9 +9,6 @@ open ToolUp.Graph
 open ToolUp.Graph.AGE
 open ToolUp.Graph.AGE.CypherToAgeSql
 open ToolUp.Platform.Tests.Contracts
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 68c — ToolUp.Graph.AGE conformance + translation unit pack ─────────
 //

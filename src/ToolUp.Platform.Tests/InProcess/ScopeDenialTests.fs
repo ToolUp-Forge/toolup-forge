@@ -3,7 +3,6 @@ module ToolUp.Platform.Tests.InProcess.ScopeDenialTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Remoting.Client
-open ToolUp.Platform.Infra
 
 // ─── Phase 227 (task #4) — typed scope-denial classification pack ────
 //

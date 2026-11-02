@@ -5,7 +5,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Consent
 open ToolUp.Platform.Tests.Contracts
-open ToolUp.Platform.Compose
 
 // ─── Phase 59 — IConsentProvider in-process contract binding ─────────
 //

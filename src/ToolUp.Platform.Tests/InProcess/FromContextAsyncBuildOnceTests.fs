@@ -2,7 +2,6 @@ module ToolUp.Platform.Tests.InProcess.FromContextAsyncBuildOnceTests
 
 open System.IO
 open Expecto
-open ToolUp.Platform.Compose
 
 // ─── Phase 69n — fromContextAsync build-once dispatcher table ──
 //
