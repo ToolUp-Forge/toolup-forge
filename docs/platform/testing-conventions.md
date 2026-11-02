@@ -188,7 +188,7 @@ Three packs (`ToolUp.Stripe.Tests`, `ToolUp.Voice.Tests`, `ToolUp.Cloud.Parity.T
 
 ## A companion's tests live in its own pack
 
-A case belongs in a **companion pack** (`src/<Family>/Tests/`, one per companion family of `version-groups.json`) when
+A case belongs in a **companion pack** (`src/<Family>/ToolUp.<Family>.Tests/`, one per companion family of `version-groups.json`) when
 the companion's own assembly is what it exercises. Examples are a sink's wire format, a backend's binding of the SDK
 contract pack, a provider's configuration parsing, and a live arm against the real service. A case stays in
 **`ToolUp.Platform.Tests`** when its subject is the core. That covers the SDK's contract packs themselves (the laws, under
@@ -212,6 +212,10 @@ Mechanics, all held by a gate:
   gate-manifest row declares the variable, because `VerifyAll` clears every other row's variables for each pack.
 - **One row per pack** in `GateManifest.fs`. `Gate --render` moves `EXPECTED_PACKS` and the CI table, and `GateReconcile`
   is red for a `*.Tests.fsproj` with no row.
+- **The pack's directory ends in `.Tests`** (`src/<Family>/ToolUp.<Family>.Tests/`). The tree scans that hold production
+  code to a rule exclude test code by that path segment: the analyzer inventory's `segmentSuffix` and
+  `VerifyScopeLiterals`. A pack under a directory named plain `Tests` reads to them as production code, and both legs
+  go red on the moved fixtures.
 
 Which files have moved, and which are still in the Platform pack and why:
 [`docs/migrations/1197-companion-test-packs.md`](../migrations/1197-companion-test-packs.md).

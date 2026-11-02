@@ -33,15 +33,15 @@ The destination says one of three things:
 | `InProcess/GroundedNarrativeTests.fs` | `ai-providers` | 85 | stays: an integration over ArtefactSigning, ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.Facts.Core, ToolUp.Facts.Presentation, ToolUp.Facts.Presentation.Server, ToolUp.Facts.Server, ToolUp.Facts.Shared, ToolUp.RAG.Server, ToolUp.Reporting.Core, ToolUp.Reporting.Server |
 | `InProcess/ProviderOAuthFlowTests.fs` | `ai-providers` | 8 | deferred: family not moved in this phase |
 | `InProcess/AICrossModuleAuditTests.fs` | `audit-sinks` | 33 | stays: an integration over ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server |
-| `InProcess/CefAuditSinkTests.fs` | `audit-sinks` | 31 | moved to `src/AuditSinks/Tests/` |
+| `InProcess/CefAuditSinkTests.fs` | `audit-sinks` | 31 | moved to `src/AuditSinks/ToolUp.AuditSinks.Tests/` |
 | `InProcess/CertificateIssuanceTransparencyTests.fs` | `audit-sinks` | 8 | stays: an integration over ArtefactSigning, ToolUp.Facts.Core, ToolUp.Facts.Server, ToolUp.Facts.Shared |
-| `InProcess/ChainedAuditLedgerTests.fs` | `audit-sinks` | 41 | moved to `src/AuditSinks/Tests/` |
-| `InProcess/DatadogLogsAuditSinkTests.fs` | `audit-sinks` | 0 | moved to `src/AuditSinks/Tests/` |
+| `InProcess/ChainedAuditLedgerTests.fs` | `audit-sinks` | 41 | moved to `src/AuditSinks/ToolUp.AuditSinks.Tests/` |
+| `InProcess/DatadogLogsAuditSinkTests.fs` | `audit-sinks` | 0 | moved to `src/AuditSinks/ToolUp.AuditSinks.Tests/` |
 | `InProcess/DeploymentVerificationReportTests.fs` | `audit-sinks` | 77 | stays: an integration over ToolUp.AI.Server |
 | `InProcess/GroundedAnswerChainJoinTests.fs` | `audit-sinks` | 11 | stays: an integration over ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.Facts.Core, ToolUp.Facts.Server, ToolUp.Facts.Shared |
 | `InProcess/GroundingSigningConvergenceTests.fs` | `audit-sinks` | 9 | stays: an integration over ArtefactSigning, ToolUp.Facts.Core, ToolUp.Facts.Server, ToolUp.Facts.Shared |
-| `InProcess/S3ArchiveAuditSinkTests.fs` | `audit-sinks` | 0 | moved to `src/AuditSinks/Tests/` |
-| `InProcess/SplunkHecAuditSinkTests.fs` | `audit-sinks` | 0 | moved to `src/AuditSinks/Tests/` |
+| `InProcess/S3ArchiveAuditSinkTests.fs` | `audit-sinks` | 0 | moved to `src/AuditSinks/ToolUp.AuditSinks.Tests/` |
+| `InProcess/SplunkHecAuditSinkTests.fs` | `audit-sinks` | 0 | moved to `src/AuditSinks/ToolUp.AuditSinks.Tests/` |
 | `InProcess/AuthProviderTests.fs` | `auth-providers` | 85 | deferred: family not moved in this phase |
 | `InProcess/DirectoryRoleApiGrantTests.fs` | `auth-providers` | 18 | stays: an integration over ToolUp.PublicRendering |
 | `InProcess/FederatedIdentitySanitisationTests.fs` | `auth-providers` | 9 | stays: an integration over InterPlatform |
@@ -79,27 +79,27 @@ The destination says one of three things:
 | `InProcess/HttpTransportBindingTests.fs` | `data-sources` | 0 | deferred: family not moved in this phase |
 | `InProcess/ParquetDatasetCodecTests.fs` | `data-sources` | 8 | deferred: family not moved in this phase |
 | `InProcess/RedisEmbeddingCacheTests.fs` | `embedding-caches` | 47 | stays: an integration over ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.RAG.Server |
-| `InProcess/EmbeddingProviderEnvTests.fs` | `embedding-providers` | 16 | moved to `src/EmbeddingProviders/Tests/` |
-| `InProcess/EmbeddingProviderKeyRotationTests.fs` | `embedding-providers` | 4 | moved to `src/EmbeddingProviders/Tests/` |
+| `InProcess/EmbeddingProviderEnvTests.fs` | `embedding-providers` | 16 | moved to `src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/` |
+| `InProcess/EmbeddingProviderKeyRotationTests.fs` | `embedding-providers` | 4 | moved to `src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/` |
 | `InProcess/HnswFidelityTests.fs` | `embedding-providers`, `vector-stores` | 6 | deferred: family not moved in this phase |
 | `InProcess/IngestionBackpressureTests.fs` | `embedding-providers` | 23 | stays: an integration over ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.RAG.Core, ToolUp.RAG.Server |
 | `InProcess/KnowledgeScopeResetAuditTests.fs` | `embedding-providers` | 4 | stays: an integration over ToolUp.KnowledgeBase.Core, ToolUp.KnowledgeBase.Server, ToolUp.RAG.Core, ToolUp.RAG.Server |
-| `InProcess/LocalEmbeddingHashingTests.fs` | `embedding-providers` | 9 | moved to `src/EmbeddingProviders/Tests/` |
+| `InProcess/LocalEmbeddingHashingTests.fs` | `embedding-providers` | 9 | moved to `src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/` |
 | `InProcess/LocalEmbeddingScopeTests.fs` | `embedding-providers` | 35 | stays: an integration over ToolUp.RAG.Server |
-| `InProcess/Phase971EmbeddingTests.fs` | `embedding-providers` | 2 | moved to `src/EmbeddingProviders/Tests/` |
+| `InProcess/Phase971EmbeddingTests.fs` | `embedding-providers` | 2 | moved to `src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/` |
 | `InProcess/RagConfigValidatorExtensionTests.fs` | `embedding-providers` | 35 | stays: an integration over ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.RAG.Server |
-| `InProcess/PostgresEntityStoreTests.fs` | `entity-stores` | 8 | moved to `src/EntityStores/Tests/` |
+| `InProcess/PostgresEntityStoreTests.fs` | `entity-stores` | 8 | moved to `src/EntityStores/ToolUp.EntityStores.Tests/` |
 | `InProcess/ExperimentSubstrateTests.fs` | `experiments` | 7 | deferred: family not moved in this phase |
 | `InProcess/PostgresFactStoreTests.fs` | `fact-stores` | 35 | stays: an integration over ToolUp.Facts.Core, ToolUp.Facts.Server, ToolUp.Facts.Shared |
-| `InProcess/FlagSourceTests.fs` | `feature-flag-providers` | 10 | moved to `src/FeatureFlagProviders/Tests/` |
+| `InProcess/FlagSourceTests.fs` | `feature-flag-providers` | 10 | moved to `src/FeatureFlagProviders/ToolUp.FeatureFlagProviders.Tests/` |
 | `Contracts/IEdgeCacheContract.fs` | `hosts` | 0 | stays: an SDK contract pack the Platform pack defines, binding the companion |
 | `InProcess/DeliveredEgressTests.fs` | `hosts`, `media` | 54 | deferred: family not moved in this phase |
 | `InProcess/EdgeCacheTests.fs` | `hosts`, `media` | 78 | stays: an integration over ToolUp.PublicRendering |
 | `InProcess/DurableIngestionQueueTests.fs` | `ingestion-queues` | 17 | stays: an integration over ToolUp.RAG.Core, ToolUp.RAG.Server |
-| `InProcess/QuartzJobSchedulerTests.fs` | `job-schedulers` | 12 | moved to `src/JobSchedulers/Tests/` |
+| `InProcess/QuartzJobSchedulerTests.fs` | `job-schedulers` | 12 | moved to `src/JobSchedulers/ToolUp.JobSchedulers.Tests/` |
 | `InProcess/ReportSubscriptionScopeTests.fs` | `job-schedulers` | 26 | stays: an integration over ArtefactSigning, ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.Facts.Core, ToolUp.Facts.Server, ToolUp.Facts.Shared, ToolUp.RAG.Server, ToolUp.Reporting.Core, ToolUp.Reporting.Server |
-| `Contracts/IMediaLibraryContract.fs` | `media` | 29 | moved to `src/Media/Tests/Contracts/` |
-| `InProcess/MediaLibraryTests.fs` | `media` | 111 | moved to `src/Media/Tests/` |
+| `Contracts/IMediaLibraryContract.fs` | `media` | 29 | moved to `src/Media/ToolUp.Media.Tests/Contracts/` |
+| `InProcess/MediaLibraryTests.fs` | `media` | 111 | moved to `src/Media/ToolUp.Media.Tests/` |
 | `InProcess/OtelActivitySinkTests.fs` | `metrics` | 0 | deferred: family not moved in this phase |
 | `Contracts/IModelEvaluationPlanMetricsContract.fs` | `model-providers` | 8 | stays: an SDK contract pack the Platform pack defines, binding the companion |
 | `Contracts/IModelFitProviderContract.fs` | `model-providers` | 16 | stays: an SDK contract pack the Platform pack defines, binding the companion |
@@ -108,56 +108,56 @@ The destination says one of three things:
 | `InProcess/ModelEvaluationTests.fs` | `model-providers` | 33 | deferred: family not moved in this phase |
 | `InProcess/ModelExecutionApiTests.fs` | `model-providers` | 11 | deferred: family not moved in this phase |
 | `InProcess/ModelFitBatchTests.fs` | `model-providers` | 6 | deferred: family not moved in this phase |
-| `InProcess/MetaWhatsAppCloudNotificationSinkTests.fs` | `notification-channels`, `webhooks` | 15 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/RedisDistributedLockTests.fs` | `notification-channels` | 1 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/RedisNotificationChannelHealthTests.fs` | `notification-channels` | 1 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/RedisNotificationChannelTests.fs` | `notification-channels` | 1 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/SendGridNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/SmtpNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/TwilioNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/TwilioWhatsAppNotificationSinkTests.fs` | `notification-channels` | 25 | moved to `src/NotificationChannels/Tests/` |
-| `InProcess/WebPushNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/Tests/` |
+| `InProcess/MetaWhatsAppCloudNotificationSinkTests.fs` | `notification-channels`, `webhooks` | 15 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/RedisDistributedLockTests.fs` | `notification-channels` | 1 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/RedisNotificationChannelHealthTests.fs` | `notification-channels` | 1 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/RedisNotificationChannelTests.fs` | `notification-channels` | 1 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/SendGridNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/SmtpNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/TwilioNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/TwilioWhatsAppNotificationSinkTests.fs` | `notification-channels` | 25 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
+| `InProcess/WebPushNotificationSinkTests.fs` | `notification-channels` | 0 | moved to `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` |
 | `InProcess/OcrProviderTests.fs` | `ocr-providers` | 36 | stays: an integration over ToolUp.KnowledgeBase.Core, ToolUp.KnowledgeBase.Server, ToolUp.RAG.Core, ToolUp.RAG.Server |
 | `Contracts/IRateLimitStoreContract.fs` | `rate-limit` | 9 | stays: an SDK contract pack the Platform pack defines, binding the companion |
 | `InProcess/InMemoryRateLimitStoreTests.fs` | `rate-limit` | 12 | deferred: family not moved in this phase |
-| `InProcess/AwsSecretsManagerSecretStoreTests.fs` | `secrets` | 1 | moved to `src/Secrets/Tests/` |
-| `InProcess/AzureKeyVaultSecretStoreTests.fs` | `secrets` | 1 | moved to `src/Secrets/Tests/` |
-| `InProcess/GcpSecretManagerSecretStoreTests.fs` | `secrets` | 4 | moved to `src/Secrets/Tests/` |
-| `InProcess/HashiCorpVaultSecretStoreTests.fs` | `secrets` | 1 | moved to `src/Secrets/Tests/` |
-| `InProcess/ServerAppSecretStoreTests.fs` | `secrets` | 13 | moved to `src/Secrets/Tests/` |
+| `InProcess/AwsSecretsManagerSecretStoreTests.fs` | `secrets` | 1 | moved to `src/Secrets/ToolUp.Secrets.Tests/` |
+| `InProcess/AzureKeyVaultSecretStoreTests.fs` | `secrets` | 1 | moved to `src/Secrets/ToolUp.Secrets.Tests/` |
+| `InProcess/GcpSecretManagerSecretStoreTests.fs` | `secrets` | 4 | moved to `src/Secrets/ToolUp.Secrets.Tests/` |
+| `InProcess/HashiCorpVaultSecretStoreTests.fs` | `secrets` | 1 | moved to `src/Secrets/ToolUp.Secrets.Tests/` |
+| `InProcess/ServerAppSecretStoreTests.fs` | `secrets` | 13 | moved to `src/Secrets/ToolUp.Secrets.Tests/` |
 | `InProcess/RevokeOnIssuerRemovedTests.fs` | `share-token-store-decorators` | 5 | deferred: family not moved in this phase |
 | `InProcess/CrossIndexErasureConformanceTests.fs` | `sparse-indices` | 17 | stays: an integration over ToolUp.RAG.Core, ToolUp.RAG.Server |
 | `InProcess/PostgresFullTextIndexTests.fs` | `sparse-indices`, `vector-stores` | 15 | stays: an integration over ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.RAG.Core, ToolUp.RAG.Server |
 | `InProcess/SparseIndexCompositionTests.fs` | `sparse-indices`, `vector-stores` | 36 | stays: an integration over ToolUp.AI.Client, ToolUp.AI.Core, ToolUp.AI.Server, ToolUp.RAG.Core, ToolUp.RAG.Server |
 | `RAG/SparseAnalyzerContract.fs` | `sparse-indices` | 22 | stays: an integration over ToolUp.RAG.Core, ToolUp.RAG.Server |
-| `InProcess/AwsS3StorageTests.fs` | `storage` | 1 | moved to `src/Storage/Tests/` |
-| `InProcess/AzureBlobStorageTests.fs` | `storage` | 1 | moved to `src/Storage/Tests/` |
-| `InProcess/BlobStorageAuthAuditTests.fs` | `storage` | 22 | moved to `src/Storage/Tests/` |
-| `InProcess/ConditionalBlobStorageTests.fs` | `storage` | 1 | moved to `src/Storage/Tests/` |
-| `InProcess/GoogleCloudStorageTests.fs` | `storage` | 2 | moved to `src/Storage/Tests/` |
+| `InProcess/AwsS3StorageTests.fs` | `storage` | 1 | moved to `src/Storage/ToolUp.Storage.Tests/` |
+| `InProcess/AzureBlobStorageTests.fs` | `storage` | 1 | moved to `src/Storage/ToolUp.Storage.Tests/` |
+| `InProcess/BlobStorageAuthAuditTests.fs` | `storage` | 22 | moved to `src/Storage/ToolUp.Storage.Tests/` |
+| `InProcess/ConditionalBlobStorageTests.fs` | `storage` | 1 | moved to `src/Storage/ToolUp.Storage.Tests/` |
+| `InProcess/GoogleCloudStorageTests.fs` | `storage` | 2 | moved to `src/Storage/ToolUp.Storage.Tests/` |
 | `InProcess/TelemetrySinkTests.fs` | `telemetry-sinks` | 13 | deferred: family not moved in this phase |
-| `InProcess/TimescaleTimeSeriesStoreTests.fs` | `time-series-stores` | 1 | moved to `src/TimeSeriesStores/Tests/` |
+| `InProcess/TimescaleTimeSeriesStoreTests.fs` | `time-series-stores` | 1 | moved to `src/TimeSeriesStores/ToolUp.TimeSeriesStores.Tests/` |
 | `Contracts/IDataSubjectRequestContract.fs` | `vector-stores` | 32 | stays: an SDK contract pack the Platform pack defines, binding the companion |
 | `InProcess/HnswVectorStoreTests.fs` | `vector-stores` | 12 | stays: an integration over ToolUp.RAG.Server |
 | `InProcess/PgvectorVectorStoreTests.fs` | `vector-stores` | 81 | deferred: family not moved in this phase |
-| `InProcess/WebhookSubstrateTests.fs` | `webhooks` | 8 | moved to `src/Webhooks/Tests/` |
+| `InProcess/WebhookSubstrateTests.fs` | `webhooks` | 8 | moved to `src/Webhooks/ToolUp.Webhooks.Tests/` |
 | `InProcess/WorkflowEngineTests.fs` | `workflow` | 6 | deferred: family not moved in this phase |
 
 ## The packs
 
 | Pack | Project | Hosts | Cases | Live arms (Pending without the variable) |
 |---|---|---|---|---|
-| `Webhooks` | `src/Webhooks/Tests/` | none: the family implements no SDK contract pack | 8 | — |
-| `JobSchedulers` | `src/JobSchedulers/Tests/` | `IJobSchedulerContract`, `IJobStoreContract` over Quartz | 68 | — |
-| `NotificationChannels` | `src/NotificationChannels/Tests/` | `INotificationChannelContract` over the Redis channel; `INotificationSinkContract` over SMTP, SendGrid, Twilio SMS, Twilio WhatsApp, Meta WhatsApp Cloud and WebPush; `IDistributedLockContract` over the Redis lock | 67 | `TOOLUP_REDIS_CONNECTION` |
-| `AuditSinks` | `src/AuditSinks/Tests/` | `IAuditSinkContract` over CEF, the chained ledger, Datadog Logs, the S3 archive and Splunk HEC | 107 | — |
-| `Storage` | `src/Storage/Tests/` | `IBlobStorageContract`, `IConditionalBlobStorageContract` over AWS S3, Azure Blob and Google Cloud Storage | 103 | `TOOLUP_AWS_S3_BUCKET`, `TOOLUP_AZURE_STORAGE_CONNECTION_STRING`, `TOOLUP_GCS_BUCKET` |
-| `Secrets` | `src/Secrets/Tests/` | `ISecretStoreContract` over AWS Secrets Manager, Azure Key Vault, GCP Secret Manager and HashiCorp Vault | 22 | `TOOLUP_AWS_SECRETS_REGION`, `TOOLUP_AZURE_KEY_VAULT_URL`, `TOOLUP_GCP_PROJECT_ID`, `VAULT_ADDR` / `VAULT_TOKEN` |
-| `EmbeddingProviders` | `src/EmbeddingProviders/Tests/` | none: the cases are each provider's own | 31 | — |
-| `EntityStores` | `src/EntityStores/Tests/` | `IEntityStoreContract` over Postgres | 1 | `TOOLUP_TEST_POSTGRES` |
-| `TimeSeriesStores` | `src/TimeSeriesStores/Tests/` | the Timescale store's live arm | 1 | `TOOLUP_TIMESCALE_CONN` |
-| `FeatureFlagProviders` | `src/FeatureFlagProviders/Tests/` | the OpenFeature provider's own cases | 10 | — |
-| `Media` | `src/Media/Tests/` | `IMediaLibraryContract`, which moved with the family: it is written over the media library's own types and nothing in the Platform pack bound it | 161 | — |
+| `Webhooks` | `src/Webhooks/ToolUp.Webhooks.Tests/` | none: the family implements no SDK contract pack | 8 | — |
+| `JobSchedulers` | `src/JobSchedulers/ToolUp.JobSchedulers.Tests/` | `IJobSchedulerContract`, `IJobStoreContract` over Quartz | 68 | — |
+| `NotificationChannels` | `src/NotificationChannels/ToolUp.NotificationChannels.Tests/` | `INotificationChannelContract` over the Redis channel; `INotificationSinkContract` over SMTP, SendGrid, Twilio SMS, Twilio WhatsApp, Meta WhatsApp Cloud and WebPush; `IDistributedLockContract` over the Redis lock | 67 | `TOOLUP_REDIS_CONNECTION` |
+| `AuditSinks` | `src/AuditSinks/ToolUp.AuditSinks.Tests/` | `IAuditSinkContract` over CEF, the chained ledger, Datadog Logs, the S3 archive and Splunk HEC | 107 | — |
+| `Storage` | `src/Storage/ToolUp.Storage.Tests/` | `IBlobStorageContract`, `IConditionalBlobStorageContract` over AWS S3, Azure Blob and Google Cloud Storage | 103 | `TOOLUP_AWS_S3_BUCKET`, `TOOLUP_AZURE_STORAGE_CONNECTION_STRING`, `TOOLUP_GCS_BUCKET` |
+| `Secrets` | `src/Secrets/ToolUp.Secrets.Tests/` | `ISecretStoreContract` over AWS Secrets Manager, Azure Key Vault, GCP Secret Manager and HashiCorp Vault | 22 | `TOOLUP_AWS_SECRETS_REGION`, `TOOLUP_AZURE_KEY_VAULT_URL`, `TOOLUP_GCP_PROJECT_ID`, `VAULT_ADDR` / `VAULT_TOKEN` |
+| `EmbeddingProviders` | `src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/` | none: the cases are each provider's own | 31 | — |
+| `EntityStores` | `src/EntityStores/ToolUp.EntityStores.Tests/` | `IEntityStoreContract` over Postgres | 1 | `TOOLUP_TEST_POSTGRES` |
+| `TimeSeriesStores` | `src/TimeSeriesStores/ToolUp.TimeSeriesStores.Tests/` | the Timescale store's live arm | 1 | `TOOLUP_TIMESCALE_CONN` |
+| `FeatureFlagProviders` | `src/FeatureFlagProviders/ToolUp.FeatureFlagProviders.Tests/` | the OpenFeature provider's own cases | 10 | — |
+| `Media` | `src/Media/ToolUp.Media.Tests/` | `IMediaLibraryContract`, which moved with the family: it is written over the media library's own types and nothing in the Platform pack bound it | 161 | — |
 
 The case counts exclude each pack's two registration-guard cases and include its Pending cases. Measured on this tree,
 the Platform pack listed 15,816 cases before and 15,237 after, and the eleven packs list 579. Nothing was lost or

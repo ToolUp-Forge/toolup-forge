@@ -15,7 +15,7 @@
       "fanOut": 82
     },
     {
-      "project": "src/TimeSeriesStores/Tests/ToolUp.TimeSeriesStores.Tests.fsproj",
+      "project": "src/TimeSeriesStores/ToolUp.TimeSeriesStores.Tests/ToolUp.TimeSeriesStores.Tests.fsproj",
       "compileSeconds": 62,
       "evaluationSeconds": 0.1,
       "lines": 589,
@@ -31,7 +31,7 @@
       "fanOut": 4
     },
     {
-      "project": "src/NotificationChannels/Tests/ToolUp.NotificationChannels.Tests.fsproj",
+      "project": "src/NotificationChannels/ToolUp.NotificationChannels.Tests/ToolUp.NotificationChannels.Tests.fsproj",
       "compileSeconds": 50.9,
       "evaluationSeconds": 0.2,
       "lines": 3402,
@@ -55,7 +55,7 @@
       "fanOut": 7
     },
     {
-      "project": "src/FeatureFlagProviders/Tests/ToolUp.FeatureFlagProviders.Tests.fsproj",
+      "project": "src/FeatureFlagProviders/ToolUp.FeatureFlagProviders.Tests/ToolUp.FeatureFlagProviders.Tests.fsproj",
       "compileSeconds": 34.3,
       "evaluationSeconds": 0.2,
       "lines": 540,
@@ -127,7 +127,7 @@
       "fanOut": 3
     },
     {
-      "project": "src/Secrets/Tests/ToolUp.Secrets.Tests.fsproj",
+      "project": "src/Secrets/ToolUp.Secrets.Tests/ToolUp.Secrets.Tests.fsproj",
       "compileSeconds": 23.6,
       "evaluationSeconds": 0.3,
       "lines": 1380,
@@ -143,7 +143,7 @@
       "fanOut": 2
     },
     {
-      "project": "src/JobSchedulers/Tests/ToolUp.JobSchedulers.Tests.fsproj",
+      "project": "src/JobSchedulers/ToolUp.JobSchedulers.Tests/ToolUp.JobSchedulers.Tests.fsproj",
       "compileSeconds": 20.3,
       "evaluationSeconds": 0.2,
       "lines": 3120,
@@ -167,7 +167,7 @@
       "fanOut": 2
     },
     {
-      "project": "src/Media/Tests/ToolUp.Media.Tests.fsproj",
+      "project": "src/Media/ToolUp.Media.Tests/ToolUp.Media.Tests.fsproj",
       "compileSeconds": 19.2,
       "evaluationSeconds": 0.3,
       "lines": 5755,
@@ -311,7 +311,7 @@
       "fanOut": 4
     },
     {
-      "project": "src/Storage/Tests/ToolUp.Storage.Tests.fsproj",
+      "project": "src/Storage/ToolUp.Storage.Tests/ToolUp.Storage.Tests.fsproj",
       "compileSeconds": 15,
       "evaluationSeconds": 0.2,
       "lines": 2481,
@@ -327,7 +327,7 @@
       "fanOut": 2
     },
     {
-      "project": "src/EntityStores/Tests/ToolUp.EntityStores.Tests.fsproj",
+      "project": "src/EntityStores/ToolUp.EntityStores.Tests/ToolUp.EntityStores.Tests.fsproj",
       "compileSeconds": 14.9,
       "evaluationSeconds": 0.1,
       "lines": 1360,
@@ -495,7 +495,7 @@
       "fanOut": 2
     },
     {
-      "project": "src/EmbeddingProviders/Tests/ToolUp.EmbeddingProviders.Tests.fsproj",
+      "project": "src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/ToolUp.EmbeddingProviders.Tests.fsproj",
       "compileSeconds": 11.8,
       "evaluationSeconds": 0.2,
       "lines": 2204,
@@ -751,7 +751,7 @@
       "fanOut": 2
     },
     {
-      "project": "src/AuditSinks/Tests/ToolUp.AuditSinks.Tests.fsproj",
+      "project": "src/AuditSinks/ToolUp.AuditSinks.Tests/ToolUp.AuditSinks.Tests.fsproj",
       "compileSeconds": 9.6,
       "evaluationSeconds": 0.3,
       "lines": 3190,
@@ -847,7 +847,7 @@
       "fanOut": 3
     },
     {
-      "project": "src/Webhooks/Tests/ToolUp.Webhooks.Tests.fsproj",
+      "project": "src/Webhooks/ToolUp.Webhooks.Tests/ToolUp.Webhooks.Tests.fsproj",
       "compileSeconds": 9.1,
       "evaluationSeconds": 0.1,
       "lines": 438,

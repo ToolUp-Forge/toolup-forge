@@ -350,16 +350,16 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         ([ Input.Tree; Input.Browser ] @ env [ "PLAYWRIGHT_BROWSERS_PATH" ])
     // Phase 1197 — a companion family's tests beside the family, building
     // against its closure and hosting the contract packs it conforms to.
-    pack "Webhooks" "src/Webhooks/Tests/ToolUp.Webhooks.Tests.fsproj" []
-    pack "JobSchedulers" "src/JobSchedulers/Tests/ToolUp.JobSchedulers.Tests.fsproj" [ Input.Tree ]
+    pack "Webhooks" "src/Webhooks/ToolUp.Webhooks.Tests/ToolUp.Webhooks.Tests.fsproj" []
+    pack "JobSchedulers" "src/JobSchedulers/ToolUp.JobSchedulers.Tests/ToolUp.JobSchedulers.Tests.fsproj" [ Input.Tree ]
     pack
         "NotificationChannels"
-        "src/NotificationChannels/Tests/ToolUp.NotificationChannels.Tests.fsproj"
+        "src/NotificationChannels/ToolUp.NotificationChannels.Tests/ToolUp.NotificationChannels.Tests.fsproj"
         ([ Input.Tree ] @ env [ "TOOLUP_REDIS_CONNECTION" ])
-    pack "AuditSinks" "src/AuditSinks/Tests/ToolUp.AuditSinks.Tests.fsproj" [ Input.Tree ]
+    pack "AuditSinks" "src/AuditSinks/ToolUp.AuditSinks.Tests/ToolUp.AuditSinks.Tests.fsproj" [ Input.Tree ]
     pack
         "Storage"
-        "src/Storage/Tests/ToolUp.Storage.Tests.fsproj"
+        "src/Storage/ToolUp.Storage.Tests/ToolUp.Storage.Tests.fsproj"
         ([ Input.Tree; Input.Network ]
          @ env [
              "TOOLUP_AWS_S3_BUCKET"
@@ -369,7 +369,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
          ])
     pack
         "Secrets"
-        "src/Secrets/Tests/ToolUp.Secrets.Tests.fsproj"
+        "src/Secrets/ToolUp.Secrets.Tests/ToolUp.Secrets.Tests.fsproj"
         ([ Input.Tree; Input.Network ]
          @ env [
              "TOOLUP_AWS_SECRETS_REGION"
@@ -380,14 +380,14 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "VAULT_NAMESPACE"
              "VAULT_TOKEN"
          ])
-    pack "EmbeddingProviders" "src/EmbeddingProviders/Tests/ToolUp.EmbeddingProviders.Tests.fsproj" [ Input.Tree ]
-    pack "EntityStores" "src/EntityStores/Tests/ToolUp.EntityStores.Tests.fsproj" (env [ "TOOLUP_TEST_POSTGRES" ])
+    pack "EmbeddingProviders" "src/EmbeddingProviders/ToolUp.EmbeddingProviders.Tests/ToolUp.EmbeddingProviders.Tests.fsproj" [ Input.Tree ]
+    pack "EntityStores" "src/EntityStores/ToolUp.EntityStores.Tests/ToolUp.EntityStores.Tests.fsproj" (env [ "TOOLUP_TEST_POSTGRES" ])
     pack
         "TimeSeriesStores"
-        "src/TimeSeriesStores/Tests/ToolUp.TimeSeriesStores.Tests.fsproj"
+        "src/TimeSeriesStores/ToolUp.TimeSeriesStores.Tests/ToolUp.TimeSeriesStores.Tests.fsproj"
         (env [ "TOOLUP_TIMESCALE_CONN" ])
-    pack "FeatureFlagProviders" "src/FeatureFlagProviders/Tests/ToolUp.FeatureFlagProviders.Tests.fsproj" [ Input.Tree ]
-    pack "Media" "src/Media/Tests/ToolUp.Media.Tests.fsproj" [ Input.Tree ]
+    pack "FeatureFlagProviders" "src/FeatureFlagProviders/ToolUp.FeatureFlagProviders.Tests/ToolUp.FeatureFlagProviders.Tests.fsproj" [ Input.Tree ]
+    pack "Media" "src/Media/ToolUp.Media.Tests/ToolUp.Media.Tests.fsproj" [ Input.Tree ]
 
     // ── The legs `VerifyAll` runs after the packs ──────────────────────
     // Every `*.Tests.fsproj` is a pack row or a named exclusion. Pure file

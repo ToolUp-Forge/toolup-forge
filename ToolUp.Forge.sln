@@ -655,27 +655,27 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Server.Jobs
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Server.Audit", "src\ToolUp.Platform.Server.Audit\ToolUp.Platform.Server.Audit.fsproj", "{3EC5DFF3-ECB8-471C-A6B8-8B0E4746C369}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Webhooks.Tests", "src\Webhooks\Tests\ToolUp.Webhooks.Tests.fsproj", "{F103EFD5-B2A3-44AE-B4FC-1E3B01543EE3}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Webhooks.Tests", "src\Webhooks\ToolUp.Webhooks.Tests\ToolUp.Webhooks.Tests.fsproj", "{F103EFD5-B2A3-44AE-B4FC-1E3B01543EE3}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.JobSchedulers.Tests", "src\JobSchedulers\Tests\ToolUp.JobSchedulers.Tests.fsproj", "{4EA27441-6309-4E59-9C9C-4DE2937C3101}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.JobSchedulers.Tests", "src\JobSchedulers\ToolUp.JobSchedulers.Tests\ToolUp.JobSchedulers.Tests.fsproj", "{4EA27441-6309-4E59-9C9C-4DE2937C3101}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.NotificationChannels.Tests", "src\NotificationChannels\Tests\ToolUp.NotificationChannels.Tests.fsproj", "{AB2A7B06-43C7-430D-8E2B-9E20C1B8DE77}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.NotificationChannels.Tests", "src\NotificationChannels\ToolUp.NotificationChannels.Tests\ToolUp.NotificationChannels.Tests.fsproj", "{AB2A7B06-43C7-430D-8E2B-9E20C1B8DE77}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.AuditSinks.Tests", "src\AuditSinks\Tests\ToolUp.AuditSinks.Tests.fsproj", "{D870D1C1-76E7-4A10-8690-DA9286CF8766}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.AuditSinks.Tests", "src\AuditSinks\ToolUp.AuditSinks.Tests\ToolUp.AuditSinks.Tests.fsproj", "{D870D1C1-76E7-4A10-8690-DA9286CF8766}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Storage.Tests", "src\Storage\Tests\ToolUp.Storage.Tests.fsproj", "{EA54AE10-9C56-4A73-9B3A-C050D658713A}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Storage.Tests", "src\Storage\ToolUp.Storage.Tests\ToolUp.Storage.Tests.fsproj", "{EA54AE10-9C56-4A73-9B3A-C050D658713A}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Secrets.Tests", "src\Secrets\Tests\ToolUp.Secrets.Tests.fsproj", "{4FD71EEC-397D-4A40-AF7B-C1DB99D2ADE2}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Secrets.Tests", "src\Secrets\ToolUp.Secrets.Tests\ToolUp.Secrets.Tests.fsproj", "{4FD71EEC-397D-4A40-AF7B-C1DB99D2ADE2}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.EmbeddingProviders.Tests", "src\EmbeddingProviders\Tests\ToolUp.EmbeddingProviders.Tests.fsproj", "{C6A59BD7-2774-455A-BB53-0F4593479B53}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.EmbeddingProviders.Tests", "src\EmbeddingProviders\ToolUp.EmbeddingProviders.Tests\ToolUp.EmbeddingProviders.Tests.fsproj", "{C6A59BD7-2774-455A-BB53-0F4593479B53}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.EntityStores.Tests", "src\EntityStores\Tests\ToolUp.EntityStores.Tests.fsproj", "{77B09F62-CFAC-4F65-B105-A633A8E2944E}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.EntityStores.Tests", "src\EntityStores\ToolUp.EntityStores.Tests\ToolUp.EntityStores.Tests.fsproj", "{77B09F62-CFAC-4F65-B105-A633A8E2944E}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.TimeSeriesStores.Tests", "src\TimeSeriesStores\Tests\ToolUp.TimeSeriesStores.Tests.fsproj", "{D4D263CF-C322-4153-B90D-ED5B4BA66271}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.TimeSeriesStores.Tests", "src\TimeSeriesStores\ToolUp.TimeSeriesStores.Tests\ToolUp.TimeSeriesStores.Tests.fsproj", "{D4D263CF-C322-4153-B90D-ED5B4BA66271}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.FeatureFlagProviders.Tests", "src\FeatureFlagProviders\Tests\ToolUp.FeatureFlagProviders.Tests.fsproj", "{E599FF3F-9D73-42D2-BF30-0A9988896013}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.FeatureFlagProviders.Tests", "src\FeatureFlagProviders\ToolUp.FeatureFlagProviders.Tests\ToolUp.FeatureFlagProviders.Tests.fsproj", "{E599FF3F-9D73-42D2-BF30-0A9988896013}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Media.Tests", "src\Media\Tests\ToolUp.Media.Tests.fsproj", "{24329E40-3879-416F-8DEE-017A21E2BBA9}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Media.Tests", "src\Media\ToolUp.Media.Tests\ToolUp.Media.Tests.fsproj", "{24329E40-3879-416F-8DEE-017A21E2BBA9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
