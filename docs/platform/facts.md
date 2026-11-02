@@ -1685,6 +1685,25 @@ choose the no-op compiler:
 `RagOptions.withFactClausePlanning false` instead stops a RAG app from
 consulting the planner at all.
 
+#### A stored page over HTTP: one gated path for the page and its data (Phase 1201)
+
+A stored page reaches a browser through two routes, each mounted by the step that composes what it serves, so a
+deployment writes neither route nor gate of its own:
+
+- `GET /api/_pages/{module}/{page}`, mounted by `PageDocumentStoreCompose.withPageDocumentStore`. It serves the page
+  folded for the caller (platform, then the caller's team, then the caller) with the sidecar saved with the layer that
+  last moved it. That sidecar is the signed read-set the deployment stores, and the route serves it verbatim and never
+  re-signs. A reader outside the page's gate is refused `403 scope-refused`, an unknown page `404 not-seeded`.
+- `POST /api/_facts/page-requests`, mounted by `PresentationCompose.withPageRequests` under a composed fact store. It
+  answers a request set (`PageRequestSet`, `{"requests":{"<key>":<request>}}`) through the caller's
+  `PageRequestResolvers` resolver, judged at the `FactBrowse` door like a browse. Each key gets the resolution's
+  canonical JSON, the same bytes the in-process resolver answers, or a refusal named by `PageRefusal.cause`. A set that
+  names anything but `requests`, a scope for instance, is refused by that name.
+
+Both run under the surface requirement the composition declares for their paths, the strict `userOrTeam` fallback
+when it declares none. The envelopes, the refusal codes and how a host builds its stored view from them:
+[`docs/migrations/1201-stored-page-routes.md`](../migrations/1201-stored-page-routes.md).
+
 #### Composing the tier onto a RAG app in one call
 
 ```fsharp skip=fragment
