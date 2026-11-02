@@ -926,6 +926,7 @@
         <Compile Include="Server\UserDirectoryApiHandler.fs" />
     </ItemGroup>
     <ItemGroup>
+        <!-- 1193 part: Jobs: the job scheduler, notifications, presence, webhooks and delivery -->
         <Compile Include="Server\Notifications\SSEConnectionManager.fs" />
         <Compile Include="Server\SseTraceContributor.fs" />
         <!-- In-memory presence channel (single-instance default). -->
@@ -1043,18 +1044,6 @@
              Consumer-wired like the scoring handler. -->
         <Compile Include="Server\ModelFitBatchItemJobHandler.fs" />
         <Compile Include="Server\ModelScoringJobHandler.fs" />
-        <!-- The opt-in model-execution compose leg (registers
-             IModelRegistry, and optionally the scorer / executor policy /
-             observers) plus the startup validator that names a
-             mounted ModelExecutionApi with no registry composed. Placed
-             here: it needs only the model seams above (BlobModelRegistry,
-             ModelRegistrationObservers, IModelScorer) and must compile
-             before Compose/ComposeConfigValidators.fs, which registers the
-             validator, and before ServerApp.fs, whose withModelExecution
-             builder folds `register` into the DI graph. -->
-        <Compile Include="Server\Compose\ServiceComposition.fs" />
-        <Compile Include="Server\ComposeModelExecution.fs" />
-        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
         <Compile Include="Server\DatasetAssemblyExecutor.fs" />
         <Compile Include="Server\ModelEvaluationRunner.fs" />
         <!-- Declared promotion policies: tolerance predicates
@@ -1098,6 +1087,102 @@
              infra files so all transitive dependencies have already loaded). -->
         <Compile Include="Server\InProcessOAuthTokenRefresher.fs" />
         <Compile Include="Server\OAuthRefreshJobHandler.fs" />
+        <Compile Include="Server\Infra\PlatformAdminStore.fs" />
+        <Compile Include="Server\Providers\ProviderOAuthRefreshJobHandler.fs" />
+        <Compile Include="Server\Providers\ProviderStatusProbeJobHandler.fs" />
+        <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
+        <Compile Include="Server\SmokeTests.fs" />
+        <Compile Include="Server\JobSchedulerInstanceValidator.fs" />
+        <Compile Include="Server\DeployPlaneDepsValidator.fs" />
+        <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
+        <Compile Include="Server\SseAuthModeValidator.fs" />
+        <Compile Include="Server\JobApiHandler.fs" />
+        <!-- The out-of-process model-execution submitter API
+             handler (fit submission via the 599 batch envelope, bulk
+             outcome retrieval, dataset resolution, scoring; typed refusals
+             throughout). Mounted by BuildRouteHandlers on the opt-in
+             ServerConfig.ModelExecution mode. Placed with the API handlers
+             (needs TeamManagement's role gate). -->
+        <Compile Include="Server\ModelExecutionApi.fs" />
+        <Compile Include="Server\OAuthFlowHandler.fs" />
+        <Compile Include="Server\DataIngestionApiHandler.fs" />
+        <!-- Grant-event notification to affected principals: the
+             pure write-delta classifier, the per-audience message shapes, and
+             the IPermissionStore observer that bridges a landed grant to
+             INotificationChannel. After GrantPolicyGuard.fs (it reads the
+             ModuleGrantPolicyRegistry and the declared PartyRef) and outside
+             every decorator that can refuse or park a write, because it must
+             observe what was actually WRITTEN. Composed only when a policy is
+             declared AND a channel is resolvable. -->
+        <Compile Include="Server\GrantNotificationObserver.fs" />
+        <Compile Include="Server\TeamQuotaPolicy.fs" />
+        <Compile Include="Server\TransactionalDispatcher.fs" />
+        <!-- Notification preference + digest substrate: the
+             INotificationPreferenceStore seam + blob-backed default, the
+             NotificationPreferenceFilter INotificationChannel decorator (+ the
+             ambient NotificationCategoryScope), and the DigestJobHandler.
+             After TransactionalDispatcher (the filter wraps its channel) and
+             IJobHandler / IJobScheduler (the digest declaration); before
+             ComposeNotifications, which composes all three. -->
+        <Compile Include="Server\INotificationPreferenceStore.fs" />
+        <Compile Include="Server\BlobNotificationPreferenceStore.fs" />
+        <Compile Include="Server\NotificationPreferenceFilter.fs" />
+        <!-- The OUTER consent gate. Composed AROUND the
+             preference filter, so consent is answered before
+             preference is. After NotificationPreferenceFilter.fs, whose
+             recipientsOf / narrowTo / hashRecipient it reuses rather
+             than duplicating; before ComposeNotifications.fs wraps it
+             onto the channel. -->
+        <Compile Include="Server\ExternalContactConsentFilter.fs" />
+        <!-- The WhatsApp send policy (24-hour window + template
+             checks), composed directly INSIDE the consent gate and outside
+             the preference filter. After ExternalContactConsentFilter.fs and
+             NotificationPreferenceFilter.fs (reuses narrowTo /
+             hashRecipient); before the Compose/ family that wires it. -->
+        <Compile Include="Server\WhatsAppSendPolicyFilter.fs" />
+        <Compile Include="Server\DigestJobHandler.fs" />
+        <Compile Include="Server\IWebhookRegistry.fs" />
+        <Compile Include="Server\WebhookRegistry.fs" />
+        <Compile Include="Server\WebhookSecretMigration.fs" />
+        <!-- Hard-Error gate on a
+             webhook secret rotation that cannot reach a sibling instance.
+             After WebhookRegistry.fs (reads BlobWebhookRegistry.IsWiredToChannel)
+             and after PerScopeKeyResolverDistributedValidator.fs (shares its
+             replica-count and channel-classification helpers, so the two gates
+             cannot disagree about the topology); before
+             Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="Server\WebhookSecretRotationFanoutValidator.fs" />
+        <Compile Include="Server\WebhookSecretValidator.fs" />
+        <Compile Include="Server\WebhookUrlValidator.fs" />
+        <Compile Include="Server\WebhookDispatcher.fs" />
+        <Compile Include="Server\HookedEventStore.fs" />
+        <Compile Include="Server\WebhookApiHandler.fs" />
+        <!-- INotificationPreferenceApi handler (same AccessContext
+             gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
+             mounts it on the NotificationPreferences opt-in. -->
+        <Compile Include="Server\NotificationPreferenceApiHandler.fs" />
+        <!-- The admin surface over IExternalContactStore.
+             Mounted by Compose/BuildRouteHandlers.fs only when the
+             ExternalContactStore mode opts in. -->
+        <Compile Include="Server\ExternalContactApiHandler.fs" />
+        <!-- IPresenceApi Remoting handler over the
+             substrate. After IPresenceTracker.fs / IEntityLockStore.fs (the
+             services it resolves); before BuildRouteHandlers mounts it. -->
+        <Compile Include="Server\PresenceApiHandler.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The opt-in model-execution compose leg (registers
+             IModelRegistry, and optionally the scorer / executor policy /
+             observers) plus the startup validator that names a
+             mounted ModelExecutionApi with no registry composed. Placed
+             here: it needs only the model seams above (BlobModelRegistry,
+             ModelRegistrationObservers, IModelScorer) and must compile
+             before Compose/ComposeConfigValidators.fs, which registers the
+             validator, and before ServerApp.fs, whose withModelExecution
+             builder folds `register` into the DI graph. -->
+        <Compile Include="Server\Compose\ServiceComposition.fs" />
+        <Compile Include="Server\ComposeModelExecution.fs" />
+        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
         <!-- Bounded local spill for DegradeToFile audit-write
              failure policy; before AuditLog.fs (the log spills into it) and
              the replay service (which drains it back into IEventStore). -->
@@ -1203,17 +1288,12 @@
         <Compile Include="Server\LineageStoreErasureHandler.fs" />
         <Compile Include="Server\ConversationEraseHandler.fs" />
         <Compile Include="Server\ConversationExporter.fs" />
-        <Compile Include="Server\Infra\PlatformAdminStore.fs" />
-        <Compile Include="Server\Providers\ProviderOAuthRefreshJobHandler.fs" />
-        <Compile Include="Server\Providers\ProviderStatusProbeJobHandler.fs" />
         <Compile Include="Server\IAuditSink.fs" />
         <Compile Include="Server\AuditReplicatorTypes.fs" />
         <Compile Include="Server\InMemoryAuditSink.fs" />
         <Compile Include="Server\AuditReplicator.fs" />
-        <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
         <Compile Include="Server\AuditLogModeValidator.fs" />
         <Compile Include="Server\AuditLogHealthCheck.fs" />
-        <Compile Include="Server\SmokeTests.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
         <!-- Durable per-subject consent persistence over
              IEntityStore (in-memory dev impl + entity-backed production
@@ -1226,12 +1306,8 @@
         <!-- After AdUnitConfigApi: the ad-analytics slot sanity check
              reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
         <Compile Include="Server\AdAnalyticsApiHandler.fs" />
-        <Compile Include="Server\JobSchedulerInstanceValidator.fs" />
-        <Compile Include="Server\DeployPlaneDepsValidator.fs" />
         <Compile Include="Server\SignedExportDepsValidator.fs" />
-        <Compile Include="Server\NotificationChannelInstanceValidator.fs" />
         <Compile Include="Server\Files\SessionFileStoreInstanceValidator.fs" />
-        <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\ConfigValidatorAggregator.fs" />
         <!-- Internet-readiness secure-default scorecard: a
              read-side projection over the aggregated preflight outcomes
@@ -1239,25 +1315,6 @@
              ValidatorOutcome). Introduces no new validation. -->
         <Compile Include="Server\InternetReadinessScorecard.fs" />
         <Compile Include="Server\MetricsMiddleware.fs" />
-        <Compile Include="Server\JobApiHandler.fs" />
-        <!-- The out-of-process model-execution submitter API
-             handler (fit submission via the 599 batch envelope, bulk
-             outcome retrieval, dataset resolution, scoring; typed refusals
-             throughout). Mounted by BuildRouteHandlers on the opt-in
-             ServerConfig.ModelExecution mode. Placed with the API handlers
-             (needs TeamManagement's role gate). -->
-        <Compile Include="Server\ModelExecutionApi.fs" />
-        <Compile Include="Server\OAuthFlowHandler.fs" />
-        <Compile Include="Server\DataIngestionApiHandler.fs" />
-        <!-- Grant-event notification to affected principals: the
-             pure write-delta classifier, the per-audience message shapes, and
-             the IPermissionStore observer that bridges a landed grant to
-             INotificationChannel. After GrantPolicyGuard.fs (it reads the
-             ModuleGrantPolicyRegistry and the declared PartyRef) and outside
-             every decorator that can refuse or park a write, because it must
-             observe what was actually WRITTEN. Composed only when a policy is
-             declared AND a channel is resolvable. -->
-        <Compile Include="Server\GrantNotificationObserver.fs" />
         <!-- Hosted-tree action audit emission (GP 6): the
              IHostActionAuditHook + default IAuditLog-backed impl +
              authorize-then-audit helper. After PermissionStoreActionAuthorizer
@@ -1265,60 +1322,6 @@
              codec + IAuditLog it writes through). -->
         <Compile Include="Server\Scope\HostActionAuditHook.fs" />
         <Compile Include="Server\ConfigStoreErasureHandler.fs" />
-        <Compile Include="Server\TeamQuotaPolicy.fs" />
-        <Compile Include="Server\TransactionalDispatcher.fs" />
-        <!-- Notification preference + digest substrate: the
-             INotificationPreferenceStore seam + blob-backed default, the
-             NotificationPreferenceFilter INotificationChannel decorator (+ the
-             ambient NotificationCategoryScope), and the DigestJobHandler.
-             After TransactionalDispatcher (the filter wraps its channel) and
-             IJobHandler / IJobScheduler (the digest declaration); before
-             ComposeNotifications, which composes all three. -->
-        <Compile Include="Server\INotificationPreferenceStore.fs" />
-        <Compile Include="Server\BlobNotificationPreferenceStore.fs" />
-        <Compile Include="Server\NotificationPreferenceFilter.fs" />
-        <!-- The OUTER consent gate. Composed AROUND the
-             preference filter, so consent is answered before
-             preference is. After NotificationPreferenceFilter.fs, whose
-             recipientsOf / narrowTo / hashRecipient it reuses rather
-             than duplicating; before ComposeNotifications.fs wraps it
-             onto the channel. -->
-        <Compile Include="Server\ExternalContactConsentFilter.fs" />
-        <!-- The WhatsApp send policy (24-hour window + template
-             checks), composed directly INSIDE the consent gate and outside
-             the preference filter. After ExternalContactConsentFilter.fs and
-             NotificationPreferenceFilter.fs (reuses narrowTo /
-             hashRecipient); before the Compose/ family that wires it. -->
-        <Compile Include="Server\WhatsAppSendPolicyFilter.fs" />
-        <Compile Include="Server\DigestJobHandler.fs" />
-        <Compile Include="Server\IWebhookRegistry.fs" />
-        <Compile Include="Server\WebhookRegistry.fs" />
-        <Compile Include="Server\WebhookSecretMigration.fs" />
-        <!-- Hard-Error gate on a
-             webhook secret rotation that cannot reach a sibling instance.
-             After WebhookRegistry.fs (reads BlobWebhookRegistry.IsWiredToChannel)
-             and after PerScopeKeyResolverDistributedValidator.fs (shares its
-             replica-count and channel-classification helpers, so the two gates
-             cannot disagree about the topology); before
-             Compose/ComposeConfigValidators.fs, which registers it. -->
-        <Compile Include="Server\WebhookSecretRotationFanoutValidator.fs" />
-        <Compile Include="Server\WebhookSecretValidator.fs" />
-        <Compile Include="Server\WebhookUrlValidator.fs" />
-        <Compile Include="Server\WebhookDispatcher.fs" />
-        <Compile Include="Server\HookedEventStore.fs" />
-        <Compile Include="Server\WebhookApiHandler.fs" />
-        <!-- INotificationPreferenceApi handler (same AccessContext
-             gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
-             mounts it on the NotificationPreferences opt-in. -->
-        <Compile Include="Server\NotificationPreferenceApiHandler.fs" />
-        <!-- The admin surface over IExternalContactStore.
-             Mounted by Compose/BuildRouteHandlers.fs only when the
-             ExternalContactStore mode opts in. -->
-        <Compile Include="Server\ExternalContactApiHandler.fs" />
-        <!-- IPresenceApi Remoting handler over the
-             substrate. After IPresenceTracker.fs / IEntityLockStore.fs (the
-             services it resolves); before BuildRouteHandlers mounts it. -->
-        <Compile Include="Server\PresenceApiHandler.fs" />
         <Compile Include="Server\FeatureFlagStoreErasureHandler.fs" />
         <Compile Include="Server\BlobStorageErasureHandler.fs" />
         <Compile Include="Server\VectorStoreErasureHandler.fs" />
