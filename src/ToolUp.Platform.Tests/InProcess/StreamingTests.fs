@@ -3,7 +3,6 @@ module ToolUp.Platform.Tests.InProcess.StreamingTests
 open System.Collections.Generic
 open Expecto
 open ToolUp.Remoting.Server
-open ToolUp.Platform.Jobs
 
 // ─── Phase 69c.tail — streaming substrate hardening ───────────────────
 //

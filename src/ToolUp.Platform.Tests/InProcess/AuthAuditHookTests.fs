@@ -7,7 +7,6 @@ open ToolUp.Platform
 open ToolUp.Platform.Audit.AuthAuditHook
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
-open ToolUp.Platform.Compose
 
 // ─── Phase 120 — IAuthAuditHook default-impl contract ────────────────
 //

@@ -6,7 +6,6 @@ open ToolUp.Platform.Scope.PeerBearerAuthMiddleware
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── Phase 317 — peer-auth posture advisory ──────────────────────────
 //

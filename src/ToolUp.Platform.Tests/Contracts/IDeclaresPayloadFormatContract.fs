@@ -3,7 +3,6 @@ module ToolUp.Platform.Tests.Contracts.IDeclaresPayloadFormatContract
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── IDeclaresPayloadFormat contract pack (Phase 834) ─────────────
 //

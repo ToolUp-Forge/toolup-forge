@@ -2,8 +2,6 @@ module ToolUp.Platform.Tests.InProcess.SubjectKindClientFlowTests
 
 open System.IO
 open Expecto
-open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Phase 66 Stream B.8 — Client identity flow keyed on SubjectKind ────
 //

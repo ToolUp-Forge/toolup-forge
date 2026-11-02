@@ -5,7 +5,6 @@ module ToolUp.Platform.Tests.InProcess.AdminLandingContractTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.Compose
 
 // ─── Phase 573 — administration-landing contract pack ────────────────
 //

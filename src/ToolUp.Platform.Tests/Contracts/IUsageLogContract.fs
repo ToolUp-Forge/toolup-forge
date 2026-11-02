@@ -5,7 +5,6 @@ open System.Threading
 open Expecto
 open ToolUp.Platform.Usage
 open ToolUp.Platform.Infra.Usage
-open ToolUp.Platform.Compose
 
 // ─── IUsageLog contract pack ──────────────────────────────────────
 //

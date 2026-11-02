@@ -6,7 +6,6 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // `OidcAudienceBindingValidator` reads TOOLUP_AUTH_MODE +
 // TOOLUP_OIDC_AUDIENCE from the environment (mirrors

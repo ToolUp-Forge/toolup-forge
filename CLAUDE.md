@@ -61,7 +61,10 @@ toolup-forge/
 │   ├── Secrets/AzureKeyVault/                        # ISecretStore companion
 │   ├── Feliz.AgGrid/, Feliz.AgCharts/                # standalone Feliz bindings (AG Grid / AG Charts Community)
 │   ├── Feliz.AgGrid.Enterprise/                      # AG Grid Enterprise init shim (opt-in)
-│   ├── ToolUp.Platform.Tests/                        # SDK contract test packs
+│   ├── ToolUp.Platform.Tests/                        # SDK contract test packs: the residue pack, and the sources every Platform pack compiles
+│   ├── ToolUp.Platform.Tests.{Remoting,Infra,Config,Scope,Jobs,Audit}/ # one pack per server part, compiling its lists from ToolUp.Platform.Tests/
+│   ├── ToolUp.Platform.Tests.PublicApi/              # the public-API approval gate's pack, built over every packable project
+│   ├── ToolUp.Platform.Tests.Support/                # the harness every Platform pack references (lane filter, registration guard, entry point)
 │   ├── ToolUp.{Forms,Scheduling,Stripe,Tabular,OpenXml,ArtefactSigning,AssetStore,Cli,AIProviders}.Tests/ # per-companion test packs
 │   ├── {Webhooks,JobSchedulers,NotificationChannels,AuditSinks,Storage,Secrets,…}/ToolUp.*.Tests/ # a companion family's pack, beside it
 │   ├── ToolUp.RAG.Evaluation/, ToolUp.RAG.Benchmarks/
@@ -434,7 +437,7 @@ dotnet run -- Format                # fantomas
 dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 ```
 
-**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus every Expecto suite `VerifyAll` runs with 0 failures (`GateManifest.rows` in `GateManifest.fs` is the one list — every pack, leg and CI-only check is a row there, and `BuildConfig.TestPacks` is derived from the `Local` pack rows; this file deliberately does not restate the count, having gone stale twice doing so. Every `*.Tests.fsproj` in the solution, or on disk under `src/`, `tests/` or `tools/`, is a pack row there or a named exclusion with its reason in `GateManifest.exclusions` beside it, and the `GateReconcile` row of `VerifyAll` — in every lane — is red otherwise, so a test project can no longer sit in the solution, build on every push and be run by nothing. `AIProviders` is env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above). **Since Phase 803 that Fable runner is a LEG of `VerifyAll`** — a `Body` row of the gate manifest, run after the packs (outside the `pure` lane), so `verify.ps1` cannot go green on a tree whose client tier does not transpile. It reports as `PASS — Fable` in the same summary block, which is why CI's `EXPECTED_PACKS` floor, rendered from the manifest, counts legs as well as packs. **Since Phase 904 a second leg sits beside it, `Samples`** (`VerifySamples`): it builds every `*.fsproj` under `samples/` one at a time, asserts the count built against an independent enumeration of the directory (a deliberately skipped sample is named, with its reason, in `SampleGate.excluded`), and — in the full lane only, about ten minutes for the six Fable samples — transpiles the Fable ones too. The fast lane still builds every sample. **Since Phase 776 a third leg, `Analyzers`** (`VerifyAnalyzers`), runs the `ToolUp.Remoting.Analyzers` TUA rules over every tracked `src/**/*.fs` and reconciles the sites with the committed inventory `src/ToolUp.Remoting.Analyzers/analyzer-inventory.json` (a new site, a count the tree no longer needs, a stale exclusion or a hand-edited `docs/platform/analyzer-rules.md` is red); about six seconds, so it runs in `fast` as well as `full`.
+**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus every Expecto suite `VerifyAll` runs with 0 failures (`GateManifest.rows` in `GateManifest.fs` is the one list — every pack, leg and CI-only check is a row there, and `BuildConfig.TestPacks` is derived from the `Local` pack rows; this file deliberately does not restate the count, having gone stale twice doing so. Every test project (`*.Tests.fsproj`, or a `.Tests.` segment in the file name) in the solution, or on disk under `src/`, `tests/` or `tools/`, is a pack row there or a named exclusion with its reason in `GateManifest.exclusions` beside it, and the `GateReconcile` row of `VerifyAll` — in every lane — is red otherwise, so a test project can no longer sit in the solution, build on every push and be run by nothing. **The Platform pack is a family of rows (Phase 1194)**: `Platform.Remoting`, `.Infra`, `.Config`, `.Scope`, `.Jobs` and `.Audit` each hold the lists whose test files reach that server part and no later one, and reference only its closure; `Platform` is the residue (the lists that reach the umbrella or a companion over it); `Platform.PublicApi` is the approval gate's own pack. The sources stay under `src/ToolUp.Platform.Tests/`, and which pack compiles a file is read from the project files. A new list goes to the latest part its file reaches and registers in that pack's `Program.fs`; the rules are in [`docs/platform/testing-conventions.md`](docs/platform/testing-conventions.md#the-platform-family-one-pack-per-server-part) and the map in [`docs/migrations/1194-platform-pack-partition.md`](docs/migrations/1194-platform-pack-partition.md). `AIProviders` is env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above). **Since Phase 803 that Fable runner is a LEG of `VerifyAll`** — a `Body` row of the gate manifest, run after the packs (outside the `pure` lane), so `verify.ps1` cannot go green on a tree whose client tier does not transpile. It reports as `PASS — Fable` in the same summary block, which is why CI's `EXPECTED_PACKS` floor, rendered from the manifest, counts legs as well as packs. **Since Phase 904 a second leg sits beside it, `Samples`** (`VerifySamples`): it builds every `*.fsproj` under `samples/` one at a time, asserts the count built against an independent enumeration of the directory (a deliberately skipped sample is named, with its reason, in `SampleGate.excluded`), and — in the full lane only, about ten minutes for the six Fable samples — transpiles the Fable ones too. The fast lane still builds every sample. **Since Phase 776 a third leg, `Analyzers`** (`VerifyAnalyzers`), runs the `ToolUp.Remoting.Analyzers` TUA rules over every tracked `src/**/*.fs` and reconciles the sites with the committed inventory `src/ToolUp.Remoting.Analyzers/analyzer-inventory.json` (a new site, a count the tree no longer needs, a stale exclusion or a hand-edited `docs/platform/analyzer-rules.md` is red); about six seconds, so it runs in `fast` as well as `full`.
 
 **Shortcut for the full Expecto matrix**: `dotnet run --project Build.fsproj -- VerifyAll` runs every `Local` pack row of the gate manifest sequentially, then its legs, with a per-row summary at the end — the canonical "run everything" invocation. Each per-pack `dotnet run --project` shown above is still the right shape for iteration on one pack.
 
@@ -490,7 +493,7 @@ Adding an SDK→SDK dependency reachable from the packaged-module template there
 | `dco` | — (CI-only: a commit-message lint; PR only, since direct-to-main is this repo's integration path) | — | PR only |
 | `fable-wire-smoke` | WireTests, WireFable | Tree, Node | yes |
 | `ai-wire-conformance` | WireConformance, WireConformanceFable | Tree, Node | yes |
-| `verify-all` | 50 rows, every `Local` row of the full lane: Platform, Forms, Scheduling, AIProviders, Stripe, Build, RemotingAnalyzers, Cli, Voice, AICookbooks, Algorithms, AlgorithmProviders, CloudParity, ArtefactSigning, ReportingDocx, ReportingXlsx, DataSources, OpenXml, OpenXmlSpreadsheet, AssetStore, SvgRasterizerSkia, Reporting, Offline, CompanionsIsolation, AIEvaluation, TriageCalibration, Tabular, Classification, DataSubject, ReportingHtmlPdf, Webhooks, JobSchedulers, NotificationChannels, AuditSinks, Storage, Secrets, EmbeddingProviders, EntityStores, TimeSeriesStores, FeatureFlagProviders, Media, GateReconcile, Fable, Samples, Analyzers, ScopeLiterals, ServiceConfigFold, FuaranCoResolution, FuaranCoBuild, MergeDrivers | Tree, Git, Docker, Network, Browser, Node, 105 env var(s) | yes |
+| `verify-all` | 57 rows, every `Local` row of the full lane: Platform, Platform.Remoting, Platform.Infra, Platform.Config, Platform.Scope, Platform.Jobs, Platform.Audit, Platform.PublicApi, Forms, Scheduling, AIProviders, Stripe, Build, RemotingAnalyzers, Cli, Voice, AICookbooks, Algorithms, AlgorithmProviders, CloudParity, ArtefactSigning, ReportingDocx, ReportingXlsx, DataSources, OpenXml, OpenXmlSpreadsheet, AssetStore, SvgRasterizerSkia, Reporting, Offline, CompanionsIsolation, AIEvaluation, TriageCalibration, Tabular, Classification, DataSubject, ReportingHtmlPdf, Webhooks, JobSchedulers, NotificationChannels, AuditSinks, Storage, Secrets, EmbeddingProviders, EntityStores, TimeSeriesStores, FeatureFlagProviders, Media, GateReconcile, Fable, Samples, Analyzers, ScopeLiterals, ServiceConfigFold, FuaranCoResolution, FuaranCoBuild, MergeDrivers | Tree, Git, Docker, Network, Browser, Node, 105 env var(s) | yes |
 | `cloud-parity` | CloudParity | Tree, Docker, 8 env var(s) | yes |
 | `fable-tier` | Fable | Tree, Node | yes |
 | `doc-snippets` | DocSnippets | Tree | yes |
@@ -609,9 +612,12 @@ filtered run reports suspiciously few tests, `--list-tests` first, or make the f
 
 ## Public-API approval baselines (Phase 175)
 
-`ToolUp.Platform.Tests`' approval gate renders each packable `ToolUp.*` assembly's public surface
-and diffs it against `api-baselines/<assembly>.approved.txt`. The rules that matter when a phase
-touches public surface:
+The approval gate renders each packable `ToolUp.*` assembly's public surface and diffs it against
+`api-baselines/<assembly>.approved.txt`. It is its own pack, `ToolUp.Platform.Tests.PublicApi`
+(Phase 1194), whose project references are every packable project, built and not referenced: so
+`dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj`
+builds exactly the surface it renders and runs the approval lists alone, with no whole-solution build.
+The rules that matter when a phase touches public surface:
 
 - **It fails in BOTH directions (Phase 618): removed / renamed / retyped members, AND additive
   growth whose baseline was not regenerated** — the failure names the added members and the baseline
@@ -637,8 +643,8 @@ touches public surface:
   filter, applied before anything reaches disk.
   **`TOOLUP_APPROVE_API=1` still rewrites EVERY built baseline** (~95 files), folding in unrelated
   additive drift and EOL-only churn, which is what the named form exists to avoid: three agents in
-  one day had to hand-revert foreign hunks after an unscoped regen. If you do use `=1`, build the
-  whole solution first (the renderer reads DLLs), regen, then `git restore` every baseline except
+  one day had to hand-revert foreign hunks after an unscoped regen. If you do use `=1`, run the
+  approval pack with `dotnet run` (it builds every packable project first), then `git restore` every baseline except
   your surgical targets and stage those by name. Either way, verify the real diff WITHOUT the env
   var — approve mode passes trivially, so its green proves nothing. Never run an unscoped regen in a
   shared working tree (it rewrites files concurrent sessions have in flight), and never apply
@@ -647,12 +653,13 @@ touches public surface:
   pin and your apply, copying the regenerated file back silently deletes the landed lines — re-pin
   against the current HEAD copy, apply only your own hunks, and diff-verify zero foreign removals.
 - **An UNBUILT tree is one failure, not fifty-two (Phase 731).** The gate renders from built DLLs,
-  so running the Platform pack before `dotnet build ToolUp.Forge.sln` has populated the companion
-  bins used to fail every unbuilt assembly's case independently — a wall of red that reads like a
+  so running the approval pack's dll before its references were built used to fail every unbuilt
+  assembly's case independently — a wall of red that reads like a
   catastrophic surface break and has misdirected a session. It now reports one
   `the solution is built` failure naming the count, a sample and the remedy, and the per-assembly
   cases defer to it. If you see that message, nothing has drifted and nothing needs regenerating:
-  build, then re-run. `VerifyAll` builds first, so this only bites a pack run on its own.
+  build, then re-run. `VerifyAll` builds first, and `dotnet run` builds the pack's references, so
+  this only bites a dll launched on its own.
 - **An untracked sibling packable project reddens the gate** (`discoverPackable` walks disk, not the
   git index): a concurrent session's uncommitted `src/**/*.fsproj` with no committed baseline fails
   the new-package arm. It is not your break — confirm with `git status --short` and note it; do not

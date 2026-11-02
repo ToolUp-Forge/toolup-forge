@@ -5,8 +5,6 @@ open System.IO
 open System.Threading
 open Expecto
 open ToolUp.Remoting.Server
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── Phase 69g.tail — per-method `[<RateLimit>]` attribution, telemetry
 // + audit denial integration, operator status-board surface ───────────

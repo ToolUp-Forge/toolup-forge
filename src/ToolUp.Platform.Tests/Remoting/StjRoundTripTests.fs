@@ -30,7 +30,6 @@ open System.IO
 open System.Text.Json
 open Expecto
 open ToolUp.Platform.Tests.Remoting.WireCorpus
-open ToolUp.Platform.Compose
 
 let private roundTrip (c: WireCase) =
     let text = c.WriteJson()

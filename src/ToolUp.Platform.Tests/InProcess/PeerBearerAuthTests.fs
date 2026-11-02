@@ -13,7 +13,6 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── PeerBearerAuthMiddleware contract binding ───────────────────────
 //

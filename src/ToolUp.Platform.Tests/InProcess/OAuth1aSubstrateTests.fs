@@ -9,7 +9,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // A minimal fake `IOAuth1aFlow` (canned request/access tokens, the real
 // signer for `Sign`) that binds the shared conformance pack.

@@ -4,7 +4,6 @@ open Expecto
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
-open ToolUp.Platform.Compose
 
 // ─── Phase 55 — withGroup preflight validator ─────────────────────────
 //

@@ -12,7 +12,6 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
-open ToolUp.Platform.Jobs
 
 // ─── Phase 69i.H — long-running typed handles over the real dispatcher ──
 //

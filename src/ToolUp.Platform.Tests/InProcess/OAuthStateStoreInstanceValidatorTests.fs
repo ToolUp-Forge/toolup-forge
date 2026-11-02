@@ -5,7 +5,6 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 let private cfg (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with

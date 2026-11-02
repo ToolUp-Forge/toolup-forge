@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The harness every pack of the Platform family references: the lane
+         vocabulary and its Expecto half, the registration guard, the corpus
+         anchor, the fire-and-forget harness, and the shared entry point. It
+         holds no cases, so it is no gate-manifest row; GateManifest.exclusions
+         names it. It references nothing in the SDK, so a pack's closure is its
+         own. The lifted sources stay where they were, because thirty packs and
+         Build.fsproj source-link them from there; PackEntry.fs is new here.
+         The suite consuming ToolUp.Platform.Testing (Phase 1100) absorbs this
+         project when it lands. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLane.fs" Link="Support\TestLane.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestLaneFilter.fs" Link="Support\TestLaneFilter.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\CorpusAnchor.fs" Link="Support\CorpusAnchor.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\FireAndForgetHarness.fs" Link="Support\FireAndForgetHarness.fs" />
+        <Compile Include="PackEntry.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

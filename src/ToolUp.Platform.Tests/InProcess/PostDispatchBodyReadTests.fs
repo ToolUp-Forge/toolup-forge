@@ -18,7 +18,6 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
-open ToolUp.Platform.Jobs
 
 // ─── Phase 461 — the request-body rewind invariant is STRUCTURAL ──
 //

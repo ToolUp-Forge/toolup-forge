@@ -112,9 +112,6 @@ open Expecto
 open FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Support
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Pins (602.B) ────────────────────────────────────────────────────
 

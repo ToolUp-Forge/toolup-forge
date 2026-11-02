@@ -360,8 +360,9 @@ let private runParallel processes =
 /// Four such packs (about 84 cases) sat in forge's solution for months for
 /// exactly that reason — nothing compared the pack list with the solution.
 /// This is the `SampleGate.reconcile` shape lifted one level: every
-/// `*.Tests.fsproj` is a declared `TestPacks` row or a named exclusion with
-/// its reason, and a declaration naming nothing is stale.
+/// test project (`*.Tests.fsproj`, or a `.Tests.` segment in the file name) is
+/// a declared `TestPacks` row or a named exclusion with its reason, and a
+/// declaration naming nothing is stale.
 ///
 /// The candidate set is the solution's projects UNION the `*.Tests.fsproj`
 /// files on disk under `src/`, `tests/` and `tools/`, because a project left
@@ -390,8 +391,15 @@ module Gate =
 
     let private key (path: string) = (normalise path).ToLowerInvariant()
 
+    /// A test project's file name ends `.Tests.fsproj` or carries a `.Tests.`
+    /// segment (`ToolUp.Platform.Tests.Infra.fsproj`, one pack of a family
+    /// partitioned out of `ToolUp.Platform.Tests`).
     let private isTestProject (path: string) =
-        (normalise path).EndsWith(".Tests.fsproj", StringComparison.OrdinalIgnoreCase)
+        let file = IO.Path.GetFileName(normalise path)
+
+        file.EndsWith(".Tests.fsproj", StringComparison.OrdinalIgnoreCase)
+        || (file.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase)
+            && file.Contains(".Tests.", StringComparison.OrdinalIgnoreCase))
 
     /// Every `.fsproj` a `.sln` or `.slnx` text names, forward-slashed.
     let solutionProjects (solutionText: string) : string list =
@@ -505,10 +513,10 @@ module Gate =
                 let full = IO.Path.Combine(root, dir)
 
                 if IO.Directory.Exists full then
-                    for file in IO.Directory.EnumerateFiles(full, "*.Tests.fsproj", IO.SearchOption.AllDirectories) do
+                    for file in IO.Directory.EnumerateFiles(full, "*.Tests*.fsproj", IO.SearchOption.AllDirectories) do
                         let relative = IO.Path.GetRelativePath(root, file)
 
-                        if not (skip ("/" + relative)) then
+                        if not (skip ("/" + relative)) && isTestProject relative then
                             yield normalise relative
         ]
 

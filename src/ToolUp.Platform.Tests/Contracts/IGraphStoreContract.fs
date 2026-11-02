@@ -5,7 +5,6 @@ open Expecto
 open ToolUp.Graph
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Tests.Graph.SubsetFloorCorpus
-open ToolUp.Platform.Jobs
 
 // ─── Phase 68.E — IGraphStore conformance pack ──────────────────────
 //

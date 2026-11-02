@@ -7,7 +7,6 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Remoting.Server
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 let private cfg (replicaCount: int) : ServerConfig = {
     ServerConfig.defaults with

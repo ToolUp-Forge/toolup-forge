@@ -5,10 +5,6 @@ open System.Diagnostics
 open System.IO
 open Expecto
 open ToolUp.Platform.Tests.Contracts.ArchitectureFitness
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Config
-open ToolUp.Platform.Audit
-open ToolUp.Platform.Compose
 
 // ─── Phase 174 — architecture-fitness dependency-direction gate ───────
 //

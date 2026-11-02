@@ -129,10 +129,87 @@ let private selectOver (paths: string list) (declared: string list) =
         Paths = paths
         Declared = declared
         Packs = [ PlatformPack; "Forms"; "Voice" ]
+        Family = []
+        Graph = None
         Read = fun p -> Map.tryFind p files
         ListsFile = "out/selection.lists"
         Command = "dotnet run --project Build.fsproj -- Select --base base0 --head head0 --out out/selection.json"
     }
+
+/// The Platform family on the real tree, read off the gate manifest's rows.
+let private realFamily () =
+    familyOf (fst (GateReconcileTests.declared ()) |> List.map (fun p -> p.Name, p.Project))
+
+/// Every pack row of the real manifest with its project.
+let private realPackProjects () =
+    fst (GateReconcileTests.declared ())
+    |> List.map (fun p -> p.Name, normalise p.Project)
+
+let private realRead (p: string) =
+    let full = Path.Combine(GateReconcileTests.repoRoot, p)
+
+    if File.Exists full then
+        Some(File.ReadAllText full)
+    else
+        None
+
+/// A synthetic project graph: Core; part A over Core and part B over A, both
+/// compiled from the umbrella's folder; the umbrella over B; one pack per
+/// part, a residue over the umbrella, and an unrelated pack over Core.
+let private graphFiles =
+    let proj (items: string list) (refs: string list) =
+        "<Project>\n<ItemGroup>\n"
+        + String.concat "" [ for i in items -> sprintf "<Compile Include=\"%s\" />\n" i ]
+        + String.concat "" [ for r in refs -> sprintf "<ProjectReference Include=\"%s\" />\n" r ]
+        + "</ItemGroup>\n</Project>\n"
+
+    Map [
+        "src/Core/Core.fsproj", proj [ @"Shared\C.fs" ] []
+        "src/PartA/PartA.fsproj", proj [ @"..\Umbrella\Server\A1.fs" ] [ @"..\Core\Core.fsproj" ]
+        "src/PartB/PartB.fsproj", proj [ @"..\Umbrella\Server\B1.fs" ] [ @"..\PartA\PartA.fsproj" ]
+        "src/Umbrella/Umbrella.fsproj", proj [ @"Server\U1.fs" ] [ @"..\PartB\PartB.fsproj" ]
+        "src/Tests.A/Tests.A.fsproj",
+        proj [ @"..\Tests\InProcess\ATests.fs"; "Program.fs" ] [ @"..\PartA\PartA.fsproj" ]
+        "src/Tests.B/Tests.B.fsproj",
+        proj [ @"..\Tests\InProcess\BTests.fs"; "Program.fs" ] [ @"..\PartB\PartB.fsproj" ]
+        "src/Tests/Tests.fsproj", proj [ @"InProcess\UTests.fs"; "Program.fs" ] [ @"..\Umbrella\Umbrella.fsproj" ]
+        "src/Other.Tests/Other.Tests.fsproj", proj [ "OtherTests.fs" ] [ @"..\Core\Core.fsproj" ]
+    ]
+
+let private graphPacks = [
+    "PA", "src/Tests.A/Tests.A.fsproj"
+    "PB", "src/Tests.B/Tests.B.fsproj"
+    "R", "src/Tests/Tests.fsproj"
+    "Other", "src/Other.Tests/Other.Tests.fsproj"
+]
+
+let private graphOver (paths: string list) =
+    select {
+        Base = Some "base0"
+        Head = Some "head0"
+        Paths = paths
+        Declared = []
+        Packs = graphPacks |> List.map fst
+        Family = []
+        Graph =
+            Some {
+                PackProjects = graphPacks
+                Cases = Map [ "PB", 7 ]
+            }
+        Read = fun p -> Map.tryFind p graphFiles
+        ListsFile = "out/selection.lists"
+        Command = "Select --source graph"
+    }
+
+let private selectedPacks (m: Manifest) =
+    m.Graph
+    |> Option.map (fun g -> g.Selected |> List.map fst)
+    |> Option.defaultValue []
+
+let private skippedPacks (m: Manifest) =
+    m.Graph
+    |> Option.map (fun g -> g.Skipped |> List.map fst)
+    |> Option.defaultValue []
 
 let private unitsFrom (source: Source) (m: Manifest) =
     m.Units |> List.filter (fun u -> u.Source = source) |> List.map _.Unit
@@ -262,6 +339,14 @@ let tests =
                     ]
                     "the registration was misread"
 
+            testCase "a registration the formatter kept on one line is read item by item"
+            <| fun () ->
+                Expect.equal
+                    (registrations "let private registeredTests =\n    testList \"P\" [ ATests.tests; BTests.more ]\n"
+                     |> List.map _.Text)
+                    [ "ATests.tests"; "BTests.more" ]
+                    "an inline list was misread"
+
             testCase "top-level, namespaced and nested modules are qualified"
             <| fun () ->
                 Expect.equal
@@ -275,19 +360,31 @@ let tests =
                     [ "A.B.C"; "A.B.C.Inner" ]
                     "nested in a top-level module"
 
-            testCase "the real Program.fs registers hundreds of entries, PublicApiApprovalTests among them"
+            testCase "the real family registers hundreds of entries, PublicApiApprovalTests in exactly one member"
             <| fun () ->
+                let family = realFamily ()
+
+                Expect.isGreaterThanOrEqual
+                    family.Length
+                    8
+                    "the family is the residue, six part packs and the approval pack"
+
                 let regs =
-                    registrations (File.ReadAllText(Path.Combine(GateReconcileTests.repoRoot, PlatformProgram)))
+                    family
+                    |> List.collect (fun (row, program) ->
+                        registrations (File.ReadAllText(Path.Combine(GateReconcileTests.repoRoot, program)))
+                        |> List.map (fun r -> row, r))
 
                 Expect.isGreaterThan regs.Length 900 "the registration parser read almost nothing"
 
-                Expect.exists
-                    regs
-                    (fun r -> r.Text = "PublicApiApprovalTests.tests")
-                    "the always-on list is not registered"
+                Expect.equal
+                    (regs
+                     |> List.filter (fun (_, r) -> r.Text = "PublicApiApprovalTests.tests")
+                     |> List.map fst)
+                    [ "Platform.PublicApi" ]
+                    "the always-on list is registered once, in the approval pack"
 
-                Expect.exists regs _.Applied "no applied (contract) entry was recognised"
+                Expect.exists regs (fun (_, r) -> r.Applied) "no applied (contract) entry was recognised"
         ]
 
         testList "the selection" [
@@ -416,13 +513,17 @@ let tests =
                     else
                         None
 
+                let family = realFamily ()
+
                 let over paths declared =
                     select {
                         Base = None
                         Head = None
                         Paths = paths
                         Declared = declared
-                        Packs = [ PlatformPack; "Forms" ]
+                        Packs = (family |> List.map fst) @ [ "Forms" ]
+                        Family = family
+                        Graph = None
                         Read = read
                         ListsFile = "selection.lists"
                         Command = "Select --paths p"
@@ -444,6 +545,15 @@ let tests =
                     [ "Platform/" + binding ]
                     "undeclared, the test file's list is diffed"
 
+                Expect.containsAll
+                    (unitsFrom Source.Always m)
+                    [
+                        "Platform.PublicApi/ToolUp.Platform.Tests.InProcess.PublicApiApprovalTests.tests"
+                        "Platform.Audit/" + RegistrationGuard
+                        "Forms/*"
+                    ]
+                    "the always-on list in its own pack, every member's guard, the other packs whole"
+
                 Expect.isEmpty m.UnresolvedDeclared "a declared binding was unresolved"
                 Expect.isGreaterThan m.Skipped.Length 900 "the skipped lists are not named"
 
@@ -457,6 +567,151 @@ let tests =
                 let full = over [ testFile; "Directory.Build.props" ] [ binding ]
                 Expect.isTrue full.Forced "Directory.Build.props did not force the full lane"
                 Expect.exists full.Fired (fun f -> f.Rule = "msbuild-import") "the rule is not named"
+        ]
+
+        testList "the graph source — whole packs by the project graph" [
+            testCase "a source compiled from the umbrella's folder belongs to the part that compiles it"
+            <| fun () ->
+                let graph =
+                    projectGraph (fun p -> Map.tryFind p graphFiles) (graphPacks |> List.map snd)
+
+                Expect.equal
+                    (ownersOf graph "src/Umbrella/Server/B1.fs")
+                    (set [ "src/PartB/PartB.fsproj" ])
+                    "an item outranks the folder it sits in"
+
+                Expect.equal
+                    (ownersOf graph "src/Umbrella/README.md")
+                    (set [ "src/Umbrella/Umbrella.fsproj" ])
+                    "a file no item names is its folder's"
+
+                Expect.equal
+                    (ownersOf graph "src/Tests/InProcess/ATests.fs")
+                    (set [ "src/Tests.A/Tests.A.fsproj" ])
+                    "a test file is the pack's that compiles it, not the residue folder's"
+
+                Expect.isEmpty (ownersOf graph "docs/x.md") "a path outside every project is owned by none"
+
+                Expect.equal
+                    (closureOf graph "src/Tests.B/Tests.B.fsproj")
+                    (set [
+                        "src/Tests.B/Tests.B.fsproj"
+                        "src/PartB/PartB.fsproj"
+                        "src/PartA/PartA.fsproj"
+                        "src/Core/Core.fsproj"
+                    ])
+                    "the closure is the pack and everything it references"
+
+            testCase "a diff confined to one part selects that part's pack and the packs above it, and skips the rest"
+            <| fun () ->
+                let m = graphOver [ "src/Umbrella/Server/B1.fs" ]
+                Expect.isFalse m.Forced "forced"
+                Expect.equal (selectedPacks m) [ "PB"; "R" ] "part B reaches its pack and the residue over the umbrella"
+                Expect.equal (skippedPacks m) [ "PA"; "Other" ] "the pack below it and the unrelated pack run nothing"
+                Expect.equal (unitsFrom Source.Graph m) [ "PB/*"; "R/*" ] "the selected packs run whole"
+                Expect.equal m.Skipped [ "PA/*"; "Other/*" ] "the skipped packs are named"
+
+                Expect.equal
+                    m.Graph
+                    (Some {
+                        Selected = [ "PB", Some 7; "R", None ]
+                        Skipped = [ "PA", None; "Other", None ]
+                        Unowned = []
+                    })
+                    "the recorded case count rides beside each pack"
+
+                let earlier = graphOver [ "src/Umbrella/Server/A1.fs" ]
+                Expect.equal (selectedPacks earlier) [ "PA"; "PB"; "R" ] "part A is in every pack built over it"
+
+            testCase "a test file selects only the pack that compiles it; an unowned path selects nothing"
+            <| fun () ->
+                let m = graphOver [ "src/Tests/InProcess/ATests.fs"; "docs/x.md" ]
+                Expect.equal (selectedPacks m) [ "PA" ] "the test file's pack"
+                Expect.equal (m.Graph |> Option.map _.Unowned) (Some [ "docs/x.md" ]) "the unowned path is named"
+
+                Expect.stringContains
+                    (String.concat "\n" (summaryLines m))
+                    "unowned  docs/x.md"
+                    "the summary does not name the unowned path"
+
+            testCase "only the graph-blind forcing rules apply; the graph places the composition root itself"
+            <| fun () ->
+                Expect.isTrue (graphOver [ "Directory.Build.props" ]).Forced "an import did not force"
+                let root = graphOver [ "src/ToolUp.Platform.Server/Server/ServerApp.fs" ]
+
+                Expect.isEmpty
+                    (rulesFiring "src/ToolUp.Platform.Server/Server/ServerApp.fs"
+                     |> List.filter graphBlindRules.Contains)
+                    "a blind rule"
+
+                Expect.isFalse root.Forced "the composition root forced a graph selection"
+
+            testCase "the graph manifest says its source and reads back to itself"
+            <| fun () ->
+                let m = graphOver [ "src/Umbrella/Server/B1.fs"; "docs/x.md" ]
+                let json = toJson m
+                Expect.stringContains json "\"source\": \"graph\"" "source"
+                Expect.stringContains json "\"map\": \"none\"" "map"
+                Expect.equal (ofJson json) (Ok m) "the manifest does not round-trip"
+
+            testCase
+                "acceptance: over the real tree, an Audit-part diff selects the Audit pack and skips the earlier parts' packs"
+            <| fun () ->
+                let over paths =
+                    select {
+                        Base = None
+                        Head = None
+                        Paths = paths
+                        Declared = []
+                        Packs = realPackProjects () |> List.map fst
+                        Family = realFamily ()
+                        Graph =
+                            Some {
+                                PackProjects = realPackProjects ()
+                                Cases = Map.empty
+                            }
+                        Read = realRead
+                        ListsFile = "selection.lists"
+                        Command = "Select --source graph"
+                    }
+
+                let parts = [ "Remoting"; "Infra"; "Config"; "Scope"; "Jobs"; "Audit" ]
+                let pack (part: string) = "Platform." + part
+
+                // One source per part, as its project compiles it.
+                for i, path in
+                    [
+                        0, "src/ToolUp.Platform.Server/Server/Remoting/MsgPack/TypeShape.fs"
+                        4, "src/ToolUp.Platform.Server/Server/SseTraceContributor.fs"
+                        5, "src/ToolUp.Platform.Server/Server/AuditFallbackStore.fs"
+                    ] do
+                    let m = over [ path ]
+                    Expect.isFalse m.Forced (sprintf "%s forced: %A" path m.Fired)
+                    let selected = selectedPacks m
+
+                    for j, part in List.indexed parts do
+                        if j < i then
+                            Expect.contains
+                                (skippedPacks m)
+                                (pack part)
+                                (sprintf "%s: %s should be skipped" path (pack part))
+                        else
+                            Expect.contains selected (pack part) (sprintf "%s: %s should be selected" path (pack part))
+
+                    Expect.contains selected PlatformPack (sprintf "%s: the residue is built over every part" path)
+
+                    Expect.contains
+                        (unitsFrom Source.Always m)
+                        "Platform.PublicApi/ToolUp.Platform.Tests.InProcess.PublicApiApprovalTests.tests"
+                        "the approval gate is always on"
+
+                // The composition root is the umbrella's: the residue, never a part's pack.
+                let root = over [ "src/ToolUp.Platform.Server/Server/ServerApp.fs" ]
+                Expect.isFalse root.Forced "the composition root forced a graph selection"
+                Expect.contains (selectedPacks root) PlatformPack "the residue"
+
+                for part in parts do
+                    Expect.contains (skippedPacks root) (pack part) (sprintf "ServerApp.fs selected %s" (pack part))
         ]
 
         testList "the keep — go-red proofs" [

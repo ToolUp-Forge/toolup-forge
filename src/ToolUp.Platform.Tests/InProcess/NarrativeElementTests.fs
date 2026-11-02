@@ -5,7 +5,6 @@ module ToolUp.Platform.Tests.InProcess.NarrativeElementTests
 
 open Expecto
 open ToolUp.Platform.Narrative
-open ToolUp.Platform.Infra
 
 // ─── Phase 87 — media + layout narrative blocks ──────────────────
 //

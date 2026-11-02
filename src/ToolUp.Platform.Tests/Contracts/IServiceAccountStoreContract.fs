@@ -5,7 +5,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
-open ToolUp.Platform.Compose
 
 // ─── IServiceAccountStore contract pack (Phase 527) ──────────────────
 //

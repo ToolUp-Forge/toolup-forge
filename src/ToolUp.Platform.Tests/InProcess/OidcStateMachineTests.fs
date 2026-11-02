@@ -7,7 +7,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.Oidc.OidcStateMachine
-open ToolUp.Platform.Jobs
 
 // ─── OidcStateMachine — Stage labels + pure decisions ────────────────
 //

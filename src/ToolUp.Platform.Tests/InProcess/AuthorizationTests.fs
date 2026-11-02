@@ -6,7 +6,6 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
 open ToolUp.Platform.Config
-open ToolUp.Platform.Audit
 
 // ─── Phase 69d.tail — per-method authorization metadata, classifier
 // default-on ─────────────────────────────────────────────────────────

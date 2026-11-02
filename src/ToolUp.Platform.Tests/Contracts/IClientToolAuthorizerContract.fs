@@ -29,7 +29,6 @@ module ToolUp.Platform.Tests.Contracts.IClientToolAuthorizerContract
 
 open Expecto
 open ToolUp.AI
-open ToolUp.Platform.Audit
 
 /// Everything the pack needs to exercise one authorizer.
 type ClientToolAuthorizerContractFixture = {

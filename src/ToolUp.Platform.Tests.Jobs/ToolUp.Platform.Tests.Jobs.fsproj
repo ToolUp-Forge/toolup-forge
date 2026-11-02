@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The Jobs pack: the lists whose test files reach the Jobs part and no later one.
+         The test sources stay under src/ToolUp.Platform.Tests/ and this project
+         compiles them from there, because other packs source-link them and
+         their citations and __SOURCE_DIRECTORY__ paths must not move. Which
+         file is in which pack, and why: docs/migrations/1194-platform-pack-partition.md. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IJobStoreContract.fs" Link="Contracts\IJobStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthStateStoreContract.fs" Link="Contracts\IOAuthStateStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthCredentialFlowContract.fs" Link="Contracts\IOAuthCredentialFlowContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\INotificationAddressBookContract.fs" Link="Contracts\INotificationAddressBookContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IExternalContactStoreContract.fs" Link="Contracts\IExternalContactStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ISmokeTestContract.fs" Link="Contracts\ISmokeTestContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IPresenceTrackerContract.fs" Link="Contracts\IPresenceTrackerContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEntityLockStoreContract.fs" Link="Contracts\IEntityLockStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IUsageLogContract.fs" Link="Contracts\IUsageLogContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ITeamQuotaPolicyContract.fs" Link="Contracts\ITeamQuotaPolicyContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthTokenRefresherContract.fs" Link="Contracts\IOAuthTokenRefresherContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ICrdtDocumentStoreContract.fs" Link="Contracts\ICrdtDocumentStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IUserSchemaStoreContract.fs" Link="Contracts\IUserSchemaStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\INotificationPreferenceStoreContract.fs" Link="Contracts\INotificationPreferenceStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDistributedLockContract.fs" Link="Contracts\IDistributedLockContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IModelRegistryContract.fs" Link="Contracts\IModelRegistryContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\JobStoreTests.fs" Link="InProcess\JobStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\CronExpressionTests.fs" Link="InProcess\CronExpressionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DataIngestorTests.fs" Link="InProcess\DataIngestorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OAuthSubstrateTests.fs" Link="InProcess\OAuthSubstrateTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WebhookSecretRotationTests.fs" Link="InProcess\WebhookSecretRotationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WebhookSecretRotationBroadcastTests.fs" Link="InProcess\WebhookSecretRotationBroadcastTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WebhookSecretMigrationTests.fs" Link="InProcess\WebhookSecretMigrationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WebhookFailureStateLeaseTests.fs" Link="InProcess\WebhookFailureStateLeaseTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\CronTickElectionTests.fs" Link="InProcess\CronTickElectionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WebhookDispatcherTests.fs" Link="InProcess\WebhookDispatcherTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PresenceChannelTests.fs" Link="InProcess\PresenceChannelTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\GrantNotificationTests.fs" Link="InProcess\GrantNotificationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DatasetAssemblyTests.fs" Link="InProcess\DatasetAssemblyTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DatasetRevintageTests.fs" Link="InProcess\DatasetRevintageTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ProvenanceLabelTests.fs" Link="InProcess\ProvenanceLabelTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModelPromotionPolicyTests.fs" Link="InProcess\ModelPromotionPolicyTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModelRegistrationObserverTests.fs" Link="InProcess\ModelRegistrationObserverTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\NotificationAddressBookTests.fs" Link="InProcess\NotificationAddressBookTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ExternalContactTests.fs" Link="InProcess\ExternalContactTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SSEHandshakeTests.fs" Link="InProcess\SSEHandshakeTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\UsageLogTests.fs" Link="InProcess\UsageLogTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SecureByDefaultValidatorTests.fs" Link="InProcess\SecureByDefaultValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InProcessOAuthTokenRefresherTests.fs" Link="InProcess\InProcessOAuthTokenRefresherTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SseTraceContributorTests.fs" Link="InProcess\SseTraceContributorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SsePerConnectionWriterTests.fs" Link="InProcess\SsePerConnectionWriterTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\JobSchedulerInstanceValidatorTests.fs" Link="InProcess\JobSchedulerInstanceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\NotificationChannelInstanceValidatorTests.fs" Link="InProcess\NotificationChannelInstanceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\NotificationsExplicitOffTests.fs" Link="InProcess\NotificationsExplicitOffTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SseAuthModeValidatorTests.fs" Link="InProcess\SseAuthModeValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SmokeTestDefaultsTests.fs" Link="InProcess\SmokeTestDefaultsTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\JobProgressTests.fs" Link="InProcess\JobProgressTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StoreFireAndForgetTests.fs" Link="InProcess\StoreFireAndForgetTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Jobs\ToolUp.Platform.Server.Jobs.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Scope\ToolUp.Platform.Server.Scope.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

@@ -16,7 +16,6 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 // ─── Phase 486 — signed worker outcomes ──────────────────────────────
 //

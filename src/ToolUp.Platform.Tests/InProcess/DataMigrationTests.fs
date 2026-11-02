@@ -10,7 +10,6 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Phase 10a — module data-migration framework ─────────────────
 //

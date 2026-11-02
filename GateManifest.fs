@@ -150,34 +150,26 @@ let private env (names: string list) = names |> List.map Input.Env
 let private apiKeys =
     env [ "ANTHROPIC_API_KEY"; "OPENAI_API_KEY"; "GEMINI_API_KEY" ]
 
-/// The variables the Platform pack's own sources read, each gating an arm
-/// or a regeneration. `PATH` is ambient toolchain, not an input, and is not
-/// here. Harness-wide variables (`TOOLUP_TEST_LANE`, `TOOLUP_TEST_LISTS`,
-/// `TOOLUP_TEST_ARGS`) belong to the driver, not to a row.
+/// The variables the residue pack's own sources read, each gating an arm or
+/// a regeneration; each part's pack declares its own beside its row. `PATH`
+/// is ambient toolchain, not an input, and is not here. Harness-wide
+/// variables (`TOOLUP_TEST_LANE`, `TOOLUP_TEST_LISTS`, `TOOLUP_TEST_ARGS`)
+/// belong to the driver, not to a row.
 let private platformEnv =
     env [
-        "TOOLUP_MODEL_EXECUTION_CORPUS"
         "TOOLUP_FEDERATION_SPEC_DIR"
         "TOOLUP_APPROVE_API"
-        "TOOLUP_APPROVE_BRANDKIT"
         "TOOLUP_APPROVE_COMPOSITION"
         "TOOLUP_AUTH_MODE"
         "TOOLUP_BUNDLE_FIXTURE_DIR"
         "TOOLUP_EMIT_WIRE_FIXTURES"
         "TOOLUP_HNSW_SCALE_CORPUS"
-        "TOOLUP_OAUTH_REDIRECT_BASE"
-        "TOOLUP_OIDC_AUDIENCE"
         "TOOLUP_REDIS_CONNECTION"
         "TOOLUP_REGEN_AUDIT_EVENT_REFERENCE"
         "TOOLUP_REGEN_CONFIG_REFERENCE"
-        "TOOLUP_REGEN_ELMISH_PROOF_CORPUS"
-        "TOOLUP_REGEN_LOCALIZATION_SKELETON"
-        "TOOLUP_REGEN_PLATFORM_DECODERS"
-        "TOOLUP_REGEN_PLATFORM_JSON_DECODERS"
         "TOOLUP_REPLICA_COUNT"
         "TOOLUP_SECRETS_MASTER_KEY"
         "TOOLUP_SECRET_STORE"
-        "TOOLUP_TEST_AGE_CONNSTRING"
         "TOOLUP_TEST_POSTGRES"
         "TOOLUP_TRANSITION_PIN_OUT"
     ]
@@ -276,6 +268,53 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
         ([ Input.Tree; Input.Git; Input.Docker ] @ platformEnv)
     |> budget (minutes 15.)
+    // The Platform pack partitioned by server part: each part's pack holds the
+    // lists whose test files reach that part and no later one, and references
+    // only the part's closure (docs/migrations/1194-platform-pack-partition.md).
+    pack
+        "Platform.Remoting"
+        "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj"
+        ([ Input.Tree; Input.Git; Input.Docker ]
+         @ env [
+             "TOOLUP_MODEL_EXECUTION_CORPUS"
+             "TOOLUP_APPROVE_BRANDKIT"
+             "TOOLUP_REGEN_ELMISH_PROOF_CORPUS"
+             "TOOLUP_REGEN_LOCALIZATION_SKELETON"
+             "TOOLUP_REGEN_PLATFORM_DECODERS"
+             "TOOLUP_REGEN_PLATFORM_JSON_DECODERS"
+             "TOOLUP_TEST_AGE_CONNSTRING"
+         ])
+    |> budget (minutes 2.)
+    pack "Platform.Infra" "src/ToolUp.Platform.Tests.Infra/ToolUp.Platform.Tests.Infra.fsproj" [ Input.Tree ]
+    |> budget (seconds 20.)
+    pack
+        "Platform.Config"
+        "src/ToolUp.Platform.Tests.Config/ToolUp.Platform.Tests.Config.fsproj"
+        ([ Input.Tree ]
+         @ env [
+             "TOOLUP_AUTH_MODE"
+             "TOOLUP_REPLICA_COUNT"
+             "TOOLUP_SECRETS_MASTER_KEY"
+             "TOOLUP_SECRET_STORE"
+         ])
+    |> budget (seconds 10.)
+    pack
+        "Platform.Scope"
+        "src/ToolUp.Platform.Tests.Scope/ToolUp.Platform.Tests.Scope.fsproj"
+        ([ Input.Tree ] @ env [ "TOOLUP_AUTH_MODE"; "TOOLUP_OIDC_AUDIENCE" ])
+    |> budget (seconds 10.)
+    pack
+        "Platform.Jobs"
+        "src/ToolUp.Platform.Tests.Jobs/ToolUp.Platform.Tests.Jobs.fsproj"
+        ([ Input.Tree ] @ env [ "TOOLUP_OAUTH_REDIRECT_BASE"; "TOOLUP_REDIS_CONNECTION" ])
+    |> budget (seconds 20.)
+    pack "Platform.Audit" "src/ToolUp.Platform.Tests.Audit/ToolUp.Platform.Tests.Audit.fsproj" [ Input.Tree ]
+    |> budget (seconds 10.)
+    pack
+        "Platform.PublicApi"
+        "src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj"
+        ([ Input.Tree ] @ env [ "TOOLUP_APPROVE_API" ])
+    |> budget (minutes 1.5)
     pack "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj" [ Input.Tree ]
     pack "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj" [ Input.Tree ]
     // Each per-provider arm runs when its key is set and reports Pending
@@ -487,7 +526,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
 
 /// The test projects `VerifyAll` deliberately does not run as
 /// packs, each with the runner that does run it or the input it needs. The
-/// `GateReconcile` leg is red for any `*.Tests.fsproj` (in the solution, or
+/// `GateReconcile` leg is red for any test project (in the solution, or
 /// on disk under `src/`, `tests/`, `tools/`) that is neither a pack row of `rows` nor
 /// named here, and for an entry here that names nothing.
 let exclusions: Gate.Exclusion list = [
@@ -506,6 +545,9 @@ let exclusions: Gate.Exclusion list = [
     Gate.exclude
         "tests/CompanionFuzz/ToolUp.Companions.Fuzz.Tests.fsproj"
         "needs Verovio.NET's native libverovio off the local feed (not on nuget.org, so it cannot join the solution CI restores) and a host that enforces a per-child kernel memory cap; run by an operator per tests/CompanionFuzz/README.md."
+    Gate.exclude
+        "src/ToolUp.Platform.Tests.Support/ToolUp.Platform.Tests.Support.fsproj"
+        "a library, not a pack: the harness every pack of the Platform family references (the lane filter, the registration guard, the shared entry point). It holds no cases."
 ]
 
 /// The `checks.yml` jobs that are not rows, each with why: a lint with no

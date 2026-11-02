@@ -2,8 +2,6 @@ module ToolUp.Platform.Tests.InProcess.EffectJoinTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Audit
 
 // ─── Phase 296 — CompanionCapability effect-join surface ──────────────
 //

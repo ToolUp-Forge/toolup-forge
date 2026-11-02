@@ -8,7 +8,6 @@ open Expecto
 open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.Platform.Tests.Contracts
-open ToolUp.Platform.Compose
 
 // ─── Phase 791.C — every provider entry takes the value ──────────────
 //

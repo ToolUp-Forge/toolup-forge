@@ -4,7 +4,6 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open Toolup.Samples.ToyTreeBinding.ToyNode
-open ToolUp.Platform.Compose
 
 // ─── Phase 278 — hosted-tree render-cost budget gate ───────────────────
 //

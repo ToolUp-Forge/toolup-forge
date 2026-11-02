@@ -4,8 +4,6 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Scope.PermissionStore
-open ToolUp.Platform.Jobs.SmokeTests
-open ToolUp.Platform.Compose
 
 // ModulePermission carries `[<RequireQualifiedAccess>]` because its
 // `Admin` case collides with TeamRole.Admin (different concepts).

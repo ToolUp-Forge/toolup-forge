@@ -2,7 +2,6 @@ namespace Contoso.Consumer.Auth
 
 open System
 open ToolUp.Platform.Config
-open ToolUp.Platform.Audit
 
 // ─── Phase 335 fixtures — a THIRD-PARTY attribute family ─────────────
 //

@@ -7,7 +7,6 @@ open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Config.UnknownConfigKeyValidator
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Phase 695 — the unknown-config-key preflight guard ───────────────
 //

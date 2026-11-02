@@ -6,8 +6,6 @@ module ToolUp.Platform.Tests.InProcess.OidcDiagnoseTests
 open Expecto
 open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.Oidc.OidcTokenStore
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
 
 // ─── diagnose : AuthError -> AuthDiagnostic ──────────────────────────
 //

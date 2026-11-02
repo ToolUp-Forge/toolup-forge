@@ -251,7 +251,7 @@ let main args =
     /// projection of it: a lane narrows what runs, it does not make an
     /// undeclared project declared.
     let runGateReconcile () : Verdict =
-        Trace.tracefn "▶ VerifyAll: GateReconcile (every *.Tests.fsproj is a pack or a named exclusion)"
+        Trace.tracefn "▶ VerifyAll: GateReconcile (every test project is a pack or a named exclusion)"
 
         match Gate.reconcile (Path.getFullName ".") config.TestPacks GateManifest.exclusions with
         | Ok() -> Verdict.Pass None
@@ -262,10 +262,11 @@ let main args =
             Verdict.Fail(sprintf "%d finding(s), named above." findings.Length)
 
     // The `affected` lane's selection, written as a manifest and the lists
-    // file the Platform pack reads.
+    // file the Platform family's packs read.
     //
     // Usage: `dotnet run --project Build.fsproj -- Select
-    //   (--base <sha> --head <sha> | --paths <file>) [--declared <file>] --out <manifest>`
+    //   (--base <sha> --head <sha> | --paths <file>) [--declared <file>]
+    //   [--source declared|graph] --out <manifest>`
     //
     // `--base`/`--head` select over `git diff --name-only --no-renames`
     // between the two (a rename is its old path deleted and its new one
@@ -276,6 +277,10 @@ let main args =
     // `--declared` names lists the change is known to reach, one per line
     // (`<pack>/<list>`, or a bare Platform list by label or binding). The
     // lists file is written beside `--out`, with the extension `.lists`.
+    // `--source graph` selects whole packs instead: those whose project
+    // closure (the pack's project and every project it references) owns a
+    // changed path, with their last recorded case counts, and names the rest
+    // as skipped; `declared` (the default) is the list-level selection.
     Target.create "Select" (fun _ ->
         let root = Path.getFullName "."
 
@@ -317,6 +322,37 @@ let main args =
 
         let listsFile = Path.ChangeExtension(out, ".lists")
 
+        let packProjects =
+            config.TestPacks
+            |> List.map (fun p -> p.Name, TestLane.Selection.normalise p.Project)
+
+        // The case count each pack's newest recorded run reported.
+        let recordedCases () =
+            match VerifyGate.commonGitDir root with
+            | Ok dir ->
+                let file = VerifyGate.Runs.path dir
+
+                let runs, _ =
+                    VerifyGate.Runs.parse (if File.Exists file then File.ReadAllText file else "")
+
+                runs
+                |> List.sortBy _.At
+                |> List.collect _.Legs
+                |> List.choose (fun l -> l.Cases |> Option.map (fun c -> l.Name, c))
+                |> Map.ofList
+            | Error _ -> Map.empty
+
+        let graph =
+            match Flags.value "--source" flags |> Option.defaultValue "declared" with
+            | "declared" -> None
+            | "graph" ->
+                Some {
+                    TestLane.Selection.GraphInputs.PackProjects = packProjects
+                    TestLane.Selection.GraphInputs.Cases = recordedCases ()
+                }
+            | other ->
+                failwithf "Select: `--source %s` is not a source; give `declared` (the default) or `graph`." other
+
         let manifest =
             TestLane.Selection.select {
                 Base = baseSha
@@ -324,6 +360,8 @@ let main args =
                 Paths = paths
                 Declared = Flags.value "--declared" flags |> Option.map lines |> Option.defaultValue []
                 Packs = config.TestPacks |> List.map _.Name
+                Family = TestLane.Selection.familyOf packProjects
+                Graph = graph
                 Read =
                     fun relative ->
                         let full = Path.Combine(root, relative)
@@ -5757,17 +5795,12 @@ let main args =
                 "MergeBaselines: name the assemblies to regenerate — `dotnet run --project Build.fsproj -- MergeBaselines --assemblies ToolUp.AI.Core,ToolUp.AI.Server`. It deliberately has no all-of-them mode: an unscoped regen folds in every unrelated drift the merged tree happens to be carrying, which is the failure the scoping exists to prevent."
 
         // The renderer reads BUILT DLLs, so the merged tree has to compile
-        // before it can be measured. An unbuilt tree would otherwise report as
-        // the Phase 731 precondition failure, which reads like a surface break
-        // and is not one.
-        Trace.tracefn "MergeBaselines: building the merged tree…"
-
-        Proc.exec "dotnet" [ "build"; "ToolUp.Forge.sln"; "--nologo" ] root
-        |> Proc.ensure
-        |> ignore
-
+        // before it can be measured. The approval gate's own pack references
+        // every packable project, so building it builds exactly the surface it
+        // renders, and running it runs the approval lists alone: no
+        // whole-solution build, and no other pack's cases.
         let scope = String.concat "," assemblies
-        Trace.tracefn "MergeBaselines: regenerating %s" scope
+        Trace.tracefn "MergeBaselines: building the packable projects and regenerating %s" scope
 
         Proc.execWith
             {
@@ -5775,7 +5808,11 @@ let main args =
                     Environment = [ "TOOLUP_APPROVE_API", scope ]
             }
             "dotnet"
-            [ "run"; "--project"; "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj" ]
+            [
+                "run"
+                "--project"
+                "src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj"
+            ]
             root
         |> Proc.ensure
         |> ignore
@@ -6804,7 +6841,16 @@ let main args =
         // reached it: a leg skipped on a guess is the direction that ships
         // a broken client tier, so with no manifest to say, it runs.
         let row =
-            if row.Name = "Fable" && not affectedClientTierMoved then
+            let graphSkipped =
+                match affectedManifest with
+                | Some m when not m.Forced ->
+                    m.Graph
+                    |> Option.exists (fun g -> g.Skipped |> List.exists (fun (pack, _) -> pack = row.Name))
+                | _ -> false
+
+            // The graph source names the packs no changed path reaches: they
+            // run nothing under the lane that selected them.
+            if (row.Name = "Fable" && not affectedClientTierMoved) || graphSkipped then
                 {
                     row with
                         Lanes = Set.remove TestLane.Lane.Affected row.Lanes

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The Remoting pack: the lists whose test files reach the Remoting part and no later one, with the lists that reach no server part at all (the earliest pack, whose closure is the smallest).
+         The test sources stay under src/ToolUp.Platform.Tests/ and this project
+         compiles them from there, because other packs source-link them and
+         their citations and __SOURCE_DIRECTORY__ paths must not move. Which
+         file is in which pack, and why: docs/migrations/1194-platform-pack-partition.md. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <!-- Remoting\WireCorpus.fs compiles its server-tier half only where this is defined. -->
+        <DefineConstants>$(DefineConstants);TOOLUP_WIRE_CORPUS_DOTNET</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IHealthCheckContract.fs" Link="Contracts\IHealthCheckContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IConfigValidatorContract.fs" Link="Contracts\IConfigValidatorContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Graph\SubsetFloorCorpus.fs" Link="Graph\SubsetFloorCorpus.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IGraphStoreContract.fs" Link="Contracts\IGraphStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Graph\InMemoryGraphStoreTests.fs" Link="Graph\InMemoryGraphStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Graph\Neo4jConformance.fs" Link="Graph\Neo4jConformance.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Graph\AgeConformance.fs" Link="Graph\AgeConformance.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IReportRendererContract.fs" Link="Contracts\IReportRendererContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IAIProviderContract.fs" Link="Contracts\IAIProviderContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IClientToolAuthorizerContract.fs" Link="Contracts\IClientToolAuthorizerContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ClientHostCapabilitiesContract.fs" Link="Contracts\ClientHostCapabilitiesContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IConsentProviderContract.fs" Link="Contracts\IConsentProviderContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IAdAnalyticsSinkContract.fs" Link="Contracts\IAdAnalyticsSinkContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\SubjectWildcardAnalyzer.fs" Link="Support\SubjectWildcardAnalyzer.fs" />
+        <Compile Include="..\ToolUp.Remoting.Analyzers\Recognition.fs" Link="Support\RemotingAnalyzerRecognition.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\WireCorpus.fs" Link="Remoting\WireCorpus.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\MsgPackRoundTripTests.fs" Link="Remoting\MsgPackRoundTripTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\StjRoundTripTests.fs" Link="Remoting\StjRoundTripTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonClientDecodeFixture.fs" Link="Remoting\JsonClientDecodeFixture.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonTextTests.fs" Link="Remoting\JsonTextTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonWideValueTests.fs" Link="Remoting\JsonWideValueTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyFixture.fs" Link="Remoting\ReadPolicyFixture.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyAttributeTests.fs" Link="Remoting\ReadPolicyAttributeTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadCatalogClientProxies.fs" Link="Remoting\ReadCatalogClientProxies.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\RemotingBatchTests.fs" Link="Remoting\RemotingBatchTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\GeneratorFidelityTests.fs" Link="Remoting\GeneratorFidelityTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientEncoderFixture.fs" Link="Remoting\ClientEncoderFixture.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientProxyGenerationTests.fs" Link="Remoting\ClientProxyGenerationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\PlatformDecodersGenerationTests.fs" Link="Remoting\PlatformDecodersGenerationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ApiRecordCensusTests.fs" Link="Remoting\ApiRecordCensusTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ProofOracleTests.fs" Link="Remoting\ProofOracleTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ColumnMatcherTests.fs" Link="InProcess\ColumnMatcherTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ColumnMappingTests.fs" Link="InProcess\ColumnMappingTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DerivedColumnEvalTests.fs" Link="InProcess\DerivedColumnEvalTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ExperimentSubstrateTests.fs" Link="InProcess\ExperimentSubstrateTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WorkflowEngineTests.fs" Link="InProcess\WorkflowEngineTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MarkdownRendererTests.fs" Link="InProcess\MarkdownRendererTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HtmlRendererTests.fs" Link="InProcess\HtmlRendererTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\NarrativeElementTests.fs" Link="InProcess\NarrativeElementTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HealthyHealthCheckTests.fs" Link="InProcess\HealthyHealthCheckTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DegradedHealthCheckTests.fs" Link="InProcess\DegradedHealthCheckTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\UnhealthyHealthCheckTests.fs" Link="InProcess\UnhealthyHealthCheckTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OkConfigValidatorTests.fs" Link="InProcess\OkConfigValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WarningConfigValidatorTests.fs" Link="InProcess\WarningConfigValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ErrorConfigValidatorTests.fs" Link="InProcess\ErrorConfigValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\EffectJoinTests.fs" Link="InProcess\EffectJoinTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcClassifyTokenTests.fs" Link="InProcess\OidcClassifyTokenTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcRefreshPlanTests.fs" Link="InProcess\OidcRefreshPlanTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcDiagnoseTests.fs" Link="InProcess\OidcDiagnoseTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcTracerTests.fs" Link="InProcess\OidcTracerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcStateMachineTests.fs" Link="InProcess\OidcStateMachineTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcPresetsTests.fs" Link="InProcess\OidcPresetsTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcCoherenceValidatorTests.fs" Link="InProcess\OidcCoherenceValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OidcSecondaryFlowTests.fs" Link="InProcess\OidcSecondaryFlowTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DatadogReadbackClientTests.fs" Link="InProcess\DatadogReadbackClientTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RateLimitConfigHelpersTests.fs" Link="InProcess\RateLimitConfigHelpersTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\I18nCoverageTests.fs" Link="InProcess\I18nCoverageTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MultimodalAIProviderTests.fs" Link="InProcess\MultimodalAIProviderTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SyntheticClientToolAuthorizerTests.fs" Link="InProcess\SyntheticClientToolAuthorizerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostCapabilityNegotiationTests.fs" Link="InProcess\HostCapabilityNegotiationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostRenderTelemetryTests.fs" Link="InProcess\HostRenderTelemetryTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\NeutralityTokens.fs" Link="InProcess\NeutralityTokens.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostContentSanitizerTests.fs" Link="InProcess\HostContentSanitizerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostI18nResolverTests.fs" Link="InProcess\HostI18nResolverTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostRenderBudgetTests.fs" Link="InProcess\HostRenderBudgetTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\NoActiveTeamLandingTests.fs" Link="InProcess\NoActiveTeamLandingTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ScopeDenialTests.fs" Link="InProcess\ScopeDenialTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostingSeamComponentIdTests.fs" Link="InProcess\HostingSeamComponentIdTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostedTreeLayoutTests.fs" Link="InProcess\HostedTreeLayoutTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\UnreducedViewPreviewTests.fs" Link="InProcess\UnreducedViewPreviewTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FactRenderingTests.fs" Link="InProcess\FactRenderingTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DisclosureProofOracleTests.fs" Link="InProcess\DisclosureProofOracleTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishProofDifferential.fs" Link="Client\ElmishProofDifferential.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ElmishProofOracleTests.fs" Link="InProcess\ElmishProofOracleTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishLoopDifferential.fs" Link="Client\ElmishLoopDifferential.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ElmishLoopProofOracleTests.fs" Link="InProcess\ElmishLoopProofOracleTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BrandKitTests.fs" Link="InProcess\BrandKitTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostThemeTokensTests.fs" Link="InProcess\HostThemeTokensTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BrandKitLayoutTests.fs" Link="InProcess\BrandKitLayoutTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\WithRequestHeadersPassthroughTests.fs" Link="InProcess\WithRequestHeadersPassthroughTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\CsrfPrefetchAnonymousGateTests.fs" Link="InProcess\CsrfPrefetchAnonymousGateTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SvgPropTests.fs" Link="InProcess\SvgPropTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DataPropTests.fs" Link="InProcess\DataPropTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AriaPropTests.fs" Link="InProcess\AriaPropTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ClientToolkitThemingTests.fs" Link="InProcess\ClientToolkitThemingTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\DomAttrCustomAuditTests.fs" Link="InProcess\DomAttrCustomAuditTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StjBackwardCompatTests.fs" Link="InProcess\StjBackwardCompatTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConsentProviderTests.fs" Link="InProcess\ConsentProviderTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConsentGatedScriptTests.fs" Link="InProcess\ConsentGatedScriptTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AdAnalyticsSinkTests.fs" Link="InProcess\AdAnalyticsSinkTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModuleGroupingValidatorTests.fs" Link="InProcess\ModuleGroupingValidatorTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SidebarVisibilityContractTests.fs" Link="InProcess\SidebarVisibilityContractTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RouteGuardContractTests.fs" Link="InProcess\RouteGuardContractTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\CommandPaletteContractTests.fs" Link="InProcess\CommandPaletteContractTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\MessageCatalogContractTests.fs" Link="InProcess\MessageCatalogContractTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\LocalizationTests.fs" Link="InProcess\LocalizationTests.fs" />
+        <Compile Include="..\..\docs\platform\message-catalog-skeleton.fs" Link="Generated\message-catalog-skeleton.fs" Condition="Exists('..\..\docs\platform\message-catalog-skeleton.fs')" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SidebarHidingContractTests.fs" Link="InProcess\SidebarHidingContractTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AdminLandingContractTests.fs" Link="InProcess\AdminLandingContractTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SubjectKindClientFlowTests.fs" Link="InProcess\SubjectKindClientFlowTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ClientBrandLiftTests.fs" Link="InProcess\ClientBrandLiftTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\CellProvenanceTests.fs" Link="InProcess\CellProvenanceTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AgChartExportTests.fs" Link="InProcess\AgChartExportTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SubjectWildcardAnalyzerTests.fs" Link="InProcess\SubjectWildcardAnalyzerTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ValidationTests.fs" Link="InProcess\ValidationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdempotencyReplayAuditTests.fs" Link="InProcess\IdempotencyReplayAuditTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdempotencyStoreEvictionTests.fs" Link="InProcess\IdempotencyStoreEvictionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryJobDispatcherTests.fs" Link="InProcess\InMemoryJobDispatcherTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditBodyDisposalTests.fs" Link="InProcess\AuditBodyDisposalTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\PostDispatchBodyReadTests.fs" Link="InProcess\PostDispatchBodyReadTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StreamingTests.fs" Link="InProcess\StreamingTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StreamingDispatchTests.fs" Link="InProcess\StreamingDispatchTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\JobHandleTests.fs" Link="InProcess\JobHandleTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\GeneratedInvocationChainTests.fs" Link="InProcess\GeneratedInvocationChainTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RemotingAnalyzerRecognitionTests.fs" Link="InProcess\RemotingAnalyzerRecognitionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RemotingDecodeRefusalTests.fs" Link="InProcess\RemotingDecodeRefusalTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\SchemaVersionTests.fs" Link="InProcess\SchemaVersionTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\MsgPackHostileInputTests.fs" Link="Remoting\MsgPackHostileInputTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\OpenCoreVocabularyNeutralityTests.fs" Link="InProcess\OpenCoreVocabularyNeutralityTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Conformance\ModelExecutionSpecConformance.fs" Link="Conformance\ModelExecutionSpecConformance.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\GoogleDirectoryTests.fs" Link="InProcess\GoogleDirectoryTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModelInputProofOracleTests.fs" Link="InProcess\ModelInputProofOracleTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\FactPresentationTests.fs" Link="InProcess\FactPresentationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AppCompositionCorpus.fs" Link="InProcess\AppCompositionCorpus.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AppCompositionConformanceTests.fs" Link="InProcess\AppCompositionConformanceTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+        <ProjectReference Include="..\AuthProviders\GoogleDirectory\GoogleDirectory.fsproj" />
+        <ProjectReference Include="..\AuthProviders\OidcClient\OidcClient.fsproj" />
+        <ProjectReference Include="..\ToolUp.AuthProviders.Oidc.Shared\ToolUp.AuthProviders.Oidc.Shared.fsproj" />
+        <ProjectReference Include="..\ToolUp.BrandKit\ToolUp.BrandKit.fsproj" />
+        <ProjectReference Include="..\ToolUp.Experiments.Core\ToolUp.Experiments.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Experiments.Server\ToolUp.Experiments.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj" />
+        <ProjectReference Include="..\ToolUp.Facts.Shared\ToolUp.Facts.Shared.fsproj" />
+        <ProjectReference Include="..\ToolUp.Graph.AGE\ToolUp.Graph.AGE.fsproj" />
+        <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" />
+        <ProjectReference Include="..\ToolUp.Graph.Neo4j\ToolUp.Graph.Neo4j.fsproj" />
+        <ProjectReference Include="..\Observability\Datadog\ToolUp.Observability.Datadog.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Build\ToolUp.Platform.Build.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Transport\ToolUp.Platform.Transport.fsproj" />
+        <ProjectReference Include="..\ToolUp.Remoting.Generator\ToolUp.Remoting.Generator.fsproj" />
+        <ProjectReference Include="..\..\proofs\oracle\ToolUp.Remoting.Proofs.Oracle.fsproj" />
+        <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Workflow.Core\ToolUp.Workflow.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Workflow.Server\ToolUp.Workflow.Server.fsproj" />
+        <ProjectReference Include="..\..\samples\ToyTreeBinding\ToyTreeBinding.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    </ItemGroup>
+</Project>

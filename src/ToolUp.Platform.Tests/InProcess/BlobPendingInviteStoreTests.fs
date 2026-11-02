@@ -12,7 +12,6 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-open ToolUp.Platform.Compose
 
 // ─── Phase 5h — BlobPendingInviteStore contract binding + concurrency ─
 //

@@ -12,7 +12,6 @@ open ToolUp.Platform.Audit.IDataExporter
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Audit
-open ToolUp.Platform.Compose
 
 // ─── Phase 53 — ConversationExporter (`IDataExporter`) round-trip ─
 //

@@ -5,7 +5,6 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
 
 /// Contract test list for any `IDataObjectStore` implementation.
 /// The factory produces a `(store, scopeA, scopeB)` triple where

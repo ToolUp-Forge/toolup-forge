@@ -13,7 +13,6 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 766 — the cron tick is a single-leader election ───────────
 //

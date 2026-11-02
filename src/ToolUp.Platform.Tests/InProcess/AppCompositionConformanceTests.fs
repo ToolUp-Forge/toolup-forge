@@ -33,8 +33,6 @@ open System.IO
 open System.Security.Cryptography
 open Expecto
 open ToolUp.Platform.Tests.InProcess.AppCompositionCorpus
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
 
 /// The disagreements between forge's pin and the specification at the pin.
 /// `readHome` takes a path relative to the specification's `wire-fixtures/`;

@@ -4,7 +4,6 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Providers
-open ToolUp.Platform.Compose
 
 /// Contract test list for any `IProviderProfile` implementation
 /// (Phase 42.B). Factory produces a fresh, empty store per test.

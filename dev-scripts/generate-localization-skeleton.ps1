@@ -28,7 +28,7 @@ Set-Location $PSScriptRoot/..
 # artefact instead of comparing); every other test in the pack runs normally.
 $env:TOOLUP_REGEN_LOCALIZATION_SKELETON = "1"
 try {
-    dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj `
+    dotnet run --project src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj `
         -- --filter-test-list "translation skeleton"
 }
 finally {

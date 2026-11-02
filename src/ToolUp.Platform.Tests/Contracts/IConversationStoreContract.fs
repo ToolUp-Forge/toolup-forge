@@ -6,8 +6,6 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 53 — IConversationStore contract test pack ────────────
 //

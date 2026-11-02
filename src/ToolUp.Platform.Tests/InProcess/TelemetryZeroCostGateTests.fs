@@ -2,11 +2,6 @@ module ToolUp.Platform.Tests.InProcess.TelemetryZeroCostGateTests
 
 open System.IO
 open Expecto
-open ToolUp.Platform.Infra
-open ToolUp.Platform.Infra.Metrics
-open ToolUp.Platform.Config
-open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 69l — Telemetry seam zero-cost gate (GP 13 alignment) ──
 //
